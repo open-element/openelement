@@ -337,7 +337,7 @@ async function buildSSG(
     islandTagNames.length > 0 ? islandTagNames : ssgIslandFiles.map((f) => fileToTagName(f));
   const ssgIslandMeta: Record<string, Partial<IslandDecl>> = Object.keys(islandMeta).length > 0
     ? islandMeta
-    : await scanIslandMeta(islandsRoot, ssgIslandFiles);
+    : await scanIslandMeta(islandsRoot, ssgIslandFiles, root);
   // Single descriptor instantiation: the SSR admission plan and the emitted
   // SSG entry code come from the same descriptor, so they can never diverge.
   // cemClassifications come from Phase 1 (plugin.ts buildStart auto-detection)

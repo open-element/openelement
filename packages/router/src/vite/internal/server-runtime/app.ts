@@ -120,6 +120,13 @@ export interface GeneratedApp {
   actionBodyLimit: ReturnType<typeof createActionBodyLimit>;
   /** SSR registration seam (security.ts). */
   registerSsrComponent(tag: string, ctor: unknown): void;
+  /**
+   * Generated-island registration seam (M11): pairs the generated element
+   * class with its compiler-emitted host renderer atomically, through the same
+   * guard owner. The generated entry calls it only for ssr-admitted islands
+   * whose compiler fact names a host producer.
+   */
+  registerSsrIsland(tag: string, ctor: unknown, hostRenderer: unknown): void;
   /** Request-time client-script src setter (`dist/server/index.js` startup). */
   setRequestTimeClientScript(src: string | null | undefined): void;
   /** wrapInDocument `scripts` descriptors for the current runtime mode (#951). */
@@ -195,6 +202,7 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
     methodNotAllowed: createMethodNotAllowedResponder(),
     actionBodyLimit: createActionBodyLimit(MAX_ACTION_BODY_BYTES),
     registerSsrComponent: (tag, ctor) => guard.register(tag, ctor),
+    registerSsrIsland: (tag, ctor, hostRenderer) => guard.registerIsland(tag, ctor, hostRenderer),
     setRequestTimeClientScript: (src) => {
       requestTimeClientScriptSrc = src || null;
     },

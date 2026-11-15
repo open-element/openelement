@@ -13,6 +13,7 @@
  */
 
 import type { PageRouteDecl, RendererDecl } from '@openelement/protocol/ssg';
+import { isFunctionPage } from './page-classification.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import {
   documentWrapOptionsLines,
@@ -174,10 +175,11 @@ function routeRenderStatement(
   propsExpr: string,
   indent: string,
 ): string {
-  if (ctx.route.functionPage !== undefined) {
+  if (isFunctionPage(ctx.route)) {
     // The handler preamble binds __page to the page descriptor; the server
     // function descriptor carries the compiled component function as its
-    // render (alpha15 server lane).
+    // render (alpha15 server lane). The branch reads the build-time page-kind
+    // fact (M11-1), never a runtime module-shape check.
     return `${indent}let __content = await __renderFunctionPageAwaited(__page, ${propsExpr})`;
   }
   return `${indent}let __content = __ssr(__tag, ${propsExpr}, { route: ${ctx.pathLiteral}, documentStyles: __documentStyles })`;
@@ -346,7 +348,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
     // Per-property og dedup on the boundary re-render too: the fresh __doc
     // above re-resolves the route's meta, and the wrap below serializes it.
     lines.push(...routeHeadExtrasStatements(headExtrasExpr, '        '));
-    if (ctx.route.functionPage !== undefined) {
+    if (isFunctionPage(ctx.route)) {
       // alpha15 server lane: the error channel re-renders through the same
       // compiled component function — the error projector maps the failure
       // onto props and the function's own compiled markup decides the 500

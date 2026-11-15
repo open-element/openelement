@@ -5,7 +5,8 @@
  * This file is an INTERNAL COMPILER CONTRACT, not author syntax and not a
  * generic program interpreter. A future M09-1 class emitter supplies a narrow
  * descriptor (tag, declared properties, the generated `create<Name>Recipe`
- * factory, and optionally the bindings factory); this shell only:
+ * factory, optionally the setup/instance factory, and optionally the legacy
+ * bindings factory); this shell only:
  *
  * - builds the generated element class; explicit registration is the separate
  *   `defineGeneratedElement` helper (a test/emitter hook, not the M09
@@ -24,10 +25,12 @@
  * - feeds the generated recipe a stable props record whose getters evaluate on
  *   every read, plus one `propsChanged` signal for the generated invalidation
  *   channel;
- * - disposes the projection with `dispose(false)` on disconnect (DOM retained)
- *   and adopts that retained DOM with a FRESH owner on reconnect. The top-level
- *   node range owned by the last successful mount/claim is recorded on the
- *   element state, so `dispose(true)` removes exactly that range: host-appended
+ * - disposes the projection and the per-connection scope with `dispose(false)`
+ *   on disconnect (DOM retained) and adopts that retained DOM with a FRESH
+ *   connection scope on reconnect, while the element-lifetime instance scope is
+ *   retained (the LC-0 seam below). The top-level node range owned by the last
+ *   successful mount/claim is recorded on the element state, so `dispose(true)`
+ *   removes exactly that range: host-appended
  *   children, borrowed server DOM a failed claim never adopted, and DOM that
  *   was never mounted are left alone. The internal disconnect path retains that
  *   ownership record for reconnect/teardown; an explicit shell `dispose(false)`
@@ -61,19 +64,53 @@
  * application, so a rejected connect can never leave a half-applied element or
  * let a later connect skip the check.
  *
- * Supported reconnect boundary: the shell-owned `propsChanged` signal and the
- * optional `createBindings()` record are created once and retained across a
- * disconnect/reconnect; the projection's subscriptions and the per-connection
- * root lineage scope are disposed on disconnect, and the reconnect claim gets a
- * fresh root scope. This is the narrow §4.1d "fresh root scope" path, not the
- * full §4.1d reconnect-resource contract. This shell has no author
- * `onConnect`/`onDispose` callbacks and makes no claim about focus/selection or
- * other platform state across the disconnect window.
+ * Supported reconnect boundary (LC-0 descriptor-fixture retention seam): the
+ * shell owns a three-tier owner tree. `instance` is one element/island-lifetime
+ * `LifetimeScope`, created on the first connection and RETAINED across a
+ * disconnect; `connection` is an `instance.child()` created per successful
+ * connect and disposed `dispose(false)` on disconnect; the projection is the
+ * existing per-mount/claim child of `connection`. FOR A DESCRIPTOR THAT
+ * SUPPLIES `createInstance(owner, host)` the factory is called ONCE per element
+ * on first connect (from the same call-once/retain site the legacy
+ * `createBindings()` uses) and its returned bindings record is retained for the
+ * element lifetime, so setup-owned signals/private state and the `propsChanged`
+ * signal survive a disconnect/reconnect: the reconnect claim runs under a fresh
+ * connection scope and does not repeat that factory. Setup cleanups register on
+ * the instance owner and run only at explicit teardown. This is the O2
+ * root-instance half of the `16b-LC` obligation, not the full §4.1d
+ * reconnect-resource contract. The ROOT generated setup split is now WIRED: the
+ * compiler emits one module-local `__oe_rootInstance(owner, host)` factory for
+ * the root and the emitted descriptor supplies it as `createInstance`
+ * (T3/`16b-LC-1`), so the generated root mount/claim alias that retained record
+ * instead of re-evaluating its setup locals inside `<Name>__claim`. THIS fixture
+ * still supplies the descriptor by hand (descriptor-fixture evidence, not
+ * generated-path evidence; the generated-path evidence is the compiler's
+ * `generated-element.root-instance.*` tests).
+ *
+ * DEPTH-1 NESTED RETENTION (LC-2) is wired here: the host record carries the
+ * logical `instance` scope, so the generated ROOT mount/claim body can open one
+ * instance pass on it and retain its DIRECT hostless children
+ * (`retainChildInstance` in `runtime/instance-ledger.ts`). On a failed connect
+ * the shell aborts that pass (evicting only entries created in the attempt and
+ * keeping committed entries for the retry); at explicit teardown
+ * (`dispose(false)`, `dispose(true)`) and at the failed-first-connect rollback
+ * it releases every retained child explicitly (`releaseRetainedChildren`)
+ * BEFORE destroying the instance scope, because ledger bookkeeping and the
+ * structural index are a strong hold while reachable, not a GC cleanup
+ * contract. Depth >= 2 retention (a retained child retaining its own children)
+ * and cross-ledger transactions remain OWED and are NOT claimed by this seam;
+ * a child body emits today's legacy text for its own references. The shell has
+ * no author `onConnect`/`onDispose` callbacks and makes no claim about
+ * focus/selection or other platform state across the disconnect window.
  *
  * Explicit teardown is `dispose(true)` on the element; it removes only the node
- * range the shell mounted or claimed. There is no public author API here: the
- * module is not re-exported from a package barrel and the descriptor is built
- * by the compiler.
+ * range the shell mounted or claimed and destroys the retained instance in the
+ * requested mode (a plain `dispose(false)` releases the record without
+ * detaching; the scope one-shot rule keeps a later `dispose(true)` from
+ * upgrading it). After teardown the instance/bindings are null, so a later
+ * connect creates a NEW instance and re-runs setup: dispose is not disconnect.
+ * There is no public author API here: the module is not re-exported from a
+ * package barrel and the descriptor is built by the compiler.
  *
  * M09-shadow now covers shadow DOM / DSD, native slots and `delegatesFocus`.
  * Out of scope for this slice: styles/theme (the separate style consumer),
@@ -106,6 +143,7 @@ import {
 } from '../../core/property-conversion.ts';
 import { isTrustedHtmlValue, trustedHtml } from '../../core/security.ts';
 import { LifetimeScope } from '../lifetime-scope.ts';
+import { abortInstancePass, releaseRetainedChildren } from '../runtime/instance-ledger.ts';
 import { claimRecipe, insertRecipe, type Projection, type Recipe } from '../runtime/recipe.ts';
 import { removeNodes } from '../runtime/values.ts';
 import { signal } from '../../signal/framework.ts';
@@ -175,16 +213,170 @@ export interface GeneratedElementProperty {
   readonly default?: string | number | boolean | (() => unknown);
 }
 
+/** The attribute name a declared row observes (the compiler's one derivation). */
+function hostPropertyAttribute(property: GeneratedElementProperty): string | null {
+  if (property.attribute === null) return null;
+  return property.attribute ?? camelToKebab(property.name);
+}
+
+/**
+ * Seed the generated host producer's content props from the host's canonical
+ * attribute pairs (M11 complete vertical).
+ *
+ * The generated element's server artifact is the emitted `<Name>__ssrHost`,
+ * which must produce the SAME content the client class renders after upgrade.
+ * Static/authored host attributes are standard SSR input, so the producer seeds
+ * them here through the canonical compiled-property conversion
+ * (`convertFromAttribute`, the same leaf the shell's own attribute channel
+ * uses) plus the declared primitive default — never a server-only second
+ * conversion table.
+ *
+ * Precedence mirrors the shell's initial state: a supplied property value (the
+ * parent's in-process channel, which also travelled as a host attribute) wins
+ * over the attribute wire; a primitive row supplied by neither falls back to
+ * its declared default. Non-primitive rows (`array`/`object`/`trustedHtml`)
+ * have no attribute channel and their generated factory default materialises
+ * per CLIENT instance; this host path deliberately does not fabricate one (no
+ * server->client value wire), so an unsupplied non-primitive row stays absent
+ * rather than pretending a seed exists.
+ *
+ * Pure: the input records are never mutated.
+ */
+export function seedGeneratedElementHostProperties<P extends object = Record<string, unknown>>(
+  properties: readonly GeneratedElementProperty[] | undefined,
+  props: P | undefined,
+  attributes: readonly (readonly [string, string])[] | undefined,
+): Record<string, unknown> {
+  const supplied = (props ?? {}) as Record<string, unknown>;
+  const seeded: Record<string, unknown> = {};
+  const pairs = attributes ?? [];
+  for (const property of properties ?? []) {
+    // A supplied property value (the parent's in-process channel, which also
+    // travelled as a host attribute) wins over the attribute wire. It is
+    // delegated LAZILY: the pre-M09-2b contract is that the producer fold never
+    // executes a supplied getter, and that each leaf read reads it again — an
+    // eager spread here would break both (see the non-primitive SSR host test).
+    // A supplied `undefined` is NOT a supplied value: the canonical client
+    // coercion resets it to the declared default, and this fold must produce the
+    // same content (review B2). The fallback is applied lazily inside the getter
+    // so the getter is still read per read, never during seeding.
+    if (Object.prototype.hasOwnProperty.call(supplied, property.name)) {
+      // Primitive rows carry a canonical default even when the descriptor omits
+      // the literal: `true` -> false/0/'' per the client's own coercion. This is
+      // the same undefined -> default rule the shell resolver and the client
+      // property conversion apply; non-primitive rows keep the resolver/factory
+      // boundary (no fabricated seed here).
+      const primitiveFallback = PRIMITIVE_PROPERTY_TYPES.has(property.type)
+        ? (property.default ??
+          (property.type === 'boolean' ? false : property.type === 'number' ? 0 : ''))
+        : undefined;
+      Object.defineProperty(seeded, property.name, {
+        enumerable: true,
+        configurable: false,
+        get: () => {
+          const value = supplied[property.name];
+          return value === undefined && primitiveFallback !== undefined ? primitiveFallback : value;
+        },
+      });
+      continue;
+    }
+    const propertyType = property.type;
+    if (propertyType !== 'string' && propertyType !== 'number' && propertyType !== 'boolean') {
+      // No attribute form and no fabricated factory default (documented above):
+      // the shell resolver still supplies the client default LAZILY, so an
+      // unused non-primitive row is never materialized by this fold.
+      continue;
+    }
+    // The seed input is the DECLARED attribute only (review B3): the compiler
+    // emits the row's attribute name and the parent serializer emits attributes
+    // under that name. Matching `property.name` (or a lowercased property name)
+    // would be a second, invented attribute dialect the client's
+    // `observedAttributes` does not observe. Wire attributes are compared
+    // case-insensitively (HTML attribute names are), but the DECLARED name is
+    // the only candidate.
+    const attribute = hostPropertyAttribute(property);
+    let matched: string | undefined;
+    if (attribute !== null) {
+      const wantedAttribute = attribute.toLowerCase();
+      for (const [name, value] of pairs) {
+        if (typeof name !== 'string' || typeof value !== 'string') continue;
+        if (name.toLowerCase() === wantedAttribute) {
+          matched = value;
+          break;
+        }
+      }
+    }
+    if (matched !== undefined) {
+      seeded[property.name] =
+        propertyType === 'string'
+          ? matched
+          : convertFromAttribute(
+              { converter: propertyType, type: propertyType, default: property.default },
+              matched,
+            );
+      continue;
+    }
+    // Neither the dynamic channel nor the attribute wire supplied the row: the
+    // declared primitive default is the client's initial state, so the server
+    // content must start from the same value.
+    if (property.default !== undefined) seeded[property.name] = property.default;
+  }
+  // A property the descriptor does not declare is not a content input; keep the
+  // historical pass-through so a supplied extra value is still readable by the
+  // leaf exactly as before, again without executing its getter eagerly.
+  for (const name of Object.keys(supplied)) {
+    if (Object.prototype.hasOwnProperty.call(seeded, name)) continue;
+    Object.defineProperty(seeded, name, {
+      enumerable: true,
+      configurable: false,
+      get: () => supplied[name],
+    });
+  }
+  return seeded;
+}
+
 /** The host record the generated recipe factory consumes. */
 export interface GeneratedElementHost<P extends object = Record<string, unknown>> {
   /**
-   * Created once by `createBindings` and retained for the element lifetime.
-   * Allocation-only: signals/computeds and plain data, never a resource that
-   * needs cleanup (see {@linkcode GeneratedElementDescriptor.createBindings}).
+   * Created once by `createInstance` (or the legacy `createBindings` fallback)
+   * and retained for the element lifetime. With `createInstance` the record is
+   * the return value of that setup factory, so it may reference setup-owned
+   * signals/computeds that live in the retained instance scope; with the legacy
+   * `createBindings` it stays allocation-only (see
+   * {@linkcode GeneratedElementDescriptor.createBindings}).
    */
   readonly bindings: Readonly<Record<string, unknown>>;
+  /**
+   * The enclosing LOGICAL instance scope (LC-2 nesting): the element/island
+   * instance that survives a disconnect and dies only at explicit teardown.
+   *
+   * It is delivered so the generated ROOT mount/claim body can open one
+   * instance pass on it and retain its direct hostless child instances
+   * (`retainChildInstance`). A retained child's narrower host record — the one
+   * supplied to the child's own body — is generated code (compiler-private),
+   * so this shell type never carries the setup record; no other consumer reads
+   * this field.
+   */
+  readonly instance?: LifetimeScope;
   readonly props: Readonly<P>;
   /** Shell-owned invalidation channel; the same signal survives reconnect. */
+  readonly propsChanged: WritableSignal<number>;
+}
+
+/**
+ * The setup-time host record the generated instance factory consumes.
+ *
+ * It deliberately excludes `bindings`: the factory PRODUCES that record (its
+ * return value becomes `GeneratedElementHost.bindings`), so supplying a
+ * bindings channel here would be circular. `props` and `propsChanged` are the
+ * only host facts setup legitimately reads.
+ *
+ * Deliberately NOT exported: it is a structural detail of the descriptor's
+ * `createInstance` member, not a new named consumable API. A host/test builds
+ * the argument structurally; no symbol is added to the package surface.
+ */
+interface GeneratedElementInstanceHost<P extends object = Record<string, unknown>> {
+  readonly props: Readonly<P>;
   readonly propsChanged: WritableSignal<number>;
 }
 
@@ -220,23 +412,56 @@ export interface GeneratedElementDescriptor<P extends object = Record<string, un
   readonly properties?: readonly GeneratedElementProperty[];
   readonly createRecipe: (owner: LifetimeScope, host: GeneratedElementHost<P>) => Recipe<P>;
   /**
-   * Signals/computeds the generated mount requires. Called once per element on
-   * first connection and the returned record is retained for the element
-   * lifetime (the factory does not re-run across disconnect/reconnect).
+   * The LC-0 descriptor-fixture retention factory (internal descriptor ABI
+   * addition, compiler-private — no public export). Called ONCE per element, on
+   * its first connection, with the retained element/island-lifetime owner. The
+   * returned record becomes the generated recipe host's `bindings` and is
+   * retained across disconnect/reconnect, so setup-owned signals/computeds and
+   * private state survive the disconnect window; the reconnect claim runs
+   * without repeating this factory.
+   *
+   * In the generated path the compiler now emits this factory for the ROOT
+   * only (module-local `__oe_rootInstance`, T3/`16b-LC-1`) and the emitted
+   * descriptor supplies it here, so the generated root mount/claim alias the
+   * retained record instead of re-evaluating setup in `<Name>__claim`; a root
+   * with no local setup snapshot emits no factory and the shell keeps the
+   * `createBindings?.() ?? {}` fallback. Hosts/tests may still supply this
+   * factory directly (descriptor-fixture evidence). Nested hostless children
+   * keep their own per-claim evaluation: the generated-path fixture measures
+   * that re-evaluation, while nested child retention remains OWED for
+   * `16b-LC retained-child` and is not claimed here.
+   *
+   * The owner is a real cleanup channel: setup-owned effects, listeners, timers,
+   * subscriptions and any other resource that needs cleanup register on it and
+   * are released only by explicit teardown (`dispose`), never by a plain
+   * disconnect. Setup MUST NOT append DOM: the projection owns the region.
+   *
+   * Mutually exclusive with `createBindings`: one descriptor names exactly one
+   * call-once/retain site, so a descriptor carrying both fails descriptor
+   * validation instead of creating a second setup path.
+   */
+  readonly createInstance?: (
+    owner: LifetimeScope,
+    host: GeneratedElementInstanceHost<P>,
+  ) => Readonly<Record<string, unknown>>;
+  /**
+   * Legacy allocation-only bindings factory, kept for hosts/tests (M09-0 shell
+   * tests). Called once per element on first connection and the returned record
+   * is retained for the element lifetime (the factory does not re-run across
+   * disconnect/reconnect).
    *
    * This factory runs without a `LifetimeScope` handle and the shell has no
    * owner on which to register a cleanup for it. The contract is therefore
    * allocation-only: it MUST NOT allocate effects, listeners, timers,
    * subscriptions, or any other resource that needs cleanup. It may allocate
-   * signals/computeds and return plain data. An element-lifetime resource
-   * owner is deliberately not invented here; a future descriptor that needs
-   * cleanup ownership must carry it explicitly rather than leaking it through
-   * this record.
+   * signals/computeds and return plain data. A descriptor that needs
+   * element-lifetime cleanup ownership uses `createInstance` instead of leaking
+   * it through this record.
    *
-   * The shell does retain the record across reconnect, while the per-connection
-   * root scope is disposed and recreated: resources the generated recipe
-   * factory registers on that scope are released. Omitted means the generated
-   * module must not require bindings; a missing binding still fails through the
+   * The shell retains the record across reconnect, while the per-connection
+   * scope is disposed and recreated: resources the generated recipe factory
+   * registers on that scope are released. Omitted means the generated module
+   * must not require bindings; a missing binding still fails through the
    * generated module's own `OEIR_LEAF_MISSING_VALUE` contract.
    */
   readonly createBindings?: () => Readonly<Record<string, unknown>>;
@@ -247,9 +472,13 @@ export interface GeneratedElement extends HTMLElement {
   /**
    * Explicit teardown. Detach mode (`true`, the default) removes only the node
    * range this shell mounted or claimed; it never infers ownership from the
-   * current children. Plain mode (`false`) releases the projection and the
-   * ownership record without detaching the retained DOM, so a later
-   * `dispose(true)` cannot upgrade that released handle into a detach.
+   * current children. Plain mode (`false`) releases the projection, the
+   * retained instance and the ownership record without detaching the retained
+   * DOM, so a later `dispose(true)` cannot upgrade that released handle into a
+   * detach. Either mode destroys the retained instance once (its setup cleanups
+   * run, first error surfaced after every cleanup was attempted); a later
+   * connect therefore creates a NEW instance and re-runs setup (dispose is not
+   * disconnect).
    */
   dispose(detachOwnedNodes?: boolean): void;
 }
@@ -289,6 +518,10 @@ interface NormalizedDescriptor {
     owner: LifetimeScope,
     host: GeneratedElementHost<Record<string, unknown>>,
   ) => Recipe<Record<string, unknown>>;
+  readonly createInstance?: (
+    owner: LifetimeScope,
+    host: GeneratedElementInstanceHost<Record<string, unknown>>,
+  ) => Readonly<Record<string, unknown>>;
   readonly createBindings?: () => Readonly<Record<string, unknown>>;
 }
 
@@ -304,8 +537,19 @@ interface ElementState {
   readonly values: Map<string, unknown>;
   readonly props: Readonly<Record<string, unknown>>;
   readonly propsChanged: WritableSignal<number>;
-  /** Per-connection lineage scope; owns no DOM, disposed with the projection. */
-  owner: LifetimeScope | null;
+  /**
+   * The element/island-lifetime setup scope (LC-0). Created on the first
+   * connection and retained across a disconnect; owns setup-owned resources and
+   * is disposed exactly once by explicit teardown. Null until the first connect
+   * or after teardown/failed first connect.
+   */
+  instance: LifetimeScope | null;
+  /**
+   * The per-connection lineage scope: `instance.child()`, created on every
+   * successful connect and disposed `dispose(false)` on disconnect. Owns
+   * connection-scoped resources; owns no DOM.
+   */
+  connection: LifetimeScope | null;
   projection: Projection<Record<string, unknown>> | null;
   /**
    * Top-level nodes owned by the last successful mount/claim. Retained across
@@ -313,6 +557,11 @@ interface ElementState {
    * host-appended or borrowed DOM); cleared when ownership is released.
    */
   ownedNodes: readonly Node[] | null;
+  /**
+   * The retained setup record: `createInstance`'s return value (or the legacy
+   * `createBindings` record). Survives disconnect; nulled by teardown/failed
+   * first connect so a later connect re-runs setup on a new instance.
+   */
   bindings: Readonly<Record<string, unknown>> | null;
   /**
    * The resolved claim/mount parent and its platform kind. Light holds the
@@ -605,6 +854,15 @@ function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Normalized
   if (descriptor.createBindings !== undefined && typeof descriptor.createBindings !== 'function') {
     descriptorError('createBindings must be a function when present');
   }
+  if (descriptor.createInstance !== undefined && typeof descriptor.createInstance !== 'function') {
+    descriptorError('createInstance must be a function when present');
+  }
+  if (descriptor.createInstance !== undefined && descriptor.createBindings !== undefined) {
+    descriptorError(
+      'createInstance and createBindings are mutually exclusive: the descriptor must name exactly ' +
+        'one call-once/retain setup site',
+    );
+  }
   const rootMode = descriptor.root ?? 'light';
   if (rootMode !== 'light' && rootMode !== 'shadow-open' && rootMode !== 'shadow-closed') {
     descriptorError(`root must be light, shadow-open or shadow-closed, got ${String(rootMode)}`);
@@ -680,6 +938,9 @@ function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Normalized
     properties,
     byAttribute,
     createRecipe: descriptor.createRecipe as NormalizedDescriptor['createRecipe'],
+    ...(descriptor.createInstance === undefined
+      ? {}
+      : { createInstance: descriptor.createInstance as NormalizedDescriptor['createInstance'] }),
     ...(descriptor.createBindings === undefined
       ? {}
       : { createBindings: descriptor.createBindings }),
@@ -765,7 +1026,8 @@ function createState(descriptor: NormalizedDescriptor): ElementState {
     values,
     props,
     propsChanged: signal(0),
-    owner: null,
+    instance: null,
+    connection: null,
     projection: null,
     ownedNodes: null,
     bindings: null,
@@ -971,19 +1233,78 @@ function applyAttribute(
   if (raw === null) restoreReflectedDefault(element, state, property);
 }
 
-function bindingsFor(state: ElementState): Readonly<Record<string, unknown>> {
-  if (state.bindings === null) {
-    state.bindings = state.descriptor.createBindings?.() ?? {};
-  }
-  return state.bindings;
-}
-
 function hostFor(state: ElementState): GeneratedElementHost<Record<string, unknown>> {
   return {
-    bindings: bindingsFor(state),
+    // `ensureInstance` publishes the retained setup record before this host is
+    // built; the empty fallback keeps the contract total for a hand-built
+    // descriptor that names neither factory.
+    bindings: state.bindings ?? {},
+    // The one logical instance (LC-2 nesting): the generated root body opens a
+    // pass on it and retains direct hostless children. Omitted while no
+    // instance exists (hand-built descriptor without createInstance); the
+    // retention path is only emitted for a generated root, whose instance is
+    // always established before this host is built.
+    instance: state.instance ?? undefined,
     props: state.props,
     propsChanged: state.propsChanged,
   };
+}
+
+function instanceHostFor(
+  state: ElementState,
+): GeneratedElementInstanceHost<Record<string, unknown>> {
+  return {
+    props: state.props,
+    propsChanged: state.propsChanged,
+  };
+}
+
+/**
+ * Create and retain the element/island-lifetime instance scope and its setup
+ * record (LC-0). Called from the first connect's call-once/retain site.
+ *
+ * The setup factory receives a real owner: setup-owned resources register on it
+ * and are released only by explicit teardown. A throw is rolled back HERE with
+ * every setup cleanup attempted (detach mode, because a failed setup never
+ * attaches a region) and the ORIGINAL setup error rethrown; the fields are
+ * cleared so the next connect retries setup on a fresh instance.
+ */
+function ensureInstance(state: ElementState): LifetimeScope {
+  const existing = state.instance;
+  if (existing !== null) return existing;
+  const instance = new LifetimeScope();
+  try {
+    const record =
+      state.descriptor.createInstance !== undefined
+        ? state.descriptor.createInstance(instance, instanceHostFor(state))
+        : (state.descriptor.createBindings?.() ?? {});
+    state.instance = instance;
+    state.bindings = record;
+    return instance;
+  } catch (error) {
+    try {
+      instance.dispose(true);
+    } catch {
+      // Keep the original setup error; every cleanup was still attempted.
+    }
+    state.instance = null;
+    state.bindings = null;
+    throw error;
+  }
+}
+
+/**
+ * Release a FAILED connect's own state without letting a cleanup error replace
+ * the original connect/claim error: every step runs, in order, errors dropped.
+ */
+function releaseIgnoringErrors(steps: readonly (() => void)[]): void {
+  for (const step of steps) {
+    try {
+      step();
+    } catch {
+      // The original connect/claim error is what surfaces.
+    }
+  }
 }
 
 /**
@@ -1232,12 +1553,13 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       // Must precede createRecipe: the recipe reads host.props on creation.
       reconcilePreUpgradeProperties(this, state);
       state.connecting = true;
-      // This connection owner exists before root resolution. A coded root
-      // failure creates no projection, no subscription and no generated DOM
-      // write, but it is not a zero-allocation or zero-write connect: the
-      // owner is released below and pre-upgrade reconciliation may already
-      // have reflected a property to an attribute.
-      const owner = new LifetimeScope();
+      // A retained instance is what makes reconnect a re-arm rather than a
+      // re-setup. It is resolved inside the try so a root failure allocates no
+      // instance; a failed FIRST connect is rolled back below, while a failed
+      // RECONNECT keeps the retained instance (a claim failure must not destroy
+      // surviving setup state).
+      const hadInstance = state.instance !== null;
+      let connection: LifetimeScope | null = null;
       try {
         const parent = rootFor(this, state);
         // Publish the reconciled initial value/validity/state once the root (and
@@ -1255,31 +1577,55 @@ export function createGeneratedElementClass<P extends object = Record<string, un
               : !state.rootCreatedByShell && parent.childNodes.length > 0;
           state.regionState = preexisting ? 'present' : 'absent';
         }
-        const recipe = normalized.createRecipe(owner, hostFor(state));
+        const instance = ensureInstance(state);
+        // The connection scope is created per successful connect and disposed
+        // plain on disconnect; the instance above is retained across it.
+        connection = instance.child();
+        const recipe = normalized.createRecipe(connection, hostFor(state));
         // Reconnect and dispose(false) retain the region; dispose(true) marks it
         // absent and the next connect mounts even when foreign nodes remain in
         // the root. The decision is never re-derived from current childNodes.
         const projection =
           state.regionState === 'present'
-            ? claimRecipe(owner, recipe, parent)
-            : insertRecipe(owner, recipe, parent);
-        state.owner = owner;
+            ? claimRecipe(connection, recipe, parent)
+            : insertRecipe(connection, recipe, parent);
+        state.connection = connection;
         state.projection = projection;
         state.ownedNodes = projection.nodes;
         state.regionState = 'present';
       } catch (error) {
-        state.owner = null;
+        state.connection = null;
         state.projection = null;
+        // A failed mount/claim aborted the root instance pass (LC-2): evict
+        // exactly the entries created in this attempt and keep every
+        // pre-existing retained entry (with its previous structural index) for
+        // a retry. This runs before any release/disposal below; a disposal that
+        // follows must not observe an open pass. Cleanup errors are dropped —
+        // the original connect/claim error is what surfaces.
+        if (state.instance !== null) abortInstancePass(state.instance);
         // Keep any ownership recorded by an earlier successful mount/claim: a
         // failed re-claim borrowed no new DOM and must not adopt the host's
-        // children. The recipe/projection rolled back its own child scope. This
-        // root owner has no DOM range of its own; release it without detach and
-        // never let its cleanup error replace the original failure.
-        try {
-          owner.dispose(false);
-        } catch {
-          // Keep the original construction/claim/activation error.
+        // children. The recipe/projection rolled back its own child scope.
+        const release: Array<() => void> = [() => connection?.dispose(false)];
+        if (!hadInstance && state.instance !== null) {
+          // Setup was created by THIS connect and never became the retained
+          // instance: dispose it in detach mode (a failed setup attaches no
+          // region) and clear the record so the next connect re-runs setup on a
+          // NEW instance. The cleanup chain is inner-first and its errors never
+          // replace the original connect/claim error.
+          const instance = state.instance;
+          state.instance = null;
+          state.bindings = null;
+          // Failed-first-connect rollback (LC-2): release every retained child
+          // bookkeeping entry and plain-dispose its retained scope BEFORE the
+          // instance is destroyed. The ledger is not a GC contract, and the
+          // owner-teardown release must run while the owner is still live (a
+          // cleanup observing `instance.disposed` sees false). Its errors never
+          // replace the original connect/claim error.
+          release.push(() => releaseRetainedChildren(instance));
+          release.push(() => instance.dispose(true));
         }
+        releaseIgnoringErrors(release);
         throw error;
       } finally {
         state.connecting = false;
@@ -1289,17 +1635,17 @@ export function createGeneratedElementClass<P extends object = Record<string, un
     disconnectedCallback(): void {
       const state = stateOf(this);
       const projection = state.projection;
-      const owner = state.owner;
+      const connection = state.connection;
       state.projection = null;
-      state.owner = null;
-      // Keep the owned node range: the generated DOM is retained across the
-      // disconnect and a later teardown must still know exactly what it owns.
-      // Plain disposal releases the projection owner's resources but keeps the
-      // DOM for a later reconnect (model note §4.1d's current non-detach path).
-      // The per-connection lineage scope owns no DOM; dispose it after the
-      // projection so a reconnect always starts from a fresh root. Both run,
+      state.connection = null;
+      // Keep the owned node range AND the retained instance/bindings: the
+      // generated DOM and setup-owned state survive the disconnect (LC-0).
+      // Plain disposal releases the projection's and the connection scope's
+      // resources but keeps the DOM for a later reconnect (model note §4.1d's
+      // current non-detach path). The connection scope owns no DOM; dispose it
+      // after the projection so a reconnect re-arms on a fresh scope. Both run,
       // and the projection's error (the first one) is what surfaces.
-      captureCleanupFailures([() => projection?.dispose(false), () => owner?.dispose(false)]);
+      captureCleanupFailures([() => projection?.dispose(false), () => connection?.dispose(false)]);
     }
 
     attributeChangedCallback(
@@ -1345,20 +1691,34 @@ export function createGeneratedElementClass<P extends object = Record<string, un
     dispose(detachOwnedNodes = true): void {
       const state = stateOf(this);
       const projection = state.projection;
-      const owner = state.owner;
+      const connection = state.connection;
+      const instance = state.instance;
       const owned = state.ownedNodes;
       const hadOwnedRegion = projection !== null || owned !== null;
       state.projection = null;
-      state.owner = null;
+      state.connection = null;
+      state.instance = null;
+      state.bindings = null;
       state.ownedNodes = null;
 
       if (!detachOwnedNodes) {
-        // Plain disposal releases the ownership record with the projection. It
-        // does not leave a retained range behind for a later dispose(true) to
-        // "upgrade" into a detach: the range cleanup is gone on the first
-        // disposal (the LifetimeScope one-shot rule). The region fact stays
-        // present so a reconnect can still claim the retained DOM.
-        captureCleanupFailures([() => projection?.dispose(false), () => owner?.dispose(false)]);
+        // Plain disposal releases the ownership record with the projection and
+        // destroys the retained instance in plain mode: setup cleanups run, but
+        // range cleanups are dropped, so it does not leave a retained range
+        // behind for a later dispose(true) to "upgrade" into a detach. The
+        // region fact stays present so a reconnect can still claim the DOM.
+        // `releaseRetainedChildren` (LC-2) runs after the pre-existing steps and
+        // before the instance is destroyed: `captureCleanupFailures` surfaces
+        // the FIRST error, so a projection/connection teardown error still wins,
+        // while a release error wins only over a later `instance.dispose` error.
+        captureCleanupFailures([
+          () => projection?.dispose(false),
+          () => connection?.dispose(false),
+          () => {
+            if (instance !== null) releaseRetainedChildren(instance);
+          },
+          () => instance?.dispose(false),
+        ]);
         return;
       }
 
@@ -1376,7 +1736,21 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         () => {
           if (owned !== null) removeNodes(owned);
         },
-        () => owner?.dispose(false),
+        () => connection?.dispose(false),
+        // LC-2 owner teardown: release every retained child instance
+        // (bookkeeping + plain-disposed retained scopes) BEFORE the instance
+        // scope is destroyed, so no entry/record outlives the owner and the
+        // release runs while the owner is still live. First-error precedence is
+        // the `captureCleanupFailures` order above: earlier teardown errors
+        // win, a release error wins only over `instance.dispose`.
+        () => {
+          if (instance !== null) releaseRetainedChildren(instance);
+        },
+        // Detach mode matches the owned-range handling above: the instance
+        // itself owns setup resources, and only explicit detach teardown asks
+        // its range cleanups to run (LIFO; first error surfaces after every
+        // cleanup was attempted).
+        () => instance?.dispose(true),
       ]);
     }
   }

@@ -53,8 +53,15 @@ import { analyzeModuleSemantics } from '@openelement/compiler';
 import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
 import { scanStreamManifest } from './stream-manifest.ts';
 import type { StreamRouteManifest } from '@openelement/protocol/ssg';
+import {
+  buildPageModuleFacts,
+  type PageModuleCarrier,
+  type PageModuleFacts,
+} from './page-classification.ts';
 
-export type ScannedRouteEntry = RouteEntry & { streamManifest?: StreamRouteManifest };
+export type ScannedRouteEntry = RouteEntry & {
+  streamManifest?: StreamRouteManifest;
+} & PageModuleCarrier;
 
 const IMPORT_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js'];
 
@@ -273,6 +280,7 @@ export async function scanRoutes(
         // admits (a shape whose JSX would escape to runtime).
         let functionPageName: string | undefined;
         let streamManifest: StreamRouteManifest | undefined;
+        let pageModule: PageModuleFacts | undefined;
         if (routeType === 'page') {
           // The compiler semantic core reads route meaning without executing the module.
           source = await safeReadFile(fullPath);
@@ -285,6 +293,16 @@ export async function scanRoutes(
             tagName = semantics.exportedTagName;
             isDefinePage = semantics.definePage;
             functionPageName = semantics.pageComponentName;
+            // M11-1: the build-only page facts. The classification itself runs
+            // in the entry descriptor, where the local island identities (the
+            // generated-element lane's owner evidence) are already scanned.
+            pageModule = buildPageModuleFacts({
+              source,
+              filePath: normalizeSeparators(relativePath),
+              definePage: semantics.definePage,
+              compiledElement: semantics.compiledElementDecorator,
+              functionPage: semantics.pageComponentName,
+            });
             streamManifest = await scanStreamManifest(
               routePath,
               fullPath,
@@ -373,6 +391,7 @@ export async function scanRoutes(
             ? { hasEnhancedForms: true }
             : {}),
           ...(options.includeSource && source !== undefined ? { source } : {}),
+          ...(pageModule === undefined ? {} : { pageModule }),
           params,
         });
       }

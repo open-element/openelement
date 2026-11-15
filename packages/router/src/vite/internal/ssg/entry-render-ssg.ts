@@ -7,6 +7,7 @@
  */
 
 import type { EntryDescriptor } from '@openelement/protocol/ssg';
+import { pageKindOf } from './page-classification.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import { routeHeadExtrasStatements } from './entry-codegen.ts';
 import {
@@ -38,6 +39,12 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   lines.push('export const routeInfo = [');
   for (const r of desc.pageRoutes) {
     const tagNameExpr = pageRouteTagExpr(r.varName, r.tagName);
+    // M11-1: the build-time page-kind fact. Emitted only for a non-class page,
+    // so a class-page-only project's routeInfo stays byte-identical; the
+    // renderRoute branches read this fact instead of the page descriptor's
+    // runtime `kind`.
+    const pageKind = pageKindOf(r);
+    const pageKindField = pageKind === 'function-page' ? `, pageKind: "function-page"` : '';
     lines.push(
       `  { path: ${quoteGeneratedJavaScriptValue(r.path)}, filePath: ${quoteGeneratedJavaScriptValue(
         r.filePath,
@@ -51,7 +58,7 @@ export function renderSsgSection(desc: EntryDescriptor): string {
         r.streamManifest
           ? `, streamManifest: __streamManifests[${quoteGeneratedJavaScriptValue(r.path)}]`
           : ''
-      } },`,
+      }${pageKindField} },`,
     );
   }
   lines.push('];');
@@ -126,11 +133,13 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   // feeds, so the HTTP/DSD contract is byte-for-byte the same shape. The
   // function-page arm is emitted only when such a route exists — the seam
   // import is gated the same way, and an app with no function pages keeps the
-  // exact compiled-only render expression.
-  const hasFunctionPages = desc.pageRoutes.some((route) => route.functionPage !== undefined);
+  // exact compiled-only render expression. The per-route fork reads the
+  // build-time `routeInfo.pageKind` fact (M11-1), not the page descriptor's
+  // runtime `kind`.
+  const hasFunctionPages = desc.pageRoutes.some((route) => pageKindOf(route) === 'function-page');
   lines.push('    let content;');
   if (hasFunctionPages) {
-    lines.push('    if (page.kind === "function-page") {');
+    lines.push('    if (info.pageKind === "function-page") {');
     lines.push('      content = await __renderFunctionPageAwaited(page, props);');
     lines.push('    } else {');
     lines.push(
@@ -238,7 +247,7 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   // referenced unbound.
   if (hasFunctionPages) {
     lines.push('        let __errorPageHtml;');
-    lines.push('        if (page.kind === "function-page") {');
+    lines.push('        if (info.pageKind === "function-page") {');
     lines.push(
       '          __errorPageHtml = await __renderFunctionPageAwaited(page, __pageErrorProps(info.module, error, __errorPageContext));',
     );

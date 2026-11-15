@@ -39,7 +39,17 @@ import {
   validateIslandDeliveryExportNames,
 } from './delivery.ts';
 import { compilerBehaviorDeclarations } from './client-admission.ts';
+import {
+  type GeneratedElementHostCarrier,
+  readGeneratedElementHost,
+} from './generated-element-host-metadata.ts';
 import { selectRendererAdapter } from './renderer-adapter.ts';
+import {
+  pageKindOf,
+  resolvePageKind,
+  type LocalPageIsland,
+  type PageKindCarrier,
+} from './page-classification.ts';
 import { buildError, DescriptorErrorCode } from '../../../internal/error-codes.ts';
 
 function normalizeLayoutImport(importPath: string): string {
@@ -165,7 +175,9 @@ export function buildEntryDescriptor(
     // compiler-owned `children` channel) and waits for an async render
     // before the HTML string exists. Emitted only when a function-page
     // route exists, so a class-page-only entry stays byte-identical.
-    if (routes.some((route) => route.functionPage !== undefined)) {
+    // The render seam import is gated by the build-time page-kind fact (M11-1),
+    // the same fact the emitted call sites branch on.
+    if (routes.some((route) => pageKindOf(route) === 'function-page')) {
       imports.push({
         from: '@openelement/router/server-runtime',
         names: ['renderFunctionPageAwaited'],
@@ -395,6 +407,35 @@ export function buildEntryDescriptor(
     return normalizeLayoutImport(entry);
   });
 
+  // Islands inputs are read here because the build-time page-kind
+  // classification below needs the local island identities (see the block).
+  const islandTagNames = options.islandTagNames || [];
+  const islandFiles = options.islandFiles || [];
+  const islandMeta = options.islandMeta || {};
+  const packageManifests = options.packageManifests || [];
+
+  // --- Build-time page-kind classification (M11-1) ---
+  // The route scan recorded the compiler-owned page facts; this descriptor
+  // build is the first point where the local island identities (the
+  // generated-element lane's owner evidence) are all available, so the
+  // classification runs here — at build time, from the recorded module facts,
+  // never from a runtime module-shape read. The verdict rides each page
+  // declaration as build-only metadata (`PageKindCarrier`); the public
+  // `PageRouteDecl` protocol type is unchanged.
+  const pageClassificationContext = {
+    routesDir,
+    islandsDir,
+    islands: islandTagNames.map((tagName, index): LocalPageIsland => {
+      const meta = islandMeta[tagName];
+      const host = readGeneratedElementHost(meta);
+      return {
+        filePath: islandFiles[index] ?? `${tagName}.tsx`,
+        tagName,
+        generatedLaneKind: host === undefined ? undefined : host.kind,
+      };
+    }),
+  };
+
   // --- Routes ---
   const apiRoutes: ApiRouteDecl[] = routes
     .filter((r) => r.type === 'api' && !r.special)
@@ -418,7 +459,7 @@ export function buildEntryDescriptor(
         ? (r.params ?? [...r.path.matchAll(/:([^/{]+)(?:\{[^}]*\})?/g)].map((m) => m[1]))
         : [];
       const fallbackTagName = fileToTagName(r.filePath);
-      return {
+      const pageDecl: PageRouteDecl & PageKindCarrier = {
         kind: 'page' as const,
         path: r.path,
         varName: `$${r.varName}`,
@@ -440,7 +481,12 @@ export function buildEntryDescriptor(
         // entry registers nothing for the route.
         ...(r.functionPage === undefined ? {} : { functionPage: r.functionPage }),
         ...(r.streamManifest ? { streamManifest: r.streamManifest } : {}),
+        // Build-only page-kind fact (M11-1): route/page generation branches on
+        // this instead of a runtime module-shape check. The carrier is cast-free
+        // metadata on the protocol declaration object.
+        pageKind: resolvePageKind(r, pageClassificationContext),
       };
+      return pageDecl;
     });
 
   // --- Special files: _renderer.ts / _middleware.ts ---
@@ -487,49 +533,61 @@ export function buildEntryDescriptor(
     }));
 
   // --- Islands ---
-  const islandTagNames = options.islandTagNames || [];
-  const islandFiles = options.islandFiles || [];
-  const islandMeta = options.islandMeta || {};
-  const packageManifests = options.packageManifests || [];
-
   // #460: islandsDir comes from user config and islandFiles from scanIslands;
   // both must be POSIX-normalized before they become module specifiers.
   const islandsSpecifierDir = normalizeSeparators(islandsDir);
-  const localIslands: IslandDecl[] = islandTagNames.map((tagName, i) => {
-    const meta = islandMeta[tagName];
-    const deliveryMeta = (meta ?? {}) as Partial<IslandDecl> &
-      IslandDeliveryMeta & {
-        hydrate?: IslandDeliveryStrategy;
-      };
-    const hydrate = resolveIslandHydrate(
-      deliveryMeta.hydrate as IslandDeliveryStrategy | undefined,
-      options.upgradeStrategy,
-    );
-    const hasDeliveryTags = deliveryMeta.tags !== undefined || deliveryMeta.tagNames !== undefined;
-    const deliveryTags = hasDeliveryTags
-      ? resolveIslandDeliveryTags(tagName, deliveryMeta.tags, deliveryMeta.tagNames, tagName)
-      : undefined;
-    const exportNames = validateIslandDeliveryExportNames(
-      deliveryMeta.exportNames,
-      deliveryTags ?? [tagName],
-      tagName,
-    );
-    return {
-      tagName,
-      modulePath: islandFiles[i]
-        ? `/${islandsSpecifierDir}/${normalizeSeparators(islandFiles[i])}`
-        : `/${islandsSpecifierDir}/${tagName}.ts`,
-      source: 'local',
-      ...resolveIslandSsrDsd(deliveryMeta),
-      hydrate,
-      ...(hydrate === 'media' && deliveryMeta.media !== undefined
-        ? { media: deliveryMeta.media }
-        : {}),
-      ...(deliveryTags === undefined ? {} : { tags: deliveryTags }),
-      ...(exportNames === undefined ? {} : { exportNames }),
-      reason: meta?.reason,
-    } as IslandDecl;
-  });
+  // M11 prerequisite consumer: the island scan resolves every local island's
+  // compiler-owned generated-host identity onto `islandMeta`
+  // (`LocalIslandMeta.generatedElementHost`); this descriptor is the existing
+  // internal carrier, so the scan fact is re-attached here through the one
+  // typed accessor instead of stopping at the scan. The public `IslandDecl`
+  // protocol type stays unchanged: the identity rides the declaration object
+  // as build-only metadata, and `expandIslandDeliveryDecl`'s spread below keeps
+  // it on every delivery alias. Nothing consumes it yet — no admission verdict,
+  // no registration and no entry codegen — so generated-entry bytes are
+  // unchanged.
+  const localIslands: Array<IslandDecl & GeneratedElementHostCarrier> = islandTagNames.map(
+    (tagName, i) => {
+      const meta = islandMeta[tagName];
+      const deliveryMeta = (meta ?? {}) as Partial<IslandDecl> &
+        IslandDeliveryMeta & {
+          hydrate?: IslandDeliveryStrategy;
+        };
+      const hydrate = resolveIslandHydrate(
+        deliveryMeta.hydrate as IslandDeliveryStrategy | undefined,
+        options.upgradeStrategy,
+      );
+      const hasDeliveryTags =
+        deliveryMeta.tags !== undefined || deliveryMeta.tagNames !== undefined;
+      const deliveryTags = hasDeliveryTags
+        ? resolveIslandDeliveryTags(tagName, deliveryMeta.tags, deliveryMeta.tagNames, tagName)
+        : undefined;
+      const exportNames = validateIslandDeliveryExportNames(
+        deliveryMeta.exportNames,
+        deliveryTags ?? [tagName],
+        tagName,
+      );
+      const localIsland = {
+        tagName,
+        modulePath: islandFiles[i]
+          ? `/${islandsSpecifierDir}/${normalizeSeparators(islandFiles[i])}`
+          : `/${islandsSpecifierDir}/${tagName}.ts`,
+        source: 'local',
+        ...resolveIslandSsrDsd(deliveryMeta),
+        hydrate,
+        ...(hydrate === 'media' && deliveryMeta.media !== undefined
+          ? { media: deliveryMeta.media }
+          : {}),
+        ...(deliveryTags === undefined ? {} : { tags: deliveryTags }),
+        ...(exportNames === undefined ? {} : { exportNames }),
+        reason: meta?.reason,
+      } as IslandDecl;
+      const generatedElementHost = readGeneratedElementHost(meta);
+      return generatedElementHost === undefined
+        ? localIsland
+        : { ...localIsland, generatedElementHost };
+    },
+  );
 
   const packageIslandDecls: IslandDecl[] = buildPackageIslandDecls(
     packageManifests,

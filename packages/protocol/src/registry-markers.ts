@@ -38,3 +38,17 @@ export const ENTRY_REGISTRATION_OWNERS = '__openEntryDefined';
  * through the previous wrapper (#952 dev re-evaluation).
  */
 export const SSR_REGISTRY_ORIGINAL_DEFINE = '__openElementOrigDefine';
+
+/**
+ * Property on the SSR registry holding the generated-entry host pairing table
+ * (tag -> the compiler-emitted generated host renderer): written atomically by
+ * the registry guard together with the class registration (M11) and read by
+ * `@openelement/element`'s server serializer nested-composition seam.
+ *
+ * It lives on the registry (not on the class and not on the module namespace)
+ * for the same reasons the ownership markers do: one writer (the generated
+ * entry's guard), one reader (Element's serializer), no class static / suffix
+ * scan / runtime module-shape read, and the pairing survives vite dev SSR
+ * module re-evaluations together with the class it belongs to.
+ */
+export const SSR_REGISTRY_GENERATED_HOSTS = '__openElementGeneratedHosts';

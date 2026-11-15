@@ -33,6 +33,7 @@ import { HYDRATION_STRATEGIES } from '@openelement/element/authoring';
 import type { IslandDeliveryStrategy } from '@openelement/protocol/ssg';
 import { hasControlCharacter } from './internal/control-characters.ts';
 import { isInvalidIslandMedia, ISLAND_MEDIA_QUERY_MAX_LENGTH } from './internal/island-media.ts';
+import { checkIslandStyleList } from './internal/island-style-specifiers.ts';
 import { authoringError, IslandErrorCode, PageErrorCode } from './internal/error-codes.ts';
 
 /**
@@ -432,18 +433,27 @@ export type FunctionPageComponent<
 const PAGE_DESCRIPTOR_FIELDS = new Set(['route', 'head', 'renderIntent', 'props', 'error']);
 
 /**
- * The class-branch discriminant of definePage()'s first argument. Two shapes
- * are element CLASSES: a value carrying the compiled Part Program
- * (`__partProgram` — the field every class the compiled-element transform
- * emits declares, so a compiled page class is recognized structurally), and
- * an ES class (class syntax defines `prototype` as a NON-writable own
- * property; a plain function's `prototype` is writable and an arrow function
- * has none). The second arm preserves the class path for classes that
- * legitimately carry no compiled program. Everything else function-shaped is
- * a server function page.
+ * The class-branch discriminant of definePage()'s first argument: an ES class.
+ *
+ * Class syntax defines `prototype` as a NON-writable own property; a plain
+ * function's `prototype` is writable and an arrow function has none, so this
+ * is the language's own class fact, not a module-shape convention.
+ *
+ * This is deliberately NOT the page classifier. Whether a route is a class
+ * page or a server function page is a BUILD-TIME fact owned by the route scan
+ * and consumed by route/page generation (`vite/internal/ssg/
+ * page-classification.ts`, M11-1). definePage only decides which descriptor
+ * shape to attach to the value the page module exports, and an ES class takes
+ * the class shape.
+ *
+ * No compiled-artifact field is read here. The retired M01 C07 form
+ * (`component.__partProgram !== undefined`) made an ABI field the page
+ * classifier for every route — including the build-only classification
+ * question — and turned the runtime module shape into a framework contract.
+ * The compiled page class is a real ES class, so it is recognized as a class
+ * by class syntax alone.
  */
 function isElementPageClass(component: (...args: never[]) => unknown): boolean {
-  if ((component as { __partProgram?: unknown }).__partProgram !== undefined) return true;
   const prototype = Object.getOwnPropertyDescriptor(component, 'prototype');
   return prototype !== undefined && prototype.writable === false;
 }
@@ -476,12 +486,14 @@ function isElementPageClass(component: (...args: never[]) => unknown): boolean {
  *   export const loader = async () => ({ heading: 'Home' });
  *   export default definePage(Home, { head: { title: 'Home' } });
  *
- * Runtime discriminant (one rule, no text sniffing): a first argument that is
- * an element CLASS — a value carrying `__partProgram` (what the compiled-
- * element transform emits) or class syntax (its `prototype` is a non-writable
- * own property; plain functions and arrows are not classes) — takes the class
+ * Descriptor-shape discriminant (one rule, no text sniffing, no ABI field): a
+ * first argument that is an ES class (its `prototype` is a non-writable own
+ * property; plain functions and arrows are not classes) takes the class
  * branch; any other function takes the function-page branch. Non-functions
- * fail closed with NOT_COMPILED_CLASS.
+ * fail closed with NOT_COMPILED_CLASS. The class-vs-function PAGE
+ * classification is a build-time route fact owned by the Router plugin, not
+ * this discriminant (M11-1 / M01 C07); definePage only picks the descriptor
+ * shape for the value it is handed.
  */
 export function definePage<
   Data = unknown,
@@ -767,6 +779,32 @@ export interface IslandConfig {
   /** Media query required by the `media` delivery strategy. */
   media?: string;
   /**
+   * Authored stylesheets for a GENERATED-element (function) island: relative
+   * `.css` specifiers resolved against the island module and fed into the
+   * existing router style plan — the same style-edge registry, Vite CSS
+   * pipeline, content-addressed emitted asset and client asset manifest
+   * (`styles`) the class lane's `static styles` imports ride. One style
+   * channel, no second pipeline.
+   *
+   * A class island does not use this field: it declares sheets through `.css`
+   * imports arrayed in its `static styles`, and the build refuses `styles` on a
+   * lane that owns that other channel instead of silently dropping it.
+   *
+   * Deliberately NOT a second adoption mechanism (GH issue #1800, the Alpha17
+   * generated-island style slice): this slice admits the declaration, resolves
+   * it and emits the sheet as a real build asset. It does not attach the sheet
+   * to a rendered island yet:
+   *
+   * - a shadow root has no style carrier until the DSD style-link slice
+   *   (M09-2e), so `styles` with `root: 'shadow'` is refused outright;
+   * - a light root's document-level application (the head `<link>` a light-root
+   *   class component's sheet gets) is not wired to the generated-element render
+   *   path yet.
+   *
+   * Keep the list small (bounded): every entry is one emitted asset edge.
+   */
+  styles?: readonly string[];
+  /**
    * The root family this island is delivered in: `'shadow'` (the compiled
    * default, DSD markup in a shadow root) or `'light'` (the component's
    * children live in the document tree, which is what lets a light island use
@@ -831,6 +869,7 @@ const ISLAND_CONFIG_FIELDS = new Set([
   'dsd',
   'hydrate',
   'media',
+  'styles',
   'root',
   'delegatesFocus',
   'formAssociated',
@@ -883,6 +922,25 @@ function validateIslandTags(value: unknown, field: 'tags' | 'tagNames'): string[
     seen.add(tag);
     return tag;
   });
+}
+
+/**
+ * Runtime shape admission for the generated-island `styles` list (GH issue
+ * #1800). One accepted shape with the static island scan: a non-empty, bounded,
+ * duplicate-free array of relative `.css` specifiers (see
+ * `internal/island-style-specifiers.ts` for the one rule).
+ */
+function validateIslandStyles(value: unknown): string[] {
+  const check = checkIslandStyleList(value);
+  if (!check.ok) {
+    throw authoringError(
+      IslandErrorCode.DESCRIPTOR_SHAPE,
+      `${ERROR_PREFIX} defineIslandConfig() styles ${check.reason}. ` +
+        "Write styles: ['./island.css'] — one or more relative .css files, resolved against " +
+        'the island module by the build and emitted through the existing style plan.',
+    );
+  }
+  return [...check.styles];
 }
 
 const ISLAND_PROPERTY_FIELDS = new Set(['reflect', 'attribute', 'default']);
@@ -1053,8 +1111,9 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
     throw authoringError(
       IslandErrorCode.DESCRIPTOR_SHAPE,
       `${ERROR_PREFIX} defineIslandConfig() requires an object descriptor. ` +
-        'Write export const openElement = defineIslandConfig({ ssr, dsd, hydrate, media, root, ' +
-        'delegatesFocus, formAssociated, properties, tags, tagNames, exportNames }).',
+        'Write export const openElement = defineIslandConfig({ ssr, dsd, hydrate, media, ' +
+        'styles, root, delegatesFocus, formAssociated, properties, tags, tagNames, ' +
+        'exportNames }).',
     );
   }
   for (const key of Object.keys(config)) {
@@ -1062,7 +1121,7 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
       throw authoringError(
         IslandErrorCode.DESCRIPTOR_SHAPE,
         `${ERROR_PREFIX} defineIslandConfig() does not accept "${key}". ` +
-          'Use only ssr, dsd, hydrate, media, root, delegatesFocus, formAssociated, ' +
+          'Use only ssr, dsd, hydrate, media, styles, root, delegatesFocus, formAssociated, ' +
           'properties, tags, tagNames, and exportNames. ' +
           `Remove "${key}" from the descriptor.`,
       );
@@ -1138,6 +1197,23 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
         'to delegate focus through, and a generated element refuses the combination.',
     );
   }
+  const styles = config.styles === undefined ? undefined : validateIslandStyles(config.styles);
+  if (styles !== undefined && config.root === 'shadow') {
+    // A shadow-root generated island has no style carrier in this slice: the
+    // DSD style-link channel is the later M09-2e slice, and emitting an asset
+    // nothing can reach would be a silent loss dressed up as delivery. Fail
+    // closed here (the static island scan repeats the same refusal at build
+    // time from the authored sidecar, where the lane/root fact is known).
+    // Adoption ownership: GH issue #1800 (Alpha17).
+    throw authoringError(
+      IslandErrorCode.DESCRIPTOR_SHAPE,
+      `${ERROR_PREFIX} defineIslandConfig() styles is not deliverable on a shadow-root island. ` +
+        'The DSD style-link carrier for a shadow root is not wired yet (M09-2e owed) and the ' +
+        'generated-element style adoption slice is GH issue #1800 (Alpha17), so the declared ' +
+        "sheets would be silently lost. Set root: 'light' or remove styles — the field is " +
+        'admitted only on a light-root generated-element island.',
+    );
+  }
   if (config.properties !== undefined) validateIslandProperties(config.properties);
   const tags = config.tags === undefined ? undefined : validateIslandTags(config.tags, 'tags');
   const tagNames =
@@ -1185,6 +1261,7 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
   return {
     ...config,
     ...(media === undefined ? {} : { media }),
+    ...(styles === undefined ? {} : { styles }),
     ...(tags === undefined ? {} : { tags }),
     ...(tagNames === undefined ? {} : { tagNames }),
   };

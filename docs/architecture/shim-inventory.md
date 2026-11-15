@@ -68,6 +68,10 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 | 18 | legacy 虚拟入口 id（`virtual:open-hono-entry`，ADR-0152） | `packages/router/src/vite/plugin-virtual-modules.ts` | 条件到即删（随下一次产物命名不兼容变更一起改名） |
 | 19 | Part Program 执行器（旧执行后端） | `packages/element/src/internal/compiled/facade-host.ts`（Part Program → live element 行为的唯一入口；`packages/element/src/internal/compiled/runtime-program.ts` 与之同属该后端，`packages/element/src/internal/compiled/runtime/` 下的 hydrate/resume 的 Part 路径由它驱动） | 条件到即删（M08 的 SSR→claim 与 per-phase 等价在固定 SHA 签收后，下一个 release 周期随生成叶路径接入产品入口一起删除） |
 | 20 | Class authoring API（旧作者面） | `packages/element/src/open-element-implementation.ts`（`OpenElement` 基类；`base.ts`、`open-element-configuration.ts`、`error-boundary.ts` 的类形状同属该面） | 条件到即删（ADR-0173 第四轮已批准零兼容退役；Alpha16b 的 C-1/C-3 能力清单覆盖证据落地、starter/文档迁移完成后删除） |
+| 21 | 生成宿主注册对（M11 垂直切片，ADR-0181） | `packages/router/src/vite/internal/server-runtime/security.ts`（`registerIsland`）+ `packages/protocol/src/registry-markers.ts`（`SSR_REGISTRY_GENERATED_HOSTS`） | 条件到即删（P1 在 tracked 依赖图工件上对全部适用应用判 MET 后随 M11-3 入口切换删除） |
+| 22 | 私有实例保留账本（ADR-0181） | `packages/element/src/internal/compiled/runtime/instance-ledger.ts`（经 `runtime.ts` 对发射代码 re-export） | 条件到即删（Alpha17 预编译分发取代发射式保留计划、且无发射模块再 import 该账本） |
+| 23 | browser-entry-graph 观测工件与检查器（temporary-by-intent） | `packages/router/src/vite/internal/browser-entry-graph.ts`、`browser-entry-graph-artifact.ts`、`tools/repo/check-browser-entry-graph.ts` | 条件到即删（P1 判 MET 且该证据并入 release 门禁后移除一次性检查器；工件本身不进入发布面） |
+| 24 | `OE_ISLAND_STYLE_SHADOW_UNWIRED` 拒绝（ADR-0181） | `packages/router/src/vite/internal/ssg/island-scanner.ts` | 条件到即删（GH #1800 落地 shadow 样式 link 载体、且三引擎通过后移除该拒绝） |
 
 没有"现在删"项：扫描发现的文本级残余（脚本头部陈旧的 `deno run` 用法
 散文）已在 alpha8/alpha10 清理；其余命中要么已含书面退役条件，要么是
@@ -419,3 +423,35 @@ native 选择缝是主产物，不再作为垫片登记。）
 退役条件、每条 `path:line` 引用必须落在文件行数内。评审结论改的是文字，
 机器守住的是"登记项不会没有主人、不会没有退役条件、不会指向不存在的
 路径"。
+
+### 21. 生成宿主注册对（M11 垂直切片）——条件到即删
+
+- 所有者：router server-runtime 注册守卫（`installSsrRegistryGuard` 是唯一写者）。
+- 方向：编译器 `ssrHostExport` → 生成入口静态命名导入 → `registerSsrIsland(tag, ctor, host)` 原子配对 → 元素序列化器在嵌套回调里按 tag 取回 renderer。
+- 存在原因：生成元素没有 `__partProgram`，旧执行器路径无法为其提供 SSR；这层配对是让请求期渲染不必读模块形状（C07 禁止的模式）的最小载体。
+- 退役条件：P1 在 tracked 依赖图工件上对全部适用生产应用判 MET（`tools/repo/check-browser-entry-graph.ts` 全 MET 于一个 clean SHA），且 M11-3 客户端入口切换落地后，配对表随旧执行器一起删除；核验用 `gate:source` + `gate:packed` 在同一 SHA 绿。
+- 处置：条件到即删。
+
+### 22. 私有实例保留账本——条件到即删
+
+- 所有者：element 生成元素运行时（`generated-element/shell.ts` 是唯一消费方）。
+- 方向：生成根 mount/claim 打开一次 pass → `retainChildInstance` 记条目 → 结构性/引用位点显式 release；销毁期 `releaseRetainedChildren`。
+- 存在原因：ADR-0173 要求 setup 只跑一次、断连不重跑，而发射代码在 reconnect claim 时会重算 setup 局部；账本是让保留语义有单一所有者的最小运行时。
+- 退役条件：Alpha17 预编译分发取代当前发射式保留计划，且 `packages/element` 内无发射模块再 import 该账本（`grep` 归零即谓词，`gate:source` 绿）。
+- 处置：条件到即删。
+
+### 23. browser-entry-graph 观测工件与检查器——temporary by intent
+
+- 所有者：router 客户端构建（观察者插件是唯一写者）+ `tools/repo` 只读检查器（唯一读者）。
+- 方向：客户端构建 → `<clientOutDir>/.vite/oe-browser-entry-graph.json` → 检查器判定 MET/VIOLATED/UNPROVEN。
+- 存在原因：P1 要求"生产浏览器入口图上旧执行器不可达"的可重算证据，源码 grep 与包依赖图都不能替代真实 chunk 图。工具刻意不接入任何 gate（gate 顺序属 release lane 决定）。
+- 退役条件：P1 判 MET 且该证据并入 release 门禁之后，一次性检查器删除；工件始终是 Git-ignored 构建输出，不进入发布面。
+- 处置：条件到即删（工具本身不是产品面）。
+
+### 24. `OE_ISLAND_STYLE_SHADOW_UNWIRED` 拒绝——条件到即删
+
+- 所有者：router island 扫描（静态准入的唯一权威）。
+- 方向：`defineIslandConfig({ styles })` + `root: 'shadow'` → 构建期 coded 拒绝，消息点名 M09-2e 与 GH #1800。
+- 存在原因：生成宿主的 DSD 模板尚无 stylesheet-link 通道，若接受声明就会静默丢样式；按 P5 宁可 fail closed。
+- 退役条件：GH #1800 落地 shadow 样式 link/adoption 载体，且一个带 `styles` 的 shadow-root 生成岛在三引擎上构建并渲染通过（`gate:release` 在同一 SHA 绿）。
+- 处置：条件到即删。

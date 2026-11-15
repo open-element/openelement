@@ -579,3 +579,50 @@ is **not** the P5 capability inventory and records no sign-off.
 - §3's dependency spine remains the ordering authority: M10 cannot start before
   M05–M09 (§3:160-161). This amendment adds no dependency edge.
 - No version, tag, publication, public API freeze or release claim is created.
+
+## 16. Dated amendment 2026-11-15 (owner-approved decision register for the Alpha16b capability train)
+
+This amendment registers three decisions the owner made on 2026-11-15 and
+corrects two records that the train left stale. It introduces **no new
+milestone and no new slice label** (§14.4:525-527 stays in force), and it
+changes no verdict.
+
+### 16.1 Decisions registered
+
+| # | Decision | Carrier |
+| --- | --- | --- |
+| D-16a | The author lifecycle surface is **two named compiler-erased intrinsics** (`onConnect`, `onDispose`) with a per-connection callback-returned cleanup; a component-returns-cleanup contract and a single-hook form were rejected. Root-only in Alpha16b. | [ADR-0180](../adr/ADR-0180-function-component-lifecycle-intrinsics.md) (amends ADR-0173) |
+| D-16b | M14 "full await" is **defined as exactly two positions** (a text child, and a server-component prop of a nested server component); every other position is a deliberate boundary with a located `OEC9032` and a named later carrier. | [the M14 definition](./m14-full-await-definition.md) |
+| D-16c | Generated-island component styles use a **sidecar `styles` declaration wired into the existing router style plan**; a shadow-root declaration fails closed until the DSD style-link carrier exists; full shadow adoption is carried by GH #1800 (Alpha17). | [ADR-0181](../adr/ADR-0181-generated-element-ssr-and-retention.md) |
+
+The same record authorizes the generated-element server-rendering surface and
+the private retained-instance ledger enumerated in ADR-0181.
+
+### 16.2 Label correction (no new slice)
+
+The working-tree records used the string `16b-LC-2` for the retained-child
+slice. **That label is withdrawn.** ADR-0181 and the updated
+[`16b-migration-note.md`](./16b-migration-note.md) describe the same work as the
+retained-child half of the existing `16b-LC` obligation. `16b-LC` remains the
+only lifecycle slice; its root half is delivered and its nested/hostless half is
+OPEN.
+
+### 16.3 M11 wording correction
+
+Commits and records in the train call the server-rendering work an "M11 vertical
+slice". Precisely: it is a **bounded vertical slice of M11's server-rendering
+direction**, not M11 and not M11-3. The §13.1 start gate is unchanged and the
+plan's own record stands:
+
+- M11-2 (request-time rendering of generated **pages**) is not done.
+- M11-3 (client entry cutover) is not done, so P1 stays NOT MET.
+- `M10-0 preparation` is tracked but **unsigned**; the unsigned document is not
+  §13.5 P5 evidence (§13.5:447-451 unchanged).
+
+### 16.4 What this amendment does not change
+
+- §2 items 1–8, §12a's five separate proofs, §13.1, §13.2, §13.4, §13.5, §13.6,
+  §14 and §15 are unchanged.
+- No milestone, gate, exit or release claim is created or moved. M09, M10, M11,
+  M12, M13 and M14 keep their recorded statuses.
+- No version, tag, publication or public-API freeze is authorized.

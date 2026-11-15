@@ -277,7 +277,14 @@ async function scanIslandsIntoCtx(state: OpenPluginState): Promise<string> {
   const islandFiles = await scanIslands(islandsRoot);
   state.ctx.phase1.islandTagNames = islandFiles.map((f) => fileToTagName(f));
   state.ctx.phase1.islandFiles = islandFiles;
-  state.ctx.phase1.islandMeta = await scanIslandMeta(islandsRoot, islandFiles);
+  // The compiler identity anchor is the actual Vite root (configResolved's
+  // `cfg.root`), not an assumption that the process cwd is the project root;
+  // the cwd fallback only serves hosts that never resolved a Vite config.
+  state.ctx.phase1.islandMeta = await scanIslandMeta(
+    islandsRoot,
+    islandFiles,
+    state.viteRoot ?? process.cwd(),
+  );
   return islandsRoot;
 }
 

@@ -14,6 +14,18 @@ interface InteropState {
   existingIdentity: Record<string, boolean>;
   existingLiveState: Record<string, boolean>;
   ready: boolean;
+  /** Hits counted by the generated host's authored `onClick` handler (M09-2c channel). */
+  generatedHostHits: number;
+  /** Pre-upgrade identity/live-state of the foreign children under the generated host. */
+  generatedExistingIdentity: Record<string, boolean>;
+  generatedExistingLiveState: Record<string, boolean>;
+  /**
+   * Registry snapshot taken before this module defines the foreign probes. The
+   * fixture client is the app's only definer, so `true` is the consumer-form
+   * evidence that neither the page, the islands nor the generated host
+   * auto-register a foreign tag.
+   */
+  foreignTagsRegisteredBeforeFixtureClient: boolean;
 }
 
 const state = (): InteropState => {
@@ -26,6 +38,10 @@ const state = (): InteropState => {
     existingIdentity: {},
     existingLiveState: {},
     ready: false,
+    generatedHostHits: 0,
+    generatedExistingIdentity: {},
+    generatedExistingLiveState: {},
+    foreignTagsRegisteredBeforeFixtureClient: false,
   };
   return global.__interopState;
 };
@@ -35,6 +51,20 @@ const probeTags = [
   'interop-lit-probe',
   'interop-fast-probe',
   'interop-stencil-probe',
+] as const;
+
+/**
+ * The foreign children the page authors as the generated host's light DOM.
+ * They are the same probe tags; their ids live in the fixture's corpus and are
+ * mirrored here so the pre-upgrade capture can find them before any definition
+ * runs.
+ */
+const generatedHostTag = 'interop-generated-host';
+const generatedProbeIds = [
+  'generated-native',
+  'generated-lit',
+  'generated-fast',
+  'generated-stencil',
 ] as const;
 
 type LiveStateElement = Element & { __interopLiveState?: string };
@@ -56,7 +86,7 @@ function fixtureShadowRoot(): ShadowRoot | null {
   return fixture?.shadowRoot ?? null;
 }
 
-function findById(root: ShadowRoot, id: string): Element | null {
+function findById(root: ParentNode, id: string): Element | null {
   return Array.from(root.querySelectorAll('*')).find((element) =>
     (element as HTMLElement).id === id
   ) ?? null;
@@ -76,6 +106,28 @@ if (preUpgradeRoot) {
     }
   }
 }
+
+// The generated-host block authors its foreign children as the host's light
+// DOM (the page places them there), so they sit outside the fixture island's
+// shadow root. Capture them the same way: the point is that the upgrade of the
+// host and of the foreign tags happens in place.
+const generatedHostElement = findTag(document, generatedHostTag);
+const generatedPreUpgradeElements = new Map<string, Element>();
+if (generatedHostElement) {
+  for (const id of generatedProbeIds) {
+    const element = findById(generatedHostElement, id);
+    if (!element) continue;
+    const liveElement = element as LiveStateElement;
+    generatedPreUpgradeElements.set(id, liveElement);
+    liveElement.__interopLiveState = `pre-upgrade:${id}`;
+  }
+}
+
+// Registry snapshot BEFORE any definition in this module: proves the app does
+// not auto-register the foreign probe tags anywhere ahead of the fixture client.
+const foreignTagsRegisteredBeforeFixtureClient = probeTags.every(
+  (tag) => customElements.get(tag) === undefined,
+);
 
 function mark(phase: UpgradeEntry['phase'], element: Element): void {
   state().upgradeOrder.push({ phase, tag: element.localName, id: element.id });
@@ -236,6 +288,17 @@ for (const [id, element] of preUpgradeElements) {
   existingLiveState[id] = liveElement.__interopLiveState === `pre-upgrade:${id}`;
 }
 
+const postGeneratedHost = findTag(document, generatedHostTag);
+const generatedExistingIdentity: Record<string, boolean> = {};
+const generatedExistingLiveState: Record<string, boolean> = {};
+for (const [id, element] of generatedPreUpgradeElements) {
+  const liveElement = element as LiveStateElement;
+  generatedExistingIdentity[id] = postGeneratedHost !== null &&
+    findById(postGeneratedHost, id) === element;
+  generatedExistingLiveState[id] =
+    liveElement.__interopLiveState === `pre-upgrade:${id}`;
+}
+
 const interopGlobal = globalThis as typeof globalThis & {
   __interopState?: InteropState;
 };
@@ -243,5 +306,8 @@ interopGlobal.__interopState = {
   ...state(),
   existingIdentity,
   existingLiveState,
+  generatedExistingIdentity,
+  generatedExistingLiveState,
+  foreignTagsRegisteredBeforeFixtureClient,
   ready: true,
 };

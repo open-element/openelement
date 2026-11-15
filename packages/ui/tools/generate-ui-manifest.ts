@@ -27,6 +27,11 @@ import type {
 import ts from 'typescript';
 import { formatJson } from '@openelement/element/build-utils';
 import { parseTypeScript } from '../../../tools/lib/typescript-ast.ts';
+import {
+  formatGeneratedElementRefusals,
+  readGeneratedElementFacts,
+  type GeneratedElementFacts,
+} from './generated-element-facts.ts';
 
 const UI_SRC_DIR = new URL('../src/', import.meta.url);
 const UI_PACKAGE_JSON = new URL('../package.json', import.meta.url);
@@ -34,7 +39,18 @@ const OUT_FILE = new URL('../src/generated-manifest.json', import.meta.url);
 
 const pkgVersion = JSON.parse(readFileSync(UI_PACKAGE_JSON, 'utf8')).version;
 
-interface ComponentMeta {
+/**
+ * The host site fact for one function-component module: the tag the island
+ * pipeline will register. The compiler lane never derives a tag, and neither
+ * does this tool — the resolver is the caller's host fact, exactly as
+ * `GeneratedElementSite.tag` is for the compiler. The live `src/` scan has no
+ * tag source yet (phase 2 owns it), so its resolver returns null and a
+ * function-shaped module there keeps the fail-loud skip.
+ */
+export type GeneratedElementTagResolver = (file: string) => string | null;
+
+interface ClassComponentMeta {
+  readonly origin: 'class';
   file: string;
   tagName: string;
   className: string;
@@ -54,6 +70,20 @@ interface ComponentMeta {
   status: 'stable' | 'experimental';
 }
 
+/**
+ * A function-component module the compiler lane emitted. The facts are the
+ * emitted element's own (see `generated-element-facts.ts`); delivery policy is
+ * deliberately absent — `layer`/`hydrate`/`status` are UI package policy, not
+ * compiler facts, and phase 1 adds no `POLICY_BY_CLASS` entry for fixtures.
+ */
+interface GeneratedComponentMeta {
+  readonly origin: 'generated-element';
+  readonly file: string;
+  readonly facts: GeneratedElementFacts;
+}
+
+type ComponentMeta = ClassComponentMeta | GeneratedComponentMeta;
+
 const COMPONENT_ORDER = [
   'open-button',
   'open-input',
@@ -70,7 +100,7 @@ const COMPONENT_ORDER = [
 // Hand-aligned with HYDRATION_STRATEGIES in
 // packages/protocol/src/framework.ts (source of truth);
 // tools cannot import element runtime code.
-const POLICY_BY_CLASS: Record<string, Pick<ComponentMeta, 'layer' | 'hydrate' | 'status'>> = {
+const POLICY_BY_CLASS: Record<string, Pick<ClassComponentMeta, 'layer' | 'hydrate' | 'status'>> = {
   OpenButton: { layer: 'dsd-interactive', hydrate: 'load', status: 'stable' },
   OpenInput: { layer: 'dsd-interactive', hydrate: 'load', status: 'experimental' },
   OpenThemeToggle: { layer: 'dsd-interactive', hydrate: 'load', status: 'stable' },
@@ -79,7 +109,9 @@ const POLICY_BY_CLASS: Record<string, Pick<ComponentMeta, 'layer' | 'hydrate' | 
   OpenDropdown: { layer: 'dsd-interactive', hydrate: 'load', status: 'experimental' },
 };
 
-function policyForClass(className: string): Pick<ComponentMeta, 'layer' | 'hydrate' | 'status'> {
+function policyForClass(
+  className: string,
+): Pick<ClassComponentMeta, 'layer' | 'hydrate' | 'status'> {
   const policy = POLICY_BY_CLASS[className];
   if (!policy) {
     throw new Error(
@@ -90,15 +122,15 @@ function policyForClass(className: string): Pick<ComponentMeta, 'layer' | 'hydra
   return policy;
 }
 
-export function layerFromClass(className: string): ComponentMeta['layer'] {
+export function layerFromClass(className: string): ClassComponentMeta['layer'] {
   return policyForClass(className).layer;
 }
 
-export function hydrateFromClass(className: string): ComponentMeta['hydrate'] {
+export function hydrateFromClass(className: string): ClassComponentMeta['hydrate'] {
   return policyForClass(className).hydrate;
 }
 
-export function statusFromClass(className: string): ComponentMeta['status'] {
+export function statusFromClass(className: string): ClassComponentMeta['status'] {
   return policyForClass(className).status;
 }
 
@@ -308,7 +340,7 @@ function parseDescription(text: string): string {
   return '';
 }
 
-function buildMeta(file: string, source: string): ComponentMeta {
+function buildMeta(file: string, source: string): ClassComponentMeta {
   const tagName = parseTagName(source);
   const className = parseClassName(source, file);
   const observed = parseObservedAttributes(source);
@@ -325,6 +357,7 @@ function buildMeta(file: string, source: string): ComponentMeta {
   }
 
   return {
+    origin: 'class',
     file,
     tagName,
     className,
@@ -339,43 +372,118 @@ function buildMeta(file: string, source: string): ComponentMeta {
   };
 }
 
-function readComponentSources(): ComponentMeta[] {
+/**
+ * Read the component declarations under `rootDir`.
+ *
+ * Dispatch is structural: a class-authored module keeps the existing class
+ * branch untouched; a module the generated-element lane owns needs the host
+ * site fact (`sites(file)`), and is projected only when the compiler lane
+ * actually emitted it. A module that passes the `open-*.tsx` naming convention
+ * but reaches neither branch is NOT filtered out — it would disappear from the
+ * manifest, from custom-elements.json, from the packed tarball and from the API
+ * reference while `ui-manifest:check`, `ui-cem:check` and `gate:packed` all
+ * stay green, because all three compare against a file this loop never wrote.
+ * That is a silent capability loss, so the skip below refuses instead of
+ * filtering: it names the files.
+ */
+function readComponentSources(
+  rootDir: URL = UI_SRC_DIR,
+  sites: GeneratedElementTagResolver = () => null,
+): ComponentMeta[] {
   const metas: ComponentMeta[] = [];
-  // The `open-*.tsx` naming convention is the ONLY registration point for a
-  // shipped component, so a file that passes it and is then dropped is not
-  // filtered out — it disappears from the manifest, from custom-elements.json,
-  // from the packed tarball and from the API reference while `ui-manifest:check`,
-  // `ui-cem:check` and `gate:packed` all stay green, because all three compare
-  // against a file this loop never wrote. That is a silent capability loss, so
-  // the skip below refuses instead of filtering: it names the files.
   const skipped: string[] = [];
-  for (const entry of readdirSync(UI_SRC_DIR, { recursive: true, withFileTypes: true })) {
+  const refused: string[] = [];
+  for (const entry of readdirSync(rootDir, { recursive: true, withFileTypes: true })) {
     if (entry.isDirectory() || !entry.name.startsWith('open-') || !entry.name.endsWith('.tsx')) {
       continue;
     }
     const source = readFileSync(`${entry.parentPath}/${entry.name}`, 'utf8');
-    if (!source.includes('extends OpenElement')) {
+    if (source.includes('extends OpenElement')) {
+      metas.push(buildMeta(entry.name, source));
+      continue;
+    }
+    const tag = sites(entry.name);
+    if (tag === null) {
       skipped.push(entry.name);
       continue;
     }
-    metas.push(buildMeta(entry.name, source));
+    const read = readGeneratedElementFacts({ file: entry.name, source, tag });
+    if (read.kind === 'admitted') {
+      metas.push({ origin: 'generated-element', file: entry.name, facts: read.facts });
+      continue;
+    }
+    if (read.kind === 'refused') {
+      refused.push(
+        `open-*.tsx ${entry.name} was refused by the compiler generated-element lane:\n` +
+          formatGeneratedElementRefusals(read.diagnostics),
+      );
+      continue;
+    }
+    skipped.push(entry.name);
+  }
+  if (refused.length > 0) {
+    throw new Error(
+      `${refused.join('\n\n')}\n\n` +
+        'The file passes the component naming convention, so projecting no declaration would ' +
+        'drop it from the manifest, the Custom Elements Manifest, the packed artifact and the ' +
+        'API reference unnoticed.',
+    );
   }
   if (skipped.length > 0) {
     throw new Error(
-      `open-*.tsx files must declare \`export [default] class <Name> extends OpenElement\`: ` +
-        `${skipped.join(', ')} passed the naming convention but not the shape, so it would be ` +
-        'dropped from the manifest, the Custom Elements Manifest, the packed artifact and the ' +
-        'API reference unnoticed. Declare the component shape, or rename the file so it is not ' +
-        'published. A function-component authoring form needs its own branch in this function ' +
-        'first (alpha16-18-execution-plan.md §14.2).',
+      `open-*.tsx files must declare \`export [default] class <Name> extends OpenElement\` ` +
+        `or be admitted by the compiler generated-element lane: ${skipped.join(', ')} passed ` +
+        'the naming convention but not either shape, so it would be dropped from the manifest, ' +
+        'the Custom Elements Manifest, the packed artifact and the API reference unnoticed. ' +
+        'Declare the component shape, or rename the file so it is not published. A ' +
+        'function-component module needs a host-supplied generated-element site fact (the tag) ' +
+        'for its compile; the live `src/` scan has no tag source yet ' +
+        '(alpha16-18-execution-plan.md §14.2).',
     );
   }
+  // The policy order is the published declaration order; the tag tie-break
+  // keeps a root with several non-policy components (the test fixture roots)
+  // deterministic instead of inheriting the filesystem's readdir order.
   const order = new Map(COMPONENT_ORDER.map((t, i) => [t, i]));
-  metas.sort((a, b) => (order.get(a.tagName) ?? 999) - (order.get(b.tagName) ?? 999));
+  const tagOf = (meta: ComponentMeta): string =>
+    meta.origin === 'class' ? meta.tagName : meta.facts.tag;
+  metas.sort((a, b) => {
+    const byOrder = (order.get(tagOf(a)) ?? 999) - (order.get(tagOf(b)) ?? 999);
+    return byOrder === 0 ? tagOf(a).localeCompare(tagOf(b)) : byOrder;
+  });
   return metas;
 }
 
-function buildDeclaration(meta: ComponentMeta): OpenElementDeclaration {
+/**
+ * Project emitted-element facts into the internal manifest declaration.
+ *
+ * The declaration describes the EMITTED native class, which is what the lane
+ * produced and shipped: `className`/`openElement.export` are the emitted
+ * module's own named export. `superclassName` is deliberately absent — the
+ * emitted class extends the non-public `OpenElementBase`, so there is no
+ * truthful public superclass to name. `events` is absent because the function
+ * lane has no authored custom-event surface; delivery policy is absent because
+ * it is UI package policy, not a compiler fact (phase 1 adds no
+ * `POLICY_BY_CLASS` entry).
+ */
+export function buildGeneratedElementDeclaration(
+  facts: GeneratedElementFacts,
+): OpenElementDeclaration {
+  return {
+    tagName: facts.tag,
+    className: facts.className,
+    ...(facts.description === '' ? {} : { description: facts.description }),
+    ...(facts.attributes.length ? { attributes: [...facts.attributes] } : {}),
+    ...(facts.slots.length ? { slots: [...facts.slots] } : {}),
+    ...(facts.cssParts.length ? { cssParts: [...facts.cssParts] } : {}),
+    openElement: {
+      module: facts.module,
+      export: facts.exportName,
+    },
+  };
+}
+
+function buildClassDeclaration(meta: ClassComponentMeta): OpenElementDeclaration {
   return {
     tagName: meta.tagName,
     className: meta.className,
@@ -409,13 +517,27 @@ function buildDeclaration(meta: ComponentMeta): OpenElementDeclaration {
   };
 }
 
+function buildDeclaration(meta: ComponentMeta): OpenElementDeclaration {
+  return meta.origin === 'generated-element'
+    ? buildGeneratedElementDeclaration(meta.facts)
+    : buildClassDeclaration(meta);
+}
+
 export type GeneratedUiManifest = OpenElementPackageManifest & {
   /** JSON has no comment syntax; this is the generated-file header. */
   $comment: string;
 };
 
-export function buildManifest(): GeneratedUiManifest {
-  const metas = readComponentSources();
+/**
+ * Build the manifest for one component root. `sites` is the host site fact
+ * resolver for function-component modules; the live `src/` scan passes none
+ * (phase 2 owns the live tag source).
+ */
+export function buildManifestFromRoot(
+  rootDir: URL,
+  sites: GeneratedElementTagResolver = () => null,
+): GeneratedUiManifest {
+  const metas = readComponentSources(rootDir, sites);
   const declarations = metas.map(buildDeclaration);
   // No `modules` block (#797): it emitted CEM-style paths like
   // `./open-card.js` that do not exist in the published package (`src/**`),
@@ -434,6 +556,11 @@ export function buildManifest(): GeneratedUiManifest {
     repository: 'https://github.com/open-element/openelement',
     declarations,
   };
+}
+
+/** The shipped manifest: the six class-authored components under `src/`. */
+export function buildManifest(): GeneratedUiManifest {
+  return buildManifestFromRoot(UI_SRC_DIR);
 }
 
 if (import.meta.main) {

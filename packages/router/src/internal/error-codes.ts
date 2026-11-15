@@ -63,6 +63,19 @@ export const IslandErrorCode = {
   TAGS: 'OE_ISLAND_TAGS',
   /** `exportNames` is malformed or names a tag outside the delivery set. */
   EXPORT_NAMES: 'OE_ISLAND_EXPORT_NAMES',
+  /**
+   * `styles` was declared on a SHADOW-root generated island. The generated
+   * element's DSD template has no stylesheet-link channel yet (M09-2e owed), so
+   * the declaration is refused at build instead of being silently dropped.
+   * Carrier: GH #1800 (Alpha17 shadow style adoption).
+   */
+  STYLE_SHADOW_UNWIRED: 'OE_ISLAND_STYLE_SHADOW_UNWIRED',
+  /**
+   * `styles` was declared on a module that is not a light-root generated
+   * island: the class lane owns `static styles` and an island that is not
+   * compiled by the generated-element lane has no channel here.
+   */
+  STYLE_LANE_UNSUPPORTED: 'OE_ISLAND_STYLE_LANE_UNSUPPORTED',
 } as const;
 
 /** Stable codes for the serve CLI (`start`/`preview`). */

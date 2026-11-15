@@ -48,6 +48,40 @@ dependencies (Lit, FAST, Ionic) are consumed as pinned npm packages.
   presence, shadow root, upgrade order (constructor before connected),
   pre-upgrade identity and live-state preservation, plus fresh-DOM probes.
 
+## Generated host slice (M09-3)
+
+Besides the two canonical placements, the corpus is hosted a third time by a
+**real generated Native Custom Element**: `app/islands/interop-generated-host.tsx`
+is a function-component island (`defineIslandConfig({ hydrate: 'load',
+ssr: false, root: 'shadow' })`) that the build's generated-element lane
+compiles — the fixture never hand-writes generated Custom Element code. The
+page authors the four canonical foreign probe tags as that host's **light
+children**, so the host's authored `<slot>` / `part` / `onClick` surfaces
+project and control the same four origins.
+
+What the generated-host block asserts (same 7 probes as the canonical
+placements, plus host-level facts):
+
+- the host is a plain tag with authored light children in SSR, **no DSD
+  template**, and the admission plan classifies it `client-only` with the
+  `openElement.ssr is false` island reason — entry-level DSD SSR for generated
+  islands has no production caller yet (M11 wiring), so this fixture records
+  the boundary instead of faking SSR capability;
+- the host is defined by its island client entry, upgrades in place, and
+  mounts its authored shadow root; native slots project the named caption and
+  the four foreign children; the authored `part` token is present; the authored
+  `onClick` runs exactly once with no DOM event attribute; the composed click
+  crosses the host's shadow boundary to the document;
+- the four foreign probes still satisfy property/attribute, event, slot,
+  css-part, root, upgrade-order, pre-upgrade identity and live-state; their own
+  composed events reach the document through the host;
+- the foreign probe tags are **not** registered before the fixture client runs
+  (the fixture client stays the only definer — no auto-registration).
+
+Not claimed: generated-host DSD SSR (M11), host-dispatched `CustomEvent`
+vocabulary, styles/theme/`::part` styling, or any M13/CI matrix identity. The
+`qualify` run is LOCAL, per-engine evidence.
+
 ## Boundary with `fixtures/third-party-web-components/`
 
 This fixture owns the **canonical contract** corpus (owned synthetic probes,

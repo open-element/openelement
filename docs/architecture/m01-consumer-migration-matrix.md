@@ -21,6 +21,20 @@ is unchanged since the design base (zero diff for the row files), so the anchors
 and CURRENT FACT readings below still hold. The counts are re-checked **row**
 counts, not a new source scan; no implementation was changed in this pass.
 
+Working-tree revision 2026-11-15 (M11-1; dirty tree, not a base-commit
+re-verification): C07's runtime `__partProgram` presence check is removed from
+page classification. `isElementPageClass` keeps only the class-syntax arm (an ES
+class defines `prototype` as a non-writable own property) as `definePage`'s
+descriptor-shape discriminant, and the class-vs-function page fact is now the
+build-time route fact owned by
+`packages/router/src/vite/internal/ssg/page-classification.ts` — recorded by the
+route scan (`PageModuleFacts`) and carried on the page declaration
+(`PageRouteDecl.pageKind`) through the typed accessors. **C07 is NOT retired by
+this revision**: M11-2 request-time generated page rendering is not done (the
+generated-element page kind is classified and refused fail-closed) and C08–C11
+are untouched. The 2026-11-05 base-commit facts and counts below stay the dated
+record.
+
 Method: repository-wide search for `__partProgram`, `PartProgramV2`,
 `PartProgram`, `PART_PROGRAM_VERSION`, `COMPILED_MODULE_ABI_VERSION`,
 `validatePartProgram`, `normalizePartProgram`, `createFreshDom`,
@@ -46,7 +60,7 @@ the old reading is not mistaken for current guidance.
 | C04 | `packages/element/src/public-runtime.ts:222,378,419,520-540,725-790` | `renderToStringAtDepth`, `createStreamShellExecutor` | tag, `metadata.properties`, program digest | R | tag lookup, registration, SSR serialization, stream shell | Server + ABI | request-time generated server structure (server-private) + tag/property metadata | 16b | SSR/stream tests | the request-time path runs the generated server entrypoint and reads no Semantic IR; the server-private structure is neither the IR nor a serialized copy of it |
 | C05 | `packages/element/src/server.ts:108-197` | server rendering helpers | compiled property metadata, root kind | R | HTML composition, root mode | Server | server-private structure | 16b | server HTML tests | server backend owns its structure |
 | C06 | `packages/element/src/internal/compiled/server/index.ts:674-681` | serializer entry | `PartProgramV2` | R | serialization entry point | Server | request-time generated server entrypoint over a server-private structure — not the Semantic IR, and not a serialized copy of it | 16b | compiled-server tests | serializer consumes the generated server render structure (a server-private artifact); the Semantic IR never crosses a process boundary |
-| C07 | `packages/router/src/authoring.ts:441-445` | `isElementPageClass` | `component.__partProgram !== undefined` | R | distinguishes element page class from function page (**property check, not lexical**) | Build metadata (build-time classification) | Router-plugin page-classification fact derived at build time — **not an ABI field, and not C08's component identity metadata** | 16b | router authoring tests | page classification is derived at build time, not by reading a runtime property on the module |
+| C07 | `packages/router/src/authoring.ts` (`isElementPageClass`, base `:441-445`) and `packages/router/src/vite/internal/ssg/page-classification.ts` | `isElementPageClass` (descriptor-shape discriminant only) plus `buildPageModuleFacts`/`classifyPageModule`/`resolvePageKind`/`pageKindOf` | base: `component.__partProgram !== undefined`; working tree: ES class syntax only (a non-writable own `prototype`) | R (base) → build fact (working tree) | base: distinguishes element page class from function page (**property check, not lexical**). WORKING TREE (2026-11-15, M11-1): the runtime presence check is removed from classification; `definePage` only picks the descriptor shape for an ES class, and the page kind is derived at build time from the scan's module facts plus the local island identity (`PageModuleFacts` carrier, `PageRouteDecl.pageKind`, read through the typed accessors) | Build metadata (build-time classification) | Router-plugin page-classification fact derived at build time — **not an ABI field, and not C08's component identity metadata**; landed as `page-classification.ts` with typed accessors and no public protocol type change | 16b (M11-1 in the working tree; M11-2 not done) | `packages/router/__tests__/function-page.test.ts` (class-syntax arm, no compiled-artifact property required) and `packages/router/__tests__/page-classification.test.ts` (M11-1 build-fact/typed-accessor sweep, 21 tests, LOCAL dirty-tree run at baseline `2545e0ac6`) | **PARTIAL — NOT RETIRED.** The classification no longer reads a runtime property (M11-1, working tree), but C07's lane is not closed: **M11-2 request-time generated page rendering is not done** (the generated-element page kind is classified and refused by a coded build error) and **C08–C11 are untouched** (page-tag identity, stream validation/identity and `PageRouteModule` typing still read `__partProgram`). Retirement needs M11-2 plus the C08–C11 migrations |
 | C08 | `packages/router/src/vite/internal/server-runtime/renderer-runtime.ts:167-175` | tag resolution | `__partProgram.tag` | R | resolves the compiled page tag | ABI | component identity metadata | 16b | renderer tests | tag comes from metadata |
 | C09 | `packages/router/src/vite/internal/server-runtime/route-dispatch.ts:47-83` | `readPartProgram` | `{version, tag}` | R | stream route validation against manifest | ABI + wire | ABI version + component identity | 16b | stream route tests | mismatch checks read new fields |
 | C10 | `packages/router/src/vite/internal/server-runtime/stream-runtime.ts:516-525` | identity guard | tag + version | R | rejects build skew on streamed hosts | ABI + wire | ABI version + build identity | 16b | stream identity tests | skew rejection preserved |
@@ -123,6 +137,18 @@ not as an alternative reading.
   build-time page-classification fact — it is not a field on the 16b component
   metadata record and must not be conflated with C08's tag/identity metadata.
 
+**C07 working-tree correction (2026-11-15, M11-1).** The APPROVED TARGET above
+has landed as `packages/router/src/vite/internal/ssg/page-classification.ts`:
+`buildPageModuleFacts` records the build facts in the route scan,
+`resolvePageKind` classifies (class page / function page / classified-but-unwired
+generated-element page), and `pageKindOf`/`isFunctionPage`/`readPageKind` are the
+typed accessors, so `PageModuleFacts` rides the scanned route and the page
+declaration carries the kind; `isElementPageClass` now reads class syntax only.
+The public `RouteEntry`/`PageRouteDecl` types are unchanged and no ABI field was
+added (boundary §7). This is the classification fact, not C07's retirement:
+M11-2 request-time generated page rendering is not done — the generated-element
+kind is refused with a coded build error — and C08–C11 are untouched.
+
 ## Classification counts (row counts; re-checked 2026-11-05)
 
 Rows **overlap** by theme — one file can be both a runtime consumer and an SSR
@@ -132,7 +158,7 @@ migration estimate elsewhere: this table's 23 rows are the audit ledger.
 
 | Theme | Rows | Overlaps with |
 | --- | --- | --- |
-| Runtime property access | C01, C02, C03, C04, C05, C06, C07, C08, C09, C10 | SSR (C04–C06), Router (C07–C10), stream (C09, C10) |
+| Runtime property access | C01, C02, C03, C04, C05, C06, C08, C09, C10 (C07 was in this theme at the base commit; the 2026-11-15 working tree moves its classification to build time) | SSR (C04–C06), Router (C08–C10), stream (C09, C10) |
 | Type-only | C11, C14, C15, C17, C18 | runtime (C11), protocol (C14–C15, C17–C18) |
 | Lexical (source text) | **C12, C13** — exactly two, in two different packages | build only |
 | Public API / protocol | C19, C20 | type-only (C14–C18 consume these) |
@@ -151,9 +177,11 @@ to decrement:
 - C04 and C06 stay in the SSR theme; only the name of what the request-time
   serialization/stream path consumes changes (server-private generated structure,
   not the IR).
-- C07 is counted as a direct field-audit row because it reads the emitted field
-  today, while its target channel is build-time classification. Its `R` access is a
-  current fact, not a claim that 16b ships an ABI field for it.
+- C07 is counted as a direct field-audit row because it read the emitted field at
+  the base commit, while its target channel is build-time classification. Its `R`
+  access was a base-commit fact, not a claim that 16b ships an ABI field for it;
+  the 2026-11-15 working tree removes that read (M11-1) while keeping the row as
+  the audit entry.
 
 ## Blocking pairs
 
@@ -169,7 +197,11 @@ a silent failure rather than a type error:
   `component.__partProgram !== undefined` makes every page classify as a function
   page — silently, with no type error. So the classification fact must land in the
   same change as the field removal, even though the two rows then live in
-  different layers.
+  different layers. WORKING TREE 2026-11-15 (M11-1): C07's half of the pair is
+  severed — the build-time classification landed first and the runtime presence
+  test is gone, so removing the field can no longer silently flip page
+  classification; C11 is untouched, and the pair still sequences the ABI removal
+  with C08–C11 (C11's type plus C08/C09/C10's reads).
 - **C09 + C10** — stream validation and stream identity read the same two fields.
 
 ## What this matrix does not do

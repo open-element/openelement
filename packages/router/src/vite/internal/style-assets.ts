@@ -89,6 +89,7 @@ import {
 } from '@openelement/protocol/style-sheet';
 import { buildError, ClientBuildErrorCode } from '../../internal/error-codes.ts';
 import { scopeLightRootCss } from './light-css-scope.ts';
+import { islandStyleDeclarations } from './island-style-declarations.ts';
 import { dirname as posixDirname, relative as posixRelative } from 'pathe';
 import { owningPackageName, packageNameAt } from './package-identity.ts';
 
@@ -567,6 +568,17 @@ export interface ServerRenderedSeeds {
  * content address, manifest record and adapters an island's sheet gets, in the
  * same client build. Modules are read, never imported: no server-only
  * JavaScript reaches a client bundle.
+ *
+ * Generated-island declarations (GH issue #1800) ride the same pass: the island
+ * scan records each admitted `styles` list (`island-style-declarations.ts`), and
+ * the discovery registers it into the compiler registry before the walk — a
+ * declared sheet has no authored `.css` import to discover, and a client-only
+ * island is not a server-rendered root at all. The emission half then serves
+ * those edges exactly like a walked one: one emission state, one content hash,
+ * one client asset manifest record. What this pass does NOT do is declare the
+ * sheet in rendered markup: a shadow root's DSD style-link carrier is M09-2e
+ * owed (the scan refuses a shadow declaration before it reaches here), and the
+ * light root's document-level application is the Alpha17 adoption slice.
  */
 export function serverRenderedStyleEdgesPlugin(
   seeds: ServerRenderedSeeds,
@@ -678,6 +690,14 @@ async function discoverServerRenderedModules(
   /** The admitted static component tags the server function component lane routes through `__ssr`. */
   serverComponentTags: readonly string[] = [],
 ): Promise<Map<string, RegisteredStyleRequest>> {
+  // The generated-island style declarations (GH issue #1800): the island scan
+  // is their ONE producer, and this pass is the ONE consumer that turns a
+  // declaration into a registered style edge in the SAME registry the class
+  // lane's authored `.css` imports ride. They are registered before the walk
+  // because the declaration — not the module graph — is the demand fact for
+  // this lane: a generated island has no authored `.css` import, and a
+  // client-only island is not an SSR entry import at all.
+  const declaredEdges = registerDeclaredIslandStyleEdges();
   const roots = [...seeds.files];
   for (const specifier of seeds.specifiers) {
     // The island modules the SSR entry imports, resolved exactly as that
@@ -696,12 +716,16 @@ async function discoverServerRenderedModules(
     // Reported through the build's own channel, like every other boundary of
     // this pass: a build with no route, layout or SSR-renderable island module
     // emits no sheet, and saying so is the difference between a diagnosis and
-    // a silent no-op.
-    this.warn(
-      'Server-rendered style discovery found no module roots (no route, layout or ' +
-        'SSR-renderable island module); no stylesheet edge was emitted.',
-    );
-    return new Map();
+    // a silent no-op. The declared edges are already registered, so the
+    // emission half still emits them (a client-only generated island's sheet
+    // has no server-rendered root to be walked from).
+    if (declaredEdges.size === 0) {
+      this.warn(
+        'Server-rendered style discovery found no module roots (no route, layout or ' +
+          'SSR-renderable island module); no stylesheet edge was emitted.',
+      );
+    }
+    return declaredEdges;
   }
   const effectiveRoot = root ?? process.cwd();
   const workspaceRoot = findBuildWorkspaceRoot(effectiveRoot) ?? undefined;
@@ -794,8 +818,10 @@ async function discoverServerRenderedModules(
   // `getStyleRequest`, a round-trip that does not hold for every registry key
   // (11 starter sheets failed it: `NO REQUEST`), so their assets were never
   // emitted and the SSR phase failed closed. The registry already gave us the
-  // requests; use them, keyed by their canonical module id.
-  const edges = new Map<string, RegisteredStyleRequest>();
+  // requests; use them, keyed by their canonical module id. The generated-island
+  // declarations are part of the same set: one emission state, one hash, one
+  // manifest.
+  const edges = new Map<string, RegisteredStyleRequest>(declaredEdges);
   for (const file of walk.files) {
     for (const request of styleRequestsForImporter(file)) {
       edges.set(request.moduleId, request);
@@ -805,6 +831,30 @@ async function discoverServerRenderedModules(
     `Server-rendered discovery walked ${walk.files.length} module(s) and declared ${edges.size} ` +
       'stylesheet edge(s) for emission',
   );
+  return edges;
+}
+
+/**
+ * Register every generated-island style declaration (GH issue #1800) into the
+ * compiler's style-edge registry, and return the registered requests so the
+ * emission half serves them through the build's ONE emission state.
+ *
+ * Resolution is the class lane's: the specifier is joined against the island
+ * module's directory by the compiler's ONE key derivation
+ * (`styleRequestModuleId`), and the island's tag rides as the light-root scope
+ * tag, so the emitted asset is the same native `@scope (<tag>)` projection a
+ * light-root class component's authored sheet gets. The island scan already
+ * validated the specifier shape, the lane and the root; this pass adds no second
+ * validation and no second style pipeline.
+ */
+function registerDeclaredIslandStyleEdges(): Map<string, RegisteredStyleRequest> {
+  const edges = new Map<string, RegisteredStyleRequest>();
+  for (const declaration of islandStyleDeclarations()) {
+    registerStyleEdges(declaration.moduleId, declaration.specifiers, declaration.tagName);
+    for (const request of styleRequestsForImporter(declaration.moduleId)) {
+      edges.set(request.moduleId, request);
+    }
+  }
   return edges;
 }
 

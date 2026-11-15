@@ -2,6 +2,7 @@
 import ts from 'typescript';
 import { createRequire } from 'node:module';
 import { existsSync, readFileSync } from 'node:fs';
+import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import { join, resolve } from 'pathe';
 import type { HydrationStrategy, OpenElementPackageManifest } from '../../framework.ts';
@@ -13,15 +14,27 @@ import {
   isSafeAttributeName,
 } from '@openelement/protocol/forbidden-sinks';
 import { createLogger } from '@openelement/element';
+import { stableModuleId } from '@openelement/compiler';
 import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
 import { hasControlCharacter } from '../../../internal/control-characters.ts';
+import { checkIslandStyleList } from '../../../internal/island-style-specifiers.ts';
+import {
+  registerIslandStyleDeclaration,
+  resetIslandStyleDeclarations,
+} from '../island-style-declarations.ts';
 import {
   buildError,
   ClientAssetErrorCode,
+  IslandErrorCode,
   PackageIslandErrorCode,
 } from '../../../internal/error-codes.ts';
+import { createGeneratedElementSiteResolver } from '../../generated-element-site.ts';
 import { reportScanFatal } from '../build-diagnostics.ts';
 import { type DeclaredStyleSource, STYLE_DIALECTS } from '../style-plan.ts';
+import {
+  type GeneratedElementHostIdentity,
+  resolveGeneratedElementHost,
+} from './generated-element-host-metadata.ts';
 import { safeReadDir, safeReadFile, safeStat } from './route-scanner-fs.ts';
 import {
   ISLAND_DELIVERY_STRATEGIES,
@@ -82,11 +95,34 @@ export interface LocalIslandMeta {
   /** Required when hydrate is media; kept as build metadata, not runtime. */
   media?: string;
   /**
+   * The island's declared stylesheets (`IslandConfig.styles`, GH issue #1800),
+   * admitted only for a light-root generated-element island. The build-time
+   * record is the scanned metadata's copy of the declaration; the style-edge
+   * plan reads it through `island-style-declarations.ts`, which this same scan
+   * writes. It is build metadata only: the public `IslandDecl` protocol shape
+   * is unchanged and no renderer consumes it yet (asset + client asset manifest
+   * is this slice's delivery; document application is the Alpha17 adoption
+   * slice).
+   */
+  styles?: string[];
+  /**
    * The root family the sidecar declares: `'light'`, or `'shadow'` for the DSD
    * default. Absent when the author pinned none: the compiled program's own
    * root decision stands, and the generated shell applies its `light` default.
    */
   root?: 'light' | 'shadow';
+  /**
+   * M11 prerequisite — the compiler-owned generated-host identity resolved by
+   * this scan from the source it already read (see
+   * `generated-element-host-metadata.ts`). Build-only metadata that rides the
+   * existing scanned record; the public `IslandDecl` shape is unchanged and the
+   * internal entry descriptor (`buildEntryDescriptor`) is its one consumer so
+   * far — it re-attaches the fact to the scanned local island declarations, and
+   * no renderer/registration consumer reads it yet. It is produced by the one
+   * scan the build and the dev island rescan share, so it cannot go stale
+   * without the descriptor.
+   */
+  generatedElementHost?: GeneratedElementHostIdentity;
   /**
    * Native `delegatesFocus` fact for the island's shadow root. Declared next
    * to `root` because it is only meaningful with `root: 'shadow'`; the static
@@ -347,7 +383,7 @@ export function buildPackageIslandDecls(
 
 function staticOpenElementError(message: string): OpenElementError {
   return new OpenElementError(
-    `Invalid static island metadata export "openElement": ${message}. Accepted shape: export const openElement = defineIslandConfig({ ssr?: boolean, dsd?: boolean, hydrate?: "load" | "idle" | "visible" | "media" | "only", media?: string, root?: "light" | "shadow", delegatesFocus?: boolean, formAssociated?: boolean, properties?: Record<string, { reflect?: boolean, attribute?: string | false, default?: string | number | boolean }> }).`,
+    `Invalid static island metadata export "openElement": ${message}. Accepted shape: export const openElement = defineIslandConfig({ ssr?: boolean, dsd?: boolean, hydrate?: "load" | "idle" | "visible" | "media" | "only", media?: string, styles?: readonly string[], root?: "light" | "shadow", delegatesFocus?: boolean, formAssociated?: boolean, properties?: Record<string, { reflect?: boolean, attribute?: string | false, default?: string | number | boolean }> }).`,
     {
       code: 'ISLAND_METADATA_ERROR',
       statusCode: 500,
@@ -363,6 +399,7 @@ type StaticIslandConfig = Pick<
   | 'dsd'
   | 'hydrate'
   | 'media'
+  | 'styles'
   | 'root'
   | 'delegatesFocus'
   | 'formAssociated'
@@ -401,6 +438,39 @@ function parseStaticStringArray(node: ts.Expression, context: string): string[] 
   }
   if (node.elements.length === 0) throw staticOpenElementError(context + ' must not be empty');
   return node.elements.map((element) => staticStringValue(element, context));
+}
+
+/**
+ * Parse the sidecar's `styles` array: static string literals only, admitted by
+ * the ONE specifier rule the runtime authoring face applies
+ * (`internal/island-style-specifiers.ts`, GH issue #1800). The array itself must
+ * be a static literal — a spread or a computed element is refused instead of
+ * guessed, exactly like every other sidecar fact the scan reads.
+ */
+function parseStaticStyleList(
+  node: ts.Expression,
+  context: string,
+  sourceFile: ts.SourceFile,
+): string[] {
+  if (!ts.isArrayLiteralExpression(node)) {
+    throw staticOpenElementError(context + ' must be an array of string literals');
+  }
+  const values: unknown[] = [];
+  for (const element of node.elements) {
+    if (ts.isSpreadElement(element)) {
+      throw staticOpenElementError(context + ' must not contain spreads');
+    }
+    if (!ts.isStringLiteral(element) && !ts.isNoSubstitutionTemplateLiteral(element)) {
+      throw staticOpenElementError(
+        `${context} must be a static array of string literals, got dynamic value ` +
+          `"${element.getText(sourceFile)}"`,
+      );
+    }
+    values.push(element.text);
+  }
+  const check = checkIslandStyleList(values);
+  if (!check.ok) throw staticOpenElementError(`${context} ${check.reason}`);
+  return [...check.styles];
 }
 
 function parseStaticStringRecord(node: ts.Expression, context: string): Record<string, string> {
@@ -750,6 +820,7 @@ function parseStaticIslandConfig(
         'dsd',
         'hydrate',
         'media',
+        'styles',
         'root',
         'delegatesFocus',
         'formAssociated',
@@ -781,6 +852,12 @@ function parseStaticIslandConfig(
         literalText(raw, 'openElement.media'),
         'openElement.media',
       );
+    } else if (key === 'styles') {
+      // The generated-island style declaration (GH issue #1800). The runtime
+      // authoring face validates the same shape; this pass is the build-time
+      // authority for the authored sidecar and the lane/root admission below
+      // (`scanIslandMeta`) decides whether the declaration can be delivered.
+      meta.styles = parseStaticStyleList(raw, 'openElement.styles', sourceFile);
     } else if (key === 'root') {
       // `IslandConfig.root` is a published field the runtime already validates;
       // the static scan is the build-time authority for the same two values and
@@ -948,6 +1025,98 @@ export async function scanIslands(islandsDir: string, relativeDir: string = ''):
 }
 
 /**
+ * The two coded refusals the generated-island `styles` admission raises (GH
+ * issue #1800). They are `OE_`-prefixed producer codes so the CLI's diagnostics
+ * exit keeps them verbatim on the envelope (#1612) instead of classifying the
+ * failure as uncoded — a host must be able to tell the shadow-carrier gap from
+ * the class-lane gap without pattern-matching prose.
+ */
+const ISLAND_STYLES_SHADOW_UNWIRED_CODE = IslandErrorCode.STYLE_SHADOW_UNWIRED;
+const ISLAND_STYLES_LANE_UNSUPPORTED_CODE = IslandErrorCode.STYLE_LANE_UNSUPPORTED;
+
+/**
+ * Admit one island's declared stylesheets (`IslandConfig.styles`, GH issue
+ * #1800) on the lane/root the compiler identity resolved for it, or fail
+ * closed.
+ *
+ * Carrier matrix for this slice (the Alpha17 generated-island style adoption is
+ * the owner of the missing delivery surfaces, GH issue #1800):
+ *
+ * - `light-no-producer` (a light-root generated-element island): admitted. The
+ *   list is recorded in the build-time declaration carrier
+ *   (`island-style-declarations.ts`), which the client build's style-edge plan
+ *   turns into the SAME content-addressed `.css` asset and client asset
+ *   manifest entry the class lane's sheets get. The document-level application
+ *   of that asset is the Alpha17 adoption slice, not this one.
+ * - `producer` / `missing-producer` (a shadow-root generated-element island):
+ *   refused. The DSD style-link carrier is the later M09-2e slice, so there is
+ *   nothing a shadow root could read the emitted sheet through — shipping the
+ *   asset anyway would be a silent loss dressed up as delivery.
+ * - `lane-declined` (the module is not a generated-element island: a class
+ *   island or a file outside the lane's admission): refused. A class island
+ *   owns the `static styles` + `.css` import channel; this field would be
+ *   ignored by the compiled class, i.e. silently dropped.
+ * - `lane-refused`: the compiler already refuses the module, and the transform
+ *   is the authoritative build-failure reporter. The scan records nothing and
+ *   raises no second, less precise error — the build cannot ship the module
+ *   with or without a style declaration.
+ *
+ * Returns the accepted specifiers for the scanned metadata record.
+ */
+function admitIslandStyles(input: {
+  readonly filePath: string;
+  readonly tagName: string;
+  readonly islandsDir: string;
+  readonly absoluteModuleId: string;
+  readonly identity: GeneratedElementHostIdentity;
+  readonly styles: readonly string[];
+}): string[] {
+  switch (input.identity.kind) {
+    case 'light-no-producer':
+      registerIslandStyleDeclaration({
+        tagName: input.tagName,
+        moduleId: input.absoluteModuleId,
+        filePath: input.filePath,
+        islandsDir: normalizeSeparators(input.islandsDir),
+        specifiers: input.styles,
+      });
+      return [...input.styles];
+    case 'producer':
+    case 'missing-producer':
+      throw reportScanFatal(
+        buildError(
+          ISLAND_STYLES_SHADOW_UNWIRED_CODE,
+          `Island "${input.filePath}" (<${input.tagName}>) declares openElement.styles on a ` +
+            'shadow-root generated element, but the DSD style-link carrier for a shadow root is ' +
+            'not wired yet (M09-2e owed; generated-island style adoption is GH issue #1800, ' +
+            'Alpha17). The declared sheets would be silently lost, so the build fails closed: ' +
+            "set root: 'light' or remove styles. This slice admits styles only on a light-root " +
+            'generated island, where the build emits the sheet as a content-addressed client ' +
+            'asset and records it in the client asset manifest.',
+        ),
+      );
+    case 'lane-refused':
+      // The compiler owns this failure; registering an edge for a module that
+      // cannot compile would emit an orphan asset and mask the authoritative
+      // diagnostics with a second error.
+      return [];
+    case 'lane-declined':
+      throw reportScanFatal(
+        buildError(
+          ISLAND_STYLES_LANE_UNSUPPORTED_CODE,
+          `Island "${input.filePath}" (<${input.tagName}>) declares openElement.styles but the ` +
+            'compiler did not admit it as a generated-element island ' +
+            `(${input.identity.reason}). A class island declares its sheets through \`.css\` ` +
+            'imports arrayed in `static styles`, and this field would be silently dropped, so the ' +
+            "build fails closed: move the sheets to the component's static styles, or author the " +
+            'island as a generated (default-exported function) island. Generated-island style ' +
+            'adoption is GH issue #1800 (Alpha17).',
+        ),
+      );
+  }
+}
+
+/**
  * v0.41.0-alpha.1: AST-based — reads island metadata by statically scanning the
  * module source for `export const openElement = defineIslandConfig({ ... })`
  * (see readIslandConfig). Island modules are never executed.
@@ -973,14 +1142,51 @@ export async function scanIslands(islandsDir: string, relativeDir: string = ''):
  * half of one ownership invariant: the client manifest and the SSR admission
  * guards keep their own fail-late checks (defense in depth), and they only
  * ever see islands a page reaches.
+ *
+ * M11 prerequisite: the same pass resolves each local island's compiler-owned
+ * generated-host identity from the source it just read (one extra compiler
+ * call per `.tsx` island, including `ssr: false` ones — the classification is
+ * admission-independent, so the scan never needs a second pass once a consumer
+ * asks for it). The host-site fact comes from the existing
+ * `createGeneratedElementSiteResolver`, the ONE identity helper the transform
+ * hosts use, so the scan's admission and tag cannot diverge from the
+ * transform's. The identity is attached to the scanned record as
+ * `generatedElementHost`; the internal entry descriptor (`buildEntryDescriptor`)
+ * re-attaches it to the scanned local island declarations (delivery aliases
+ * included), and no renderer/registration consumer reads it yet.
+ *
+ * `projectRoot` is the compiler identity anchor: the compile call receives
+ * `stableModuleId(fullPath, projectRoot)` (the same anchoring
+ * `island-blocks-scan` uses) so a refusal diagnostic carries a stable
+ * project-relative id, never a machine path. Only the host-site resolver gets
+ * the absolute path, because it needs the `islandsDir` segment. Callers pass
+ * their real root (the Vite plugin's resolved root, the SSG build's root); the
+ * cwd default only serves hosts that never resolved one.
+ *
+ * Generated-island styles (GH issue #1800): the same pass admits each accepted
+ * `styles` declaration into the build-time declaration carrier
+ * (`island-style-declarations.ts`, reset first so the scan is authoritative) and
+ * refuses it with a coded build error on every lane/root this slice cannot
+ * deliver (shadow root: M09-2e owed; non-generated lane: the class island's
+ * `static styles` channel owns it). The declaration itself never reaches the
+ * public `IslandDecl` shape — it is build metadata, and the existing style plan
+ * plus the client asset manifest are its delivery in this slice.
  */
 export async function scanIslandMeta(
   islandsDir: string,
   islandFiles: string[],
+  projectRoot: string = process.cwd(),
 ): Promise<Record<string, StoredIslandMeta>> {
   const meta: Record<string, LocalIslandMeta> = {};
   /** tag -> the island file that first wrote it (islandsDir-relative). */
   const tagClaimants = new Map<string, string>();
+  // The generated-island style declarations are built from THIS scan, so the
+  // scan owns the carrier's authority: a removed `styles` field cannot leave a
+  // stale declaration for the client build's style plan (GH issue #1800).
+  resetIslandStyleDeclarations();
+  // One resolver per scan, over the same root the island loop reads: the
+  // generated host site fact is the transform's own admission identity.
+  const generatedElementSite = createGeneratedElementSiteResolver(normalizeSeparators(islandsDir));
 
   for (const filePath of islandFiles) {
     const tagName = pathToTagName(filePath);
@@ -1016,13 +1222,46 @@ export async function scanIslandMeta(
     }
     tagClaimants.set(tagName, filePath);
 
+    // The compiler identity is project-anchored (the same `stableModuleId`
+    // anchoring island-blocks-scan uses), so a refusal diagnostic carries a
+    // stable id instead of the machine path. The ABSOLUTE path is only for
+    // the host-site resolver, which anchors admission on the islandsDir
+    // segment.
+    const absoluteModuleId = normalizeSeparators(fullPath);
+    const moduleId = stableModuleId(absoluteModuleId, projectRoot);
+    const generatedElementHost = resolveGeneratedElementHost({
+      source,
+      moduleId,
+      filePath,
+      root: islandConfig.root,
+      // The same host-side site fact the compiler transform resolves for this
+      // module path (M09-1b); null means this host never admits the module.
+      site: generatedElementSite(absoluteModuleId),
+    });
+    // The generated-island `styles` declaration (GH issue #1800): admitted only
+    // on the one lane/root this slice can deliver (light-root generated island),
+    // and refused with a coded build error everywhere else — never dropped.
+    const styles =
+      islandConfig.styles === undefined
+        ? undefined
+        : admitIslandStyles({
+            filePath,
+            tagName,
+            islandsDir,
+            absoluteModuleId,
+            identity: generatedElementHost,
+            styles: islandConfig.styles,
+          });
+
     meta[tagName] = {
       tagName,
       filePath,
+      generatedElementHost,
       ssr,
       dsd,
       hydrate,
       ...(islandConfig.media === undefined ? {} : { media: islandConfig.media }),
+      ...(styles === undefined || styles.length === 0 ? {} : { styles }),
       ...(islandConfig.root === undefined ? {} : { root: islandConfig.root }),
       ...(islandConfig.delegatesFocus === undefined
         ? {}

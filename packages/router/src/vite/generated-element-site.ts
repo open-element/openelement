@@ -15,11 +15,16 @@
  * `pathToTagName` derivation, and the layout is outside the M09-1 site
  * (design §2.4).
  *
- * The site fact only admits a module to the lane. The lane itself still
- * requires the island sidecar (`export const openElement = defineIslandConfig({…})`),
- * a local default-exported function component, and fails closed on a props
- * parameter or a required host binding; those gates live in the compiler's
- * generated-element site admission, not here.
+ * The site fact only admits a module to the lane, and it carries the TAG ONLY.
+ * The lane itself still requires the island sidecar
+ * (`export const openElement = defineIslandConfig({…})`), a local
+ * default-exported function component, and reads the platform facts from that
+ * same sidecar — the descriptor root, `delegatesFocus`, `formAssociated` and
+ * the `properties` table (D-root-source / M09-2a / M09-2d) — so this host fact
+ * can never pin a root the source no longer declares. The lane fails closed on
+ * a props parameter that no declared `properties` table replaces, and on a
+ * required host binding; those gates live in the compiler's generated-element
+ * site admission, not here.
  *
  * Call-site map — exactly three real sites, do not add a fourth:
  *
@@ -51,9 +56,10 @@ export type GeneratedElementSiteResolver = (moduleId: string) => GeneratedElemen
  * id is admitted only when it still carries the `islandsDir` segment, exactly
  * as the island transform would admit it.
  *
- * The production root is `light`: a shadow root cannot be authored until
- * M09-2a accepts the `root` key in the static island scan (design R8). Tests
- * pass a shadow mode directly to the compiler lane instead.
+ * The answer is the tag only. The descriptor root (and `delegatesFocus`,
+ * `formAssociated`, `properties`) is read by the compiler lane from the
+ * authored island sidecar, so an authored `root: 'shadow'` reaches the lane
+ * without a host fact and a stale host scan cannot override it.
  */
 export function createGeneratedElementSiteResolver(
   islandsDir: string,
@@ -70,6 +76,6 @@ export function createGeneratedElementSiteResolver(
       filePath: moduleId,
     });
     const island = islands[0];
-    return island === undefined ? null : { tag: island.tagName, root: 'light' };
+    return island === undefined ? null : { tag: island.tagName };
   };
 }

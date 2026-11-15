@@ -287,6 +287,10 @@ const CONSTANT_MESSAGES: Readonly<Record<string, string>> = {
   OE_ISLAND_HYDRATE: 'Invalid island hydrate strategy',
   OE_ISLAND_TAGS: 'defineIslandConfig() tags must be a non-empty array',
   OE_ISLAND_EXPORT_NAMES: 'defineIslandConfig() exportNames must be an object',
+  OE_ISLAND_STYLE_SHADOW_UNWIRED:
+    'defineIslandConfig() styles on a shadow-root island need the generated DSD stylesheet channel (M09-2e, GH #1800)',
+  OE_ISLAND_STYLE_LANE_UNSUPPORTED:
+    'defineIslandConfig() styles are only admitted on a light-root generated-element island',
   OE_SERVE_MODE: 'unknown --mode',
   SSR_RENDER_ERROR: 'SSR render failed',
   BOUNDARY_CAUGHT: 'an error boundary caught a render failure',
