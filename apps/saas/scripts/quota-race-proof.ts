@@ -154,12 +154,14 @@ try {
       { method: 'DELETE', headers: serviceHeaders },
     );
     await rowsCleanup.body?.cancel();
-    console.log(`cleanup reservation rows -> ${rowsCleanup.status}`);
+    // Human cleanup status goes to stderr: stdout carries only the JSON
+    // proof document (the evidence consumer parses stdout as one document).
+    console.error(`cleanup reservation rows -> ${rowsCleanup.status}`);
     const userCleanup = await fetch(`${supabaseUrl}/auth/v1/admin/users/${userId}`, {
       method: 'DELETE',
       headers: serviceHeaders,
     });
     await userCleanup.body?.cancel();
-    console.log(`cleanup throwaway user -> ${userCleanup.status}`);
+    console.error(`cleanup throwaway user -> ${userCleanup.status}`);
   }
 }
