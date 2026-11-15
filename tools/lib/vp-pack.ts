@@ -70,6 +70,17 @@ export const VP_TOOLCHAIN = {
 export const VITE_ALIAS_SPEC = `npm:@voidzero-dev/vite-plus-core@${VP_TOOLCHAIN.vitePlusCore}`;
 
 /**
+ * Names the staging manifests deliberately alias to the vp toolchain instead of
+ * the registry: every staging manifest declares `vite` as
+ * `npm:@voidzero-dev/vite-plus-core@...` in its devDependencies, so the
+ * installed `node_modules/vite` is the toolchain core (version 1.0.0), not the
+ * lockfile's registry `vite`. #1715's direct pinning and installed-version
+ * assertion therefore skip these names by construction; every other external
+ * name is still pinned and verified.
+ */
+const STAGING_TOOLCHAIN_ALIAS_NAMES: ReadonlySet<string> = new Set(['vite', 'vite-plus']);
+
+/**
  * The #868 client runtime modules, delivered by file path. `build-client.ts`
  * resolves them by path when it generates the consumer's client entry, and
  * that entry imports their factories by name — no package-internal import
@@ -291,6 +302,8 @@ export function stagedDependencyName(key: string, spec: string): string {
  */
 function lockedStagingSpec(key: string, spec: string, lock: StagingLock, context: string): string {
   const name = stagedDependencyName(key, spec);
+  if (STAGING_TOOLCHAIN_ALIAS_NAMES.has(key) || STAGING_TOOLCHAIN_ALIAS_NAMES.has(name))
+    return spec;
   if (lock.workspaceNames.has(key) || lock.workspaceNames.has(name)) return spec;
   const version = lock.lockedVersions.get(name);
   if (version === undefined) {
@@ -306,6 +319,7 @@ function lockedStagingSpec(key: string, spec: string, lock: StagingLock, context
 /** The exact version a staging dependency entry must install to. */
 function expectedStagingVersion(key: string, spec: string, lock: StagingLock): string {
   const name = stagedDependencyName(key, spec);
+  if (STAGING_TOOLCHAIN_ALIAS_NAMES.has(key) || STAGING_TOOLCHAIN_ALIAS_NAMES.has(name)) return '';
   if (lock.workspaceNames.has(key) || lock.workspaceNames.has(name)) return '';
   const version = lock.lockedVersions.get(name);
   if (version === undefined) {

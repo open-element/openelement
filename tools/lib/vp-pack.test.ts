@@ -919,6 +919,49 @@ test('a staging dependency without a committed lock resolution fails closed', ()
   ).toThrow(/unocss has no committed pnpm-lock\.yaml resolution/);
 });
 
+test('the toolchain-aliased vite entry is never pinned against the registry lock', () => {
+  const lock = lockFixture({ vite: '8.1.6', marked: '15.0.12' }, ['@openelement/router']);
+  const root = rootStagingPackageJsonFor(
+    [pkg('@openelement/router', { '.': './src/index.ts' })],
+    new Map([['@openelement/router', { vite: '^8.1.6', marked: '^15.0.0' }]]),
+    lock,
+  ) as { dependencies: Record<string, string>; devDependencies: Record<string, string> };
+  // The derived range stays untouched: `devDependencies.vite` owns the name
+  // through the toolchain alias, so an exact registry pin would collide with it
+  // and npm would install the aliased core instead (version 1.0.0).
+  expect(root.dependencies.vite).toBe('^8.1.6');
+  expect(root.dependencies.marked).toBe('15.0.12');
+  expect(root.devDependencies.vite).toContain('@voidzero-dev/vite-plus-core');
+
+  const member = stagingPackageJsonFor(
+    pkg('@openelement/router', { '.': './src/index.ts' }),
+    { vite: '^8.1.6' },
+    lock,
+  ) as { dependencies: Record<string, string> };
+  expect(member.dependencies.vite).toBe('^8.1.6');
+});
+
+test('assertStagedDependencyVersions skips the toolchain-aliased vite install', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vp-pack-alias-'));
+  try {
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({ name: 'staging', private: true, dependencies: { vite: '^8.1.6' } }),
+    );
+    mkdirSync(join(root, 'node_modules', 'vite'), { recursive: true });
+    writeFileSync(
+      join(root, 'node_modules', 'vite', 'package.json'),
+      JSON.stringify({ name: 'vite', version: '1.0.0' }),
+    );
+    // The installed 1.0.0 is the aliased vp core, not a floating registry vite.
+    expect(() =>
+      assertStagedDependencyVersions(root, lockFixture({ vite: '8.1.6' })),
+    ).not.toThrow();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('assertStagedDependencyVersions verifies the installed lockfile pin', async () => {
   const root = await mkdtemp(join(tmpdir(), 'vp-pack-verify-'));
   try {
