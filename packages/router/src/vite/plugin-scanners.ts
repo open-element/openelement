@@ -419,6 +419,33 @@ export async function scanCemClassificationsInto(
       ),
     );
   }
+  // A skipped manifest means this package's classifications are unavailable, so
+  // its islands must not be admitted on the strength of the package manifest's
+  // `openElement.ssr: true` alone: ADR-0157 defines that flag as a candidate
+  // signal, and the pre-harness admission path has no other proof here. Record
+  // one synthetic `client-only` classification per declared island (unless the
+  // tag already has real evidence) so the admission plan downgrades it with an
+  // explicit reason instead of silently trusting the declaration.
+  const classifiedTags = new Set(detection.classifications.map((entry) => entry.tagName));
+  for (const entry of detection.skipped) {
+    const skippedManifest = state.ctx.phase1.packageManifests.find(
+      (pkg) => pkg.packageName === entry.packageName,
+    );
+    for (const declaration of skippedManifest?.declarations ?? []) {
+      const tagName = declaration.tagName;
+      if (!declaration.openElement?.module || !tagName || classifiedTags.has(tagName)) continue;
+      detection.classifications.push({
+        tagName,
+        tier: 'client-only',
+        reason:
+          `CEM manifest unparseable (${entry.reason}); the SSR capability is unproven, ` +
+          'downgraded to client-only',
+        source: 'package',
+        ssr: false,
+      });
+      classifiedTags.add(tagName);
+    }
+  }
   state.ctx.phase1.cemClassifications = detection.classifications;
   for (const entry of detection.skipped) {
     const warning = {
@@ -427,12 +454,12 @@ export async function scanCemClassificationsInto(
       phase: 'build',
       message:
         `The CEM manifest of package "${entry.packageName}" could not be parsed, so its ` +
-        `components are not classified (${entry.reason}). Their SSR capability is therefore ` +
-        `not proven: only a package island whose manifest declares openElement.ssr=true is ` +
-        `admitted for SSR, and every other component in this package falls back to client-only.`,
+        `components are not classified (${entry.reason}). Its package islands are downgraded ` +
+        `to client-only for this build: the manifest's openElement.ssr flag is a candidate ` +
+        `signal (ADR-0157), not proof, and no classifier ran.`,
       file: entry.packageName,
       hint:
-        "Fix or remove the package's custom-elements.json; a client-only fallback keeps the " +
+        "Fix or remove the package's custom-elements.json; the client-only fallback keeps the " +
         'site working but drops server rendering for these components.',
     } as const;
     recordBuildDiagnostic(warning);

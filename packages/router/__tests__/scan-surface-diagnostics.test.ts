@@ -10,7 +10,9 @@
  * - Tier-2 — per-item degradation (an unparseable CEM manifest, an
  *   unreadable module) rides the structured result envelope and surfaces as
  *   a coded warning through the build-diagnostics channel (#1612): reported,
- *   never silent, never fatal.
+ *   never silent, never fatal. An unparseable CEM also downgrades that
+ *   package's declared islands to client-only (ADR-0157: the manifest's
+ *   `openElement.ssr` flag is a candidate signal, not proof).
  *
  * The raise sites are `scanCemClassificationsInto` and `scanForeignTagsInto`;
  * the detector/scanner parameters are the injection seam these stubs drive.
@@ -18,7 +20,10 @@
 
 import { expect, test, vi, type MockInstance } from 'vitest';
 import { OpenElementError } from '@openelement/element/authoring';
-import type { CompatibilityClassification } from '@openelement/protocol/framework';
+import type {
+  CompatibilityClassification,
+  OpenElementPackageManifest,
+} from '@openelement/protocol/framework';
 import { ScanSurfaceErrorCode } from '../src/internal/error-codes.ts';
 import {
   resetBuildExitRecords,
@@ -26,7 +31,11 @@ import {
 } from '../src/vite/internal/build-diagnostics.ts';
 import { scanCemClassificationsInto, scanForeignTagsInto } from '../src/vite/plugin-scanners.ts';
 import { createOpenPluginState } from '../src/vite/plugin-config.ts';
-import type { CemDetectionResult, ForeignTagScanResult } from '../src/vite/internal/ssg/index.ts';
+import {
+  buildSsrAdmissionPlan,
+  type CemDetectionResult,
+  type ForeignTagScanResult,
+} from '../src/vite/internal/ssg/index.ts';
 
 function captureConsoleError(): { lines: string[]; spy: MockInstance } {
   const lines: string[] = [];
@@ -141,6 +150,60 @@ test('scan: skipped CEM manifests surface as coded warnings through the envelope
     ),
     `expected the coded skip line, got: ${JSON.stringify(capture.lines)}`,
   ).toBeTruthy();
+});
+
+test("scan: a skipped CEM downgrades that package's ssr=true island to client-only", async () => {
+  // ADR-0157: the manifest's `openElement.ssr` flag is a candidate signal, not
+  // proof. When the package's CEM cannot be parsed no classifier runs, so the
+  // pre-harness admission path must not upgrade the flag into an admission:
+  // the island is downgraded to client-only with a reason that says why.
+  const state = createOpenPluginState({}, undefined, {});
+  const manifest: OpenElementPackageManifest = {
+    schemaVersion: '1',
+    packageName: '@broken/pkg',
+    version: '0.0.0',
+    declarations: [
+      {
+        tagName: 'x-broken-island',
+        openElement: { module: '@broken/pkg/island.js', ssr: true },
+      },
+    ],
+  };
+  state.ctx.phase1.packageManifests = [manifest];
+  const detection: CemDetectionResult = {
+    classifications: [],
+    skipped: [{ packageName: '@broken/pkg', reason: 'Unexpected token { in JSON' }],
+  };
+  resetBuildExitRecords();
+  const capture = captureConsoleWarn();
+  try {
+    await scanCemClassificationsInto(state, () => Promise.resolve(detection));
+  } finally {
+    capture.spy.mockRestore();
+  }
+
+  const synthetic = state.ctx.phase1.cemClassifications.find(
+    (entry) => entry.tagName === 'x-broken-island',
+  );
+  expect(synthetic?.tier).toEqual('client-only');
+  expect(synthetic?.reason).toContain('unproven');
+
+  const plan = buildSsrAdmissionPlan(
+    [
+      {
+        tagName: 'x-broken-island',
+        modulePath: '@broken/pkg/island.js',
+        source: 'package',
+        ssr: true,
+      },
+    ],
+    state.ctx.phase1.cemClassifications,
+  );
+  expect(plan.renderableTags).not.toContain('x-broken-island');
+  expect(plan.clientOnlyTags).toContain('x-broken-island');
+  const decision = plan.decisions.find((entry) => entry.tagName === 'x-broken-island');
+  expect(decision?.renderPath).toEqual('client-only');
+  expect(decision?.reason).toContain('downgraded to client-only');
 });
 
 test('scan: unreadable foreign-tag modules surface as coded warnings through the envelope channel', async () => {

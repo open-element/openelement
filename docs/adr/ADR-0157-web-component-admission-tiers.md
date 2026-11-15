@@ -145,3 +145,25 @@ release approval. Wiring, thresholds for snapshot equivalence, cache
 invalidation proof, and the first gating milestone must be settled during
 #1451 review before any T1/third-party T2 documentation can be described as
 shipped behavior.
+
+## Amendment (2026-11-15): CEM-unavailable downgrade in the pre-harness path
+
+The admission plan trusts a package manifest's `openElement.ssr: true` when no
+CEM classification exists (`entry-descriptor.ts`:758-766). This record defines
+that flag as a candidate signal, so the trust was too strong whenever the
+classification was missing because the package's CEM could not be parsed: the
+island was admitted `ssr+client` without any classifier having run.
+
+PR #1804 closes that gap the way this record prescribes for unavailable
+evidence — downgrade, not build failure. A skipped CEM now yields one
+synthetic `client-only` classification per declared island of that package
+(`plugin-scanners.ts`, `scanCemClassificationsInto`), unless the tag already
+has real classification evidence from another manifest. The admission
+decision and its `reason` then state that the capability is unproven and the
+island is client-only; the build still proceeds and the skip remains a coded
+warning.
+
+Scope: this is the pre-harness behavior only. It does not implement T0/T1/T2
+qualification, does not change the tier definitions, and does not promote
+anything to a release gate — the "failed or unavailable adapter yields the T0
+path" obligation and any gating decision remain #1451's.
