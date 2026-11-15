@@ -424,6 +424,14 @@ export const PackageAdmissionErrorCode = {
    * named; the admitted set is unchanged.
    */
   DYNAMIC_UNRESOLVED: 'OE_PACKAGE_ADMISSION_DYNAMIC_UNRESOLVED',
+  /**
+   * The derivation's evidence walk stopped at its module bound, so some
+   * imported component packages may not be derived. Non-fatal, reported, and
+   * graph-level (no single file owns it): the admitted set stays derivable
+   * from what the walk did reach. Declare the packages explicitly in
+   * `packageIslands` when certainty matters more than the bound.
+   */
+  MODULE_BOUND_EXCEEDED: 'OE_PACKAGE_ADMISSION_MODULE_BOUND_EXCEEDED',
 } as const;
 
 /**

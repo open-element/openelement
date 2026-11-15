@@ -142,13 +142,28 @@ async function scanRoutesAndStaticComponents(state: OpenPluginState): Promise<Ro
         '(buildStart captures it); refusing to scan with relative imports only',
     );
   }
-  state.ctx.phase1.staticComponents = await scanStaticComponents({
+  const staticScan = await scanStaticComponents({
     root: process.cwd(),
     routesDir: state.resolvedOptions.routesDir!,
     islandsDir: state.resolvedOptions.islandsDir || DEFAULT_ISLANDS_DIR,
     routes,
     resolve,
   });
+  state.ctx.phase1.staticComponents = staticScan.declarations;
+  // The discovery walk's boundaries are NOT silent: a partial registry must
+  // say so through the same envelope channel as every other scan degradation
+  // (#1612) — the machine-readable exit replays it, the log carries the line.
+  for (const diagnostic of staticScan.notes) {
+    const envelope = {
+      code: diagnostic.code,
+      severity: 'warning',
+      phase: 'build',
+      message: diagnostic.message,
+      ...(diagnostic.file !== undefined ? { file: diagnostic.file } : {}),
+    } as const;
+    recordBuildDiagnostic(envelope);
+    log.warn(formatDiagnosticLine(envelope));
+  }
   return routes;
 }
 

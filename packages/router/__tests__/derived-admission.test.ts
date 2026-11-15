@@ -271,6 +271,20 @@ test('an imported package element module derives its owner and admits the manife
   expect(derived.dynamicUnproven).toEqual([]);
 });
 
+test('the walk bound is a coded note on the derivation, not a log-only fact', async () => {
+  // maxModules: 1 stops the evidence walk at the seed, so nothing downstream
+  // is derived — and the stop itself is a structured note on the result (the
+  // envelope channel replays it), not a line only the build log carries.
+  const root = await appWithPackage();
+  const derived = await deriveAdmittedPackages(deriveInput(root, { maxModules: 1 }));
+  expect(derived.manifests).toEqual([]);
+  expect(derived.manifestLess).toEqual([]);
+  expect(derived.notes.map((note) => note.code)).toEqual([
+    PackageAdmissionErrorCode.MODULE_BOUND_EXCEEDED,
+  ]);
+  expect(derived.notes[0]!.file).toBeUndefined();
+});
+
 test('a pure utility import derives nothing and reports nothing', async () => {
   const root = await appWithPackage({ widgetImport: "import '@acme/ui/missing-helper';" });
   // The helper does not exist: the resolver misses it, so the graph never

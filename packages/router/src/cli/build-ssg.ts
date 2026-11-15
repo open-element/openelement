@@ -44,6 +44,7 @@ import { createLogger, formatError } from '@openelement/element';
 import { createSsgRenderEvidence } from './ssg-render.ts';
 import { mdxPlugin } from '../vite/plugin-mdx.ts';
 import { quoteGeneratedJavaScriptValue } from '../vite/internal/ssg/codegen-literals.ts';
+import { formatDiagnosticLine, recordBuildDiagnostic } from '../vite/internal/build-diagnostics.ts';
 import {
   generateCustomElementsPolyfill,
   generateSsrPolyfillBanner,
@@ -322,13 +323,29 @@ async function buildSSG(
             'discover them with the bundler’s own reachability',
         );
       }
-      return await scanStaticComponents({
+      const staticScan = await scanStaticComponents({
         root,
         routesDir,
         islandsDir,
         routes,
         resolve: options.resolve,
       });
+      // The walk's boundaries reach the developer the same way the plugin
+      // path reports them (#1612): the envelope is recorded for the exit, and
+      // the human line carries the `[CODE]` token. A truncated registry is a
+      // reported fact, never a silent one.
+      for (const diagnostic of staticScan.notes) {
+        const envelope = {
+          code: diagnostic.code,
+          severity: 'warning',
+          phase: 'build',
+          message: diagnostic.message,
+          ...(diagnostic.file !== undefined ? { file: diagnostic.file } : {}),
+        } as const;
+        recordBuildDiagnostic(envelope);
+        log.warn(formatDiagnosticLine(envelope));
+      }
+      return staticScan.declarations;
     })());
 
   const islandsRoot = join(root, islandsDir);

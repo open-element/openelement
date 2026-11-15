@@ -105,8 +105,11 @@ export type {
   UnreadableForeignTagModule,
 } from './foreign-tag-scanner.ts';
 
-export { scanStaticComponents } from './static-component-scanner.ts';
-export type { ScanStaticComponentsOptions } from './static-component-scanner.ts';
+export { scanStaticComponents, StaticScanDiagnosticCode } from './static-component-scanner.ts';
+export type {
+  ScanStaticComponentsOptions,
+  StaticComponentScanResult,
+} from './static-component-scanner.ts';
 
 export { buildEntryDescriptor, buildSsrAdmissionPlan } from './entry-descriptor.ts';
 

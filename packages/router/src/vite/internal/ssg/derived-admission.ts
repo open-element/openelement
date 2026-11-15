@@ -61,6 +61,12 @@ export interface DeriveAdmissionInput {
   layout?: { import?: string } | false | 'default';
   /** Named layouts, if any (their modules are seeds). */
   layouts?: Record<string, { import?: string } | false | 'default' | undefined>;
+  /**
+   * The evidence walk's module bound, forwarded to `walkModuleGraph`. The
+   * production default is the walker's own; the explicit field exists so the
+   * truncation behavior is testable without pathological fixtures.
+   */
+  maxModules?: number;
 }
 
 /**
@@ -109,12 +115,21 @@ export async function deriveAdmittedPackages(
 ): Promise<DerivedAdmission> {
   const root = resolve(input.root);
   const seeds = derivationSeeds(root, input);
-  const walk = await walkModuleGraph(input.resolve, seeds, { collectDynamicImports: true });
+  const walk = await walkModuleGraph(input.resolve, seeds, {
+    collectDynamicImports: true,
+    maxModules: input.maxModules,
+  });
+  // The derivation's notes (Tier-2): each catch below keeps the walk alive —
+  // one unreadable module must not erase the derivation — and adds its reason
+  // here, so the exclusion is (reported, never silent), and the walk bound's
+  // stop is coded on the same channel instead of living only in the log.
+  const notes: DerivationNote[] = [];
   if (walk.truncated) {
-    log.warn(
+    const message =
       'Package admission derivation stopped at its module bound; some imported component ' +
-        'packages may not be derived (reported, never silent).',
-    );
+      'packages may not be derived (reported, never silent).';
+    log.warn(message);
+    notes.push({ code: PackageAdmissionErrorCode.MODULE_BOUND_EXCEEDED, message });
   }
 
   const appPackageName = packageNameAt(root);
@@ -123,11 +138,6 @@ export async function deriveAdmittedPackages(
   const staticOwners = new Set<string>();
   /** Each derived owner's package directory, from the walked module id. */
   const packageRoots = new Map<string, string>();
-  // The per-module exclusion notes (Tier-2): each catch below keeps the walk
-  // alive — one unreadable module must not erase the derivation — and adds
-  // its reason here, so the exclusion is (reported, never silent) exactly
-  // like the walk bound above.
-  const notes: DerivationNote[] = [];
 
   for (const file of walk.files) {
     // Identity, not paths: the nearest package.json names the owner. The app's

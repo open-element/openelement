@@ -60,10 +60,17 @@ export const ModuleWalkDiagnosticCode = {
   ANALYSIS_FAILED: 'OE_MODULE_WALK_ANALYSIS_FAILED',
 } as const;
 
-/** One reported walk failure: a code, the module it happened on, its cause. */
+/**
+ * One reported walk failure: a code, the module it happened on, its cause.
+ * The transport shape carries `code` as a string so a pass-scoped boundary
+ * constant (each consumer names its own, as the scanners do) rides on the
+ * same record; the walk's own emissions always set `file`, and the one
+ * graph-level boundary a caller may add (a bound stop) legitimately has no
+ * single file.
+ */
 export interface ModuleWalkDiagnostic {
-  readonly code: (typeof ModuleWalkDiagnosticCode)[keyof typeof ModuleWalkDiagnosticCode];
-  readonly file: string;
+  readonly code: string;
+  readonly file?: string;
   readonly message: string;
 }
 
