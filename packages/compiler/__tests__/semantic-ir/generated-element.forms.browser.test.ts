@@ -741,6 +741,7 @@ describe('bounded generated-element form mechanism (Chromium)', () => {
           shadowText: host.shadowRoot?.textContent ?? null,
           lightInputs: host.querySelectorAll('input').length,
           hostValueAttribute: host.getAttribute('value'),
+          hostNameAttribute: host.getAttribute('name'),
         };
       });
       expect(result.listed).toBe(0);
@@ -748,7 +749,14 @@ describe('bounded generated-element form mechanism (Chromium)', () => {
       expect(result.roundedShadow).toBe(true);
       expect(result.shadowText).toBe('static-value');
       expect(result.lightInputs).toBe(0);
-      expect(result.hostValueAttribute).toBeNull();
+      // M11-2 SSR->claim parity: a declared row with an attribute channel is
+      // seeded onto the host tag, so the client claim re-reads the same value
+      // the server content rendered. The no-JS FACE guarantees above still
+      // hold: without JavaScript the element has no internals and contributes
+      // no form entry or hidden input; the value attribute alone does not
+      // create a form control.
+      expect(result.hostValueAttribute).toBe('static-value');
+      expect(result.hostNameAttribute).toBe('q');
     } finally {
       await page.close();
     }
