@@ -22,9 +22,10 @@ gates. The M08 consolidation change owns the single-writer ledger/matrix update
 for the adjacent text and condition slices. A dated 2026-11-15 working-tree
 amendment below records the internal LC-0 descriptor-fixture retention seam, a
 later 2026-11-15 T3 amendment records the compiler-emitted root setup factory,
-and a further 2026-11-15 LC-2 amendment records the depth-1 nested-instance
-retention wiring; none of the three amendments changes this record's status or
-the landing counts in this section.
+a further 2026-11-15 LC-2 amendment records the depth-1 nested-instance
+retention wiring, and a fourth 2026-11-15 amendment records the root-only author
+lifecycle intrinsics that ride that factory; none of the four amendments
+changes this record's status or the landing counts in this section.
 
 ## Landing scope
 
@@ -200,9 +201,14 @@ This shell is a bounded M09-0 slice. It does **not** implement or claim:
 - **Rich property reflection**: only `string` / `number` / `boolean`
   properties are admitted; array/object reflection and richer coercion remain
   outside the slice.
-- **Author lifecycle hooks**: there is no author `onConnect` / `onDispose`,
-  setup-once count, or focus/selection/scroll restoration across the
-  disconnect window.
+- **Author lifecycle hooks**: the dated 2026-11-13 record had no author
+  `onConnect` / `onDispose`. The 2026-11-15 lifecycle-hooks amendment below now
+  admits both as compiler-erased intrinsics in the generated-element ROOT setup
+  only (`onConnect` replayed per connection with its cleanup on the connection
+  scope; `onDispose` on the instance scope). Nested/hostless component hooks and
+  the connection-scope helper channel remain OWED, and there is still no
+  setup-once count or focus/selection/scroll restoration across the disconnect
+  window.
 - **The full §4.1d reconnect-resource contract**: the landed M09-0 slice proved
   only the narrow retained-DOM + fresh root/projection owner + retained
   bindings/`propsChanged` path; in that slice `createBindings()` was
@@ -504,10 +510,106 @@ Limits — the part that must not be overstated:
   Git-tracked guard paths). No front-matter change and no `docs-index:write`: the
   generated architecture view is unchanged.
 
+## 2026-11-15 amendment — author lifecycle intrinsics, root-only (16b-LC; working tree)
+
+Status: **working-tree amendment — uncommitted, not a status flip, not the M09
+exit, not clean-SHA evidence.** Date: 2026-11-15 (Asia/Shanghai). Base:
+`feat/alpha16-integration` @ `6bd3667d4`, with the uncommitted `16b-LC` author
+lifecycle lane (the tree also carries other lanes' edits; this section reads
+only the lifecycle surface). The landing record and the LC-0/T3/LC-2 amendments
+above keep their dated counts; this section records the current lifecycle seam
+only.
+
+The generated-element lane now has an author-facing lifecycle surface, admitted
+with the same binding-provenance, compiler-erased shape as the
+`element`/`property` decorator intrinsics:
+
+- **Public surface.** [`compile-lifecycle.ts`](../../packages/element/src/internal/core/compile-lifecycle.ts)
+  defines `onConnect` / `onDispose` as compile-time-only intrinsics, re-exported
+  through [`public-runtime.ts`](../../packages/element/src/public-runtime.ts) and
+  [`public-surface.ts`](../../packages/element/src/public-surface.ts). Outside
+  the compiler pipeline they have no dispatcher: the standalone calls fail
+  closed by throwing the existing `JSX_OUTSIDE_COMPILER` identity (the "ran
+  outside the compiler pipeline" code, with the intrinsic named in the message;
+  no new public error code) instead of silently dropping an author's connection
+  cleanup.
+- **Root-only admission.** [`function-frontend.ts`](../../packages/compiler/src/internal/compiler/semantic-core/function-frontend.ts)
+  admits a direct top-level `onConnect(cb)` / `onDispose(cb)` statement of the
+  generated element ROOT setup when the callee resolves to a named import of
+  `@openelement/element` (aliases followed). [`compile.ts`](../../packages/compiler/src/internal/compiler/semantic-ir/generated-element/compile.ts)
+  passes the host-resolved root as the compiler-private `lifecycleRoot`; every
+  other function-lane caller keeps today's statement grammar, so a
+  nested/hostless component hook keeps the existing `OEC9041` refusal with no
+  new diagnostic code and no admission narrowing. The intrinsic call is erased
+  from the emitted module: no import, no runtime call, no hook-order slot.
+- **Carrier and replay.** [`generate.ts`](../../packages/compiler/src/internal/compiler/semantic-ir/generated-leaf/generate.ts)
+  records the lowered callbacks in authored order in the retained
+  `__oe_rootInstance` factory (`__oe_connect`), registers each `onDispose`
+  callback on the instance owner the shell passes (`__oe_owner.add(...)`), and
+  emits the mount and claim PROLOGUE replay: the retained callbacks run on the
+  per-connection scope and each returned cleanup registers on that same scope,
+  so the shell's existing disconnect/rollback disposal releases it (LIFO,
+  first-error rule). Setup is never repeated; a hook-only root still emits the
+  factory; a hook-free module keeps clean-HEAD bytes (SHA-256 pinned).
+
+Limits — the part that must not be overstated:
+
+- **Root-only, helpers OWED.** Nested/hostless component hooks are NOT admitted
+  and keep the unchanged frontend statement refusal. The connection-scope helper
+  channel (callback parameters) is OWED: a hook callback with a parameter is
+  refused rather than silently receiving `undefined`, so there is no
+  connection-scope context and no setup-once author API in this slice.
+- **No ADR-0173 DOM/refs-ready timing claim.** The replay is a PROLOGUE: it runs
+  before the retained-setup alias and before any mount/claim DOM work, so
+  `onConnect` executes while the connection's DOM does not yet exist. That does
+  not satisfy [ADR-0173](../adr/ADR-0173-component-execution-and-composition.md)'s
+  "DOM/refs-ready connected" meaning of an author `onConnect`; this amendment
+  claims only "per connection, compiler-erased, cleanup owned by the shell".
+- **Signal reads inside hooks are still refused.** A callback that reads a
+  signal is a host-binding read in the generated-element lane, so the unchanged
+  `UNBOUND_BINDING` gate refuses it; `props` reads are admitted as the live
+  frozen props record and setup locals become closure captures. A root setup
+  that reads a host binding cannot host the factory and fails closed as
+  `OEIR_LEAF_UNSUPPORTED_BINDING` instead of emitting a record that drops the
+  hooks.
+- **`onDispose` runs during failed-first-connect rollback.** The shell destroys
+  the just-created instance when the first connect throws, so an `onDispose`
+  callback registered by that attempt runs even though the element never
+  completed a connection (the Chromium guard journals the connect callbacks,
+  the earlier cleanup and the dispose callback, with nothing mounted). A failed
+  reconnect claim keeps the retained instance, so `onDispose` does not run
+  there. This is the shell's existing rollback contract applied to the new
+  registration, not a separate disposal path.
+- **No SSR invocation.** `<Root>__ssr` keeps its own per-request setup
+  evaluation, is byte-identical with and without the lifecycle marker, and
+  invokes no `onConnect`/`onDispose` callback; the callbacks are client
+  connection/instance work only.
+- **Evidence is untracked and LOCAL.** Two new files — the Node artifact
+  contract (13 tests, A1–A13) and the Chromium form (5 tests, C1–C4) — are
+  untracked in this working tree; their LOCAL results are dirty-tree
+  development feedback, not clean-SHA evidence and not a permanent test-count
+  promise. No gate ran for this amendment.
+
+Seam duty: the new [`seams.md`](./seams.md) row registers the author lifecycle
+intrinsics seam (`Author lifecycle intrinsics ↔ generated-element
+instance/connection scopes`), and the M09-0 row points at it. The tracked guard
+files at the ABI and owner edges are the root-instance Node/Chromium tests, the
+shell test and the instance-ledger test; the new lifecycle guard files are
+recorded as pending there because the seam checker requires Git-tracked paths.
+No front-matter change and no `docs-index:write`: the generated architecture
+view is unchanged.
+
+Non-claims: no `16b-LC` completion (root lifecycle only; nested/hostless hooks
+and connection-scope helpers are OWED), no §4.1d reconnect-resource contract,
+no M09 exit, no M13 matrix, no owner sign-off.
+
 ## Not claimed
 
-This record does not claim M09 completion, an author-facing API, a production
-registration point, an ABI/statics contract, shadow/DSD support, events, forms,
+This record does not claim M09 completion, an author-facing runtime API (the
+2026-11-15 lifecycle amendment's `onConnect`/`onDispose` are experimental
+compile-time intrinsics erased by the compiler, not a runtime hook API), a
+production registration point, an ABI/statics contract, shadow/DSD support,
+events, forms,
 context, styles, richer reflection, third-party Web Component qualification, a
 three-engine matrix, packed-consumer proof, or any Alpha16 exit. It is one
 bounded runtime slice with LOCAL evidence, landed for review.

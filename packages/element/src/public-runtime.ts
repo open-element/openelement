@@ -63,6 +63,7 @@ export type { ErrorTelemetryHook } from '@openelement/protocol/errors';
 export { computed, effect, signal } from './internal/signal/index.ts';
 export type { ReadonlySignal, Signal } from '@openelement/protocol/signal';
 export { element, property } from './internal/core/compile-decorators.ts';
+export { onConnect, onDispose } from './internal/core/compile-lifecycle.ts';
 export {
   DANGEROUS_KEYS,
   isDangerousKey,

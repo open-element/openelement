@@ -217,6 +217,26 @@ export interface FunctionModelResource {
   readonly span: SourceSpan;
 }
 
+/**
+ * One admitted lifecycle intrinsic statement of the generated element ROOT
+ * setup (`16b-LC`, option 1a): a direct top-level `onConnect(cb)` or
+ * `onDispose(cb)` call whose callee is a canonical named import of
+ * '@openelement/element' (aliases followed). The callback is lowered exactly
+ * like any other authored expression (type-erased, JSX-free), so the generator
+ * emits it as an ordinary closure inside the compiler-owned
+ * `__oe_rootInstance` factory; the intrinsic call itself is erased.
+ *
+ * The model carries no runtime hook identity: there is no dispatcher, no
+ * hook-order slot and no callback-context record. Nested/hostless component
+ * hooks are not admitted in this slice (their placement keeps the existing
+ * frontend statement refusal).
+ */
+export interface FunctionModelLifecycleHook {
+  readonly kind: 'connect' | 'dispose';
+  readonly callback: FunctionExpressionRef;
+  readonly span: SourceSpan;
+}
+
 /** One function component of the module. */
 export interface FunctionModelComponent {
   readonly name: string;
@@ -225,6 +245,12 @@ export interface FunctionModelComponent {
   readonly resources: readonly FunctionModelResource[];
   readonly recipes: readonly FunctionModelRecipe[];
   readonly roots: readonly FunctionModelNode[];
+  /**
+   * The admitted root lifecycle intrinsic statements, in authored order
+   * (`16b-LC`). Empty for every other component and for a hook-free root; the
+   * generator is the only consumer.
+   */
+  readonly lifecycle: readonly FunctionModelLifecycleHook[];
   readonly span: SourceSpan;
 }
 
@@ -239,6 +265,17 @@ export interface FunctionModelModule {
 export interface FunctionFrontendOptions {
   /** Host classifier for imported symbols (A1 §6); omitted = nothing known. */
   readonly importClassifier?: ImportClassifier;
+  /**
+   * `16b-LC` compiler-private admission marker: the component name whose
+   * direct top-level `onConnect`/`onDispose` intrinsic statements are admitted
+   * (the generated element ROOT the host lane resolved). Compiler-private and
+   * never author syntax. Omitted (function pages, leaf tests, the
+   * facts projection) keeps today's statement grammar exactly: a hook call
+   * stays the existing "statement outside the admitted component grammar"
+   * refusal, which is why nested/hostless hooks keep their current behavior
+   * with no new diagnostic code and no admission narrowing.
+   */
+  readonly lifecycleRoot?: string;
 }
 
 export interface FunctionFrontendResult {
@@ -369,6 +406,8 @@ class FunctionFrontendBuilder {
   private readonly sourceFile: ts.SourceFile;
   private readonly resolved: ResolvedModule;
   private readonly registry: ExpressionRegistry;
+  /** `16b-LC`: the one component whose root lifecycle hooks are admitted. */
+  private readonly lifecycleRoot: string | undefined;
   private readonly diagnostics: CompilerDiagnostic[] = [];
   private readonly recipeIds = new Map<ts.Node, string>();
   /**
@@ -383,9 +422,14 @@ class FunctionFrontendBuilder {
   private recipeCounter = 0;
   private childrenRecipeCounter = 0;
 
-  constructor(sourceFile: ts.SourceFile, resolved: ResolvedModule) {
+  constructor(
+    sourceFile: ts.SourceFile,
+    resolved: ResolvedModule,
+    lifecycleRoot: string | undefined,
+  ) {
     this.sourceFile = sourceFile;
     this.resolved = resolved;
+    this.lifecycleRoot = lifecycleRoot;
     this.registry = createExpressionRegistry({
       module: resolved,
       recipeReference: (jsx) => this.recipeReference(jsx),
@@ -529,6 +573,7 @@ class FunctionFrontendBuilder {
     }
 
     const resources: FunctionModelResource[] = [];
+    const lifecycle: FunctionModelLifecycleHook[] = [];
     const body = node.body;
     if (body === undefined) {
       this.fail(node, CODES.shape, 'a function component must have a body');
@@ -537,6 +582,17 @@ class FunctionFrontendBuilder {
     let returnExpression: ts.Expression | null = null;
     if (ts.isBlock(body)) {
       for (const statement of body.statements) {
+        if (ts.isExpressionStatement(statement)) {
+          // `16b-LC` option 1a: a direct top-level lifecycle intrinsic in the
+          // admitted generated-element ROOT setup. Not a model node and not a
+          // resource: it is erased into the compiler-owned instance factory.
+          const lifecycleHook = this.buildLifecycleHook(statement, candidate.name);
+          if (lifecycleHook === 'refused') continue;
+          if (lifecycleHook !== null) {
+            lifecycle.push(lifecycleHook);
+            continue;
+          }
+        }
         if (ts.isVariableStatement(statement)) {
           for (const declaration of statement.declarationList.declarations) {
             const resource = this.buildDeclaration(declaration);
@@ -599,7 +655,102 @@ class FunctionFrontendBuilder {
       resources,
       recipes,
       roots,
+      lifecycle,
       span: spanOf(this.sourceFile, node),
+    };
+  }
+
+  /**
+   * `16b-LC` option 1a — admit one direct top-level lifecycle intrinsic
+   * statement of the generated element ROOT setup.
+   *
+   * Recognition is binding provenance, exactly like the `element`/`property`
+   * decorator intrinsics: the callee must be a value-position identifier whose
+   * resolved binding is a named import of '@openelement/element' (aliases
+   * followed) whose imported name is `onConnect`/`onDispose`. A local shadow,
+   * a namespace member or a foreign module's same-named function is NOT an
+   * intrinsic and falls through to the pre-existing component-body grammar
+   * (its `ExpressionStatement` refusal is the unchanged diagnostic).
+   *
+   * The callback is lowered as an ordinary authored expression in `handler`
+   * mode (no tracked dependencies; type-erased). Its reads are classified by
+   * the generator exactly like any other expression: setup locals become
+   * closure captures, `props` is the live frozen props record, builtin globals
+   * stay direct, and anything else keeps the leaf's existing fail-closed
+   * binding gate. The generator emits the lowered text inside the
+   * compiler-owned `__oe_rootInstance` factory; this call node itself never
+   * reaches generated code.
+   *
+   * Slice boundary (no new diagnostic codes): placement/root/arity/shape
+   * problems inside the admitted root use the existing function-frontend
+   * `OEC9042` form code; a hook in any other component keeps the existing
+   * `OEC9041` statement refusal because this method returns null there. The
+   * callback takes no parameters in this slice (there is no connection-scope
+   * helper channel yet), so a parameter is refused rather than silently
+   * receiving `undefined`.
+   */
+  private buildLifecycleHook(
+    statement: ts.ExpressionStatement,
+    componentName: string,
+  ): FunctionModelLifecycleHook | 'refused' | null {
+    if (this.lifecycleRoot !== componentName) return null;
+    const expression = statement.expression;
+    if (!ts.isCallExpression(expression)) return null;
+    const callee = unwrap(expression.expression);
+    if (!ts.isIdentifier(callee)) return null;
+    const binding = this.resolved.resolveIdentifier(callee);
+    if (binding === undefined || binding.origin.form !== 'import') return null;
+    if (binding.origin.specifier !== '@openelement/element') return null;
+    const importedName = binding.origin.importedName;
+    if (importedName !== 'onConnect' && importedName !== 'onDispose') return null;
+    const writtenName = importedName;
+    if (expression.typeArguments !== undefined || expression.arguments.length !== 1) {
+      this.fail(
+        statement,
+        CODES.form,
+        `${writtenName}(...) takes exactly one inline function-expression callback`,
+      );
+      return 'refused';
+    }
+    const callback = unwrap(expression.arguments[0]!);
+    if (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) {
+      this.fail(
+        statement,
+        CODES.form,
+        `${writtenName}(...) needs an inline arrow/function-expression callback; an indirect ` +
+          'function reference is outside the admitted lifecycle slice',
+      );
+      return 'refused';
+    }
+    if (callback.asteriskToken !== undefined) {
+      this.fail(statement, CODES.form, `${writtenName}(...) cannot take a generator callback`);
+      return 'refused';
+    }
+    const modifiers = ts.canHaveModifiers(callback) ? ts.getModifiers(callback) : undefined;
+    if (modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) === true) {
+      this.fail(
+        statement,
+        CODES.form,
+        `the ${writtenName} callback must be synchronous; async callbacks (and async cleanups) ` +
+          'are outside the lifecycle slice',
+      );
+      return 'refused';
+    }
+    if (callback.parameters.length > 0) {
+      this.fail(
+        statement,
+        CODES.form,
+        `the ${writtenName} callback takes no parameters in this slice; the connection-scope ` +
+          'helper channel is a later, additive slice',
+      );
+      return 'refused';
+    }
+    const lowered = this.expression(callback, 'handler');
+    if (lowered === null) return 'refused';
+    return {
+      kind: importedName === 'onConnect' ? 'connect' : 'dispose',
+      callback: lowered,
+      span: spanOf(this.sourceFile, statement),
     };
   }
 
@@ -1090,7 +1241,7 @@ export function compileFunctionModule(
   );
   if (diagnostics.length > 0) return { module: null, diagnostics };
 
-  const builder = new FunctionFrontendBuilder(sourceFile, resolved);
+  const builder = new FunctionFrontendBuilder(sourceFile, resolved, options.lifecycleRoot);
   const module = builder.build(components);
   return module === null
     ? { module: null, diagnostics: builder.diagnosticsView() }

@@ -33,6 +33,7 @@ import { HYDRATION_STRATEGIES } from '@openelement/element/authoring';
 import type { IslandDeliveryStrategy } from '@openelement/protocol/ssg';
 import { hasControlCharacter } from './internal/control-characters.ts';
 import { isInvalidIslandMedia, ISLAND_MEDIA_QUERY_MAX_LENGTH } from './internal/island-media.ts';
+import { checkIslandStyleList } from './internal/island-style-specifiers.ts';
 import { authoringError, IslandErrorCode, PageErrorCode } from './internal/error-codes.ts';
 
 /**
@@ -778,6 +779,32 @@ export interface IslandConfig {
   /** Media query required by the `media` delivery strategy. */
   media?: string;
   /**
+   * Authored stylesheets for a GENERATED-element (function) island: relative
+   * `.css` specifiers resolved against the island module and fed into the
+   * existing router style plan — the same style-edge registry, Vite CSS
+   * pipeline, content-addressed emitted asset and client asset manifest
+   * (`styles`) the class lane's `static styles` imports ride. One style
+   * channel, no second pipeline.
+   *
+   * A class island does not use this field: it declares sheets through `.css`
+   * imports arrayed in its `static styles`, and the build refuses `styles` on a
+   * lane that owns that other channel instead of silently dropping it.
+   *
+   * Deliberately NOT a second adoption mechanism (GH issue #1800, the Alpha17
+   * generated-island style slice): this slice admits the declaration, resolves
+   * it and emits the sheet as a real build asset. It does not attach the sheet
+   * to a rendered island yet:
+   *
+   * - a shadow root has no style carrier until the DSD style-link slice
+   *   (M09-2e), so `styles` with `root: 'shadow'` is refused outright;
+   * - a light root's document-level application (the head `<link>` a light-root
+   *   class component's sheet gets) is not wired to the generated-element render
+   *   path yet.
+   *
+   * Keep the list small (bounded): every entry is one emitted asset edge.
+   */
+  styles?: readonly string[];
+  /**
    * The root family this island is delivered in: `'shadow'` (the compiled
    * default, DSD markup in a shadow root) or `'light'` (the component's
    * children live in the document tree, which is what lets a light island use
@@ -842,6 +869,7 @@ const ISLAND_CONFIG_FIELDS = new Set([
   'dsd',
   'hydrate',
   'media',
+  'styles',
   'root',
   'delegatesFocus',
   'formAssociated',
@@ -894,6 +922,25 @@ function validateIslandTags(value: unknown, field: 'tags' | 'tagNames'): string[
     seen.add(tag);
     return tag;
   });
+}
+
+/**
+ * Runtime shape admission for the generated-island `styles` list (GH issue
+ * #1800). One accepted shape with the static island scan: a non-empty, bounded,
+ * duplicate-free array of relative `.css` specifiers (see
+ * `internal/island-style-specifiers.ts` for the one rule).
+ */
+function validateIslandStyles(value: unknown): string[] {
+  const check = checkIslandStyleList(value);
+  if (!check.ok) {
+    throw authoringError(
+      IslandErrorCode.DESCRIPTOR_SHAPE,
+      `${ERROR_PREFIX} defineIslandConfig() styles ${check.reason}. ` +
+        "Write styles: ['./island.css'] — one or more relative .css files, resolved against " +
+        'the island module by the build and emitted through the existing style plan.',
+    );
+  }
+  return [...check.styles];
 }
 
 const ISLAND_PROPERTY_FIELDS = new Set(['reflect', 'attribute', 'default']);
@@ -1064,8 +1111,9 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
     throw authoringError(
       IslandErrorCode.DESCRIPTOR_SHAPE,
       `${ERROR_PREFIX} defineIslandConfig() requires an object descriptor. ` +
-        'Write export const openElement = defineIslandConfig({ ssr, dsd, hydrate, media, root, ' +
-        'delegatesFocus, formAssociated, properties, tags, tagNames, exportNames }).',
+        'Write export const openElement = defineIslandConfig({ ssr, dsd, hydrate, media, ' +
+        'styles, root, delegatesFocus, formAssociated, properties, tags, tagNames, ' +
+        'exportNames }).',
     );
   }
   for (const key of Object.keys(config)) {
@@ -1073,7 +1121,7 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
       throw authoringError(
         IslandErrorCode.DESCRIPTOR_SHAPE,
         `${ERROR_PREFIX} defineIslandConfig() does not accept "${key}". ` +
-          'Use only ssr, dsd, hydrate, media, root, delegatesFocus, formAssociated, ' +
+          'Use only ssr, dsd, hydrate, media, styles, root, delegatesFocus, formAssociated, ' +
           'properties, tags, tagNames, and exportNames. ' +
           `Remove "${key}" from the descriptor.`,
       );
@@ -1149,6 +1197,23 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
         'to delegate focus through, and a generated element refuses the combination.',
     );
   }
+  const styles = config.styles === undefined ? undefined : validateIslandStyles(config.styles);
+  if (styles !== undefined && config.root === 'shadow') {
+    // A shadow-root generated island has no style carrier in this slice: the
+    // DSD style-link channel is the later M09-2e slice, and emitting an asset
+    // nothing can reach would be a silent loss dressed up as delivery. Fail
+    // closed here (the static island scan repeats the same refusal at build
+    // time from the authored sidecar, where the lane/root fact is known).
+    // Adoption ownership: GH issue #1800 (Alpha17).
+    throw authoringError(
+      IslandErrorCode.DESCRIPTOR_SHAPE,
+      `${ERROR_PREFIX} defineIslandConfig() styles is not deliverable on a shadow-root island. ` +
+        'The DSD style-link carrier for a shadow root is not wired yet (M09-2e owed) and the ' +
+        'generated-element style adoption slice is GH issue #1800 (Alpha17), so the declared ' +
+        "sheets would be silently lost. Set root: 'light' or remove styles — the field is " +
+        'admitted only on a light-root generated-element island.',
+    );
+  }
   if (config.properties !== undefined) validateIslandProperties(config.properties);
   const tags = config.tags === undefined ? undefined : validateIslandTags(config.tags, 'tags');
   const tagNames =
@@ -1196,6 +1261,7 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
   return {
     ...config,
     ...(media === undefined ? {} : { media }),
+    ...(styles === undefined ? {} : { styles }),
     ...(tags === undefined ? {} : { tags }),
     ...(tagNames === undefined ? {} : { tagNames }),
   };

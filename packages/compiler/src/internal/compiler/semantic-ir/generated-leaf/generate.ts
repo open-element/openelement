@@ -433,6 +433,24 @@ const INTERNAL_PREFIX = '__oe_';
  */
 const GENERATED_ROOT_INSTANCE_NAME = `${INTERNAL_PREFIX}rootInstance`;
 /**
+ * `16b-LC` option 1a: the compiler-owned key/array name carrying the ROOT's
+ * admitted `onConnect` callbacks through the retained instance record.
+ *
+ * The `__oe_rootInstance` factory pushes every lowered callback into this
+ * array and returns it with the setup record; the root mount/claim PROLOGUE
+ * replays the array on the per-connection scope the shell handed it and
+ * registers each returned cleanup on that same scope. It is not a runtime hook
+ * dispatcher and not author syntax: the record field is read by generated code
+ * only, the `__oe_` prefix is refused for every authored identifier, and the
+ * name is a fixed compiler-owned local, so it cannot collide with an authored
+ * name or a `nextName` identifier.
+ */
+const GENERATED_ROOT_CONNECT_RECORD = `${INTERNAL_PREFIX}connect`;
+/** Replay locals the root mount/claim prologue uses (all compiler-owned). */
+const LIFECYCLE_HOOKS_VAR = `${INTERNAL_PREFIX}lifecycleHooks`;
+const LIFECYCLE_HOOK_VAR = `${INTERNAL_PREFIX}lifecycleHook`;
+const LIFECYCLE_CLEANUP_VAR = `${INTERNAL_PREFIX}lifecycleCleanup`;
+/**
  * 16b-LC-2: the module-local setup factory a RETAINED hostless child exposes to
  * its retaining reference site (`<Name>__setup`). Synthesized from the
  * component's own name, exactly like `<Name>__mount`/`<Name>__claim`, so it can
@@ -5296,6 +5314,17 @@ interface SetupLocal {
 }
 
 /**
+ * One admitted `16b-LC` lifecycle intrinsic callback after read classification.
+ * `kind` mirrors the frontend model; `record` is the lowered (type-erased)
+ * callback expression the factory emits verbatim as an ordinary closure.
+ */
+interface AdmittedLifecycleHook {
+  readonly kind: 'connect' | 'dispose';
+  readonly record: LoweredExpressionRecord;
+  readonly span: SpanLike;
+}
+
+/**
  * The retained-setup alias prologue (T3 / 16b-LC-1 for the root, 16b-LC-2 for a
  * leaf instance body).
  *
@@ -5326,6 +5355,37 @@ function emitSetupAlias(
 }
 
 /**
+ * `16b-LC` option 1a — replay the retained `onConnect` callbacks on the
+ * per-connection scope of the ROOT body that is about to mount or claim.
+ *
+ * The callbacks were lowered into the compiler-owned
+ * `__oe_rootInstance` factory and carried by the retained instance record, so
+ * replaying here never repeats setup. Each callback's optional returned cleanup
+ * is registered on the SAME per-connection scope the projection owns, so the
+ * shell's existing disconnect/rollback disposal releases it (LIFO, first error
+ * surfaced after every cleanup was attempted). Nothing here is a second
+ * lifecycle engine: mount and claim call the one retained list, and the
+ * intrinsic itself never reaches the emitted module.
+ *
+ * A throwing callback stops the replay and propagates into the shell's existing
+ * connect catch: the projection/connection rollback disposes the entries the
+ * earlier callbacks already registered, then the original error surfaces.
+ * Absence of the key is the hand-built-descriptor / hook-free shape and is a
+ * no-op (never a fabricated subscription).
+ */
+function emitRootLifecycleReplay(): string[] {
+  return [
+    `  const ${LIFECYCLE_HOOKS_VAR} = ${MOUNT_HOST}.bindings.${GENERATED_ROOT_CONNECT_RECORD};`,
+    `  if (${LIFECYCLE_HOOKS_VAR} !== undefined) {`,
+    `    for (const ${LIFECYCLE_HOOK_VAR} of ${LIFECYCLE_HOOKS_VAR}) {`,
+    `      const ${LIFECYCLE_CLEANUP_VAR} = ${LIFECYCLE_HOOK_VAR}();`,
+    `      if (typeof ${LIFECYCLE_CLEANUP_VAR} === "function") ${MOUNT_SCOPE}.add(${LIFECYCLE_CLEANUP_VAR});`,
+    '    }',
+    '  }',
+  ];
+}
+
+/**
  * Emit `<Name>__claim` for a claimable component. Returns null when the shape
  * is outside the admitted claim slice; the caller then leaves the recipe mount-only.
  */
@@ -5336,6 +5396,7 @@ function emitClaimFunction(
   componentByName: ReadonlyMap<string, FunctionModelComponent>,
   sharedClaimCursor: boolean,
   rootSetup: boolean,
+  connectReplay: boolean,
   retention: RetentionPlan | null,
 ): ClaimEmission | null {
   const ctx: ClaimContext = { componentByName, stack: new Set() };
@@ -5429,7 +5490,7 @@ function emitClaimFunction(
     // before the claim walk reads them (authored side effects therefore run
     // during claim); the ROOT aliases the retained `createInstance` record
     // instead and never re-runs an initializer (T3 / 16b-LC-1).
-    if (rootSetup) {
+    if (rootSetup && localLines.length > 0) {
       emitSetupAlias(state, localLines, ROOT_SETUP_HOST_PROPERTY);
     } else if (leafSetup) {
       emitSetupAlias(state, localLines, LEAF_SETUP_HOST_PROPERTY);
@@ -5470,7 +5531,7 @@ function emitClaimFunction(
     // Shared-cursor claim: both branches of the claim walk read the same setup
     // names, so this branch aliases the retained root record exactly like the
     // non-shared one instead of re-evaluating the setup initializers.
-    if (rootSetup) {
+    if (rootSetup && localLines.length > 0) {
       emitSetupAlias(state, localLines, ROOT_SETUP_HOST_PROPERTY);
     } else if (leafSetup) {
       emitSetupAlias(state, localLines, LEAF_SETUP_HOST_PROPERTY);
@@ -5556,6 +5617,13 @@ function emitClaimFunction(
         `  const ${binding} = ${INTERNAL_PREFIX}requireBinding(${JSON.stringify(binding)});`,
       );
     }
+  }
+  // `16b-LC` option 1a: the claim is a NEW connection, so the retained connect
+  // callbacks are replayed here on the fresh per-connection scope before any
+  // claim work. No setup is repeated (the callbacks come from the retained
+  // instance record) and the probe is absent on the hook-free bytes path.
+  if (connectReplay) {
+    for (const line of emitRootLifecycleReplay()) prologue.push(line);
   }
   const shift = fragmentLineCount(prologue);
   return {
@@ -6690,6 +6758,46 @@ function emitComponent(
     };
   }
 
+  // `16b-LC` option 1a: the ROOT setup's admitted lifecycle intrinsics. Each
+  // callback is an ordinary lowered expression, classified against the SAME
+  // state the setup locals use: a setup local is a closure capture, `props`
+  // stays the live frozen props record, builtin globals stay direct, and any
+  // other read keeps the leaf's existing fail-closed binding gate. The callback
+  // TEXT is emitted inside the factory BELOW, after the setup locals it may
+  // close over; the intrinsic call itself is erased.
+  const admittedHooks: AdmittedLifecycleHook[] = [];
+  for (const hook of component.lifecycle) {
+    if (rootInstance !== component.name) {
+      // Emitter invariant (the frontend admits hooks only for the supplied
+      // root): fail closed instead of emitting a module that silently drops an
+      // author's connection/disposal work.
+      diag(
+        state,
+        'OEIR_LEAF_INVALID_ARTIFACT',
+        `the '${hook.kind}' lifecycle hook is outside the generated element root setup`,
+        hook.span,
+      );
+      continue;
+    }
+    const record = recordFor(state, hook.callback, records);
+    if (record === null || !declareReads(state, record)) continue;
+    admittedHooks.push({ kind: hook.kind, record, span: hook.span });
+  }
+  if (state.diagnostics.length > 0) {
+    return {
+      lines: [],
+      diagnostics: state.diagnostics,
+      requiredBindings: [],
+      requiredProps: [],
+      requiresPropsChanged: false,
+      rootInstanceFactory: null,
+      segments: [],
+      placements: [],
+    };
+  }
+  const connectHooks = admittedHooks.filter((hook) => hook.kind === 'connect');
+  const disposeHooks = admittedHooks.filter((hook) => hook.kind === 'dispose');
+
   // T3 / 16b-LC-1: the ROOT's local snapshots are element-lifetime setup, not
   // per-projection work. They move into one module-local factory the shell's
   // `createInstance` calls once; mount/claim alias the retained record. A
@@ -6711,8 +6819,41 @@ function emitComponent(
         state.requiredBindings.has(read.binding.name),
     ),
   );
+  const hooksOnRoot = admittedHooks.length > 0;
   const rootSetup =
-    rootInstance === component.name && localLines.length > 0 && !setupReadsHostBinding;
+    rootInstance === component.name &&
+    (localLines.length > 0 || hooksOnRoot) &&
+    !setupReadsHostBinding;
+  if (hooksOnRoot && !rootSetup) {
+    // The factory is the ONLY carrier of the admitted hooks, so a setup shape
+    // that cannot host the factory fails closed here instead of emitting an
+    // instance record without its connect/dispose work. (The same module is
+    // also refused by the unchanged binding gate; this diagnostic keeps the
+    // drop impossible in the intermediate artifact too. Existing code, no new
+    // diagnostic vocabulary.)
+    return {
+      lines: [],
+      diagnostics: [
+        ...state.diagnostics,
+        {
+          severity: 'error',
+          code: 'OEIR_LEAF_UNSUPPORTED_BINDING',
+          message:
+            'the root setup reads a host binding, so the admitted onConnect/onDispose hooks ' +
+            'cannot be carried by the retained instance factory; the generated element lane ' +
+            'has no binding channel',
+          span: { file: '', start: 0, end: 0, line: 1, column: 1 },
+          origin: 'module',
+        },
+      ],
+      requiredBindings: [],
+      requiredProps: [],
+      requiresPropsChanged: false,
+      rootInstanceFactory: null,
+      segments: [],
+      placements: [],
+    };
+  }
   let setupLines: string[] = [];
   let setupSegments: EmissionSegment[] = [];
   let setupPlacements: ExpressionPlacement[] = [];
@@ -6723,6 +6864,7 @@ function emitComponent(
     // keeps a model that bypassed both from emitting a duplicate declaration.
     const fixedNames: readonly string[] = [
       GENERATED_ROOT_INSTANCE_NAME,
+      GENERATED_ROOT_CONNECT_RECORD,
       ROOT_SETUP_RECORD,
       ROOT_SETUP_REQUIRE,
     ];
@@ -6761,9 +6903,13 @@ function emitComponent(
         placements: [],
       };
     }
-    const setupReadsProps = localLines.some((line) =>
-      line.record.reads.some((read) => read.name === 'props' || read.binding.name === 'props'),
-    );
+    const setupReadsProps =
+      localLines.some((line) =>
+        line.record.reads.some((read) => read.name === 'props' || read.binding.name === 'props'),
+      ) ||
+      admittedHooks.some((hook) =>
+        hook.record.reads.some((read) => read.name === 'props' || read.binding.name === 'props'),
+      );
     const setupPrologue: string[] = [
       `function ${GENERATED_ROOT_INSTANCE_NAME}(${INTERNAL_PREFIX}owner, ${MOUNT_HOST}) {`,
     ];
@@ -6786,7 +6932,34 @@ function emitComponent(
     for (const line of localLines) {
       pushParts(setupState, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
     }
-    const setupReturn = `  return { ${localLines.map((line) => line.name).join(', ')} };`;
+    // `16b-LC` option 1a: the connect callbacks are RECORDED, not replayed
+    // here. The root mount/claim prologue replays them on the per-connection
+    // scope, so "setup runs once" and "the callback runs on every connection"
+    // stay separate phases with no second lifecycle engine.
+    if (connectHooks.length > 0) {
+      push(setupState, `const ${GENERATED_ROOT_CONNECT_RECORD} = [];`);
+    }
+    for (const hook of connectHooks) {
+      pushParts(
+        setupState,
+        [`${GENERATED_ROOT_CONNECT_RECORD}.push((`, { record: hook.record }, '));'],
+        hook.span,
+      );
+    }
+    // `onDispose` registers on the element/island instance owner the shell
+    // hands the factory: the existing LifetimeScope teardown cascade owns it
+    // (once, after the connection/projection cleanups, LIFO, first-error rule).
+    for (const hook of disposeHooks) {
+      pushParts(
+        setupState,
+        [`${INTERNAL_PREFIX}owner.add((`, { record: hook.record }, '));'],
+        hook.span,
+      );
+    }
+    const recordFields = localLines.map((line) => line.name);
+    if (connectHooks.length > 0) recordFields.push(GENERATED_ROOT_CONNECT_RECORD);
+    const setupReturn =
+      recordFields.length === 0 ? '  return {};' : `  return { ${recordFields.join(', ')} };`;
     setupLines = [...setupPrologue, ...setupState.lines, setupReturn, '}', ''];
     const setupShift = fragmentLineCount(setupPrologue);
     setupSegments = setupState.segments.map((segment) => ({
@@ -6882,7 +7055,7 @@ function emitComponent(
   // any setup/DOM work; the shell aborts it when mount/claim throws.
   if (state.retainBody) push(state, `beginInstancePass(${MOUNT_HOST}.instance);`);
   push(state, `const ${INTERNAL_PREFIX}nodes = [];`);
-  if (rootSetup) {
+  if (rootSetup && localLines.length > 0) {
     emitSetupAlias(state, localLines, ROOT_SETUP_HOST_PROPERTY);
   } else if (leafSetup) {
     emitSetupAlias(state, localLines, LEAF_SETUP_HOST_PROPERTY);
@@ -6955,6 +7128,11 @@ function emitComponent(
       );
     }
   }
+  // `16b-LC` option 1a: the mount is a connection too, so the same retained
+  // connect callbacks replay on this fresh per-connection scope.
+  if (connectHooks.length > 0) {
+    for (const line of emitRootLifecycleReplay()) mountPrologue.push(line);
+  }
   const mountHostVar = `${INTERNAL_PREFIX}mountHost`;
   const factoryLines: string[] = [
     `export function create${component.name}Recipe(${INTERNAL_PREFIX}owner, ${INTERNAL_PREFIX}host) {`,
@@ -6987,6 +7165,7 @@ function emitComponent(
           componentByName,
           sharedClaimCursor,
           rootSetup,
+          connectHooks.length > 0,
           retention,
         )
       : null;

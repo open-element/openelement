@@ -131,6 +131,12 @@ export function compileGeneratedElementIfAdmitted(
 
   const frontend = compileFunctionModule(code, id, {
     importClassifier: GENERATED_ELEMENT_IMPORT_CLASSIFIER,
+    // `16b-LC` option 1a: the generated-element lane is the only host that
+    // admits the author lifecycle intrinsics, and only in the ROOT setup of a
+    // module it owns. Every other function-lane caller keeps today's statement
+    // grammar (the existing OEC9041 refusal), which is the recorded slice
+    // boundary for nested/hostless hooks.
+    lifecycleRoot: admission.componentName,
   });
   if (frontend.module === null) {
     // Authored diagnostics from the real frontend keep their OEC codes and

@@ -25,7 +25,12 @@ Alpha16 release qualification is not openable". The untracked working draft
 `alpha16-migration-capabilities.md` is none of those. **No owner sign-off is
 recorded here and no gate was run.** Every row below is OPEN. An amendment of
 2026-11-15 records the CEM input fixture-first slice in the verification
-appendix; no row flips to closed and no milestone or P5 claim changes.
+appendix; no row flips to closed and no milestone or P5 claim changes. A second
+2026-11-15 amendment records `16b-LC` as PARTIAL (root lifecycle delivered;
+nested/hostless hooks and connection-scope helpers OWED) and the generated-island
+style channel as PARTIAL (declaration and build pipeline delivered for light
+roots; document application and shadow adoption carried by GH issue #1800 /
+M09-2e); no row flips to closed and no sign-off is recorded.
 
 ## Row-for-row obligations (§14.1 condition 6, §14.2:504)
 
@@ -36,17 +41,99 @@ appendix; no row flips to closed and no milestone or P5 claim changes.
 | form validity policy (`setValidity` rules) | retained obligation (was: §13.3 exception) | M09 forms; M10 P5; `16b-MN` | **OPEN — bounded mechanism only.** #1790 `fa6e5232d` lands `formAssociated`, value / required / disabled and `required → valueMissing`; the slice document declares an explicit "Host access gap" non-claim, "not full OpenInput migration parity", Chromium LOCAL only. Its Chromium vertical and Node contract pass at `237e14bd2` (see the Verification appendix). | the existing form e2e contract re-run on the generated CE; form value / reset / restore tests on the generated path. Full constraint mirroring (type/email, minlength, …) may stay a **deferred sub-obligation listed in this row**, never an exception (§14.2:510). |
 | Two `/internal/*` artifact-resolution export subpaths | named deviation, no exemption | ADR-0137 §1 remains in force; ADR-0177 owns the written retirement condition | **OPEN — deviation registered 2026-11-14**; `packages/element/package.json`:16-17 unchanged. | `graph:check` zero importers outside `packages/element`; `esm:boundary-check` no external resolution; snapshot zero `publicSymbols`; `gate:release` + `gate:packed` green at one SHA. Byte attribution in the full reachable page closure also remains owed (ADR-0174:42-50, :12-13). |
 
-The five `16b-*` slices have no implementation slices yet. `16b-LC` (lifecycle),
-`16b-EB` (error boundary), `16b-CTX` (context, TSX-13) and `16b-REF` (refs) must
-be delivered inside Alpha16b and may not be deferred to Alpha17 (§13.2:385-387).
-They are not claimed here.
+Before the 2026-11-15 amendments, none of the five `16b-*` slices had an
+implementation slice. `16b-LC` (lifecycle) is now **PARTIAL**: the
+generated-element ROOT author lifecycle hooks are delivered, while nested/hostless
+hooks and the connection-scope helper channel are OWED (see the amendment
+below). `16b-EB` (error boundary), `16b-CTX` (context, TSX-13) and `16b-REF`
+(refs) still have no implementation slice and must be delivered inside Alpha16b;
+they may not be deferred to Alpha17 (§13.2:385-387). None of them is claimed
+here.
 
 ## Two non-exception items, unchanged (§13.3:427-435)
 
-- Client style declaration for generated islands is a **deferred obligation**,
-  not an exception (a replacement path exists); M11 re-verifies it on a real build.
+- Client style declaration for generated islands remains a **deferred
+  obligation**, not an exception (a replacement path exists); M11 re-verifies it
+  on a real build. The 2026-11-15 amendment below records the channel as
+  PARTIAL: declaration plus the existing build pipeline are delivered for
+  light-root generated islands, while document application and shadow adoption
+  are carried by GH issue #1800 / M09-2e.
 - Utility and theme CSS is outside the capability list entirely (build-side, no
   authoring model dependency); M11 re-verifies it.
+
+## 2026-11-15 amendment — 16b-LC and the generated-island style channel are PARTIAL (working tree)
+
+Status: **working-tree amendment — uncommitted, not a status flip, not a
+capability-inventory row, no sign-off, no gate.** Date: 2026-11-15
+(Asia/Shanghai). Base: `feat/alpha16-integration` @ `6bd3667d4`, plus the
+uncommitted `16b-LC` lifecycle and generated-island style lanes (the tree also
+carries other lanes' edits). This amendment records two PARTIAL states; no row
+above flips to closed and no milestone, P5 or release claim changes. It is not
+clean-SHA evidence.
+
+### 16b-LC — PARTIAL: root author lifecycle delivered, the rest OWED
+
+The generated-element lane now admits author `onConnect` / `onDispose` as
+compiler-erased intrinsics in the generated element ROOT setup only (binding
+provenance: a named import of `@openelement/element`, aliases followed; direct
+top-level statements). The lowered callbacks ride the retained
+`__oe_rootInstance` record; `onConnect` replays on the per-connection scope in
+the mount/claim prologue with its optional cleanup registered there, and
+`onDispose` registers on the element-lifetime instance owner. The intrinsics are
+erased from the emitted module and fail closed with the existing
+`JSX_OUTSIDE_COMPILER` identity outside the compiler; the emitted SSR producer
+runs no hook. The seam is registered in the
+[M09-0 shell record](./m09-generated-element-shell.md) and in
+[`seams.md`](./seams.md).
+
+Owed, and the reason this is PARTIAL, not delivered:
+
+- nested/hostless component hooks — they keep the unchanged `OEC9041` statement
+  refusal — and any cross-component reconciliation;
+- the connection-scope helper channel (callback parameters) — a hook callback
+  with a parameter is refused today, so there is no connection-scope context
+  and no setup-once author API;
+- the timing semantics an author may expect from "connected": the replay runs
+  in the mount/claim prologue before the connection's DOM exists, so this record
+  claims no ADR-0173 DOM/refs-ready timing;
+- signal reads inside a hook remain a host-binding read and are refused by the
+  unchanged `UNBOUND_BINDING` gate.
+
+### Generated-island style channel — PARTIAL: declaration and build pipeline delivered, application OWED
+
+`IslandConfig.styles` is now declared and validated on a LIGHT-root
+generated-element (function) island and carried through the build into the SAME
+router style plan the class lane uses: one specifier rule shared by the runtime
+authoring face and the static island scan, a build-time declaration carrier,
+registration into the existing compiler style-edge registry, one
+content-addressed `.css` asset and the client asset manifest `styles` record.
+There is no second style pipeline, hash or emitter. The seam is registered in
+[`seams.md`](./seams.md).
+
+Owed, and the reason this is PARTIAL, not delivered:
+
+- document-level application of the emitted sheet on a light root (the class
+  lane's head `<link>` is not wired to the generated-element render path);
+- shadow-root adoption: no DSD style-link carrier until M09-2e, so a shadow-root
+  declaration is refused at build with the coded
+  `OE_ISLAND_STYLE_SHADOW_UNWIRED` diagnostic instead of being silently lost;
+- a non-generated/class-lane module declaring `styles` is refused with
+  `OE_ISLAND_STYLE_LANE_UNSUPPORTED`; its sheets belong to `static styles`.
+
+The adoption surface is carried by GH issue #1800 (Alpha17) and the shadow
+carrier by M09-2e; M11 still re-verifies the deferred client style declaration
+obligation on a real build. The two lanes' test files are untracked in this
+working tree and their LOCAL results are dirty-tree development feedback, not
+clean-SHA evidence.
+
+### What this amendment does not do
+
+- It flips no row to closed, records no capability-inventory row, no final-SHA
+  matrix, no gate result, no clean-SHA evidence and no sign-off.
+- It does not claim `16b-LC`, `16b-LC-2`, §4.1d, M09 exit, M13 or any Alpha16
+  exit / P5 item.
+- It does not rewrite the execution plan, the progress ledger, the semantic test
+  matrix, the public-interface snapshot or any `packages/*` source/export map.
 
 ## Retirement-condition form (P5 / P6 / P8)
 
