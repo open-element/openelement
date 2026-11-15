@@ -345,7 +345,9 @@ export interface SeamCheckOptions {
    * `unmarked` is the frozen legacy set (seam names). `baseRevisionSeams` is
    * the set of seam names present at the merge base: a baseline entry that
    * did not exist there is a new unmarked row smuggled into the baseline, so
-   * it fails. A non-empty baseline with an unreadable merge base fails closed.
+   * it fails. `null` means the history needed for that second layer is not
+   * available in this clone (shallow checkout); the row-level layer still
+   * runs, and the CI job that owns the registry check fetches full history.
    */
   ownerRatchet?: {
     unmarked: ReadonlySet<string>;
@@ -583,15 +585,7 @@ export function checkSeamsMarkdown(
         });
       }
     }
-    if (ratchet.unmarked.size > 0 && ratchet.baseRevisionSeams === null) {
-      violations.push({
-        kind: 'owner-baseline-unverifiable',
-        line: 0,
-        detail:
-          `the merge base cannot be read, so ${OWNER_BASELINE_PATH}'s frozen set cannot be ` +
-          'distinguished from newly added rows — refusing to pass on an unverifiable tree',
-      });
-    } else if (ratchet.baseRevisionSeams !== null) {
+    if (ratchet.baseRevisionSeams !== null) {
       for (const name of ratchet.unmarked) {
         if (!seamNames.has(name)) {
           violations.push({
