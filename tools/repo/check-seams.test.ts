@@ -46,6 +46,7 @@ import {
   formatSeamsSummary,
   readBaseOwnerState,
   splitTableCells,
+  type SeamCheckOptions,
   type SeamViolation,
 } from './check-seams.ts';
 import { spawnCommandSync } from './node-command.ts';
@@ -65,6 +66,24 @@ const VACCINE = 'Missing/unreadable behavior: the reader fails closed.';
 
 function kinds(violations: SeamViolation[]): string[] {
   return violations.map((violation) => violation.kind);
+}
+
+/**
+ * The R1 ratchet option set for one synthetic registry: `unmarked` is the
+ * frozen legacy set, and `base` is the merge-base Owner state (seam name →
+ * marked there); `null` is a clone without that history. Each test still
+ * spells its own case and assertions.
+ */
+function ratchet(
+  unmarked: string[],
+  base: Readonly<Record<string, boolean>> | null = {},
+): SeamCheckOptions {
+  return {
+    ownerRatchet: {
+      unmarked: new Set(unmarked),
+      baseOwnerState: base === null ? null : new Map(Object.entries(base)),
+    },
+  };
 }
 
 test('splitTableCells keeps an escaped pipe inside one cell and drops edge empties', () => {
@@ -112,7 +131,7 @@ test('R1 ratchet: an unmarked row is reported once the frozen set does not list 
       `| New seam | \`owner.ts\` | writer → reader | \`artifact\` | ${VACCINE} \`tools/repo/check-vp-selector-flags.test.ts\` |`,
     ]),
     repoRoot,
-    { ownerRatchet: { unmarked: new Set(), baseOwnerState: new Map() } },
+    ratchet([]),
   );
   expect(kinds(report.violations)).toContain('owner-baseline-missing');
 });
@@ -123,7 +142,7 @@ test('R1 ratchet: a marked row naming one existing repo path passes', () => {
       `| New seam | ONE owner: \`tools/repo/checker-io.ts\` — the one writer | writer → reader | \`artifact\` | ${VACCINE} \`tools/repo/check-vp-selector-flags.test.ts\` |`,
     ]),
     repoRoot,
-    { ownerRatchet: { unmarked: new Set(), baseOwnerState: new Map() } },
+    ratchet([]),
   );
   expect(kinds(report.violations)).not.toContain('owner-ambiguous');
   expect(kinds(report.violations)).not.toContain('owner-baseline-missing');
@@ -136,7 +155,7 @@ test('R1 ratchet: a marked row naming two repo paths is reported as ambiguous', 
       `| New seam | ONE owner: \`tools/repo/checker-io.ts\` and \`tools/repo/check-seams.ts\` | writer → reader | \`artifact\` | ${VACCINE} \`tools/repo/check-vp-selector-flags.test.ts\` |`,
     ]),
     repoRoot,
-    { ownerRatchet: { unmarked: new Set(), baseOwnerState: new Map() } },
+    ratchet([]),
   );
   expect(kinds(report.violations)).toContain('owner-ambiguous');
 });
@@ -147,7 +166,7 @@ test('R1 ratchet: an Owner cell carrying the marker twice is reported even with 
       `| New seam | ONE owner: \`tools/repo/checker-io.ts\` (ONE owner: the one writer) | writer → reader | \`artifact\` | ${VACCINE} \`tools/repo/check-vp-selector-flags.test.ts\` |`,
     ]),
     repoRoot,
-    { ownerRatchet: { unmarked: new Set(), baseOwnerState: new Map() } },
+    ratchet([]),
   );
   expect(kinds(report.violations)).toContain('owner-ambiguous');
   expect(kinds(report.violations)).not.toContain('owner-path-missing');
@@ -160,7 +179,7 @@ test('R1 ratchet: a marked row naming a missing path is reported', () => {
       `| New seam | ONE owner: \`tools/repo/does-not-exist.ts\` | writer → reader | \`artifact\` | ${VACCINE} \`tools/repo/check-vp-selector-flags.test.ts\` |`,
     ]),
     repoRoot,
-    { ownerRatchet: { unmarked: new Set(), baseOwnerState: new Map() } },
+    ratchet([]),
   );
   expect(kinds(report.violations)).toContain('owner-path-missing');
 });
@@ -171,15 +190,7 @@ test('R1 ratchet: a baseline entry with no row is stale', () => {
       `| Sample seam | \`owner.ts\` | writer → reader | \`artifact\` | ${VACCINE} \`tools/repo/check-vp-selector-flags.test.ts\` |`,
     ]),
     repoRoot,
-    {
-      ownerRatchet: {
-        unmarked: new Set(['Sample seam', 'Ghost seam']),
-        baseOwnerState: new Map([
-          ['Sample seam', false],
-          ['Ghost seam', false],
-        ]),
-      },
-    },
+    ratchet(['Sample seam', 'Ghost seam'], { 'Sample seam': false, 'Ghost seam': false }),
   );
   expect(kinds(report.violations)).toContain('owner-baseline-stale');
 });
@@ -190,7 +201,7 @@ test('R1 ratchet: a baseline entry that did not exist at the merge base is unver
       `| Sample seam | \`owner.ts\` | writer → reader | \`artifact\` | ${VACCINE} \`tools/repo/check-vp-selector-flags.test.ts\` |`,
     ]),
     repoRoot,
-    { ownerRatchet: { unmarked: new Set(['Sample seam']), baseOwnerState: new Map() } },
+    ratchet(['Sample seam']),
   );
   expect(kinds(report.violations)).toContain('owner-baseline-unverifiable');
 });
@@ -201,12 +212,7 @@ test('R1 ratchet: a baseline entry whose row is marked now is rejected (the froz
       `| Sample seam | ONE owner: \`tools/repo/checker-io.ts\` — the one writer | writer → reader | \`artifact\` | ${VACCINE} \`tools/repo/check-vp-selector-flags.test.ts\` |`,
     ]),
     repoRoot,
-    {
-      ownerRatchet: {
-        unmarked: new Set(['Sample seam']),
-        baseOwnerState: new Map([['Sample seam', false]]),
-      },
-    },
+    ratchet(['Sample seam'], { 'Sample seam': false }),
   );
   expect(kinds(report.violations)).toContain('owner-baseline-marked');
   expect(kinds(report.violations)).not.toContain('owner-marked-regression');
@@ -223,12 +229,7 @@ test('R1 ratchet: de-marking a row marked at the merge base and adding it to the
       `| Sample seam | plain owner text | writer → reader | \`artifact\` | ${VACCINE} \`tools/repo/check-vp-selector-flags.test.ts\` |`,
     ]),
     repoRoot,
-    {
-      ownerRatchet: {
-        unmarked: new Set(['Sample seam']),
-        baseOwnerState: new Map([['Sample seam', true]]),
-      },
-    },
+    ratchet(['Sample seam'], { 'Sample seam': true }),
   );
   const found = kinds(report.violations);
   expect(found).toContain('owner-marked-regression');
@@ -242,12 +243,7 @@ test('R1 ratchet: a marked row that loses the marker is a regression, not merely
       `| Sample seam | plain owner text | writer → reader | \`artifact\` | ${VACCINE} \`tools/repo/check-vp-selector-flags.test.ts\` |`,
     ]),
     repoRoot,
-    {
-      ownerRatchet: {
-        unmarked: new Set(),
-        baseOwnerState: new Map([['Sample seam', true]]),
-      },
-    },
+    ratchet([], { 'Sample seam': true }),
   );
   const found = kinds(report.violations);
   expect(found).toContain('owner-marked-regression');
@@ -260,12 +256,7 @@ test('a clone without the merge-base history runs the row-level ratchet and repo
       `| Sample seam | plain owner text | writer → reader | \`artifact\` | ${VACCINE} \`tools/repo/check-vp-selector-flags.test.ts\` |`,
     ]),
     repoRoot,
-    {
-      ownerRatchet: {
-        unmarked: new Set(['Sample seam']),
-        baseOwnerState: null,
-      },
-    },
+    ratchet(['Sample seam'], null),
   );
   expect(report.violations).toEqual([]);
   expect(report.historyLayer).toBe('unverified');
@@ -280,12 +271,7 @@ test('the passing summary states the verified history layer only when the Owner 
       `| Sample seam | plain owner text | writer → reader | \`artifact\` | ${VACCINE} \`tools/repo/check-vp-selector-flags.test.ts\` |`,
     ]),
     repoRoot,
-    {
-      ownerRatchet: {
-        unmarked: new Set(['Sample seam']),
-        baseOwnerState: new Map([['Sample seam', false]]),
-      },
-    },
+    ratchet(['Sample seam'], { 'Sample seam': false }),
   );
   expect(report.violations).toEqual([]);
   expect(report.historyLayer).toBe('verified');

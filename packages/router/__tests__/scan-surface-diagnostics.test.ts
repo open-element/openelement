@@ -56,6 +56,27 @@ function captureConsoleWarn(): { lines: string[]; spy: MockInstance } {
   return { lines, spy };
 }
 
+/**
+ * Run one CEM-skip scan against a fresh plugin state. The console capture is
+ * restored before returning; the captured lines stay readable for the coded
+ * skip-line assertion, and the caller owns every assertion about the outcome.
+ */
+async function scanSkippedCem(
+  manifests: OpenElementPackageManifest[],
+  detection: CemDetectionResult,
+): Promise<{ state: ReturnType<typeof createOpenPluginState>; lines: string[] }> {
+  const state = createOpenPluginState({}, undefined, {});
+  state.ctx.phase1.packageManifests = manifests;
+  resetBuildExitRecords();
+  const capture = captureConsoleWarn();
+  try {
+    await scanCemClassificationsInto(state, () => Promise.resolve(detection));
+  } finally {
+    capture.spy.mockRestore();
+  }
+  return { state, lines: capture.lines };
+}
+
 test('scan: a crashing CEM detection channel fails closed with OE_SCAN_CEM_DETECTION_UNAVAILABLE', async () => {
   const state = createOpenPluginState({}, undefined, {});
   const boom = new Error('cem walk exploded');
@@ -117,24 +138,16 @@ test('scan: a crashing foreign-tag channel fails closed with OE_SCAN_FOREIGN_TAG
 });
 
 test('scan: skipped CEM manifests surface as coded warnings through the envelope channel', async () => {
-  const state = createOpenPluginState({}, undefined, {});
   const classification = {
     tagName: 'x-widget',
     tier: 'client-only',
     reason: 'unscanned',
     source: 'package',
   } as CompatibilityClassification;
-  const detection: CemDetectionResult = {
+  const { state, lines } = await scanSkippedCem([], {
     classifications: [classification],
     skipped: [{ packageName: '@broken/pkg', reason: 'Unexpected token { in JSON' }],
-  };
-  resetBuildExitRecords();
-  const capture = captureConsoleWarn();
-  try {
-    await scanCemClassificationsInto(state, () => Promise.resolve(detection));
-  } finally {
-    capture.spy.mockRestore();
-  }
+  });
   // The scan proceeds: the classifications land in ctx.
   expect(state.ctx.phase1.cemClassifications).toEqual([classification]);
   // The skip is a coded warning, recorded for the exit and printed once.
@@ -148,10 +161,10 @@ test('scan: skipped CEM manifests surface as coded warnings through the envelope
   expect(envelope?.message).toContain('@broken/pkg');
   expect(envelope?.message).toContain('Unexpected token { in JSON');
   expect(
-    capture.lines.some(
+    lines.some(
       (line) => line.includes('[OE_SCAN_CEM_MANIFEST_SKIPPED]') && line.includes('@broken/pkg'),
     ),
-    `expected the coded skip line, got: ${JSON.stringify(capture.lines)}`,
+    `expected the coded skip line, got: ${JSON.stringify(lines)}`,
   ).toBeTruthy();
 });
 
@@ -160,7 +173,6 @@ test("scan: a skipped CEM downgrades that package's ssr=true island to client-on
   // proof. When the package's CEM cannot be parsed no classifier runs, so the
   // pre-harness admission path must not upgrade the flag into an admission:
   // the island is downgraded to client-only with a reason that says why.
-  const state = createOpenPluginState({}, undefined, {});
   const manifest: OpenElementPackageManifest = {
     schemaVersion: '1',
     packageName: '@broken/pkg',
@@ -172,18 +184,10 @@ test("scan: a skipped CEM downgrades that package's ssr=true island to client-on
       },
     ],
   };
-  state.ctx.phase1.packageManifests = [manifest];
-  const detection: CemDetectionResult = {
+  const { state } = await scanSkippedCem([manifest], {
     classifications: [],
     skipped: [{ packageName: '@broken/pkg', reason: 'Unexpected token { in JSON' }],
-  };
-  resetBuildExitRecords();
-  const capture = captureConsoleWarn();
-  try {
-    await scanCemClassificationsInto(state, () => Promise.resolve(detection));
-  } finally {
-    capture.spy.mockRestore();
-  }
+  });
 
   const synthetic = state.ctx.phase1.cemClassifications.find(
     (entry) => entry.tagName === 'x-broken-island',
@@ -249,21 +253,11 @@ test('scan: a skipped CEM downgrades every delivered tag, not only the primary t
   // the declaration and `buildSsrAdmissionPlan` expands it into one island per
   // delivered tag, so a downgrade keyed on `declaration.tagName` alone leaves
   // the alias tags admitted `ssr+client` with an unproven capability.
-  const state = createOpenPluginState({}, undefined, {});
-  state.ctx.phase1.packageManifests = [deliveryManifest()];
   const deliveredTags = ['x-widget', 'x-widget-alt', 'x-gadget', 'x-gadget-alt'];
-  resetBuildExitRecords();
-  const capture = captureConsoleWarn();
-  try {
-    await scanCemClassificationsInto(state, () =>
-      Promise.resolve({
-        classifications: [],
-        skipped: [{ packageName: '@broken/pkg', reason: 'Unexpected token { in JSON' }],
-      }),
-    );
-  } finally {
-    capture.spy.mockRestore();
-  }
+  const { state } = await scanSkippedCem([deliveryManifest()], {
+    classifications: [],
+    skipped: [{ packageName: '@broken/pkg', reason: 'Unexpected token { in JSON' }],
+  });
 
   // The scan→plan consumer form: the real declaration objects (delivery
   // aliases included) go through the same builder the plugin uses.
@@ -299,20 +293,10 @@ test('scan: a skipped CEM for a package that is not admitted claims no downgrade
   // manifest) or whose delivered tags all carry real evidence. The coded
   // warning must state the conditional outcome, not claim the package's
   // islands were downgraded when none were.
-  const state = createOpenPluginState({}, undefined, {});
-  state.ctx.phase1.packageManifests = [];
-  resetBuildExitRecords();
-  const capture = captureConsoleWarn();
-  try {
-    await scanCemClassificationsInto(state, () =>
-      Promise.resolve({
-        classifications: [],
-        skipped: [{ packageName: '@unrelated/broken-cem', reason: 'Unexpected token { in JSON' }],
-      }),
-    );
-  } finally {
-    capture.spy.mockRestore();
-  }
+  const { state } = await scanSkippedCem([], {
+    classifications: [],
+    skipped: [{ packageName: '@unrelated/broken-cem', reason: 'Unexpected token { in JSON' }],
+  });
 
   // No admission input, so no synthetic classification is fabricated.
   expect(state.ctx.phase1.cemClassifications).toEqual([]);
@@ -331,8 +315,6 @@ test('scan: a skipped CEM whose delivered tags all carry real evidence preserves
   // The no-downgrade branch also covers an ADMITTED package whose delivered
   // tags all have real evidence; the hint must stay neutral instead of
   // claiming the build admitted no tag from the package.
-  const state = createOpenPluginState({}, undefined, {});
-  state.ctx.phase1.packageManifests = [deliveryManifest()];
   const real = ['x-widget', 'x-widget-alt', 'x-gadget', 'x-gadget-alt'].map(
     (tagName) =>
       ({
@@ -343,18 +325,10 @@ test('scan: a skipped CEM whose delivered tags all carry real evidence preserves
         ssr: true,
       }) as CompatibilityClassification,
   );
-  resetBuildExitRecords();
-  const capture = captureConsoleWarn();
-  try {
-    await scanCemClassificationsInto(state, () =>
-      Promise.resolve({
-        classifications: [...real],
-        skipped: [{ packageName: '@broken/pkg', reason: 'Unexpected token { in JSON' }],
-      }),
-    );
-  } finally {
-    capture.spy.mockRestore();
-  }
+  const { state } = await scanSkippedCem([deliveryManifest()], {
+    classifications: [...real],
+    skipped: [{ packageName: '@broken/pkg', reason: 'Unexpected token { in JSON' }],
+  });
 
   expect(state.ctx.phase1.cemClassifications).toEqual(real);
   const envelope = takeBuildDiagnostics().find(
@@ -381,8 +355,6 @@ test('scan: real classification evidence outranks the synthetic downgrade for a 
   // only one delivered alias. Cross-package tag ownership stays
   // mergeAdmittedManifests's TAG_CONFLICT verdict — this scan introduces no
   // package-scoped override.
-  const state = createOpenPluginState({}, undefined, {});
-  state.ctx.phase1.packageManifests = [deliveryManifest()];
   const real: CompatibilityClassification = {
     tagName: 'x-widget-alt',
     tier: 'ssr-capable',
@@ -390,18 +362,10 @@ test('scan: real classification evidence outranks the synthetic downgrade for a 
     source: 'package',
     ssr: true,
   };
-  resetBuildExitRecords();
-  const capture = captureConsoleWarn();
-  try {
-    await scanCemClassificationsInto(state, () =>
-      Promise.resolve({
-        classifications: [real],
-        skipped: [{ packageName: '@broken/pkg', reason: 'Unexpected token { in JSON' }],
-      }),
-    );
-  } finally {
-    capture.spy.mockRestore();
-  }
+  const { state } = await scanSkippedCem([deliveryManifest()], {
+    classifications: [real],
+    skipped: [{ packageName: '@broken/pkg', reason: 'Unexpected token { in JSON' }],
+  });
 
   expect(
     state.ctx.phase1.cemClassifications.filter((entry) => entry.tagName === 'x-widget-alt'),
