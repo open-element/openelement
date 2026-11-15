@@ -427,9 +427,13 @@ export async function scanCemClassificationsInto(
       phase: 'build',
       message:
         `The CEM manifest of package "${entry.packageName}" could not be parsed, so its ` +
-        `components are not classified (${entry.reason}).`,
+        `components are not classified (${entry.reason}). Their SSR capability is therefore ` +
+        `not proven: only a package island whose manifest declares openElement.ssr=true is ` +
+        `admitted for SSR, and every other component in this package falls back to client-only.`,
       file: entry.packageName,
-      hint: "Fix or remove the package's custom-elements.json.",
+      hint:
+        "Fix or remove the package's custom-elements.json; a client-only fallback keeps the " +
+        'site working but drops server rendering for these components.',
     } as const;
     recordBuildDiagnostic(warning);
     log.warn(formatDiagnosticLine(warning));

@@ -1,4 +1,8 @@
 /**
+ * Form: consumer-form test (P8), permanent — the claimed state is re-derived
+ * from git on every run, so there is no copy to keep in sync and no
+ * retirement condition.
+ *
  * Consumer-form test (constitution P8) for docs/agent-contract.md's
  * generated-file map: every row claims a repository state (**Tracked** or
  * **Git-ignored**), and trackedness is derivable from git itself. This test

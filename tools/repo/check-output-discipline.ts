@@ -2,6 +2,10 @@
  * check-output-discipline.ts — the static half of the single-writer seam for
  * check stdout.
  *
+ * Form: structural derived guard (permanent — no retirement condition). The
+ * checker set is discovered from the workspace task graph, not copied; there
+ * is nothing whose deletion would retire it.
+ *
  * Output discipline (docs/architecture/design-principles.md, "Output
  * discipline"): a command's stdout is a data channel, and a passing check
  * prints one summary line and no more. The writer side of that seam is

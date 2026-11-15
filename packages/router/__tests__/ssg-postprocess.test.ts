@@ -12,9 +12,17 @@
  * shipping a partial page manifest, and only the metadata Phase 2 selected
  * is validated or delivered.
  */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { OpenElementError } from '@openelement/element';
 import { ClientAssetErrorCode } from '../src/internal/error-codes.ts';
@@ -30,6 +38,7 @@ import {
   routeFromRelativePath,
 } from '../src/vite/internal/ssg/index.ts';
 import {
+  cleanSsrArtifacts,
   islandChunkMapFromAssetManifest,
   postProcessClientIslandBuild,
 } from '../src/vite/internal/ssg/build-postprocess.ts';
@@ -1193,5 +1202,62 @@ test('injectIslandPrefetchRules is idempotent and leaves other lanes’ tags alo
     expect(about.includes('data-open-island-prefetch')).toEqual(true);
   } finally {
     cleanup(tmp);
+  }
+});
+
+/** Capture console.warn lines while one async call runs. */
+async function captureWarn(run: () => Promise<void>): Promise<string[]> {
+  const lines: string[] = [];
+  const spy = vi.spyOn(console, 'warn').mockImplementation((message: unknown) => {
+    lines.push(String(message));
+  });
+  try {
+    await run();
+  } finally {
+    spy.mockRestore();
+  }
+  return lines;
+}
+
+function postprocessCtx(root: string) {
+  return { phase3: { root, outDir: 'dist' } } as unknown as Parameters<typeof cleanSsrArtifacts>[0];
+}
+
+test('SSR artifact hygiene reports an unlistable assets dir with its coded warn', async () => {
+  // Make the assets dir unreadable (EACCES, not ENOENT): safeReadDir's "not
+  // found means legal silence" branch must not swallow a real I/O failure, so
+  // the pass names the code and the consequence instead.
+  const tmp = mkdtempSync(join(tmpdir(), 'oe-postprocess-'));
+  const assets = join(tmp, 'dist', 'assets');
+  try {
+    mkdirSync(assets, { recursive: true });
+    chmodSync(assets, 0o000);
+    const lines = await captureWarn(() => cleanSsrArtifacts(postprocessCtx(tmp)));
+    expect(lines.some((line) => line.includes('[OE_SSG_HYGIENE_ASSETS_LIST_FAILED]'))).toBe(true);
+    expect(lines.some((line) => line.includes('stale SSR artifacts'))).toBe(true);
+  } finally {
+    chmodSync(assets, 0o755);
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('SSR artifact hygiene reports a failed removal with its coded warn and keeps going', async () => {
+  // A directory named like a stale artifact cannot be unlinked: rm throws
+  // EISDIR. The pass reports the code for that path and continues with the
+  // remaining entries instead of aborting the whole cleanup.
+  const tmp = mkdtempSync(join(tmpdir(), 'oe-postprocess-'));
+  try {
+    const assets = join(tmp, 'dist', 'assets');
+    mkdirSync(assets, { recursive: true });
+    mkdirSync(join(assets, '_virtual_open-hono-entry'));
+    writeFileSync(join(assets, '_virtual_open-build-trigger'), 'x');
+    const lines = await captureWarn(() => cleanSsrArtifacts(postprocessCtx(tmp)));
+    expect(lines.some((line) => line.includes('[OE_SSG_HYGIENE_ARTIFACT_REMOVE_FAILED]'))).toBe(
+      true,
+    );
+    // The second matching entry was removable and is gone: the pass continued.
+    expect(() => statSync(join(assets, '_virtual_open-build-trigger'))).toThrow();
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
   }
 });

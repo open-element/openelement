@@ -1,6 +1,12 @@
 /**
  * TypeScript 7 shadow gate (1.0 Alpha convergence — "TypeScript 7: split
- * decision"). An INDEPENDENT SHADOW GATE, not a required gate: nothing wires
+ * decision").
+ *
+ * Form: independent shadow gate (manual, deliberately unwired) — NOT an
+ * emergency drift guard, so it carries no RETIRE condition and no temporary
+ * intent: it is a diagnostic lane someone runs on purpose.
+ *
+ * An INDEPENDENT SHADOW GATE, not a required gate: nothing wires
  * it into CI or any gate layer — there is no job for it in .github/workflows
  * and no step in gate.ts, gate:source, gate:release, verify:core or
  * release:check. Its only caller is the manual tools/repo task

@@ -1,5 +1,11 @@
 #!/usr/bin/env node
-/** Run repository tests and enforce production-package LCOV thresholds. */
+/**
+ * Run repository tests and enforce production-package LCOV thresholds.
+ *
+ * Form: structural derived guard (permanent — no retirement condition). The
+ * thresholds are the gate's own contract and the coverage data is derived
+ * from the test run; there is no temporary mechanism to retire.
+ */
 
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
