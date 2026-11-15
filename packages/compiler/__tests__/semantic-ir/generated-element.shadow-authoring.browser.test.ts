@@ -77,6 +77,22 @@ export default ProfileCard;
 `;
 
 /**
+ * M09-2e / #1803: the same shadow shape with a `styles` sidecar entry. The host
+ * producer grows the typed styleLinks channel and the claim skips the canonical
+ * marked link prefix the DSD template declares.
+ */
+const STYLED_ID = `${ISLANDS_DIR}/styled-card.tsx`;
+const STYLED_SIDECAR =
+  "import { defineIslandConfig } from '@openelement/router';\n" +
+  "export const openElement = defineIslandConfig({ hydrate: 'idle', root: 'shadow', styles: ['./styled-card.css'] });\n";
+const STYLED_SOURCE = `${STYLED_SIDECAR}
+function StyledCard() {
+  return <section><p id="styled">styled</p></section>;
+}
+export default StyledCard;
+`;
+
+/**
  * The refresh island. Its root takes props, which M09-1a's lane refuses
  * (`OEIR_GENERATED_ELEMENT_UNDECLARED_PROPS`); it is emitted through the same
  * emitter so the DSD host bytes and the generated recipe stay the real ones.
@@ -96,6 +112,13 @@ interface PageRuntime {
   LiveCard__ssrHost: (props: unknown, lightChildren?: string) => string;
   createLiveCardRecipe: (owner: unknown, host: unknown) => unknown;
   createGeneratedElementClass: (descriptor: unknown) => CustomElementConstructor;
+  StyledElement: CustomElementConstructor;
+  StyledCard__ssrHost: (
+    props: unknown,
+    lightChildren?: string,
+    attributes?: readonly (readonly [string, string])[],
+    styleLinks?: readonly string[],
+  ) => string;
 }
 
 declare global {
@@ -122,15 +145,18 @@ async function buildBundle(
   dir: string,
   staticModule: string,
   liveModule: string,
+  styledModule: string,
 ): Promise<BundleResult> {
   const element = join(REPO_ROOT, 'packages/element/src/internal');
   const runtime = join(element, 'compiled/runtime');
   const leafStatic = join(dir, 'static.js');
   const leafLive = join(dir, 'live.js');
+  const leafStyled = join(dir, 'styled.js');
   const shim = join(dir, 'runtime-shim.ts');
   const entry = join(dir, 'entry.ts');
   writeFileSync(leafStatic, staticModule);
   writeFileSync(leafLive, liveModule);
+  writeFileSync(leafStyled, styledModule);
   writeFileSync(
     shim,
     [
@@ -153,6 +179,7 @@ async function buildBundle(
     [
       `export { default as GeneratedElement, ProfileCard__ssr, ProfileCard__ssrHost } from './static.js';`,
       `export { LiveCard__ssrHost, createLiveCardRecipe } from './live.js';`,
+      `export { default as StyledElement, StyledCard__ssrHost } from './styled.js';`,
       `export { createGeneratedElementClass } from ${JSON.stringify(join(element, 'compiled/generated-element/shell.ts'))};`,
       '',
     ].join('\n'),
@@ -270,7 +297,14 @@ beforeAll(async () => {
     'export function LiveCard__ssrHost(props, lightChildren, attributes) {',
   );
 
-  bundleFile = (await buildBundle(tempDir, staticCompiled!.code, live.module!)).file;
+  const styled = compileGeneratedElementIfAdmitted(STYLED_SOURCE, STYLED_ID, {
+    site: { tag: 'styled-card' },
+  });
+  expect(styled).not.toBeNull();
+  expect(styled!.code).toContain(
+    'export function StyledCard__ssrHost(props, lightChildren, attributes, styleLinks) {',
+  );
+  bundleFile = (await buildBundle(tempDir, staticCompiled!.code, live.module!, styled!.code)).file;
   browser = await chromium.launch();
 }, 180_000);
 
@@ -462,6 +496,112 @@ describe('M09-2a authored shadow island (Chromium)', () => {
       expect(result.liveClaimed.attachShadowCalls).toBe(0);
     } finally {
       await page.close();
+    }
+  });
+});
+
+/**
+ * M09-2e / #1803 — the styled shadow host's DSD link prefix (Chromium).
+ *
+ * The positive row proves the claim adopts the authored nodes AFTER the
+ * canonical marked links, keeps exactly one link (no duplicate, no delete) and
+ * records zero claim-period mutations. The negatives prove the skip is exact:
+ * an unmarked `<link>` and a marked non-link node are NOT swallowed — the claim
+ * fails closed on the structural mismatch instead of silently adopting past
+ * them.
+ */
+describe('M09-2e styled shadow host DSD link prefix (Chromium)', () => {
+  test('claim skips only the canonical marked link prefix', async () => {
+    const page = await openPage();
+    try {
+      const result = await page.evaluate(async () => {
+        const mod = window.__oeVertical;
+        const probe = (window as unknown as { __oeProbe: { attachShadowCalls: number } }).__oeProbe;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        const observe = (
+          window as unknown as {
+            __oeObserve: (target: Node) => { records: MutationRecord[]; stop: () => void };
+          }
+        ).__oeObserve;
+        customElements.define('styled-card', mod.StyledElement);
+        const hostHtml = mod.StyledCard__ssrHost(undefined, undefined, undefined, [
+          '/client/assets/styled-abc.css',
+        ]);
+        const frame = document.createElement('div');
+        frame.setHTMLUnsafe(hostHtml);
+        const host = frame.firstElementChild as HTMLElement;
+        const shadow = host.shadowRoot!;
+        const linkBefore = shadow.querySelector('link')!;
+        const styledBefore = shadow.querySelector('#styled')!;
+        const observer = observe(shadow);
+        document.body.append(frame);
+        await tick();
+        observer.stop();
+        return {
+          hostHtml,
+          mutations: observer.records.length,
+          links: shadow.querySelectorAll('link').length,
+          linkIdentity: shadow.querySelector('link') === linkBefore,
+          marker: linkBefore.hasAttribute('data-oe-static-styles'),
+          href: linkBefore.getAttribute('href'),
+          styledIdentity: shadow.querySelector('#styled') === styledBefore,
+          styledCount: shadow.querySelectorAll('#styled').length,
+          attachShadowCalls: probe.attachShadowCalls,
+        };
+      });
+      expect(result.hostHtml).toContain(
+        '<link rel="stylesheet" href="/client/assets/styled-abc.css" data-oe-static-styles />',
+      );
+      expect(result.mutations).toBe(0);
+      expect(result.links).toBe(1);
+      expect(result.linkIdentity).toBe(true);
+      expect(result.marker).toBe(true);
+      expect(result.href).toBe('/client/assets/styled-abc.css');
+      expect(result.styledIdentity).toBe(true);
+      expect(result.styledCount).toBe(1);
+      expect(result.attachShadowCalls).toBe(0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('an unmarked link and a marked non-link are refused, not swallowed', async () => {
+    for (const [name, mutate] of [
+      ['unmarked link', (html: string) => html.replace(' data-oe-static-styles', '')],
+      [
+        'marked non-link',
+        (html: string) =>
+          html.replace(
+            '<link rel="stylesheet" href="/client/assets/styled-abc.css" data-oe-static-styles />',
+            '<div data-oe-static-styles=""></div>',
+          ),
+      ],
+    ] as const) {
+      const page = await openPage();
+      const errors: string[] = [];
+      page.on('pageerror', (error) => errors.push(error.message));
+      try {
+        const hostHtml = await page.evaluate(() =>
+          window.__oeVertical.StyledCard__ssrHost(undefined, undefined, undefined, [
+            '/client/assets/styled-abc.css',
+          ]),
+        );
+        const mutated = mutate(hostHtml);
+        expect(mutated, `${name}: the fixture mutation must apply`).not.toBe(hostHtml);
+        await page.evaluate(async (html: string) => {
+          customElements.define('styled-card', window.__oeVertical.StyledElement);
+          const frame = document.createElement('div');
+          frame.setHTMLUnsafe(html);
+          document.body.append(frame);
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }, mutated);
+        await page.waitForTimeout(50);
+        expect(errors.join('\n'), `${name}: claim must fail closed`).toMatch(
+          /expected element .* at \/0|mismatch|extra node/i,
+        );
+      } finally {
+        await page.close();
+      }
     }
   });
 });

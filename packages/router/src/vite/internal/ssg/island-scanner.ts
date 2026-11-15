@@ -1049,10 +1049,15 @@ const ISLAND_STYLES_LANE_UNSUPPORTED_CODE = IslandErrorCode.STYLE_LANE_UNSUPPORT
  *   turns into the SAME content-addressed `.css` asset and client asset
  *   manifest entry the class lane's sheets get. The document-level application
  *   of that asset is the Alpha17 adoption slice, not this one.
- * - `producer` / `missing-producer` (a shadow-root generated-element island):
- *   refused. The DSD style-link carrier is the later M09-2e slice, so there is
- *   nothing a shadow root could read the emitted sheet through — shipping the
- *   asset anyway would be a silent loss dressed up as delivery.
+ * - `producer` (a shadow-root generated-element island whose leaf emitted the
+ *   compiled host producer): admitted with root `shadow`. The carried sheet is
+ *   declared INSIDE the host's DSD template as the canonical marked `<link>`
+ *   prefix (M09-2e / #1803); a sheet the client build did not emit fails the
+ *   build closed, so the asset and the declared link cannot disagree.
+ * - `missing-producer` (a shadow-root island with no compiled host producer):
+ *   refused. There is no DSD template to declare the sheet in and no client
+ *   adoption channel yet, so shipping the asset would be a silent loss dressed
+ *   up as delivery.
  * - `lane-declined` (the module is not a generated-element island: a class
  *   island or a file outside the lane's admission): refused. A class island
  *   owns the `static styles` + `.css` import channel; this field would be
@@ -1076,6 +1081,7 @@ function admitIslandStyles(input: {
     case 'light-no-producer':
       registerIslandStyleDeclaration({
         tagName: input.tagName,
+        root: 'light',
         moduleId: input.absoluteModuleId,
         filePath: input.filePath,
         islandsDir: normalizeSeparators(input.islandsDir),
@@ -1083,17 +1089,29 @@ function admitIslandStyles(input: {
       });
       return [...input.styles];
     case 'producer':
+      // M09-2e / #1803: the DSD style-link carrier exists for a shadow host
+      // with a compiled producer. The client build joins this declaration to
+      // the emitted asset and the generated SSR entry declares the canonical
+      // marked `<link>` inside the template; a missing asset fails closed there.
+      registerIslandStyleDeclaration({
+        tagName: input.tagName,
+        root: 'shadow',
+        moduleId: input.absoluteModuleId,
+        filePath: input.filePath,
+        islandsDir: normalizeSeparators(input.islandsDir),
+        specifiers: input.styles,
+      });
+      return [...input.styles];
     case 'missing-producer':
       throw reportScanFatal(
         buildError(
           ISLAND_STYLES_SHADOW_UNWIRED_CODE,
           `Island "${input.filePath}" (<${input.tagName}>) declares openElement.styles on a ` +
-            'shadow-root generated element, but the DSD style-link carrier for a shadow root is ' +
-            'not wired yet (M09-2e owed; generated-island style adoption is GH issue #1800, ' +
-            'Alpha17). The declared sheets would be silently lost, so the build fails closed: ' +
-            "set root: 'light' or remove styles. This slice admits styles only on a light-root " +
-            'generated island, where the build emits the sheet as a content-addressed client ' +
-            'asset and records it in the client asset manifest.',
+            'shadow-root generated element whose leaf emitted no compiled DSD host producer, ' +
+            'so there is no template the canonical style link could be declared in. The ' +
+            'declared sheets would be silently lost, so the build fails closed: give the ' +
+            "component a claimable/SSR-capable shadow shape, set root: 'light', or remove " +
+            'styles (generated-island client style adoption is GH issue #1800, Alpha17).',
         ),
       );
     case 'lane-refused':

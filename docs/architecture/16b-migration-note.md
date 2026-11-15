@@ -215,3 +215,18 @@ and no `gate:release` / `gate:packed` pair ran at one SHA.
 - It does not open Alpha16 release qualification. The owner sign-off of §13.5,
   the five §12a proofs, M13 and the publication authorization in
   `CONTRIBUTING.md`:197 remain separate, non-mergeable acts.
+
+## 2026-11-16 amendment — shadow DSD link carrier delivered (facts only)
+
+The generated shadow host's declared `styles` sheets are now delivered inside
+the DSD template as the canonical marked links (the minimal M09-2e carrier):
+the client build joins each admitted shadow declaration to its emitted asset and
+fails closed when one is missing, the emitted host producer carries the typed
+styleLinks channel only for that styled site, and the generated claim skips
+exactly the marked prefix. Real CLI fixture evidence is three-engine LOCAL
+(chromium 147.0.7727.15, firefox 148.0.2, webkit 26.4).
+
+No row flips and no status changes: light-root document application and
+client/shadow adoption (GH #1800) remain open, the dev server has no
+emitted-asset carrier and fails closed, and no M09/M11 status, P5 evidence,
+matrix cell or sign-off is created.

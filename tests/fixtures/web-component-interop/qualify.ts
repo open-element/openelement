@@ -157,6 +157,10 @@ export interface GeneratedSsrHostConfig {
   /** The light child slot the host's own `<slot name>` projects. */
   lightChildSlot: string;
   lightChildText: string;
+  /** The authored class the declared stylesheet targets (M09-2e / #1803). */
+  styleClass: string;
+  /** The authored sheet's computed color the DSD link must apply without JS. */
+  styleColor: string;
 }
 
 export interface InteropCorpus extends Omit<CorpusConfig, 'cem'> {
@@ -190,6 +194,8 @@ export interface GeneratedSsrHostSsrEvidence {
   lightChildAfterTemplate: boolean;
   /** The authored `<script>` payload never appears raw in the output. */
   rawScriptAbsent: boolean;
+  /** M09-2e / #1803: exactly one canonical marked link INSIDE the DSD template. */
+  styleLinks: { count: number; href: string | null; insideTemplate: boolean };
   admission: { renderPath: string; reason: string } | null;
 }
 
@@ -322,6 +328,12 @@ export interface GeneratedSsrHostBrowserEvidence {
   contentStableAfterUpgrade: boolean;
   /** The page light child is projected by the host's own slot after upgrade. */
   lightChildProjected: boolean;
+  /** M09-2e / #1803: one marked stylesheet link in the shadow root before AND after claim. */
+  styleLinkCount: number;
+  /** The declared sheet applied from the DSD link (computed color before definition). */
+  styleApplied: boolean;
+  /** The claim kept the declared link: no duplicate, no delete. */
+  styleSurvivedClaim: boolean;
 }
 
 export interface BrowserEvidence {
@@ -801,6 +813,8 @@ const FIXTURE_SOURCE_FILES = [
   // class page nests. The qualification build must carry the authored file so
   // the generated entry's static host import resolves in the REAL build.
   'app/islands/interop-generated-ssr-card.tsx',
+  // M09-2e / #1803: the declared sheet the shadow host's DSD template links.
+  'app/islands/interop-generated-ssr-card.css',
   'app/client/interop-client.ts',
 ] as const;
 
@@ -1046,6 +1060,22 @@ async function verifySsr(appDir: string, corpus: InteropCorpus): Promise<SsrEvid
     generatedSsrLightChild > generatedSsrTemplateClose &&
     generatedSsrTemplateClose < generatedSsrLightChild;
   const generatedSsrRawScriptAbsent = !generatedSsrRegion.includes('<script');
+  // M09-2e / #1803: the shadow host's declared sheet must be a canonical marked
+  // link INSIDE the template (no JS required to apply it), exactly once.
+  const generatedSsrTemplateOpenIndex = generatedSsrRegion.search(/<template\b/i);
+  const styleLinkMatches = [
+    ...generatedSsrRegion.matchAll(/<link\b[^>]*data-oe-static-styles[^>]*>/gi),
+  ].map((match) => match[0]);
+  const styleLinkHref =
+    styleLinkMatches.length === 1
+      ? (/\shref="([^"]+)"/i.exec(styleLinkMatches[0]!)?.[1] ?? null)
+      : null;
+  const styleLinkInsideTemplate =
+    styleLinkMatches.length === 1 &&
+    generatedSsrTemplateOpenIndex >= 0 &&
+    generatedSsrTemplateClose > generatedSsrTemplateOpenIndex &&
+    generatedSsrRegion.indexOf(styleLinkMatches[0]!) > generatedSsrTemplateOpenIndex &&
+    generatedSsrRegion.indexOf(styleLinkMatches[0]!) < generatedSsrTemplateClose;
   const generatedSsrDecision = decisions.get(generatedSsr.tag) ?? null;
   const generatedSsrHostEvidence: GeneratedSsrHostSsrEvidence = {
     tag: generatedSsr.tag,
@@ -1055,6 +1085,11 @@ async function verifySsr(appDir: string, corpus: InteropCorpus): Promise<SsrEvid
     dsdTemplate: generatedSsrDsdTemplate,
     lightChildAfterTemplate: generatedSsrLightChildAfterTemplate,
     rawScriptAbsent: generatedSsrRawScriptAbsent,
+    styleLinks: {
+      count: styleLinkMatches.length,
+      href: styleLinkHref,
+      insideTemplate: styleLinkInsideTemplate,
+    },
     admission: generatedSsrDecision
       ? { renderPath: generatedSsrDecision.renderPath, reason: generatedSsrDecision.reason }
       : null,
@@ -1079,6 +1114,28 @@ async function verifySsr(appDir: string, corpus: InteropCorpus): Promise<SsrEvid
   }
   if (!generatedSsrRawScriptAbsent) {
     failures.push(`${generatedSsr.tag}: raw script markup reached the generated host content`);
+  }
+  if (styleLinkMatches.length !== 1) {
+    failures.push(
+      `${generatedSsr.tag}: the DSD template must declare exactly one marked stylesheet link, ` +
+        `saw ${styleLinkMatches.length}`,
+    );
+  }
+  if (!styleLinkInsideTemplate) {
+    failures.push(
+      `${generatedSsr.tag}: the marked stylesheet link is not inside the DSD template ` +
+        `(href=${JSON.stringify(styleLinkHref)})`,
+    );
+  }
+  if (
+    styleLinkHref === null ||
+    !styleLinkHref.includes('/client/assets/') ||
+    !styleLinkHref.endsWith('.css')
+  ) {
+    failures.push(
+      `${generatedSsr.tag}: the marked stylesheet link does not name an emitted client asset ` +
+        `(href=${JSON.stringify(styleLinkHref)})`,
+    );
   }
   if (!generatedSsrDecision) {
     failures.push(`${generatedSsr.tag}: no admission decision was emitted`);
@@ -1123,10 +1180,26 @@ export async function verifyBrowser(
     // observation set, and the walk runs from the document and every known
     // root until the host's parser-adopted DSD is found (still pre-definition:
     // module scripts are deferred, so the observer microtask wins).
+    // Atomic pre-definition capture (agent-6 cross-check): the DSD snapshot is
+    // taken SYNCHRONOUSLY inside the `customElements.define` call for the
+    // target tag, before the class exists and before the upgrade reactions run.
+    // Document parsing has completed for deferred module scripts, so the host's
+    // whole parser-adopted shadow tree (including the appended marked style
+    // link) is present — a document MutationObserver capture can otherwise run
+    // mid-parse and record a partial tree, making the parser's own later nodes
+    // look like claim mutations. The claim-mutation observer starts at this
+    // same atomic point; the zero-mutation and node-identity assertions are
+    // unchanged.
     await page.addInitScript(
-      ({ tag, lightChildSlot }) => {
+      ({ tag, lightChildSlot, styleClass }) => {
         type Capture = {
           seen: boolean;
+          documentParsed: boolean;
+          readyState: string;
+          preDefinedBeforePatch: boolean;
+          hostMissingAtDefine: boolean;
+          hostId: string | null;
+          defineNamesSeen: string[];
           undefinedAtCapture: boolean;
           shadowMode: string | null;
           innerHTML: string;
@@ -1137,6 +1210,8 @@ export async function verifyBrowser(
           host: HTMLElement | null;
           shadow: ShadowRoot | null;
           claimMutations: number;
+          styleLinkCount: number;
+          styleColor: string | null;
         };
         const globals = globalThis as typeof globalThis & {
           __oeSsrHostCapture?: Capture;
@@ -1144,6 +1219,14 @@ export async function verifyBrowser(
         };
         const capture: Capture = {
           seen: false,
+          documentParsed: false,
+          readyState: '',
+          // The patch is installed at document-start; a target class already
+          // registered here means the atomic capture point is unreachable.
+          preDefinedBeforePatch: customElements.get(tag) !== undefined,
+          hostMissingAtDefine: false,
+          hostId: null,
+          defineNamesSeen: [],
           undefinedAtCapture: false,
           shadowMode: null,
           innerHTML: '',
@@ -1154,64 +1237,79 @@ export async function verifyBrowser(
           host: null,
           shadow: null,
           claimMutations: 0,
+          styleLinkCount: 0,
+          styleColor: null,
         };
         globals.__oeSsrHostCapture = capture;
-        const attachClaimObserver = (shadow: ShadowRoot): void => {
-          if (globals.__oeSsrHostShadowObserver !== undefined) return;
-          const observer = new MutationObserver((records) => {
-            capture.claimMutations += records.length;
-          });
-          observer.observe(shadow, {
-            attributes: true,
-            characterData: true,
-            childList: true,
-            subtree: true,
-          });
-          globals.__oeSsrHostShadowObserver = observer;
-        };
-        const attach = (host: HTMLElement): void => {
-          if (capture.seen) return;
-          const shadow = host.shadowRoot;
-          if (shadow === null) return;
-          capture.seen = true;
-          capture.undefinedAtCapture = customElements.get(tag) === undefined;
-          capture.shadowMode = shadow.mode;
-          capture.host = host;
-          capture.shadow = shadow;
-          capture.innerHTML = shadow.innerHTML;
-          capture.textContent = shadow.textContent ?? '';
-          capture.firstChild = shadow.firstChild;
-          capture.lastChild = shadow.lastChild;
-          capture.lightChild = host.querySelector(
-            `[slot="${lightChildSlot}"]`,
-          ) as HTMLElement | null;
-          attachClaimObserver(shadow);
-        };
-        const observedRoots = new Set<Document | ShadowRoot>([document]);
-        const observer = new MutationObserver(() => {
-          scan(document);
-          for (const root of observedRoots) scan(root);
-        });
-        const scan = (root: Document | ShadowRoot): void => {
-          if (capture.seen) return;
-          const host = root.querySelector(tag) as HTMLElement | null;
-          if (host !== null) attach(host);
-          if (capture.seen) return;
+        const findHost = (root: Document | ShadowRoot): HTMLElement | null => {
+          const direct = root.querySelector(tag) as HTMLElement | null;
+          if (direct !== null) return direct;
           for (const element of root.querySelectorAll('*')) {
             const shadow = (element as HTMLElement).shadowRoot;
-            if (shadow === null || observedRoots.has(shadow)) continue;
-            observedRoots.add(shadow);
-            observer.observe(shadow, { childList: true, subtree: true });
-            scan(shadow);
-            if (capture.seen) return;
+            if (shadow === null) continue;
+            const found = findHost(shadow);
+            if (found !== null) return found;
           }
+          return null;
         };
-        observer.observe(document, { childList: true, subtree: true });
-        scan(document);
+        const originalDefine = customElements.define.bind(customElements);
+        customElements.define = function (
+          name: string,
+          constructor: CustomElementConstructor,
+          options?: ElementDefinitionOptions,
+        ): void {
+          if (capture.defineNamesSeen.length < 20 && !capture.defineNamesSeen.includes(name)) {
+            capture.defineNamesSeen.push(name);
+          }
+          if (name === tag && !capture.seen) {
+            capture.seen = true;
+            // Deferred module scripts run after parsing; a 'loading' document
+            // here means the host's shadow content could still be incomplete.
+            capture.readyState = document.readyState;
+            capture.documentParsed = document.readyState !== 'loading';
+            capture.undefinedAtCapture = customElements.get(tag) === undefined;
+            const host = findHost(document);
+            capture.hostMissingAtDefine = host === null;
+            if (host !== null) {
+              capture.hostId = host.id;
+              const shadow = host.shadowRoot;
+              capture.shadowMode = shadow?.mode ?? null;
+              capture.host = host;
+              capture.shadow = shadow;
+              capture.innerHTML = shadow?.innerHTML ?? '';
+              capture.textContent = shadow?.textContent ?? '';
+              capture.firstChild = shadow?.firstChild ?? null;
+              capture.lastChild = shadow?.lastChild ?? null;
+              capture.lightChild = host.querySelector(
+                `[slot="${lightChildSlot}"]`,
+              ) as HTMLElement | null;
+              capture.styleLinkCount =
+                shadow?.querySelectorAll('link[rel="stylesheet"][data-oe-static-styles]').length ??
+                0;
+              const styledElement = shadow?.querySelector(`.${styleClass}`) as HTMLElement | null;
+              capture.styleColor =
+                styledElement === null ? null : getComputedStyle(styledElement).color;
+              if (shadow !== null) {
+                const observer = new MutationObserver((records) => {
+                  capture.claimMutations += records.length;
+                });
+                observer.observe(shadow, {
+                  attributes: true,
+                  characterData: true,
+                  childList: true,
+                  subtree: true,
+                });
+                globals.__oeSsrHostShadowObserver = observer;
+              }
+            }
+          }
+          originalDefine(name, constructor, options);
+        };
       },
       {
         tag: corpus.generatedSsrHost.tag,
         lightChildSlot: corpus.generatedSsrHost.lightChildSlot,
+        styleClass: corpus.generatedSsrHost.styleClass,
       },
     );
     await page.goto(`${session.origin}/`, { waitUntil: 'networkidle' });
@@ -1292,6 +1390,8 @@ export async function verifyBrowser(
       note: corpus.generatedSsrHost.note,
       lightChildSlot: corpus.generatedSsrHost.lightChildSlot,
       lightChildText: corpus.generatedSsrHost.lightChildText,
+      styleClass: corpus.generatedSsrHost.styleClass,
+      styleColor: corpus.generatedSsrHost.styleColor,
     };
     const evaluateInput = {
       components,
@@ -1348,6 +1448,8 @@ export async function verifyBrowser(
         note: string;
         lightChildSlot: string;
         lightChildText: string;
+        styleClass: string;
+        styleColor: string;
       };
       const componentInput = input.components as ComponentInput[];
       const generatedHostInput = input.generatedHost as GeneratedHostInput;
@@ -1811,6 +1913,12 @@ export async function verifyBrowser(
         globalThis as typeof globalThis & {
           __oeSsrHostCapture?: {
             seen: boolean;
+            documentParsed: boolean;
+            readyState: string;
+            preDefinedBeforePatch: boolean;
+            hostMissingAtDefine: boolean;
+            hostId: string | null;
+            defineNamesSeen: string[];
             undefinedAtCapture: boolean;
             shadowMode: string | null;
             innerHTML: string;
@@ -1821,6 +1929,8 @@ export async function verifyBrowser(
             host: HTMLElement | null;
             shadow: ShadowRoot | null;
             claimMutations: number;
+            styleLinkCount: number;
+            styleColor: string | null;
           };
         }
       ).__oeSsrHostCapture;
@@ -1828,8 +1938,25 @@ export async function verifyBrowser(
         const empty = {
           tag: generatedSsrHostInput.tag,
           captureMissing: true,
+          // Diagnostics for a missing define capture: which defines the patch
+          // observed and whether the SSR host existed at evaluation time. This
+          // keeps a future registration-path change diagnosable (harness
+          // assumption vs product defect) without weakening any assertion.
+          observedDefineNames:
+            (
+              globalThis as typeof globalThis & {
+                __oeSsrHostCapture?: { defineNamesSeen?: string[] };
+              }
+            ).__oeSsrHostCapture?.defineNamesSeen ?? [],
+          hostPresentAtEvaluation: findTag(document, generatedSsrHostInput.tag) !== null,
           upgraded: false,
           ssrRootBeforeDefinition: false,
+          documentParsed: false,
+          readyState: '',
+          preDefinedBeforePatch: false,
+          hostMissingAtDefine: false,
+          hostId: null,
+          defineNamesSeen: [],
           undefinedAtCapture: false,
           shadowRootMode: null,
           shadowRootIdentityPreserved: false,
@@ -1840,6 +1967,9 @@ export async function verifyBrowser(
           clientPropsMatch: false,
           contentStableAfterUpgrade: false,
           lightChildProjected: false,
+          styleLinkCount: 0,
+          styleApplied: false,
+          styleSurvivedClaim: false,
         };
         if (capture === undefined || !capture.seen) return empty;
         if (customElements.get(generatedSsrHostInput.tag) === undefined) {
@@ -1863,12 +1993,31 @@ export async function verifyBrowser(
         const innerHTMLNow = shadow !== null ? shadow.innerHTML : '';
         const textNow = shadow !== null ? (shadow.textContent ?? '') : '';
         const liveProps = host as (HTMLElement & { title?: unknown; note?: unknown }) | null;
+        const styleLinkCountNow =
+          shadow === null
+            ? 0
+            : shadow.querySelectorAll('link[rel="stylesheet"][data-oe-static-styles]').length;
+        const styledNow =
+          shadow === null
+            ? null
+            : (shadow.querySelector(`.${generatedSsrHostInput.styleClass}`) as HTMLElement | null);
+        const styleColorNow = styledNow === null ? null : getComputedStyle(styledNow).color;
         return {
           tag: generatedSsrHostInput.tag,
           captureMissing: false,
           upgraded,
           ssrRootBeforeDefinition:
-            capture.undefinedAtCapture === true && capture.shadowMode === 'open',
+            capture.documentParsed === true &&
+            capture.undefinedAtCapture === true &&
+            capture.shadowMode === 'open',
+          documentParsed: capture.documentParsed === true,
+          readyState: capture.readyState,
+          preDefinedBeforePatch: capture.preDefinedBeforePatch === true,
+          hostMissingAtDefine: capture.hostMissingAtDefine === true,
+          hostId: capture.hostId,
+          defineNamesSeen: capture.defineNamesSeen,
+          observedDefineNames: capture.defineNamesSeen,
+          hostPresentAtEvaluation: true,
           undefinedAtCapture: capture.undefinedAtCapture === true,
           shadowRootMode: capture.shadowMode,
           shadowRootIdentityPreserved: sameShadow,
@@ -1890,6 +2039,16 @@ export async function verifyBrowser(
           contentStableAfterUpgrade: capture.textContent === textNow,
           lightChildProjected:
             capture.lightChild !== null && capture.lightChild.assignedSlot !== null,
+          styleLinkCount: styleLinkCountNow,
+          // The stylesheet is a declarative resource the browser fetches after
+          // parsing; the applied value is read on the live DSD tree once the
+          // page is quiet, not in the pre-definition microtask (a network fetch
+          // is not guaranteed to have completed there in every engine).
+          styleApplied: styleColorNow === generatedSsrHostInput.styleColor,
+          styleSurvivedClaim:
+            capture.styleLinkCount === styleLinkCountNow &&
+            styleLinkCountNow === 1 &&
+            styleColorNow === generatedSsrHostInput.styleColor,
         };
       })();
 
@@ -1939,11 +2098,38 @@ export async function verifyBrowser(
     const ssrHostClaim = observed.generatedSsrHost;
     const ssrHostFailures: string[] = [];
     if (ssrHostClaim.captureMissing) {
-      ssrHostFailures.push('no pre-definition DSD snapshot was captured');
+      ssrHostFailures.push(
+        'no pre-definition DSD snapshot was captured ' +
+          `(observed defines: ${JSON.stringify(ssrHostClaim.observedDefineNames ?? [])}, ` +
+          `SSR host present at evaluation: ${ssrHostClaim.hostPresentAtEvaluation === true})`,
+      );
     }
     if (!ssrHostClaim.upgraded) {
       ssrHostFailures.push(
         'the generated class did not upgrade the SSR host in place (client registration missing)',
+      );
+    }
+    if (ssrHostClaim.preDefinedBeforePatch) {
+      ssrHostFailures.push(
+        'the target class was already registered before the capture patch was installed ' +
+          '(the atomic pre-definition capture point was unreachable)',
+      );
+    }
+    if (!ssrHostClaim.documentParsed) {
+      ssrHostFailures.push(
+        `the pre-definition capture was taken before document parsing completed ` +
+          `(readyState=${JSON.stringify(ssrHostClaim.readyState)}; partial DSD tree)`,
+      );
+    }
+    if (ssrHostClaim.hostMissingAtDefine) {
+      ssrHostFailures.push(
+        'the target tag was defined before its SSR host existed in the parsed document',
+      );
+    }
+    if (ssrHostClaim.hostId !== corpus.generatedSsrHost.id) {
+      ssrHostFailures.push(
+        `the captured host id is ${JSON.stringify(ssrHostClaim.hostId)}, expected ` +
+          `${JSON.stringify(corpus.generatedSsrHost.id)} (wrong or ambiguous SSR host instance)`,
       );
     }
     if (!ssrHostClaim.ssrRootBeforeDefinition) {
@@ -1979,6 +2165,16 @@ export async function verifyBrowser(
     }
     if (!ssrHostClaim.lightChildProjected) {
       ssrHostFailures.push('the page light child is not projected by the host slot after upgrade');
+    }
+    if (!ssrHostClaim.styleApplied) {
+      ssrHostFailures.push(
+        `the declared stylesheet did not apply from the DSD link (class ${generatedSsrHostInput.styleClass})`,
+      );
+    }
+    if (!ssrHostClaim.styleSurvivedClaim) {
+      ssrHostFailures.push(
+        'the claim changed the declared stylesheet state (before/after count mismatch, duplicate, or the sheet stopped applying)',
+      );
     }
     if (ssrHostFailures.length > 0) {
       throw new Error(
@@ -2116,9 +2312,9 @@ export async function verifyBrowser(
  *   client props no longer match the SSR content/attribute facts and the claim
  *   probe must fail closed.
  * - `no-client-registration`: remove the generated client entry's
- *   `customElements.define("interop-generated-ssr-card", …)` call. The DSD is
- *   still SSR-adopted (identity capture works), but the class never upgrades;
- *   the claim probe must fail closed instead of silently accepting a
+ *   `customElements.define("interop-generated-ssr-card", …)` call. With the
+ *   atomic define-hook capture no pre-definition snapshot is taken, so the
+ *   probe fails closed at the missing upgrade instead of silently accepting a
  *   never-upgraded host.
  *
  * The files are restored after each mode; nothing outside the temp app changes.

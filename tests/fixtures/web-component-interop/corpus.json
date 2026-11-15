@@ -29,7 +29,9 @@
     "title": "a \"b\" <c>",
     "note": "<script>alert(1)</script>",
     "lightChildSlot": "x",
-    "lightChildText": "light & child"
+    "lightChildText": "light & child",
+    "styleClass": "interop-styled",
+    "styleColor": "rgb(12, 34, 56)"
   },
   "components": [
     {

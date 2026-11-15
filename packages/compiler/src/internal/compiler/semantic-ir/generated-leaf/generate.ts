@@ -267,7 +267,7 @@
 
 import ts from 'typescript';
 import { unsafeStreamFrameAttribute } from '@openelement/protocol/stream-frame-policy';
-import { VOID_TAGS } from '@openelement/protocol/part-program';
+import { STATIC_STYLES_MARKER, VOID_TAGS } from '@openelement/protocol/part-program';
 import type {
   FunctionExpressionRef,
   FunctionModelAttribute,
@@ -796,6 +796,8 @@ interface EmitState {
    * Static-only claims leave this false and keep the M07a local cursor.
    */
   claimCursorShared: boolean;
+  /** M09-2e / #1803: skip the canonical marked stylesheet-link prefix before the root claim walk. */
+  claimStyleLinkPrefix: boolean;
   /** Runtime array that collects adopted root nodes, or null for the M07a static return. */
   claimAdoptedVar: string | null;
   /**
@@ -5397,8 +5399,10 @@ function emitClaimFunction(
   componentByName: ReadonlyMap<string, FunctionModelComponent>,
   sharedClaimCursor: boolean,
   rootSetup: boolean,
+  rootComponent: boolean,
   connectReplay: boolean,
   retention: RetentionPlan | null,
+  claimStyleLinkPrefix: boolean,
 ): ClaimEmission | null {
   const ctx: ClaimContext = { componentByName, stack: new Set() };
   if (!componentClaimable(component, ctx)) return null;
@@ -5437,6 +5441,7 @@ function emitClaimFunction(
     directorySource: `${file}#${component.name}`,
     usesStaticSiblingDirectoryConsumer: false,
     claimCursorShared: useShared,
+    claimStyleLinkPrefix: claimStyleLinkPrefix && rootComponent,
     claimAdoptedVar: null,
     claimActivationVar: null,
     usesClaimRecipe: false,
@@ -5503,14 +5508,33 @@ function emitClaimFunction(
     push(state, `const ${rootAdoptedVar} = [];`);
   }
   const rootDirectory = staticElementDirectory(component.roots);
-  if (!useShared && rootDirectory !== null) {
+  // M09-2e / #1803: a styled shadow host's DSD template prefixes the claimed
+  // content with canonical marked links, and the static sibling directory
+  // consumer parses the parent from its first child. The styled root claim
+  // therefore uses the general cursor walk (which skips that prefix) instead of
+  // the directory fast path; the admissibility of the shape is unchanged.
+  if (!useShared && rootDirectory !== null && !state.claimStyleLinkPrefix) {
     for (const interior of emitClaimedDirectory(state, CLAIM_PARENT, rootDirectory)) {
       push(state, `${rootAdoptedVar}.push(${interior});`);
     }
   } else if (!useShared) {
     emitClaimHtmlNamespace(state, CLAIM_PARENT, '/', component.span);
     const rootCursor = nextName(state, 'cursor');
-    push(state, `const ${rootCursor} = { node: ${CLAIM_PARENT}.firstChild };`);
+    if (state.claimStyleLinkPrefix) {
+      // D-claim-prefix (M09-2e / #1803): a shadow host's DSD template declares
+      // its stylesheets as canonical marked `<link>` nodes BEFORE the authored
+      // content. They are borrowed server DOM: the claim adopts the authored
+      // nodes after them and never writes, moves or duplicates a link.
+      const startVar = nextName(state, 'claimStart');
+      push(state, `let ${startVar} = ${CLAIM_PARENT}.firstChild;`);
+      push(
+        state,
+        `while (${startVar} !== null && ${startVar}.nodeType === 1 && ${startVar}.nodeName === "LINK" && ${startVar}.hasAttribute(${JSON.stringify(STATIC_STYLES_MARKER)})) ${startVar} = ${startVar}.nextSibling;`,
+      );
+      push(state, `const ${rootCursor} = { node: ${startVar} };`);
+    } else {
+      push(state, `const ${rootCursor} = { node: ${CLAIM_PARENT}.firstChild };`);
+    }
     emitClaimInto(
       state,
       component.roots,
@@ -5554,6 +5578,15 @@ function emitClaimFunction(
     state.claimAdoptedVar = adoptedVar;
     push(state, `const ${adoptedVar} = [];`);
     const activationSteps = emitClaimQueueInit(state, CLAIM_PARENT);
+    if (state.claimStyleLinkPrefix) {
+      // D-claim-prefix (M09-2e / #1803) for the shared-cursor owner: the
+      // module-level cursor was initialized at `parent.firstChild`; skip exactly
+      // the canonical marked stylesheet links before the authored walk.
+      push(
+        state,
+        `while (__oe_claimCursor.node !== null && __oe_claimCursor.node.nodeType === 1 && __oe_claimCursor.node.nodeName === "LINK" && __oe_claimCursor.node.hasAttribute(${JSON.stringify(STATIC_STYLES_MARKER)})) __oe_claimCursor.node = __oe_claimCursor.node.nextSibling;`,
+      );
+    }
     push(state, 'try {');
     state.indent += 1;
     emitClaimInto(
@@ -5809,6 +5842,7 @@ function ssrEmitState(
     directorySource: `${file}#${component.name}`,
     usesStaticSiblingDirectoryConsumer: false,
     claimCursorShared: false,
+    claimStyleLinkPrefix: false,
     claimAdoptedVar: null,
     claimActivationVar: null,
     usesClaimRecipe: false,
@@ -6617,6 +6651,7 @@ function emitComponent(
   sharedClaimCursor: boolean,
   rootInstance: string | undefined,
   retention: RetentionPlan | null,
+  claimStyleLinkPrefix: boolean,
 ): EmittedComponent {
   const propsName = component.propsParam;
   const projectsChildren = componentProjectsChildren(component);
@@ -6663,6 +6698,7 @@ function emitComponent(
     directorySource: `${file}#${component.name}`,
     usesStaticSiblingDirectoryConsumer: false,
     claimCursorShared: false,
+    claimStyleLinkPrefix: false,
     claimAdoptedVar: null,
     claimActivationVar: null,
     usesClaimRecipe: false,
@@ -7166,8 +7202,10 @@ function emitComponent(
           componentByName,
           sharedClaimCursor,
           rootSetup,
+          rootInstance === component.name,
           connectHooks.length > 0,
           retention,
+          claimStyleLinkPrefix,
         )
       : null;
   if (claim !== null && claim.diagnostics.length > 0) {
@@ -7453,6 +7491,16 @@ export function generateLeafModule(
      * and a root with no setup snapshot also emits no factory.
      */
     readonly rootInstance?: string;
+    /**
+     * M09-2e / #1803 compiler-private claim-prefix marker: `true` when the
+     * generated-element lane read a `styles` declaration from the same authored
+     * sidecar (shadow root only), so this module's DSD template prefixes its
+     * claimed content with the canonical marked stylesheet links. The ROOT claim
+     * then skips exactly that leading marked <link> prefix — borrowed server
+     * DOM, never deleted, re-written or duplicated. Omitted keeps every byte of
+     * the pre-slice claim unchanged.
+     */
+    readonly claimStyleLinkPrefix?: boolean;
   } = {},
 ): GeneratedLeafModule {
   const records = new Map(module.expressions.expressions.map((record) => [record.id, record]));
@@ -7520,6 +7568,7 @@ export function generateLeafModule(
       sharedClaimCursor,
       options.rootInstance,
       retention,
+      options.claimStyleLinkPrefix === true,
     );
     diagnostics.push(...emitted.diagnostics);
     if (emitted.diagnostics.length > 0) continue;

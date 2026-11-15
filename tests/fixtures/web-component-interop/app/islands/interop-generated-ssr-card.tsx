@@ -22,6 +22,10 @@ export const openElement = defineIslandConfig({
   hydrate: 'load',
   ssr: true,
   root: 'shadow',
+  // M09-2e / #1803: a shadow-root generated island declares its sheet through
+  // the sidecar; the build emits it and the DSD template declares the canonical
+  // marked link inside the template (no JS required to apply it).
+  styles: ['./interop-generated-ssr-card.css'],
   properties: {
     title: { default: '' },
     note: { default: '' },
@@ -31,7 +35,7 @@ export const openElement = defineIslandConfig({
 export default function InteropGeneratedSsrCard(props: { title: string; note: string }) {
   return (
     <article part='card'>
-      <h2>{props.title}</h2>
+      <h2 class='interop-styled'>{props.title}</h2>
       <p>{props.note}</p>
       <slot name='x'></slot>
     </article>

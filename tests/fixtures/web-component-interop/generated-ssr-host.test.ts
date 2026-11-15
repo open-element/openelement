@@ -68,7 +68,9 @@ test('the real ssr:true generated shadow island compiles to the host-producer AB
   // M11 host-producer ABI: third host-attribute parameter, canonical property
   // seeding over the SAME descriptor rows, conditional host-attribute forwarding.
   expect(code).toContain(
-    'export function InteropGeneratedSsrCard__ssrHost(props, lightChildren, attributes) {',
+    // M09-2e / #1803: the island declares a stylesheet on its shadow root, so
+    // the emitted host producer grows the typed styleLinks channel.
+    'export function InteropGeneratedSsrCard__ssrHost(props, lightChildren, attributes, styleLinks) {',
   );
   expect(code).toContain(
     'seedGeneratedElementHostProperties(__oeElementDescriptor.properties, props, attributes)',

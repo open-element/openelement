@@ -841,16 +841,23 @@ async function discoverServerRenderedModules(
  *
  * Resolution is the class lane's: the specifier is joined against the island
  * module's directory by the compiler's ONE key derivation
- * (`styleRequestModuleId`), and the island's tag rides as the light-root scope
- * tag, so the emitted asset is the same native `@scope (<tag>)` projection a
- * light-root class component's authored sheet gets. The island scan already
+ * (`styleRequestModuleId`). A LIGHT-root island's tag rides as the scope tag, so
+ * the emitted asset is the same native `@scope (<tag>)` projection a light-root
+ * class component's authored sheet gets; a SHADOW-root island's edge carries NO
+ * scope tag (the shadow boundary is the isolation), which is the registry's
+ * existing shadow-root edge shape — the authored bytes ship verbatim and are
+ * declared inside the DSD template (M09-2e / #1803). The island scan already
  * validated the specifier shape, the lane and the root; this pass adds no second
  * validation and no second style pipeline.
  */
 function registerDeclaredIslandStyleEdges(): Map<string, RegisteredStyleRequest> {
   const edges = new Map<string, RegisteredStyleRequest>();
   for (const declaration of islandStyleDeclarations()) {
-    registerStyleEdges(declaration.moduleId, declaration.specifiers, declaration.tagName);
+    registerStyleEdges(
+      declaration.moduleId,
+      declaration.specifiers,
+      declaration.root === 'shadow' ? undefined : declaration.tagName,
+    );
     for (const request of styleRequestsForImporter(declaration.moduleId)) {
       edges.set(request.moduleId, request);
     }

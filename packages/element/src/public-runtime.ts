@@ -15,7 +15,10 @@ import {
 import { SSR_REGISTRY_GENERATED_HOSTS } from '@openelement/protocol/registry-markers';
 import { convertToAttribute } from './internal/compiled/facade-host.ts';
 import { sheetResourceUrls } from './internal/compiled/style-links.ts';
-import { requestTimeStyleLinks } from './internal/compiled/server/style-links.ts';
+import {
+  requestTimeIslandStyleLinks,
+  requestTimeStyleLinks,
+} from './internal/compiled/server/style-links.ts';
 import type { DocumentStyleResources } from './internal/core/html-escape.ts';
 import type {
   CompiledElementMetadata,
@@ -922,13 +925,37 @@ function renderToStringAtDepth(
                   const hostAttributes = normalizedAttributes.attributes.map(
                     (attribute) => [attribute.name, attribute.bare ? '' : attribute.value] as const,
                   );
+                  // M09-2e / #1803: the generated host's DSD template declares
+                  // the island's stylesheets INSIDE its shadow root. The emitted
+                  // host producer takes the typed styleLinks channel; a 3-arg
+                  // (unstyled) producer ignores the extra argument. `null` is the
+                  // explicit "declared but carrier unavailable" state (dev server
+                  // without the emitted assets) and fails closed rather than
+                  // silently rendering an unstyled shadow host.
+                  const islandStyleLinks = requestTimeIslandStyleLinks(nested.tag);
+                  if (islandStyleLinks === null) {
+                    throw new OpenElementError(
+                      `[openElement] admitted generated host <${nested.tag}> declares ` +
+                        'IslandConfig.styles on a shadow root, but this render has no DSD ' +
+                        'style-link carrier for it (the dev server emits no style assets). ' +
+                        'Run a production build, or remove the declaration; rendering it ' +
+                        'unstyled would silently drop the authored sheets.',
+                      { code: ErrorCode.SSR_RENDER_ERROR, phase: 'ssr' },
+                    );
+                  }
                   const rendered = (
                     hostRenderer as (
                       props: Readonly<Record<string, unknown>>,
                       lightChildren: string,
                       attributes: readonly (readonly [string, string])[],
+                      styleLinks?: readonly string[],
                     ) => unknown
-                  )(nested.properties, nested.children, hostAttributes);
+                  )(
+                    nested.properties,
+                    nested.children,
+                    hostAttributes,
+                    islandStyleLinks === undefined ? undefined : islandStyleLinks,
+                  );
                   if (typeof rendered !== 'string') {
                     throw new OpenElementError(
                       `[openElement] admitted generated host <${nested.tag}> produced ` +

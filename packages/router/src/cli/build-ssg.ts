@@ -29,6 +29,7 @@ import type { EntryDescriptor, IslandDecl, StaticComponentDecl } from '@openelem
 import type { OpenElementBuildContext } from '../vite/build-context.ts';
 import { elementStyleLinksPlugin } from '../vite/internal/element-style-links.ts';
 import { findBuildWorkspaceRootOrUndefined } from '../vite/workspace-alias.ts';
+import { clientIslandStyleAssets } from '../vite/internal/island-style-build-assets.ts';
 import {
   buildEntryDescriptor,
   fileToTagName,
@@ -494,7 +495,9 @@ async function buildSSG(
         // imports this module, which hands the emitted asset addresses to the
         // element runtime before the render pass (and at request-time startup,
         // because the module is bundled into dist/server/index.js).
-        elementStyleLinksPlugin(componentStyleSheetUrls),
+        elementStyleLinksPlugin(componentStyleSheetUrls, [
+          ...clientIslandStyleAssets(ctx).entries(),
+        ]),
         // MDX route support must mirror the outer plugin list (plugin.ts),
         // otherwise .mdx routes fail Phase 3 parse (the oxc transform treats
         // them as JS).

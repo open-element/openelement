@@ -47,7 +47,10 @@ import {
 // Canonical attribute-escape contract (issue #1220, L1): the server output is
 // the wire truth for hydration parity, so both serializers share this one
 // implementation (escapes & < > " ').
-import { escapeAttr, isComponentStyleHref } from '../../core/html-escape.ts';
+import { escapeAttr } from '../../core/html-escape.ts';
+// The canonical marked-stylesheet-link writer (M09-2e / #1803): one spelling
+// shared with the generated-element DSD host producer and the public runtime.
+import { serializeStyleLinks } from '../style-link-tags.ts';
 // Canonical each-Block item-key derivation (#1374): single source shared
 // with the runtime executors; do not reintroduce a private copy.
 import { displayValue, itemTemplateFields, itemValue } from '../runtime/program-kernel.ts';
@@ -516,36 +519,13 @@ function serializeCompiledSnapshot(
 }
 
 /**
- * Serialize the component's external stylesheet references as marked
- * `<link rel="stylesheet">` nodes. The href must be a site-absolute path or an
- * absolute http(s) URL and may not carry whitespace or markup-significant
- * characters — a framework-emitted asset address always satisfies this, and a
- * value that does not is a defect that must fail closed (never escape into
- * markup). The shape rule itself is shared with the document head's
- * stylesheet-link sink (`isComponentStyleHref`): one rule, two sinks.
+ * Re-export the canonical marked-stylesheet-link writer (M09-2e / #1803). The
+ * implementation lives in the browser-safe `style-link-tags.ts` leaf so the
+ * generated-element DSD producer can share it without importing this server
+ * module; this export keeps the established import path
+ * (`server/index.ts` → `public-runtime.ts`, compiler tests) compatible.
  */
-/**
- * The marked `<link rel="stylesheet" data-oe-static-styles>` tags for a set of
- * component stylesheet URLs. Exported because the DSD serializer is not its
- * only writer: a LIGHT-root component nested inside another component's shadow
- * template delivers its sheets from the template too (the document head cannot
- * reach a shadow tree), and it must use this one shape so the client's delivery
- * check recognizes the resource.
- */
-export function serializeStyleLinks(links: readonly string[] | undefined): string {
-  if (!links || links.length === 0) return '';
-  let markup = '';
-  for (const href of links) {
-    if (!isComponentStyleHref(href)) {
-      throw new CompiledProgramValidationError(
-        'styleLinks',
-        `component stylesheet href must be a site-absolute path or an absolute http(s) URL, got ${JSON.stringify(href)}`,
-      );
-    }
-    markup += `<link rel="stylesheet" href="${escapeAttr(href)}" ${STATIC_STYLES_MARKER} />`;
-  }
-  return markup;
-}
+export { serializeStyleLinks } from '../style-link-tags.ts';
 
 /** A request-local owner; its program reference and object identity are never serialized. */
 export interface StreamOwner {

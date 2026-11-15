@@ -180,6 +180,42 @@ describe('M09-2a generated shadow host producer', () => {
     expect(parseDiagnostics(emitted(LIGHT, 'light').module!)).toEqual([]);
   });
 
+  test('a styles sidecar grows the typed styleLinks channel and the claim prefix', () => {
+    // The fact is read from the SAME authored sidecar the lane already reads for
+    // root/focus/props, so no host boolean and no scan-order dependence exists.
+    const styledSource = SHADOW.replace(
+      "export const openElement = defineIslandConfig({ root: 'shadow' });",
+      "export const openElement = defineIslandConfig({ root: 'shadow', styles: ['./profile-card.css'] });",
+    );
+    const styled = compileGeneratedElementIfAdmitted(styledSource, FILE, { site: SITE })!;
+    expect(styled.code).toContain(
+      'export function Profile__ssrHost(props, lightChildren, attributes, styleLinks) {',
+    );
+    expect(styled.code).toContain('    ...(styleLinks === undefined ? {} : { styleLinks }),');
+    // The claim skips exactly the canonical marked link prefix.
+    expect(styled.code).toContain('data-oe-static-styles');
+    expect(styled.code).toContain('nodeName === "LINK"');
+    // The unstyled module keeps the 3-arg producer and no prefix walk.
+    const unstyled = compileGeneratedElementIfAdmitted(SHADOW, FILE, { site: SITE })!;
+    expect(unstyled.code).toContain(
+      'export function Profile__ssrHost(props, lightChildren, attributes) {',
+    );
+    expect(unstyled.code).not.toContain('data-oe-static-styles');
+  });
+
+  test('a light root keeps its bytes even when the sidecar declares styles', () => {
+    const styledLight = LIGHT.replace(
+      "export const openElement = defineIslandConfig({ root: 'light' });",
+      "export const openElement = defineIslandConfig({ root: 'light', styles: ['./profile-card.css'] });",
+    );
+    const light = compileGeneratedElementIfAdmitted(styledLight, FILE, { site: SITE })!;
+    // Light roots have no DSD template: the declared sheet keeps the document
+    // channel, so no host wrapper / styleLinks channel / claim prefix is added.
+    expect(light.code).not.toContain('__ssrHost');
+    expect(light.code).not.toContain('styleLinks');
+    expect(light.code).not.toContain('data-oe-static-styles');
+  });
+
   test('the lane reads the authored sidecar and emits the wrapper only for shadow', () => {
     const shadow = compileGeneratedElementIfAdmitted(SHADOW, FILE, { site: SITE });
     expect(shadow).not.toBeNull();

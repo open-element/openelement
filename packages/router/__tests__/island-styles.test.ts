@@ -2,20 +2,19 @@
  * Generated-island styles — authoring + static-scan admission and the
  * build-time declaration carrier (GH issue #1800, option a).
  *
- * The owner-approved slice admits `IslandConfig.styles` on a LIGHT-root
- * generated-element (function) island and wires the accepted list into the
- * EXISTING router style plan (style-edge registration → content-addressed
- * build asset → client asset manifest). The adoption of the sheet (a shadow
- * root's DSD style-link carrier, M09-2e; the light root's document-level
- * application) is the Alpha17 slice tracked as GH issue #1800, so this file
- * pins the two refusals that keep the gap from becoming a silent loss:
+ * The scan admits `IslandConfig.styles` on generated-element (function)
+ * islands and records the build-time declaration carrier, which the client
+ * build's style-edge plan turns into the existing content-addressed asset:
  *
- * - a SHADOW-root generated island declaring styles fails the build with a
- *   coded diagnostic naming the missing carrier (`ISLAND_STYLES_SHADOW_UNWIRED`)
- *   instead of emitting an asset nothing could read;
- * - a module the generated lane did not admit (a class island, a non-TSX
- *   island) fails closed as well: its sheets belong to the class lane's
- *   `static styles` channel, and this field would be ignored.
+ * - a LIGHT-root declaration carries the island tag as its `@scope` identity
+ *   (document application is a later adoption slice, GH issue #1800);
+ * - a SHADOW-root declaration whose module emitted the compiled DSD host
+ *   producer carries root `shadow` (M09-2e / #1803): its sheet ships authored
+ *   bytes verbatim and is declared inside the host's DSD template as the
+ *   canonical marked `<link>` prefix;
+ * - a shadow island with NO host producer, and a module the generated lane did
+ *   not admit (a class island, a non-TSX island), fail closed: no carrier could
+ *   deliver the sheet, so the declaration must not be silently dropped.
  *
  * Both readers of the sidecar (the runtime `defineIslandConfig()` face and the
  * static island scan) are exercised over ONE shape so the runtime descriptor
@@ -31,6 +30,8 @@ import { afterEach, expect, test } from 'vitest';
 import { OpenElementError } from '@openelement/element';
 import { normalizeSeparators } from '@openelement/element/build-utils';
 import { defineIslandConfig } from '../src/authoring.ts';
+import { compileGeneratedElementIfAdmitted } from '@openelement/compiler';
+import { createGeneratedElementSiteResolver } from '../src/vite/generated-element-site.ts';
 import { IslandErrorCode } from '../src/internal/error-codes.ts';
 import {
   islandStyleDeclarationFor,
@@ -349,11 +350,49 @@ test('scan: an island without styles registers no declaration (authoritative res
   expect(islandStyleDeclarations()).toHaveLength(0);
 });
 
-test('scan: a shadow-root generated island with styles fails closed with the coded carrier gap', async () => {
+test('scan: a shadow-root generated island with a producer carries root shadow', async () => {
+  const { root, scan } = await scanProject({
+    'app/islands/profile-card.tsx': SHADOW_GENERATED,
+  });
+  const meta = await scan();
+  expect(meta['profile-card']!.styles).toEqual(['./profile-card.css']);
+  const declarations = islandStyleDeclarations();
+  expect(declarations).toHaveLength(1);
+  const declaration = declarations[0]!;
+  expect(declaration.tagName).toBe('profile-card');
+  expect(declaration.root).toBe('shadow');
+  expect(declaration.specifiers).toEqual(['./profile-card.css']);
+  const absoluteModuleId = normalizeSeparators(join(root, 'app', 'islands', 'profile-card.tsx'));
+  expect(islandStyleDeclarationFor(absoluteModuleId)).toBe(declaration);
+  // The light-root record is distinguishable by the same field.
+  const light = await scanProject({ 'app/islands/light-card.tsx': LIGHT_GENERATED });
+  await light.scan();
+  expect(islandStyleDeclarations()[0]!.root).toBe('light');
+});
+
+test('scan: a shadow-root generated island without a host producer still fails closed', async () => {
+  // A shadow-root function island with a shape the leaf generator cannot turn
+  // into a claimable host producer: the identity is `missing-producer`, so no
+  // template exists to declare the sheet in and the build must refuse.
+  // A shadow root whose declared property channel keeps the component
+  // mount-only: the compiler admits the module but emits no `<Name>__ssr`, so
+  // there is no host producer to append and no template to declare the sheet in.
+  const missingProducer = `import { defineIslandConfig } from '@openelement/router';
+export const openElement = defineIslandConfig({
+  root: 'shadow',
+  hydrate: 'idle',
+  styles: ['./profile-card.css'],
+  properties: { value: { default: '' } },
+});
+function Field(props: { value: string }) {
+  return <input value={props.value} />;
+}
+export default Field;
+`;
   await expectScanRefusal(
-    { 'app/islands/profile-card.tsx': SHADOW_GENERATED },
+    { 'app/islands/profile-card.tsx': missingProducer },
     'OE_ISLAND_STYLE_SHADOW_UNWIRED',
-    ['DSD style-link carrier for a shadow root is not wired yet', 'M09-2e owed', '#1800'],
+    ['emitted no compiled DSD host producer', 'GH issue #1800'],
   );
 });
 
@@ -381,4 +420,41 @@ test('scan: a compiler-refused island with styles records no declaration and rai
   const meta = await scan();
   expect(meta['refused-card']!.styles).toBeUndefined();
   expect(islandStyleDeclarations()).toHaveLength(0);
+});
+
+test('the compiler derives the style-link fact from the sidecar, not scan order', async () => {
+  // Regression for the reviewed ordering hazard: the scan compiles an island to
+  // resolve its host identity BEFORE its style declaration is registered. The
+  // fact must come from the authored sidecar (the lane's one metadata read), so
+  // a compile taken before the scan and one taken after it are byte-identical.
+  await scanProject({ 'app/islands/profile-card.tsx': SHADOW_GENERATED });
+  const projectRoot = 'app/islands';
+  const site = createGeneratedElementSiteResolver(projectRoot)(`${projectRoot}/profile-card.tsx`);
+  expect(site).toEqual({ tag: 'profile-card' });
+  expect(islandStyleDeclarations()).toHaveLength(0); // scan has not run yet
+  const before = compileGeneratedElementIfAdmitted(
+    SHADOW_GENERATED,
+    `${projectRoot}/profile-card.tsx`,
+    {
+      site,
+    },
+  );
+  expect(before).not.toBeNull();
+  expect(before!.code).toContain(
+    'export function ProfileCard__ssrHost(props, lightChildren, attributes, styleLinks) {',
+  );
+
+  await scanProject({ 'app/islands/profile-card.tsx': SHADOW_GENERATED }).then(({ scan }) =>
+    scan(),
+  );
+  expect(islandStyleDeclarations()).toHaveLength(1);
+  const after = compileGeneratedElementIfAdmitted(
+    SHADOW_GENERATED,
+    `${projectRoot}/profile-card.tsx`,
+    {
+      site,
+    },
+  );
+  expect(after).not.toBeNull();
+  expect(after!.code).toBe(before!.code);
 });

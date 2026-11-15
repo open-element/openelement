@@ -57,9 +57,10 @@ export type GeneratedElementSiteResolver = (moduleId: string) => GeneratedElemen
  * as the island transform would admit it.
  *
  * The answer is the tag only. The descriptor root (and `delegatesFocus`,
- * `formAssociated`, `properties`) is read by the compiler lane from the
- * authored island sidecar, so an authored `root: 'shadow'` reaches the lane
- * without a host fact and a stale host scan cannot override it.
+ * `formAssociated`, `properties`, and the M09-2e `styles` presence) is read by
+ * the compiler lane from the authored island sidecar, so an authored
+ * `root: 'shadow'` reaches the lane without a host fact and a stale host scan
+ * cannot override it.
  */
 export function createGeneratedElementSiteResolver(
   islandsDir: string,

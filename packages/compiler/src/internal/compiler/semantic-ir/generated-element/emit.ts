@@ -122,6 +122,13 @@ export interface GenerateElementModuleOptions {
   readonly properties?: readonly GeneratedElementPlatformProperty[];
   /** The authored source for the leaf source map (required for `sourcesContent`). */
   readonly authoredSource?: string;
+  /**
+   * M09-2e / #1803 compiler-private marker: the authored sidecar declares
+   * `styles`, so this shadow host's DSD template will carry the canonical
+   * marked link prefix. Emits the typed styleLinks channel and the claim prefix
+   * walk; omitted keeps the pre-slice bytes exactly.
+   */
+  readonly styleLinkPrefix?: boolean;
 }
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -335,9 +342,14 @@ export function generateElementModule(
     module.components.some((component) => component.name === rootCandidate)
       ? rootCandidate
       : undefined;
+  // M09-2e / #1803: derived from the authored sidecar by the lane admission,
+  // never from a host fact. An unstyled module passes nothing, so its bytes
+  // stay exactly the pre-slice output.
+  const styleLinkPrefix = options.styleLinkPrefix === true;
   const leaf = generateLeafModule(module, {
     ...(options.authoredSource === undefined ? {} : { authoredSource: options.authoredSource }),
     ...(rootInstanceName === undefined ? {} : { rootInstance: rootInstanceName }),
+    ...(styleLinkPrefix ? { claimStyleLinkPrefix: true } : {}),
   });
   const leafText = leaf.module;
   if (leafText === null) {
@@ -435,7 +447,13 @@ export function generateElementModule(
     ...(propertyEmission.usesPropsResolver && hostWrapper !== null ? [names.propsResolver] : []),
     ...(hostWrapper === null
       ? []
-      : [names.ssrHostImport, names.hostPropsSeed, names.hostPropsVar, names.ssrHost]),
+      : [
+          names.ssrHostImport,
+          names.hostPropsSeed,
+          names.hostPropsVar,
+          names.ssrHost,
+          ...(styleLinkPrefix ? ['styleLinks'] : []),
+        ]),
   ];
   const collisions = collisionNames.filter((name) => identifierOccurs(leafText, name));
   if (collisions.length > 0) {
@@ -501,7 +519,9 @@ export function generateElementModule(
       : [
           '',
           '// ---- generated shadow host SSR (M09-2a) ----',
-          `export function ${hostWrapper.name}(props, lightChildren, attributes) {`,
+          styleLinkPrefix
+            ? `export function ${hostWrapper.name}(props, lightChildren, attributes, styleLinks) {`
+            : `export function ${hostWrapper.name}(props, lightChildren, attributes) {`,
           `  const ${names.hostPropsVar} = ${names.hostPropsSeed}(${names.descriptor}.properties, props, attributes);`,
           `  return ${names.ssrHostImport}({`,
           `    tag: ${JSON.stringify(site.tag)},`,
@@ -514,6 +534,7 @@ export function generateElementModule(
           }, undefined),`,
           '    ...(lightChildren === undefined ? {} : { lightChildren }),',
           '    ...(attributes === undefined ? {} : { attributes }),',
+          ...(styleLinkPrefix ? ['    ...(styleLinks === undefined ? {} : { styleLinks }),'] : []),
           '  });',
           '}',
         ]),

@@ -60,12 +60,15 @@ import {
   resolveElementRuntimeIdentity,
 } from '../vite/internal/element-runtime-chunk.ts';
 import { requireViteHelperChunk, viteHelperChunkName } from '../vite/internal/vite-helper-chunk.ts';
+import { islandStyleDeclarations } from '../vite/internal/island-style-declarations.ts';
+import { setClientIslandStyleAssets } from '../vite/internal/island-style-build-assets.ts';
 import { browserEntryBoundaryPlugin } from '../vite/internal/browser-entry-boundary.ts';
 import { browserEntryGraphPlugin } from '../vite/internal/browser-entry-graph.ts';
 import {
   analyzeModuleSemantics,
   clearStyleRequests,
   compiledElementPlugin,
+  styleRequestsForImporter,
 } from '@openelement/compiler';
 import { ELEMENT_RUNTIME_MESSAGES_DEFINE } from '../vite/internal/element-error-messages.ts';
 import {
@@ -1217,6 +1220,49 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
     ctx.clientStyleAssetFiles = new Map(
       [...styleAssetRecords.entries()].map(([key, record]) => [key, record.fileName]),
     );
+
+    // M09-2e / #1803: join every admitted generated SHADOW island's declared
+    // sheets to the client asset this build emitted. The join is the ONE check
+    // that the DSD template's link and the emitted bytes agree — a declared
+    // sheet with no emitted asset fails the build closed here, before any SSR
+    // entry can emit a link to a missing resource. A LIGHT-root declaration is
+    // not part of this channel (document delivery is the separate adoption
+    // slice); its asset still exists and is served by the same plan.
+    const islandStyleAssets = new Map<string, string[]>();
+    for (const declaration of islandStyleDeclarations()) {
+      if (declaration.root !== 'shadow') continue;
+      const urls: string[] = [];
+      for (const request of styleRequestsForImporter(declaration.moduleId)) {
+        const emitted = ctx.clientStyleAssetFiles.get(request.moduleId);
+        if (emitted === undefined) {
+          throw buildError(
+            ClientAssetErrorCode.STYLESHEET_MISSING,
+            `Generated shadow island <${declaration.tagName}> declares ` +
+              `openElement.styles "${request.specifier}" but the client build emitted no ` +
+              'stylesheet asset for it. A declared sheet is never silently dropped: fix the ' +
+              'stylesheet edge or remove the declaration.',
+          );
+        }
+        urls.push(`${clientBase}client/${emitted}`);
+      }
+      if (urls.length !== declaration.specifiers.length) {
+        throw buildError(
+          ClientAssetErrorCode.STYLESHEET_MISSING,
+          `Generated shadow island <${declaration.tagName}> declares ` +
+            `${declaration.specifiers.length} stylesheet(s) but the client build joined ` +
+            `${urls.length} emitted asset(s); the style plan and the declaration disagree.`,
+        );
+      }
+      if (urls.length === 0) {
+        throw buildError(
+          ClientAssetErrorCode.STYLESHEET_MISSING,
+          `Generated shadow island <${declaration.tagName}> is styled but produced no ` +
+            'stylesheet URL; an unstyled shadow host must not be rendered silently.',
+        );
+      }
+      islandStyleAssets.set(declaration.tagName, urls);
+    }
+    setClientIslandStyleAssets(ctx, islandStyleAssets);
 
     // The component stylesheet (alpha15 S lane): a discovered shadow-candidate
     // set whose entry emitted no CSS would ship unstyled shadow components —

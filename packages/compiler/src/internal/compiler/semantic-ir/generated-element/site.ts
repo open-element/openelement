@@ -71,6 +71,12 @@ export type DefaultExportFact =
 
 /** The root-component facts the gates need, derived from the authored AST. */
 export interface GeneratedElementSiteAdmission {
+  /**
+   * The authored sidecar declares `styles` (M09-2e / #1803): the emitted host
+   * producer grows the typed styleLinks channel and the claim skips the marked
+   * DSD link prefix. Unstyled modules keep the pre-slice bytes exactly.
+   */
+  readonly declaresStyles: boolean;
   readonly componentName: string;
   /** The default-export node, used for source-located refusals. */
   readonly defaultExportSpan: SourceSpan;
@@ -219,6 +225,14 @@ export type IslandRootRead =
 export interface IslandMetadataFacts {
   readonly root: RootMode | undefined;
   readonly delegatesFocus: boolean;
+  /**
+   * The sidecar declares a `styles` key (M09-2e / #1803). Presence, not the
+   * list: the router's island scan owns the specifier admission. The compiler
+   * lane only needs "this host's DSD template will carry the canonical marked
+   * link prefix", so it emits the typed styleLinks channel and the claim prefix
+   * walk from the SAME authored sidecar it already reads for root/focus/props.
+   */
+  readonly declaresStyles: boolean;
   /** Sidecar `formAssociated: true`; false covers absent/explicit false. */
   readonly formAssociated: boolean;
   /**
@@ -689,6 +703,7 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
   let seenDelegatesFocus = false;
   let delegatesFocus = false;
   let delegatesFocusSpan: ts.Node | null = null;
+  let declaresStyles = false;
   let seenFormAssociated = false;
   let formAssociated = false;
   let seenProperties = false;
@@ -756,6 +771,11 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
         };
       }
       declaredRoot = initializer.text;
+      continue;
+    }
+    if (name === 'styles') {
+      // Presence is the compiler fact; the router scan validates the list.
+      declaresStyles = true;
       continue;
     }
     if (name === 'properties') {
@@ -856,7 +876,7 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
   }
   return {
     kind: 'read',
-    facts: { root, delegatesFocus, formAssociated, properties },
+    facts: { root, delegatesFocus, formAssociated, declaresStyles, properties },
   };
 }
 
@@ -1885,7 +1905,13 @@ export function admitGeneratedElementSite(
   const facts =
     metadata.kind === 'read'
       ? metadata.facts
-      : { root: undefined, delegatesFocus: false, formAssociated: false, properties: undefined };
+      : {
+          root: undefined,
+          delegatesFocus: false,
+          formAssociated: false,
+          declaresStyles: false,
+          properties: undefined,
+        };
   const propertiesAdmission = admitGeneratedElementProperties(
     sourceFile,
     fact.node,
@@ -1913,6 +1939,7 @@ export function admitGeneratedElementSite(
       root: facts.root,
       delegatesFocus: facts.delegatesFocus,
       formAssociated: facts.formAssociated,
+      declaresStyles: facts.declaresStyles,
       propertiesDeclared: propertiesAdmission.kind === 'admitted',
       properties,
       propsParameter: propsParameterOf(fact.node),

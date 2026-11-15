@@ -35,6 +35,7 @@ import { createStreamServerExecutor } from '../../src/internal/compiled/server/i
 import { PART_PROGRAM_VERSION } from '@openelement/protocol/part-program';
 import { SSR_REGISTRY_GENERATED_HOSTS } from '@openelement/protocol/registry-markers';
 import { normalizeHostAttributePairs } from '../../src/internal/compiled/server/index.ts';
+import { __setRequestTimeStyleSheetUrls } from '../../src/internal/compiled/server/style-links.ts';
 import { testProgram } from '../compiled-runtime/test-program.ts';
 
 const HOST_TAG = 'oe-generated-card';
@@ -44,6 +45,7 @@ type HostRenderer = (
   props: Readonly<Record<string, unknown>>,
   lightChildren: string,
   attributes: readonly (readonly [string, string])[] | undefined,
+  styleLinks?: readonly string[],
 ) => string;
 
 function compiledClass(program: ReturnType<typeof testProgram>): CustomElementConstructor {
@@ -693,6 +695,82 @@ describe('stream boundary (L3 — OWED, characterized not supported)', () => {
     } finally {
       if (original) Object.defineProperty(globalThis, 'customElements', original);
       else delete (globalThis as Record<string, unknown>).customElements;
+    }
+  });
+});
+
+/**
+ * M09-2e / #1803: the nested renderer hands a generated SHADOW host the
+ * per-island stylesheet URLs recorded for its tag, and the emitted host
+ * producer declares them INSIDE the canonical DSD template. A resolved carrier
+ * is passed through the SAME typed channel; the `null` state (declared but
+ * unavailable, e.g. the dev server) fails closed instead of rendering the
+ * island silently unstyled.
+ */
+describe('M09-2e generated-host stylesheet carrier', () => {
+  // The same nested parent as the suite above: it already hosts HOST_TAG with
+  // a static attribute, a dynamic property channel and a slotted light child.
+  const STYLED_TAG = HOST_TAG;
+  const styledProgram = parentProgram;
+
+  test('a resolved island carrier reaches the host producer as the typed styleLinks channel', () => {
+    const emitted: Array<readonly string[] | undefined> = [];
+    const renderer: HostRenderer = (props, lightChildren, attributes, styleLinks) => {
+      emitted.push(styleLinks);
+      return serializeGeneratedElementHtml({
+        tag: STYLED_TAG,
+        root: 'open',
+        content: '<article part="card"></article>',
+        ...(styleLinks === undefined ? {} : { styleLinks }),
+      });
+    };
+
+    let html = '';
+    __setRequestTimeStyleSheetUrls(null, [[STYLED_TAG, ['/client/assets/styled.css']]]);
+    try {
+      withGeneratedRegistry(new Map([[STYLED_TAG, renderer]]), () => {
+        html = renderToString(compiledClass(styledProgram()), {
+          ssrRenderableTags: [STYLED_TAG],
+        });
+      });
+    } finally {
+      __setRequestTimeStyleSheetUrls(null);
+    }
+
+    expect(emitted).toEqual([['/client/assets/styled.css']]);
+    // Exactly one canonical marked link, inside the template, before the
+    // authored content — the claim's prefix walk has exactly this shape.
+    expect(
+      html.match(
+        /<link rel="stylesheet" href="\/client\/assets\/styled\.css" data-oe-static-styles \/>/g,
+      )?.length,
+    ).toBe(1);
+    const templateOpen = html.indexOf('<template shadowrootmode="open">');
+    const link = html.indexOf('<link rel="stylesheet"');
+    const content = html.indexOf('<article part="card">');
+    expect(templateOpen).toBeGreaterThan(-1);
+    expect(link).toBeGreaterThan(templateOpen);
+    expect(content).toBeGreaterThan(link);
+  });
+
+  test('the explicit unavailable carrier fails closed instead of rendering unstyled', () => {
+    const renderer: HostRenderer = (props, lightChildren, attributes, styleLinks) =>
+      serializeGeneratedElementHtml({
+        tag: STYLED_TAG,
+        root: 'open',
+        content: '<article part="card"></article>',
+        ...(styleLinks === undefined ? {} : { styleLinks }),
+      });
+
+    __setRequestTimeStyleSheetUrls(null, [[STYLED_TAG, null]]);
+    try {
+      withGeneratedRegistry(new Map([[STYLED_TAG, renderer]]), () => {
+        expect(() =>
+          renderToString(compiledClass(styledProgram()), { ssrRenderableTags: [STYLED_TAG] }),
+        ).toThrow(/declares IslandConfig\.styles on a shadow root/);
+      });
+    } finally {
+      __setRequestTimeStyleSheetUrls(null);
     }
   });
 });
