@@ -28,7 +28,7 @@ import type {
 import type { EntryDescriptor, IslandDecl, StaticComponentDecl } from '@openelement/protocol/ssg';
 import type { OpenElementBuildContext } from '../vite/build-context.ts';
 import { elementStyleLinksPlugin } from '../vite/internal/element-style-links.ts';
-import { findBuildWorkspaceRoot } from '../vite/workspace-alias.ts';
+import { findBuildWorkspaceRootOrUndefined } from '../vite/workspace-alias.ts';
 import {
   buildEntryDescriptor,
   fileToTagName,
@@ -310,7 +310,7 @@ async function buildSSG(
     options.routes ??
     (await scanRoutes(routesDir, '', {
       root,
-      workspaceRoot: findBuildWorkspaceRoot(root) ?? undefined,
+      workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
     }));
   const staticComponents =
     options.staticComponents ??
@@ -496,13 +496,13 @@ async function buildSSG(
         compiledElementPlugin({
           // Linked workspace packages sit outside the project root; without the
           // workspace anchor their absolute ids would land in the source maps.
-          workspaceRoot: findBuildWorkspaceRoot(root) ?? undefined,
+          workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
           // Route/island sources carry the island delivery policy statement;
           // the compiler admits it only through the injected descriptor.
           staticSidecars: [ISLAND_ADMISSION],
           resolveServerComponentModule: createServerComponentSourceResolver({
             root,
-            workspaceRoot: findBuildWorkspaceRoot(root) ?? undefined,
+            workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
           }),
           // The union the entry's SSR registry carries — renderable islands
           // plus static compiled components (the same union

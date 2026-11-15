@@ -32,7 +32,11 @@ import { analyzeModuleSemantics } from '@openelement/compiler';
 import type { OpenElementPackageManifest, RouteEntry } from '../../framework.ts';
 import { createLogger } from '@openelement/element';
 import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
-import { buildError, PackageAdmissionErrorCode } from '../../../internal/error-codes.ts';
+import {
+  buildError,
+  describeError,
+  PackageAdmissionErrorCode,
+} from '../../../internal/error-codes.ts';
 import { reportScanFatal } from '../build-diagnostics.ts';
 import { owningPackageName, owningPackageRoot, packageNameAt } from '../package-identity.ts';
 import { walkModuleGraph, type ModuleWalkResolver } from '../module-graph-walk.ts';
@@ -59,6 +63,19 @@ export interface DeriveAdmissionInput {
   layouts?: Record<string, { import?: string } | false | 'default' | undefined>;
 }
 
+/**
+ * One non-fatal exclusion note the derivation collected (Tier-2): a module it
+ * reached could not be read or analyzed, or a dynamic import could not be
+ * resolved, so that module contributes no evidence. The reason travels on
+ * the result to the admission diagnostics channel (#1612) — reported, never
+ * silent, never fatal.
+ */
+export interface DerivationNote {
+  readonly code: string;
+  readonly message: string;
+  readonly file?: string;
+}
+
 /** What the derivation produced, before the explicit list is merged in. */
 export interface DerivedAdmission {
   /** Valid manifests of the derived packages, sorted by package name. */
@@ -75,6 +92,11 @@ export interface DerivedAdmission {
     readonly specifier: string;
     readonly importer: string;
   }>;
+  /**
+   * The per-module exclusion notes (unreadable sources, refused semantic
+   * analyses, unresolvable dynamic imports), in walk order.
+   */
+  readonly notes: ReadonlyArray<DerivationNote>;
 }
 
 /**
@@ -101,6 +123,11 @@ export async function deriveAdmittedPackages(
   const staticOwners = new Set<string>();
   /** Each derived owner's package directory, from the walked module id. */
   const packageRoots = new Map<string, string>();
+  // The per-module exclusion notes (Tier-2): each catch below keeps the walk
+  // alive — one unreadable module must not erase the derivation — and adds
+  // its reason here, so the exclusion is (reported, never silent) exactly
+  // like the walk bound above.
+  const notes: DerivationNote[] = [];
 
   for (const file of walk.files) {
     // Identity, not paths: the nearest package.json names the owner. The app's
@@ -112,7 +139,15 @@ export async function deriveAdmittedPackages(
     let source: string;
     try {
       source = await readFile(file, 'utf8');
-    } catch {
+    } catch (e) {
+      notes.push({
+        code: PackageAdmissionErrorCode.MODULE_UNREADABLE,
+        message:
+          `The admission derivation could not read module ${file}, so it contributes ` +
+          `no evidence (${describeError(e)}); its owner package is derived only from ` +
+          'the modules that did read.',
+        file,
+      });
       continue;
     }
     // The SAME compiler analysis the static-component scan uses, with the
@@ -126,7 +161,15 @@ export async function deriveAdmittedPackages(
       defined = analyzeModuleSemantics(source, file, {
         vocabulary: ROUTER_MODULE_VOCABULARY,
       }).definedCustomElementTags;
-    } catch {
+    } catch (e) {
+      notes.push({
+        code: PackageAdmissionErrorCode.MODULE_UNREADABLE,
+        message:
+          `The admission derivation could not analyze module ${file}, so it contributes ` +
+          `no evidence (${describeError(e)}); its owner package is derived only from ` +
+          'the modules that did analyze.',
+        file,
+      });
       continue;
     }
     if (defined.length === 0) continue;
@@ -203,7 +246,14 @@ export async function deriveAdmittedPackages(
     let resolved: { id: string; external?: boolean | 'absolute' | 'relative' } | null;
     try {
       resolved = await input.resolve.resolve(specifier, importer);
-    } catch {
+    } catch (e) {
+      notes.push({
+        code: PackageAdmissionErrorCode.DYNAMIC_UNRESOLVED,
+        message:
+          `The dynamic import "${specifier}" in ${importer} could not be resolved, so its ` +
+          `package attribution is unproven (${describeError(e)}).`,
+        file: importer,
+      });
       continue;
     }
     if (resolved === null || resolved.external === true) continue;
@@ -214,7 +264,14 @@ export async function deriveAdmittedPackages(
     let source: string;
     try {
       source = await readFile(id, 'utf8');
-    } catch {
+    } catch (e) {
+      notes.push({
+        code: PackageAdmissionErrorCode.MODULE_UNREADABLE,
+        message:
+          `The admission derivation could not read dynamically-imported module ${id}, so it ` +
+          `contributes no evidence (${describeError(e)}).`,
+        file: id,
+      });
       continue;
     }
     let defined: readonly string[] = [];
@@ -222,7 +279,14 @@ export async function deriveAdmittedPackages(
       defined = analyzeModuleSemantics(source, id, {
         vocabulary: ROUTER_MODULE_VOCABULARY,
       }).definedCustomElementTags;
-    } catch {
+    } catch (e) {
+      notes.push({
+        code: PackageAdmissionErrorCode.MODULE_UNREADABLE,
+        message:
+          `The admission derivation could not analyze dynamically-imported module ${id}, so ` +
+          `it contributes no evidence (${describeError(e)}).`,
+        file: id,
+      });
       continue;
     }
     if (defined.length === 0) continue;
@@ -236,6 +300,7 @@ export async function deriveAdmittedPackages(
       (a, b) =>
         a.packageName.localeCompare(b.packageName) || a.specifier.localeCompare(b.specifier),
     ),
+    notes,
   };
 }
 

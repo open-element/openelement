@@ -145,14 +145,72 @@ test('foreign-tag scan: scanForeignTags reads route + island files from disk', a
     await writeFile(`${root}/app/routes/index.tsx`, PAGE_SOURCE);
     await writeFile(`${root}/app/islands/my-island.tsx`, ISLAND_SOURCE);
 
-    const foreign = await scanForeignTags({
+    const result = await scanForeignTags({
       routesDir: `${root}/app/routes`,
       islandsDir: `${root}/app/islands`,
       routeFiles: ['index.tsx'],
       islandFiles: ['my-island.tsx'],
       knownTags: new Set(['my-island', 'index-page']),
     });
-    expect(foreign).toEqual(['demo-native-badge', 'md-switch', 'sl-button']);
+    expect(result.foreignTags).toEqual(['demo-native-badge', 'md-switch', 'sl-button']);
+    expect(result.unreadable).toEqual([]);
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+test('foreign-tag scan: an unreadable module lands in unreadable with its path, the rest of the scan proceeds', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'foreign-tag-scan-'));
+  try {
+    await mkdir(`${root}/app/routes`, { recursive: true });
+    await mkdir(`${root}/app/islands`, { recursive: true });
+    await writeFile(`${root}/app/routes/index.tsx`, PAGE_SOURCE);
+    await writeFile(`${root}/app/islands/my-island.tsx`, ISLAND_SOURCE);
+    // The vanished module: the file list still names it, the disk does not
+    // (the race the file helpers tolerate). Its skip must be reported with
+    // its path — never a silent debug drop.
+    const result = await scanForeignTags({
+      routesDir: `${root}/app/routes`,
+      islandsDir: `${root}/app/islands`,
+      routeFiles: ['index.tsx', 'vanished.tsx'],
+      islandFiles: ['my-island.tsx', 'ghost-island.tsx'],
+      knownTags: new Set(['my-island', 'index-page']),
+    });
+    expect(result.foreignTags).toEqual(['demo-native-badge', 'md-switch', 'sl-button']);
+    expect(result.unreadable).toEqual([
+      {
+        path: `${root}/app/routes/vanished.tsx`,
+        reason: 'the module does not exist (vanished after the file listing)',
+      },
+      {
+        path: `${root}/app/islands/ghost-island.tsx`,
+        reason: 'the module does not exist (vanished after the file listing)',
+      },
+    ]);
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+test('foreign-tag scan: a read failure (not a disappearance) is carried per item, not raised', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'foreign-tag-scan-'));
+  try {
+    await mkdir(`${root}/app/routes`, { recursive: true });
+    // A directory where a route module should be: readFile raises EISDIR —
+    // a real I/O error the file helpers propagate. One broken module must
+    // not erase the scan: it degrades into `unreadable` with its reason.
+    await mkdir(`${root}/app/routes/broken.tsx`, { recursive: true });
+    const result = await scanForeignTags({
+      routesDir: `${root}/app/routes`,
+      islandsDir: `${root}/app/islands`,
+      routeFiles: ['broken.tsx'],
+      islandFiles: [],
+      knownTags: new Set(),
+    });
+    expect(result.foreignTags).toEqual([]);
+    expect(result.unreadable.length).toEqual(1);
+    expect(result.unreadable[0].path).toEqual(`${root}/app/routes/broken.tsx`);
+    expect(result.unreadable[0].reason.length).toBeGreaterThan(0);
   } finally {
     await rm(root, { recursive: true });
   }

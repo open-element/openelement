@@ -411,6 +411,85 @@ export const PackageAdmissionErrorCode = {
    * package explicitly in `packageIslands` to admit it.
    */
   DYNAMIC_UNPROVEN: 'OE_PACKAGE_ADMISSION_DYNAMIC_UNPROVEN',
+  /**
+   * A module the derivation walked could not be read or analyzed (unreadable
+   * source, or a semantic-analysis refusal), so it is excluded from the
+   * derivation's evidence. Non-fatal, reported: the admitted set stays
+   * derivable, and the exclusion is never silent.
+   */
+  MODULE_UNREADABLE: 'OE_PACKAGE_ADMISSION_MODULE_UNREADABLE',
+  /**
+   * A dynamic import the derivation reached could not be resolved, so its
+   * package attribution is unproven. Non-fatal, reported with the importer
+   * named; the admitted set is unchanged.
+   */
+  DYNAMIC_UNRESOLVED: 'OE_PACKAGE_ADMISSION_DYNAMIC_UNRESOLVED',
+} as const;
+
+/**
+ * Stable codes for the buildStart scan lane's structured reporting
+ * (`vite/plugin-scanners.ts` and the scanners under `vite/internal/ssg/`).
+ * Phase `build`.
+ *
+ * Two severity tiers, per the two-level semantics of scan degradation: the
+ * two UNAVAILABLE codes are fatal classes — the whole scan CHANNEL crashed,
+ * so the build fails closed (log-before-throw through `reportScanFatal`)
+ * instead of shipping a silently half-empty scan. The rest are per-item
+ * degradation classes — one broken input (an unparseable manifest, an
+ * unreadable module, a vanished file) is skipped with a structured reason
+ * while the rest of the scan proceeds, and the reason reaches the developer
+ * through the build-diagnostics envelope channel (#1612). Neither tier ever
+ * swallows.
+ */
+export const ScanSurfaceErrorCode = {
+  /** The CEM detection channel itself failed (not one bad manifest). */
+  CEM_DETECTION_UNAVAILABLE: 'OE_SCAN_CEM_DETECTION_UNAVAILABLE',
+  /** The foreign-tag scan channel itself failed (not one unreadable module). */
+  FOREIGN_TAG_SCAN_UNAVAILABLE: 'OE_SCAN_FOREIGN_TAG_UNAVAILABLE',
+  /** One package's custom-elements.json is present but unparseable. */
+  CEM_MANIFEST_SKIPPED: 'OE_SCAN_CEM_MANIFEST_SKIPPED',
+  /** One module could not be read during the foreign-tag source scan. */
+  FOREIGN_TAG_MODULE_UNREADABLE: 'OE_SCAN_FOREIGN_TAG_MODULE_UNREADABLE',
+  /** The configured routes directory does not exist. */
+  ROUTES_DIR_MISSING: 'OE_SCAN_ROUTES_DIR_MISSING',
+  /** A route file vanished between the directory listing and its stat. */
+  ROUTE_FILE_VANISHED: 'OE_SCAN_ROUTE_FILE_VANISHED',
+  /** A route module could not be read (vanished after the listing). */
+  ROUTE_MODULE_UNREADABLE: 'OE_SCAN_ROUTE_MODULE_UNREADABLE',
+  /**
+   * A page route module carries no tagName export. An advisory, not a
+   * defect: not every page route defines one (definePage pages resolve
+   * their tag from the compiled Part Program).
+   */
+  ROUTE_TAG_NAME_MISSING: 'OE_SCAN_ROUTE_TAG_NAME_MISSING',
+} as const;
+
+/**
+ * Stable codes for the SSG post-processor's hygiene channel
+ * (`vite/internal/ssg/build-postprocess.ts` `cleanSsrArtifacts`). Phase
+ * `build`: the cleanup never fails the build it cleans up after, but a
+ * failure is reported with its code and the path instead of swallowed.
+ */
+export const SsgHygieneErrorCode = {
+  /** The dist/assets listing failed; stale artifacts, if any, stay. */
+  ASSETS_LIST_FAILED: 'OE_SSG_HYGIENE_ASSETS_LIST_FAILED',
+  /** One stale artifact chunk could not be removed. */
+  ARTIFACT_REMOVE_FAILED: 'OE_SSG_HYGIENE_ARTIFACT_REMOVE_FAILED',
+  /** The hygiene pass itself failed in a way the steps above did not classify. */
+  PASS_FAILED: 'OE_SSG_HYGIENE_PASS_FAILED',
+} as const;
+
+/**
+ * Stable codes for the build workspace-anchor seam (`vite/workspace-alias.ts`
+ * and its `vite/plugin-config.ts` consumer). Phase `build`: the anchor only
+ * shapes identity strings (stable module ids, source maps, HMR error copy),
+ * so a lookup failure degrades (identities stay unanchored) and is reported
+ * as a coded warning — never fatal, never silent. A marker-less tree is the
+ * legal absent, silenced by contract.
+ */
+export const WorkspaceAnchorErrorCode = {
+  /** The ancestor walk could not probe for the marker (permissions, I/O). */
+  LOOKUP_FAILED: 'OE_WORKSPACE_ANCHOR_LOOKUP_FAILED',
 } as const;
 
 /**

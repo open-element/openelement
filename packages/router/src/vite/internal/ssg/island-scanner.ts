@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the scan stages share one private type flow; the public boundary is the structured scan-result union consumed by the SSG pipeline.
 /** Island and package-manifest discovery without executing local island modules. */
 import ts from 'typescript';
 import { createRequire } from 'node:module';
@@ -1129,7 +1130,9 @@ function admitIslandStyles(input: {
  * authoring intent; resolveIslandHydrate() applies the upgrade-strategy
  * fallback downstream where the configured strategy is known.
  *
- * If a module cannot be read, its metadata is silently skipped.
+ * If a module cannot be read, its metadata is skipped with a structured
+ * status: the unreadable module is reported on the scan log (never a silent
+ * drop), and the scan result simply carries no record for that file.
  *
  * Delivery-tag ownership is checked HERE, at scan time: this record is keyed
  * by derived tag, so a second file deriving the same tag would silently

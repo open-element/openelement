@@ -16,13 +16,11 @@
  * Compiler semantic analysis owns TSX/tag meaning; this adapter only reads
  * files and aggregates the returned module facts.
  */
-import { createLogger } from '@openelement/element';
 import { join } from 'pathe';
+import { describeError } from '../../../internal/error-codes.ts';
 import { safeReadFile } from './route-scanner-fs.ts';
 import { analyzeModuleSemantics } from '@openelement/compiler';
 import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
-
-const log = createLogger('foreign-tag-scan');
 
 /** Extract custom-element tags the compiler semantic core sees as definitions. */
 export function collectDefinedTags(source: string): Set<string> {
@@ -74,18 +72,55 @@ export interface ScanForeignTagsOptions {
 }
 
 /**
- * Read page route + island module sources from disk and discover the foreign
- * custom-element tags they consume. Unreadable modules are skipped (same
- * posture as scanIslandMeta); the scan never executes module code.
+ * One module the scan could not read: the per-item degradation record
+ * (Tier-2) — the reason travels with the result to the envelope channel
+ * (#1612) instead of a debug-only drop. The scan never executes module code.
  */
-export async function scanForeignTags(options: ScanForeignTagsOptions): Promise<string[]> {
+export interface UnreadableForeignTagModule {
+  path: string;
+  reason: string;
+}
+
+/**
+ * The scan result envelope: the discovered foreign tags plus every module
+ * that could not be read, each with its reason. A module that vanished
+ * between the file listing and its read (the race the file helpers tolerate)
+ * is an `unreadable` entry, not a channel failure — one unreadable module
+ * must not erase the rest of the scan.
+ */
+export interface ForeignTagScanResult {
+  foreignTags: string[];
+  unreadable: UnreadableForeignTagModule[];
+}
+
+/**
+ * Read page route + island module sources from disk and discover the foreign
+ * custom-element tags they consume.
+ */
+export async function scanForeignTags(
+  options: ScanForeignTagsOptions,
+): Promise<ForeignTagScanResult> {
   const sources: string[] = [];
+  const unreadable: UnreadableForeignTagModule[] = [];
   const readInto = async (dir: string, files: string[]): Promise<void> => {
     for (const file of files) {
       const fullPath = join(dir, file);
-      const source = await safeReadFile(fullPath);
+      let source: string | undefined;
+      try {
+        source = await safeReadFile(fullPath);
+      } catch (err) {
+        // A single unreadable module is a per-item degradation (Tier-2): the
+        // reason is carried on the result, never swallowed — and never
+        // promoted to a channel crash that would erase the whole scan.
+        unreadable.push({ path: fullPath, reason: describeError(err) });
+        continue;
+      }
       if (source === undefined) {
-        log.debug(`Unable to read module for foreign-tag scan: ${fullPath}`);
+        // ENOENT between listing and read: race-tolerant, but reported.
+        unreadable.push({
+          path: fullPath,
+          reason: 'the module does not exist (vanished after the file listing)',
+        });
         continue;
       }
       sources.push(source);
@@ -93,5 +128,5 @@ export async function scanForeignTags(options: ScanForeignTagsOptions): Promise<
   };
   await readInto(options.routesDir, options.routeFiles);
   await readInto(options.islandsDir, options.islandFiles);
-  return discoverForeignTags(sources, options.knownTags);
+  return { foreignTags: discoverForeignTags(sources, options.knownTags), unreadable };
 }

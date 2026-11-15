@@ -81,7 +81,7 @@ import {
   registerArtifactCandidates,
   registerCandidatesFromCompiled,
 } from './collect-shadow-candidates.ts';
-import { findBuildWorkspaceRoot } from '../workspace-alias.ts';
+import { findBuildWorkspaceRootOrUndefined } from '../workspace-alias.ts';
 import {
   STYLE_SHEET_LIVE,
   STYLE_SHEET_READY,
@@ -728,7 +728,7 @@ async function discoverServerRenderedModules(
     return declaredEdges;
   }
   const effectiveRoot = root ?? process.cwd();
-  const workspaceRoot = findBuildWorkspaceRoot(effectiveRoot) ?? undefined;
+  const workspaceRoot = findBuildWorkspaceRootOrUndefined(effectiveRoot);
   const serverComponentResolver = createServerComponentSourceResolver({
     root: effectiveRoot,
     workspaceRoot,

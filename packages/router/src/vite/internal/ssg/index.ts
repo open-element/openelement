@@ -82,6 +82,13 @@ export {
   scanIslands,
   scanPackageManifests,
   scanRoutes,
+  takeRouteScanDiagnostics,
+} from './route-scanner.ts';
+export type {
+  CemDetectionResult,
+  CemScanResult,
+  RouteScanDiagnostic,
+  SkippedCemManifest,
 } from './route-scanner.ts';
 
 export { classifyCemManifest, parseCem } from './cem-compat.ts';
@@ -92,7 +99,11 @@ export {
   discoverForeignTags,
   scanForeignTags,
 } from './foreign-tag-scanner.ts';
-export type { ScanForeignTagsOptions } from './foreign-tag-scanner.ts';
+export type {
+  ForeignTagScanResult,
+  ScanForeignTagsOptions,
+  UnreadableForeignTagModule,
+} from './foreign-tag-scanner.ts';
 
 export { scanStaticComponents } from './static-component-scanner.ts';
 export type { ScanStaticComponentsOptions } from './static-component-scanner.ts';

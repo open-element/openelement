@@ -141,17 +141,26 @@ test('CEM scanner discovers scoped and unscoped packages without executing them'
     const scanned = await scanCemManifests(root);
     expect(scanned.map((entry) => entry.packageName).sort()).toEqual(['@scope/package', 'plain']);
     const classified = await detectAndClassifyCemPackages(root);
-    expect(classified.map((entry) => entry.tagName).sort()).toEqual([
+    expect(classified.classifications.map((entry) => entry.tagName).sort()).toEqual([
       'plain-element',
       'server-element',
     ]);
+    expect(classified.skipped).toEqual([]);
 
+    // A PRESENT-but-broken manifest is the per-item degradation class: the
+    // package lands in `skipped` with its parse reason, the rest of the scan
+    // proceeds — never a silent drop.
     await writeFile(join(root, 'plain', 'custom-elements.json'), '{bad');
-    expect((await detectAndClassifyCemPackages(root)).map((entry) => entry.tagName)).toEqual([
-      'server-element',
-    ]);
+    const withBroken = await detectAndClassifyCemPackages(root);
+    expect(withBroken.classifications.map((entry) => entry.tagName)).toEqual(['server-element']);
+    expect(withBroken.skipped).toEqual([{ packageName: 'plain', reason: expect.any(String) }]);
+    expect(withBroken.skipped[0].reason.length).toBeGreaterThan(0);
+
+    // A missing CEM directory is the legal empty: an empty envelope with
+    // nothing skipped and nothing reported.
     expect(await scanCemManifests(join(root, 'missing'))).toEqual([]);
-    expect(await detectAndClassifyCemPackages(join(root, 'missing'))).toEqual([]);
+    const empty = await detectAndClassifyCemPackages(join(root, 'missing'));
+    expect(empty).toEqual({ classifications: [], skipped: [] });
   } finally {
     await rm(root, { recursive: true });
   }

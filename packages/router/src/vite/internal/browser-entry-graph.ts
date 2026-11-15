@@ -74,7 +74,7 @@ export interface BrowserEntryGraphPluginOptions {
   outDir: string;
   /** The app's public base (`ctx.phase3.base || '/'`). */
   base: string;
-  /** The machine-independent identity anchor (`findBuildWorkspaceRoot(root) ?? root`). */
+  /** The machine-independent identity anchor (`findBuildWorkspaceRootOrUndefined(root) ?? root`). */
   workspaceRoot: string;
   /** The resolved virtual client entry id (`\0virtual:open-client-entry`). */
   clientEntryModuleId: string;

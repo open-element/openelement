@@ -3,7 +3,7 @@ import process from 'node:process';
 import { ACTION_FETCH_HEADER, IDLE_FALLBACK_TIMEOUT_MS } from '@openelement/element';
 import { stableModuleId } from '@openelement/compiler';
 import { runtimeModulePath } from '../runtime-module-path.ts';
-import { findBuildWorkspaceRoot } from '../../workspace-alias.ts';
+import { findBuildWorkspaceRootOrUndefined } from '../../workspace-alias.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import {
   type AdmittedClientIslandEntry,
@@ -15,7 +15,7 @@ import type { ClientIslandDeliveryEntry, ClientIslandDeliveryInput } from './del
 
 // Machine-independent identity for the generated error copy: the workspace
 // anchor keeps absolute build paths out of the shipped client bundle.
-const WORKSPACE_ROOT = findBuildWorkspaceRoot(process.cwd()) ?? undefined;
+const WORKSPACE_ROOT = findBuildWorkspaceRootOrUndefined(process.cwd());
 
 /**
  * One island's activation factory.

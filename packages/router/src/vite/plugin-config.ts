@@ -43,7 +43,9 @@ import { OpenElementBuildContext } from './build-context.ts';
 import type { EntryDescriptor } from './internal/ssg/index.ts';
 import { generateEntry } from './plugin-scanners.ts';
 import { VIRTUAL_BUILD_TRIGGER_ID } from './plugin-virtual-modules.ts';
+import { WorkspaceAnchorErrorCode } from '../internal/error-codes.ts';
 import { findBuildWorkspaceRoot } from './workspace-alias.ts';
+import { formatDiagnosticLine, recordBuildDiagnostic } from './internal/build-diagnostics.ts';
 
 const log = createLogger('router-vite');
 
@@ -341,10 +343,26 @@ export function createOpenPluginState(
   // layout, and a consumer that needs an alias declares it in its own vite
   // config.
   let workspaceRoot: string | undefined;
-  try {
-    workspaceRoot = findBuildWorkspaceRoot(process.cwd()) ?? undefined;
-  } catch (e) {
-    log.debug('Workspace not available - identities stay unanchored', e);
+  const workspaceLookup = findBuildWorkspaceRoot(process.cwd());
+  if (workspaceLookup.status === 'found') {
+    workspaceRoot = workspaceLookup.root;
+  } else if (workspaceLookup.status === 'error') {
+    // Three-way read of the lookup: `absent` is the LEGAL silence (standalone
+    // single-package consumers have no workspace marker — nothing to say), and
+    // only `error` surfaces, as a coded diagnostic: identities silently
+    // unanchoring because the marker could not be probed is a degradation the
+    // developer must see, not a quiet fallback.
+    const diagnostic = {
+      code: WorkspaceAnchorErrorCode.LOOKUP_FAILED,
+      severity: 'warning',
+      phase: 'build',
+      message:
+        'The workspace-root lookup failed, so identity anchors (stable module ids, ' +
+        `source maps, HMR error copy) stay unanchored: ${workspaceLookup.reason}`,
+      hint: 'Check the permissions of the project directory and its ancestors.',
+    } as const;
+    recordBuildDiagnostic(diagnostic);
+    log.warn(formatDiagnosticLine(diagnostic));
   }
 
   return {
