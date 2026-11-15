@@ -380,3 +380,46 @@ test('compiled server preserves structured custom-element property values for ne
     '<oe-child model="{&quot;title&quot;:&quot;safe &amp; exact&quot;,&quot;items&quot;:[1,2]}" enabled="false"></oe-child>',
   );
 });
+
+test('assertCompiledProgram memoizes the asserted result by program identity', async () => {
+  const { assertCompiledProgram } = await import('../../src/internal/compiled/server/index.ts');
+  const { serverAssertionPassCount } = await import('../../src/internal/compiled/server/shared.ts');
+  // Two html Parts own one DOM sink: wire-valid (the protocol validator does
+  // not carry the ownership invariant) but server-invalid — the exact shape
+  // the server-only duplicate-sink check exists to reject.
+  const twoSinks = testProgram({
+    tag: 'oe-memo-html',
+    template: [{ k: 'el', tag: 'div', attrs: [] as Array<[string, string]>, children: [] }],
+    parts: [
+      { k: 'html', index: 0, signal: 'body', path: [0] },
+      { k: 'html', index: 1, signal: 'body2', path: [0] },
+    ],
+  });
+  const control = assertThrowsIncludes(() => assertCompiledProgram(twoSinks), Error);
+  expect(control.message).toContain('multiple html Parts own one DOM sink');
+  // Failures are not memoized: the same invalid program re-validates and
+  // re-throws on every call.
+  const failuresBaseline = serverAssertionPassCount();
+  assertThrowsIncludes(() => assertCompiledProgram(twoSinks), Error);
+  expect(serverAssertionPassCount()).toBe(failuresBaseline + 1);
+
+  const program = testProgram({
+    tag: 'oe-memo-html',
+    template: [{ k: 'el', tag: 'div', attrs: [] as Array<[string, string]>, children: [] }],
+    parts: [{ k: 'html', index: 0, signal: 'body', path: [0] }],
+  });
+  const baseline = serverAssertionPassCount();
+  const ir = assertCompiledProgram(program);
+  expect(serverAssertionPassCount()).toBe(baseline + 1);
+  // Same program object: the memoized assertion returns the one validated IR
+  // without re-walking the server validation surface — one pass per program
+  // object, not per SSR call.
+  expect(assertCompiledProgram(program)).toBe(ir);
+  expect(serverAssertionPassCount()).toBe(baseline + 1);
+  // A structurally identical program under a NEW object identity is a
+  // different key: it validates (and fails on the server-only surface the
+  // same way the control did when its shape is forged).
+  const clone = structuredClone(program);
+  assertCompiledProgram(clone);
+  expect(serverAssertionPassCount()).toBe(baseline + 2);
+});

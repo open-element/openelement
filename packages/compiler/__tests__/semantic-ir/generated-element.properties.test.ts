@@ -50,7 +50,9 @@ import {
 } from '../../src/internal/compiler/semantic-ir/generated-element/site.ts';
 import {
   createGeneratedElementClass,
+  resolveGeneratedElementProps,
   type GeneratedElementDescriptor,
+  type GeneratedElementProperty,
 } from '../../../element/src/internal/compiled/generated-element/shell.ts';
 
 const FILE = '/proj/src/islands/counter.tsx';
@@ -374,6 +376,34 @@ test('a property row is a plain descriptor input the shell normalizes', () => {
   expect((ctor as unknown as { observedAttributes: readonly string[] }).observedAttributes).toEqual(
     ['count'],
   );
+});
+
+test('descriptor normalization is memoized by descriptor identity', () => {
+  // A generated module evaluates its descriptor literal once, so the shell
+  // normalizes it once: the SSR props resolver (per render) and the
+  // class-definition pass reuse the one normalized descriptor instead of
+  // re-running the authoring-shape validation family per render. The props
+  // record itself stays per-render (fresh record, lazily evaluated getters).
+  const descriptor: GeneratedElementDescriptor = {
+    tag: 'x-props-memo',
+    properties: [{ name: 'label', type: 'string' }],
+    createRecipe: (() => ({ mount: () => [], createProps: () => ({}) })) as never,
+  };
+  const first = resolveGeneratedElementProps(descriptor);
+  expect(resolveGeneratedElementProps(descriptor)).not.toBe(first);
+
+  // Mutate the SAME object into a shape the shell's own duplicate-name check
+  // rejects. The identity contract returns the memoized normalization without
+  // re-running it; a fresh object carrying the same rows still fails closed,
+  // so the absence of a throw can only be the memoization.
+  (descriptor.properties as GeneratedElementProperty[]).push({ name: 'label', type: 'string' });
+  expect(() => resolveGeneratedElementProps(descriptor)).not.toThrow();
+  expect(() =>
+    resolveGeneratedElementProps({
+      ...descriptor,
+      properties: [...(descriptor.properties as GeneratedElementProperty[])],
+    }),
+  ).toThrow(/duplicate property "label"/);
 });
 
 test('a cyclic props type alias refuses instead of overflowing the stack (B1)', () => {

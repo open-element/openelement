@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the generated element's lifecycle — class construction, mount-vs-claim selection, attribute conversion, property reflection, the props record, dispose and reconnect — mutates one shared connection/instance state, so it is one shell; the boundary is INTERNAL COMPILER CONTRACT: a narrow descriptor plus the generated factory in, a Custom Element class out, with imports of neither facade-host.ts, runtime-program.ts, the kernel, nor the Part Program executor.
 /**
  * M09-0 — the runtime shell that turns one generated leaf module into a
  * Custom Element.
@@ -840,7 +841,32 @@ function coercePropertyWrite(property: NormalizedProperty, value: unknown): unkn
   return coercePropertyValue(property.conversion!, value);
 }
 
+/**
+ * Descriptor normalization is memoized by descriptor object identity — the
+ * same contract as `runtime-program.ts`'s `normalizedByProgram`: a generated
+ * module evaluates its `__oeElementDescriptor` literal once (the compiler
+ * emits it as a module-level `const`; "the descriptor rows emitted above ARE
+ * the input"), so every SSR render of that element — the emitted
+ * `<Name>__ssrHost` resolves props per render — and the one class-definition
+ * pass reuse the same normalized descriptor instead of re-running the
+ * authoring-shape validation family and rebuilding the camelCase→kebab
+ * attribute derivation and the per-name/attribute maps per render.
+ *
+ * The key is the descriptor object; there is no invalidation: the normalized
+ * result is a pure function of the descriptor rows, and a descriptor mutated
+ * after its first successful normalization is not re-normalized (descriptors
+ * are compiler-built module literals, never mutable request inputs). The
+ * normalized descriptor is read-only by contract — consumers read rows and
+ * maps, never mutate them, and per-render/per-instance state (lazy defaults,
+ * signal values) is allocated fresh downstream. Failures are not memoized: an
+ * invalid descriptor re-validates and re-throws on every call, so rejection
+ * behavior is unchanged.
+ */
+const normalizedByDescriptor = new WeakMap<GeneratedElementDescriptor, NormalizedDescriptor>();
+
 function normalizeDescriptor(descriptor: GeneratedElementDescriptor): NormalizedDescriptor {
+  const cached = normalizedByDescriptor.get(descriptor);
+  if (cached !== undefined) return cached;
   if (typeof descriptor.tag !== 'string' || !descriptor.tag.includes('-')) {
     descriptorError(
       'tag must be a hyphenated custom-element name',
@@ -930,7 +956,7 @@ function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Normalized
     };
   }
 
-  return {
+  const normalized: NormalizedDescriptor = {
     rootMode,
     delegatesFocus,
     formAssociated,
@@ -945,6 +971,8 @@ function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Normalized
       ? {}
       : { createBindings: descriptor.createBindings }),
   };
+  normalizedByDescriptor.set(descriptor, normalized);
+  return normalized;
 }
 
 /**

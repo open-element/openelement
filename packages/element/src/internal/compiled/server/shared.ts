@@ -333,8 +333,46 @@ function validateLocations(program: PartProgramV2): void {
   });
 }
 
+/**
+ * The full assertion is memoized by raw program object identity — the same
+ * contract as `runtime-program.ts`'s `normalizedByProgram`: every SSR entry
+ * (`serializeProgramContent`, `serializeCompiledProgram`,
+ * `createStreamServerExecutor`) passes the compiler-emitted module-level
+ * `__partProgram` literal, which each compiled module evaluates exactly once,
+ * so every render of the same element reuses the one validated result instead
+ * of re-walking the tag/static-node/Part grammar and the server-only
+ * ownership invariants (duplicate sinks, anchor counts) per request. The
+ * key is the raw object; there is no invalidation: the asserted result is a
+ * pure function of the raw value, and a program mutated after its first
+ * successful validation is not re-validated (a program object is a frozen
+ * compile-time fact, never a mutable request input — the identity contract
+ * the stream executor's `owner.program !== raw` check already relies on).
+ * Failures are not memoized: an invalid program re-validates and re-throws on
+ * every call, so rejection behavior is unchanged.
+ */
+const assertedByProgram = new WeakMap<object, RuntimeProgramIR>();
+
+/**
+ * Diagnostics counter (test seam): how many FULL assertion passes have run
+ * since module load. Memoization means one pass per distinct program object,
+ * not per call; tests read this to pin that a repeat call does not re-walk
+ * the validation surface. Not re-exported through the server barrel — it is
+ * read from this module directly.
+ */
+let assertionPassCount = 0;
+
+/** Read the full-assertion-pass counter (see the memoization note above). */
+export function serverAssertionPassCount(): number {
+  return assertionPassCount;
+}
+
 /** Validate the unified program plus the server/hydration security and ownership invariants. */
 export function assertCompiledProgram(raw: unknown): RuntimeProgramIR {
+  if (typeof raw === 'object' && raw !== null) {
+    const cached = assertedByProgram.get(raw);
+    if (cached !== undefined) return cached;
+  }
+  assertionPassCount++;
   let program: RuntimeProgramIR;
   try {
     program = normalizePartProgram(raw);
@@ -347,6 +385,7 @@ export function assertCompiledProgram(raw: unknown): RuntimeProgramIR {
   validateStaticNodes(program.template, 'template', false, true);
   program.parts.forEach(validatePart);
   validateLocations(program);
+  if (typeof raw === 'object' && raw !== null) assertedByProgram.set(raw, program);
   return program;
 }
 
