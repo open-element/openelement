@@ -2,11 +2,11 @@
 // Source: packages/ui/src/theme-contract.ts
 // Generator: www/tools/generate-theme-init.ts (--check enforces byte equality).
 (function () {
+  'use strict';
   if (typeof document === 'undefined') return;
 
   const exports = {};
   const module = { exports: exports };
-"use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.THEME_STORAGE_KEY = void 0;
 exports.isSiteTheme = isSiteTheme;

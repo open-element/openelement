@@ -56,6 +56,7 @@ function assertImportFree(source: string, path: string): void {
 function renderShell(compiledContract: string): string {
   return `${GENERATED_HEADER}
 (function () {
+  'use strict';
   if (typeof document === 'undefined') return;
 
   const exports = {};
@@ -110,16 +111,21 @@ export async function renderThemeInit(root: string): Promise<string> {
       newLine: ts.NewLineKind.LineFeed,
     },
   }).outputText;
+  // The transpiled CommonJS block opens with its own `"use strict";`. Inside
+  // the shell it is no longer a directive prologue (it follows declarations),
+  // so it is a no-effect expression — the shell carries the directive at the
+  // top instead. Dropping it keeps the artifact clean for static analysis.
+  const compiledBody = compiled.replace(/^"use strict";\n/, '');
 
   for (const symbol of ['resolveSiteTheme', 'applyDocumentTheme']) {
-    if (!compiled.includes(symbol)) {
+    if (!compiledBody.includes(symbol)) {
       throw new Error(
         `theme-init generation would be vacuous: compiled contract does not export ${symbol}.`,
       );
     }
   }
 
-  const generated = renderShell(compiled.trimEnd());
+  const generated = renderShell(compiledBody.trimEnd());
   const machinePath = findMachinePath(generated);
   if (machinePath) {
     throw new Error(
