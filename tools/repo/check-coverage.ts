@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /** Run repository tests and enforce production-package LCOV thresholds. */
 
-import { readFile, rm } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import process from 'node:process';
+import { emitSummary, reportPathArg } from './checker-io.ts';
 import {
   addUncoveredFiles,
   countCoverableElements,
@@ -95,9 +96,16 @@ export async function runTestSuiteWithCrashRetry(
   }
 }
 
-/** The vitest node projects whose runs feed the coverage denominator. */
-const COVERAGE_PROJECTS = [
+/**
+ * The vitest node projects whose runs feed the coverage denominator. This
+ * list is a SECONDARY COPY of the project axis declared in the root
+ * `vitest.config.ts` — the project-axis drift guard below holds it to that
+ * source (#1566 split the compiler out of `element` and this list silently
+ * missed the new project until it was caught by hand).
+ */
+export const COVERAGE_PROJECTS = [
   'element',
+  'compiler',
   'router',
   'create',
   'ui',
@@ -107,6 +115,140 @@ const COVERAGE_PROJECTS = [
   'tests',
   'benchmarks',
 ] as const;
+
+/** The config file the project axis is derived from. */
+export const VITEST_CONFIG_PATH = 'vitest.config.ts';
+/** This checker's own repository-relative path (for naming drift findings). */
+export const COVERAGE_CHECKER_PATH = 'tools/repo/check-coverage.ts';
+
+/** One parsed project entry from the root vitest config. */
+export interface VitestProjectRef {
+  name: string;
+  /** 1-based line of the project's `name:` entry in vitest.config.ts. */
+  line: number;
+  /** True when the project block enables vitest browser mode. */
+  browserEnabled: boolean;
+}
+
+/**
+ * Extract the vitest project axis from the root config's source text, with
+ * line numbers, so drift findings can name the exact side. The parser
+ * understands this config's shape — a flat `projects:` array of
+ * `{ test: { name: '...' } }` entries; a project's name is the first
+ * `name: '...'` after its `test: {`, and a project enables browser mode when
+ * its block declares `browser:` with `enabled: true`. A config the parser
+ * cannot read yields zero projects, which the drift guard refuses (fail
+ * closed, never a vacuous green).
+ */
+export function extractVitestProjects(text: string): VitestProjectRef[] {
+  const lines = text.split('\n');
+  const projectsMarker = lines.findIndex((line) => /^\s*projects:\s*\[/.test(line));
+  if (projectsMarker === -1) return [];
+  const refs: VitestProjectRef[] = [];
+  // First pass: the line indices of every `test: {` after the projects
+  // marker — each opens one project's test block.
+  const blockStarts: number[] = [];
+  for (let index = projectsMarker; index < lines.length; index++) {
+    if (/\btest:\s*\{/.test(lines[index]!)) blockStarts.push(index);
+  }
+  for (let position = 0; position < blockStarts.length; position++) {
+    const start = blockStarts[position]!;
+    // A project's block extends to the next `test: {` (or end of file).
+    const end = position + 1 < blockStarts.length ? blockStarts[position + 1]! : lines.length;
+    let name: string | undefined;
+    let browserEnabled = false;
+    for (let index = start; index < end; index++) {
+      const line = lines[index]!;
+      if (name === undefined) {
+        const nameMatch = line.match(/\bname:\s*'([^']+)'/);
+        if (nameMatch) name = nameMatch[1]!;
+      }
+      // `browser: {` and its `enabled: true` sit on different lines; once the
+      // browser block opens inside this project, its enabled flag decides.
+      if (/\bbrowser:\s*\{/.test(line)) {
+        browserEnabled = lines.slice(index, end).some((rest) => /\benabled:\s*true/.test(rest));
+      }
+    }
+    if (name !== undefined) {
+      // The name line is reported, not the `test: {` line: findings point at
+      // the identifier a maintainer edits.
+      const nameLine =
+        start + lines.slice(start, end).findIndex((line) => /\bname:\s*'/.test(line)) + 1;
+      refs.push({ name, line: nameLine, browserEnabled });
+    }
+  }
+  return refs;
+}
+
+/**
+ * The project-axis drift: COVERAGE_PROJECTS must equal the set of vitest
+ * NODE projects exactly. Browser-mode projects are excluded by a derived
+ * rule (a project block that enables `browser:`), not by a name list — they
+ * are gated separately and none of them contributes to the production-source
+ * denominator. Every finding names both files, the line, and the direction
+ * of the difference.
+ */
+export function coverageProjectDrift(
+  projects: readonly VitestProjectRef[],
+  coverageLines: ReadonlyMap<string, number>,
+): string[] {
+  const findings: string[] = [];
+  if (projects.length === 0) {
+    findings.push(
+      `${VITEST_CONFIG_PATH}: no vitest projects could be parsed — refusing to let the ` +
+        'coverage project axis pass vacuously.',
+    );
+    return findings;
+  }
+  const nodeProjects = projects.filter((project) => !project.browserEnabled);
+  if (nodeProjects.length === 0) {
+    findings.push(
+      `${VITEST_CONFIG_PATH}: every parsed project is browser-mode — refusing to let the ` +
+        'coverage project axis pass vacuously.',
+    );
+    return findings;
+  }
+  const declared = new Set<string>(COVERAGE_PROJECTS);
+  for (const project of nodeProjects) {
+    if (!declared.has(project.name)) {
+      findings.push(
+        `${VITEST_CONFIG_PATH}:${project.line}: vitest node project '${project.name}' is missing ` +
+          `from ${COVERAGE_CHECKER_PATH} COVERAGE_PROJECTS — the coverage gate runs without it and ` +
+          'its sources silently leave the denominator (the #1566 compiler-split drift class).',
+      );
+    }
+  }
+  const vitestNodeNames = new Set(nodeProjects.map((project) => project.name));
+  for (const name of COVERAGE_PROJECTS) {
+    if (!vitestNodeNames.has(name)) {
+      const line = coverageLines.get(name);
+      findings.push(
+        `${COVERAGE_CHECKER_PATH}:${line ?? '?'}: COVERAGE_PROJECTS entry '${name}' matches no ` +
+          `${VITEST_CONFIG_PATH} node project — the gate passes a --project flag that selects nothing.`,
+      );
+    }
+  }
+  return findings;
+}
+
+/**
+ * Line numbers of the COVERAGE_PROJECTS entries, read from this checker's own
+ * source so every drift finding can name both sides precisely.
+ */
+export async function coverageProjectLines(selfPath: string): Promise<Map<string, number>> {
+  const text = await readFile(selfPath, 'utf8');
+  const start = text.indexOf('const COVERAGE_PROJECTS');
+  const end = text.indexOf('] as const', start);
+  const lines = new Map<string, number>();
+  if (start === -1 || end === -1) return lines;
+  const before = text.slice(0, start).split('\n').length - 1;
+  for (const name of COVERAGE_PROJECTS) {
+    const index = text.indexOf(`'${name}',`, start);
+    if (index === -1 || index > end) continue;
+    lines.set(name, before + text.slice(start, index).split('\n').length);
+  }
+  return lines;
+}
 
 /** Instrumentation roots: exactly the three threshold scopes. */
 export const COVERAGE_INCLUDES = [
@@ -190,10 +332,29 @@ async function main(): Promise<void> {
   // retries that only fire on native-crash exits (>= 128 + signal), never on
   // assertion failures. Loud by design: every crash prints to stderr.
   const crashRetries = getNumberArg('--crash-retries', 2);
+  // The per-scope detail report (denominators, not-exercised files, metric
+  // lines) is a file artifact, not stdout content; parse the flag up front so
+  // a malformed value fails before the expensive test run.
+  const reportPath = reportPathArg(process.argv.slice(2));
   // vitest's lcov reporter writes SF paths relative to the vitest root; the
   // summarizer and scope predicates match absolute paths. Normalize once at
   // the read boundary — without it every in-scope file lands in the "never
   // loaded" bucket and every scope reads 0%.
+  // Project-axis drift guard FIRST: it is cheap, and a drifted COVERAGE_PROJECTS
+  // list invalidates the denominator the whole expensive run would measure.
+  const projects = extractVitestProjects(
+    await readFile(join(process.cwd(), VITEST_CONFIG_PATH), 'utf8'),
+  );
+  const drift = coverageProjectDrift(projects, await coverageProjectLines(import.meta.filename!));
+  if (drift.length > 0) {
+    console.error(
+      `coverage: the vitest project axis drifted from COVERAGE_PROJECTS ` +
+        `(${VITEST_CONFIG_PATH} vs ${COVERAGE_CHECKER_PATH}) — fix one side or the other; ` +
+        'a drifted list silently changes the coverage denominator:',
+    );
+    for (const finding of drift) console.error(`  ${finding}`);
+    process.exit(1);
+  }
   const lcov = normalizeLcovSourcePaths(await runCoverage(crashRetries), process.cwd());
   const profiledFiles = lcovFilePaths(lcov);
 
@@ -268,8 +429,11 @@ async function main(): Promise<void> {
   ];
 
   const failures: string[] = [];
+  const reportLines: string[] = [];
+  const scopeResults: string[] = [];
   for (const scope of scopes) {
-    console.log(`\nCoverage scope: ${scope.label}`);
+    if (reportLines.length > 0) reportLines.push('');
+    reportLines.push(`Coverage scope: ${scope.label}`);
     // Full denominator: every in-scope source file counts, even when no test
     // loaded it (the coverage provider only profiles imported modules). Unloaded files are
     // folded in as fully uncovered via an AST estimate of their coverable
@@ -282,24 +446,37 @@ async function main(): Promise<void> {
       missing.push(path);
       uncovered.push(countCoverableElements(await readFile(path, 'utf8'), path));
     }
-    console.log(
+    reportLines.push(
       `Denominator: ${treeFiles.length} source files ` +
         `(${missing.length} never loaded by any test, counted at 0%).`,
     );
-    for (const path of missing) console.log(`  not exercised: ${path}`);
+    for (const path of missing) reportLines.push(`  not exercised: ${path}`);
     const summary = addUncoveredFiles(parseLcov(lcov, scope.include), uncovered);
+    const measured: string[] = [];
     for (const name of ['lines', 'branches', 'functions'] as const) {
-      console.log(formatMetric(name, summary[name], scope.thresholds[name]));
+      reportLines.push(formatMetric(name, summary[name], scope.thresholds[name]));
+      measured.push(`${name} ${summary[name].percentage.toFixed(2)}%`);
       if (summary[name].percentage < scope.thresholds[name]) {
-        failures.push(`${scope.label} ${name}`);
+        failures.push(
+          `${scope.label} ${name} ${summary[name].percentage.toFixed(2)}% < minimum ` +
+            `${scope.thresholds[name]}%`,
+        );
       }
     }
+    scopeResults.push(`${scope.label} ${measured.join(', ')}`);
+  }
+
+  if (reportPath !== undefined) {
+    await writeFile(reportPath, `${reportLines.join('\n')}\n`, 'utf8');
   }
 
   if (failures.length) {
     throw new Error(`coverage threshold failed: ${failures.join(', ')}`);
   }
-  console.log('\nCoverage gate passed.');
+  emitSummary(
+    `coverage: gate passed — ${scopeResults.join('; ')} ` +
+      '(per-scope denominators and floors in the --report artifact).',
+  );
 }
 
 if (import.meta.main) await main();

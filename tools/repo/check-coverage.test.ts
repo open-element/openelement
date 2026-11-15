@@ -1,12 +1,19 @@
 import { expect, test } from 'vitest';
-import { relative } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertRejectsIncludes } from '../../tests/lib/vitest-asserts.ts';
 import {
   classifyTestExit,
+  COVERAGE_CHECKER_PATH,
   COVERAGE_INCLUDES,
+  COVERAGE_PROJECTS,
+  coverageProjectDrift,
+  coverageProjectLines,
   describeNativeCrash,
+  extractVitestProjects,
   runTestSuiteWithCrashRetry,
+  VITEST_CONFIG_PATH,
 } from './check-coverage.ts';
 import {
   enumerateCoverageFiles,
@@ -161,4 +168,77 @@ test('maxAttempts must be a positive integer', async () => {
     'positive integer',
   );
   expect(calls()).toEqual(0);
+});
+
+// ─── Project-axis drift guard (COVERAGE_PROJECTS vs vitest.config.ts) ───────
+
+test('COVERAGE_PROJECTS matches the vitest node project axis in the real config', async () => {
+  // The consumer-form pin: the list is a secondary copy of the root config's
+  // project axis, and this test fails on exactly the drift that #1566's
+  // compiler split caused (a new node project absent from COVERAGE_PROJECTS).
+  const config = await readFile(join(repoRoot, VITEST_CONFIG_PATH), 'utf8');
+  const projects = extractVitestProjects(config);
+  const drift = coverageProjectDrift(projects, await coverageProjectLines(import.meta.filename!));
+  expect(
+    drift,
+    `project-axis drift (fix vitest.config.ts or check-coverage.ts): ${drift.join(' | ')}`,
+  ).toEqual([]);
+});
+
+test('extractVitestProjects reads names, lines, and browser mode from the real config', async () => {
+  const config = await readFile(join(repoRoot, VITEST_CONFIG_PATH), 'utf8');
+  const projects = extractVitestProjects(config);
+  const names = projects.map((project) => project.name);
+  // Every declared coverage project is a parsed vitest project...
+  for (const name of COVERAGE_PROJECTS) expect(names).toContain(name);
+  // ...and the browser-mode project is recognized so it can be excluded by
+  // the derived rule instead of a name list.
+  const browser = projects.find((project) => project.name === 'element-browser');
+  expect(browser).toBeDefined();
+  expect(browser!.browserEnabled).toEqual(true);
+  for (const project of projects) {
+    if (project.name === 'element-browser') continue;
+    expect(project.browserEnabled, project.name).toEqual(false);
+    expect(project.line).toBeGreaterThan(0);
+  }
+});
+
+test('a missing vitest node project is named with both files and lines', () => {
+  const drift = coverageProjectDrift(
+    [
+      { name: 'element', line: 133, browserEnabled: false },
+      { name: 'future-project', line: 42, browserEnabled: false },
+    ],
+    new Map([['element', 100]]),
+  );
+  expect(drift.length).toBeGreaterThan(0);
+  const joined = drift.join('\n');
+  expect(joined).toContain(VITEST_CONFIG_PATH);
+  expect(joined).toContain(COVERAGE_CHECKER_PATH);
+  // The vitest-side finding names the exact config line.
+  expect(joined).toMatch(/vitest\.config\.ts:42/);
+  expect(joined).toContain("'future-project'");
+});
+
+test('a phantom COVERAGE_PROJECTS entry is named with its own line', async () => {
+  // The line map comes from the checker's own source, not the test file.
+  const lines = await coverageProjectLines(join(repoRoot, COVERAGE_CHECKER_PATH));
+  // Drop one declared project from the vitest side: the list now carries an
+  // entry that matches no config project.
+  const vitestSide = COVERAGE_PROJECTS.filter((name) => name !== 'benchmarks').map((name) => ({
+    name,
+    line: 1,
+    browserEnabled: false,
+  }));
+  const drift = coverageProjectDrift(vitestSide, lines);
+  const phantom = drift.filter((finding) => finding.includes("'benchmarks'"));
+  expect(phantom.length).toEqual(1);
+  expect(phantom[0]).toContain('--project flag that selects nothing');
+  expect(phantom[0]).toContain(`${lines.get('benchmarks')}`);
+});
+
+test('an unparseable config refuses to pass vacuously', () => {
+  const drift = coverageProjectDrift([], new Map());
+  expect(drift.length).toEqual(1);
+  expect(drift[0]).toContain('no vitest projects could be parsed');
 });

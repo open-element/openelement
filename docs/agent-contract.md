@@ -22,14 +22,14 @@ behavior it describes, then regenerate the derived blocks
 (`node tools/repo/check-agent-contract.ts --write`) and run the conformance
 check.
 
-Verified against the alpha.15 release tree (#1613); the tree's release stamp
-is `1.0.0-alpha.15` (all six package manifests, `CREATE_VERSION`,
-`release-state.json`'s `sourceVersion`, and the state machine's
-`ADMITTED_ACTIVE_TARGET`). The registry serves `1.0.0-alpha.15` on both the
-`alpha` and `latest` dist-tags, and the `v1.0.0-alpha.15` tag and GitHub
-Release exist, so the source version and the published line are the same fact
-on this release. The published
-consumer index is [llms.txt](https://openelement.org/llms.txt).
+The tree's current release version is the one
+[`docs/release/release-state.json`](release/release-state.json) records — its
+`sourceVersion` / `activeTarget` pair is the single source of truth, written
+by the version-bump stamp surface. This document deliberately asserts no
+version literal, so a bump cannot turn it false. The alpha.15 verification
+pass (#1613, registry read-back `verifiedAt` 2026-10-19 recorded in that
+file) stands as history; the published consumer index is
+[llms.txt](https://openelement.org/llms.txt).
 
 ## Repository entry points
 

@@ -114,8 +114,8 @@ which selects by exact package name:
 The gates are split in two layers. CI's fast PR layer is the `lint`, `test`,
 `e2e`, and `pack` jobs in `.github/workflows/autoflow-ci.yml`, and it runs on
 every pull request targeting `main` and on pushes to `main` and
-`alpha15-consolidation`. `tools/repo#gate:source` (17
-steps: sixteen `@`-qualified tasks plus `check:dep-age`) is the LOCAL source
+`alpha15-consolidation`. `tools/repo#gate:source` (19
+steps: 18 `@`-qualified tasks plus `check:dep-age`) is the LOCAL source
 gate: no workflow invokes the aggregate task, and `pnpm run verify`
 and `pnpm run verify:core` are its entry points. Twelve of those steps also
 run in CI through the fast jobs — `@openelement/tools-repo#typecheck` (the
