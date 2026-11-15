@@ -609,11 +609,13 @@ export default {
         );
 
         // ---- S2 condition: toggle the declared boolean property. ----
-        // Observed packed-shell behavior (reported, not fixed): with the
-        // condition branch PRESENT, an unrelated declared-property write
-        // re-evaluates the sibling condition slot and re-creates its node. The
-        // keyed-reorder minimality assertion is therefore taken after closing
-        // the branch; the branch itself is then re-opened and asserted.
+        // The condition force leak is fixed (the condition refresh no longer
+        // receives the numeric propsChanged value as `force`), so an unrelated
+        // declared-property write must NOT re-create the condition node. This
+        // leg still measures the branch-present write and reports it as
+        // `condition-present-reorder-gap` regression evidence; the keyed-reorder
+        // minimality assertion is taken after closing the branch, and the branch
+        // path is then re-opened and asserted.
         const conditionOff = await page.evaluate(async () => {
           const scope = window as unknown as {
             __s3: {
@@ -901,11 +903,14 @@ export default {
           3,
           'reconnect mounts one list, not a duplicate',
         );
-        // Observed packed-shell behavior (reported, not fixed): after explicit
-        // dispose(true) + reconnect the shell retains the prior declared
-        // property values (B,C,A here), so this proof asserts the no-duplicate
-        // DOM resource fact, not a fresh-default order. Subscription accounting
-        // below still proves the old connection's subscriptions are closed.
+        // Recorded shell semantics (clarified in
+        // docs/architecture/m09-generated-element-shell.md): after explicit
+        // dispose(true) + reconnect the retained instance is recreated and setup
+        // re-runs, while declared properties/attributes stay host/platform state
+        // on the element node (B,C,A here), so this proof asserts the
+        // no-duplicate DOM resource fact, not a fresh-default order.
+        // Subscription accounting below still proves the old connection's
+        // subscriptions are closed.
         assert.deepStrictEqual([...teardown.reconnectTexts].sort(), ['A', 'B', 'C']);
         assert.deepStrictEqual([...teardown.reconnectKeys].sort(), ['a', 'b', 'c']);
 

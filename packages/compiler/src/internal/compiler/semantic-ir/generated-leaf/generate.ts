@@ -1201,9 +1201,15 @@ function emitBranchRelease(state: EmitState, ownerVar: string): void {
  * Attempt the branch owner's `dispose(true)` and the structural release, drop
  * both cleanup errors and rethrow the ORIGINAL construction error (B2).
  */
-function emitBranchRollback(state: EmitState, branchOwnerVar: string): void {
+function emitBranchRollback(state: EmitState, branchOwnerVar: string, activeVar?: string): void {
   push(state, `} catch (error) {`);
   state.indent += 1;
+  // The branch state is unknown after a failed rebuild: reset the active marker
+  // BEFORE rethrowing so a later signal (even one carrying the same test value)
+  // retries instead of being suppressed by the `next === active` guard. This
+  // keeps retry-on-next-write semantics without treating the signal VALUE as an
+  // explicit force.
+  if (activeVar !== undefined) push(state, `${activeVar} = -1;`);
   push(state, `try { ${branchOwnerVar}.dispose(true); } catch { /* construction error wins */ }`);
   push(
     state,
@@ -1277,6 +1283,10 @@ function emitCondition(
   const select = alternateFn === null ? `? 1 : 0` : `? 1 : 2`;
   pushParts(state, [`const ${INTERNAL_PREFIX}next = (`, { record }, `) ${select};`]);
   push(state, `if (!force && ${INTERNAL_PREFIX}next === ${activeVar}) return;`);
+  // The old branch is about to be released: mark the branch state unknown FIRST
+  // so a throwing release leaves a retryable condition instead of an `active`
+  // marker that suppresses the next refresh.
+  push(state, `${activeVar} = -1;`);
   if (emitsRetentionReleaseText(state)) {
     emitBranchRelease(state, ownerVar);
   } else {
@@ -1295,9 +1305,12 @@ function emitCondition(
   );
   state.indent -= 1;
   if (emitsRetentionReleaseText(state)) {
-    emitBranchRollback(state, `${INTERNAL_PREFIX}branchOwner`);
+    emitBranchRollback(state, `${INTERNAL_PREFIX}branchOwner`, activeVar);
   } else {
-    push(state, `} catch (error) { ${INTERNAL_PREFIX}branchOwner.dispose(true); throw error; }`);
+    push(
+      state,
+      `} catch (error) { ${activeVar} = -1; ${INTERNAL_PREFIX}branchOwner.dispose(true); throw error; }`,
+    );
   }
   push(
     state,
@@ -1338,7 +1351,9 @@ function emitCondition(
   push(state, `const ${endVar} = emitComment(MARKERS.whenEnd);`, node.span);
   sink.push({ kind: 'spread', name: initialNodesVar });
   sink.push({ kind: 'node', name: endVar });
-  emitDependencySubscriptions(state, dependencies, refreshVar, node.span);
+  emitDependencySubscriptions(state, dependencies, refreshVar, node.span, {
+    ignoreSignalValue: true,
+  });
   registerRefresh(state, refreshVar);
 }
 
@@ -1777,19 +1792,33 @@ function emitDependencySubscriptions(
   dependencies: readonly Dependency[],
   refreshVar: string,
   anchor: SpanLike,
+  options?: {
+    /**
+     * Condition refreshes interpret their first argument as `force`. The signal
+     * subscription callback receives the signal VALUE (`bindSignalWrites` calls
+     * `fn(value)`), and the generated element root's `propsChanged` channel is a
+     * monotonically increasing number: passing it through would make every
+     * props write look like an explicit force and rebuild the branch even when
+     * the condition test is unchanged. Subscribe through `() => refresh()` for
+     * condition collectors; entry/list collectors keep their explicit
+     * `refresh(true)` calls.
+     */
+    readonly ignoreSignalValue?: boolean;
+  },
 ): void {
+  const handler = options?.ignoreSignalValue === true ? `() => ${refreshVar}()` : refreshVar;
   for (const dependency of dependencies) {
     if (dependency.fromProps) {
       push(
         state,
-        `for (const ${MOUNT_DEP_LOOP} of ${state.hostVar}.propDeps) bindSignalWrites(${state.scopeVar}, ${MOUNT_DEP_LOOP}, ${JSON.stringify(dependency.name)}, ${refreshVar});`,
+        `for (const ${MOUNT_DEP_LOOP} of ${state.hostVar}.propDeps) bindSignalWrites(${state.scopeVar}, ${MOUNT_DEP_LOOP}, ${JSON.stringify(dependency.name)}, ${handler});`,
         anchor,
       );
       continue;
     }
     push(
       state,
-      `bindSignalWrites(${state.scopeVar}, ${dependency.name}, ${JSON.stringify(dependency.name)}, ${refreshVar});`,
+      `bindSignalWrites(${state.scopeVar}, ${dependency.name}, ${JSON.stringify(dependency.name)}, ${handler});`,
       anchor,
     );
   }
@@ -4362,6 +4391,7 @@ function emitConditionClaim(
     node.span,
   );
   push(state, `if (!force && ${nextVar} === ${activeVar}) return;`);
+  push(state, `${activeVar} = -1;`);
   if (emitsRetentionReleaseText(state)) {
     emitBranchRelease(state, ownerVar);
   } else {
@@ -4380,9 +4410,12 @@ function emitConditionClaim(
   );
   state.indent -= 1;
   if (emitsRetentionReleaseText(state)) {
-    emitBranchRollback(state, branchOwnerVar);
+    emitBranchRollback(state, branchOwnerVar, activeVar);
   } else {
-    push(state, `} catch (error) { ${branchOwnerVar}.dispose(true); throw error; }`);
+    push(
+      state,
+      `} catch (error) { ${activeVar} = -1; ${branchOwnerVar}.dispose(true); throw error; }`,
+    );
   }
   push(state, `${branchOwnerVar}.addRangeCleanup(() => removeNodes(${branchNodesVar}));`);
   push(state, `const ${refreshParentVar} = ${endVar}.parentNode;`);
@@ -4402,7 +4435,9 @@ function emitConditionClaim(
   });
   if (slot.dependencies.length > 0) {
     phase2.push(() => {
-      emitDependencySubscriptions(state, slot.dependencies, refreshVar, node.span);
+      emitDependencySubscriptions(state, slot.dependencies, refreshVar, node.span, {
+        ignoreSignalValue: true,
+      });
     });
   }
   if (thenCreate !== null || elseCreate !== null) {
