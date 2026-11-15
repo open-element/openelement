@@ -15,6 +15,7 @@ import type { IslandDecl } from '@openelement/protocol/ssg';
 
 import { fsPathToModuleSpecifier } from './module-specifier.ts';
 import { resolveIslandHydrate, resolveIslandSsrDsd } from './island-scanner.ts';
+import { readGeneratedElementHost } from './generated-element-host-metadata.ts';
 import type { ClientIslandDeliveryEntry, IslandDeliveryStrategy } from './delivery.ts';
 
 type ScannedIslandMeta = Partial<IslandDecl> & {
@@ -55,6 +56,15 @@ export function buildClientIslandEntries(options: {
         meta?.hydrate as IslandDeliveryStrategy | undefined,
         upgradeStrategy,
       ) as IslandDeliveryStrategy;
+      // M11-3 lane fact: the scan's compiler-owned generated-host identity is
+      // the ONE source. A `lane-declined`/`lane-refused` module is not owned by
+      // the generated lane (the class lane or the transform owns it/fails it).
+      const generatedHost = readGeneratedElementHost(meta);
+      const generatedLane =
+        generatedHost !== undefined &&
+        (generatedHost.kind === 'producer' ||
+          generatedHost.kind === 'missing-producer' ||
+          generatedHost.kind === 'light-no-producer');
       return {
         tagName,
         // #460: resolve() emits drive-letter backslash paths on Windows; convert
@@ -68,6 +78,7 @@ export function buildClientIslandEntries(options: {
         ),
         isPackage: false,
         strategy,
+        ...(generatedLane ? { generatedLane: true as const } : {}),
         ...(strategy === 'media' && meta?.media !== undefined ? { media: meta.media } : {}),
         ...(meta?.tags !== undefined ? { tags: meta.tags } : {}),
         ...(meta?.tagNames !== undefined ? { tagNames: meta.tagNames } : {}),

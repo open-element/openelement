@@ -19,6 +19,7 @@ import process from 'node:process';
 import { build as viteBuild, type InlineConfig } from 'vite';
 import { dirname, isAbsolute, join, relative, resolve } from 'pathe';
 import {
+  clientEntryHasClientJs,
   clientEntryNeedsElementRuntime,
   extractCustomElementTags,
   generateClientEntry,
@@ -643,9 +644,15 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
   const entryNeedsElementRuntime = clientEntryNeedsElementRuntime(islandEntries, {
     enhancedForms,
   });
-  const styleOnlyEmission = !entryNeedsElementRuntime;
+  // M11-3: client JS and the legacy executor runtime are two facts. A page whose
+  // only islands are generated-lane islands keeps its island entry (and JS) but
+  // must not be held to the executor runtime's chunk contract.
+  const entryHasClientJs = clientEntryHasClientJs(islandEntries, { enhancedForms });
+  const styleOnlyEmission = !entryHasClientJs;
   if (styleOnlyEmission) {
     log.info('Island-free client entry - style-only client build, zero client JS');
+  } else if (!entryNeedsElementRuntime) {
+    log.info('Generated-element islands only - client entry without the executor runtime');
   }
 
   // #1471: island identity comes from this build's own resolver. Each

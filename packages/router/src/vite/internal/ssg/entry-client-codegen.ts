@@ -34,6 +34,7 @@ function islandImportFactory(
   modulePath: AdmittedIslandModuleSpecifier,
   tagName: string,
   exportName?: string,
+  generatedLane = false,
 ): string {
   const nameLiteral = exportName ? quoteGeneratedJavaScriptValue(exportName) : 'undefined';
   const tagLiteral = quoteGeneratedJavaScriptValue(tagName);
@@ -47,6 +48,17 @@ function islandImportFactory(
     )} did not export a constructor for ${tagName}`,
   );
   const define = `var _name = ${nameLiteral}; var Ctor = _name ? mod[_name] : mod.default; if (typeof Ctor !== 'function') throw new Error(${errorLiteral}); if (!customElements.get(${tagLiteral})) customElements.define(${tagLiteral}, Ctor); return mod;`;
+  if (generatedLane) {
+    // M11-3: a generated Native Custom Element island owns its mount/claim
+    // through the compiler-emitted shell; the legacy executor runtime is not a
+    // prerequisite for defining it, so the factory never waits for (or loads)
+    // that runtime. Class-lane islands keep the B2 runtime-first ordering.
+    return `function () {
+    return import(${quoteGeneratedJavaScriptValue(modulePath)}).then(function (mod) {
+      ${define}
+    });
+  }`;
+  }
   return `function () {
     var __island = import(${quoteGeneratedJavaScriptValue(modulePath)});
     return Promise.all([__island, __loadElementRuntime()]).then(function (__loaded) {
@@ -58,6 +70,8 @@ function islandImportFactory(
 
 interface NormalizedClientIsland extends AdmittedClientIslandEntry {
   tagName: string;
+  /** M11-3 build-only lane fact; absent means the class/executor lane. */
+  generatedLane?: true;
 }
 
 /** JavaScript single-quoted literal used in the media-query evidence. */
@@ -93,6 +107,7 @@ function expandClientIslandEntries(
         ...admitted,
         tagName,
         ...(delivery.exportNames?.[tagName] ? { exportName: delivery.exportNames[tagName] } : {}),
+        ...(delivery.generatedLane === true ? { generatedLane: true as const } : {}),
       };
       const prior = seen.get(tagName);
       if (prior) {
@@ -119,21 +134,32 @@ interface ActivationGroup {
 }
 
 function activationGroupKey(entry: NormalizedClientIsland): string {
-  return `${entry.modulePath}\u0000${entry.strategy}\u0000${entry.media ?? ''}`;
+  return `${entry.modulePath}\u0000${entry.strategy}\u0000${entry.media ?? ''}\u0000${
+    entry.generatedLane === true ? 'generated' : 'class'
+  }`;
 }
 
 function sharedActivationFactory(group: ActivationGroup, index: number): string {
   const promise = `__activation${index}Promise`;
   const factory = `__activation${index}`;
-  const importExpression = `Promise.all([import(${quoteGeneratedJavaScriptValue(
-    group.modulePath,
-  )}), __loadElementRuntime()])`;
-  const lines = [
-    `var ${promise};`,
-    `var ${factory} = function() {`,
-    `  if (!${promise}) ${promise} = ${importExpression}.then(function(__loaded) {`,
-    '    var mod = __loaded[0];',
-  ];
+  const generatedLane = group.entries.every((entry) => entry.generatedLane === true);
+  const importExpression = generatedLane
+    ? `import(${quoteGeneratedJavaScriptValue(group.modulePath)})`
+    : `Promise.all([import(${quoteGeneratedJavaScriptValue(
+        group.modulePath,
+      )}), __loadElementRuntime()])`;
+  const lines = generatedLane
+    ? [
+        `var ${promise};`,
+        `var ${factory} = function() {`,
+        `  if (!${promise}) ${promise} = ${importExpression}.then(function(mod) {`,
+      ]
+    : [
+        `var ${promise};`,
+        `var ${factory} = function() {`,
+        `  if (!${promise}) ${promise} = ${importExpression}.then(function(__loaded) {`,
+        '    var mod = __loaded[0];',
+      ];
   group.entries.forEach((entry, entryIndex) => {
     const ctor = `__Ctor${index}_${entryIndex}`;
     const value = entry.exportName
@@ -336,23 +362,39 @@ interface GenerateClientEntryOptions {
 }
 
 /**
- * Does the generated client entry need the element runtime at all?
+ * Does the generated client entry need the legacy compiled executor runtime?
  *
- * The island-free entry shapes (zero client JS, and the CSS-only entry a
- * Tailwind-enabled app without islands or enhanced forms generates) import the
- * document stylesheet and nothing else — no runtime module is reachable from
- * them. This is the ONE place that fact is decided: the generator below selects
- * the island-free branch with it, and the client build's element-runtime chunk
- * guard consumes it instead of inferring a runtime requirement from the
- * emission shape (defect D). A `hydrate: 'none'` island is SSR-only and never
- * enters the client bundle, so it does not require the runtime either.
- *
- * "Needs" is a graph fact, not an evaluation-order fact: since B2 the entry
- * reaches the runtime through a dynamic import only, so the runtime chunk
- * still exists in the emitted graph (and the guard still validates its
- * layout) while an island-free entry never requests it at runtime.
+ * This is the executor lane question (defect D / M11-3), not the "is there any
+ * client JS" question — that one is {@linkcode clientEntryHasClientJs}. A
+ * generated Native Custom Element island defines/claims through the
+ * compiler-emitted shell, so it does not need the executor runtime; a class-lane
+ * island (or the form-enhancement layer) does. The generator emits
+ * `__loadElementRuntime`/the element-services dynamic import only when this
+ * returns true, and the client build's element-runtime chunk guard consumes the
+ * same fact instead of inferring a runtime requirement from the emission shape.
+ * A `hydrate: 'none'` island never enters the client bundle at all.
  */
 export function clientEntryNeedsElementRuntime(
+  islands: readonly ClientIslandDeliveryInput[],
+  options: GenerateClientEntryOptions = {},
+): boolean {
+  if (options.enhancedForms === true) return true;
+  // M11-3: an island owned by the generated Native Custom Element lane defines
+  // and claims through the compiler-emitted shell, so it is not a reason to
+  // load the legacy compiled executor runtime. Any class-lane island (and the
+  // form-enhancement layer) still is.
+  return expandClientIslandEntries(islands).some(
+    (island) => island.strategy !== 'none' && island.generatedLane !== true,
+  );
+}
+
+/**
+ * Does the generated client entry carry any client JavaScript at all? This is
+ * a different fact from {@linkcode clientEntryNeedsElementRuntime} (M11-3): a
+ * page whose only islands are generated-lane islands has client JS but no
+ * executor runtime, so the island-free/style-only shapes must not swallow it.
+ */
+export function clientEntryHasClientJs(
   islands: readonly ClientIslandDeliveryInput[],
   options: GenerateClientEntryOptions = {},
 ): boolean {
@@ -375,9 +417,10 @@ export function generateClientEntry(
       ? ''
       : `import ${quoteGeneratedJavaScriptValue(options.styleEntry)};\n`;
 
-  // The island-free shapes (clientEntryNeedsElementRuntime owns the decision):
-  // the document stylesheet import is the only import they carry.
-  if (!clientEntryNeedsElementRuntime(islands, options)) {
+  // The island-free shapes (clientEntryHasClientJs owns the decision): the
+  // document stylesheet import is the only import they carry. A generated-lane
+  // island still has client JS even though it needs no executor runtime.
+  if (!clientEntryHasClientJs(islands, options)) {
     if (styleImport !== '') {
       return `// openElement Client Entry - no client islands; the document stylesheet only\n${styleImport}`;
     }
@@ -413,7 +456,13 @@ export function generateClientEntry(
       const group = groups.find((candidate) => candidate.entries.includes(entry));
       const factory = group && groupFactories.get(group);
       return `  ${quoteGeneratedJavaScriptValue(entry.tagName)}: ${
-        factory || islandImportFactory(entry.modulePath, entry.tagName, entry.exportName)
+        factory ||
+        islandImportFactory(
+          entry.modulePath,
+          entry.tagName,
+          entry.exportName,
+          entry.generatedLane === true,
+        )
       }`;
     })
     .join(',\n');
@@ -489,7 +538,9 @@ export function generateClientEntry(
   // existing host, while island chunks still download in parallel.
   // Island-bearing pages keep their warm start through the build's per-page
   // `<link rel="modulepreload">` projection of the island manifest.
-  const runtimeLoader = `var __elementRuntimePromise = null;
+  const needsElementRuntime = clientEntryNeedsElementRuntime(islands, options);
+  const runtimeLoader = needsElementRuntime
+    ? `var __elementRuntimePromise = null;
 var __loadElementRuntime = function () {
   if (!__elementRuntimePromise) {
     __elementRuntimePromise = import('${elementServicesSpecifier(
@@ -512,7 +563,8 @@ var __loadElementRuntime = function () {
     });
   }
   return __elementRuntimePromise;
-};`;
+};`
+    : '';
 
   const schedulerImport = `import { createIslandScheduler as __schedule } from '${VIRTUAL_RUNTIME_SPECIFIERS.scheduler}';`;
   const enhanceImport =

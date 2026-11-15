@@ -132,6 +132,7 @@ export type {
 } from './island-manifest.ts';
 
 export {
+  clientEntryHasClientJs,
   clientEntryNeedsElementRuntime,
   elementServicesSpecifier,
   generateClientEntry,
