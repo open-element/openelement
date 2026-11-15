@@ -343,28 +343,24 @@ function validateLocations(program: PartProgramV2): void {
  * of re-walking the tag/static-node/Part grammar and the server-only
  * ownership invariants (duplicate sinks, anchor counts) per request. The
  * key is the raw object; there is no invalidation: the asserted result is a
- * pure function of the raw value, and a program mutated after its first
- * successful validation is not re-validated (a program object is a frozen
- * compile-time fact, never a mutable request input — the identity contract
- * the stream executor's `owner.program !== raw` check already relies on).
+ * pure function of the raw value. The compiler emits `__partProgram` once per
+ * module and every render passes that same object, so the identity key is the
+ * module's own compile-time constant — nothing in the repository mutates it
+ * after validation.
+ *
+ * Known limitation (ADR-0174 amendment, 2026-11-15): the object is NOT frozen
+ * at runtime. Mutating a raw program (or a descriptor) after its first
+ * successful validation silently keeps the memoized result instead of
+ * re-validating or throwing. This is documented, not enforced: freezing here
+ * would change the generated-module ABI across server and client (the same
+ * object is read by 4 normalize and 3 assert call sites) for a contract no
+ * caller violates. A fresh object identity always validates from scratch and
+ * still fails closed.
+ *
  * Failures are not memoized: an invalid program re-validates and re-throws on
  * every call, so rejection behavior is unchanged.
  */
 const assertedByProgram = new WeakMap<object, RuntimeProgramIR>();
-
-/**
- * Diagnostics counter (test seam): how many FULL assertion passes have run
- * since module load. Memoization means one pass per distinct program object,
- * not per call; tests read this to pin that a repeat call does not re-walk
- * the validation surface. Not re-exported through the server barrel — it is
- * read from this module directly.
- */
-let assertionPassCount = 0;
-
-/** Read the full-assertion-pass counter (see the memoization note above). */
-export function serverAssertionPassCount(): number {
-  return assertionPassCount;
-}
 
 /** Validate the unified program plus the server/hydration security and ownership invariants. */
 export function assertCompiledProgram(raw: unknown): RuntimeProgramIR {
@@ -372,7 +368,6 @@ export function assertCompiledProgram(raw: unknown): RuntimeProgramIR {
     const cached = assertedByProgram.get(raw);
     if (cached !== undefined) return cached;
   }
-  assertionPassCount++;
   let program: RuntimeProgramIR;
   try {
     program = normalizePartProgram(raw);

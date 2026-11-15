@@ -383,7 +383,6 @@ test('compiled server preserves structured custom-element property values for ne
 
 test('assertCompiledProgram memoizes the asserted result by program identity', async () => {
   const { assertCompiledProgram } = await import('../../src/internal/compiled/server/index.ts');
-  const { serverAssertionPassCount } = await import('../../src/internal/compiled/server/shared.ts');
   // Two html Parts own one DOM sink: wire-valid (the protocol validator does
   // not carry the ownership invariant) but server-invalid — the exact shape
   // the server-only duplicate-sink check exists to reject.
@@ -399,27 +398,30 @@ test('assertCompiledProgram memoizes the asserted result by program identity', a
   expect(control.message).toContain('multiple html Parts own one DOM sink');
   // Failures are not memoized: the same invalid program re-validates and
   // re-throws on every call.
-  const failuresBaseline = serverAssertionPassCount();
   assertThrowsIncludes(() => assertCompiledProgram(twoSinks), Error);
-  expect(serverAssertionPassCount()).toBe(failuresBaseline + 1);
+  assertThrowsIncludes(() => assertCompiledProgram(twoSinks), Error);
 
   const program = testProgram({
     tag: 'oe-memo-html',
     template: [{ k: 'el', tag: 'div', attrs: [] as Array<[string, string]>, children: [] }],
     parts: [{ k: 'html', index: 0, signal: 'body', path: [0] }],
   });
-  const baseline = serverAssertionPassCount();
   const ir = assertCompiledProgram(program);
-  expect(serverAssertionPassCount()).toBe(baseline + 1);
-  // Same program object: the memoized assertion returns the one validated IR
-  // without re-walking the server validation surface — one pass per program
-  // object, not per SSR call.
+  // Same program object: the memoized assertion returns the one validated IR.
   expect(assertCompiledProgram(program)).toBe(ir);
-  expect(serverAssertionPassCount()).toBe(baseline + 1);
+
+  // Cache-hit proof without a diagnostics counter: mutate the raw program into
+  // the duplicate-sink shape the validator rejects. A fresh object with this
+  // shape throws (the control above); the SAME identity returns the cached IR
+  // and never re-walks the validation surface. This is the known limitation
+  // recorded in ADR-0174 (the compiler emits the literal once and no caller
+  // mutates it) — not a promise that mutating a program is safe.
+  (program.parts as unknown[]).push({ k: 'html', index: 1, signal: 'body2', path: [0] });
+  expect(assertCompiledProgram(program)).toBe(ir);
+
   // A structurally identical program under a NEW object identity is a
-  // different key: it validates (and fails on the server-only surface the
-  // same way the control did when its shape is forged).
+  // different key: it validates from scratch and fails closed on the forged
+  // duplicate sink.
   const clone = structuredClone(program);
-  assertCompiledProgram(clone);
-  expect(serverAssertionPassCount()).toBe(baseline + 2);
+  assertThrowsIncludes(() => assertCompiledProgram(clone), Error);
 });

@@ -378,7 +378,7 @@ test('a property row is a plain descriptor input the shell normalizes', () => {
   );
 });
 
-test('descriptor normalization is memoized by descriptor identity', () => {
+test('descriptor normalization is memoized by identity (known limitation: a mutated descriptor keeps the stale normalization)', () => {
   // A generated module evaluates its descriptor literal once, so the shell
   // normalizes it once: the SSR props resolver (per render) and the
   // class-definition pass reuse the one normalized descriptor instead of
@@ -396,6 +396,12 @@ test('descriptor normalization is memoized by descriptor identity', () => {
   // rejects. The identity contract returns the memoized normalization without
   // re-running it; a fresh object carrying the same rows still fails closed,
   // so the absence of a throw can only be the memoization.
+  //
+  // This is the known limitation recorded in ADR-0174 (amendment 2026-11-15):
+  // the descriptor is a compile-time literal that nothing mutates, and it is
+  // not frozen at runtime. Freezing would change the generated-module ABI
+  // shared by server and client, so the boundary is documented instead of
+  // enforced. The fresh-identity case below stays fail-closed.
   (descriptor.properties as GeneratedElementProperty[]).push({ name: 'label', type: 'string' });
   expect(() => resolveGeneratedElementProps(descriptor)).not.toThrow();
   expect(() =>
