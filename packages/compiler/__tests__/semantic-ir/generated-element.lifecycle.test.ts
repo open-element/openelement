@@ -94,7 +94,7 @@ function frontModuleWithRoot(
 ): FunctionModelModule {
   const front = compileFunctionModule(source, file, {
     importClassifier: GENERATED_ELEMENT_IMPORT_CLASSIFIER,
-    lifecycleRoot,
+    lifecycleAdmission: { admission: 'root', root: lifecycleRoot },
   });
   expect(front.diagnostics, front.diagnostics.map((item) => item.message).join('\n')).toEqual([]);
   return front.module!;
@@ -422,15 +422,22 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     const hook = 'onConnect(() => { globalThis.__oeX = 1; });';
     const importLine = "import { onConnect, onDispose } from '@openelement/element';\n";
 
-    const frontendCodes = (source: string, lifecycleRoot: string | undefined): string[] => {
+    const frontendCodes = (
+      source: string,
+      admission: { admission: 'root'; root: string } | { admission: 'module' } | undefined,
+    ): string[] => {
       const front = compileFunctionModule(source, '/proj/src/refused.tsx', {
         importClassifier: GENERATED_ELEMENT_IMPORT_CLASSIFIER,
-        ...(lifecycleRoot === undefined ? {} : { lifecycleRoot }),
+        ...(admission === undefined ? {} : { lifecycleAdmission: admission }),
       });
       return front.diagnostics.map((diagnostic) => diagnostic.code);
     };
+    const moduleAdmission = { admission: 'module' } as const;
+    const rootAdmission = { admission: 'root', root: 'Root' } as const;
 
-    // Nested component hook: the unchanged component-body statement refusal.
+    // Nested component hooks are admitted MODULE-WIDE by the frontend now; the
+    // generator owns the placement verdict (authored-span refusal), so the
+    // frontend reports no diagnostic here. `A9b` pins the placement gate.
     expect(
       frontendCodes(
         importLine +
@@ -438,9 +445,9 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
           hook +
           '\n  return <em>{props.x}</em>;\n}\n' +
           'function Root(props) { return <p><Child x={props.x} /></p>; }\n',
-        'Root',
+        moduleAdmission,
       ),
-    ).toEqual(['OEC9041']);
+    ).toEqual([]);
     // No lifecycle marker (function-page / hostless lane): same unchanged refusal.
     expect(
       frontendCodes(
@@ -460,21 +467,21 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
         'const fn = () => { globalThis.__oeX = 1; };\n' +
         importLine +
         `function Root(props) {\n  ${malformed}\n  return <p>{props.x}</p>;\n}\n`;
-      expect(frontendCodes(source, 'Root'), malformed).toEqual(['OEC9042']);
+      expect(frontendCodes(source, moduleAdmission), malformed).toEqual(['OEC9042']);
     }
     // A same-named foreign import or a local declaration is NOT an intrinsic.
     expect(
       frontendCodes(
         "import { onConnect } from 'somewhere-else';\n" +
           `function Root(props) {\n  ${hook}\n  return <p>{props.x}</p>;\n}\n`,
-        'Root',
+        rootAdmission,
       ),
     ).toEqual(['OEC9041']);
     expect(
       frontendCodes(
         `function onConnect(cb: () => void) { cb(); }\n` +
           `function Root(props) {\n  ${hook}\n  return <p>{props.x}</p>;\n}\n`,
-        'Root',
+        rootAdmission,
       ),
     ).toEqual(['OEC9041']);
   });
@@ -624,5 +631,165 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
       }
     }
     expect(callbackPlacements).toBe(3);
+  });
+
+  test('A12 a depth-1 retained hostless child carries hooks in its own setup record', () => {
+    const nested = (hooks: boolean): string =>
+      SIDECAR +
+      "import { onConnect, onDispose } from '@openelement/element';\n" +
+      'function Child(props: { seed: number }) {\n' +
+      '  const snapshot = props.seed;\n' +
+      (hooks
+        ? '  onConnect(() => {\n' +
+          '    globalThis.__oeChildConnect = snapshot;\n' +
+          '    return () => { globalThis.__oeChildCleanup = 1; };\n' +
+          '  });\n' +
+          '  onDispose(() => { globalThis.__oeChildDispose = 1; });\n'
+        : '') +
+      '  return <em className="child">{snapshot}</em>;\n' +
+      '}\n' +
+      'function Host(props: { seed: number }) {\n' +
+      '  const rootSnapshot = props.seed;\n' +
+      '  return <span className="root"><b>{rootSnapshot}</b><Child seed={props.seed} /></span>;\n' +
+      '}\n' +
+      'export default Host;\n';
+    const module = compileIsland('lifecycle-nested', nested(true));
+    // The depth-1 retained child's ONE setup factory carries both channels:
+    // connect callbacks recorded in the retained record, dispose registrations
+    // on the instance owner. No second lifecycle engine.
+    const childSetup = functionText(module, 'Child__setup');
+    expect(childSetup).toContain('__oe_connect.push((');
+    expect(childSetup).toContain('__oe_owner.add((');
+    expect(childSetup).toContain('return { snapshot, __oe_connect }');
+    // The child replays from its OWN retained setup record...
+    expect(functionText(module, 'Child__mount')).toContain('__oe_host.setup.__oe_connect');
+    // ...while the root body (no hooks here) never invents the setup channel.
+    expect(functionText(module, 'Host__mount')).not.toContain('setup.__oe_connect');
+    // The SSR producer is untouched by hooks (no invocation text).
+    const childSsr = functionText(module, 'Child__ssr');
+    expect(childSsr).not.toContain('__oe_connect');
+    expect(childSsr).not.toContain('__oe_owner');
+    // Root/module bytes that do not carry the hooks are unchanged by them.
+    const plain = compileIsland('lifecycle-nested-plain', nested(false));
+    expect(functionText(module, 'Host__ssr')).toBe(functionText(plain, 'Host__ssr'));
+    expect(functionText(module, 'Child__ssr')).toBe(functionText(plain, 'Child__ssr'));
+    expect(functionText(plain, 'Child__setup')).not.toContain('__oe_connect');
+    expect(functionText(plain, 'Child__setup')).not.toContain('__oe_owner.add');
+  });
+
+  test('A13 nested hook placement outside depth-1 fails closed at the AUTHORED span', () => {
+    const importLine = "import { onConnect } from '@openelement/element';\n";
+    const hookLine = '  onConnect(() => { globalThis.__oeNested = 1; });';
+    const authoredLine = (source: string): number =>
+      source.split('\n').findIndex((line) => line.includes('onConnect(')) + 1;
+    const cases: Array<{ name: string; source: string; expected: RegExp }> = [
+      {
+        name: 'depth2',
+        expected: /depth>=2|no lifecycle owner/,
+        source:
+          SIDECAR +
+          importLine +
+          'function Child(props: { seed: number }) {\n' +
+          hookLine +
+          '\n  return <em>{props.seed}</em>;\n}\n' +
+          'function Mid(props: { seed: number }) {\n' +
+          '  return <div><Child seed={props.seed} /></div>;\n}\n' +
+          'function Host(props: { seed: number }) {\n' +
+          '  return <span><Mid seed={props.seed} /></span>;\n}\n' +
+          'export default Host;\n',
+      },
+      {
+        name: 'recipe',
+        expected: /recipe\/list bodies|no lifecycle owner/,
+        source:
+          SIDECAR +
+          importLine +
+          'function Child(props: { seed: number }) {\n' +
+          hookLine +
+          '\n  return <em>{props.seed}</em>;\n}\n' +
+          'function Host(props: { seed: number }) {\n' +
+          '  const card = <Child seed={props.seed} />;\n' +
+          '  return <span>{card}</span>;\n}\n' +
+          'export default Host;\n',
+      },
+      {
+        name: 'list',
+        expected: /recipe\/list bodies|no lifecycle owner/,
+        source:
+          SIDECAR +
+          importLine +
+          'function Child(props: { seed: number }) {\n' +
+          hookLine +
+          '\n  return <em>{props.seed}</em>;\n}\n' +
+          'function Host(props: { seed: number }) {\n' +
+          '  return <span>{[props.seed].map((item) => <Child seed={item} />)}</span>;\n}\n' +
+          'export default Host;\n',
+      },
+      {
+        name: 'non-retained-target',
+        expected: /no lifecycle owner|depth>=2/,
+        source:
+          SIDECAR +
+          importLine +
+          'function Child(props: { seed: number }) {\n' +
+          hookLine +
+          '\n  return <em>{props.seed}</em>;\n}\n' +
+          'function Host(props: { seed: number }) {\n' +
+          '  return <span><Child seed={props.seed} /></span>;\n}\n' +
+          'export function Outer() {\n  return <Host seed={1} />;\n}\n' +
+          'export default Host;\n',
+      },
+    ];
+    for (const item of cases) {
+      const fact = site(`lifecycle-nested-refused-${item.name}`);
+      let error: unknown = null;
+      try {
+        compileGeneratedElementIfAdmitted(item.source, fact.file, { site: fact.site });
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error, item.name).not.toBeNull();
+      const diagnostics = (error as CompiledElementError).diagnostics;
+      const relevant = diagnostics.find(
+        (diagnostic) => diagnostic.code === 'OEIR_LEAF_INVALID_ARTIFACT',
+      );
+      expect(relevant, item.name).toBeDefined();
+      expect(relevant!.message, item.name).toMatch(item.expected);
+      // Authored span: the refusal points at the author's hook line, never 1:1.
+      expect(relevant!.file, item.name).toBe(fact.file);
+      expect(relevant!.line, item.name).toBe(authoredLine(item.source));
+    }
+  });
+
+  test('A14 a nested hook reading a host binding keeps the UNBOUND_BINDING refusal', () => {
+    // A module-scope read is a host binding in this lane (same rule that makes
+    // a root hook that reads one fail closed): the nested child cannot receive
+    // it through the retained setup record, so the existing module gate keeps
+    // the identity instead of emitting a factory with an undeclared name.
+    const source =
+      SIDECAR +
+      "import { onConnect } from '@openelement/element';\n" +
+      'const external = 1;\n' +
+      'function Child(props: { seed: number }) {\n' +
+      '  const snapshot = props.seed;\n' +
+      '  onConnect(() => { globalThis.__oeNestedExt = external + snapshot; });\n' +
+      '  return <em>{snapshot}</em>;\n' +
+      '}\n' +
+      'function Host(props: { seed: number }) {\n' +
+      '  return <span><Child seed={props.seed} /></span>;\n' +
+      '}\n' +
+      'export default Host;\n';
+    const fact = site('lifecycle-nested-binding');
+    let error: unknown = null;
+    try {
+      compileGeneratedElementIfAdmitted(source, fact.file, { site: fact.site });
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).not.toBeNull();
+    expect(codes(error)).toContain(GENERATED_ELEMENT_DIAGNOSTIC.UNBOUND_BINDING);
+    // The binding refusal is the module gate, not an invalid-artifact drop.
+    expect(codes(error)).not.toContain('OEIR_LEAF_INVALID_ARTIFACT');
+    expect(String((error as CompiledElementError).diagnostics[0]!.message)).toContain('"external"');
   });
 });

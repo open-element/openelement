@@ -263,20 +263,31 @@ export interface FunctionModelModule {
   readonly expressions: ExpressionRegistry;
 }
 
+/**
+ * `16b-LC` compiler-private lifecycle admission (never author syntax).
+ *
+ * - `root`: only the named component's direct top-level intrinsics are admitted
+ *   (the pre-nested slice behavior);
+ * - `module`: every component's direct top-level intrinsics are admitted. ONLY
+ *   the generated-element lane selects this mode, and the GENERATOR owns
+ *   placement: a hook is carried only by the generated element root setup or a
+ *   depth-1 retained hostless child setup; every other placement fails closed
+ *   with the authored span. No dispatcher, hook slot or lifecycle context is
+ *   introduced.
+ *
+ * Omitted (function pages, leaf tests, the facts projection) keeps the existing
+ * statement grammar exactly: a hook call stays the "statement outside the
+ * admitted component grammar" refusal (`OEC9041`).
+ */
+export type FunctionLifecycleAdmission =
+  | { readonly admission: 'root'; readonly root: string }
+  | { readonly admission: 'module' };
+
 export interface FunctionFrontendOptions {
   /** Host classifier for imported symbols (A1 §6); omitted = nothing known. */
   readonly importClassifier?: ImportClassifier;
-  /**
-   * `16b-LC` compiler-private admission marker: the component name whose
-   * direct top-level `onConnect`/`onDispose` intrinsic statements are admitted
-   * (the generated element ROOT the host lane resolved). Compiler-private and
-   * never author syntax. Omitted (function pages, leaf tests, the
-   * facts projection) keeps today's statement grammar exactly: a hook call
-   * stays the existing "statement outside the admitted component grammar"
-   * refusal, which is why nested/hostless hooks keep their current behavior
-   * with no new diagnostic code and no admission narrowing.
-   */
-  readonly lifecycleRoot?: string;
+  /** Compiler-private lifecycle admission; see {@linkcode FunctionLifecycleAdmission}. */
+  readonly lifecycleAdmission?: FunctionLifecycleAdmission;
 }
 
 export interface FunctionFrontendResult {
@@ -407,8 +418,8 @@ class FunctionFrontendBuilder {
   private readonly sourceFile: ts.SourceFile;
   private readonly resolved: ResolvedModule;
   private readonly registry: ExpressionRegistry;
-  /** `16b-LC`: the one component whose root lifecycle hooks are admitted. */
-  private readonly lifecycleRoot: string | undefined;
+  /** `16b-LC`: the compiler-private lifecycle admission mode for this module. */
+  private readonly lifecycleAdmission: FunctionLifecycleAdmission | undefined;
   private readonly diagnostics: CompilerDiagnostic[] = [];
   private readonly recipeIds = new Map<ts.Node, string>();
   /**
@@ -426,11 +437,11 @@ class FunctionFrontendBuilder {
   constructor(
     sourceFile: ts.SourceFile,
     resolved: ResolvedModule,
-    lifecycleRoot: string | undefined,
+    lifecycleAdmission: FunctionLifecycleAdmission | undefined,
   ) {
     this.sourceFile = sourceFile;
     this.resolved = resolved;
-    this.lifecycleRoot = lifecycleRoot;
+    this.lifecycleAdmission = lifecycleAdmission;
     this.registry = createExpressionRegistry({
       module: resolved,
       recipeReference: (jsx) => this.recipeReference(jsx),
@@ -690,11 +701,23 @@ class FunctionFrontendBuilder {
    * helper channel yet), so a parameter is refused rather than silently
    * receiving `undefined`.
    */
+  /**
+   * The compiler-private admission check. Placement (root vs depth-1 retained
+   * hostless child vs everywhere else) is NOT decided here: the generator owns
+   * that verdict and fails closed with the authored span, because only the
+   * emitted reference graph can tell whether a component is a retained body.
+   */
+  private admitsLifecycle(componentName: string): boolean {
+    const admission = this.lifecycleAdmission;
+    if (admission === undefined) return false;
+    return admission.admission === 'module' || admission.root === componentName;
+  }
+
   private buildLifecycleHook(
     statement: ts.ExpressionStatement,
     componentName: string,
   ): FunctionModelLifecycleHook | 'refused' | null {
-    if (this.lifecycleRoot !== componentName) return null;
+    if (!this.admitsLifecycle(componentName)) return null;
     const expression = statement.expression;
     if (!ts.isCallExpression(expression)) return null;
     const callee = unwrap(expression.expression);
@@ -1242,7 +1265,7 @@ export function compileFunctionModule(
   );
   if (diagnostics.length > 0) return { module: null, diagnostics };
 
-  const builder = new FunctionFrontendBuilder(sourceFile, resolved, options.lifecycleRoot);
+  const builder = new FunctionFrontendBuilder(sourceFile, resolved, options.lifecycleAdmission);
   const module = builder.build(components);
   return module === null
     ? { module: null, diagnostics: builder.diagnosticsView() }

@@ -91,6 +91,91 @@ const LIFECYCLE_SOURCE =
   '}\n' +
   'export default LifeCard;\n';
 
+const NESTED_SIDECAR = sidecar('seed: { default: 0 }, showChild: { default: true }');
+
+/**
+ * Nested/hostless depth-1 fixture: a ROOT component retains a direct hostless
+ * Child that declares both intrinsics. The Child's hooks are carried by its
+ * own retained `<Child>__setup` record (no root hook, no dispatcher): connection
+ * = the child projection's insertion, disposal = the retained owner's release
+ * (structural removal or parent teardown).
+ */
+const NESTED_SOURCE =
+  `import { onConnect, onDispose } from '@openelement/element';\n` +
+  NESTED_SIDECAR +
+  'function Child(props: { seed: number }) {\n' +
+  '  const setupRuns = (globalThis.__oeNestedSetupRuns = (globalThis.__oeNestedSetupRuns ?? 0) + 1);\n' +
+  '  const snapshot = props.seed;\n' +
+  '  onConnect(() => {\n' +
+  "    globalThis.__oeJournal.push('child-connect');\n" +
+  '    globalThis.__oeNestedSnapshotAtConnect = snapshot;\n' +
+  "    return () => { globalThis.__oeJournal.push('child-cleanup'); };\n" +
+  '  });\n' +
+  '  onDispose(() => {\n' +
+  "    globalThis.__oeJournal.push('child-dispose');\n" +
+  '  });\n' +
+  '  return <em className="nested-child">{snapshot}</em>;\n' +
+  '}\n' +
+  'function NestedHost(props: { seed: number; showChild: boolean }) {\n' +
+  '  const rootSnapshot = props.seed;\n' +
+  '  return (\n' +
+  '    <span className="nested-root">\n' +
+  '      <b>{rootSnapshot}</b>\n' +
+  '      {props.showChild ? <Child seed={props.seed} /> : null}\n' +
+  '    </span>\n' +
+  '  );\n' +
+  '}\n' +
+  'export default NestedHost;\n';
+
+/** Throwing nested connect: the child's FIRST callback registers a cleanup, the
+ *  second throws; the parent's connect pass must release the child's entries and
+ *  surface the original error (existing rollback, no new engine). */
+const NESTED_THROW_SOURCE =
+  `import { onConnect } from '@openelement/element';\n` +
+  NESTED_SIDECAR +
+  'function Child(props: { seed: number }) {\n' +
+  '  const snapshot = props.seed;\n' +
+  '  onConnect(() => {\n' +
+  "    globalThis.__oeJournal.push('child-connect-1');\n" +
+  "    return () => { globalThis.__oeJournal.push('child-cleanup-1'); };\n" +
+  '  });\n' +
+  '  onConnect(() => {\n' +
+  "    globalThis.__oeJournal.push('child-connect-2');\n" +
+  "    throw new Error('nested onConnect boom');\n" +
+  '  });\n' +
+  '  return <em>{snapshot}</em>;\n' +
+  '}\n' +
+  'function NestedThrowHost(props: { seed: number; showChild: boolean }) {\n' +
+  '  return <span>{props.showChild ? <Child seed={props.seed} /> : null}</span>;\n' +
+  '}\n' +
+  'export default NestedThrowHost;\n';
+
+/**
+ * SSR companion fixture: the SAME depth-1 child, but the root has no
+ * conditional branch (the SSR serializer does not admit an unsupported
+ * conditional shape, so the lifecycle fixture's root export is absent by
+ * design). Calling this module's real root producer proves the nested child's
+ * hooks never run on the server path.
+ */
+const NESTED_SSR_SOURCE =
+  `import { onConnect, onDispose } from '@openelement/element';\n` +
+  NESTED_SIDECAR +
+  'function Child(props: { seed: number }) {\n' +
+  '  const setupRuns = (globalThis.__oeNestedSetupRuns = (globalThis.__oeNestedSetupRuns ?? 0) + 1);\n' +
+  '  const snapshot = props.seed;\n' +
+  '  onConnect(() => {\n' +
+  "    globalThis.__oeJournal.push('child-connect');\n" +
+  '    globalThis.__oeNestedSnapshotAtConnect = snapshot;\n' +
+  "    return () => { globalThis.__oeJournal.push('child-cleanup'); };\n" +
+  '  });\n' +
+  "  onDispose(() => { globalThis.__oeJournal.push('child-dispose'); });\n" +
+  '  return <em>{snapshot}</em>;\n' +
+  '}\n' +
+  'function NestedSsrHost(props: { seed: number; showChild: boolean }) {\n' +
+  '  return <span><Child seed={props.seed} /></span>;\n' +
+  '}\n' +
+  'export default NestedSsrHost;\n';
+
 /**
  * Throw fixture: the first connect callback registers a cleanup, the second
  * throws. The existing shell connect catch must release the first cleanup and
@@ -187,6 +272,12 @@ declare global {
 }
 
 let browser: Browser;
+let nestedTag = '';
+let nestedBundle = '';
+let nestedThrowTag = '';
+let nestedThrowBundle = '';
+let nestedSsrBundle = '';
+let nestedSsrTag = '';
 let tempDir = '';
 let mainBundle = '';
 let throwBundle = '';
@@ -333,6 +424,27 @@ beforeAll(async () => {
     'dispose-cleanup',
     '__oeDisposeCleanup',
     disposeCleanup.component,
+  );
+  const nested = compileIsland('lifecycle-nested-browser', NESTED_SOURCE);
+  nestedTag = nested.tag;
+  nestedBundle = await buildBundle(tempDir, nested.code, 'nested', '__oeNested', nested.component);
+  const nestedThrow = compileIsland('lifecycle-nested-throw-browser', NESTED_THROW_SOURCE);
+  nestedThrowTag = nestedThrow.tag;
+  nestedThrowBundle = await buildBundle(
+    tempDir,
+    nestedThrow.code,
+    'nested-throw',
+    '__oeNestedThrow',
+    nestedThrow.component,
+  );
+  const nestedSsr = compileIsland('lifecycle-nested-ssr-browser', NESTED_SSR_SOURCE);
+  nestedSsrTag = nestedSsr.tag;
+  nestedSsrBundle = await buildBundle(
+    tempDir,
+    nestedSsr.code,
+    'nested-ssr',
+    '__oeNestedSsr',
+    nestedSsr.component,
   );
   browser = await chromium.launch();
 }, 180_000);
@@ -596,4 +708,160 @@ describe('16b-LC lifecycle hooks (Chromium)', () => {
       await page.close();
     }
   }, 120_000);
+
+  test('C5 a depth-1 nested hostless child connects per insertion, cleans at disconnect, setup once; SSR invokes nothing', async () => {
+    // SSR first, on the unconditional fixture whose real root producer is
+    // emitted: no child hook runs on the server path.
+    const ssrPage = await openPage(nestedSsrBundle);
+    try {
+      const ssr = await ssrPage.evaluate(() => {
+        const mod = window.__oeNestedSsr;
+        const html = mod.NestedSsrHost__ssr({ seed: 1, showChild: true });
+        return { html, journal: [...window.__oeJournal] };
+      });
+      expect(ssr.journal).toEqual([]);
+      expect(ssr.html).toContain('<em>');
+      expect(ssr.html).toContain('1<!--oe:/t:0-->');
+    } finally {
+      await ssrPage.close();
+    }
+    const page = await openPage(nestedSsrBundle);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeNestedSsr;
+        const tick = window.__oeTick;
+        customElements.define(tagName, mod.GeneratedElement);
+        const host = document.createElement(tagName) as HTMLElement & {
+          seed: number;
+          showChild: boolean;
+          dispose: (detach?: boolean) => void;
+        };
+        host.seed = 1;
+        host.showChild = true;
+        document.body.append(host);
+        await tick();
+        const afterFirstConnect = [...window.__oeJournal];
+        const setupRunsAfterFirst = window.__oeNestedSetupRuns;
+        const snapshotAtConnect = window.__oeNestedSnapshotAtConnect;
+        host.remove();
+        await tick();
+        const afterDisconnect = [...window.__oeJournal];
+        const setupRunsAfterDisconnect = window.__oeNestedSetupRuns;
+        document.body.append(host);
+        await tick();
+        const afterReconnect = [...window.__oeJournal];
+        const setupRunsAfterReconnect = window.__oeNestedSetupRuns;
+        host.dispose(true);
+        await tick();
+        return {
+          afterFirstConnect,
+          setupRunsAfterFirst,
+          snapshotAtConnect,
+          afterDisconnect,
+          setupRunsAfterDisconnect,
+          afterReconnect,
+          setupRunsAfterReconnect,
+          afterTeardown: [...window.__oeJournal],
+          errors: window.__oeErrors,
+        };
+      }, nestedSsrTag);
+      expect(result.errors).toEqual([]);
+      expect(result.afterFirstConnect).toEqual(['child-connect']);
+      expect(result.setupRunsAfterFirst).toBe(1);
+      expect(result.snapshotAtConnect).toBe(1);
+      expect(result.afterDisconnect).toEqual(['child-connect', 'child-cleanup']);
+      expect(result.setupRunsAfterDisconnect).toBe(1);
+      expect(result.afterReconnect).toEqual(['child-connect', 'child-cleanup', 'child-connect']);
+      expect(result.setupRunsAfterReconnect).toBe(1);
+      expect(result.afterTeardown).toEqual([
+        'child-connect',
+        'child-cleanup',
+        'child-connect',
+        'child-cleanup',
+        'child-dispose',
+      ]);
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('C5b structural removal disposes the retained depth-1 child exactly once', async () => {
+    const page = await openPage(nestedBundle);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeNested;
+        const tick = window.__oeTick;
+        customElements.define(tagName, mod.GeneratedElement);
+        const host = document.createElement(tagName) as HTMLElement & {
+          seed: number;
+          showChild: boolean;
+          dispose: (detach?: boolean) => void;
+        };
+        host.seed = 1;
+        host.showChild = true;
+        document.body.append(host);
+        await tick();
+        const afterConnect = [...window.__oeJournal];
+        const setupRunsAfterConnect = window.__oeNestedSetupRuns;
+        // Structural removal of the retained child (condition flips): the
+        // ledger releases the retained instance; its connection cleanup runs
+        // first, then its onDispose exactly once.
+        host.showChild = false;
+        await tick();
+        const afterStructuralRemoval = [...window.__oeJournal];
+        host.dispose(true);
+        await tick();
+        return {
+          afterConnect,
+          setupRunsAfterConnect,
+          afterStructuralRemoval,
+          afterTeardown: [...window.__oeJournal],
+          errors: window.__oeErrors,
+        };
+      }, nestedTag);
+      expect(result.errors).toEqual([]);
+      expect(result.afterConnect).toEqual(['child-connect']);
+      expect(result.setupRunsAfterConnect).toBe(1);
+      expect(result.afterStructuralRemoval).toEqual([
+        'child-connect',
+        'child-cleanup',
+        'child-dispose',
+      ]);
+      // Parent teardown after the child was already released adds no duplicate
+      // child disposal (except-once contract).
+      expect(result.afterTeardown).toEqual(result.afterStructuralRemoval);
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('C6 a throwing nested child connect releases earlier cleanups and surfaces the original error', async () => {
+    const page = await openPage(nestedThrowBundle);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeNestedThrow;
+        const tick = window.__oeTick;
+        customElements.define(tagName, mod.GeneratedElement);
+        const host = document.createElement(tagName) as HTMLElement & {
+          seed: number;
+          showChild: boolean;
+        };
+        host.seed = 1;
+        host.showChild = true;
+        document.body.append(host);
+        await tick();
+        return {
+          journal: [...window.__oeJournal],
+          errors: [...window.__oeErrors],
+          connected: host.isConnected,
+        };
+      }, nestedThrowTag);
+      // First child callback registered a cleanup, second threw: the shell's
+      // connect catch released it and the original error surfaced.
+      expect(result.errors.join('\n')).toContain('nested onConnect boom');
+      expect(result.journal).toEqual(['child-connect-1', 'child-connect-2', 'child-cleanup-1']);
+    } finally {
+      await page.close();
+    }
+  });
 });

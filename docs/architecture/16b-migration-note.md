@@ -230,3 +230,32 @@ No row flips and no status changes: light-root document application and
 client/shadow adoption (GH #1800) remain open, the dev server has no
 emitted-asset carrier and fails closed, and no M09/M11 status, P5 evidence,
 matrix cell or sign-off is created.
+
+## 2026-11-16 amendment — 16b-LC nested/hostless depth-1 hooks (facts only)
+
+This is a fact-only append. `16b-LC` remains **PARTIAL**; no gate, milestone,
+capability status or P5 row is flipped, and the ADR-0180 root-only decision text
+is not re-decided.
+
+- Delivered: a direct top-level `onConnect`/`onDispose` in a **depth-1 retained
+  hostless child** of the generated-element root (direct root-body reference,
+  not inside a reusable JSX/list body). The child's own `<Name>__setup` factory
+  records `__oe_connect` in its retained instance record and registers
+  `onDispose` on the same instance owner; mount/claim replay from
+  `host.setup.__oe_connect`. No dispatcher/hook slot/context/author API.
+- Implementation reading adopted by the slice (owner may later rule; not a
+  settled decision): hostless child **connection = its projection insertion
+  lifetime** (parent disconnect ⇒ child cleanups; structural removal / owner
+  teardown ⇒ child `onDispose` once, after that connection's cleanup).
+- Fail closed outside depth-1 (depth ≥ 2, recipe/list bodies, non-retained
+  targets, legacy-retention modules) at the authored span with
+  `OEIR_LEAF_INVALID_ARTIFACT`; host-binding reads keep `UNBOUND_BINDING`;
+  callback form refusals unchanged (`OEC9042`).
+- Byte identity: hook-free modules and root-hook modules keep their
+  pre-nested output (SHA pins green). Evidence: Node artifact suite + Chromium
+  user-level suite (connect per insertion, cleanup at disconnect, setup once,
+  structural-removal/teardown dispose once, throwing-connect rollback, SSR zero
+  invocation). LOCAL; single Chromium engine; not M09 exit / M13 matrix.
+- Still OWED in `16b-LC`: depth ≥ 2, recipe/list placement, non-retained
+  targets, connection-scope helper parameters, pre-DOM timing, and the remaining
+  signed-inventory rows.

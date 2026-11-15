@@ -128,3 +128,45 @@ Both conditions are events on a standard artifact (`public-interface-snapshot.js
   no compatibility adapter).
 - **Leaving the names unreleased while shipping them.** That is the unnamed
   deviation this record exists to end.
+
+## Amendment (2026-11-16): nested/hostless depth-1 hooks delivered
+
+This is an append-only fact record. The **root-only decision text above is
+unchanged and is not re-decided here**; this amendment only records what the
+`16b-LC` slice now delivers and the one reading it adopts.
+
+Delivered (same `16b-LC` slice; the root half was already delivered):
+
+- A direct top-level `onConnect`/`onDispose` intrinsic in a NON-root function
+  component is admitted only when the component is a **depth-1 retained
+  hostless child** of the generated-element root: its reference sits directly
+  in the root body, is not inside a reusable JSX/list body, and the target is
+  referenced only there. Its callbacks are recorded by that component's own
+  real synthesis factory (`<Name>__setup`) in the SAME retained instance record
+  namespace the root uses (`__oe_connect`); `onDispose` registers on the same
+  instance owner. No dispatcher, hook-order slot, lifecycle context, second
+  engine or author API is added. The child mount/claim prologues replay
+  `__oe_connect` from `host.setup`; the root keeps `host.bindings`
+  byte-for-byte, and hook-free modules and root-hook modules are unchanged.
+- **Placement reading adopted by this slice (IMPLEMENTATION READING, not a
+  re-decision):** a hostless child has no platform connection of its own, so its
+  **connection is the lifetime of its projection insertion in the parent body** —
+  the parent projection/connection ending runs the child's connect cleanups
+  (parent disconnect), while **structural removal** (condition/target removal)
+  or the **parent's instance-owner teardown** releases the retained child and
+  runs its `onDispose` exactly once, after that connection's cleanup. This
+  reading keeps "setup once per retained instance" and reuses the existing
+  `LifetimeScope`/ledger cascade without a new channel. It is what this slice
+  implements; the owner may later rule to change the semantics (for example a
+  distinct child connection callback), in which case this amendment is
+  superseded rather than treated as settled.
+- Every placement outside depth-1 (depth ≥ 2, reusable JSX/list bodies,
+  non-retained targets, or a module whose retention plan falls back to legacy)
+  fails closed at the AUTHORED span with the existing
+  `OEIR_LEAF_INVALID_ARTIFACT`; a hook that reads a host binding keeps the
+  existing `UNBOUND_BINDING` refusal; the callback form rules (`OEC9042`) are
+  unchanged.
+- No public surface/snapshot change, no status flip: retirement condition 2
+  remains open until the `16b-LC` nested/hostless rows go green in the signed
+  capability inventory and the corresponding emitter tests run at one clean
+  SHA.
