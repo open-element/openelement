@@ -18,6 +18,9 @@
  *   the listener; reconnect re-installs both under the fresh claim;
  * - CSR mount installs both, and a reconnect after mount claims the retained
  *   DOM with the listener/ref re-installed;
+ * - update: a prop write re-renders the value slots of the same nodes in place
+ *   and never re-installs the ref/listener (CSR mount and claim paths; the
+ *   attach/cleanup counters stay flat and one dispatch is one hit);
  * - `dispose(false)` keeps the claimed tree and `dispose(true)` removes the
  *   owned region;
  * - failure semantics: a claim mismatch installs NOTHING; a phase-2
@@ -117,6 +120,10 @@ interface PageRuntime {
   ConditionalCard__ssr: (props?: unknown, host?: unknown) => string;
   ConditionalCard__ssrHost: (props: unknown, lightChildren?: string) => string;
   createConditionalCardRecipe: (owner: unknown, host: unknown) => unknown;
+  UpdateElement: CustomElementConstructor;
+  UpdateCard__ssr: (props?: unknown, host?: unknown) => string;
+  UpdateCard__ssrHost: (props: unknown, lightChildren?: string) => string;
+  createUpdateCardRecipe: (owner: unknown, host: unknown) => unknown;
   PruneElement: CustomElementConstructor;
   PruneCard__ssr: (props?: unknown, host?: unknown) => string;
   PruneCard__ssrHost: (props: unknown, lightChildren?: string) => string;
@@ -170,6 +177,33 @@ function ConditionalCard(props: { flag: boolean }) {
   );
 }
 export default ConditionalCard;
+`;
+
+/**
+ * The update fixture: the ref-bearing `<input>` also carries a dynamic
+ * attribute (`title={props.label}`) while a sibling renders `{props.tick}`, so
+ * a prop write is a real update of the node the ref attached to.
+ */
+const UPDATE_SOURCE =
+  "import { defineIslandConfig } from '@openelement/router';\n" +
+  "export const openElement = defineIslandConfig({ hydrate: 'idle', root: 'shadow', " +
+  "properties: { label: { attribute: false, default: 'seed' }, tick: { attribute: false, default: 0 } } });\n" +
+  `
+function UpdateCard(props: { label: string; tick: number }) {
+  return (
+    <div>
+      <button id="hit" onClick={() => (globalThis.__updHits = (globalThis.__updHits ?? 0) + 1)}>hit</button>
+      <input id="field" title={props.label} ref={(el) =>
+        el === null
+          ? undefined
+          : ((globalThis.__updSeen = (globalThis.__updSeen ?? 0) + 1),
+            () => (globalThis.__updClean = (globalThis.__updClean ?? 0) + 1))}
+      />
+      <span id="tick">{props.tick}</span>
+    </div>
+  );
+}
+export default UpdateCard;
 `;
 
 const PRUNE_SOURCE =
@@ -306,6 +340,11 @@ beforeAll(async () => {
   });
   expect(prune).not.toBeNull();
 
+  const update = compileGeneratedElementIfAdmitted(UPDATE_SOURCE, FILE, {
+    site: { tag: 'update-card' },
+  });
+  expect(update).not.toBeNull();
+
   // The two failure islands need host bindings, which the generated-element
   // lane deliberately refuses; the modules are emitted through the same emitter
   // for the runtime precondition tests only (no production wiring claim).
@@ -368,6 +407,11 @@ beforeAll(async () => {
         'PruneCard__ssrHost',
         'createPruneCardRecipe',
       ],
+    },
+    {
+      file: 'update.js',
+      code: update!.code,
+      exports: ['default as UpdateElement', 'UpdateCard__ssrHost', 'createUpdateCardRecipe'],
     },
   ]);
   browser = await chromium.launch();
@@ -826,6 +870,126 @@ describe('M09 intrinsic event/ref on the generated native element (Chromium)', (
       expect(result.off).toEqual({ branch: false, refNull: 1 });
       expect(result.on).toEqual({ branch: true, refSeen: 2 });
       expect(result.hitsAfter).toBe(2);
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('prop updates after CSR mount and after claim rewrite in place without re-installing ref/listener', async () => {
+    const page = await openPage();
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeEventRef;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        const win = window as unknown as {
+          __updHits?: number;
+          __updSeen?: number;
+          __updClean?: number;
+        };
+        const reset = (): void => {
+          win.__updHits = 0;
+          win.__updSeen = 0;
+          win.__updClean = 0;
+        };
+        const snapshot = (shadow: ShadowRoot, field: HTMLElement): Record<string, unknown> => ({
+          seen: win.__updSeen,
+          clean: win.__updClean,
+          sameNode: shadow.querySelector('#field') === field,
+          title: field.getAttribute('title'),
+          tick: shadow.querySelector('#tick')?.textContent ?? '',
+        });
+        const click = (hit: HTMLElement): void => {
+          hit.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        };
+        reset();
+        customElements.define(tagName, mod.UpdateElement);
+        // CSR mount: one attach and one listener on the created nodes.
+        const host = document.createElement(tagName) as HTMLElement & {
+          label: string;
+          tick: number;
+        };
+        document.body.append(host);
+        await tick();
+        const shadow = host.shadowRoot!;
+        const field = shadow.querySelector('#field') as HTMLElement;
+        const hit = shadow.querySelector('#hit') as HTMLElement;
+        const mounted = snapshot(shadow, field);
+        host.label = 'label-a';
+        host.tick = 2;
+        await tick();
+        click(hit);
+        const mountedUpdated = { ...snapshot(shadow, field), hits: win.__updHits };
+        (host as unknown as { dispose: (detach?: boolean) => void }).dispose(true);
+        const mountedDisposed = { clean: win.__updClean };
+
+        // Claim path through the real SSR host producer: same guarantees on the
+        // adopted node. Two dispatches must be exactly two hits, so the updates
+        // added no second listener.
+        reset();
+        const frame = document.createElement('div');
+        frame.setHTMLUnsafe(mod.UpdateCard__ssrHost({ label: 'seed', tick: 0 }));
+        const claimedHost = frame.firstElementChild as HTMLElement & {
+          label: string;
+          tick: number;
+        };
+        document.body.append(frame);
+        await tick();
+        const claimedShadow = claimedHost.shadowRoot!;
+        const claimedField = claimedShadow.querySelector('#field') as HTMLElement;
+        const claimedHit = claimedShadow.querySelector('#hit') as HTMLElement;
+        const claimed = snapshot(claimedShadow, claimedField);
+        claimedHost.label = 'after-claim';
+        claimedHost.tick = 5;
+        await tick();
+        click(claimedHit);
+        click(claimedHit);
+        const claimedUpdated = {
+          ...snapshot(claimedShadow, claimedField),
+          hits: win.__updHits,
+        };
+        claimedHost.remove();
+        await tick();
+        return {
+          mounted,
+          mountedUpdated,
+          mountedDisposed,
+          claimed,
+          claimedUpdated,
+          claimedDisconnected: { clean: win.__updClean },
+        };
+      }, 'update-card');
+      expect(result.mounted).toEqual({
+        seen: 1,
+        clean: 0,
+        sameNode: true,
+        title: 'seed',
+        tick: '0',
+      });
+      expect(result.mountedUpdated).toEqual({
+        seen: 1,
+        clean: 0,
+        sameNode: true,
+        title: 'label-a',
+        tick: '2',
+        hits: 1,
+      });
+      expect(result.mountedDisposed).toEqual({ clean: 1 });
+      expect(result.claimed).toEqual({
+        seen: 1,
+        clean: 0,
+        sameNode: true,
+        title: 'seed',
+        tick: '0',
+      });
+      expect(result.claimedUpdated).toEqual({
+        seen: 1,
+        clean: 0,
+        sameNode: true,
+        title: 'after-claim',
+        tick: '5',
+        hits: 2,
+      });
+      expect(result.claimedDisconnected).toEqual({ clean: 1 });
     } finally {
       await page.close();
     }

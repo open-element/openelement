@@ -23,6 +23,9 @@
  * - claim ordering: installation is emitted after the structural mismatch walk
  *   (phase-2), so a claim mismatch installs nothing; the claim's static
  *   attribute seed does not treat event/ref names as DOM attributes;
+ * - update: value slots refresh in place against the same element the ref
+ *   attached to, and no refresh adds a second install site (consumer form: the
+ *   Chromium update vertical in `generated-element.event-ref.browser.test.ts`);
  * - SSR exclusion: event/ref render no bytes, keep the M08-1a static
  *   no-argument form and bytes, and never request a handler callable via
  *   `requireBinding`;
@@ -534,6 +537,53 @@ describe('claim installs client-only channels only after the structural walk', (
     expect(lastMismatch).toBeGreaterThanOrEqual(0);
     expect(refInstall).toBeGreaterThan(lastMismatch);
     expect(claim).toMatch(/__oe_refHandler\d+\(null\)/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Update phase: the ref-attached node is rewritten in place, never rebuilt
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The ref-bearing `<input>` also carries a dynamic attribute
+ * (`title={props.label}`) while an unrelated sibling renders `{props.tick}`:
+ * a props write is a real update of the node the ref attached to.
+ */
+const UPDATE_COMPONENT = `
+function C(props) {
+  return (
+    <div>
+      <button id="hit" onClick={() => (globalThis.__hits = (globalThis.__hits ?? 0) + 1)}>hit</button>
+      <input id="field" title={props.label} ref={(el) => (el === null ? undefined : () => {})} />
+      <span id="tick">{props.tick}</span>
+    </div>
+  );
+}
+`;
+
+describe('update path rewrites the ref-attached node in place', () => {
+  test('props updates target the attached element and add no install site', () => {
+    const compilation = compileLeaf(UPDATE_COMPONENT);
+    expect(compilation.module).not.toBeNull();
+    const moduleText = compilation.module!;
+    const install = /const (__oe_refCleanup\d+) = __oe_refHandler\d+\((__oe_el\d+)\);/.exec(
+      moduleText,
+    );
+    expect(install, 'mount ref install').not.toBeNull();
+    const [, cleanupName, elementName] = install!;
+    expect(moduleText).toContain(
+      `__oe_scope.add(() => { try { if (typeof ${cleanupName} === "function") ${cleanupName}(); } finally {`,
+    );
+    // The attribute slot refresh writes the SAME element variable the ref was
+    // called with (in-place update, no node rebuild); the props channel drives
+    // both slots, so this is the real update path.
+    expect(moduleText).toContain(`${elementName}.setAttribute("title"`);
+    const propsBindings =
+      moduleText.match(/bindSignalWrites\(__oe_scope, __oe_propDep, "props", __oe_refresh\d+\)/g) ??
+      [];
+    expect(propsBindings.length).toBeGreaterThanOrEqual(2);
+    // Mount and claim are the only install sites; the update path adds none.
+    expect(moduleText.match(/const __oe_refCleanup\d+ = /g)?.length).toBe(2);
   });
 });
 
