@@ -165,6 +165,20 @@ generated pages, light-root document styles, canonical shell seeds),
   full_qualification=true`) and are not claimed. This CI record is provenance
   for the SHA; it is not substituted into the `LOCAL` rows above.
 
+### Full source gate at the final feature head
+
+| Field | Record |
+| --- | --- |
+| commit | `61b7eeac0129f3b3e0e07f63fe93cb6b7bbaa6a8` |
+| status | clean (`git status --porcelain` empty before and after the run) |
+| command | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo gate:source` |
+| result | exit 0; `gate ok: 20 step(s)`, every step PASS. Suites inside the gate: element 124 files / 969 tests, router 159 files / 1834 tests, request-time fixture build + three-engine E2E 342 passed, base-path fixture E2E 9 passed, Element browser gate 28 passed; generator wiring, seams registry (with merge-base Owner-state ratchet), output discipline, constitution parity, shims, ADR index, docs index, content dates, doc claims and the interface snapshot all passed. |
+| provenance | `LOCAL` (macOS arm64, Node 24.18.0); no CI identity. |
+
+Boundary: this is the LOCAL 20-step source gate only. It does not run the
+five dispatch-only heavy qualification jobs, does not qualify a production app
+for P1, does not execute M12/M13 and does not flip any milestone or status row.
+
 ### What these 2026-11-16 records do not do
 
 - No milestone, exit, closeout or release claim: M09, M10, M11, M12, M13 and
