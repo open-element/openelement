@@ -335,10 +335,13 @@ carrier: [the M14 definition](../architecture/m14-full-await-definition.md)).
   untyped reads. The code stays `OEC9032`; this is a message contract, not an
   admission change.
 - **Verification (LOCAL, 2026-11-17, lane C2).** Clean worktree at
-  `aa1f949d92f4ab3fa2eff64c95bc4f74c9741f9a`: the compiler full-await suite
-  (29 tests, including the three reserved-callee rows added by that
-  verification), the router function-page/entry-guard suites (54) and the
-  element thenable-backstop suite (19) all pass; the full record lives in
+  `7bdb1a2064706abd70fe31398ce6929f7b5fcfb9` — the commit that contains the
+  29-test suite as run (26 pre-existing rows were green at the earlier
+  `aa1f949d9`; the three reserved-callee rows landed in `7bdb1a206`, and the
+  suite was re-executed clean there through the canonical vp task entry): the
+  compiler full-await suite (29), the router function-page/entry-guard suites
+  (54) and the element thenable-backstop suite (19) all pass; the full record,
+  including the mis-attribution correction, lives in
   [the definition's §9](../architecture/m14-full-await-definition.md).
 - This amendment changes no decision above, no admission, and no milestone
   status. The M14 exit row and the TSX-17 matrix cells stay with the

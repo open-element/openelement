@@ -279,11 +279,23 @@ integration single-writer.
 
 | Field | Record |
 | --- | --- |
-| commit | `aa1f949d92f4ab3fa2eff64c95bc4f74c9741f9a` (branch `work/alpha16-qualification`, isolated worktree) |
-| status | clean before the runs (`git status --porcelain` empty); the only tree change after them is this lane's targeted test + doc amendments, committed locally |
-| commands | `node_modules/.bin/vitest run --project compiler packages/compiler/__tests__/server-component-full-await.test.ts` → **29 passed** (26 pre-existing + 3 new reserved-callee rows below); `node_modules/.bin/vitest run --project router packages/router/__tests__/function-page.test.ts packages/router/__tests__/browser-entry-boundary.test.ts packages/router/__tests__/entry-graph-boundary.test.ts` → **3 files / 54 passed**; `node_modules/.bin/vitest run --project element packages/element/__tests__/server-html.test.ts` → **1 file / 19 passed** |
+| commit | `7bdb1a2064706abd70fe31398ce6929f7b5fcfb9` (branch `work/alpha16-qualification`, isolated worktree) — the commit that contains the 29-test suite as run |
+| status | clean before and after the runs at this commit (`git status --porcelain` empty at `7bdb1a206`, before and after every command below) |
+| commands | `node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/compiler test packages/compiler/__tests__/server-component-full-await.test.ts` → **1 file / 29 passed**; `node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/router test packages/router/__tests__/function-page.test.ts packages/router/__tests__/browser-entry-boundary.test.ts packages/router/__tests__/entry-graph-boundary.test.ts` → **3 files / 54 passed**; `node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/element test packages/element/__tests__/server-html.test.ts` → **1 file / 19 passed** — each vp call forwards the file targets to the package task's `vitest run` script (verified live; the dispatch log shows the script line with the targets appended) |
 | result | all green, Node v24 (LOCAL, no CI identity, chromium not required — TSX-17 is SSR-only) |
 | provenance | LOCAL (isolated worktree); not a gate, not M13, not a milestone exit |
+
+**Correction (2026-11-17; append-never-rewrite, corrected by a docs-only commit
+that carries no test change and cites no run of its own).** The first recording
+of this section named `aa1f949d9` as the verification commit with 29 tests: that
+was wrong. The 26 pre-existing rows were green at `aa1f949d9` (direct
+`node_modules/.bin/vitest` call), the three reserved-callee rows were added in
+`7bdb1a206`, and the suite as run (29/54/19) was re-executed clean at
+`7bdb1a206` itself — first via the direct `vitest` call, then via the canonical
+vp task entry above. The verification SHA is therefore `7bdb1a206`, and the
+dirty intermediate runs (test file edited before commit) are not baseline-clean
+records. The pre-correction text stands as the mis-attribution history; this
+paragraph is the correction.
 
 **Coverage map (read from the passing rows, not asserted).**
 
