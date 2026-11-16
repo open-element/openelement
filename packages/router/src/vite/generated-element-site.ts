@@ -40,11 +40,67 @@
  * carries no class program to scan.
  */
 
+import { createRequire } from 'node:module';
 import { normalizeSeparators, transformIslandSource } from '@openelement/element/build-utils';
-import type { GeneratedElementSite } from '@openelement/compiler';
+import { stableModuleId, type GeneratedElementSite } from '@openelement/compiler';
+import type { IslandDecl } from '@openelement/protocol/ssg';
 
 /** One island module's registration site, or null when the module is not one. */
 export type GeneratedElementSiteResolver = (moduleId: string) => GeneratedElementSite | null;
+
+/**
+ * The package-side facts this module needs: the declaration's tag and the
+ * `openElement.module` specifier the island pipeline already ships.
+ */
+export type PackageIslandSiteDeclaration = Pick<IslandDecl, 'tagName' | 'modulePath' | 'source'>;
+
+export interface PackageIslandSiteOptions {
+  /** The app root the host anchors stable module ids on. */
+  readonly root: string;
+  /** The workspace root used as the second identity anchor. */
+  readonly workspaceRoot?: string;
+}
+
+/**
+ * Resolve the `source: 'package'` island declarations to the host's own stable
+ * module ids (`stableModuleId` of the Node-resolved module file), so the
+ * generated-element site fact can admit a workspace/installed package module.
+ *
+ * This is the package half of the site fact and it stays a CONSUMER of the
+ * declaration list: the tag still comes from the package manifest declaration
+ * (`buildPackageIslandDecls`), never from a path derivation, so a package
+ * module and its local counterpart cannot produce two different tags.
+ *
+ * Resolution is Node's (the package's own `exports` map), anchored on the app
+ * root: a specifier the host cannot resolve is skipped rather than guessed —
+ * an unresolvable package island is already a coded failure in the island
+ * pipeline, and the generated lane must not invent a tag for it.
+ */
+export function collectPackageIslandModuleSites(
+  declarations: readonly PackageIslandSiteDeclaration[],
+  options: PackageIslandSiteOptions,
+): ReadonlyMap<string, string> {
+  const requireFromRoot = createRequire(`${options.root}/package.json`);
+  const sites = new Map<string, string>();
+  for (const declaration of declarations) {
+    if (declaration.source !== 'package') continue;
+    const specifier = declaration.modulePath;
+    if (specifier === undefined || specifier === '') continue;
+    let resolved: string;
+    try {
+      resolved = requireFromRoot.resolve(specifier);
+    } catch {
+      continue;
+    }
+    sites.set(stableModuleId(resolved, options.root, options.workspaceRoot), declaration.tagName);
+  }
+  return sites;
+}
+
+/** A precomputed map, or a lazy provider the dev host re-reads after its scan. */
+export type PackageIslandSiteFacts =
+  | ReadonlyMap<string, string>
+  | (() => ReadonlyMap<string, string> | undefined);
 
 /**
  * Build the site closure once per host (one build, one dev server), over the
@@ -54,7 +110,9 @@ export type GeneratedElementSiteResolver = (moduleId: string) => GeneratedElemen
  * derives with `stableModuleId` — so a project-relative path like
  * `app/islands/profile-card.tsx` answers `{ tag: 'profile-card' }`. An absolute
  * id is admitted only when it still carries the `islandsDir` segment, exactly
- * as the island transform would admit it.
+ * as the island transform would admit it. A workspace/installed package module
+ * is admitted through `packageSites` (see `collectPackageIslandModuleSites`),
+ * keyed by the same stable id.
  *
  * The answer is the tag only. The descriptor root (and `delegatesFocus`,
  * `formAssociated`, `properties`, and the M09-2e `styles` presence) is read by
@@ -64,9 +122,13 @@ export type GeneratedElementSiteResolver = (moduleId: string) => GeneratedElemen
  */
 export function createGeneratedElementSiteResolver(
   islandsDir: string,
+  packageSites?: PackageIslandSiteFacts,
 ): GeneratedElementSiteResolver {
   const normalizedIslandsDir = normalizeSeparators(islandsDir);
+  const readPackageSites = typeof packageSites === 'function' ? packageSites : () => packageSites;
   return (moduleId: string) => {
+    const packageTag = readPackageSites()?.get(moduleId);
+    if (packageTag !== undefined) return { tag: packageTag };
     // The island transform is the authority for admission AND tag: it strips
     // query/hash, rejects non-script paths, anchors the islands segment on its
     // last occurrence and derives the tag with `pathToTagName`. Calling it with

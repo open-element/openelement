@@ -59,7 +59,10 @@ import {
   generateSsrPolyfillBanner,
 } from '../vite/internal/ssg/index.ts';
 import { clearStyleRequests, compiledElementPlugin } from '@openelement/compiler';
-import { createGeneratedElementSiteResolver } from '../vite/generated-element-site.ts';
+import {
+  collectPackageIslandModuleSites,
+  createGeneratedElementSiteResolver,
+} from '../vite/generated-element-site.ts';
 import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
 import { serverStyleAssetPlugin } from '../vite/internal/style-assets.ts';
 import {
@@ -646,7 +649,13 @@ async function buildSSG(
           // The generated Native Custom Element site (M09-1b): the SSR build
           // must lower an admitted island's function default export to the
           // same generated class the client build emits.
-          generatedElementSite: createGeneratedElementSiteResolver(islandsDir),
+          generatedElementSite: createGeneratedElementSiteResolver(
+            islandsDir,
+            collectPackageIslandModuleSites(ctx.phase1.packageIslandDecls, {
+              root,
+              workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
+            }),
+          ),
         }),
         // serves the server half of the style edge protocol — the
         // sheet adapter embeds the authored .css file's bytes, the same bytes

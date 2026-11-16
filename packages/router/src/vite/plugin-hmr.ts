@@ -29,7 +29,10 @@ import {
   styleRequestModuleId,
 } from '@openelement/compiler';
 import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
-import { createGeneratedElementSiteResolver } from './generated-element-site.ts';
+import {
+  collectPackageIslandModuleSites,
+  createGeneratedElementSiteResolver,
+} from './generated-element-site.ts';
 import { styleAssetGraphId } from './internal/style-assets.ts';
 import { devClientModulePath } from './internal/dev-client-path.ts';
 import {
@@ -58,8 +61,26 @@ export function createCompilerHooks(
   // captures. The generated lane needs the tag the island pipeline will
   // register; the compiler transform runs before the island transform, so the
   // host supplies it (M09-1b).
+  // Package islands ride the same site fact: the declaration list comes from
+  // the phase-1 scan, and the dev host re-reads it lazily because a package
+  // module can be transformed after the scan populated the context. The map is
+  // cached by declaration-array identity (the scan replaces the array only when
+  // it runs).
+  let packageSiteDecls: unknown;
+  let packageSites: ReadonlyMap<string, string> = new Map();
   const generatedElementSite = createGeneratedElementSiteResolver(
     state.resolvedOptions.islandsDir!,
+    () => {
+      const decls = state.ctx.phase1.packageIslandDecls;
+      if (decls !== packageSiteDecls) {
+        packageSiteDecls = decls;
+        packageSites = collectPackageIslandModuleSites(decls, {
+          root: state.viteRoot ?? process.cwd(),
+          workspaceRoot: state.workspaceRoot,
+        });
+      }
+      return packageSites;
+    },
   );
 
   const programShape = (program: unknown): string => {
