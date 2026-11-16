@@ -262,11 +262,33 @@ export interface FunctionModelComponent {
 }
 
 /** The lowered module: components plus the per-compilation expression sidecar. */
+/**
+ * One static import of the authored module, as the generated lane may keep it.
+ *
+ * The generated module replaces the authored one at the same graph position, so
+ * a used import is re-emitted verbatim (`specifier` + the local spelling) and a
+ * read of it stays a direct module reference instead of becoming a host
+ * binding. The sidecar helper and the erased intrinsics are never READ in a
+ * component body, so they are never re-emitted.
+ */
+export interface FunctionModelImport {
+  readonly specifier: string;
+  readonly imported: string;
+  readonly local: string;
+  readonly form: 'named' | 'default' | 'namespace';
+}
+
 export interface FunctionModelModule {
   readonly file: string;
   readonly components: readonly FunctionModelComponent[];
   /** A2 sidecar: lowered text, captures/dependencies, anchors, segments. */
   readonly expressions: ExpressionRegistry;
+  /**
+   * The module's static (non-type-only) imports. Optional so a hand-built model
+   * in a fixture keeps its exact meaning; the generated lane treats an absent
+   * list as "no import channel".
+   */
+  readonly imports?: readonly FunctionModelImport[];
 }
 
 /**
@@ -1236,7 +1258,47 @@ class FunctionFrontendBuilder {
       file: this.sourceFile.fileName,
       components,
       expressions: this.registry,
+      imports: this.collectModuleImports(),
     };
+  }
+
+  /**
+   * The module's static import table. Type-only and side-effect imports carry
+   * no readable binding, so they are not part of it; a named alias keeps the
+   * authored `imported as local` spelling.
+   */
+  private collectModuleImports(): FunctionModelImport[] {
+    const imports: FunctionModelImport[] = [];
+    for (const statement of this.sourceFile.statements) {
+      if (!ts.isImportDeclaration(statement)) continue;
+      if (!ts.isStringLiteral(statement.moduleSpecifier)) continue;
+      const clause = statement.importClause;
+      if (clause === undefined || clause.isTypeOnly) continue;
+      const specifier = statement.moduleSpecifier.text;
+      if (clause.name !== undefined) {
+        imports.push({ specifier, imported: 'default', local: clause.name.text, form: 'default' });
+      }
+      const bindings = clause.namedBindings;
+      if (bindings !== undefined && ts.isNamespaceImport(bindings)) {
+        imports.push({
+          specifier,
+          imported: '*',
+          local: bindings.name.text,
+          form: 'namespace',
+        });
+      } else if (bindings !== undefined) {
+        for (const element of bindings.elements) {
+          if (element.isTypeOnly) continue;
+          imports.push({
+            specifier,
+            imported: (element.propertyName ?? element.name).text,
+            local: element.name.text,
+            form: 'named',
+          });
+        }
+      }
+    }
+    return imports;
   }
 }
 

@@ -382,7 +382,12 @@ describe('M03-I-4b — expression-level parity with the Alpha15 map convention',
       FILE,
     );
     expect(result.diagnostics).toEqual([]);
-    expect(Object.keys(result.module!).sort()).toEqual(['components', 'expressions', 'file']);
+    expect(Object.keys(result.module!).sort()).toEqual([
+      'components',
+      'expressions',
+      'file',
+      'imports',
+    ]);
     expect(result.module).not.toHaveProperty('code');
     expect(result.module).not.toHaveProperty('map');
     // The class frontend's composed module map is the Alpha15 side; the

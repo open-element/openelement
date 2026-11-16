@@ -383,9 +383,10 @@ describe('SSR producer excludes client-only channels and prunes unreachable loca
       "import { format } from './util';\nfunction C(props) { const helper = () => format(); return <button title={props.t} onClick={() => helper()}>{props.x}</button>; }\n",
     );
     expect(compilation.module).not.toBeNull();
-    // The mount still needs the callable (the handler may run), but the SSR
-    // producer never evaluates or requests it.
-    expect(compilation.requiredBindings).toEqual(['format']);
+    // The import is a static module reference now (binding import channel), not
+    // a host binding; the SSR producer still never evaluates or requests it.
+    expect(compilation.requiredBindings).toEqual([]);
+    expect(compilation.module).toContain('import { format } from "./util";');
     const ssr = ssrSection(compilation);
     expect(ssr).not.toContain('const helper =');
     expect(ssr).not.toContain('requireBinding("format")');
@@ -592,16 +593,18 @@ describe('update path rewrites the ref-attached node in place', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('binding/import carry is not faked', () => {
-  test('an imported handler is a host binding and the lane refuses UNBOUND_BINDING', () => {
+  test('an imported handler is a static reference the module re-emits', () => {
     const component =
       "import { handler } from './util';\nfunction C() { return <button onClick={handler}>go</button>; }\n";
     const leaf = compileLeaf(component);
     expect(leaf.module).not.toBeNull();
-    expect(leaf.requiredBindings).toEqual(['handler']);
-    const error = laneError(island(component));
-    expect(error.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
-      GENERATED_ELEMENT_DIAGNOSTIC.UNBOUND_BINDING,
-    ]);
+    // The binding import channel keeps the static import: it is not a host
+    // binding and the lane does not refuse the module.
+    expect(leaf.requiredBindings).toEqual([]);
+    expect(leaf.module).toContain('import { handler } from "./util";');
+    expect(() =>
+      compileGeneratedElementIfAdmitted(island(component), FILE, { site: SITE }),
+    ).not.toThrow();
   });
 
   test('a handler closing over an owned signal keeps the signal-carry refusal', () => {

@@ -91,7 +91,7 @@ export default EventRefCard;
 
 /**
  * The failure island: a plain local button listener (installed first) followed
- * by a ref that reads an imported host binding. The bindings value is supplied
+ * by a ref that reads an imported static value. The value is supplied
  * as a non-callable by the test, so the ref validation throws in claim phase 2
  * AFTER the listener was installed; the owner rollback must release it.
  */
@@ -345,9 +345,9 @@ beforeAll(async () => {
   });
   expect(update).not.toBeNull();
 
-  // The two failure islands need host bindings, which the generated-element
-  // lane deliberately refuses; the modules are emitted through the same emitter
-  // for the runtime precondition tests only (no production wiring claim).
+  // The two failure islands read non-callable statics through the binding
+  // import channel; the modules are emitted through the same emitter for the
+  // runtime precondition tests only (no production wiring claim).
   const failure = generateElementModule(frontModule(FAILURE_SOURCE, FAILURE_FILE), FAILURE_SITE, {
     rootComponent: 'FailureCard',
     root: 'shadow-open',
@@ -366,6 +366,16 @@ beforeAll(async () => {
     eventFailure.diagnostics.map((item) => item.message).join('\n'),
   ).toEqual([]);
   expect(eventFailure.module).toContain('leafRuntimeError("OEIR_LEAF_EVENT_HANDLER_INVALID"');
+
+  // The failure fixtures import a non-callable handler. The generated module
+  // now keeps that static import (binding import channel), so the module the
+  // bundle resolves must exist and export the non-callable value the runtime
+  // precondition expects.
+  writeFileSync(join(tempDir, 'bad-handler.js'), 'export const badHandler = "not-a-function";\n');
+  writeFileSync(
+    join(tempDir, 'bad-event-handler.js'),
+    'export const badHandler = "not-a-function";\n',
+  );
 
   bundleFile = await buildBundle(tempDir, [
     {
