@@ -1999,6 +1999,16 @@ export function createGeneratedElementClass<P extends object = Record<string, un
     value: observedAttributes,
   });
 
+  if (normalized.delegatesFocus) {
+    // The class lane's emitted static carries this platform fact; a generated
+    // class exposes the same static so consumers (and the accessibility suite)
+    // read the focus-delegation decision off the constructor.
+    Object.defineProperty(GeneratedElementShell, 'delegatesFocus', {
+      configurable: true,
+      value: true,
+    });
+  }
+
   if (normalized.formAssociated) {
     // The platform reads the constructor static, not the descriptor; set it
     // before the outer entry calls customElements.define.

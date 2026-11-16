@@ -571,9 +571,11 @@ describe('update path rewrites the ref-attached node in place', () => {
       moduleText,
     );
     expect(install, 'mount ref install').not.toBeNull();
-    const [, cleanupName, elementName] = install!;
-    expect(moduleText).toContain(
-      `__oe_scope.add(() => { try { if (typeof ${cleanupName} === "function") ${cleanupName}(); } finally {`,
+    const [, , elementName] = install!;
+    // The cleanup the mount registered is the one the ref handler returned;
+    // a static backreference keeps the assertion free of constructed source.
+    expect(moduleText).toMatch(
+      /__oe_scope\.add\(\(\) => \{ try \{ if \(typeof (__oe_refCleanup\d+) === "function"\) \1\(\); \} finally \{/,
     );
     // The attribute slot refresh writes the SAME element variable the ref was
     // called with (in-place update, no node rebuild); the props channel drives
