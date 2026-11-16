@@ -49,9 +49,8 @@ describe('generated-element SVG subtrees', () => {
     );
     const claim = section(module, 'function Icon__claim(');
     // The svg element and its child each assert the SVG namespace.
-    expect(
-      claim.match(new RegExp(`assertElementInNamespace\\([^,]+, "${SVG_NS}"`, 'g'))?.length,
-    ).toBe(2);
+    expect(claim.split('assertElementInNamespace(').length - 1).toBe(2);
+    expect(claim.split(`"${SVG_NS}"`).length - 1).toBe(2);
   });
 
   test('camelCase SVG tags stay outside the admitted tag grammar', () => {
