@@ -259,3 +259,46 @@ is not re-decided.
 - Still OWED in `16b-LC`: depth ≥ 2, recipe/list placement, non-retained
   targets, connection-scope helper parameters, pre-DOM timing, and the remaining
   signed-inventory rows.
+
+## 2026-11-16 amendment — 16b-LC env parameter `{ host, signal }` (facts only)
+
+This is a fact-only append. `16b-LC` remains **PARTIAL**; no gate, milestone,
+capability status or P5 row is flipped, and the ADR-0180 root-only decision text
+is not re-decided. It supersedes one item of the OWED list in the previous
+amendment: the **connection-scope helper parameter** is delivered in the env
+form below; the remaining OWED items are unchanged.
+
+- Delivered: an admitted `onConnect`/`onDispose` callback may declare ONE `env`
+  parameter — a plain identifier or an object binding pattern (`(env) => …`,
+  `({ host, signal }) => …`). More than one parameter, rest, optional, default
+  and array-pattern forms are refused with the existing `OEC9042`; zero-argument
+  callbacks stay admitted and are the pre-existing form.
+- Semantics: `env.host` is the generated element the connection belongs to (for
+  a depth-1 retained hostless child: its nearest ancestor generated element);
+  `env.signal` is the per-connection scope's own signal, aborted at the FIRST
+  step of that scope's disposal (before children and before any registered
+  cleanup), and a reconnect gets a fresh un-aborted signal. An `onDispose(env)`
+  callback receives the element-lifetime teardown signal: it is created when the
+  retained instance/child scope is created and aborted at teardown start, before
+  the disposal callbacks run.
+- Carrier: the element reaches generated code only through the compiler-private,
+  NON-enumerable runtime property `__oe_hostElement` the shell attaches to the
+  host records (`hostFor` / `instanceHostFor`). The exported host types are
+  unchanged and no exported symbol is added.
+- Byte identity: env-form callbacks live in their own retained record
+  (`__oe_connectEnv`) with their own replay lines, and the host element is only
+  forwarded in modules that declare an env-form callback. Zero-argument modules
+  — hook-free and root-hook alike — keep their exact pre-change bytes (the
+  existing SHA pins stay green).
+- Implementation reading adopted by the slice (owner may later rule; not a
+  settled decision): within one component the two forms are not interleaved —
+  zero-argument callbacks replay before env callbacks, and each form keeps its
+  own authored order. Interleaving would change every existing hook module's
+  bytes, so it is left to an explicit decision.
+- Public delta: the `onConnect`/`onDispose` parameter type is widened to accept
+  the env callback (source-compatible: a zero-argument callback is still
+  assignable) and `docs/release/public-interface-snapshot.json` is regenerated.
+  This is a recorded interface delta, not a stability promise; the 体验版 label
+  of D-17b in execution-plan §17 still applies.
+- Still OWED in `16b-LC`: depth ≥ 2, recipe/list placement, non-retained
+  targets, pre-DOM timing, and the remaining signed-inventory rows.

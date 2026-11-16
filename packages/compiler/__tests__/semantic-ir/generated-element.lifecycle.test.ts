@@ -458,7 +458,11 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     // Malformed admitted shapes use the existing OEC9042 form code.
     for (const malformed of [
       'onConnect(async () => { globalThis.__oeX = 1; });',
-      'onConnect((connection) => { globalThis.__oeX = connection; });',
+      'onConnect((a, b) => { globalThis.__oeX = a + b; });',
+      'onConnect((...rest) => { globalThis.__oeX = rest; });',
+      'onConnect((env?) => { globalThis.__oeX = env; });',
+      'onConnect((env = 1) => { globalThis.__oeX = env; });',
+      'onConnect(([a]) => { globalThis.__oeX = a; });',
       'onConnect();',
       'onConnect(fn);',
       'onDispose(async () => { globalThis.__oeX = 1; });',
@@ -791,5 +795,140 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     // The binding refusal is the module gate, not an invalid-artifact drop.
     expect(codes(error)).not.toContain('OEIR_LEAF_INVALID_ARTIFACT');
     expect(String((error as CompiledElementError).diagnostics[0]!.message)).toContain('"external"');
+  });
+
+  test('A15 an env-form hook is recorded separately and replayed with {host, signal}', () => {
+    const source =
+      SIDECAR +
+      "import { onConnect, onDispose } from '@openelement/element';\n" +
+      'function EnvCard(props: { seed: number }) {\n' +
+      '  const snapshot = props.seed;\n' +
+      '  onConnect(({ host, signal }) => {\n' +
+      '    globalThis.__oeHostTag = host.tagName;\n' +
+      '    globalThis.__oeAbortedAtConnect = signal.aborted;\n' +
+      '    return () => { globalThis.__oeAbortedAtCleanup = signal.aborted; };\n' +
+      '  });\n' +
+      '  onDispose((env) => { globalThis.__oeAbortedAtDispose = env.signal.aborted; });\n' +
+      '  return <span className="seed">{snapshot}</span>;\n' +
+      '}\n' +
+      'export default EnvCard;\n';
+    const module = compileIsland('lifecycle-env', source);
+    const factory = functionText(module, '__oe_rootInstance');
+    // The env form has its OWN retained record; no zero-argument record is
+    // emitted in an env-only module, so the two byte paths never mix.
+    expect(factory).toContain('const __oe_connectEnv = [];');
+    expect(factory).toContain('__oe_connectEnv.push((');
+    expect(factory).not.toContain('const __oe_connect = [];');
+    expect(factory).toContain('const __oe_teardownSignal = __oe_owner.signal;');
+    expect(factory).toContain('__oe_owner.add(() => (');
+    expect(factory).toContain(
+      ')({ host: __oe_host.__oe_hostElement, signal: __oe_teardownSignal }));',
+    );
+    expect(factory).toContain('return { snapshot, __oe_connectEnv };');
+    for (const body of ['EnvCard__mount', 'EnvCard__claim']) {
+      const text = functionText(module, body);
+      expect(text).toContain('const __oe_lifecycleEnvHooks = __oe_host.bindings.__oe_connectEnv;');
+      expect(text).toContain('for (const __oe_lifecycleEnvHook of __oe_lifecycleEnvHooks)');
+      expect(text).toContain(
+        '__oe_lifecycleEnvHook({ host: __oe_host.__oe_hostElement, signal: __oe_scope.signal })',
+      );
+      expect(text).toContain('__oe_scope.add(__oe_lifecycleEnvCleanup)');
+      // The zero-argument replay is not emitted for an env-only module.
+      expect(text).not.toContain('__oe_lifecycleHooks');
+    }
+    // The recipe's mount host forwards the shell-attached runtime property.
+    expect(functionText(module, 'createEnvCardRecipe')).toContain(
+      '__oe_hostElement: __oe_host.__oe_hostElement',
+    );
+    // The intrinsic calls, their import and the env parameter never reach the
+    // emitted module.
+    expect(module).not.toContain('onConnect');
+    expect(module).not.toContain('onDispose');
+    expect(module).not.toMatch(/from\s+"@openelement\/element"/);
+  });
+
+  test('A16 a zero-argument module keeps the pre-env host record and replay bytes', () => {
+    const module = compileIsland('lifecycle-zero-arg', LIFECYCLE_SOURCE);
+    const factory = functionText(module, '__oe_rootInstance');
+    expect(factory).not.toContain('__oe_connectEnv');
+    expect(factory).not.toContain('__oe_teardownSignal');
+    expect(factory).toContain('const __oe_connect = [];');
+    expect(factory).toContain('return { snapshot, __oe_connect };');
+    for (const body of ['LifeCard__mount', 'LifeCard__claim']) {
+      const text = functionText(module, body);
+      expect(text).not.toContain('__oe_lifecycleEnv');
+      expect(text).not.toContain('__oe_hostElement');
+      for (const line of CONNECT_REPLAY_LINES) {
+        expect(text, `${body}: ${line}`).toContain(line);
+      }
+    }
+    // No host-record forwarding is added to a module without the env form.
+    expect(functionText(module, 'createLifeCardRecipe')).not.toContain('__oe_hostElement');
+  });
+
+  test('A17 a depth-1 retained child receives the ancestor element and its own signal', () => {
+    const source =
+      SIDECAR +
+      "import { onConnect, onDispose } from '@openelement/element';\n" +
+      'function Child(props: { seed: number }) {\n' +
+      '  const snapshot = props.seed;\n' +
+      '  onConnect((env) => {\n' +
+      '    globalThis.__oeChildHost = env.host;\n' +
+      '    globalThis.__oeChildSignal = env.signal;\n' +
+      '    return () => { globalThis.__oeChildAbort = env.signal.aborted; };\n' +
+      '  });\n' +
+      '  onDispose((env) => { globalThis.__oeChildDisposeAbort = env.signal.aborted; });\n' +
+      '  return <em className="child">{snapshot}</em>;\n' +
+      '}\n' +
+      'function Host(props: { seed: number }) {\n' +
+      '  const rootSnapshot = props.seed;\n' +
+      '  return <span className="root"><b>{rootSnapshot}</b><Child seed={props.seed} /></span>;\n' +
+      '}\n' +
+      'export default Host;\n';
+    const module = compileIsland('lifecycle-nested-env', source);
+    const childSetup = functionText(module, 'Child__setup');
+    expect(childSetup).toContain('const __oe_connectEnv = [];');
+    expect(childSetup).toContain('__oe_owner.add(() => (');
+    expect(childSetup).toContain(
+      ')({ host: __oe_host.__oe_hostElement, signal: __oe_teardownSignal }));',
+    );
+    expect(childSetup).toContain('return { snapshot, __oe_connectEnv };');
+    // The child replays from its OWN retained record and the per-projection
+    // scope signal (the parent's connection signal only for the root body).
+    const childMount = functionText(module, 'Child__mount');
+    expect(childMount).toContain('__oe_host.setup.__oe_connectEnv');
+    expect(childMount).toContain('signal: __oe_scope.signal');
+    expect(childMount).toContain('host: __oe_host.__oe_hostElement');
+    // The retaining site forwards the element into BOTH hosts it builds: the
+    // setup host the factory reads and the mount/claim host the body reads.
+    const hostMount = functionText(module, 'Host__mount');
+    expect(occurrences(hostMount, '__oe_hostElement: __oe_host.__oe_hostElement')).toBe(2);
+    // The root body itself has no hooks, so it invents no replay.
+    expect(hostMount).not.toContain('__oe_lifecycleEnv');
+  });
+
+  test('A18 mixed forms in one component keep one record per form and both replays', () => {
+    const source =
+      SIDECAR +
+      "import { onConnect } from '@openelement/element';\n" +
+      'function Mixed(props: { seed: number }) {\n' +
+      '  const snapshot = props.seed;\n' +
+      '  onConnect(() => { globalThis.__oeLegacy = snapshot; });\n' +
+      '  onConnect((env) => { globalThis.__oeHostTag = env.host.tagName; });\n' +
+      '  return <span>{snapshot}</span>;\n' +
+      '}\n' +
+      'export default Mixed;\n';
+    const module = compileIsland('lifecycle-mixed', source);
+    const factory = functionText(module, '__oe_rootInstance');
+    expect(factory).toContain('const __oe_connect = [];');
+    expect(factory).toContain('const __oe_connectEnv = [];');
+    expect(factory).toContain('return { snapshot, __oe_connect, __oe_connectEnv };');
+    for (const body of ['Mixed__mount', 'Mixed__claim']) {
+      const text = functionText(module, body);
+      expect(text).toContain('__oe_lifecycleHooks');
+      expect(text).toContain('__oe_lifecycleEnvHooks');
+      // Zero-argument callbacks are still invoked with no argument.
+      expect(text).toContain('__oe_lifecycleHook();');
+    }
   });
 });

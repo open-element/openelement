@@ -40,8 +40,21 @@ function outsideCompiler(intrinsic: string): never {
  * connection of the generated element (initial mount and each reconnect) and
  * releases the optional returned cleanup at that disconnection. Erased by the
  * compiler; calling it at runtime fails closed.
+ *
+ * The callback may keep the original zero-argument form or declare ONE `env`
+ * parameter. `env.host` is the generated element the connection belongs to (for
+ * a depth-1 retained hostless child: its nearest ancestor generated element),
+ * and `env.signal` aborts at the START of that disconnection, before any
+ * registered cleanup runs; a reconnect gets a fresh, un-aborted signal. The
+ * parameter's type is the author-facing contract only — the compiler erases it
+ * and passes the value from the connection scope the callback runs in.
  */
-export function onConnect(callback: () => void | (() => void)): void {
+export function onConnect(
+  callback: (env: {
+    readonly host: HTMLElement;
+    readonly signal: AbortSignal;
+  }) => void | (() => void),
+): void {
   void callback;
   outsideCompiler('onConnect');
 }
@@ -51,8 +64,15 @@ export function onConnect(callback: () => void | (() => void)): void {
  * the generated element instance is torn down (explicit `dispose()`), after
  * that connection's connect-cleanups. Erased by the compiler; calling it at
  * runtime fails closed.
+ *
+ * The callback may keep the original zero-argument form or declare ONE `env`
+ * parameter whose `signal` is the instance-lifetime teardown signal: it is
+ * aborted at the start of teardown, before this and every other disposal
+ * callback runs, so `env.signal.aborted` is `true` inside the callback.
  */
-export function onDispose(callback: () => void): void {
+export function onDispose(
+  callback: (env: { readonly host: HTMLElement; readonly signal: AbortSignal }) => void,
+): void {
   void callback;
   outsideCompiler('onDispose');
 }

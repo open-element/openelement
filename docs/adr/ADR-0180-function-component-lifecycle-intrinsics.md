@@ -170,3 +170,62 @@ Delivered (same `16b-LC` slice; the root half was already delivered):
   remains open until the `16b-LC` nested/hostless rows go green in the signed
   capability inventory and the corresponding emitter tests run at one clean
   SHA.
+
+## Amendment (2026-11-16): the `env` parameter (`{ host, signal }`)
+
+Append-only fact record. The two-intrinsic decision and the root/depth-1
+placement rules are unchanged and are not re-decided here; this amendment
+records the argument the callbacks may now receive. It creates no milestone,
+gate, exit or release claim, and it is not a stability promise (the D-17b
+experience-edition label in execution-plan §17 still applies).
+
+### Contract
+
+| Aspect | Rule |
+| --- | --- |
+| Callback form | Zero parameters (unchanged) or ONE `env` parameter: a plain identifier or an object binding pattern. More than one parameter, rest, optional, default and array-pattern forms are refused with the existing form code (`OEC9042`). |
+| `env.host` | The generated element the connection belongs to. For a depth-1 retained hostless child: its nearest ancestor generated element (the child has no element of its own). |
+| `env.signal` (connect) | The per-connection scope's `AbortSignal`. It aborts at the FIRST step of that scope's disposal — before children and before any registered cleanup — so a callback's own cleanup observes `signal.aborted === true`. A reconnect gets a fresh, un-aborted signal; the callback runs on every connection. |
+| `env.signal` (dispose) | The element-lifetime teardown signal of the retained instance (or retained child) scope. It is created with that scope and aborted at teardown start, before the disposal callbacks run. |
+| Carrier | The element crosses into generated code only as the compiler-private, non-enumerable runtime property `__oe_hostElement` on the host record (`hostFor` / `instanceHostFor`). The exported host types (`GeneratedElementHost`, `GeneratedElementInstanceHost`) are unchanged; no exported symbol is added. |
+| Byte identity | The env form has its own retained record (`__oe_connectEnv`) and its own replay lines, and the host element is forwarded only in modules that declare an env-form callback. Zero-argument modules keep their exact pre-change bytes (existing SHA pins stay green). |
+| Public surface | `onConnect`/`onDispose` accept the env callback; a zero-argument callback remains assignable, so the widening is source-compatible. `docs/release/public-interface-snapshot.json` is regenerated (signature + per-subpath shape hashes). |
+
+### Why
+
+The 64 production class modules that `16b-MN` has to migrate consume `this`
+inside lifecycle callbacks (DOM queries, `WeakMap` keys, `ElementInternals`).
+Without the element and a cancellation signal, the migration cannot express
+those callbacks. `AbortSignal` is the platform's cancellation primitive; no
+timer scheduler, observable or framework lifecycle context is introduced.
+
+### P7 four questions
+
+1. **Platform (P1).** The element is the custom element the platform upgraded;
+   `AbortSignal`/`AbortController` are platform primitives. The slice adds no
+   runtime phase: the signal is the existing per-connection `LifetimeScope`
+   signal, aborted by the existing disposal order.
+2. **Compile time (P2).** Fully erased. The only artefacts are generated code:
+   a second retained record for the env form and the replay lines that build the
+   argument. A module without the env form is byte-identical to its pre-change
+   output, and that identity is pinned by test.
+3. **Runtime posture (P3).** The callback runs synchronously inside the existing
+   connection callback; the SSR producer does not run hooks, so no server
+   contract is bent. The imports keep failing closed outside the compiler.
+4. **Prior art (P7.4).** React's `useEffect` callback receives no element;
+   Solid's `onMount`/`onCleanup` receive none either. The difference is
+   deliberate and narrow: exactly two values (`host`, `signal`), no dependency
+   array, no hook-order slot, no re-render-driven effect.
+
+### Boundaries and readings
+
+- Placement is unchanged: root plus depth-1 retained hostless child. Depth ≥ 2,
+  recipe/list bodies and non-retained targets still fail closed at the authored
+  span (`OEIR_LEAF_INVALID_ARTIFACT`), and a hook that reads a host binding keeps
+  the existing `UNBOUND_BINDING` refusal.
+- Implementation reading (owner may later rule): within one component the two
+  callback forms are not interleaved — zero-argument callbacks replay before
+  env callbacks, and each form keeps its own authored order. Interleaving would
+  change every existing hook module's bytes.
+- The retirement conditions above are unchanged. This amendment adds no third
+  intrinsic, no lifecycle context, no dispatcher and no server path.

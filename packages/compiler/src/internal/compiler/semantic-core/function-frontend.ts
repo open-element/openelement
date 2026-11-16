@@ -228,13 +228,19 @@ export interface FunctionModelResource {
  * `__oe_rootInstance` factory; the intrinsic call itself is erased.
  *
  * The model carries no runtime hook identity: there is no dispatcher, no
- * hook-order slot and no callback-context record. Nested/hostless component
- * hooks are not admitted in this slice (their placement keeps the existing
- * frontend statement refusal).
+ * hook-order slot and no callback-context record. `receivesEnv` is a plain
+ * static fact about the authored callback: `true` when it declares the one
+ * admitted `env` parameter, `false` when it keeps the zero-argument form. The
+ * generator uses it only to decide whether the replay passes the env argument
+ * (zero-argument callbacks and their emitted bytes stay exactly as they were).
+ * Nested/hostless component hooks are admitted module-wide; their placement
+ * verdict stays with the generator (authored-span refusal).
  */
 export interface FunctionModelLifecycleHook {
   readonly kind: 'connect' | 'dispose';
   readonly callback: FunctionExpressionRef;
+  /** `true` when the authored callback declares the one admitted env parameter. */
+  readonly receivesEnv: boolean;
   readonly span: SourceSpan;
 }
 
@@ -697,9 +703,12 @@ class FunctionFrontendBuilder {
    * problems inside the admitted root use the existing function-frontend
    * `OEC9042` form code; a hook in any other component keeps the existing
    * `OEC9041` statement refusal because this method returns null there. The
-   * callback takes no parameters in this slice (there is no connection-scope
-   * helper channel yet), so a parameter is refused rather than silently
-   * receiving `undefined`.
+   * callback admits exactly zero parameters (the pre-existing zero-argument
+   * form) or ONE `env` parameter — an identifier or an object binding pattern,
+   * no rest/optional/default form. The parameter is typed by the public
+   * `onConnect`/`onDispose` signature and erased from the emitted module; the
+   * generator passes the env argument only for the one-parameter form, so a
+   * zero-argument callback keeps its exact bytes.
    */
   /**
    * The compiler-private admission check. Placement (root vs depth-1 retained
@@ -760,20 +769,44 @@ class FunctionFrontendBuilder {
       );
       return 'refused';
     }
-    if (callback.parameters.length > 0) {
+    if (callback.parameters.length > 1) {
       this.fail(
         statement,
         CODES.form,
-        `the ${writtenName} callback takes no parameters in this slice; the connection-scope ` +
-          'helper channel is a later, additive slice',
+        `the ${writtenName} callback takes at most one 'env' parameter (drop the extra one)`,
       );
       return 'refused';
+    }
+    const parameter = callback.parameters[0];
+    if (parameter !== undefined) {
+      if (
+        parameter.dotDotDotToken !== undefined ||
+        parameter.questionToken !== undefined ||
+        parameter.initializer !== undefined
+      ) {
+        this.fail(
+          statement,
+          CODES.form,
+          `the ${writtenName} 'env' parameter is a plain identifier or object binding pattern; ` +
+            'rest, optional and default forms are outside the lifecycle slice',
+        );
+        return 'refused';
+      }
+      if (!ts.isIdentifier(parameter.name) && !ts.isObjectBindingPattern(parameter.name)) {
+        this.fail(
+          statement,
+          CODES.form,
+          `the ${writtenName} 'env' parameter must be an identifier or an object binding pattern`,
+        );
+        return 'refused';
+      }
     }
     const lowered = this.expression(callback, 'handler');
     if (lowered === null) return 'refused';
     return {
       kind: importedName === 'onConnect' ? 'connect' : 'dispose',
       callback: lowered,
+      receivesEnv: parameter !== undefined,
       span: spanOf(this.sourceFile, statement),
     };
   }

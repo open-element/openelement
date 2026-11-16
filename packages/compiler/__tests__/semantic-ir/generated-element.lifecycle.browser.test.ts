@@ -31,8 +31,17 @@
  *   connection and the disposal side.
  *
  * One engine (Chromium), LOCAL. Not M09 exit, not the M13 matrix, no
- * nested/hostless hook admission, no connection-scope helper channel, no
- * public API freeze.
+ * nested/hostless hook admission, no public API freeze.
+ *
+ * Env form (`onConnect(env)` / `onDispose(env)`, 2026-11-16): the callback
+ * receives `{ host, signal }`. `host` is the generated element the connection
+ * belongs to (the nearest ancestor generated element for a depth-1 retained
+ * hostless child) and is a real, queryable DOM node. The connection `signal`
+ * aborts at the START of the disconnection, so the callback's own cleanup
+ * observes `aborted === true`; a reconnect gets a FRESH signal. The dispose
+ * `signal` is the instance-lifetime teardown signal, aborted before the
+ * disposal callbacks run. Zero-argument callbacks keep the pre-env behaviour
+ * (asserted by the C1–C4 rows still passing unchanged).
  */
 
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -249,6 +258,63 @@ const DISPOSE_CLEANUP_THROW_SOURCE =
   '}\n' +
   'export default DisposeCleanupCard;\n';
 
+/**
+ * Env-form fixture: one connect callback and one dispose callback, both
+ * declaring the single allowed `env` parameter. Every observation goes through
+ * `globalThis` (the expression model admits ECMAScript builtins, not
+ * `window`/`document`); the element reference itself is pushed into the
+ * journal arrays so the page can compare identity afterwards.
+ */
+const ENV_SOURCE =
+  `import { onConnect, onDispose } from '@openelement/element';\n` +
+  SIDECAR +
+  'function EnvCard(props: { seed: number }) {\n' +
+  '  const snapshot = props.seed;\n' +
+  '  onConnect((env) => {\n' +
+  '    globalThis.__oeEnv.hosts.push(env.host);\n' +
+  '    globalThis.__oeEnv.tags.push(env.host.tagName);\n' +
+  '    globalThis.__oeEnv.connected.push(env.host.isConnected);\n' +
+  '    globalThis.__oeEnv.aborted.push(env.signal.aborted);\n' +
+  '    globalThis.__oeEnv.signals.push(env.signal);\n' +
+  '    globalThis.__oeEnv.queried.push(env.host.querySelector("span") !== null);\n' +
+  '    return () => {\n' +
+  '      globalThis.__oeEnv.cleanupAborted.push(env.signal.aborted);\n' +
+  '      globalThis.__oeEnv.cleanupSameSignal.push(env.signal === globalThis.__oeEnv.signals[0]);\n' +
+  '    };\n' +
+  '  });\n' +
+  '  onDispose((env) => {\n' +
+  '    globalThis.__oeEnv.disposeAborted.push(env.signal.aborted);\n' +
+  '  });\n' +
+  '  return <span className="seed">{snapshot}</span>;\n' +
+  '}\n' +
+  'export default EnvCard;\n';
+
+/**
+ * Env-form depth-1 fixture: the retained hostless Child's `env.host` must be
+ * the nearest ancestor GENERATED ELEMENT (the root host), never its own `<em>`.
+ */
+const NESTED_ENV_SOURCE =
+  `import { onConnect } from '@openelement/element';\n` +
+  NESTED_SIDECAR +
+  'function Child(props: { seed: number }) {\n' +
+  '  const snapshot = props.seed;\n' +
+  '  onConnect((env) => {\n' +
+  '    globalThis.__oeNestedEnv.hosts.push(env.host);\n' +
+  '    globalThis.__oeNestedEnv.confirmed.push(env.host === globalThis.__oeNestedEnv.root);\n' +
+  '    return () => { globalThis.__oeNestedEnv.cleanupAborted.push(env.signal.aborted); };\n' +
+  '  });\n' +
+  '  return <em className="nested-child">{snapshot}</em>;\n' +
+  '}\n' +
+  'function NestedHost(props: { seed: number; showChild: boolean }) {\n' +
+  '  return (\n' +
+  '    <span className="nested-root">\n' +
+  '      <b>{props.seed}</b>\n' +
+  '      {props.showChild ? <Child seed={props.seed} /> : null}\n' +
+  '    </span>\n' +
+  '  );\n' +
+  '}\n' +
+  'export default NestedHost;\n';
+
 interface PageRuntime {
   GeneratedElement: CustomElementConstructor;
   __oeElementTag: string;
@@ -268,6 +334,23 @@ declare global {
     __oeSetupRuns: number | undefined;
     __oeSnapshotAtConnect: number | undefined;
     __oeLiveSeedAtConnect: number | undefined;
+    __oeEnv: {
+      hosts: HTMLElement[];
+      tags: string[];
+      connected: boolean[];
+      aborted: boolean[];
+      signals: AbortSignal[];
+      queried: boolean[];
+      cleanupAborted: boolean[];
+      cleanupSameSignal: boolean[];
+      disposeAborted: boolean[];
+    };
+    __oeNestedEnv: {
+      root: HTMLElement;
+      hosts: HTMLElement[];
+      confirmed: boolean[];
+      cleanupAborted: boolean[];
+    };
   }
 }
 
@@ -287,6 +370,10 @@ let mainTag = '';
 let throwTag = '';
 let connCleanupTag = '';
 let disposeCleanupTag = '';
+let envBundle = '';
+let envTag = '';
+let nestedEnvBundle = '';
+let nestedEnvTag = '';
 
 const PAGE_SETUP = `
   window.__oeTick = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -445,6 +532,18 @@ beforeAll(async () => {
     'nested-ssr',
     '__oeNestedSsr',
     nestedSsr.component,
+  );
+  const env = compileIsland('lifecycle-env-browser', ENV_SOURCE);
+  envTag = env.tag;
+  envBundle = await buildBundle(tempDir, env.code, 'env', '__oeEnvCard', env.component);
+  const nestedEnv = compileIsland('lifecycle-nested-env-browser', NESTED_ENV_SOURCE);
+  nestedEnvTag = nestedEnv.tag;
+  nestedEnvBundle = await buildBundle(
+    tempDir,
+    nestedEnv.code,
+    'nested-env',
+    '__oeNestedEnvCard',
+    nestedEnv.component,
   );
   browser = await chromium.launch();
 }, 180_000);
@@ -864,4 +963,139 @@ describe('16b-LC lifecycle hooks (Chromium)', () => {
       await page.close();
     }
   });
+
+  test('C7 onConnect(env) gets the owning element and a signal that aborts at disconnect', async () => {
+    const page = await openPage(envBundle);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        window.__oeEnv = {
+          hosts: [],
+          tags: [],
+          connected: [],
+          aborted: [],
+          signals: [],
+          queried: [],
+          cleanupAborted: [],
+          cleanupSameSignal: [],
+          disposeAborted: [],
+        };
+        const mod = window.__oeEnvCard as unknown as {
+          GeneratedElement: CustomElementConstructor;
+        };
+        const tick = window.__oeTick;
+        customElements.define(tagName, mod.GeneratedElement);
+        const host = document.createElement(tagName) as HTMLElement & {
+          seed: number;
+          dispose: (detach?: boolean) => void;
+        };
+        host.seed = 1;
+        document.body.append(host);
+        await tick();
+        const snapshot = () => ({
+          hosts: [...window.__oeEnv.hosts],
+          tags: [...window.__oeEnv.tags],
+          connected: [...window.__oeEnv.connected],
+          aborted: [...window.__oeEnv.aborted],
+          signals: [...window.__oeEnv.signals],
+          queried: [...window.__oeEnv.queried],
+          cleanupAborted: [...window.__oeEnv.cleanupAborted],
+          cleanupSameSignal: [...window.__oeEnv.cleanupSameSignal],
+          disposeAborted: [...window.__oeEnv.disposeAborted],
+        });
+        const mounted = snapshot();
+        const sameHost = window.__oeEnv.hosts[0] === host;
+        host.remove();
+        await tick();
+        const disconnected = snapshot();
+        document.body.append(host);
+        await tick();
+        const reconnected = snapshot();
+        host.dispose(true);
+        const afterDispose = snapshot();
+        const errors = [...window.__oeErrors];
+        return {
+          mounted,
+          sameHost,
+          disconnected,
+          reconnected,
+          afterDispose,
+          errors,
+          sameHostOnReconnect: window.__oeEnv.hosts[1] === host,
+        };
+      }, envTag);
+      // First connection: the element is the real, connected custom element;
+      // its signal is live; the DOM is not mounted yet (the replay is a
+      // prologue), so querySelector finds nothing yet.
+      expect(result.mounted.tags).toEqual([envTag.toUpperCase()]);
+      expect(result.sameHost).toBe(true);
+      expect(result.mounted.connected).toEqual([true]);
+      expect(result.mounted.aborted).toEqual([false]);
+      expect(result.mounted.queried).toEqual([false]);
+      // Disconnect: the signal aborted BEFORE the callback's own cleanup ran.
+      expect(result.disconnected.cleanupAborted).toEqual([true]);
+      expect(result.disconnected.cleanupSameSignal).toEqual([true]);
+      // Reconnect: a FRESH, un-aborted signal for the new connection, and the
+      // retained DOM is now queryable from the host element.
+      expect(result.reconnected.aborted).toEqual([false, false]);
+      expect(result.mounted.signals[0]).not.toBe(result.reconnected.signals[1]);
+      expect(result.reconnected.queried).toEqual([false, true]);
+      expect(result.sameHostOnReconnect).toBe(true);
+      // Teardown: the instance-lifetime signal is aborted before the dispose
+      // callbacks run, and the disposal callback ran exactly once.
+      expect(result.afterDispose.disposeAborted).toEqual([true]);
+      expect(result.errors).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 120_000);
+
+  test('C8 a depth-1 child onConnect(env).host is the nearest generated element', async () => {
+    const page = await openPage(nestedEnvBundle);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        window.__oeNestedEnv = {
+          root: null as unknown as HTMLElement,
+          hosts: [],
+          confirmed: [],
+          cleanupAborted: [],
+        };
+        const mod = window.__oeNestedEnvCard as unknown as {
+          GeneratedElement: CustomElementConstructor;
+        };
+        const tick = window.__oeTick;
+        customElements.define(tagName, mod.GeneratedElement);
+        const host = document.createElement(tagName) as HTMLElement & {
+          seed: number;
+          showChild: boolean;
+        };
+        window.__oeNestedEnv.root = host;
+        host.seed = 1;
+        host.showChild = true;
+        document.body.append(host);
+        await tick();
+        const connected = {
+          confirmed: [...window.__oeNestedEnv.confirmed],
+          hostIsRoot: window.__oeNestedEnv.hosts[0] === host,
+          childText: host.querySelector('em')?.textContent,
+        };
+        host.showChild = false;
+        await tick();
+        const afterRemoval = {
+          cleanupAborted: [...window.__oeNestedEnv.cleanupAborted],
+          childNodes: host.querySelectorAll('em').length,
+        };
+        return { connected, afterRemoval, errors: [...window.__oeErrors] };
+      }, nestedEnvTag);
+      // The retained child's env.host is the root generated element, not its
+      // own <em>, and its cleanup sees the aborted projection signal.
+      expect(result.connected.confirmed).toEqual([true]);
+      expect(result.connected.hostIsRoot).toBe(true);
+      expect(result.connected.childText).toBe('1');
+      expect(result.afterRemoval.cleanupAborted).toEqual([true]);
+      expect(result.afterRemoval.childNodes).toBe(0);
+      expect(result.errors).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 120_000);
 });

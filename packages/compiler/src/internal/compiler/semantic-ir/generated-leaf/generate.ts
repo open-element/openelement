@@ -447,10 +447,57 @@ const GENERATED_ROOT_INSTANCE_NAME = `${INTERNAL_PREFIX}rootInstance`;
  * name or a `nextName` identifier.
  */
 const GENERATED_ROOT_CONNECT_RECORD = `${INTERNAL_PREFIX}connect`;
+/**
+ * `16b-LC` option 1a env form: the compiler-owned retained-record key carrying
+ * the callbacks that declare the one `env` parameter. It is a SEPARATE record
+ * on purpose: a module whose hooks are all zero-argument keeps the exact
+ * pre-env bytes, and the replay for each form is emitted only when that form is
+ * present. Like `__oe_connect`, the key is read by generated code only.
+ */
+const GENERATED_ROOT_CONNECT_ENV_RECORD = `${INTERNAL_PREFIX}connectEnv`;
+/**
+ * The compiler-private host-record property carrying the element a connection
+ * belongs to: the generated element itself for the root, and the nearest
+ * ancestor generated element for a depth-1 retained hostless child. The shell
+ * attaches it as a runtime property (`hostFor`/`instanceHostFor`) — the
+ * exported host types are not changed and no exported symbol is added.
+ */
+const HOST_ELEMENT_PROPERTY = `${INTERNAL_PREFIX}hostElement`;
 /** Replay locals the root mount/claim prologue uses (all compiler-owned). */
 const LIFECYCLE_HOOKS_VAR = `${INTERNAL_PREFIX}lifecycleHooks`;
 const LIFECYCLE_HOOK_VAR = `${INTERNAL_PREFIX}lifecycleHook`;
 const LIFECYCLE_CLEANUP_VAR = `${INTERNAL_PREFIX}lifecycleCleanup`;
+/** Env-form replay locals (separate from the zero-argument ones). */
+const LIFECYCLE_ENV_HOOKS_VAR = `${INTERNAL_PREFIX}lifecycleEnvHooks`;
+const LIFECYCLE_ENV_HOOK_VAR = `${INTERNAL_PREFIX}lifecycleEnvHook`;
+const LIFECYCLE_ENV_CLEANUP_VAR = `${INTERNAL_PREFIX}lifecycleEnvCleanup`;
+/** The instance-lifetime signal an `onDispose(env)` registration captures. */
+const TEARDOWN_SIGNAL_VAR = `${INTERNAL_PREFIX}teardownSignal`;
+
+/**
+ * Whether any component in the module declares an env-form lifecycle callback.
+ * The host-element property is forwarded through the host-record literals only
+ * for such a module, so a module that never opts into the env form keeps its
+ * exact pre-env bytes (including every hook-free SHA pin).
+ */
+function moduleUsesLifecycleEnv(state: EmitState): boolean {
+  for (const component of state.componentByName.values()) {
+    if (component.lifecycle.some((hook) => hook.receivesEnv)) return true;
+  }
+  return false;
+}
+
+/**
+ * The host-element field a RETAINED reference-site host literal forwards to a
+ * depth-1 child that declares an env-form lifecycle callback. Empty otherwise,
+ * so every other module and reference site keeps its exact bytes.
+ */
+function childHostElementField(state: EmitState, node: FunctionModelComponentRef): string {
+  if (!moduleUsesLifecycleEnv(state)) return '';
+  const child = state.componentByName.get(node.name);
+  if (child === undefined || !child.lifecycle.some((hook) => hook.receivesEnv)) return '';
+  return `, ${HOST_ELEMENT_PROPERTY}: ${state.hostVar}.${HOST_ELEMENT_PROPERTY}`;
+}
 /**
  * 16b-LC retained-child: the module-local setup factory a RETAINED hostless child exposes to
  * its retaining reference site (`<Name>__setup`). Synthesized from the
@@ -2381,7 +2428,7 @@ function emitComponentRef(
     : `() => ({})`;
   push(
     state,
-    `const ${setupHostVar} = { bindings: ${state.hostVar}.bindings, propDeps: ${depList} };`,
+    `const ${setupHostVar} = { bindings: ${state.hostVar}.bindings, propDeps: ${depList}${childHostElementField(state, node)} };`,
     span,
   );
   push(
@@ -2392,7 +2439,7 @@ function emitComponentRef(
   push(state, `const ${scopeVar} = ${state.scopeVar}.child();`, span);
   push(
     state,
-    `const ${hostVar} = { bindings: ${setupHostVar}.bindings, propDeps: ${setupHostVar}.propDeps, instance: ${instanceVar}.scope, setup: ${instanceVar}.record };`,
+    `const ${hostVar} = { bindings: ${setupHostVar}.bindings, propDeps: ${setupHostVar}.propDeps, instance: ${instanceVar}.scope, setup: ${instanceVar}.record${childHostElementField(state, node)} };`,
     span,
   );
   push(state, `let ${nodesVar};`);
@@ -5227,7 +5274,7 @@ function emitClaimComponentRef(
     : `() => ({})`;
   push(
     state,
-    `const ${setupHostVar} = { bindings: ${state.hostVar}.bindings, propDeps: ${depList} };`,
+    `const ${setupHostVar} = { bindings: ${state.hostVar}.bindings, propDeps: ${depList}${childHostElementField(state, node)} };`,
     span,
   );
   push(
@@ -5238,7 +5285,7 @@ function emitClaimComponentRef(
   push(state, `const ${scopeVar} = ${state.scopeVar}.child();`, span);
   push(
     state,
-    `const ${hostVar} = { bindings: ${setupHostVar}.bindings, propDeps: ${setupHostVar}.propDeps, instance: ${instanceVar}.scope, setup: ${instanceVar}.record };`,
+    `const ${hostVar} = { bindings: ${setupHostVar}.bindings, propDeps: ${setupHostVar}.propDeps, instance: ${instanceVar}.scope, setup: ${instanceVar}.record${childHostElementField(state, node)} };`,
     span,
   );
   push(state, `let ${nodesVar};`);
@@ -5391,6 +5438,8 @@ interface SetupLocal {
 interface AdmittedLifecycleHook {
   readonly kind: 'connect' | 'dispose';
   readonly record: LoweredExpressionRecord;
+  /** `true` when the authored callback declares the one admitted env parameter. */
+  readonly receivesEnv: boolean;
   readonly span: SpanLike;
 }
 
@@ -5456,6 +5505,32 @@ function emitLifecycleReplay(hostRecordProperty: 'bindings' | 'setup'): string[]
 }
 
 /**
+ * `16b-LC` option 1a, env form — replay the retained `onConnect(env)` callbacks
+ * on the per-connection scope of the body that is about to mount or claim.
+ *
+ * The env argument is built HERE, from data the body already has: the host
+ * element the shell attached to the host record (runtime property; no exported
+ * type change) and the per-connection scope's own `signal`. `LifetimeScope`
+ * aborts that signal at the FIRST step of `dispose()`, before children and
+ * before any registered cleanup, so a cleanup that runs at disconnect observes
+ * an aborted signal. Each returned cleanup registers on the same scope, exactly
+ * like the zero-argument form. The env form has its own retained record and its
+ * own replay lines, so a module whose callbacks are all zero-argument keeps its
+ * exact pre-env bytes.
+ */
+function emitLifecycleEnvReplay(hostRecordProperty: 'bindings' | 'setup'): string[] {
+  return [
+    `  const ${LIFECYCLE_ENV_HOOKS_VAR} = ${MOUNT_HOST}.${hostRecordProperty}.${GENERATED_ROOT_CONNECT_ENV_RECORD};`,
+    `  if (${LIFECYCLE_ENV_HOOKS_VAR} !== undefined) {`,
+    `    for (const ${LIFECYCLE_ENV_HOOK_VAR} of ${LIFECYCLE_ENV_HOOKS_VAR}) {`,
+    `      const ${LIFECYCLE_ENV_CLEANUP_VAR} = ${LIFECYCLE_ENV_HOOK_VAR}({ host: ${MOUNT_HOST}.${HOST_ELEMENT_PROPERTY}, signal: ${MOUNT_SCOPE}.signal });`,
+    `      if (typeof ${LIFECYCLE_ENV_CLEANUP_VAR} === "function") ${MOUNT_SCOPE}.add(${LIFECYCLE_ENV_CLEANUP_VAR});`,
+    '    }',
+    '  }',
+  ];
+}
+
+/**
  * Emit `<Name>__claim` for a claimable component. Returns null when the shape
  * is outside the admitted claim slice; the caller then leaves the recipe mount-only.
  */
@@ -5468,6 +5543,7 @@ function emitClaimFunction(
   rootSetup: boolean,
   rootComponent: boolean,
   connectReplaySource: 'bindings' | 'setup' | null,
+  connectEnvReplaySource: 'bindings' | 'setup' | null,
   retention: RetentionPlan | null,
   claimStyleLinkPrefix: boolean,
 ): ClaimEmission | null {
@@ -5725,6 +5801,9 @@ function emitClaimFunction(
   // instance record) and the probe is absent on the hook-free bytes path.
   if (connectReplaySource !== null) {
     for (const line of emitLifecycleReplay(connectReplaySource)) prologue.push(line);
+  }
+  if (connectEnvReplaySource !== null) {
+    for (const line of emitLifecycleEnvReplay(connectEnvReplaySource)) prologue.push(line);
   }
   const shift = fragmentLineCount(prologue);
   return {
@@ -6912,7 +6991,7 @@ function emitComponent(
       );
       continue;
     }
-    admittedHooks.push({ kind: hook.kind, record, span: hook.span });
+    admittedHooks.push({ kind: hook.kind, record, receivesEnv: hook.receivesEnv, span: hook.span });
   }
   if (state.diagnostics.length > 0) {
     return {
@@ -7068,19 +7147,55 @@ function emitComponent(
     // scope, so "setup runs once" and "the callback runs on every connection"
     // stay separate phases with no second lifecycle engine.
     if (connectHooks.length > 0) {
-      push(setupState, `const ${GENERATED_ROOT_CONNECT_RECORD} = [];`);
-    }
-    for (const hook of connectHooks) {
-      pushParts(
-        setupState,
-        [`${GENERATED_ROOT_CONNECT_RECORD}.push((`, { record: hook.record }, '));'],
-        hook.span,
-      );
+      const legacyConnectHooks = connectHooks.filter((hook) => !hook.receivesEnv);
+      const envConnectHooks = connectHooks.filter((hook) => hook.receivesEnv);
+      if (legacyConnectHooks.length > 0) {
+        push(setupState, `const ${GENERATED_ROOT_CONNECT_RECORD} = [];`);
+      }
+      for (const hook of legacyConnectHooks) {
+        pushParts(
+          setupState,
+          [`${GENERATED_ROOT_CONNECT_RECORD}.push((`, { record: hook.record }, '));'],
+          hook.span,
+        );
+      }
+      // Env-form callbacks get their OWN retained record: the replay passes the
+      // env argument only for this form, so an all-zero-argument module keeps
+      // its exact pre-env bytes (see the record constant's comment).
+      if (envConnectHooks.length > 0) {
+        push(setupState, `const ${GENERATED_ROOT_CONNECT_ENV_RECORD} = [];`);
+      }
+      for (const hook of envConnectHooks) {
+        pushParts(
+          setupState,
+          [`${GENERATED_ROOT_CONNECT_ENV_RECORD}.push((`, { record: hook.record }, '));'],
+          hook.span,
+        );
+      }
     }
     // `onDispose` registers on the element/island instance owner the shell
     // hands the factory: the existing LifetimeScope teardown cascade owns it
     // (once, after the connection/projection cleanups, LIFO, first-error rule).
+    // An env-form callback is wrapped so the owner's own `signal` is read at
+    // teardown: `LifetimeScope.dispose` aborts it BEFORE any cleanup runs, so
+    // the callback observes an aborted signal. The signal is created here (once
+    // per instance) so the abort is teardown-start, not first-callback.
+    if (disposeHooks.some((hook) => hook.receivesEnv)) {
+      push(setupState, `const ${TEARDOWN_SIGNAL_VAR} = ${INTERNAL_PREFIX}owner.signal;`);
+    }
     for (const hook of disposeHooks) {
+      if (hook.receivesEnv) {
+        pushParts(
+          setupState,
+          [
+            `${INTERNAL_PREFIX}owner.add(() => (`,
+            { record: hook.record },
+            `)({ host: ${MOUNT_HOST}.${HOST_ELEMENT_PROPERTY}, signal: ${TEARDOWN_SIGNAL_VAR} }));`,
+          ],
+          hook.span,
+        );
+        continue;
+      }
       pushParts(
         setupState,
         [`${INTERNAL_PREFIX}owner.add((`, { record: hook.record }, '));'],
@@ -7088,7 +7203,12 @@ function emitComponent(
       );
     }
     const recordFields = localLines.map((line) => line.name);
-    if (connectHooks.length > 0) recordFields.push(GENERATED_ROOT_CONNECT_RECORD);
+    if (connectHooks.some((hook) => !hook.receivesEnv)) {
+      recordFields.push(GENERATED_ROOT_CONNECT_RECORD);
+    }
+    if (connectHooks.some((hook) => hook.receivesEnv)) {
+      recordFields.push(GENERATED_ROOT_CONNECT_ENV_RECORD);
+    }
     const setupReturn =
       recordFields.length === 0 ? '  return {};' : `  return { ${recordFields.join(', ')} };`;
     setupLines = [...setupPrologue, ...setupState.lines, setupReturn, '}', ''];
@@ -7184,18 +7304,47 @@ function emitComponent(
     // the same retained setup record the locals use; the child mount/claim
     // prologue replays them on its per-projection scope. `onDispose` registers
     // on the retained instance owner, so the ledger's structural release /
-    // owner teardown cascades it exactly once (LIFO, first-error rule).
-    if (connectHooks.length > 0) {
+    // owner teardown cascades it exactly once (LIFO, first-error rule). The env
+    // form mirrors the root factory: its own retained record, and a wrapper
+    // that reads the retained owner's signal at teardown.
+    if (connectHooks.some((hook) => !hook.receivesEnv)) {
       push(setupState, `const ${GENERATED_ROOT_CONNECT_RECORD} = [];`);
     }
     for (const hook of connectHooks) {
+      if (hook.receivesEnv) continue;
       pushParts(
         setupState,
         [`${GENERATED_ROOT_CONNECT_RECORD}.push((`, { record: hook.record }, '));'],
         hook.span,
       );
     }
+    if (connectHooks.some((hook) => hook.receivesEnv)) {
+      push(setupState, `const ${GENERATED_ROOT_CONNECT_ENV_RECORD} = [];`);
+    }
+    for (const hook of connectHooks) {
+      if (!hook.receivesEnv) continue;
+      pushParts(
+        setupState,
+        [`${GENERATED_ROOT_CONNECT_ENV_RECORD}.push((`, { record: hook.record }, '));'],
+        hook.span,
+      );
+    }
+    if (disposeHooks.some((hook) => hook.receivesEnv)) {
+      push(setupState, `const ${TEARDOWN_SIGNAL_VAR} = ${INTERNAL_PREFIX}owner.signal;`);
+    }
     for (const hook of disposeHooks) {
+      if (hook.receivesEnv) {
+        pushParts(
+          setupState,
+          [
+            `${INTERNAL_PREFIX}owner.add(() => (`,
+            { record: hook.record },
+            `)({ host: ${MOUNT_HOST}.${HOST_ELEMENT_PROPERTY}, signal: ${TEARDOWN_SIGNAL_VAR} }));`,
+          ],
+          hook.span,
+        );
+        continue;
+      }
       pushParts(
         setupState,
         [`${INTERNAL_PREFIX}owner.add((`, { record: hook.record }, '));'],
@@ -7203,7 +7352,12 @@ function emitComponent(
       );
     }
     const setupFields = localLines.map((line) => line.name);
-    if (connectHooks.length > 0) setupFields.push(GENERATED_ROOT_CONNECT_RECORD);
+    if (connectHooks.some((hook) => !hook.receivesEnv)) {
+      setupFields.push(GENERATED_ROOT_CONNECT_RECORD);
+    }
+    if (connectHooks.some((hook) => hook.receivesEnv)) {
+      setupFields.push(GENERATED_ROOT_CONNECT_ENV_RECORD);
+    }
     const setupReturn =
       setupFields.length === 0 ? '  return {};' : `  return { ${setupFields.join(', ')} };`;
     setupLines = [...setupPrologue, ...setupState.lines, setupReturn, '}', ''];
@@ -7299,8 +7453,13 @@ function emitComponent(
   // callbacks replay on this fresh per-connection scope. A retained depth-1
   // hostless child reads them from its own setup record (`host.setup`); the
   // root keeps the unchanged `host.bindings` spelling (byte-identical).
-  if (connectHooks.length > 0) {
+  if (connectHooks.some((hook) => !hook.receivesEnv)) {
     for (const line of emitLifecycleReplay(rootSetup ? 'bindings' : 'setup')) {
+      mountPrologue.push(line);
+    }
+  }
+  if (connectHooks.some((hook) => hook.receivesEnv)) {
+    for (const line of emitLifecycleEnvReplay(rootSetup ? 'bindings' : 'setup')) {
       mountPrologue.push(line);
     }
   }
@@ -7313,6 +7472,12 @@ function emitComponent(
   // root component of a retained module changes bytes; every other factory keeps
   // today's literal exactly.
   const forwardedInstance = state.retainBody ? `, instance: ${INTERNAL_PREFIX}host.instance` : '';
+  // Env-form callbacks read the owning element from the host record. The shell
+  // attaches it; this literal carries it into the mount/claim host the replay
+  // prologues read. Guests: modules without the env form keep today's bytes.
+  const forwardedHostElement = moduleUsesLifecycleEnv(state)
+    ? `, ${HOST_ELEMENT_PROPERTY}: ${INTERNAL_PREFIX}host.${HOST_ELEMENT_PROPERTY}`
+    : '';
   if (state.requiresPropsChanged) {
     // The root instance's defining scope is the host props channel: the
     // original OEIR_LEAF_MISSING_VALUE contract stays at factory creation.
@@ -7320,11 +7485,11 @@ function emitComponent(
       `  const ${INTERNAL_PREFIX}propsChanged = ${INTERNAL_PREFIX}host.propsChanged; if (${INTERNAL_PREFIX}propsChanged === undefined) throw new Error("OEIR_LEAF_MISSING_VALUE: propsChanged");`,
     );
     factoryLines.push(
-      `  const ${mountHostVar} = { bindings: ${INTERNAL_PREFIX}host.bindings, propDeps: [${INTERNAL_PREFIX}propsChanged]${forwardedInstance} };`,
+      `  const ${mountHostVar} = { bindings: ${INTERNAL_PREFIX}host.bindings, propDeps: [${INTERNAL_PREFIX}propsChanged]${forwardedInstance}${forwardedHostElement} };`,
     );
   } else {
     factoryLines.push(
-      `  const ${mountHostVar} = { bindings: ${INTERNAL_PREFIX}host.bindings, propDeps: []${forwardedInstance} };`,
+      `  const ${mountHostVar} = { bindings: ${INTERNAL_PREFIX}host.bindings, propDeps: []${forwardedInstance}${forwardedHostElement} };`,
     );
   }
   const claim =
@@ -7337,7 +7502,12 @@ function emitComponent(
           sharedClaimCursor,
           rootSetup,
           rootInstance === component.name,
-          connectHooks.length > 0 ? (rootSetup ? 'bindings' : 'setup') : null,
+          connectHooks.some((hook) => !hook.receivesEnv)
+            ? rootSetup
+              ? 'bindings'
+              : 'setup'
+            : null,
+          connectHooks.some((hook) => hook.receivesEnv) ? (rootSetup ? 'bindings' : 'setup') : null,
           retention,
           claimStyleLinkPrefix,
         )

@@ -1356,30 +1356,61 @@ function applyAttribute(
   if (raw === null) restoreReflectedDefault(element, state, property);
 }
 
-function hostFor(state: ElementState): GeneratedElementHost<Record<string, unknown>> {
-  return {
-    // `ensureInstance` publishes the retained setup record before this host is
-    // built; the empty fallback keeps the contract total for a hand-built
-    // descriptor that names neither factory.
-    bindings: state.bindings ?? {},
-    // The one logical instance (LC-2 nesting): the generated root body opens a
-    // pass on it and retains direct hostless children. Omitted while no
-    // instance exists (hand-built descriptor without createInstance); the
-    // retention path is only emitted for a generated root, whose instance is
-    // always established before this host is built.
-    instance: state.instance ?? undefined,
-    props: state.props,
-    propsChanged: state.propsChanged,
-  };
+/**
+ * The compiler-private runtime property that carries the element a connection
+ * belongs to. The generated code reads it when it builds the `env` argument of
+ * an `onConnect(env)` / `onDispose(env)` callback. It is attached as a
+ * NON-enumerable runtime property: the exported host types
+ * (`GeneratedElementHost`, `GeneratedElementInstanceHost`) are unchanged, no
+ * exported symbol is added, and no host-record key enumeration changes.
+ */
+const HOST_ELEMENT_PROPERTY = '__oe_hostElement';
+
+/** Attach the owning element to a host record without changing its shape. */
+function withHostElement<T extends object>(record: T, element: HTMLElement): T {
+  Object.defineProperty(record, HOST_ELEMENT_PROPERTY, {
+    value: element,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  return record;
+}
+
+function hostFor(
+  state: ElementState,
+  element: HTMLElement,
+): GeneratedElementHost<Record<string, unknown>> {
+  return withHostElement(
+    {
+      // `ensureInstance` publishes the retained setup record before this host is
+      // built; the empty fallback keeps the contract total for a hand-built
+      // descriptor that names neither factory.
+      bindings: state.bindings ?? {},
+      // The one logical instance (LC-2 nesting): the generated root body opens a
+      // pass on it and retains direct hostless children. Omitted while no
+      // instance exists (hand-built descriptor without createInstance); the
+      // retention path is only emitted for a generated root, whose instance is
+      // always established before this host is built.
+      instance: state.instance ?? undefined,
+      props: state.props,
+      propsChanged: state.propsChanged,
+    },
+    element,
+  );
 }
 
 function instanceHostFor(
   state: ElementState,
+  element: HTMLElement,
 ): GeneratedElementInstanceHost<Record<string, unknown>> {
-  return {
-    props: state.props,
-    propsChanged: state.propsChanged,
-  };
+  return withHostElement(
+    {
+      props: state.props,
+      propsChanged: state.propsChanged,
+    },
+    element,
+  );
 }
 
 /**
@@ -1392,14 +1423,14 @@ function instanceHostFor(
  * attaches a region) and the ORIGINAL setup error rethrown; the fields are
  * cleared so the next connect retries setup on a fresh instance.
  */
-function ensureInstance(state: ElementState): LifetimeScope {
+function ensureInstance(state: ElementState, element: HTMLElement): LifetimeScope {
   const existing = state.instance;
   if (existing !== null) return existing;
   const instance = new LifetimeScope();
   try {
     const record =
       state.descriptor.createInstance !== undefined
-        ? state.descriptor.createInstance(instance, instanceHostFor(state))
+        ? state.descriptor.createInstance(instance, instanceHostFor(state, element))
         : (state.descriptor.createBindings?.() ?? {});
     state.instance = instance;
     state.bindings = record;
@@ -1700,11 +1731,11 @@ export function createGeneratedElementClass<P extends object = Record<string, un
               : !state.rootCreatedByShell && parent.childNodes.length > 0;
           state.regionState = preexisting ? 'present' : 'absent';
         }
-        const instance = ensureInstance(state);
+        const instance = ensureInstance(state, this);
         // The connection scope is created per successful connect and disposed
         // plain on disconnect; the instance above is retained across it.
         connection = instance.child();
-        const recipe = normalized.createRecipe(connection, hostFor(state));
+        const recipe = normalized.createRecipe(connection, hostFor(state, this));
         // Reconnect and dispose(false) retain the region; dispose(true) marks it
         // absent and the next connect mounts even when foreign nodes remain in
         // the root. The decision is never re-derived from current childNodes.
