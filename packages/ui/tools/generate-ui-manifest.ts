@@ -331,12 +331,22 @@ export function parseEvents(text: string): OpenElementEvent[] {
       node.expression.name.text === 'dispatchEvent'
     ) {
       const [eventNode] = node.arguments;
-      if (
-        eventNode !== undefined &&
-        ts.isNewExpression(eventNode) &&
-        ts.isIdentifier(eventNode.expression) &&
-        eventNode.expression.text === 'CustomEvent'
-      ) {
+      if (eventNode !== undefined && ts.isNewExpression(eventNode)) {
+        // A generated component authors the constructor through the global
+        // namespace (`new globalThis.CustomEvent(...)`) because the function
+        // lane's value allowlist has no bare DOM globals; the class lane writes
+        // `new CustomEvent(...)`. Both spell the same declaration.
+        const callee = eventNode.expression;
+        const isCustomEvent =
+          (ts.isIdentifier(callee) && callee.text === 'CustomEvent') ||
+          (ts.isPropertyAccessExpression(callee) &&
+            callee.name.text === 'CustomEvent' &&
+            ts.isIdentifier(callee.expression) &&
+            callee.expression.text === 'globalThis');
+        if (!isCustomEvent) {
+          ts.forEachChild(node, visit);
+          return;
+        }
         const [nameNode, optionsNode] = eventNode.arguments ?? [];
         if (nameNode && ts.isStringLiteralLike(nameNode) && !seen.has(nameNode.text)) {
           const name = nameNode.text;

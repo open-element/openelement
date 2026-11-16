@@ -138,11 +138,14 @@ test('the fixture root is not part of the shipped manifest (tracked bytes unchan
   expect(formatJson(shipped)).toEqual(
     readFileSync(new URL('src/generated-manifest.json', UI_ROOT), 'utf8'),
   );
-  // ... and the no-argument build (the shipped scan) never sees the fixture root.
-  expect(buildManifestFromRoot(new URL('src/', UI_ROOT))).toEqual(shipped);
+  // ... and the no-argument build (a scan with no host facts) now fails loud on
+  // the generated component instead of silently projecting nothing for it.
+  expect(() => buildManifestFromRoot(new URL('src/', UI_ROOT))).toThrow(
+    /needs a host-supplied generated-element site fact/,
+  );
 });
 
-test('the tracked CEM is unchanged and class-only', () => {
+test('the tracked CEM is unchanged and keeps the class-authored superclass', () => {
   const projected = buildCustomElementsManifest();
   validateCustomElementsManifest(projected);
   expect(formatJson(projected)).toEqual(
@@ -154,7 +157,13 @@ test('the tracked CEM is unchanged and class-only', () => {
     for (const declaration of module.declarations) {
       expect(declaration.kind).toEqual('class');
       expect(declaration.customElement).toEqual(true);
-      // The six-class corpus keeps its truthful public superclass.
+      if (declaration.tagName === 'open-theme-toggle') {
+        // The generated declaration has no truthful public superclass: the
+        // emitted class extends the non-public OpenElementBase.
+        expect('superclass' in declaration).toEqual(false);
+        continue;
+      }
+      // The class-authored corpus keeps its truthful public superclass.
       expect(declaration.superclass?.name).toEqual('OpenElement');
       expect(declaration.superclass?.package).toEqual('@openelement/element');
     }

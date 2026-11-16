@@ -27,6 +27,7 @@ import { DEFAULT_ISLANDS_DIR, DEFAULT_ROUTES_DIR } from '../paths.ts';
 import { fileToTagName } from './route-scanner.ts';
 import type { ScannedRouteEntry } from './route-scanner.ts';
 import {
+  attachPackageIslandHostIdentities,
   buildPackageIslandDecls,
   expandIslandDeliveryDecl,
   resolveIslandHydrate,
@@ -605,9 +606,9 @@ export function buildEntryDescriptor(
     },
   );
 
-  const packageIslandDecls: IslandDecl[] = buildPackageIslandDecls(
+  const packageIslandDecls: IslandDecl[] = attachPackageIslandHostIdentities(
+    buildPackageIslandDecls(packageManifests, options.upgradeStrategy),
     packageManifests,
-    options.upgradeStrategy,
   );
 
   const compilerBehaviorIslands = compilerBehaviorDeclarations(

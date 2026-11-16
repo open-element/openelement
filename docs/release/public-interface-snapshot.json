@@ -981,7 +981,7 @@
           ]
         },
         "./internal/compiled/runtime": {
-          "publicShapeSha256": "133e2da58a63bac42036606d889b83f2760329fa0fb2316f6c2c249969462100",
+          "publicShapeSha256": "339da71658f2cd4d1b95265b725ab817252879ebdcb3fa3d0e80974b28b4bcca",
           "publicSymbols": [
             "BlockHydrationOwner=type:{anchor:Comment;end:Comment;kind:\"block\";parent:Node;part:union(ProgramEachPart|ProgramWhenPart)}",
             "ClaimFunction=type:{call:(scope:{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal},props:Readonly<P>,parent:Node)=>array(Node)}",
@@ -1019,6 +1019,7 @@
             "assertEachAnchor=value:{call:(node:union(Node|null|undefined),where:string,origin:union(undefined|{readonly column:number;readonly file:string;readonly line:number}))=>void}",
             "assertEachEndMarker=value:{call:(node:union(Node|null|undefined),where:string,origin:union(undefined|{readonly column:number;readonly file:string;readonly line:number}))=>void}",
             "assertElementInHtmlNamespace=value:{call:(node:union(Node|null),where:string,origin:union(undefined|{readonly column:number;readonly file:string;readonly line:number}))=>void}",
+            "assertElementInNamespace=value:{call:(node:union(Node|null),namespace:string,where:string,origin:union(undefined|{readonly column:number;readonly file:string;readonly line:number}))=>void}",
             "assertSafeUrlAttribute=value:{call:(name:string,value:string)=>void}",
             "assertStaticAttributeSeed=value:{call:(element:Element,declared:array({readonly name:string;readonly value:string}),where:string,dynamicNames:array(string),origin:union(undefined|{readonly column:number;readonly file:string;readonly line:number}))=>void}",
             "assertTextSlotMarker=value:{call:(node:union(Node|null|undefined),ordinal:number,end:union(false|true),where:string,origin:union(undefined|{readonly column:number;readonly file:string;readonly line:number}))=>void}",
@@ -1601,14 +1602,14 @@
       },
       "declarations": {
         ".": {
-          "publicShapeSha256": "300471de66e201f3616e52bcb3b6203f3e4fa4d6147d56b7c00f68bf332ed5cc",
+          "publicShapeSha256": "fc95d15bd89bf27266adf8cbd3247e7c9e4e4f684eb3350b70515b02e89753a7",
           "publicSymbols": [
             "OpenButton=type:{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};buttonMode:ReadonlySignal<boolean>;disabled:union(false|true);href:string;linkAriaDisabled:ReadonlySignal<string | null>;linkHref:ReadonlySignal<string | null>;linkRel:ReadonlySignal<string | null>;linkTarget:ReadonlySignal<string | null>;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown};size:string;target:string;type:string;variant:string}|value:{construct:()=>{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};buttonMode:ReadonlySignal<boolean>;disabled:union(false|true);href:string;linkAriaDisabled:ReadonlySignal<string | null>;linkHref:ReadonlySignal<string | null>;linkRel:ReadonlySignal<string | null>;linkTarget:ReadonlySignal<string | null>;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown};size:string;target:string;type:string;variant:string};styles:array(StyleSheetLike)}",
             "OpenCodeBlock=type:{copyLabel:string;render:{call:()=>unknown}}|value:{construct:()=>{copyLabel:string;render:{call:()=>unknown}};styles:array(StyleSheetLike)}",
             "OpenDialog=type:{close:{call:()=>void};disconnectedCallback:{call:()=>void};label:string;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};open:union(false|true);render:{call:()=>unknown};show:{call:()=>void};toggle:{call:()=>void}}|value:{construct:()=>{close:{call:()=>void};disconnectedCallback:{call:()=>void};label:string;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};open:union(false|true);render:{call:()=>unknown};show:{call:()=>void};toggle:{call:()=>void}};styles:array(StyleSheetLike)}",
             "OpenDropdown=type:{anchorName:string;anchorStyle:ReadonlySignal<string>;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown}}|value:{construct:()=>{anchorName:string;anchorStyle:ReadonlySignal<string>;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown}};styles:array(StyleSheetLike)}",
             "OpenInput=type:{ariaInvalidAttr:ReadonlySignal<string | null>;attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};describedByAttr:ReadonlySignal<string | null>;disabled:union(false|true);error:string;errorIdAttr:ReadonlySignal<string | null>;formDisabledCallback:{call:(disabled:union(false|true))=>void};formResetCallback:{call:()=>void};idAttr:ReadonlySignal<string | null>;inputId:string;label:string;name:string;noError:ReadonlySignal<boolean>;noLabel:ReadonlySignal<boolean>;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};placeholder:string;render:{call:()=>unknown};required:union(false|true);requiredMark:ReadonlySignal<string>;type:string;value:string}|value:{construct:()=>{ariaInvalidAttr:ReadonlySignal<string | null>;attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};describedByAttr:ReadonlySignal<string | null>;disabled:union(false|true);error:string;errorIdAttr:ReadonlySignal<string | null>;formDisabledCallback:{call:(disabled:union(false|true))=>void};formResetCallback:{call:()=>void};idAttr:ReadonlySignal<string | null>;inputId:string;label:string;name:string;noError:ReadonlySignal<boolean>;noLabel:ReadonlySignal<boolean>;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};placeholder:string;render:{call:()=>unknown};required:union(false|true);requiredMark:ReadonlySignal<string>;type:string;value:string};styles:array(StyleSheetLike)}",
-            "OpenThemeToggle=type:{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};connectedCallback:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown};theme:union(\"dark\"|\"light\")}|value:{construct:()=>{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};connectedCallback:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown};theme:union(\"dark\"|\"light\")};styles:array(StyleSheetLike)}",
+            "OpenThemeToggle=value:{call:(props:{theme:string})=>any}",
             "manifest=value:OpenElementPackageManifest",
             "readInstanceState=value:{call:<T>(host:object,key:string,init:{call:()=>T})=>T}",
             "registerOpenUi=value:{call:(registry:union(CustomElementRegistry|undefined))=>void}",
@@ -1659,9 +1660,10 @@
           ]
         },
         "./open-theme-toggle": {
-          "publicShapeSha256": "ae880bca66ee6af6fe9506936329eb5e85f4c83a6d8598fa6645fb3869cd4060",
+          "publicShapeSha256": "10a05e27077ff85a5bef2739a33892650f347cdde66651a16a36cab12254e024",
           "publicSymbols": [
-            "OpenThemeToggle=type:{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};connectedCallback:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown};theme:union(\"dark\"|\"light\")}|value:{construct:()=>{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};connectedCallback:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown};theme:union(\"dark\"|\"light\")};styles:array(StyleSheetLike)}"
+            "default=value:{call:(props:{theme:string})=>any}",
+            "openElement=value:{delegatesFocus:true;properties:{theme:{default:string}};root:\"shadow\";styles:array(string)}"
           ]
         }
       }

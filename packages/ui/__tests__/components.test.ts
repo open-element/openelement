@@ -15,13 +15,7 @@
  * nothing here connects an element.
  */
 import { expect, test } from 'vitest';
-import {
-  dialogWith,
-  fakeDialog,
-  installDomHarness,
-  installThemeGlobals,
-  themeHarness,
-} from './harness.ts';
+import { dialogWith, fakeDialog, installDomHarness } from './harness.ts';
 
 installDomHarness();
 
@@ -269,85 +263,15 @@ test('open-input: formDisabledCallback mirrors onto the property, never the attr
   expect(el.disabled).toEqual(false);
 });
 
-// ─── open-theme-toggle: initialization priority + persistence policy (#804) ──
-
-test('open-theme-toggle: init follows attribute > document > storage > media priority', async () => {
-  const { OpenThemeToggle } = await import('../src/open-theme-toggle.tsx');
-  const withAttr = new (OpenThemeToggle as unknown as new () => AnyComponent)();
-  const attrHarness = themeHarness({ savedTheme: 'dark', mediaLight: false });
-  installThemeGlobals(attrHarness);
-  withAttr.setAttribute('theme', 'light');
-  withAttr.initTheme();
-  expect(withAttr.theme).toEqual('light');
-
-  const withDoc = new (OpenThemeToggle as unknown as new () => AnyComponent)();
-  installThemeGlobals(themeHarness({ docTheme: 'light' }));
-  withDoc.initTheme();
-  expect(withDoc.theme).toEqual('light');
-
-  const withStorage = new (OpenThemeToggle as unknown as new () => AnyComponent)();
-  installThemeGlobals(themeHarness({ savedTheme: 'dark' }));
-  withStorage.initTheme();
-  expect(withStorage.theme).toEqual('dark');
-
-  const withMedia = new (OpenThemeToggle as unknown as new () => AnyComponent)();
-  installThemeGlobals(themeHarness({ mediaLight: true }));
-  withMedia.initTheme();
-  expect(withMedia.theme).toEqual('light');
-});
-
-test('open-theme-toggle: init never persists; explicit toggle persists and dispatches (#804)', async () => {
-  const { OpenThemeToggle } = await import('../src/open-theme-toggle.tsx');
-  const harness = themeHarness({ savedTheme: 'dark' });
-  installThemeGlobals(harness);
-  const el = new (OpenThemeToggle as unknown as new () => AnyComponent)();
-  el.initTheme();
-  expect(harness.writes, 'init path must not write localStorage').toEqual([]);
-
-  el.handleToggle();
-  expect(el.theme).toEqual('light');
-  expect(harness.writes).toEqual(['light']);
-  expect(harness.dispatched.includes('open:theme-change')).toEqual(true);
-});
-
-test('open-theme-toggle: an explicit theme attribute overrides the pre-paint document theme (#1804)', async () => {
-  const { OpenThemeToggle } = await import('../src/open-theme-toggle.tsx');
-  // The pre-paint script already wrote `dark`; the authored attribute wins, so
-  // the hydration write that follows is deliberate — not a duplicate writer.
-  const harness = themeHarness({ savedTheme: 'dark', mediaLight: false, docTheme: 'dark' });
-  installThemeGlobals(harness);
-  const el = new (OpenThemeToggle as unknown as new () => AnyComponent)();
-  el.setAttribute('theme', 'light');
-  el.initTheme();
-
-  expect(el.theme).toEqual('light');
-  expect(harness.docAttributes).toEqual([['data-theme', 'light']]);
-  expect(harness.colorSchemes).toEqual(['light']);
-  // The event contract is unchanged: the first init announces the applied theme.
-  expect(harness.dispatched).toEqual(['open:theme-change']);
-  expect(harness.eventDetails).toEqual([{ theme: 'light' }]);
-  expect(harness.writes, 'the init path must not persist an explicit override').toEqual([]);
-});
-
-test('open-theme-toggle: a throwing matchMedia follows the dark default instead of aborting init (#1804)', async () => {
-  const { OpenThemeToggle } = await import('../src/open-theme-toggle.tsx');
-  const harness = themeHarness({ mediaThrows: true });
-  installThemeGlobals(harness);
-  const el = new (OpenThemeToggle as unknown as new () => AnyComponent)();
-  expect(() => el.initTheme()).not.toThrow();
-  expect(el.theme).toEqual('dark');
-  expect(harness.docAttributes).toEqual([['data-theme', 'dark']]);
-  expect(harness.dispatched).toEqual(['open:theme-change']);
-});
-
-test('open-theme-toggle: a legacy truthy saved value is not a theme; the system preference decides (#1804)', async () => {
-  const { OpenThemeToggle } = await import('../src/open-theme-toggle.tsx');
-  const harness = themeHarness({ savedTheme: 'garbage', mediaLight: true });
-  installThemeGlobals(harness);
-  const el = new (OpenThemeToggle as unknown as new () => AnyComponent)();
-  el.initTheme();
-  expect(el.theme).toEqual('light');
-});
+// ─── open-theme-toggle is a generated (function-component) element ───────────
+//
+// It no longer exists as a class to instantiate: the compiler emits
+// `OpenThemeToggleElement` and the build registers it. Its priority chain,
+// persistence policy, per-instance resolution and reconnect/dispose semantics
+// are asserted against the REAL shipped element in
+// `www/e2e/theme-toggle-instances.spec.ts` (and the toggle behavior in
+// `www/e2e/theme-system.spec.ts`), which is the platform-level form of the rows
+// that used to drive the class methods here.
 
 // ─── open-dropdown: pointerdown popover guard + per-instance anchor (#1061) ──
 

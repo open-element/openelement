@@ -366,10 +366,12 @@ export function registerPackageIslandStyleDeclarations(
     const specifier = declaration.modulePath;
     if (specifier === undefined || specifier === '') continue;
     try {
-      moduleByTag.set(
-        declaration.tagName,
-        stableModuleId(requireFromRoot.resolve(specifier), host.root, host.workspaceRoot),
-      );
+      // The style registry resolves every specifier against the module's own
+      // directory, exactly like the local island scan (which passes the
+      // island module's ABSOLUTE path). A project-relative stable id would
+      // make the emitted edge a relative filesystem path the loader cannot
+      // read.
+      moduleByTag.set(declaration.tagName, requireFromRoot.resolve(specifier));
     } catch {
       continue;
     }
@@ -388,6 +390,64 @@ export function registerPackageIslandStyleDeclarations(
       specifiers: fact.specifiers,
     });
   }
+}
+
+/**
+ * Attach the compiler-owned generated host identity to every package island
+ * declaration whose module source resolves.
+ *
+ * The identity is what the generated entry pairs a tag with (`__registerSsrIsland`
+ * writer); a local island gets it from its own source scan, and a package
+ * component needs the same carrier even though its declaration comes from a
+ * manifest. The compiler is the authority: the declaration supplies the tag and
+ * the published root, the module source supplies everything else. A module the
+ * host cannot resolve keeps no identity (its own coded failure is reported by
+ * the island pipeline) and the entry keeps the class-only bytes.
+ */
+export function attachPackageIslandHostIdentities(
+  declarations: readonly IslandDecl[],
+  packageManifests: readonly OpenElementPackageManifest[],
+): IslandDecl[] {
+  const declaredRoots = new Map<string, 'light' | 'shadow' | undefined>();
+  for (const pkg of packageManifests) {
+    for (const declaration of pkg.declarations) {
+      declaredRoots.set(
+        declaration.tagName,
+        declaration.openElement?.root === 'shadow'
+          ? 'shadow'
+          : declaration.openElement?.root === 'light'
+            ? 'light'
+            : undefined,
+      );
+    }
+  }
+  const requireFromRoot = createRequire(join(process.cwd(), 'package.json'));
+  return declarations.map((declaration) => {
+    if (declaration.source !== 'package') return declaration;
+    const specifier = declaration.modulePath;
+    if (specifier === undefined || specifier === '') return declaration;
+    let file: string;
+    try {
+      file = requireFromRoot.resolve(specifier);
+    } catch {
+      return declaration;
+    }
+    if (!/\.tsx$/.test(file)) return declaration;
+    let source: string;
+    try {
+      source = readFileSync(file, 'utf8');
+    } catch {
+      return declaration;
+    }
+    const identity = resolveGeneratedElementHost({
+      source,
+      moduleId: file,
+      filePath: file,
+      root: declaredRoots.get(declaration.tagName),
+      site: { tag: declaration.tagName },
+    });
+    return { ...declaration, generatedElementHost: identity };
+  });
 }
 
 /**

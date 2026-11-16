@@ -363,6 +363,10 @@ export function readGeneratedElementFacts(input: GeneratedElementInput): Generat
 
   const frontend = compileFunctionModule(input.source, input.file, {
     importClassifier: GENERATED_ELEMENT_IMPORT_CLASSIFIER,
+    // The lane entry compiles with the SAME module-wide lifecycle admission;
+    // the facts projection must mirror it or a component with admitted hooks
+    // would be refused here while the build accepts it.
+    lifecycleAdmission: { admission: 'module' },
   });
   if (frontend.module === null) {
     return {

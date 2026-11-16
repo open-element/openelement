@@ -183,6 +183,7 @@ export {
   assertEachAnchor,
   assertEachEndMarker,
   assertElementInHtmlNamespace,
+  assertElementInNamespace,
   assertStaticAttributeSeed,
   assertTextSlotMarker,
   assertWhenAnchor,

@@ -96,7 +96,9 @@ test('the pre-paint artifact is the generator output, byte for byte', async () =
 test('the toggle delegates the resolution rule and the document write to the contract', async () => {
   const toggle = await THEME_TOGGLE_SOURCE;
 
-  expect(toggle).toContain('applyDocumentTheme(document.documentElement, theme)');
+  // A generated component receives its host, so the document write goes
+  // through `host.ownerDocument`; the contract remains the only writer.
+  expect(toggle).toMatch(/applyDocumentTheme\(\s*[\w.]*documentElement\s*,/);
   expect(toggle, 'the toggle must not write html[data-theme] itself').not.toMatch(
     /documentElement\.setAttribute\(\s*'data-theme'/,
   );

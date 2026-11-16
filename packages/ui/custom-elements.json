@@ -217,14 +217,10 @@
       "declarations": [
         {
           "kind": "class",
-          "name": "OpenThemeToggle",
+          "name": "OpenThemeToggleElement",
           "tagName": "open-theme-toggle",
           "customElement": true,
           "description": "Theme toggle button for dark/light mode: reads and flips the document's `data-theme` (with an initialization priority chain) and persists the choice; icon visibility follows the current theme attribute.",
-          "superclass": {
-            "name": "OpenElement",
-            "package": "@openelement/element"
-          },
           "members": [],
           "attributes": [
             {
@@ -232,7 +228,7 @@
               "type": {
                 "text": "string"
               },
-              "description": "theme attribute"
+              "default": "dark"
             }
           ],
           "events": [
@@ -246,16 +242,13 @@
           ],
           "cssParts": [
             {
-              "name": "toggle",
-              "description": "The button element"
+              "name": "toggle"
             },
             {
-              "name": "icon-sun",
-              "description": "The sun SVG icon"
+              "name": "icon-sun"
             },
             {
-              "name": "icon-moon",
-              "description": "The moon SVG icon"
+              "name": "icon-moon"
             }
           ]
         }

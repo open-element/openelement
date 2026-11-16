@@ -111,9 +111,11 @@ describe('package island style declarations', () => {
     expect(recorded[0]).toMatchObject({
       tagName: 'open-theme-toggle',
       root: 'shadow',
-      moduleId: 'packages/ui/src/open-theme-toggle.tsx',
       specifiers: ['./open-theme-toggle.css'],
     });
+    // The registry resolves specifiers against the module's own directory, so
+    // the recorded id must be the absolute file the host resolved.
+    expect(recorded[0]!.moduleId.endsWith('/packages/ui/src/open-theme-toggle.tsx')).toBe(true);
   });
 
   test('skips a package module the host cannot resolve instead of inventing an edge', () => {

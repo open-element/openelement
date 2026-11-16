@@ -3,15 +3,18 @@ import { OpenCodeBlock } from './open-code-block.tsx';
 import { OpenDialog } from './open-dialog.tsx';
 import { OpenDropdown } from './open-dropdown.tsx';
 import { OpenInput } from './open-input.tsx';
-import { OpenThemeToggle } from './open-theme-toggle.tsx';
 
 // Compiled modules carry no runtime tagName export (the compiled
 // program owns the tag), so the registration table lives here, beside the
 // class imports. Keep aligned with manifest.declarations order.
+//
+// A component authored as a function component has no class to register: the
+// build emits its element class from the manifest declaration and the island
+// entry defines it. `open-theme-toggle` is the first such component, so it is
+// deliberately absent from this table.
 const COMPONENTS: ReadonlyArray<readonly [string, CustomElementConstructor]> = [
   ['open-button', OpenButton],
   ['open-input', OpenInput],
-  ['open-theme-toggle', OpenThemeToggle],
   ['open-code-block', OpenCodeBlock],
   ['open-dialog', OpenDialog],
   ['open-dropdown', OpenDropdown],

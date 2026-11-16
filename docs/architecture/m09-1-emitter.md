@@ -316,3 +316,25 @@ signal refusal) and the updated carry rows in
 (an imported handler is now a static reference the module re-emits) plus the
 Chromium failure fixture, whose import now resolves through the emitted module.
 LOCAL.
+
+## 2026-11-16 amendment — SVG subtrees (namespace-aware mount and claim)
+
+An `<svg>` subtree lives in the SVG namespace. `document.createElement` produces
+an HTML-namespaced lookalike that renders nothing, and the HTML claim walk
+refuses it (`non-HTML namespace`), so the first migrated component (the ui theme
+toggle's icons) could not be claimed.
+
+- Mount: an `<svg>` element and its descendants are created with
+  `document.createElementNS('http://www.w3.org/2000/svg', tag)`.
+- Claim: inside the subtree the claim asserts the element's OWN namespace
+  (`assertElementInNamespace`), not the HTML ancestor walk — the ancestors are
+  legitimately SVG. An HTML-only module keeps the existing
+  `assertElementInHtmlNamespace` bytes.
+- Boundary: the admitted tag grammar is lowercase (`TAG_PATTERN`), so camelCase
+  SVG tags (`foreignObject`, `linearGradient`) stay refused with
+  `OEIR_LEAF_UNSUPPORTED_TAG` rather than created in the wrong namespace.
+
+Evidence: `packages/compiler/__tests__/semantic-ir/generated-element.svg.test.ts`
+(mount uses `createElementNS` for the subtree, claim asserts the SVG namespace
+per element, camelCase tags stay refused) and the www theme-toggle e2e path,
+which claims the shipped component's icons. LOCAL.

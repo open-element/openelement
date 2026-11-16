@@ -38,7 +38,10 @@ import {
   setRouteDocumentStyleLinks,
   type RouteDocumentStyleLinks,
 } from '../vite/internal/ssg/route-style-links.ts';
-import { admittedTailwindDeclarations } from '../vite/internal/ssg/island-scanner.ts';
+import {
+  admittedTailwindDeclarations,
+  buildPackageIslandDecls,
+} from '../vite/internal/ssg/island-scanner.ts';
 import { buildError, RouteScanErrorCode } from '../internal/error-codes.ts';
 import {
   buildEntryDescriptor,
@@ -667,10 +670,18 @@ async function buildSSG(
           // same generated class the client build emits.
           generatedElementSite: createGeneratedElementSiteResolver(
             islandsDir,
-            collectPackageIslandModuleSites(ctx.phase1.packageIslandDecls, {
-              root,
-              workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
-            }),
+            // Admission facts for the SSR compile come from the manifest set,
+            // not from the client build's delivery narrowing: the generated
+            // entry pairs an SSR-admitted package host producer regardless of
+            // whether a page uses the tag, so every package module it may
+            // import must be admitted here or the import cannot resolve.
+            collectPackageIslandModuleSites(
+              buildPackageIslandDecls(ctx.phase1.packageManifests ?? []),
+              {
+                root,
+                workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
+              },
+            ),
           ),
         }),
         // serves the server half of the style edge protocol — the

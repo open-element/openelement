@@ -22,7 +22,8 @@
  * import { registerOpenUi } from '@openelement/ui';
  * registerOpenUi();
  *
- * // Or import specific components
+ * // Or import specific components (authored source; the elements register
+ * // themselves through the build, not through a class export)
  * import { OpenButton } from '@openelement/ui/open-button';
  * ```
  *
@@ -38,7 +39,9 @@ export { readInstanceState, writeInstanceState } from './instance-state.ts';
 export { OpenButton } from './open-button.tsx';
 export { OpenInput } from './open-input.tsx';
 export { OpenCodeBlock } from './open-code-block.tsx';
-export { OpenThemeToggle } from './open-theme-toggle.tsx';
+// Authored function component; the element constructor is build-emitted and
+// registered by the build (see docs/adr/ADR-0182).
+export { default as OpenThemeToggle } from './open-theme-toggle.tsx';
 export { OpenDialog } from './open-dialog.tsx';
 export { OpenDropdown } from './open-dropdown.tsx';
 

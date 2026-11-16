@@ -322,6 +322,10 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
     predicate: (body) => body.includes('assertElementInHtmlNamespace('),
   },
   {
+    symbol: 'assertElementInNamespace',
+    predicate: (body) => body.includes('assertElementInNamespace('),
+  },
+  {
     symbol: 'assertStaticAttributeSeed',
     predicate: (body) => body.includes('assertStaticAttributeSeed('),
   },
@@ -421,6 +425,9 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
 ];
 
 const INTERNAL_PREFIX = '__oe_';
+/** The namespace URI an `<svg>` subtree is created and claimed in. */
+const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
 /**
  * T3 / 16b-LC-1: the module-local ROOT setup factory name.
  *
@@ -3507,6 +3514,7 @@ function emitNode(
   sink: SinkEntry[],
   records: ReadonlyMap<string, LoweredExpressionRecord>,
   allowDirectory = true,
+  namespace: 'html' | 'svg' = 'html',
 ): void {
   const span: IrSpan = node.span;
   if (node.kind === 'text') {
@@ -3525,7 +3533,7 @@ function emitNode(
     // interior emit its own `oe:r` pair. The child list is normalized on the
     // same gate as every other claimable surface.
     for (const child of emissionNodes(state, node.children))
-      emitNode(state, child, sink, records, allowDirectory);
+      emitNode(state, child, sink, records, allowDirectory, namespace);
     return;
   }
   if (node.kind === 'condition') {
@@ -3547,9 +3555,15 @@ function emitNode(
       return;
     }
     const varName = nextName(state, 'el');
+    // An `<svg>` element (and its subtree) lives in the SVG namespace; a
+    // `document.createElement` call would produce an HTML-namespaced lookalike
+    // that renders nothing. `foreignObject` switches its children back to HTML.
+    const elementNamespace = node.tag === 'svg' ? 'svg' : namespace;
     push(
       state,
-      `const ${varName} = document.createElement(${JSON.stringify(node.tag)});`,
+      elementNamespace === 'svg'
+        ? `const ${varName} = document.createElementNS(${JSON.stringify(SVG_NAMESPACE)}, ${JSON.stringify(node.tag)});`
+        : `const ${varName} = document.createElement(${JSON.stringify(node.tag)});`,
       node.span,
     );
     for (const attribute of node.attributes) {
@@ -3634,9 +3648,14 @@ function emitNode(
     if (ranges !== null)
       emitMountedDirectory(state, ranges, records, { kind: 'element', name: varName });
     else {
+      // The admitted tag grammar is lowercase (`TAG_PATTERN`), so camelCase SVG
+      // tags (`foreignObject`, `linearGradient`) are outside this lane; the
+      // subtree keeps its namespace. An SVG subtree needing one of them stays
+      // unsupported instead of silently mis-namespaced.
+      const childNamespace = elementNamespace;
       for (const child of emissionNodes(state, node.children)) {
         const childSink: SinkEntry[] = [];
-        emitNode(state, child, childSink, records, allowDirectory);
+        emitNode(state, child, childSink, records, allowDirectory, childNamespace);
         appendSinkToElement(state, childSink, varName);
       }
     }
@@ -4039,6 +4058,27 @@ function emitClaimMismatch(
  * in the HTML namespace. Text and comment ancestors are not element checks.
  * A failure here is before any claim write.
  */
+/**
+ * The own-element namespace assertion for a claimed SVG subtree (or an HTML
+ * element inside an SVG `foreignObject`). Kept beside the HTML ancestor walk so
+ * the two claim namespace rules read together.
+ */
+function emitClaimElementNamespace(
+  state: EmitState,
+  nodeExpr: string,
+  namespace: 'html' | 'svg',
+  where: string,
+  anchor?: SpanLike,
+): void {
+  state.usesLeafClaimMismatch = true;
+  push(
+    state,
+    `assertElementInNamespace(${nodeExpr}, ${JSON.stringify(
+      namespace === 'svg' ? SVG_NAMESPACE : HTML_NAMESPACE,
+    )}, ${JSON.stringify(where)}${originArgs(anchor)});`,
+  );
+}
+
 function emitClaimHtmlNamespace(
   state: EmitState,
   nodeExpr: string,
@@ -4976,6 +5016,7 @@ function emitClaimInto(
   adoptIf: (name: string, condition: string) => void,
   parentExpr: string,
   collect: boolean,
+  namespace: 'html' | 'svg' = 'html',
 ): void {
   const list = state.emitTextBoundaries ? normalizeTextRuns(nodes) : nodes;
   list.forEach((node, index) => {
@@ -5001,6 +5042,7 @@ function emitClaimInto(
         adoptIf,
         parentExpr,
         collect,
+        namespace,
       );
       return;
     }
@@ -5074,7 +5116,17 @@ function emitClaimInto(
         `expected element '${node.tag}' at ${here}`,
         node.span,
       );
-      emitClaimHtmlNamespace(state, name, here, node.span);
+      const elementNamespace = node.tag === 'svg' ? 'svg' : namespace;
+      if (elementNamespace === 'svg') {
+        emitClaimElementNamespace(state, name, 'svg', here, node.span);
+      } else if (namespace === 'svg') {
+        // HTML inside an SVG subtree (`foreignObject`): the element itself is
+        // HTML, but its ancestors are legitimately SVG, so the own-namespace
+        // rule applies instead of the ancestor walk.
+        emitClaimElementNamespace(state, name, 'html', here, node.span);
+      } else {
+        emitClaimHtmlNamespace(state, name, here, node.span);
+      }
       emitClaimStaticAttributeSeed(state, name, node.attributes, here, node.span);
       for (const attribute of node.attributes) {
         if (attribute.kind === 'static') continue;
@@ -5133,6 +5185,7 @@ function emitClaimInto(
           () => {},
           name,
           false,
+          elementNamespace,
         );
         emitClaimCursorEnd(state, childCursor, here, node.span);
         if (saved !== null) {

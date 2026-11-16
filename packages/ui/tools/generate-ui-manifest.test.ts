@@ -148,11 +148,16 @@ function tagsDeclaredInSource(): string[] {
   return readdirSync(sourceRoot, { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile() && /^open-.*\.tsx$/.test(entry.name))
     .map((entry) => {
-      const declaration = /@element\(\s*'([^']+)'/.exec(
-        readFileSync(`${entry.parentPath}/${entry.name}`, 'utf8'),
-      );
-      if (declaration === null) throw new Error(`${entry.name}: no @element('<tag>') declaration`);
-      return declaration[1]!;
+      const source = readFileSync(`${entry.parentPath}/${entry.name}`, 'utf8');
+      const decorator = /@element\(\s*'([^']+)'/.exec(source);
+      if (decorator !== null) return decorator[1]!;
+      // A generated (function) component declares its platform facts through
+      // the sidecar and takes its tag from the published `exports` subpath,
+      // which the site rule pins to the file stem.
+      if (source.includes('export const openElement')) {
+        return entry.name.replace(/\.tsx$/, '');
+      }
+      throw new Error(`${entry.name}: no @element('<tag>') or openElement sidecar declaration`);
     })
     .sort();
 }

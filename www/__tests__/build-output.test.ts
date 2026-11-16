@@ -127,15 +127,21 @@ test('build output: artifact scan — no vendored highlighter, no CDN font refer
     // dragon-live-gaze's sheet lives in client/assets/ — a hit means the
     // extraction path regressed and the sheet re-inlined into the chunk.
     ['dragon-enter', 'extracted dragon-live-gaze sheet'],
-    // The DSD static-styles marker is the server serializer's write and the
-    // runtime's claim channel; an island copy would be a second writer.
+    // The DSD static-styles marker is the server serializer's write; an island
+    // copy would be a second writer. A styled generated shadow island's CLAIM
+    // legitimately READS the marked prefix it skips (`hasAttribute(...)`), so
+    // only the write spelling counts.
     ['data-oe-static-styles', 'static-styles channel'],
   ];
   for (const file of readdirSync(islandsDir)) {
     if (!file.startsWith('island-') || !file.endsWith('.js')) continue;
     const code = readFileSync(join(islandsDir, file), 'utf8');
+    const withoutClaimReader = code
+      .replaceAll('hasAttribute(`data-oe-static-styles`)', '')
+      .replaceAll('hasAttribute("data-oe-static-styles")', '')
+      .replaceAll("hasAttribute('data-oe-static-styles')", '');
     for (const [marker, why] of cssTextMarkers) {
-      if (code.includes(marker)) {
+      if (withoutClaimReader.includes(marker)) {
         violations.push(`island ${file} carries ${why} (${JSON.stringify(marker)})`);
       }
     }

@@ -271,3 +271,63 @@ behaviour regression rather than an implementation detail.
   listener, then surface the first error".
 - Placement follows the lifecycle intrinsics: depth >= 2, recipe/list bodies and
   non-retained targets keep the existing authored-span refusals.
+
+## Migration record (2026-11-16): the first component, `open-theme-toggle`
+
+The owner approved the class-export retirement for migrated components on
+2026-11-16 (direction D1 = A). This record applies it to the first component and
+states exactly what the public surface loses and keeps.
+
+### What migrated
+
+`packages/ui/src/open-theme-toggle.tsx` is now a function component with a
+sidecar (`defineComponentConfig({ root: 'shadow', delegatesFocus: true,
+styles: ['./open-theme-toggle.css'], properties: { theme: { default: 'dark' } } })`).
+The compiler emits `OpenThemeToggleElement`; the build's generated entry defines
+it. The behavior is the class's: attribute > document > storage > media priority,
+per-instance resolution, document convergence, dual-state transitions,
+click-only persistence, `open:theme-change` with `{ theme }`, `::part`
+toggle/icon-sun/icon-moon, the `data-theme` sink on the button.
+
+### Public-surface delta (enumerated)
+
+- `@openelement/ui` no longer exports the `OpenThemeToggle` **class**. The same
+  name is exported as the authored function component; it is not constructible.
+  The element constructor exists only in the build output
+  (`customElements.get('open-theme-toggle')` after registration).
+- `registerOpenUi` no longer defines that tag; the generated entry defines it
+  from the manifest declaration. The manual table keeps the five class-authored
+  components.
+- The manifest/CEM declaration for the tag becomes a generated one: emitted
+  class name, no public superclass, `root: 'shadow'`, the authored `styles`
+  list, the same attribute, event and part names.
+- `docs/release/public-interface-snapshot.json` is regenerated (class type
+  replaced by the function type; `assertElementInNamespace` added to the
+  element runtime's internal compiled surface for SVG claims).
+
+This is a breaking TypeScript-surface change for consumers that imported the
+class to instantiate or register it themselves. Consumers of the tag, the CSS
+parts, the attribute or the event see no change.
+
+### Evidence
+
+`www/e2e/theme-toggle-instances.spec.ts` (priority chain, multi-instance
+independence, document convergence, attribute-driven no-persist, reconnect
+exactly-once, mount/claim parity), `www/e2e/theme-system.spec.ts` and
+`www/e2e/ui-behaviour-matrix.spec.ts` (shipped behavior, parts, no-JS styling),
+the ui unit suites (manifest coverage, smoke, contract) and the compiler
+artifact suites. LOCAL.
+
+### One capability this migration required: SVG subtrees
+
+The component's icons are an `<svg>` subtree. The generated lane previously
+created every element with `document.createElement` and claimed every element
+with the HTML ancestor walk, so an SVG subtree would be HTML-namespaced in a
+mount and refused by a claim (`non-HTML namespace`). The emitters now create an
+`<svg>` subtree with `createElementNS(SVG)`, the claim asserts the element's OWN
+namespace inside it, and camelCase SVG tags (`foreignObject`, `linearGradient`)
+stay outside the admitted lowercase tag grammar. Existing HTML-only modules keep
+their bytes.
+
+Nothing in this record claims a stability promise, an owner sign-off, a gate or
+a release condition.
