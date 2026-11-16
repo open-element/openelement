@@ -76,6 +76,7 @@ import {
 } from '@openelement/compiler';
 import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
 import { createServerComponentSourceResolver } from './server-component-host.ts';
+import type { IslandStyleDeclaration } from './island-style-declarations.ts';
 import { walkModuleGraph } from './module-graph-walk.ts';
 import {
   registerArtifactCandidates,
@@ -1107,9 +1108,46 @@ export function serverStyleAssetPlugin(options?: {
  * surfaces through the element runtime's `OE_STYLES_SHEET_LOAD_FAILED` report.
  * There is no fallback that inlines the CSS.
  */
+/**
+ * Dev-only index: resource digest → the style edge's registry key.
+ *
+ * The endpoint needs the mapping the URL cannot carry. It is filled by the
+ * adapter module's own `load()` (class-lane edges) AND by the generated-island
+ * declarations (`devAuthoredIslandStyleUrls`), because a declared shadow sheet
+ * has no authored `.css` import whose adapter would register it — the DSD
+ * template declares the URL directly. Module-scoped on purpose: the server half
+ * and the entry's virtual module are different plugin instances of the same dev
+ * server.
+ */
+const devAuthoredResourceEdges = new Map<string, string>();
+
+/**
+ * The dev URLs of one generated island's declared sheets. Registers the edges in
+ * the SAME compiler registry the class lane rides and records the digest index
+ * the dev endpoint reads, so a shadow island's DSD `<link>` resolves in dev
+ * exactly as it does in a build.
+ */
+export function devAuthoredIslandStyleUrls(
+  base: string,
+  declaration: IslandStyleDeclaration,
+): readonly string[] {
+  registerStyleEdges(
+    declaration.moduleId,
+    declaration.specifiers,
+    declaration.root === 'shadow' ? undefined : declaration.tagName,
+  );
+  const urls: string[] = [];
+  for (const request of styleRequestsForImporter(declaration.moduleId)) {
+    const url = devAuthoredStyleUrl(base, request.moduleId);
+    devAuthoredResourceEdges.set(devStyleDigest(request.moduleId), request.moduleId);
+    urls.push(url);
+  }
+  return urls;
+}
+
 export function devStyleAssetPlugin(): Plugin {
   /** Resource digest → the edge's registry key (the middleware's index). */
-  const resourceEdges = new Map<string, string>();
+  const resourceEdges = devAuthoredResourceEdges;
   let base = '/';
   return {
     name: 'open:style-assets-dev',
