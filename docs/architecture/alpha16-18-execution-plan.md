@@ -626,3 +626,74 @@ plan's own record stands:
 - No milestone, gate, exit or release claim is created or moved. M09, M10, M11,
   M12, M13 and M14 keep their recorded statuses.
 - No version, tag, publication or public-API freeze is authorized.
+
+## 17. Dated amendment 2026-11-16 (owner direction register — draft; formal sign-off pending)
+
+This amendment records three directions the owner gave on 2026-11-16: **D1 = A**
+(generated islands of the workspace `@openelement/ui` package migrate inside
+Alpha16, targeting the Alpha16 release line), **D2 = the experience-edition
+capability API**, and **D3 = B** (a JSON seed channel for non-attribute
+properties). It is a **draft carrier of the direction only**: the formal owner
+sign-off line in §17.2 is intentionally blank, and this draft records no
+signature, approval, verdict, evidence or release authorization. The proposed
+decision text lives in
+[the ADR-0182 draft](../adr/ADR-0182-function-component-capability-api.md).
+
+It introduces **no new milestone and no new slice label** (§14.4:525-527 stays
+in force) and it changes no verdict.
+
+### 17.1 Decisions directed
+
+| # | Direction (owner, 2026-11-16) | Boundaries recorded by this draft |
+| --- | --- | --- |
+| D-17a | **D1 = A.** Generated-lane island admission extends to workspace package modules, and the three `@openelement/ui` islands the docs site consumes (`open-button`, `open-code-block`, `open-theme-toggle`) migrate to function/generated components **inside Alpha16**, targeting the Alpha16 release line subject to the release gates. | Not class retirement, not a package split or rename, and not a second admission mechanism. The workspace-source-versus-build-metadata route for the package-module site fact, and the scope of the CEM live input plus the ui package build/publish chain, are implementation decisions recorded by the implementation slices — not selected or waived here. |
+| D-17b | **D2 = experience-edition capability API:** lifecycle callbacks receive `env = { host, signal }`; an `onError` error-boundary intrinsic; `provideContext` / `useContext` as a scope tree over generated owners (hostless owners included); an intrinsic element `ref` plus `useHost` host-element access; a **component `ref` stays FUTURE** and is not part of this edition. | Compiler-erased intrinsics admitted by binding provenance (the ADR-0180 pattern): no runtime dispatcher, no hook-order slots, no second lifecycle engine, no class adapter. "Experience edition" is a deliberate **no-stability-promise** label; exact signatures, the boundary reset policy and the context representation/lifetime/reactivity remain implementation decisions (the candidate contract's TSX-12 ref-timing boundary and TSX-13/TSX-19 OPEN items are unchanged). Every public export or tracked-interface delta is enumerated in the implementation record and its regenerated snapshot change. |
+| D-17c | **D3 = B.** Declared non-attribute (`attribute: false` / non-primitive) property values cross to the client through a dedicated **JSON seed channel**; attribute encoding is not the chosen carrier. | Only declared property-only rows whose declared value type is JSON-encodable are in scope; values are JSON-safe and validated, and no raw-markup channel is added. The `trustedHtml` crossing and the exact transport are separate decisions — [`m09-2d-nonprimitive-properties.md`](./m09-2d-nonprimitive-properties.md):126 already assigns a future transport to M11 and records that no server-to-client seed exists today. Claim acceptance: an equal seed writes nothing and a structurally divergent seed fails closed through the existing claim-mismatch path. |
+
+### 17.2 Formal sign-off (pending — intentionally blank)
+
+| Field | Value |
+| --- | --- |
+| Owner direction recorded | 2026-11-16 (the three directions above) |
+| Owner sign-off | ____________________________ (pending; blank by design) |
+| Sign-off date | ____________________________ (pending) |
+
+This draft does not move §17 from draft to an approved amendment, and the blank
+line is not a signature. Only the owner's recorded sign-off can do that.
+
+Implementation slices may proceed under this recorded direction (the owner gave
+it on 2026-11-16); the blank sign-off blocks any claim that the direction is
+delivered, that a §17.3 evidence row is satisfied, or that any gate, exit or
+release condition is met.
+
+### 17.3 Acceptance evidence required before the direction is claimed delivered
+
+The evidence below is what the implementation slices must produce; **this
+amendment produces none of it**:
+
+- **D-17a:** a real `www` build with the migrated ui islands (the normal build,
+  the browser-entry graph's P1 result and the docs-site output), with every
+  non-migrated package component keeping its bytes and behavior.
+- **D-17b:** consumer-form tests for each capability — Node artifact rows and
+  Chromium rows for the `env` shape, the per-connection signal (abort on
+  disconnect, fresh signal on reconnect), cleanup order, zero-argument
+  compatibility, host usability, context isolation, error-boundary containment
+  and ref lifecycle — plus unchanged bytes for every non-participating module
+  and an enumerated public-interface delta (if any) with its snapshot change.
+- **D-17c:** SSR-to-claim parity for the declared JSON-encodable values
+  (byte/fixture/browser rows), an equal-seed zero-write claim, a divergent-seed
+  claim that fails closed, and the explicit absence of an attribute or
+  raw-markup carrier.
+
+No partial row, green CI run or draft record satisfies any of these.
+
+### 17.4 What this amendment does not change
+
+- §2 items 1–8, §12a's five separate proofs, §13.1, §13.2, §13.4, §13.5,
+  §13.6, §14, §15 and §16 are unchanged.
+- No milestone, gate, exit or release claim is created or moved. M09, M10, M11,
+  M12, M13 and M14 keep their recorded statuses; the ui migration is not an M09
+  exit and the capability API is not an M11 delivery.
+- No version, tag, publication or public-API freeze is authorized.
+- No implementation slice is approved by this direction; no owner sign-off is
+  recorded, and no P5 evidence or M13 qualification is claimed.
