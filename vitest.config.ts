@@ -242,8 +242,20 @@ export default defineConfig({
         resolve: {
           alias: [
             // The __wtr__ conformance suite's working-tree contract: the bare
-            // runtime specifier and the two production ui source modules
-            // resolve to THIS tree, never to a published artifact.
+            // runtime specifier and the production ui source modules resolve
+            // to THIS tree, never to a published artifact.
+            {
+              // The generated-element lane's emitted module imports the
+              // internal shell and runtime subpaths; the bare alias below
+              // would rewrite them into `src/index.ts/internal/...`, so the
+              // specific entries come first.
+              find: '@openelement/element/internal/compiled/generated-element/shell',
+              replacement: `${rootDir}packages/element/src/internal/compiled/generated-element/shell.ts`,
+            },
+            {
+              find: '@openelement/element/internal/compiled/runtime',
+              replacement: `${rootDir}packages/element/src/internal/compiled/runtime.ts`,
+            },
             {
               find: '@openelement/element',
               replacement: `${rootDir}packages/element/src/index.ts`,
@@ -255,6 +267,10 @@ export default defineConfig({
             {
               find: /^\.\/instance-state\.ts$/,
               replacement: `${rootDir}packages/ui/src/instance-state.ts`,
+            },
+            {
+              find: /^\.\/dialog-machine\.ts$/,
+              replacement: `${rootDir}packages/ui/src/dialog-machine.ts`,
             },
           ],
         },

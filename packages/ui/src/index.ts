@@ -42,7 +42,7 @@ export { default as OpenCodeBlock } from './open-code-block.tsx';
 // Authored function component; the element constructor is build-emitted and
 // registered by the build (see docs/adr/ADR-0182).
 export { default as OpenThemeToggle } from './open-theme-toggle.tsx';
-export { OpenDialog } from './open-dialog.tsx';
+export { default as OpenDialog } from './open-dialog.tsx';
 export { OpenDropdown } from './open-dropdown.tsx';
 
 // Package manifest (WC Package Protocol)

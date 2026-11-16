@@ -21,11 +21,11 @@
  */
 import { assert } from 'chai';
 import { userEvent } from 'vitest/browser';
-import { OpenDialog } from '../generated/open-dialog.ts';
+import { OpenDialogElement } from '../generated/open-dialog.ts';
 import { OpenDropdown } from '../generated/open-dropdown.ts';
 import { waitFor } from './helpers.js';
 
-customElements.define('open-dialog', OpenDialog);
+customElements.define('open-dialog', OpenDialogElement);
 customElements.define('open-dropdown', OpenDropdown);
 await Promise.all([
   customElements.whenDefined('open-dialog'),
@@ -116,6 +116,28 @@ describe('overlay contract: open-dialog (production packages/ui component)', () 
       assert.strictEqual(host.shadowRoot.querySelector('dialog'), dialog, 'dialog node kept');
     }
     assert.strictEqual(closeEvents, 3, 'exactly one open-dialog-close per close');
+
+    host.remove();
+  });
+
+  it('programmatic open property writes drive the top layer and reflection', async () => {
+    const { host } = setupDialog();
+    await waitFor(() => dialogEl(host) !== null, 'dialog shadow render');
+    const dialog = dialogEl(host);
+
+    host.open = true;
+    await waitFor(() => host.open && dialog.open, 'open property opened');
+    assert.strictEqual(dialog.matches(':modal'), true, 'modal open entered the top layer');
+    assert.strictEqual(host.hasAttribute('open'), true, 'the open property reflects');
+
+    host.open = false;
+    await waitFor(() => !host.open && !dialog.open, 'open property closed');
+    assert.strictEqual(host.hasAttribute('open'), false, 'the closed state reflects');
+
+    host.open = true;
+    await waitFor(() => dialog.open, 'property reopen');
+    host.open = false;
+    await waitFor(() => !dialog.open, 'property close again');
 
     host.remove();
   });

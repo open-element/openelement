@@ -7,11 +7,13 @@
  * Experimental (owner ruling C1, #1468): no compatibility promise — may
  * change or be removed before 1.0.
  *
- * Compiled authoring. The `open` boolean property drives the
- * compiled bool sink on the inner <dialog>; the top-layer/modal choreography
- * (showModal/show/close) stays imperative in methods. Modal-session state lives
- * in the shared instance-state module (compiled classes carry only @property
- * fields + methods).
+ * Generated authoring. The `open` property drives the compiled bool sink on
+ * the inner <dialog> and the declared `label` drives the aria-label/text
+ * sinks; the top-layer/modal choreography (showModal/show/close) and the
+ * close-echo guards stay imperative in the dialog-machine module helper, run
+ * from the lifecycle intrinsics (ADR-0182). The class lane's `show` / `close`
+ * / `toggle` methods are property sugar and are retired with the class export:
+ * drive the declared `open` property instead (`el.open = true`).
  *
  * @csspart overlay - The dialog backdrop/element
  * @csspart header -The header bar
@@ -40,200 +42,104 @@
  * - `label` - Title text and aria-label of the dialog
  * - `mode` - `modal` (default, showModal()) or `non-modal` (show()); read at open time
  */
-import { effect, element, OpenElement, property, type StyleSheetLike } from '@openelement/element';
+import { onConnect, onPropertyChange } from '@openelement/element';
 
-import { readInstanceState, writeInstanceState } from './instance-state.ts';
-import overlayRecipe from './overlay-recipe.css';
-import openDialogStyles from './open-dialog.css';
+import { defineComponentConfig } from './component-config.ts';
+import {
+  handleDialogCancel,
+  handleDialogNativeClose,
+  syncOpenDialog,
+  type DialogHost,
+} from './dialog-machine.ts';
 
-@element('open-dialog', { root: 'shadow-open', delegatesFocus: true })
-export class OpenDialog extends OpenElement {
-  static override styles: StyleSheetLike[] = [overlayRecipe, openDialogStyles];
+/**
+ * Platform facts for the generated element: shadow root with delegated focus,
+ * the authored package stylesheets, and the declared `open`/`label` property
+ * rows (`open` reflects; `label` keeps its observable attribute without
+ * reflection — the class lane's exact surface).
+ */
+export const openElement = defineComponentConfig({
+  root: 'shadow',
+  delegatesFocus: true,
+  styles: ['./overlay-recipe.css', './open-dialog.css'],
+  properties: {
+    open: { default: false, reflect: true },
+    label: { default: '' },
+  },
+});
 
-  /** Presence opens the dialog (reflected so JS property sets stay truthful). */
-  @property({ reflect: true, type: Boolean })
-  open = false;
+/** Dialog component using native <dialog> element + popover API. */
+function OpenDialog(props: { open: boolean; label: string }) {
+  /** The host the inline handler's currentTarget belongs to. */
+  const hostOf = (event: Event): DialogHost =>
+    ((event.currentTarget as HTMLElement).getRootNode() as ShadowRoot).host as DialogHost;
 
-  @property({ reflect: false })
-  label = '';
-
-  render(): unknown {
-    return (
-      <div style='display:contents'>
-        <slot name='trigger' onClick={this.handleTrigger}></slot>
-        <dialog
-          class='p-6 rounded-xl max-w-[min(90vw,480px)] font-sans'
-          open={this.open}
-          aria-label={this.label}
-          part='overlay'
-          onCancel={this.handleCancel}
-          onClose={this.handleNativeClose}
-        >
-          <div class='dialog-header mb-4 flex items-center justify-between' part='header'>
-            <h2 class='dialog-title m-0 text-xl font-semibold text-foreground'>{this.label}</h2>
-            <button
-              type='button'
-              class='dialog-close cursor-pointer rounded-md border-0 bg-transparent p-1 text-xl leading-tight text-muted-foreground transition-colors duration-150 ease-out'
-              part='close'
-              aria-label='Close'
-              onClick={this.handleClose}
-            >
-              ×
-            </button>
-          </div>
-          <div class='dialog-body text-base leading-normal text-muted-foreground' part='body'>
-            <slot></slot>
-          </div>
-          <div class='dialog-footer mt-5 flex justify-end gap-2' part='footer'>
-            <slot name='footer'></slot>
-          </div>
-        </dialog>
-      </div>
+  onConnect((env) => {
+    // The class lane applied the open state after the shadow DOM existed
+    // (onCsrRendered / onDsdHydrated); the generated setup can run before the
+    // template mounts, so the same sync defers one frame. The connection
+    // signal cancels a frame that outlives the connection.
+    const frame = globalThis.requestAnimationFrame(() =>
+      syncOpenDialog(env.host as DialogHost, env.states),
     );
-  }
-
-  override onCsrRendered(): void {
-    this.syncOpenState();
-  }
-
-  override onDsdHydrated(): void {
-    this.syncOpenState();
-  }
-
-  override disconnectedCallback(): void {
-    readInstanceState(this, 'openEffect', () => undefined as undefined | (() => void))?.();
-    writeInstanceState(this, 'openEffect', undefined);
-    super.disconnectedCallback();
-  }
-
-  /**
-   * Apply the `open` state once the shadow DOM exists, then keep it synced
-   * through the compiled signal — an effect over `this.open` covers attribute
-   * AND property writes with one channel (both routes convert into the signal
-   * before any sink or method runs). SSR markup like `<open-dialog open>`
-   * fires attributeChangedCallback at upgrade time — before ElementInternals
-   * and the shadow DOM exist — so the initial run here applies that state.
-   */
-  private syncOpenState(): void {
-    this.updateStates();
-    this.syncDialogElement();
-    const off = effect(() => {
-      // Reading the property tracks the signal; the bodies stay idempotent.
-      void this.open;
-      this.updateStates();
-      this.syncDialogElement();
+    env.signal.addEventListener('abort', () => globalThis.cancelAnimationFrame(frame), {
+      once: true,
     });
-    writeInstanceState(this, 'openEffect', off);
-  }
+  });
+  onPropertyChange((event) => {
+    if (event.name !== 'open') return;
+    syncOpenDialog(event.host as DialogHost, event.states);
+  });
 
-  private updateStates(): void {
-    const states = this.stateSet();
-    if (!states) return;
-    if (this.open) {
-      states.add('open');
-      states.delete('closed');
-    } else {
-      states.delete('open');
-      states.add('closed');
-    }
-  }
-
-  /**
-   * The kernel attaches ElementInternals only for form-associated hosts, so
-   * the dialog (delegatesFocus, not formAssociated) attaches its own once —
-   * without it :state(open)/:state(closed) silently never apply (#1226).
-   */
-  private stateSet(): CustomStateSet | undefined {
-    if (this._internals?.states) return this._internals.states;
-    let internals = readInstanceState(
-      this,
-      'internals',
-      () => undefined as ElementInternals | undefined,
-    );
-    if (!internals) {
-      if (typeof this.attachInternals !== 'function') return undefined;
-      internals = this.attachInternals();
-      writeInstanceState(this, 'internals', internals);
-    }
-    return internals.states;
-  }
-
-  show(): void {
-    this.open = true;
-  }
-
-  close(): void {
-    this.open = false;
-  }
-
-  toggle(): void {
-    this.open = !this.open;
-  }
-
-  private syncDialogElement(): void {
-    const dialog = this.shadowRoot?.querySelector('dialog');
-    if (!dialog) return;
-    // True once showModal() has run for the current open session (#1030).
-    const modalActive = readInstanceState(this, 'modalActive', () => false);
-    if (this.open) {
-      if ((this.getAttribute('mode') || 'modal') === 'modal') {
-        // Modal: showModal() puts the rest of the page on the inert top layer
-        // natively — focus, hit-testing, and the accessibility tree are all
-        // covered by the platform, so no hand-rolled sibling inert is needed.
-        if (modalActive) return;
-        // #1030: the compiled bool sink writes `open` onto the inner <dialog>
-        // (SSR DSD / CSR first render), so dialog.open may already be true
-        // without showModal() having run — that state presents as NON-modal
-        // (no top layer, no ::backdrop, no focus containment). Close the
-        // attribute-driven open first, then enter the top layer; showModal()
-        // on an already-open dialog throws InvalidStateError.
-        if (dialog.open) dialog.close();
-        dialog.showModal();
-        writeInstanceState(this, 'modalActive', true);
-      } else if (!dialog.open) {
-        // Non-modal: show() leaves the page interactive by design.
-        dialog.show();
-      }
-    } else {
-      // A modal session only exits the top layer while the inner `open`
-      // attribute is still present. The compiled bool sink subscribes to the
-      // same signal and may have already removed it — removing the attribute
-      // leaves the dialog :modal and close() is then a spec no-op, so the
-      // attribute must be restored before close() (#1226).
-      if (modalActive && !dialog.open) dialog.setAttribute('open', '');
-      if (dialog.open) dialog.close();
-      writeInstanceState(this, 'modalActive', false);
-    }
-  }
-
-  private handleNativeClose(): void {
-    // The attribute→modal transition above close()es the attribute-opened
-    // dialog and immediately re-opens it via showModal(); if the resulting
-    // close event is dispatched asynchronously it arrives after the re-open
-    // (dialog.open true, host attribute still present) and must be ignored.
-    const dialog = this.shadowRoot?.querySelector('dialog');
-    if (dialog?.open && this.open) return;
-    // A close() driven by handleClose (property already cleared) is the same
-    // closing session — its open-dialog-close event already fired (#1226).
-    if (!this.open) return;
-    // A genuine native close (e.g. form method="dialog") finds the platform
-    // has already cleared dialog.open.
-    this.handleClose();
-  }
-
-  private handleClose(): void {
-    // Clearing the property updates the compiled signal; the open effect runs
-    // updateStates() + syncDialogElement() — no duplicate sync here.
-    this.open = false;
-    this.dispatchEvent(new CustomEvent('open-dialog-close', { bubbles: true, composed: true }));
-  }
-
-  private handleCancel(e: Event): void {
-    e.preventDefault();
-    this.handleClose();
-  }
-
-  private handleTrigger(): void {
-    this.toggle();
-  }
+  return (
+    <div style='display:contents'>
+      <slot
+        name='trigger'
+        onClick={(event: Event) => {
+          const host = hostOf(event);
+          host.open = !host.open;
+        }}
+      ></slot>
+      <dialog
+        class='p-6 rounded-xl max-w-[min(90vw,480px)] font-sans'
+        open={props.open}
+        aria-label={props.label}
+        part='overlay'
+        onCancel={(event: Event) => handleDialogCancel(hostOf(event), event)}
+        onClose={(event: Event) => handleDialogNativeClose(hostOf(event))}
+      >
+        <div class='dialog-header mb-4 flex items-center justify-between' part='header'>
+          <h2 class='dialog-title m-0 text-xl font-semibold text-foreground'>{props.label}</h2>
+          <button
+            type='button'
+            class='dialog-close cursor-pointer rounded-md border-0 bg-transparent p-1 text-xl leading-tight text-muted-foreground transition-colors duration-150 ease-out'
+            part='close'
+            aria-label='Close'
+            onClick={(event: Event) => {
+              // The user-facing close path: the change channel applies the
+              // states and the top-layer exit, then the component's event
+              // fires. The dispatch is authored inline because the manifest's
+              // event recognizer is module-local (the cancel and native-close
+              // paths share the same two lines through dialog-machine).
+              const host = hostOf(event);
+              host.open = false;
+              host.dispatchEvent(
+                new globalThis.CustomEvent('open-dialog-close', { bubbles: true, composed: true }),
+              );
+            }}
+          >
+            ×
+          </button>
+        </div>
+        <div class='dialog-body text-base leading-normal text-muted-foreground' part='body'>
+          <slot></slot>
+        </div>
+        <div class='dialog-footer mt-5 flex justify-end gap-2' part='footer'>
+          <slot name='footer'></slot>
+        </div>
+      </dialog>
+    </div>
+  );
 }
+
+export default OpenDialog;

@@ -15,7 +15,7 @@
  * nothing here connects an element.
  */
 import { expect, test } from 'vitest';
-import { dialogWith, fakeDialog, installDomHarness } from './harness.ts';
+import { dialogHostWith, fakeDialog, installDomHarness } from './harness.ts';
 
 installDomHarness();
 
@@ -121,89 +121,103 @@ test('open-button: disabled click prevents default and fires nothing (#757)', as
   expect(event.defaultPrevented).toEqual(true);
 });
 
-// ─── open-dialog: top-layer state machine (#1030) ────────────────────────────
+// ─── open-dialog: top-layer state machine (#1030, dialog-machine helpers) ────
 
-test('open-dialog: show/close/toggle manage the open property', async () => {
-  const el = await dialogWith(fakeDialog());
-  el.show();
-  expect(el.open).toEqual(true);
-  el.close();
-  expect(el.open).toEqual(false);
-  el.toggle();
-  expect(el.open).toEqual(true);
+test('open-dialog: the open property drives the custom states', async () => {
+  const { updateDialogStates } = await import('../src/dialog-machine.ts');
+  const el = dialogHostWith(fakeDialog());
+  const states = new Set<string>();
+  el.open = true;
+  updateDialogStates(el, states);
+  expect(states.has('open')).toEqual(true);
+  expect(states.has('closed')).toEqual(false);
+  el.open = false;
+  updateDialogStates(el, states);
+  expect(states.has('open')).toEqual(false);
+  expect(states.has('closed')).toEqual(true);
 });
 
 test('open-dialog: modal open closes the attribute-driven open, then showModal (#1030)', async () => {
+  const { syncOpenDialog } = await import('../src/dialog-machine.ts');
   const fake = fakeDialog();
-  const el = await dialogWith(fake);
+  const el = dialogHostWith(fake);
   el.open = true;
-  el.onDsdHydrated();
-  // The bool sink (compiled) marks dialog.open; the sync closes that state and
-  // enters the top layer via showModal exactly once per open session.
-  expect(fake.calls.includes('showModal')).toEqual(true);
+  // The compiled bool sink marks dialog.open at mount; the sync closes that
+  // state and enters the top layer via showModal exactly once per session.
+  fake.open = true;
+  syncOpenDialog(el, new Set<string>());
+  expect(fake.calls).toEqual(['close', 'showModal']);
 });
 
 test('open-dialog: non-modal mode uses show() only', async () => {
+  const { syncOpenDialog } = await import('../src/dialog-machine.ts');
   const fake = fakeDialog();
-  const el = await dialogWith(fake, 'non-modal');
+  const el = dialogHostWith(fake, 'non-modal');
   el.open = true;
-  el.onCsrRendered();
+  syncOpenDialog(el, new Set<string>());
   expect(fake.calls).toEqual(['show']);
   expect(fake.calls.includes('showModal')).toEqual(false);
 });
 
-test('open-dialog: close dispatches open-dialog-close; cancel prevents default first', async () => {
-  const el = await dialogWith(fakeDialog());
+test('open-dialog: cancel prevents default first, then closes and dispatches open-dialog-close', async () => {
+  const { handleDialogCancel } = await import('../src/dialog-machine.ts');
+  const el = dialogHostWith(fakeDialog());
   let closes = 0;
   el.addEventListener('open-dialog-close', () => {
     closes++;
   });
+  el.open = true;
   const cancel = new Event('cancel', { cancelable: true });
-  el.handleCancel(cancel);
+  handleDialogCancel(el, cancel);
   expect(cancel.defaultPrevented).toEqual(true);
   expect(closes).toEqual(1);
   expect(el.open).toEqual(false);
 });
 
 test('open-dialog: modal close restores the sink-removed open attribute before close() (#1226)', async () => {
+  const { syncOpenDialog } = await import('../src/dialog-machine.ts');
   const fake = fakeDialog();
-  const el = await dialogWith(fake);
+  const el = dialogHostWith(fake);
   el.open = true;
-  el.onDsdHydrated();
+  fake.open = true;
+  syncOpenDialog(el, new Set<string>());
   expect(fake.calls.includes('showModal')).toEqual(true);
   // The compiled bool sink may remove the inner `open` attribute before the
-  // component's sync runs; per spec close() is then a no-op and the dialog
-  // stays :modal forever. The sync must restore the attribute first.
+  // sync runs; per spec close() is then a no-op and the dialog stays :modal
+  // forever. The sync must restore the attribute first.
   fake.open = false;
   fake.calls.length = 0;
   el.open = false;
-  el.syncDialogElement();
+  syncOpenDialog(el, new Set<string>());
   expect(fake.calls).toEqual(['setAttribute:open', 'close']);
   expect(fake.open).toEqual(false);
 });
 
 test('open-dialog: the native close echo of a programmatic close does not re-dispatch (#1226)', async () => {
+  const { handleDialogCancel, handleDialogNativeClose, syncOpenDialog } =
+    await import('../src/dialog-machine.ts');
   const fake = fakeDialog();
-  const el = await dialogWith(fake);
+  const el = dialogHostWith(fake);
   let closes = 0;
   el.addEventListener('open-dialog-close', () => {
     closes++;
   });
   el.open = true;
-  el.onDsdHydrated();
+  fake.open = true;
+  syncOpenDialog(el, new Set<string>());
   // The user-facing close path (close button / cancel) fires the event.
-  el.handleCancel(new Event('cancel', { cancelable: true }));
+  handleDialogCancel(el, new Event('cancel', { cancelable: true }));
   expect(closes).toEqual(1);
   // The inner dialog's native close event arrives after the programmatic
   // close; the session already fired its event.
   fake.open = false;
-  el.handleNativeClose();
+  handleDialogNativeClose(el);
   expect(closes).toEqual(1);
   // A genuine native close (e.g. form method="dialog") with the session
   // still open still dispatches exactly once.
   el.open = true;
   fake.open = false;
-  el.handleNativeClose();
+  handleDialogNativeClose(el);
   expect(closes).toEqual(2);
   expect(el.open).toEqual(false);
 });

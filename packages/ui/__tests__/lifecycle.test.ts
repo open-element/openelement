@@ -22,7 +22,7 @@
  * persistence/multi-toggle on the shipped page).
  */
 import { expect, test } from 'vitest';
-import { dialogWith, fakeDialog, installDomHarness } from './harness.ts';
+import { dialogHostWith, fakeDialog, installDomHarness } from './harness.ts';
 import { readInstanceState, writeInstanceState } from '../src/instance-state.ts';
 
 installDomHarness();
@@ -59,46 +59,38 @@ test('instance-state: slots are per-host — writes never leak across instances'
 // teardown and the attribute-driven no-persist rule) are asserted in
 // `www/e2e/theme-toggle-instances.spec.ts` against the real element.
 
-// ─── open-dialog: session lifecycle + dispose ────────────────────────────────
+// ─── open-dialog: session lifecycle (dialog-machine helpers; generated lane) ─
 
 test('open-dialog: each open session enters the top layer exactly once; reopen re-enters', async () => {
+  const { syncOpenDialog } = await import('../src/dialog-machine.ts');
   const fake = fakeDialog();
-  const el = await dialogWith(fake);
+  const el = dialogHostWith(fake);
+  const states = new Set<string>();
   el.open = true;
-  el.onDsdHydrated();
+  syncOpenDialog(el, states);
   expect(fake.calls).toEqual(['showModal']);
   // A repeated sync inside the same open session must not re-enter (the
   // modalActive guard), or showModal() would throw InvalidStateError.
-  el.syncDialogElement();
+  syncOpenDialog(el, states);
   expect(fake.calls).toEqual(['showModal']);
 
   el.open = false;
-  el.syncDialogElement();
+  syncOpenDialog(el, states);
   expect(fake.calls).toEqual(['showModal', 'close']);
 
   // A new session re-enters the top layer exactly once.
   el.open = true;
-  el.syncDialogElement();
+  syncOpenDialog(el, states);
   expect(fake.calls).toEqual(['showModal', 'close', 'showModal']);
 });
 
-test('open-dialog: dispose tears the open effect down exactly once; reconnect re-establishes it', async () => {
-  const el = await dialogWith(fakeDialog());
-  el.onCsrRendered();
-  expect(typeof readInstanceState(el, 'openEffect', () => undefined)).toEqual('function');
-
-  el.disconnectedCallback();
-  expect(
-    readInstanceState(el, 'openEffect', () => 'missing'),
-    'the effect teardown must run and the slot must be cleared',
-  ).toEqual(undefined);
-  // Double dispose is safe (the cleared slot yields no second teardown call).
-  el.disconnectedCallback();
-
-  // Reconnect re-subscribes the compiled-signal effect for the new session.
-  el.onCsrRendered();
-  expect(typeof readInstanceState(el, 'openEffect', () => undefined)).toEqual('function');
-});
+// The class's openEffect dispose/reconnect rows moved with the component: the
+// generated lane's connection-signal teardown is shell-owned (not observable
+// through this harness, per the header), and the same disconnect/reconnect
+// semantics — clean teardown, exactly-once close events across reconnect —
+// are pinned at browser level in
+// packages/element/__wtr__/tests/overlay-contract.test.js ('disconnect/
+// reconnect leaves a working dialog with single-event closes').
 
 // ─── open-dropdown: activation wiring is reconnect-safe ──────────────────────
 

@@ -1602,11 +1602,11 @@
       },
       "declarations": {
         ".": {
-          "publicShapeSha256": "1bc688915f0f4d54a99c4c4c680c609ee82086b90a1372ac8da5da64b2d944f9",
+          "publicShapeSha256": "f72b0e39cd2af8bf60bd5438be40d86d20bddc1b45305b1e4c86c65c4ffa79bc",
           "publicSymbols": [
             "OpenButton=type:{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};buttonMode:ReadonlySignal<boolean>;disabled:union(false|true);href:string;linkAriaDisabled:ReadonlySignal<string | null>;linkHref:ReadonlySignal<string | null>;linkRel:ReadonlySignal<string | null>;linkTarget:ReadonlySignal<string | null>;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown};size:string;target:string;type:string;variant:string}|value:{construct:()=>{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};buttonMode:ReadonlySignal<boolean>;disabled:union(false|true);href:string;linkAriaDisabled:ReadonlySignal<string | null>;linkHref:ReadonlySignal<string | null>;linkRel:ReadonlySignal<string | null>;linkTarget:ReadonlySignal<string | null>;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown};size:string;target:string;type:string;variant:string};styles:array(StyleSheetLike)}",
             "OpenCodeBlock=value:{call:(props:{copyLabel:string})=>any}",
-            "OpenDialog=type:{close:{call:()=>void};disconnectedCallback:{call:()=>void};label:string;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};open:union(false|true);render:{call:()=>unknown};show:{call:()=>void};toggle:{call:()=>void}}|value:{construct:()=>{close:{call:()=>void};disconnectedCallback:{call:()=>void};label:string;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};open:union(false|true);render:{call:()=>unknown};show:{call:()=>void};toggle:{call:()=>void}};styles:array(StyleSheetLike)}",
+            "OpenDialog=value:{call:(props:{label:string;open:union(false|true)})=>any}",
             "OpenDropdown=type:{anchorName:string;anchorStyle:ReadonlySignal<string>;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown}}|value:{construct:()=>{anchorName:string;anchorStyle:ReadonlySignal<string>;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown}};styles:array(StyleSheetLike)}",
             "OpenInput=type:{ariaInvalidAttr:ReadonlySignal<string | null>;attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};describedByAttr:ReadonlySignal<string | null>;disabled:union(false|true);error:string;errorIdAttr:ReadonlySignal<string | null>;formDisabledCallback:{call:(disabled:union(false|true))=>void};formResetCallback:{call:()=>void};idAttr:ReadonlySignal<string | null>;inputId:string;label:string;name:string;noError:ReadonlySignal<boolean>;noLabel:ReadonlySignal<boolean>;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};placeholder:string;render:{call:()=>unknown};required:union(false|true);requiredMark:ReadonlySignal<string>;type:string;value:string}|value:{construct:()=>{ariaInvalidAttr:ReadonlySignal<string | null>;attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};describedByAttr:ReadonlySignal<string | null>;disabled:union(false|true);error:string;errorIdAttr:ReadonlySignal<string | null>;formDisabledCallback:{call:(disabled:union(false|true))=>void};formResetCallback:{call:()=>void};idAttr:ReadonlySignal<string | null>;inputId:string;label:string;name:string;noError:ReadonlySignal<boolean>;noLabel:ReadonlySignal<boolean>;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};placeholder:string;render:{call:()=>unknown};required:union(false|true);requiredMark:ReadonlySignal<string>;type:string;value:string};styles:array(StyleSheetLike)}",
             "OpenThemeToggle=value:{call:(props:{theme:string})=>any}",
@@ -1643,9 +1643,10 @@
           ]
         },
         "./open-dialog": {
-          "publicShapeSha256": "295a1c2cda52a42622f735910c8d0c6071506fb4a0e7b03fa916851e0b1d0606",
+          "publicShapeSha256": "5318c7bf69da5f9c8d39fd133f669e323306a0f11618ee620b0790e636e0a7de",
           "publicSymbols": [
-            "OpenDialog=type:{close:{call:()=>void};disconnectedCallback:{call:()=>void};label:string;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};open:union(false|true);render:{call:()=>unknown};show:{call:()=>void};toggle:{call:()=>void}}|value:{construct:()=>{close:{call:()=>void};disconnectedCallback:{call:()=>void};label:string;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};open:union(false|true);render:{call:()=>unknown};show:{call:()=>void};toggle:{call:()=>void}};styles:array(StyleSheetLike)}"
+            "default=value:{call:(props:{label:string;open:union(false|true)})=>any}",
+            "openElement=value:{delegatesFocus:true;properties:{label:{default:string};open:{default:false;reflect:true}};root:\"shadow\";styles:array(string)}"
           ]
         },
         "./open-dropdown": {

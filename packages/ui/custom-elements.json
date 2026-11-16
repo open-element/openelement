@@ -284,14 +284,10 @@
       "declarations": [
         {
           "kind": "class",
-          "name": "OpenDialog",
+          "name": "OpenDialogElement",
           "tagName": "open-dialog",
           "customElement": true,
           "description": "Dialog component using native <dialog> element + popover API.",
-          "superclass": {
-            "name": "OpenElement",
-            "package": "@openelement/element"
-          },
           "members": [],
           "attributes": [
             {
@@ -299,15 +295,14 @@
               "type": {
                 "text": "boolean"
               },
-              "default": "false",
-              "description": "open attribute"
+              "default": "false"
             },
             {
               "name": "label",
               "type": {
                 "text": "string"
               },
-              "description": "label attribute"
+              "default": ""
             }
           ],
           "events": [
@@ -321,38 +316,30 @@
           ],
           "slots": [
             {
-              "name": "",
-              "description": "Default slot"
+              "name": ""
             },
             {
-              "name": "trigger",
-              "description": "The 'trigger' slot"
+              "name": "trigger"
             },
             {
-              "name": "footer",
-              "description": "The 'footer' slot"
+              "name": "footer"
             }
           ],
           "cssParts": [
             {
-              "name": "overlay",
-              "description": "The dialog backdrop/element"
+              "name": "overlay"
             },
             {
-              "name": "header",
-              "description": "The header bar"
+              "name": "header"
             },
             {
-              "name": "close",
-              "description": "The close button"
+              "name": "close"
             },
             {
-              "name": "body",
-              "description": "The content area (<slot>)"
+              "name": "body"
             },
             {
-              "name": "footer",
-              "description": "The optional footer slot"
+              "name": "footer"
             }
           ]
         }

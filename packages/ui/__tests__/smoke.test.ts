@@ -39,12 +39,12 @@ test('open-ui - explicit registration covers every class-authored component', as
 
   registerOpenUi(registry);
   registerOpenUi(registry);
-  // `open-theme-toggle` and `open-code-block` are authored as function
-  // components: their element classes are build-emitted and defined by the
-  // island entry, so they are deliberately absent from the manual table.
-  const classAuthored = EXPECTED_TAGS.filter(
-    (tag) => tag !== 'open-theme-toggle' && tag !== 'open-code-block',
-  );
+  // `open-theme-toggle`, `open-code-block` and `open-dialog` are authored as
+  // function components: their element classes are build-emitted and defined
+  // by the island entry, so they are deliberately absent from the manual
+  // table.
+  const generatedTags = ['open-theme-toggle', 'open-code-block', 'open-dialog'];
+  const classAuthored = EXPECTED_TAGS.filter((tag) => !generatedTags.includes(tag));
   expect(definitions.size).toEqual(classAuthored.length);
   expect([...definitions.keys()]).toEqual(classAuthored);
 });
@@ -52,7 +52,6 @@ test('open-ui - explicit registration covers every class-authored component', as
 test('open-ui - every component module exports its component', async () => {
   const classExports: Record<string, string> = {
     'open-button': 'OpenButton',
-    'open-dialog': 'OpenDialog',
     'open-dropdown': 'OpenDropdown',
     'open-input': 'OpenInput',
   };
@@ -65,6 +64,7 @@ test('open-ui - every component module exports its component', async () => {
   for (const [name, exportName] of [
     ['open-theme-toggle', 'OpenThemeToggle'],
     ['open-code-block', 'OpenCodeBlock'],
+    ['open-dialog', 'OpenDialog'],
   ] as const) {
     const generated = await import(`../src/${name}.tsx`);
     expect(typeof generated.default).toEqual('function');

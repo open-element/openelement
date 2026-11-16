@@ -1,5 +1,4 @@
 import { OpenButton } from './open-button.tsx';
-import { OpenDialog } from './open-dialog.tsx';
 import { OpenDropdown } from './open-dropdown.tsx';
 import { OpenInput } from './open-input.tsx';
 
@@ -9,12 +8,11 @@ import { OpenInput } from './open-input.tsx';
 //
 // A component authored as a function component has no class to register: the
 // build emits its element class from the manifest declaration and the island
-// entry defines it. `open-theme-toggle` and `open-code-block` are such
-// components, so they are deliberately absent from this table.
+// entry defines it. `open-theme-toggle`, `open-code-block` and `open-dialog`
+// are such components, so they are deliberately absent from this table.
 const COMPONENTS: ReadonlyArray<readonly [string, CustomElementConstructor]> = [
   ['open-button', OpenButton],
   ['open-input', OpenInput],
-  ['open-dialog', OpenDialog],
   ['open-dropdown', OpenDropdown],
 ];
 

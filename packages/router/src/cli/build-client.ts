@@ -76,7 +76,7 @@ import {
   analyzeModuleSemantics,
   clearStyleRequests,
   compiledElementPlugin,
-  styleRequestsForImporter,
+  styleRequestModuleId,
 } from '@openelement/compiler';
 import { ELEMENT_RUNTIME_MESSAGES_DEFINE } from '../vite/internal/element-error-messages.ts';
 import {
@@ -1271,25 +1271,44 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
     const islandStyleAssets = new Map<string, string[]>();
     for (const declaration of islandStyleDeclarations()) {
       const urls: string[] = [];
-      for (const request of styleRequestsForImporter(declaration.moduleId)) {
-        const emitted = ctx.clientStyleAssetFiles.get(request.moduleId);
+      const joinedSheets = new Set<string>();
+      for (const specifier of declaration.specifiers) {
+        // The declared sheet's asset is joined by its registry KEY, not by
+        // importer attribution: a shadow edge is keyed by its sheet file, so a
+        // sheet shared with a class island's authored import carries ONE
+        // registry entry under whichever importer registered last — the
+        // per-importer request list cannot be the join for a shared sheet
+        // (open-dialog and open-dropdown share overlay-recipe.css). The
+        // emitted asset is per key (content-addressed per sheet file), so the
+        // declaration → asset join recomputes the same key the registration
+        // used and reads the emission state directly.
+        const key = styleRequestModuleId(
+          declaration.moduleId,
+          specifier,
+          declaration.root === 'shadow' ? undefined : declaration.tagName,
+        );
+        const emitted = ctx.clientStyleAssetFiles.get(key);
         if (emitted === undefined) {
           throw buildError(
             ClientAssetErrorCode.STYLESHEET_MISSING,
             `Generated ${declaration.root} island <${declaration.tagName}> declares ` +
-              `openElement.styles "${request.specifier}" but the client build emitted no ` +
+              `openElement.styles "${specifier}" but the client build emitted no ` +
               'stylesheet asset for it. A declared sheet is never silently dropped: fix the ' +
               'stylesheet edge or remove the declaration.',
           );
         }
-        urls.push(`${clientBase}client/${emitted}`);
+        if (!joinedSheets.has(key)) {
+          joinedSheets.add(key);
+          urls.push(`${clientBase}client/${emitted}`);
+        }
       }
       if (urls.length !== declaration.specifiers.length) {
         throw buildError(
           ClientAssetErrorCode.STYLESHEET_MISSING,
           `Generated ${declaration.root} island <${declaration.tagName}> declares ` +
-            `${declaration.specifiers.length} stylesheet(s) but the client build joined ` +
-            `${urls.length} emitted asset(s); the style plan and the declaration disagree.`,
+            `${declaration.specifiers.length} stylesheet(s) but joined ` +
+            `${urls.length} sheet file(s); a duplicated declared specifier cannot be ` +
+            'told apart from its sibling, and the style plan and the declaration disagree.',
         );
       }
       if (urls.length === 0) {

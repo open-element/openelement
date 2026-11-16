@@ -347,3 +347,76 @@ declaration becomes generated, and the manual registration table drops the tag.
 Evidence: the www behaviour-matrix copy-control rows, the `::part(copy)`
 reachability row and both shipped colour-pair contrast rows against the real
 element; ui manifest/smoke suites. LOCAL.
+
+## Migration record (2026-11-17): the third component, `open-dialog`
+
+`packages/ui/src/open-dialog.tsx` is a function component with a sidecar
+(`root: 'shadow'`, `delegatesFocus: true`, the two authored stylesheets in
+authored order, and the `open` (reflect) / `label` rows). The imperative
+top-layer/modal choreography and the close-echo guards (#1030, #1226) moved
+verbatim into `dialog-machine.ts`, a module helper in the `copy-feedback.ts`
+shape whose functions take the host explicitly; the component drives it from
+`onConnect` (one rAF-deferred sync, cancelled through the connection signal)
+and `onPropertyChange` (declared `open` rows only). `@openelement/ui` no longer
+exports the `OpenDialog` class; the authored function takes the name, the
+manifest/CEM declaration becomes generated (`OpenDialogElement`, no public
+superclass), the manual registration table drops the tag, and the interface
+snapshot is regenerated (class type → function type; the `./open-dialog`
+subpath gains the `default` function and the `openElement` facts).
+
+### Public-surface delta (enumerated)
+
+- The class's `show()` / `close()` / `toggle()` methods are **retired with the
+  class export**. The generated lane has no authored-method capability, and
+  the three methods were property sugar over the declared `open` row:
+  `el.open = true` / `el.open = false` are the programmatic paths. Consumers
+  of the tag, the attribute, the event or the parts see no change; consumers
+  of the sugar must switch to the property. This is the first migration whose
+  class surface exceeded the export itself — recorded here because the
+  snapshot diff makes it visible, not silent.
+- The manifest event declaration survives (`open-dialog-close`, CustomEvent):
+  the user-facing close dispatch is authored inline in the component module
+  (the manifest event recognizer is module-local) with
+  `new globalThis.CustomEvent(...)` (the function lane's value allowlist has
+  no bare DOM globals). The cancel and native-close paths share the same two
+  lines through the helper.
+- SSR parity: the generated host wrapper reproduces the class lane's DSD
+  marker byte-for-byte (`<open-dialog label="..."><template
+  shadowrootmode="open" shadowrootdelegatesfocus>`); the inner dialog's
+  attribute ORDER differs (seed order, not authored spelling), so two dogfood
+  assertions moved from attribute-order literals to atomic facts.
+- Style delivery: the generated lane's declared-sheet channel emits the same
+  sheets the class lane bundled; a client-created (never server-rendered)
+  generated host takes no constructed sheet today — the recorded Alpha17
+  adoption slice. The dogfood constructed-sheet-sharing row therefore pins the
+  class-lane contract on `open-dropdown` (still class lane) and documents the
+  generated delivery.
+
+### One router capability this migration required: the shared-sheet plan join
+
+`overlay-recipe.css` is the first sheet shared between a generated island
+(declared) and a class island (authored import). The style-edge registry keys
+a shadow edge by its sheet file, so the sheet carries ONE registry entry under
+whichever importer registered last, and the per-importer request lists cannot
+join a shared sheet to its emitted asset. The client build's join and the dev
+URLs now compute the registry KEY the declaration's registration used
+(`styleRequestModuleId`) and read the emission state directly — per importer
+attribution is no longer a join input. The A6 disposition (emitted and
+unreferenced for www-unrendered declarations) is unchanged and still passes;
+its sheet derivation reads the sidecar list for generated-lane modules.
+
+### Evidence
+
+`tests/fixtures/router-ui-dogfood` e2e (the dialog qualification page: SSR/DSD
+markup, claim + hydration, SSR-open #1030 choreography, trigger/Tab/Escape
+focus containment, exactly-one close event, reconnect) — 33 specs ×
+chromium/firefox/webkit = 99 passed; the element browser overlay-contract
+suite against the generated fixture (10 tests, including a programmatic
+open-property top-layer row); the ui unit suites (84: the state-machine rows
+now drive the helper directly, the dispose row moved to the browser evidence
+per the harness contract); compiler 1265 / element 970 / router 1845 / www +
+tools + create + saas + tests 1268 (+1 skipped); the www behaviour matrix and
+the A6 sheet-admission suite. `pnpm run check`. LOCAL.
+
+P1 is unaffected by this slice: `open-dialog` was never a www island, so the
+browser-entry-graph verdict and the remaining class-island set are unchanged.

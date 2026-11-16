@@ -257,14 +257,17 @@ export function fakeDialog(): FakeDialog {
   return fake;
 }
 
-/** An uncompiled OpenDialog whose shadow root resolves `dialog` to `fake`. */
-export function dialogWith(fake: FakeDialog, mode?: string) {
-  return (async () => {
-    const { OpenDialog } = await import('../src/open-dialog.tsx');
-    // oxlint-disable-next-line no-explicit-any
-    const el = new (OpenDialog as unknown as new () => any)();
-    el.shadowRoot = { querySelector: (sel: string) => (sel === 'dialog' ? fake : null) };
-    if (mode) el.setAttribute('mode', mode);
-    return el;
-  })();
+/**
+ * A fake generated-element host whose shadow root resolves `dialog` to
+ * `fake` and whose declared `open` property stands in for the compiled row:
+ * the dialog-machine helpers take this host shape directly.
+ */
+export function dialogHostWith(fake: FakeDialog, mode?: string) {
+  installDomHarness();
+  // oxlint-disable-next-line no-explicit-any
+  const el = new (globalThis.HTMLElement as unknown as new () => any)();
+  el.shadowRoot = { querySelector: (sel: string) => (sel === 'dialog' ? fake : null) };
+  if (mode) el.setAttribute('mode', mode);
+  el.open = false;
+  return el;
 }

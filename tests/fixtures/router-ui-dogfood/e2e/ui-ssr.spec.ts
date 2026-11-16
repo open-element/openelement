@@ -26,9 +26,17 @@ test.describe('ui dogfood SSR/DSD output', () => {
     // Trigger/footer slots stay in the light DOM (slot projection).
     expect(html).toContain('<button slot="trigger" id="dialog-trigger" type="button">');
     // The SSR-open dialog: host `open` attribute + bool sink opened the inner
-    // dialog at render time (#1030 choreography input state).
-    expect(html).toContain('<open-dialog id="ssr-open-dialog" open="" label="SSR open dialog">');
-    expect(html).toMatch(/<dialog [^>]*part="overlay"[^>]*open[^>]*aria-label="SSR open dialog"/);
+    // dialog at render time (#1030 choreography input state). The facts are
+    // atomic, not attribute-order literals: the generated host wrapper spells
+    // attributes in the seed order, not the authored spelling.
+    const ssrOpenHost = html.match(/<open-dialog [^>]*id="ssr-open-dialog"[^>]*>/)?.[0] ?? '';
+    expect(ssrOpenHost, 'the SSR-open host exists').not.toBe('');
+    expect(ssrOpenHost).toContain('open=""');
+    expect(ssrOpenHost).toContain('label="SSR open dialog"');
+    const ssrOpenDialog = html.match(/<dialog [^>]*aria-label="SSR open dialog"[^>]*>/)?.[0] ?? '';
+    expect(ssrOpenDialog, 'the inner dialog rendered open').not.toBe('');
+    expect(ssrOpenDialog).toContain('open=""');
+    expect(ssrOpenDialog).toContain('part="overlay"');
   });
 
   test('/dropdown emits open-dropdown DSD with a native popover content block', async ({
@@ -127,12 +135,14 @@ test.describe('tailwind entry delivery (entry-on + compiled DSD)', () => {
   }) => {
     await gotoDialog(page);
     // The compiled claim succeeded (it fails closed on any injected node),
-    // so the hydrated dialog actually drives the shadow <dialog>.
-    await page.evaluate(`${deepFirstExpr('#ssr-open-dialog')}.show()`);
+    // so the hydrated dialog actually drives the shadow <dialog>. The
+    // declared `open` property is the programmatic path (the class's
+    // show()/close() sugar retired with the class export).
+    await page.evaluate(`${deepFirstExpr('#ssr-open-dialog')}.open = true`);
     await page.waitForFunction(
       `${deepFirstExpr('#ssr-open-dialog')}?.matches(':state(open)') ?? false`,
     );
-    await page.evaluate(`${deepFirstExpr('#ssr-open-dialog')}.close()`);
+    await page.evaluate(`${deepFirstExpr('#ssr-open-dialog')}.open = false`);
 
     // The theme layer is custom properties delivered by the head link: a
     // shadow-tree element resolves a bundle token through inheritance.

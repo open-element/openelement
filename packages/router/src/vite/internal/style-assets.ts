@@ -1137,9 +1137,19 @@ export function devAuthoredIslandStyleUrls(
     declaration.root === 'shadow' ? undefined : declaration.tagName,
   );
   const urls: string[] = [];
-  for (const request of styleRequestsForImporter(declaration.moduleId)) {
-    const url = devAuthoredStyleUrl(base, request.moduleId);
-    devAuthoredResourceEdges.set(devStyleDigest(request.moduleId), request.moduleId);
+  for (const specifier of declaration.specifiers) {
+    // Join by the registry KEY the registration above used, not by importer
+    // attribution: a shadow sheet shared with a class island's authored import
+    // carries one registry entry (keyed by the sheet file) under whichever
+    // importer registered last, so the per-importer request list would drop
+    // the shared sheet from this island's declared dev links.
+    const key = styleRequestModuleId(
+      declaration.moduleId,
+      specifier,
+      declaration.root === 'shadow' ? undefined : declaration.tagName,
+    );
+    const url = devAuthoredStyleUrl(base, key);
+    devAuthoredResourceEdges.set(devStyleDigest(key), key);
     urls.push(url);
   }
   return urls;

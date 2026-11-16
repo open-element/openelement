@@ -73,16 +73,18 @@ test('a client-created shadow component adopts the one shared sheet (no per-inst
   page,
 }) => {
   // Requirements 5.1/5.2: the same stylesheet resource shares ONE constructed
-  // sheet identity, and instances never re-fetch or re-parse it. The probe
-  // page carries no client JavaScript, so the island client is loaded from a
-  // page that hydrates, then the component is created client-side — the
-  // registered sheet must be adopted, with no link/style node created at
-  // runtime.
-  await page.goto('/dialog');
-  await page.waitForFunction(() => Boolean(globalThis.customElements.get('open-dialog')));
+  // sheet identity, and instances never re-fetch or re-parse it. The subject
+  // is open-dropdown, the class-lane shadow component whose registered sheets
+  // the kernel adopts at connect (open-dialog now rides the generated lane,
+  // whose declared-sheet delivery is the SSR DSD `<link>` channel; client-
+  // created generated hosts take the recorded Alpha17 adoption slice). The
+  // /dropdown page hydrates its island, so the registered sheets exist before
+  // the client-side creation.
+  await page.goto('/dropdown');
+  await page.waitForFunction(() => Boolean(globalThis.customElements.get('open-dropdown')));
   const result = await page.evaluate(() => {
     const adopt = (): { sheets: CSSStyleSheet[]; links: number; styles: number } => {
-      const host = document.createElement('open-dialog') as HTMLElement;
+      const host = document.createElement('open-dropdown') as HTMLElement;
       document.body.appendChild(host);
       const root = host.shadowRoot;
       return {

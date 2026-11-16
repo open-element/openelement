@@ -272,20 +272,19 @@
     },
     {
       "tagName": "open-dialog",
-      "className": "OpenDialog",
-      "superclassName": "OpenElement",
+      "className": "OpenDialogElement",
       "description": "Dialog component using native <dialog> element + popover API.",
       "attributes": [
         {
           "name": "open",
           "type": "boolean",
-          "description": "open attribute",
-          "default": "false"
+          "default": "false",
+          "reflects": true
         },
         {
           "name": "label",
           "type": "string",
-          "description": "label attribute"
+          "default": ""
         }
       ],
       "events": [
@@ -297,38 +296,30 @@
       ],
       "slots": [
         {
-          "name": "",
-          "description": "Default slot"
+          "name": ""
         },
         {
-          "name": "trigger",
-          "description": "The 'trigger' slot"
+          "name": "trigger"
         },
         {
-          "name": "footer",
-          "description": "The 'footer' slot"
+          "name": "footer"
         }
       ],
       "cssParts": [
         {
-          "name": "overlay",
-          "description": "The dialog backdrop/element"
+          "name": "overlay"
         },
         {
-          "name": "header",
-          "description": "The header bar"
+          "name": "header"
         },
         {
-          "name": "close",
-          "description": "The close button"
+          "name": "close"
         },
         {
-          "name": "body",
-          "description": "The content area (<slot>)"
+          "name": "body"
         },
         {
-          "name": "footer",
-          "description": "The optional footer slot"
+          "name": "footer"
         }
       ],
       "openElement": {
@@ -338,13 +329,18 @@
         "hydrate": "idle",
         "status": "experimental",
         "module": "@openelement/ui/open-dialog",
-        "export": "OpenDialog",
+        "export": "OpenDialogElement",
         "tailwind": {
           "required": true,
           "sources": [
             "./src/theme.css"
           ]
-        }
+        },
+        "root": "shadow",
+        "styles": [
+          "./overlay-recipe.css",
+          "./open-dialog.css"
+        ]
       }
     },
     {
