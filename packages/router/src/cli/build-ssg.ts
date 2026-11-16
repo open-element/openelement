@@ -34,9 +34,11 @@ import { islandStyleDeclarations } from '../vite/internal/island-style-declarati
 import {
   buildRouteDocumentStyleLinks,
   deliveredIslandStyleTags,
+  islandStyleEntryLinks,
   setRouteDocumentStyleLinks,
   type RouteDocumentStyleLinks,
 } from '../vite/internal/ssg/route-style-links.ts';
+import { admittedTailwindDeclarations } from '../vite/internal/ssg/island-scanner.ts';
 import { buildError, RouteScanErrorCode } from '../internal/error-codes.ts';
 import {
   buildEntryDescriptor,
@@ -400,6 +402,15 @@ async function buildSSG(
       { tags?: readonly string[]; tagNames?: readonly string[] } | undefined
     >,
   ).shadow;
+  // A generated shadow host has no emitted class static to carry the class
+  // lane's `__oeUtilityClasses` fact, so the manifest declaration is the
+  // build-time authority for "this component's shadow tree needs the app's
+  // shared utility sheet".
+  const utilityRequiredTags = new Set(
+    admittedTailwindDeclarations(ctx.phase1.packageManifests, ctx.phase1.packageIslandDecls)
+      .filter((fact) => fact.required)
+      .map((fact) => fact.tagName),
+  );
   if (componentStyleSheetUrls.length > 0) {
     log.info(`Component stylesheet linked into DSD: ${componentStyleSheetUrls.join(', ')}`);
   }
@@ -609,7 +620,12 @@ async function buildSSG(
         // because the module is bundled into dist/server/index.js).
         elementStyleLinksPlugin(
           componentStyleSheetUrls,
-          [...clientIslandStyleAssets(ctx).entries()].filter(([tag]) => styledShadowTags.has(tag)),
+          islandStyleEntryLinks(
+            clientIslandStyleAssets(ctx),
+            styledShadowTags,
+            componentStyleSheetUrls,
+            utilityRequiredTags,
+          ),
         ),
         // MDX route support must mirror the outer plugin list (plugin.ts),
         // otherwise .mdx routes fail Phase 3 parse (the oxc transform treats

@@ -57,6 +57,34 @@ export function deliveredIslandStyleTags(
   return { light, shadow };
 }
 
+/**
+ * The per-tag DSD style-link entries the generated entry seeds.
+ *
+ * The emitted component-sheet URLs of every styled shadow island, plus the
+ * app's shared utility sheet for the tags whose package manifest declares the
+ * Tailwind requirement. The class lane carries that fact on the emitted class
+ * (`static __oeUtilityClasses`); a generated host has no such static, so the
+ * manifest declaration is the build-time authority and the entry appends the
+ * one shared, content-addressed URL to exactly those tags.
+ */
+export function islandStyleEntryLinks(
+  assets: ReadonlyMap<string, readonly string[]>,
+  shadowTags: ReadonlySet<string>,
+  utilitySheetUrls: readonly string[],
+  utilityRequiredTags: ReadonlySet<string>,
+): Array<[string, readonly string[]]> {
+  const entries: Array<[string, readonly string[]]> = [];
+  for (const [tag, urls] of assets) {
+    if (!shadowTags.has(tag)) continue;
+    const links =
+      utilityRequiredTags.has(tag) && utilitySheetUrls.length > 0
+        ? [...urls, ...utilitySheetUrls]
+        : [...urls];
+    entries.push([tag, links]);
+  }
+  return entries;
+}
+
 /** Stable code for the one graph boundary this fact reports. */
 export const RouteStyleLinksDiagnosticCode = {
   /**

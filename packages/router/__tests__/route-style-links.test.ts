@@ -25,6 +25,7 @@ import { dirname, join, resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import type { RouteEntry } from '../src/framework.ts';
 import type { ModuleWalkResolver } from '../src/vite/internal/module-graph-walk.ts';
+import { islandStyleEntryLinks } from '../src/vite/internal/ssg/route-style-links.ts';
 import {
   ModuleWalkDiagnosticCode,
   walkModuleGraph,
@@ -403,5 +404,40 @@ describe('routeDocumentStyleLinks carrier', () => {
     setRouteDocumentStyleLinks(context, links);
     expect(routeDocumentStyleLinks(context)).toBe(links);
     expect(routeDocumentStyleLinks({}), 'another build context sees no fact').toEqual({});
+  });
+});
+
+describe('generated-entry DSD style link entries', () => {
+  test('joins the emitted sheet and the shared utility sheet for a Tailwind-required tag', () => {
+    const assets = new Map<string, readonly string[]>([
+      ['open-theme-toggle', ['/client/open-theme-toggle.abc.css']],
+      ['open-plain', ['/client/plain.abc.css']],
+    ]);
+    const shadowTags = new Set(['open-theme-toggle', 'open-plain']);
+    const entries = islandStyleEntryLinks(
+      assets,
+      shadowTags,
+      ['/client/component-shared.css'],
+      new Set(['open-theme-toggle']),
+    );
+    expect(entries).toEqual([
+      ['open-theme-toggle', ['/client/open-theme-toggle.abc.css', '/client/component-shared.css']],
+      ['open-plain', ['/client/plain.abc.css']],
+    ]);
+  });
+
+  test('filters to styled shadow tags and never adds an empty utility link', () => {
+    const assets = new Map<string, readonly string[]>([
+      ['open-light', ['/client/light.css']],
+      ['open-shadow', ['/client/shadow.css']],
+    ]);
+    expect(
+      islandStyleEntryLinks(
+        assets,
+        new Set(['open-shadow']),
+        [],
+        new Set(['open-shadow', 'open-light']),
+      ),
+    ).toEqual([['open-shadow', ['/client/shadow.css']]]);
   });
 });
