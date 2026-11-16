@@ -47,6 +47,28 @@ function FormCard(props: { value: string; name: string; required: boolean; disab
 export default FormCard;
 `;
 
+// The button shape: `formAssociated: true` without a declared `value` row (the
+// open-button contract). The declared boolean `disabled` row reflects — the
+// host attribute is the class-lane open-button contract.
+const BUTTON_FILE = '/proj/src/islands/form-button.tsx';
+const BUTTON_SITE: GeneratedElementSite = { tag: 'x-form-button' };
+
+const BUTTON_ISLAND_SOURCE = `import { defineIslandConfig } from '@openelement/router';
+export const openElement = defineIslandConfig({
+  hydrate: 'idle',
+  root: 'shadow',
+  formAssociated: true,
+  properties: {
+    label: {},
+    disabled: { reflect: true, default: false },
+  },
+});
+function FormButton(props: { label: string; disabled: boolean }) {
+  return <p>{props.label}</p>;
+}
+export default FormButton;
+`;
+
 interface PageRuntime {
   FormElement: CustomElementConstructor;
   FormCard__ssr: (props?: unknown, host?: unknown) => string;
@@ -55,17 +77,43 @@ interface PageRuntime {
   createGeneratedElementClass: (descriptor: unknown) => CustomElementConstructor;
 }
 
+interface ButtonPageRuntime {
+  ButtonElement: CustomElementConstructor;
+  FormButton__ssrHost: (props: unknown, lightChildren?: string) => string;
+  createFormButtonRecipe: (owner: unknown, host: unknown) => unknown;
+  createGeneratedElementClass: (descriptor: unknown) => CustomElementConstructor;
+}
+
 declare global {
   interface Window {
     __oeForms: PageRuntime;
+    __oeFormsButton: ButtonPageRuntime;
   }
 }
 
 let browser: Browser;
 let tempDir = '';
 let bundleFile = '';
+let buttonBundleFile = '';
 
-async function buildBundle(dir: string, code: string): Promise<string> {
+interface BundleNames {
+  readonly global: string;
+  readonly entryExports: string;
+}
+
+const FORM_CARD_BUNDLE: BundleNames = {
+  global: '__oeForms',
+  entryExports:
+    "export { default as FormElement, FormCard__ssr, FormCard__ssrHost, createFormCardRecipe } from './island.js';",
+};
+
+const FORM_BUTTON_BUNDLE: BundleNames = {
+  global: '__oeFormsButton',
+  entryExports:
+    "export { default as ButtonElement, FormButton__ssrHost, createFormButtonRecipe } from './island.js';",
+};
+
+async function buildBundle(dir: string, code: string, names: BundleNames): Promise<string> {
   const element = join(REPO_ROOT, 'packages/element/src/internal');
   const runtime = join(element, 'compiled/runtime');
   const shim = join(dir, 'runtime-shim.ts');
@@ -92,7 +140,7 @@ async function buildBundle(dir: string, code: string): Promise<string> {
   writeFileSync(
     entry,
     [
-      `export { default as FormElement, FormCard__ssr, FormCard__ssrHost, createFormCardRecipe } from './island.js';`,
+      `${names.entryExports}`,
       `export { createGeneratedElementClass } from ${JSON.stringify(join(element, 'compiled/generated-element/shell.ts'))};`,
       '',
     ].join('\n'),
@@ -110,7 +158,7 @@ async function buildBundle(dir: string, code: string): Promise<string> {
     build: {
       write: false,
       minify: false,
-      lib: { entry, formats: ['iife'], name: '__oeForms', fileName: () => 'forms.js' },
+      lib: { entry, formats: ['iife'], name: names.global, fileName: () => 'forms.js' },
     },
   });
   const output = Array.isArray(result)
@@ -129,10 +177,10 @@ const PAGE_SETUP = `
   window.__oeTick = () => new Promise((resolve) => setTimeout(resolve, 0));
 `;
 
-async function openPage(): Promise<Page> {
+async function openPage(bundle: string = bundleFile): Promise<Page> {
   const page = await browser.newPage();
   await page.setContent('<!doctype html><html><body></body></html>');
-  await page.addScriptTag({ path: bundleFile });
+  await page.addScriptTag({ path: bundle });
   await page.addScriptTag({ content: PAGE_SETUP });
   return page;
 }
@@ -143,7 +191,30 @@ beforeAll(async () => {
   expect(compiled).not.toBeNull();
   expect(compiled!.code).toContain('formAssociated: true,');
   expect(compiled!.code).toContain('createFormCardRecipe');
-  bundleFile = await buildBundle(tempDir, compiled!.code);
+  // Each bundle gets its own directory: buildBundle writes island.js/entry.ts
+  // alongside the bundle, so two builds sharing one dir would overwrite each
+  // other's inputs.
+  bundleFile = await buildBundle(
+    mkdtempSync(join(tempDir, 'card-')),
+    compiled!.code,
+    FORM_CARD_BUNDLE,
+  );
+  const buttonCompiled = compileGeneratedElementIfAdmitted(BUTTON_ISLAND_SOURCE, BUTTON_FILE, {
+    site: BUTTON_SITE,
+  });
+  expect(buttonCompiled).not.toBeNull();
+  // The button shape keeps the descriptor's formAssociated row and the normal
+  // (reflecting) disabled row; no value row exists to publish.
+  expect(buttonCompiled!.code).toContain('formAssociated: true,');
+  expect(buttonCompiled!.code).toContain(
+    '    { name: "disabled", attribute: "disabled", type: "boolean", reflect: true, default: false },',
+  );
+  expect(buttonCompiled!.code.match(/\{ name: "value"/)).toBeNull();
+  buttonBundleFile = await buildBundle(
+    mkdtempSync(join(tempDir, 'button-')),
+    buttonCompiled!.code,
+    FORM_BUTTON_BUNDLE,
+  );
   browser = await chromium.launch();
 }, 180_000);
 
@@ -156,6 +227,12 @@ type FormHost = HTMLElement & {
   value: string;
   disabled: boolean;
   required: boolean;
+  formResetCallback(): void;
+  formStateRestoreCallback(state: File | string | FormData | null, mode: string): void;
+};
+
+type ButtonHost = HTMLElement & {
+  disabled: boolean;
   formResetCallback(): void;
   formStateRestoreCallback(state: File | string | FormData | null, mode: string): void;
 };
@@ -903,6 +980,221 @@ describe('bounded generated-element form mechanism (Chromium)', () => {
       expect(result.afterRestore).toEqual({ value: 'restored', formData: { q: 'restored' } });
       expect(result.disabled).toEqual({ stateDisabled: true, formData: {} });
       expect(result.reenabled).toEqual({ stateDisabled: false, formData: { r: 'locked' } });
+    } finally {
+      await page.close();
+    }
+  });
+});
+
+describe('button-shape generated element form association (Chromium)', () => {
+  test('form.elements membership, external form=id, no published value, no validity claim', async () => {
+    const page = await openPage(buttonBundleFile);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeFormsButton;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        customElements.define(tagName, mod.ButtonElement);
+        const form = document.createElement('form');
+        const host = document.createElement(tagName);
+        host.setAttribute('name', 'b');
+        form.append(host);
+        document.body.append(form);
+        await tick();
+        const ancestor = {
+          staticFormAssociated:
+            (mod.ButtonElement as unknown as { formAssociated?: boolean }).formAssociated === true,
+          listed: Array.from(form.elements).includes(host),
+          formDataKeys: Array.from(new FormData(form).keys()),
+          checkValidity: form.checkValidity(),
+          valid: host.matches(':valid'),
+        };
+        const externalForm = document.createElement('form');
+        externalForm.id = 'external-form';
+        document.body.append(externalForm);
+        host.setAttribute('form', 'external-form');
+        await tick();
+        const external = {
+          ancestorStillLists: Array.from(form.elements).includes(host),
+          externalLists: Array.from(externalForm.elements).includes(host),
+          externalKeys: Array.from(new FormData(externalForm).keys()),
+        };
+        return { ancestor, external };
+      }, BUTTON_SITE.tag);
+      expect(result.ancestor).toEqual({
+        staticFormAssociated: true,
+        listed: true,
+        formDataKeys: [],
+        checkValidity: true,
+        valid: true,
+      });
+      expect(result.external).toEqual({
+        ancestorStillLists: false,
+        externalLists: true,
+        externalKeys: [],
+      });
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('disabled reflects to the host attribute and drives the custom states reversibly', async () => {
+    const page = await openPage(buttonBundleFile);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeFormsButton;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        customElements.define(tagName, mod.ButtonElement);
+        const form = document.createElement('form');
+        const fieldset = document.createElement('fieldset');
+        const host = document.createElement(tagName) as unknown as ButtonHost;
+        host.setAttribute('name', 'b');
+        fieldset.append(host);
+        form.append(fieldset);
+        document.body.append(form);
+        await tick();
+        const customStates = (): { disabled: boolean; enabled: boolean } => ({
+          disabled: host.matches(':state(disabled)'),
+          enabled: host.matches(':state(enabled)'),
+        });
+        const snapshot = (): {
+          disabled: boolean;
+          attribute: boolean;
+          states: { disabled: boolean; enabled: boolean };
+        } => ({
+          disabled: host.disabled,
+          attribute: host.hasAttribute('disabled'),
+          states: customStates(),
+        });
+        const initial = snapshot();
+        host.disabled = true;
+        await tick();
+        const authored = snapshot();
+        host.disabled = false;
+        await tick();
+        const cleared = snapshot();
+        host.setAttribute('disabled', '');
+        await tick();
+        const attributeWrite = snapshot();
+        host.removeAttribute('disabled');
+        await tick();
+        const attributeRemove = snapshot();
+        fieldset.disabled = true;
+        await tick();
+        const fieldsetDisabled = snapshot();
+        fieldset.disabled = false;
+        await tick();
+        const fieldsetEnabled = snapshot();
+        return {
+          initial,
+          authored,
+          cleared,
+          attributeWrite,
+          attributeRemove,
+          fieldsetDisabled,
+          fieldsetEnabled,
+        };
+      }, BUTTON_SITE.tag);
+      expect(result.initial).toEqual({
+        disabled: false,
+        attribute: false,
+        states: { disabled: false, enabled: true },
+      });
+      expect(result.authored).toEqual({
+        disabled: true,
+        attribute: true,
+        states: { disabled: true, enabled: false },
+      });
+      expect(result.cleared).toEqual({
+        disabled: false,
+        attribute: false,
+        states: { disabled: false, enabled: true },
+      });
+      expect(result.attributeWrite).toEqual({
+        disabled: true,
+        attribute: true,
+        states: { disabled: true, enabled: false },
+      });
+      expect(result.attributeRemove).toEqual({
+        disabled: false,
+        attribute: false,
+        states: { disabled: false, enabled: true },
+      });
+      // The fieldset-effective state is separate from the author property: the
+      // reflecting row's attribute is never written by the callback, so the
+      // authored state stays reversible (F2).
+      expect(result.fieldsetDisabled).toEqual({
+        disabled: false,
+        attribute: false,
+        states: { disabled: true, enabled: false },
+      });
+      expect(result.fieldsetEnabled).toEqual({
+        disabled: false,
+        attribute: false,
+        states: { disabled: false, enabled: true },
+      });
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('reset and restore are no-ops: nothing to restore, FormData stays empty', async () => {
+    const page = await openPage(buttonBundleFile);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeFormsButton;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        customElements.define(tagName, mod.ButtonElement);
+        const form = document.createElement('form');
+        const host = document.createElement(tagName) as unknown as ButtonHost;
+        host.setAttribute('name', 'b');
+        form.append(host);
+        document.body.append(form);
+        await tick();
+        host.formResetCallback();
+        host.formStateRestoreCallback('restored', 'restore');
+        host.formStateRestoreCallback(new File(['x'], 'x.txt'), 'restore');
+        await tick();
+        return {
+          formDataKeys: Array.from(new FormData(form).keys()),
+          disabled: host.disabled,
+          enabled: host.matches(':state(enabled)'),
+        };
+      }, BUTTON_SITE.tag);
+      expect(result).toEqual({ formDataKeys: [], disabled: false, enabled: true });
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('pre-upgrade disabled attribute replays into the reflecting property and states', async () => {
+    const page = await openPage(buttonBundleFile);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeFormsButton;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        const host = document.createElement(tagName) as unknown as ButtonHost;
+        host.setAttribute('disabled', '');
+        customElements.define(tagName, mod.ButtonElement);
+        const form = document.createElement('form');
+        form.append(host);
+        document.body.append(form);
+        await tick();
+        return {
+          disabled: host.disabled,
+          attribute: host.hasAttribute('disabled'),
+          formDataKeys: Array.from(new FormData(form).keys()),
+          states: {
+            disabled: host.matches(':state(disabled)'),
+            enabled: host.matches(':state(enabled)'),
+          },
+        };
+      }, BUTTON_SITE.tag);
+      expect(result).toEqual({
+        disabled: true,
+        attribute: true,
+        formDataKeys: [],
+        states: { disabled: true, enabled: false },
+      });
     } finally {
       await page.close();
     }

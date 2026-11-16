@@ -1,13 +1,22 @@
 /**
- * M09-2d bounded form mechanism — compiler/descriptor contract.
+ * M09-2d bounded form mechanism — compiler/descriptor contract (two shapes).
  *
- * The author opts in with the public `formAssociated: true` sidecar field and
- * keeps the ordinary declared string `value` property as the form value source
- * (no `formValue` field). Optional declared boolean `required`/`disabled`
- * properties map the bounded required→valueMissing and fieldset-disabled
- * behavior. The shell owns the one ElementInternals record shared with closed
- * root discovery; the descriptor row only carries the boolean fact and the
- * normal property rows.
+ * The author opts in with the public `formAssociated: true` sidecar field; the
+ * shape is derived from the declared rows (no `formValue` or shape field):
+ *
+ * - value shape — the ordinary declared string `value` property is the form
+ *   value source; optional declared boolean `required`/`disabled` properties
+ *   map the bounded required→valueMissing and fieldset-disabled behavior, and
+ *   `disabled` must not reflect (the shell writes the property, never the
+ *   attribute, so the fieldset/authored state stays reversible).
+ * - button shape — no declared `value` row (the open-button contract): the
+ *   element stays form-associated but publishes no form value, makes no
+ *   validity claim and maps no reset/restore state; its declared boolean
+ *   `disabled` row MAY reflect. A `required` row without `value` is refused.
+ *
+ * The shell owns the one ElementInternals record shared with closed root
+ * discovery; the descriptor row only carries the boolean fact and the normal
+ * property rows.
  */
 
 import { describe, expect, test } from 'vitest';
@@ -102,10 +111,6 @@ describe('bounded formAssociated admission', () => {
   test('the bounded value/required/disabled mapping is validated', () => {
     const cases: Array<[string, string]> = [
       [
-        'missing value property',
-        island('formAssociated: true, properties: { label: {} }', '{ label: string }'),
-      ],
-      [
         'non-string value',
         island('formAssociated: true, properties: { value: { default: 0 } }', '{ value: number }'),
       ],
@@ -131,12 +136,62 @@ describe('bounded formAssociated admission', () => {
           '{ value: string; disabled: boolean }',
         ),
       ],
+    ];
+    for (const [label, source] of cases) {
+      const error = laneError(source);
+      expect(codes(error), label).toEqual([GENERATED_ELEMENT_DIAGNOSTIC.FORM_VALUE_UNSUPPORTED]);
+    }
+  });
+
+  test('the button shape admits formAssociated without a declared value row', () => {
+    const compiled = compileGeneratedElementIfAdmitted(
+      island(
+        "root: 'shadow', formAssociated: true, properties: { label: {}, " +
+          'disabled: { reflect: true, default: false } }',
+        '{ label: string; disabled: boolean }',
+        '<button disabled={props.disabled}>{props.label}</button>',
+      ),
+      FILE,
+      { site: SITE },
+    );
+    expect(compiled).not.toBeNull();
+    expect(compiled!.code).toContain('formAssociated: true,');
+    expect(compiled!.code).toContain(
+      '    { name: "disabled", attribute: "disabled", type: "boolean", reflect: true, default: false },',
+    );
+    // No value row: the descriptor carries no form value source and no
+    // invented shape field.
+    expect(compiled!.code.match(/\{ name: "value"/)).toBeNull();
+  });
+
+  test('the minimal button shape needs no property table at all', () => {
+    const compiled = compileGeneratedElementIfAdmitted(
+      "import { defineIslandConfig } from '@openelement/router';\n" +
+        'export const openElement = defineIslandConfig({ formAssociated: true });\n' +
+        'function Field() { return <div>x</div>; }\n' +
+        'export default Field;\n',
+      FILE,
+      { site: SITE },
+    );
+    expect(compiled).not.toBeNull();
+    expect(compiled!.code).toContain('formAssociated: true,');
+  });
+
+  test('the button shape refuses required (nothing to mirror) and a non-boolean disabled', () => {
+    const cases: Array<[string, string]> = [
       [
-        'no property table',
-        "import { defineIslandConfig } from '@openelement/router';\n" +
-          'export const openElement = defineIslandConfig({ formAssociated: true });\n' +
-          'function Field() { return <div>x</div>; }\n' +
-          'export default Field;\n',
+        'required without value',
+        island(
+          'formAssociated: true, properties: { disabled: { default: false }, required: { default: false } }',
+          '{ disabled: boolean; required: boolean }',
+        ),
+      ],
+      [
+        'non-boolean disabled',
+        island(
+          'formAssociated: true, properties: { disabled: { default: 0 } }',
+          '{ disabled: number }',
+        ),
       ],
     ];
     for (const [label, source] of cases) {
@@ -165,17 +220,28 @@ describe('shell descriptor form validation', () => {
     expect((plain as unknown as { formAssociated?: boolean }).formAssociated).not.toBe(true);
   });
 
+  test('the button shape is a valid descriptor and may reflect disabled', () => {
+    const ctor = createGeneratedElementClass({
+      tag: 'x-form-probe',
+      formAssociated: true,
+      properties: [
+        { name: 'disabled', attribute: 'disabled', type: 'boolean', reflect: true, default: false },
+      ],
+      createRecipe: base.createRecipe,
+    } as unknown as GeneratedElementDescriptor);
+    expect((ctor as unknown as { formAssociated?: boolean }).formAssociated).toBe(true);
+    // The minimal button shape: no declared rows at all.
+    const minimal = createGeneratedElementClass({
+      tag: 'x-form-probe',
+      formAssociated: true,
+      properties: [],
+      createRecipe: base.createRecipe,
+    } as unknown as GeneratedElementDescriptor);
+    expect((minimal as unknown as { formAssociated?: boolean }).formAssociated).toBe(true);
+  });
+
   test('unsupported mappings fail closed at class creation', () => {
     const invalid: Array<[string, GeneratedElementDescriptor]> = [
-      [
-        'missing value',
-        {
-          tag: 'x-form-probe',
-          formAssociated: true,
-          properties: [],
-          createRecipe: base.createRecipe,
-        } as unknown as GeneratedElementDescriptor,
-      ],
       [
         'non-string value',
         {
@@ -188,13 +254,35 @@ describe('shell descriptor form validation', () => {
         } as unknown as GeneratedElementDescriptor,
       ],
       [
-        'reflected disabled',
+        'reflected disabled in the value shape',
         {
           tag: 'x-form-probe',
           formAssociated: true,
           properties: [
             { name: 'value', attribute: null, type: 'string', reflect: false, default: '' },
             { name: 'disabled', attribute: null, type: 'boolean', reflect: true, default: false },
+          ],
+          createRecipe: base.createRecipe,
+        } as unknown as GeneratedElementDescriptor,
+      ],
+      [
+        'required without value (button shape)',
+        {
+          tag: 'x-form-probe',
+          formAssociated: true,
+          properties: [
+            { name: 'required', attribute: null, type: 'boolean', reflect: false, default: false },
+          ],
+          createRecipe: base.createRecipe,
+        } as unknown as GeneratedElementDescriptor,
+      ],
+      [
+        'non-boolean disabled (button shape)',
+        {
+          tag: 'x-form-probe',
+          formAssociated: true,
+          properties: [
+            { name: 'disabled', attribute: null, type: 'number', reflect: true, default: 0 },
           ],
           createRecipe: base.createRecipe,
         } as unknown as GeneratedElementDescriptor,

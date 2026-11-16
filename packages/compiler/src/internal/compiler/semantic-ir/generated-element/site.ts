@@ -1984,14 +1984,25 @@ export function admitGeneratedElementSite(
 }
 
 /**
- * The bounded M09-2d form mapping gate.
+ * The bounded M09-2d form mapping gate (two shapes).
  *
- * The author declares `formAssociated: true` and an ordinary declared string
- * `value` property; there is no separate `formValue` field. Optional declared
- * boolean `required`/`disabled` properties enable the required→valueMissing
- * mirror and the fieldset-disabled state. A reflected `disabled` row is refused
- * because the class path deliberately writes the property, not the attribute,
- * so the fieldset/authored state stays reversible (#1226).
+ * The shape is derived from the declared rows — no separate `formValue` field
+ * or shape field is invented:
+ *
+ * - **value shape** — `formAssociated: true` plus the ordinary declared string
+ *   `value` property, which is the form value source. Optional declared boolean
+ *   `required`/`disabled` properties enable the required→valueMissing mirror
+ *   and the fieldset-disabled state. A reflected `disabled` row is refused
+ *   because the shell deliberately writes the property, not the attribute, so
+ *   the fieldset/authored state stays reversible (#1226).
+ * - **button shape** — `formAssociated: true` without a declared `value` row
+ *   (the open-button contract): the element stays form-associated (it is listed
+ *   in `form.elements` and an external `form=<id>` association resolves), but
+ *   it publishes no form value, makes no validity claim, and its declared
+ *   boolean `disabled` row MAY reflect. `required` mirrors valueMissing on the
+ *   form value, so it has nothing to mirror here and is refused.
+ *
+ * Both shapes require the optional `required`/`disabled` rows to be boolean.
  */
 function admitGeneratedElementForm(
   sourceFile: ts.SourceFile,
@@ -2007,25 +2018,6 @@ function admitGeneratedElementForm(
   const declarationByName = new Map(
     (declarations ?? []).map((declaration) => [declaration.name, declaration]),
   );
-  const value = byName.get('value');
-  if (value === undefined) {
-    return [
-      refuse(
-        defaultExport,
-        'a form-associated generated element requires a declared property named "value" ' +
-          '(the existing declared string property is the form value source; no formValue field ' +
-          'is introduced)',
-      ),
-    ];
-  }
-  if (value.type !== 'string') {
-    return [
-      refuse(
-        declarationByName.get('value')?.node ?? defaultExport,
-        `the form value property "value" must be a string, got ${value.type}`,
-      ),
-    ];
-  }
   for (const name of ['required', 'disabled'] as const) {
     const property = byName.get(name);
     if (property === undefined) continue;
@@ -2037,15 +2029,39 @@ function admitGeneratedElementForm(
         ),
       ];
     }
-    if (name === 'disabled' && property.reflect) {
+  }
+  const value = byName.get('value');
+  if (value === undefined) {
+    const required = byName.get('required');
+    if (required !== undefined) {
       return [
         refuse(
-          declarationByName.get(name)?.node ?? defaultExport,
-          'the form property "disabled" must not reflect to its attribute: the fieldset/authored ' +
-            'disabled state must stay reversible',
+          declarationByName.get('required')?.node ?? defaultExport,
+          'the optional form property "required" mirrors valueMissing on the declared form value; ' +
+            'a form-associated element without a declared "value" property publishes no form ' +
+            'value, so "required" has nothing to mirror',
         ),
       ];
     }
+    return [];
+  }
+  if (value.type !== 'string') {
+    return [
+      refuse(
+        declarationByName.get('value')?.node ?? defaultExport,
+        `the form value property "value" must be a string, got ${value.type}`,
+      ),
+    ];
+  }
+  const disabled = byName.get('disabled');
+  if (disabled?.reflect) {
+    return [
+      refuse(
+        declarationByName.get('disabled')?.node ?? defaultExport,
+        'the form property "disabled" must not reflect to its attribute: the fieldset/authored ' +
+          'disabled state must stay reversible',
+      ),
+    ];
   }
   return [];
 }

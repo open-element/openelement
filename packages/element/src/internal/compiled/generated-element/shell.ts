@@ -503,11 +503,21 @@ export interface GeneratedElementDescriptor<P extends object = Record<string, un
   /**
    * Associate the host with its surrounding native form through the shell's
    * ONE element-lifetime `ElementInternals` record (shared with closed-root
-   * discovery). The form value is the declared string `value` property; an
-   * optional declared boolean `required` enables the valueMissing mirror and an
-   * optional declared boolean non-reflecting `disabled` enables the
-   * fieldset-enabled state. The shell owns all platform callbacks; there is no
-   * author internals API and no separate `formValue` field.
+   * discovery). Two shapes, derived from the declared rows (no shape field):
+   *
+   * - value shape — a declared string `value` property is the form value
+   *   source; an optional declared boolean `required` enables the valueMissing
+   *   mirror and an optional declared boolean non-reflecting `disabled`
+   *   enables the fieldset-enabled state.
+   * - button shape — no declared `value` row: the element stays form-associated
+   *   (`form.elements` membership, external `form=<id>` association) but
+   *   publishes no form value, makes no validity claim and maps no reset or
+   *   restore state; its optional declared boolean `disabled` row may reflect
+   *   (the class open-button contract). A `required` row without `value` is
+   *   refused (nothing to mirror).
+   *
+   * The shell owns all platform callbacks; there is no author internals API
+   * and no separate `formValue` field.
    */
   readonly formAssociated?: boolean;
   readonly properties?: readonly GeneratedElementProperty[];
@@ -602,8 +612,20 @@ interface NormalizedProperty {
   readonly defaultHtml?: string;
 }
 
+/**
+ * The bounded M09-2d form mapping, in one of two shapes derived from the
+ * declared rows (no shape field is invented):
+ *
+ * - **value shape** — `value` is the declared string row; it is the form value
+ *   source and carries the required→valueMissing mirror, reset and restore.
+ * - **button shape** — `value` is null (the sidecar declared no `value` row):
+ *   the element stays form-associated (`form.elements` membership and the
+ *   external `form=<id>` association resolve through the one internals record)
+ *   but publishes no form value, makes no validity claim and never maps a
+ *   reset/restore state. A declared boolean `disabled` row may reflect.
+ */
 interface FormMapping {
-  readonly value: NormalizedProperty;
+  readonly value: NormalizedProperty | null;
   readonly required?: NormalizedProperty;
   readonly disabled?: NormalizedProperty;
 }
@@ -1032,32 +1054,44 @@ function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Normalized
   let form: FormMapping | null = null;
   if (formAssociated) {
     const value = byName.get('value');
-    if (value === undefined) {
-      descriptorError('formAssociated requires a declared property named "value"');
-    }
-    if (value.type !== 'string') {
-      descriptorError(`the form value property "value" must be a string, got ${value.type}`);
-    }
     const required = byName.get('required');
+    const disabled = byName.get('disabled');
     if (required !== undefined && required.type !== 'boolean') {
       descriptorError(
         `the optional form property "required" must be boolean, got ${required.type}`,
       );
     }
-    const disabled = byName.get('disabled');
     if (disabled !== undefined && disabled.type !== 'boolean') {
       descriptorError(
         `the optional form property "disabled" must be boolean, got ${disabled.type}`,
       );
     }
-    if (disabled?.reflect === true) {
-      descriptorError(
-        'the form property "disabled" must not reflect: the fieldset/authored disabled state ' +
-          'must stay reversible',
-      );
+    if (value === undefined) {
+      // The button shape: no declared value row publishes no form value. The
+      // element stays form-associated (form.elements membership and the
+      // external `form=<id>` association resolve through the one internals
+      // record); `required` mirrors valueMissing on the form value and is
+      // refused here; a reflecting `disabled` row is the class open-button
+      // contract and is admitted.
+      if (required !== undefined) {
+        descriptorError(
+          'the optional form property "required" mirrors valueMissing on the declared form value; ' +
+            'a form-associated descriptor without a "value" property publishes no form value',
+        );
+      }
+    } else {
+      if (value.type !== 'string') {
+        descriptorError(`the form value property "value" must be a string, got ${value.type}`);
+      }
+      if (disabled?.reflect === true) {
+        descriptorError(
+          'the form property "disabled" must not reflect: the fieldset/authored disabled state ' +
+            'must stay reversible',
+        );
+      }
     }
     form = {
-      value,
+      value: value ?? null,
       ...(required === undefined ? {} : { required }),
       ...(disabled === undefined ? {} : { disabled }),
     };
@@ -1631,7 +1665,7 @@ function attachForm(element: HTMLElement, state: ElementState): void {
 
 function formValueOf(state: ElementState): string {
   const form = state.form;
-  if (form === null) return '';
+  if (form === null || form.mapping.value === null) return '';
   const value = state.values.get(form.mapping.value.name);
   return typeof value === 'string' ? value : '';
 }
@@ -1648,13 +1682,17 @@ function formAuthorDisabledOf(state: ElementState): boolean {
 
 function syncFormValue(state: ElementState): void {
   const form = state.form;
-  if (form === null) return;
+  // The button shape publishes no form value: a form-associated element that
+  // never calls setFormValue contributes no FormData entry.
+  if (form === null || form.mapping.value === null) return;
   form.controller.setFormValue(formValueOf(state));
 }
 
 function syncFormValidity(state: ElementState): void {
   const form = state.form;
-  if (form === null) return;
+  // The button shape makes no validity claim; its form.checkValidity() is the
+  // platform default (valid).
+  if (form === null || form.mapping.value === null) return;
   const internals = form.controller.internals;
   if (internals === undefined) return;
   if (formRequiredOf(state) && formValueOf(state) === '') {
@@ -1669,7 +1707,8 @@ function syncFormStates(state: ElementState): void {
   if (form === null) return;
   const states = form.controller.internals?.states;
   if (states === undefined) return;
-  if (formRequiredOf(state) && formValueOf(state) === '') states.add('invalid');
+  if (form.mapping.value !== null && formRequiredOf(state) && formValueOf(state) === '')
+    states.add('invalid');
   else states.delete('invalid');
   if (formAuthorDisabledOf(state) || form.effectiveDisabled) {
     states.delete('enabled');
@@ -1691,7 +1730,8 @@ function syncFormAll(state: ElementState): void {
 function syncFormProperty(state: ElementState, property: NormalizedProperty): void {
   const form = state.form;
   if (form === null || form.controller.internals === undefined) return;
-  if (property.name === form.mapping.value.name) {
+  const value = form.mapping.value;
+  if (value !== null && property.name === value.name) {
     syncFormAll(state);
     return;
   }
@@ -1709,7 +1749,7 @@ function syncFormProperty(state: ElementState, property: NormalizedProperty): vo
 /** Write the form value through the declared property and keep its attribute seed. */
 function writeFormValue(element: HTMLElement, state: ElementState, next: string): void {
   const form = state.form;
-  if (form === null) return;
+  if (form === null || form.mapping.value === null) return;
   const property = form.mapping.value;
   setProperty(element, state, property, next, false);
   if (property.attribute !== null) {
@@ -1727,7 +1767,7 @@ function writeFormValue(element: HTMLElement, state: ElementState, next: string)
 /** `form.reset()` restores only the declared value source (never every property). */
 function resetFormValue(element: HTMLElement, state: ElementState): void {
   const form = state.form;
-  if (form === null) return;
+  if (form === null || form.mapping.value === null) return;
   writeFormValue(element, state, String(form.mapping.value.defaultValue));
   syncFormAll(state);
 }

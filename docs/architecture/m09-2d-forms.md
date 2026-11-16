@@ -200,3 +200,64 @@ does not claim ownership of their implementations.
 
 Registered in [`seams.md`](./seams.md) as "Generated-element form association
 and value publication (M09-2d)".
+
+## Amendment (2026-11-17): the two form shapes (value and button)
+
+This amendment is append-only. It records the owner-approved split of the
+bounded form mechanism into **two shapes**; it re-decides nothing above and
+creates no M09 exit, release claim or signature. The value shape is the
+mechanism as recorded above, unchanged; the button shape is new.
+
+### The shape is derived, not declared
+
+The shape follows from the declared property rows — no `formValue` field and no
+separate shape field is invented:
+
+- **Value shape** — `formAssociated: true` plus the declared string `value`
+  row: form value publication, the `required → valueMissing` mirror, value-only
+  reset, string restore and the non-reflecting `disabled` rule all stay exactly
+  as recorded above.
+- **Button shape** — `formAssociated: true` without a declared `value` row (the
+  class-lane `open-button` contract):
+  - The element stays form-associated: `static formAssociated` is installed,
+    the shell attaches the ONE `ElementInternals` record (shared with
+    closed-root discovery), the element is listed in `form.elements`, and an
+    external `form=<id>` association resolves (`internals.form`).
+  - It **publishes no form value**: the shell never calls `setFormValue`, so
+    the element contributes no `FormData` entry even with a host `name`
+    attribute.
+  - It **makes no validity claim**: no `setValidity` call is made, so
+    `checkValidity()`/`:valid` stay the platform default.
+  - Reset and restore are **no-ops**: there is no declared value source to
+    restore, and `File`/`FormData`/string states map to nothing.
+  - A declared boolean `disabled` row **MAY reflect**: the host attribute is
+    the class-lane `open-button` contract (`:host([variant=...])`-style
+    attribute selectors and the platform's own disabled-attribute rule read
+    it). The F2 rule is unchanged: `formDisabledCallback` records the
+    effective state separately and never writes the author property or the
+    host attribute, so the authored (reflecting) state stays reversible; the
+    `disabled`/`enabled` custom states are driven by
+    `authorDisabled || effectiveDisabled` exactly as in the value shape.
+  - The recorded live-UI migration gap above still applies to both shapes:
+    the effective disabled state reaches the internals custom
+    states/validity/submission behavior, not the component's own DOM.
+
+### Refusals
+
+- `required` without a declared `value` row fails closed
+  (`OEIR_GENERATED_ELEMENT_FORM_VALUE_UNSUPPORTED`): required mirrors
+  valueMissing on the form value, which the button shape does not publish.
+- The `required`/`disabled` rows must be boolean in both shapes; a non-string
+  `value` row still fails closed; a reflecting `disabled` row still fails
+  closed **in the value shape** only.
+
+### Evidence
+
+- Compiler/descriptor contract: `generated-element.forms.test.ts` (button-shape
+  admission positives and refusals; the shell descriptor block).
+- Chromium vertical: `generated-element.forms.browser.test.ts` "button-shape
+  generated element form association" — `form.elements` membership, external
+  `form=<id>` association with an empty `FormData`, no validity claim,
+  reflecting disabled (property write, attribute write, fieldset
+  disable/enable reversibility), reset/restore no-ops, pre-upgrade disabled
+  attribute replay. LOCAL, one engine (Chromium).
