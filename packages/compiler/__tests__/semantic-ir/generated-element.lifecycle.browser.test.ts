@@ -315,6 +315,23 @@ const NESTED_ENV_SOURCE =
   '}\n' +
   'export default NestedHost;\n';
 
+/**
+ * Change-form fixture: `onPropertyChange` must run after a DECLARED row commits
+ * a new value, for a property write and an attribute write, and never at setup.
+ */
+const PROPERTY_CHANGE_SOURCE =
+  `import { onPropertyChange } from '@openelement/element';\n` +
+  SIDECAR +
+  'function ChangeCard(props: { seed: number }) {\n' +
+  '  onPropertyChange((event) => {\n' +
+  '    globalThis.__oeChangeJournal.push([event.name, event.value]);\n' +
+  '    globalThis.__oeChangeHosts.push(event.host);\n' +
+  '    globalThis.__oeChangeAborted.push(event.signal.aborted);\n' +
+  '  });\n' +
+  '  return <span className="seed">{props.seed}</span>;\n' +
+  '}\n' +
+  'export default ChangeCard;\n';
+
 interface PageRuntime {
   GeneratedElement: CustomElementConstructor;
   __oeElementTag: string;
@@ -351,6 +368,9 @@ declare global {
       confirmed: boolean[];
       cleanupAborted: boolean[];
     };
+    __oeChangeJournal: Array<[string, unknown]>;
+    __oeChangeHosts: HTMLElement[];
+    __oeChangeAborted: boolean[];
   }
 }
 
@@ -374,6 +394,8 @@ let envBundle = '';
 let envTag = '';
 let nestedEnvBundle = '';
 let nestedEnvTag = '';
+let changeBundle = '';
+let changeTag = '';
 
 const PAGE_SETUP = `
   window.__oeTick = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -544,6 +566,15 @@ beforeAll(async () => {
     'nested-env',
     '__oeNestedEnvCard',
     nestedEnv.component,
+  );
+  const change = compileIsland('lifecycle-property-change-browser', PROPERTY_CHANGE_SOURCE);
+  changeTag = change.tag;
+  changeBundle = await buildBundle(
+    tempDir,
+    change.code,
+    'property-change',
+    '__oeChangeCard',
+    change.component,
   );
   browser = await chromium.launch();
 }, 180_000);
@@ -1093,6 +1124,76 @@ describe('16b-LC lifecycle hooks (Chromium)', () => {
       expect(result.connected.childText).toBe('1');
       expect(result.afterRemoval.cleanupAborted).toEqual([true]);
       expect(result.afterRemoval.childNodes).toBe(0);
+      expect(result.errors).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 120_000);
+
+  test('C9 onPropertyChange runs after a committed declared-row change, not at setup or after teardown', async () => {
+    const page = await openPage(changeBundle);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        window.__oeChangeJournal = [];
+        window.__oeChangeHosts = [];
+        window.__oeChangeAborted = [];
+        const mod = window.__oeChangeCard as unknown as {
+          GeneratedElement: CustomElementConstructor;
+        };
+        const tick = window.__oeTick;
+        customElements.define(tagName, mod.GeneratedElement);
+        const host = document.createElement(tagName) as HTMLElement & {
+          seed: number;
+          dispose: (detach?: boolean) => void;
+        };
+        // Before the listener exists: this write must not be reported.
+        host.seed = 5;
+        document.body.append(host);
+        await tick();
+        const afterConnect = [...window.__oeChangeJournal];
+        host.seed = 7;
+        await tick();
+        const afterProperty = [...window.__oeChangeJournal];
+        host.setAttribute('seed', '9');
+        await tick();
+        const afterAttribute = [...window.__oeChangeJournal];
+        host.dispose(true);
+        host.seed = 11;
+        await tick();
+        const afterTeardown = [...window.__oeChangeJournal];
+        document.body.append(host);
+        await tick();
+        host.seed = 13;
+        await tick();
+        return {
+          afterConnect,
+          afterProperty,
+          afterAttribute,
+          afterTeardown,
+          afterReconnect: [...window.__oeChangeJournal],
+          hostMatch: window.__oeChangeHosts.every((element) => element === host),
+          aborted: [...window.__oeChangeAborted],
+          errors: [...window.__oeErrors],
+        };
+      }, changeTag);
+      // Setup-time seeding and the initial connect report nothing.
+      expect(result.afterConnect).toEqual([]);
+      // A property write and an attribute write each report the committed row.
+      expect(result.afterProperty).toEqual([['seed', 7]]);
+      expect(result.afterAttribute).toEqual([
+        ['seed', 7],
+        ['seed', 9],
+      ]);
+      // Teardown clears the element-lifetime listeners.
+      expect(result.afterTeardown).toEqual(result.afterAttribute);
+      // A fresh instance registers exactly once (no duplicate from the old one).
+      expect(result.afterReconnect).toEqual([
+        ['seed', 7],
+        ['seed', 9],
+        ['seed', 13],
+      ]);
+      expect(result.hostMatch).toBe(true);
+      expect(result.aborted).toEqual([false, false, false]);
       expect(result.errors).toEqual([]);
     } finally {
       await page.close();

@@ -931,4 +931,45 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
       expect(text).toContain('__oe_lifecycleHook();');
     }
   });
+
+  test('A19 an onPropertyChange root registers on the instance host and erases the intrinsic', () => {
+    const source =
+      SIDECAR +
+      "import { onPropertyChange } from '@openelement/element';\n" +
+      'function ChangeCard(props: { seed: number }) {\n' +
+      '  onPropertyChange((event) => { globalThis.__oeSeen = event.value; });\n' +
+      '  return <p>{props.seed}</p>;\n' +
+      '}\n' +
+      'export default ChangeCard;\n';
+    const module = compileIsland('lifecycle-change', source);
+    const factory = functionText(module, '__oe_rootInstance');
+    // The registration is a setup-time side effect on the instance host, not a
+    // retained record field and not a connection hook.
+    expect(factory).toContain(
+      'if (__oe_host.__oe_onPropertyChange !== undefined) __oe_host.__oe_onPropertyChange((',
+    );
+    expect(factory).not.toContain('__oe_connect');
+    expect(factory).toContain('return {};');
+    // The authored intrinsic and its public import never reach the emitted
+    // module; the only channel is the compiler-owned host-record property.
+    expect(module).not.toMatch(/from\s+"@openelement\/element"/);
+    expect(module).not.toContain("from '@openelement/element'");
+    // The connection host forwards the channel so a depth-1 child setup host
+    // can carry it too.
+    expect(functionText(module, 'createChangeCardRecipe')).toContain(
+      '__oe_onPropertyChange: __oe_host.__oe_onPropertyChange',
+    );
+  });
+
+  test('A20 a module without the intrinsic forwards no change channel', () => {
+    for (const module of [
+      compileIsland('lifecycle-no-change', LIFECYCLE_SOURCE),
+      compileIsland(
+        'lifecycle-no-change-plain',
+        SIDECAR + LIFECYCLE_SOURCE_NO_HOOKS.split(SIDECAR)[1]!,
+      ),
+    ]) {
+      expect(module).not.toContain('__oe_onPropertyChange');
+    }
+  });
 });

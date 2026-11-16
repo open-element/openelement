@@ -1,6 +1,7 @@
 /**
- * Runtime fail-closed stand-ins for the compile-time-only lifecycle intrinsics
- * `onConnect` / `onDispose` (`16b-LC` author surface, option 1a).
+ * Runtime fail-closed stand-ins for the compile-time-only lifecycle/change
+ * intrinsics `onConnect` / `onDispose` (`16b-LC` author surface, option 1a) and
+ * `onPropertyChange` (experience-edition change channel, execution-plan §17).
  *
  * The OpenElement compiler (the generated-element lane in
  * `@openelement/compiler`) recognizes these calls by binding provenance — a
@@ -75,4 +76,28 @@ export function onDispose(
 ): void {
   void callback;
   outsideCompiler('onDispose');
+}
+
+/**
+ * Compiler-recognized change intrinsic: runs the callback after a DECLARED
+ * property of this generated element commits a new value, for an attribute
+ * write and for a property write, and never at setup. Erased by the compiler —
+ * the callback is registered on the element-lifetime instance owner through the
+ * compiler-private host record; calling it at runtime fails closed.
+ *
+ * `event.host` is the generated element (the nearest ancestor generated element
+ * for a depth-1 retained hostless child), `event.signal` is the instance-lifetime
+ * teardown signal, and `event.name`/`event.value` are the changed row and its
+ * committed value. The callback may keep the zero-argument form.
+ */
+export function onPropertyChange(
+  callback: (event: {
+    readonly host: HTMLElement;
+    readonly signal: AbortSignal;
+    readonly name: string;
+    readonly value: unknown;
+  }) => void,
+): void {
+  void callback;
+  outsideCompiler('onPropertyChange');
 }

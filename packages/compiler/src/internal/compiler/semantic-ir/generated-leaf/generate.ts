@@ -473,6 +473,25 @@ const LIFECYCLE_ENV_HOOK_VAR = `${INTERNAL_PREFIX}lifecycleEnvHook`;
 const LIFECYCLE_ENV_CLEANUP_VAR = `${INTERNAL_PREFIX}lifecycleEnvCleanup`;
 /** The instance-lifetime signal an `onDispose(env)` registration captures. */
 const TEARDOWN_SIGNAL_VAR = `${INTERNAL_PREFIX}teardownSignal`;
+/**
+ * The compiler-private host-record property that registers an element-lifetime
+ * `onPropertyChange` callback. The shell owns the actual listener list and the
+ * env it builds; generated code only registers through this channel, exactly
+ * like `__oe_hostElement` is a runtime property and not an exported symbol.
+ */
+const PROPERTY_CHANGE_PROPERTY = `${INTERNAL_PREFIX}onPropertyChange`;
+
+/**
+ * Whether any component in the module registers an `onPropertyChange`
+ * callback. The registration channel is forwarded through the host-record
+ * literals only for such a module, so every other module keeps its exact bytes.
+ */
+function moduleUsesPropertyChange(state: EmitState): boolean {
+  for (const component of state.componentByName.values()) {
+    if (component.lifecycle.some((hook) => hook.kind === 'property-change')) return true;
+  }
+  return false;
+}
 
 /**
  * Whether any component in the module declares an env-form lifecycle callback.
@@ -482,7 +501,9 @@ const TEARDOWN_SIGNAL_VAR = `${INTERNAL_PREFIX}teardownSignal`;
  */
 function moduleUsesLifecycleEnv(state: EmitState): boolean {
   for (const component of state.componentByName.values()) {
-    if (component.lifecycle.some((hook) => hook.receivesEnv)) return true;
+    if (component.lifecycle.some((hook) => hook.kind !== 'property-change' && hook.receivesEnv)) {
+      return true;
+    }
   }
   return false;
 }
@@ -497,6 +518,16 @@ function childHostElementField(state: EmitState, node: FunctionModelComponentRef
   const child = state.componentByName.get(node.name);
   if (child === undefined || !child.lifecycle.some((hook) => hook.receivesEnv)) return '';
   return `, ${HOST_ELEMENT_PROPERTY}: ${state.hostVar}.${HOST_ELEMENT_PROPERTY}`;
+}
+
+/** The change channel a retained child setup host forwards (empty otherwise). */
+function childPropertyChangeField(state: EmitState, node: FunctionModelComponentRef): string {
+  if (!moduleUsesPropertyChange(state)) return '';
+  const child = state.componentByName.get(node.name);
+  if (child === undefined || !child.lifecycle.some((hook) => hook.kind === 'property-change')) {
+    return '';
+  }
+  return `, ${PROPERTY_CHANGE_PROPERTY}: ${state.hostVar}.${PROPERTY_CHANGE_PROPERTY}`;
 }
 /**
  * 16b-LC retained-child: the module-local setup factory a RETAINED hostless child exposes to
@@ -2428,7 +2459,7 @@ function emitComponentRef(
     : `() => ({})`;
   push(
     state,
-    `const ${setupHostVar} = { bindings: ${state.hostVar}.bindings, propDeps: ${depList}${childHostElementField(state, node)} };`,
+    `const ${setupHostVar} = { bindings: ${state.hostVar}.bindings, propDeps: ${depList}${childHostElementField(state, node)}${childPropertyChangeField(state, node)} };`,
     span,
   );
   push(
@@ -5274,7 +5305,7 @@ function emitClaimComponentRef(
     : `() => ({})`;
   push(
     state,
-    `const ${setupHostVar} = { bindings: ${state.hostVar}.bindings, propDeps: ${depList}${childHostElementField(state, node)} };`,
+    `const ${setupHostVar} = { bindings: ${state.hostVar}.bindings, propDeps: ${depList}${childHostElementField(state, node)}${childPropertyChangeField(state, node)} };`,
     span,
   );
   push(
@@ -5436,7 +5467,7 @@ interface SetupLocal {
  * callback expression the factory emits verbatim as an ordinary closure.
  */
 interface AdmittedLifecycleHook {
-  readonly kind: 'connect' | 'dispose';
+  readonly kind: 'connect' | 'dispose' | 'property-change';
   readonly record: LoweredExpressionRecord;
   /** `true` when the authored callback declares the one admitted env parameter. */
   readonly receivesEnv: boolean;
@@ -7007,6 +7038,7 @@ function emitComponent(
   }
   const connectHooks = admittedHooks.filter((hook) => hook.kind === 'connect');
   const disposeHooks = admittedHooks.filter((hook) => hook.kind === 'dispose');
+  const changeHooks = admittedHooks.filter((hook) => hook.kind === 'property-change');
 
   // T3 / 16b-LC-1: the ROOT's local snapshots are element-lifetime setup, not
   // per-projection work. They move into one module-local factory the shell's
@@ -7202,6 +7234,20 @@ function emitComponent(
         hook.span,
       );
     }
+    for (const hook of changeHooks) {
+      // Registration only: the shell owns the listener list, the env it builds
+      // and the teardown clearing. The channel check keeps a hand-built
+      // descriptor without the runtime property a no-op instead of a crash.
+      pushParts(
+        setupState,
+        [
+          `if (${MOUNT_HOST}.${PROPERTY_CHANGE_PROPERTY} !== undefined) ${MOUNT_HOST}.${PROPERTY_CHANGE_PROPERTY}((`,
+          { record: hook.record },
+          '));',
+        ],
+        hook.span,
+      );
+    }
     const recordFields = localLines.map((line) => line.name);
     if (connectHooks.some((hook) => !hook.receivesEnv)) {
       recordFields.push(GENERATED_ROOT_CONNECT_RECORD);
@@ -7351,6 +7397,17 @@ function emitComponent(
         hook.span,
       );
     }
+    for (const hook of changeHooks) {
+      pushParts(
+        setupState,
+        [
+          `if (${MOUNT_HOST}.${PROPERTY_CHANGE_PROPERTY} !== undefined) ${MOUNT_HOST}.${PROPERTY_CHANGE_PROPERTY}((`,
+          { record: hook.record },
+          '));',
+        ],
+        hook.span,
+      );
+    }
     const setupFields = localLines.map((line) => line.name);
     if (connectHooks.some((hook) => !hook.receivesEnv)) {
       setupFields.push(GENERATED_ROOT_CONNECT_RECORD);
@@ -7478,6 +7535,10 @@ function emitComponent(
   const forwardedHostElement = moduleUsesLifecycleEnv(state)
     ? `, ${HOST_ELEMENT_PROPERTY}: ${INTERNAL_PREFIX}host.${HOST_ELEMENT_PROPERTY}`
     : '';
+  // The change channel rides the same literal for the depth-1 child setup host.
+  const forwardedPropertyChange = moduleUsesPropertyChange(state)
+    ? `, ${PROPERTY_CHANGE_PROPERTY}: ${INTERNAL_PREFIX}host.${PROPERTY_CHANGE_PROPERTY}`
+    : '';
   if (state.requiresPropsChanged) {
     // The root instance's defining scope is the host props channel: the
     // original OEIR_LEAF_MISSING_VALUE contract stays at factory creation.
@@ -7485,11 +7546,11 @@ function emitComponent(
       `  const ${INTERNAL_PREFIX}propsChanged = ${INTERNAL_PREFIX}host.propsChanged; if (${INTERNAL_PREFIX}propsChanged === undefined) throw new Error("OEIR_LEAF_MISSING_VALUE: propsChanged");`,
     );
     factoryLines.push(
-      `  const ${mountHostVar} = { bindings: ${INTERNAL_PREFIX}host.bindings, propDeps: [${INTERNAL_PREFIX}propsChanged]${forwardedInstance}${forwardedHostElement} };`,
+      `  const ${mountHostVar} = { bindings: ${INTERNAL_PREFIX}host.bindings, propDeps: [${INTERNAL_PREFIX}propsChanged]${forwardedInstance}${forwardedHostElement}${forwardedPropertyChange} };`,
     );
   } else {
     factoryLines.push(
-      `  const ${mountHostVar} = { bindings: ${INTERNAL_PREFIX}host.bindings, propDeps: []${forwardedInstance}${forwardedHostElement} };`,
+      `  const ${mountHostVar} = { bindings: ${INTERNAL_PREFIX}host.bindings, propDeps: []${forwardedInstance}${forwardedHostElement}${forwardedPropertyChange} };`,
     );
   }
   const claim =

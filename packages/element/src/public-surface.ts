@@ -91,21 +91,24 @@ export type { ReadonlySignal, Signal } from './public-runtime.ts';
 export { element, property } from './public-runtime.ts';
 
 /**
- * @experimental Compile-time-only lifecycle intrinsics (`16b-LC`): the
- * generated-element lane admits direct top-level `onConnect(cb)` /
- * `onDispose(cb)` calls in the ROOT setup of a generated element module by
- * binding provenance (a canonical named import of '@openelement/element',
- * aliases followed) and ERASES them into compiler-owned code — a connect
- * callback list in the retained `__oe_rootInstance` record, replayed by the
- * generated mount/claim prologue on the per-connection scope, and instance
- * cleanups for `onDispose`. They are not a runtime dispatcher and not a second
- * lifecycle engine: outside a compiled generated element root setup the
- * standalone functions fail closed instead of silently dropping the callback.
- * Nested/hostless component hooks and connection-scope helpers are a later,
- * additive slice. May move to a dedicated authoring subpath with the rest of
- * the intrinsics at the B1.2 surface freeze.
+ * @experimental Compile-time-only lifecycle/change intrinsics (`16b-LC` plus
+ * the experience-edition change channel): the generated-element lane admits
+ * direct top-level `onConnect(cb)` / `onDispose(cb)` / `onPropertyChange(cb)`
+ * calls in the ROOT setup of a generated element module by binding provenance
+ * (a canonical named import of '@openelement/element', aliases followed) and
+ * ERASES them into compiler-owned code — a connect callback list in the
+ * retained `__oe_rootInstance` record, replayed by the generated mount/claim
+ * prologue on the per-connection scope; instance cleanups for `onDispose`; and
+ * one element-lifetime listener registration on the instance host record for
+ * `onPropertyChange` (fired by the shell after a declared row commits a value).
+ * They are not a runtime dispatcher and not a second lifecycle engine: outside
+ * a compiled generated element root setup the standalone functions fail closed
+ * instead of silently dropping the callback. Nested/hostless component hooks
+ * and connection-scope helpers are the additive slices recorded in ADR-0180.
+ * May move to a dedicated authoring subpath with the rest of the intrinsics at
+ * the B1.2 surface freeze.
  */
-export { onConnect, onDispose } from './public-runtime.ts';
+export { onConnect, onDispose, onPropertyChange } from './public-runtime.ts';
 
 // ─── HTML utilities (re-export from core) ────────────────
 

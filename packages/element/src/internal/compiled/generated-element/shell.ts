@@ -695,6 +695,13 @@ interface ElementState {
   reflecting: boolean;
   /** The first connect reconciled pre-upgrade own data properties. */
   ownPropertiesReconciled: boolean;
+  /**
+   * Element-lifetime `onPropertyChange` registrations. The compiled setup
+   * registers through the internal `__oe_onPropertyChange` runtime property on
+   * the instance host record; the list is cleared with the instance at teardown
+   * so a listener never runs after its owner is gone.
+   */
+  readonly propertyChangeCallbacks: PropertyChangeListener[];
 }
 
 const states = new WeakMap<HTMLElement, ElementState>();
@@ -1170,6 +1177,7 @@ function createState(descriptor: NormalizedDescriptor): ElementState {
     connecting: false,
     reflecting: false,
     ownPropertiesReconciled: false,
+    propertyChangeCallbacks: [],
   };
 }
 
@@ -1220,6 +1228,40 @@ function setProperty(
   if (reflect) reflectProperty(element, state, property, next);
   bumpProps(state);
   syncFormProperty(state, property);
+  notifyPropertyChange(element, state, property.name);
+}
+
+/**
+ * Run the element-lifetime change listeners for one DECLARED property after its
+ * value (and its reflection) is committed. The env is built here, exactly like
+ * the lifecycle env: the owning element, the instance-lifetime signal and the
+ * changed row. Every listener runs; the first error surfaces after the last one
+ * (the existing first-error rule), and the value write itself is never rolled
+ * back by a listener.
+ */
+function notifyPropertyChange(element: HTMLElement, state: ElementState, name: string): void {
+  const listeners = state.propertyChangeCallbacks;
+  if (listeners.length === 0) return;
+  const signal = state.instance?.signal ?? new AbortController().signal;
+  const event = {
+    host: element,
+    signal,
+    name,
+    value: state.values.get(name),
+  };
+  let firstError: unknown;
+  let failed = false;
+  for (const listener of [...listeners]) {
+    try {
+      listener(event);
+    } catch (error) {
+      if (!failed) {
+        firstError = error;
+        failed = true;
+      }
+    }
+  }
+  if (failed) throw firstError;
 }
 
 /**
@@ -1366,6 +1408,21 @@ function applyAttribute(
  */
 const HOST_ELEMENT_PROPERTY = '__oe_hostElement';
 
+/**
+ * The compiler-private runtime property that registers an element-lifetime
+ * `onPropertyChange` listener. Like `__oe_hostElement` it rides the instance
+ * host record as a NON-enumerable property: no exported type or symbol changes.
+ */
+const PROPERTY_CHANGE_PROPERTY = '__oe_onPropertyChange';
+
+/** One registered change listener (the env is built by the shell). */
+type PropertyChangeListener = (event: {
+  readonly host: HTMLElement;
+  readonly signal: AbortSignal;
+  readonly name: string;
+  readonly value: unknown;
+}) => void;
+
 /** Attach the owning element to a host record without changing its shape. */
 function withHostElement<T extends object>(record: T, element: HTMLElement): T {
   Object.defineProperty(record, HOST_ELEMENT_PROPERTY, {
@@ -1377,26 +1434,47 @@ function withHostElement<T extends object>(record: T, element: HTMLElement): T {
   return record;
 }
 
+/**
+ * Attach the element-lifetime change-registration channel to a host record.
+ * Both host records carry it (the instance record the setup factory receives
+ * and the connection record the recipe receives), so a depth-1 retained child's
+ * generated setup host can forward the SAME channel as a plain property.
+ */
+function withPropertyChangeChannel<T extends object>(record: T, state: ElementState): T {
+  Object.defineProperty(record, PROPERTY_CHANGE_PROPERTY, {
+    value: (listener: PropertyChangeListener): void => {
+      state.propertyChangeCallbacks.push(listener);
+    },
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  return record;
+}
+
 function hostFor(
   state: ElementState,
   element: HTMLElement,
 ): GeneratedElementHost<Record<string, unknown>> {
-  return withHostElement(
-    {
-      // `ensureInstance` publishes the retained setup record before this host is
-      // built; the empty fallback keeps the contract total for a hand-built
-      // descriptor that names neither factory.
-      bindings: state.bindings ?? {},
-      // The one logical instance (LC-2 nesting): the generated root body opens a
-      // pass on it and retains direct hostless children. Omitted while no
-      // instance exists (hand-built descriptor without createInstance); the
-      // retention path is only emitted for a generated root, whose instance is
-      // always established before this host is built.
-      instance: state.instance ?? undefined,
-      props: state.props,
-      propsChanged: state.propsChanged,
-    },
-    element,
+  return withPropertyChangeChannel(
+    withHostElement(
+      {
+        // `ensureInstance` publishes the retained setup record before this host is
+        // built; the empty fallback keeps the contract total for a hand-built
+        // descriptor that names neither factory.
+        bindings: state.bindings ?? {},
+        // The one logical instance (LC-2 nesting): the generated root body opens a
+        // pass on it and retains direct hostless children. Omitted while no
+        // instance exists (hand-built descriptor without createInstance); the
+        // retention path is only emitted for a generated root, whose instance is
+        // always established before this host is built.
+        instance: state.instance ?? undefined,
+        props: state.props,
+        propsChanged: state.propsChanged,
+      },
+      element,
+    ),
+    state,
   );
 }
 
@@ -1404,12 +1482,15 @@ function instanceHostFor(
   state: ElementState,
   element: HTMLElement,
 ): GeneratedElementInstanceHost<Record<string, unknown>> {
-  return withHostElement(
-    {
-      props: state.props,
-      propsChanged: state.propsChanged,
-    },
-    element,
+  return withPropertyChangeChannel(
+    withHostElement(
+      {
+        props: state.props,
+        propsChanged: state.propsChanged,
+      },
+      element,
+    ),
+    state,
   );
 }
 
@@ -1770,6 +1851,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
           const instance = state.instance;
           state.instance = null;
           state.bindings = null;
+          state.propertyChangeCallbacks.length = 0;
           // Failed-first-connect rollback (LC-2): release every retained child
           // bookkeeping entry and plain-dispose its retained scope BEFORE the
           // instance is destroyed. The ledger is not a GC contract, and the
@@ -1854,6 +1936,9 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       state.instance = null;
       state.bindings = null;
       state.ownedNodes = null;
+      // The instance is being destroyed: drop its change listeners before any
+      // teardown cleanup runs, so none can observe a dying owner.
+      state.propertyChangeCallbacks.length = 0;
 
       if (!detachOwnedNodes) {
         // Plain disposal releases the ownership record with the projection and

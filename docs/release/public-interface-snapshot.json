@@ -599,7 +599,7 @@
       },
       "declarations": {
         ".": {
-          "publicShapeSha256": "7aa24d42267815661e00134320eb3d593aa32f08bdbd78c761e8a8b8edd99acd",
+          "publicShapeSha256": "33a2db271699beea2e2b9759cc70ae7b761f4247f9e317b28558883df6cd34d4",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -687,6 +687,7 @@
             "isValidTagName=value:{call:(tagName:string)=>union(false|true)}",
             "onConnect=value:{call:(callback:{call:(env:{readonly host:HTMLElement;readonly signal:AbortSignal})=>union(void|{call:()=>void})})=>void}",
             "onDispose=value:{call:(callback:{call:(env:{readonly host:HTMLElement;readonly signal:AbortSignal})=>void})=>void}",
+            "onPropertyChange=value:{call:(callback:{call:(event:{readonly host:HTMLElement;readonly name:string;readonly signal:AbortSignal;readonly value:unknown})=>void})=>void}",
             "property=value:{call:(_options:{attribute?:union(false|string|undefined);converter?:unknown;reflect:union(false|true);type?:unknown})=>{call:(target:unknown,context:unknown)=>void}}",
             "provideContext=value:{call:<T>(host:HTMLElement,context:{readonly defaultValue:T;readonly key:symbol},value:T)=>Unsubscribe}",
             "releaseConsumedContext=value:{call:(signalValue:SignalLike<unknown>)=>void}",
@@ -727,7 +728,7 @@
           ]
         },
         "./base": {
-          "publicShapeSha256": "7aa24d42267815661e00134320eb3d593aa32f08bdbd78c761e8a8b8edd99acd",
+          "publicShapeSha256": "33a2db271699beea2e2b9759cc70ae7b761f4247f9e317b28558883df6cd34d4",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -815,6 +816,7 @@
             "isValidTagName=value:{call:(tagName:string)=>union(false|true)}",
             "onConnect=value:{call:(callback:{call:(env:{readonly host:HTMLElement;readonly signal:AbortSignal})=>union(void|{call:()=>void})})=>void}",
             "onDispose=value:{call:(callback:{call:(env:{readonly host:HTMLElement;readonly signal:AbortSignal})=>void})=>void}",
+            "onPropertyChange=value:{call:(callback:{call:(event:{readonly host:HTMLElement;readonly name:string;readonly signal:AbortSignal;readonly value:unknown})=>void})=>void}",
             "property=value:{call:(_options:{attribute?:union(false|string|undefined);converter?:unknown;reflect:union(false|true);type?:unknown})=>{call:(target:unknown,context:unknown)=>void}}",
             "provideContext=value:{call:<T>(host:HTMLElement,context:{readonly defaultValue:T;readonly key:symbol},value:T)=>Unsubscribe}",
             "releaseConsumedContext=value:{call:(signalValue:SignalLike<unknown>)=>void}",
@@ -843,7 +845,7 @@
           ]
         },
         "./client-only": {
-          "publicShapeSha256": "7aa24d42267815661e00134320eb3d593aa32f08bdbd78c761e8a8b8edd99acd",
+          "publicShapeSha256": "33a2db271699beea2e2b9759cc70ae7b761f4247f9e317b28558883df6cd34d4",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -931,6 +933,7 @@
             "isValidTagName=value:{call:(tagName:string)=>union(false|true)}",
             "onConnect=value:{call:(callback:{call:(env:{readonly host:HTMLElement;readonly signal:AbortSignal})=>union(void|{call:()=>void})})=>void}",
             "onDispose=value:{call:(callback:{call:(env:{readonly host:HTMLElement;readonly signal:AbortSignal})=>void})=>void}",
+            "onPropertyChange=value:{call:(callback:{call:(event:{readonly host:HTMLElement;readonly name:string;readonly signal:AbortSignal;readonly value:unknown})=>void})=>void}",
             "property=value:{call:(_options:{attribute?:union(false|string|undefined);converter?:unknown;reflect:union(false|true);type?:unknown})=>{call:(target:unknown,context:unknown)=>void}}",
             "provideContext=value:{call:<T>(host:HTMLElement,context:{readonly defaultValue:T;readonly key:symbol},value:T)=>Unsubscribe}",
             "releaseConsumedContext=value:{call:(signalValue:SignalLike<unknown>)=>void}",
@@ -1097,7 +1100,7 @@
           ]
         },
         "./no-blocks": {
-          "publicShapeSha256": "7aa24d42267815661e00134320eb3d593aa32f08bdbd78c761e8a8b8edd99acd",
+          "publicShapeSha256": "33a2db271699beea2e2b9759cc70ae7b761f4247f9e317b28558883df6cd34d4",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -1185,6 +1188,7 @@
             "isValidTagName=value:{call:(tagName:string)=>union(false|true)}",
             "onConnect=value:{call:(callback:{call:(env:{readonly host:HTMLElement;readonly signal:AbortSignal})=>union(void|{call:()=>void})})=>void}",
             "onDispose=value:{call:(callback:{call:(env:{readonly host:HTMLElement;readonly signal:AbortSignal})=>void})=>void}",
+            "onPropertyChange=value:{call:(callback:{call:(event:{readonly host:HTMLElement;readonly name:string;readonly signal:AbortSignal;readonly value:unknown})=>void})=>void}",
             "property=value:{call:(_options:{attribute?:union(false|string|undefined);converter?:unknown;reflect:union(false|true);type?:unknown})=>{call:(target:unknown,context:unknown)=>void}}",
             "provideContext=value:{call:<T>(host:HTMLElement,context:{readonly defaultValue:T;readonly key:symbol},value:T)=>Unsubscribe}",
             "releaseConsumedContext=value:{call:(signalValue:SignalLike<unknown>)=>void}",

@@ -220,3 +220,54 @@ release condition is met.
   seed transport.
 - It does not retire the class lane, add a compatibility adapter, or claim a
   public ABI; component `ref` stays FUTURE.
+
+## Amendment (2026-11-16): the change channel — `onPropertyChange`
+
+This is an append-only fact record. It adds ONE intrinsic to the
+experience-edition umbrella that the five enumerated D-17b items do not cover;
+it re-decides nothing above and creates no signature, gate, exit or release
+claim. The owner may accept or revert it.
+
+### Contract
+
+| Aspect | Rule |
+| --- | --- |
+| Call site | A direct top-level `onPropertyChange(cb)` in the generated-element root setup, admitted by the same binding-provenance rule as the lifecycle intrinsics (a canonical named import of `@openelement/element`, aliases followed). |
+| Callback form | One inline synchronous arrow/function expression; zero parameters or one event parameter. |
+| Event | `{ host, signal, name, value }` — the generated element (the nearest ancestor generated element for a depth-1 retained hostless child), the instance-lifetime teardown signal, the declared row's name, and its committed value. |
+| Timing | After a DECLARED property commits a new value: a property write and an attribute write both fire it; an unchanged write does not. It never runs at setup. |
+| Ownership | One element-lifetime registration on the instance host record; cleared when the instance is destroyed (explicit teardown or a failed first connect). Setup runs once per instance, so a reconnect does not duplicate it. |
+| Byte identity | Emitted only for modules that use the intrinsic, and the registration channel is forwarded through host-record literals only for them. |
+| Outside the compiler | The public import keeps failing closed with the existing `JSX_OUTSIDE_COMPILER` identity. |
+
+### Why it is needed now
+
+The three `@openelement/ui` islands that D1 = A migrates rely on
+`attributeChangedCallback` side effects: `open-theme-toggle` propagates its
+`theme` attribute to the document and dispatches `open:theme-change`, and
+`open-button` syncs `:state(disabled)`. Without a change channel a migration
+would silently drop those side effects on a PUBLISHED attribute, which is a
+behaviour regression rather than an implementation detail.
+
+### P7 (short form)
+
+1. **Platform (P1).** The trigger is the platform callback the shell already
+   owns (`attributeChangedCallback` and the property setter); the slice adds no
+   observer, scheduler or reactive graph.
+2. **Compile time (P2).** Fully erased. The only artefact is one registration
+   call in the setup factory, emitted only for modules that use the intrinsic.
+3. **Runtime posture (P3).** The callback runs synchronously inside the existing
+   property write; the env is built by the shell from the existing instance
+   signal. No server path.
+4. **Prior art (P7.4).** React re-runs an effect when dependencies change; this
+   is deliberately narrower — one event per committed declared row, no
+   dependency tracking, no ordering slots, no batching.
+
+### Boundaries
+
+- Declared property rows only; a change to a non-declared own property is not
+  reported.
+- No dependency tracking, no batching, no re-entrancy policy beyond "run every
+  listener, then surface the first error".
+- Placement follows the lifecycle intrinsics: depth >= 2, recipe/list bodies and
+  non-retained targets keep the existing authored-span refusals.

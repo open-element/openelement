@@ -237,7 +237,7 @@ export interface FunctionModelResource {
  * verdict stays with the generator (authored-span refusal).
  */
 export interface FunctionModelLifecycleHook {
-  readonly kind: 'connect' | 'dispose';
+  readonly kind: 'connect' | 'dispose' | 'property-change';
   readonly callback: FunctionExpressionRef;
   /** `true` when the authored callback declares the one admitted env parameter. */
   readonly receivesEnv: boolean;
@@ -735,7 +735,13 @@ class FunctionFrontendBuilder {
     if (binding === undefined || binding.origin.form !== 'import') return null;
     if (binding.origin.specifier !== '@openelement/element') return null;
     const importedName = binding.origin.importedName;
-    if (importedName !== 'onConnect' && importedName !== 'onDispose') return null;
+    if (
+      importedName !== 'onConnect' &&
+      importedName !== 'onDispose' &&
+      importedName !== 'onPropertyChange'
+    ) {
+      return null;
+    }
     const writtenName = importedName;
     if (expression.typeArguments !== undefined || expression.arguments.length !== 1) {
       this.fail(
@@ -804,7 +810,12 @@ class FunctionFrontendBuilder {
     const lowered = this.expression(callback, 'handler');
     if (lowered === null) return 'refused';
     return {
-      kind: importedName === 'onConnect' ? 'connect' : 'dispose',
+      kind:
+        importedName === 'onConnect'
+          ? 'connect'
+          : importedName === 'onDispose'
+            ? 'dispose'
+            : 'property-change',
       callback: lowered,
       receivesEnv: parameter !== undefined,
       span: spanOf(this.sourceFile, statement),
