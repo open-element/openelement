@@ -253,6 +253,25 @@ separate shape field is invented:
   - The recorded live-UI migration gap above still applies to both shapes:
     the effective disabled state reaches the internals custom
     states/validity/submission behavior, not the component's own DOM.
+  - **The consumable effective-disabled channel is the element's own
+    `CustomStateSet` — one source, two reads.** The shell writes
+    `authorDisabled || effectiveDisabled` into `ElementInternals.states`, the
+    same set the class lane and this shell always used; nothing new is
+    invented. Setup/lifecycle callbacks consume it directly as
+    `env.states` (a live getter over the shared internals record — the
+    `open-code-block`/`open-dialog` callback pattern). Event-time code (a
+    click handler) reaches the same state through the standard selector on
+    the resolved host — `(event.currentTarget.getRootNode() as
+    ShadowRoot).host` then `host.matches(':state(disabled)')`. The
+    `props.disabled` sink does NOT change on a fieldset disable (the author
+    property is unchanged, so the inner control's attribute stays as
+    authored — the visual gap above stands); the interaction-disable path
+    for a migrated control is the handler guard over that read. Proven by
+    the interaction row: with a fieldset-disabled host, a programmatic click
+    still reaches the inner control's DOM listener (no platform suppression
+    of shadow-content clicks) while the handler refuses to dispatch; the
+    author-disabled path keeps the native suppressed-click behavior and
+    drives the sink normally.
 
 ### Refusals
 
@@ -271,5 +290,10 @@ separate shape field is invented:
   generated element form association" — `form.elements` membership, external
   `form=<id>` association with an empty `FormData`, no validity claim,
   reflecting disabled (property write, attribute write, fieldset
-  disable/enable reversibility), reset/restore no-ops, pre-upgrade disabled
-  attribute replay. LOCAL, one engine (Chromium).
+  disable/enable reversibility), reset/restore no-ops with the button
+  configuration untouched, pre-upgrade disabled attribute replay, the
+  fieldset × author interleavings, the submitter non-claim
+  (`form.requestSubmit(host)` refuses), and the interaction row where the
+  fixture's inner button handler consumes the effective-disabled state at
+  event time through `:state(disabled)` while the props sink stays
+  unchanged. LOCAL, one engine (Chromium).

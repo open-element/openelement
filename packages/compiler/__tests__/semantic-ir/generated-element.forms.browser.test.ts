@@ -49,7 +49,16 @@ export default FormCard;
 
 // The button shape: `formAssociated: true` without a declared `value` row (the
 // open-button contract). The declared boolean `disabled` row reflects — the
-// host attribute is the class-lane open-button contract.
+// host attribute is the class-lane open-button contract. The fixture is a REAL
+// interactive control in the migrated open-button shape: the inner button's
+// disabled sink rides `props.disabled` (the author path), and the click
+// handler consumes the effective disabled state at event time through the
+// host's own CustomStateSet — `:state(disabled)`, the ONE set the shell
+// writes from `authorDisabled || effectiveDisabled` (the same set the
+// lifecycle env hands to callbacks as `env.states`). Setup-body locals are
+// the call-once retained snapshot (const), so the event-time consumption
+// path is the standard DOM read through the resolved host — no second state
+// source and no captured snapshot.
 const BUTTON_FILE = '/proj/src/islands/form-button.tsx';
 const BUTTON_SITE: GeneratedElementSite = { tag: 'x-form-button' };
 
@@ -64,7 +73,23 @@ export const openElement = defineIslandConfig({
   },
 });
 function FormButton(props: { label: string; disabled: boolean }) {
-  return <p>{props.label}</p>;
+  return (
+    <button
+      class='real'
+      type='button'
+      disabled={props.disabled}
+      onClick={(event: Event) => {
+        const control = event.currentTarget as HTMLElement;
+        const host = (control.getRootNode() as ShadowRoot).host as HTMLElement;
+        if (host.matches(':state(disabled)')) return;
+        host.dispatchEvent(
+          new globalThis.CustomEvent('open-click', { bubbles: true, composed: true }),
+        );
+      }}
+    >
+      {props.label}
+    </button>
+  );
 }
 export default FormButton;
 `;
@@ -1403,6 +1428,122 @@ describe('button-shape generated element form association (Chromium)', () => {
       expect(result.afterRequestSubmitHost.submitEvents).toBe(0);
       expect(result.afterHostClick).toBe(0);
       expect(result.listed).toBe(true);
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('the handler consumes the effective-disabled state at event time; the props sink does not update on fieldset changes', async () => {
+    const page = await openPage(buttonBundleFile);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeFormsButton;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        customElements.define(tagName, mod.ButtonElement);
+        let openClicks = 0;
+        document.addEventListener('open-click', () => openClicks++);
+        const form = document.createElement('form');
+        const fieldset = document.createElement('fieldset');
+        const host = document.createElement(tagName) as HTMLElement & {
+          disabled: boolean;
+          label: string;
+        };
+        host.setAttribute('name', 'b');
+        host.setAttribute('label', 'Send');
+        fieldset.append(host);
+        form.append(fieldset);
+        document.body.append(form);
+        await tick();
+        const inner = host.shadowRoot?.querySelector('button.real') as HTMLButtonElement;
+        let innerClicks = 0;
+        inner.addEventListener('click', () => innerClicks++);
+        // Baseline: the interactive path works while enabled.
+        inner.click();
+        await tick();
+        const baseline = { openClicks, innerClicks, innerDisabled: inner.disabled };
+        innerClicks = 0;
+        // Fieldset-disable the host. The author property and the reflecting
+        // attribute stay untouched; the props-disabled sink on the inner
+        // button does NOT change (the recorded visual gap) — but the handler
+        // reads the host's `:state(disabled)` at EVENT TIME, which is the
+        // same CustomStateSet the shell writes from
+        // authorDisabled || effectiveDisabled (the set the lifecycle env
+        // exposes as env.states). The effective state is therefore visible
+        // to the handler without any captured snapshot.
+        fieldset.disabled = true;
+        await tick();
+        const fieldsetDisabled = {
+          authorProperty: host.disabled,
+          reflectingAttribute: host.hasAttribute('disabled'),
+          innerSinkDisabled: inner.disabled,
+          customState: host.matches(':state(disabled)'),
+        };
+        inner.click();
+        await tick();
+        // The DOM click DID reach the inner control (this is NOT platform
+        // click suppression); the handler refused through the standard
+        // :state() read — no open-click was dispatched.
+        const guarded = { openClicks, innerClicks };
+        innerClicks = 0;
+        fieldset.disabled = false;
+        await tick();
+        inner.click();
+        await tick();
+        const reenabled = { openClicks, innerClicks };
+        innerClicks = 0;
+        // The author path still drives the sink normally: disabling through
+        // the property renders the inner button natively disabled (its click
+        // is not even dispatched).
+        host.disabled = true;
+        await tick();
+        const authorDisabled = {
+          innerSinkDisabled: inner.disabled,
+          stateDisabled: host.matches(':state(disabled)'),
+          reflectingAttribute: host.hasAttribute('disabled'),
+        };
+        let clickDuringAuthorDisabled = false;
+        const probe = (): void => {
+          clickDuringAuthorDisabled = true;
+        };
+        inner.addEventListener('click', probe);
+        inner.click();
+        inner.removeEventListener('click', probe);
+        const openClicksAfterAuthor = openClicks;
+        host.disabled = false;
+        await tick();
+        inner.click();
+        await tick();
+        return {
+          baseline,
+          fieldsetDisabled,
+          guarded,
+          reenabled,
+          authorDisabled,
+          clickDuringAuthorDisabled,
+          openClicksAfterAuthor,
+          openClicksFinal: openClicks,
+        };
+      }, BUTTON_SITE.tag);
+      expect(result.baseline).toEqual({ openClicks: 1, innerClicks: 1, innerDisabled: false });
+      expect(result.fieldsetDisabled).toEqual({
+        authorProperty: false,
+        reflectingAttribute: false,
+        // The props sink does not change on a fieldset disable — exactly why
+        // the handler must consume the effective state instead.
+        innerSinkDisabled: false,
+        customState: true,
+      });
+      // DOM click reached the inner control; the handler guard refused it.
+      expect(result.guarded).toEqual({ openClicks: 1, innerClicks: 1 });
+      expect(result.reenabled).toEqual({ openClicks: 2, innerClicks: 1 });
+      expect(result.authorDisabled).toEqual({
+        innerSinkDisabled: true,
+        stateDisabled: true,
+        reflectingAttribute: true,
+      });
+      expect(result.clickDuringAuthorDisabled).toBe(false);
+      expect(result.openClicksAfterAuthor).toBe(2);
+      expect(result.openClicksFinal).toBe(3);
     } finally {
       await page.close();
     }
