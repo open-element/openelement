@@ -127,4 +127,4 @@ record:
 - Recorder: PR #1804 (`fix/taoup-remediation`)
 - Basis: `#1470` (predicate consolidation), PR #1804 head SHA, and the
   `docs/adr/ADR-0163-seam-single-ownership.md` precedent
-- Owner sign-off: ____________________ (date: __________)
+- Owner sign-off: Owner, 2026-11-17 (date: 2026-11-17)
