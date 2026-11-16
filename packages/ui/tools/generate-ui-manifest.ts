@@ -624,10 +624,16 @@ export function buildGeneratedElementDeclaration(
     ...(options.events?.length ? { events: [...options.events] } : {}),
     ...(facts.slots.length ? { slots: [...facts.slots] } : {}),
     ...(facts.cssParts.length ? { cssParts: [...facts.cssParts] } : {}),
-    openElement:
-      options.policy === undefined
+    openElement: {
+      ...(options.policy === undefined
         ? { module: facts.module, export: facts.exportName }
-        : openElementDelivery(options.policy, facts.module, facts.exportName),
+        : openElementDelivery(options.policy, facts.module, facts.exportName)),
+      // The host root and the authored sheets are facts of the emitted element,
+      // not package policy: the consuming build registers the style declaration
+      // from them without re-reading or re-compiling the package source.
+      root: facts.root,
+      ...(facts.styles.length === 0 ? {} : { styles: [...facts.styles] }),
+    },
   };
 }
 

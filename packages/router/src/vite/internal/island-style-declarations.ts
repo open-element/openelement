@@ -3,10 +3,17 @@
  * `styles` declaration (`IslandConfig.styles`, GH issue #1800).
  *
  * WHO WRITES IT: the island scan (`ssg/island-scanner.ts` `scanIslandMeta`) is
- * the ONE producer. It already reads every island source for its static sidecar
- * facts and resolves the generated-element lane identity in the same pass; an
- * accepted `styles` list is recorded here with the island's derived tag, the
- * islands directory and the module's absolute path.
+ * the ONE producer for LOCAL islands. It already reads every island source for
+ * its static sidecar facts and resolves the generated-element lane identity in
+ * the same pass; an accepted `styles` list is recorded here with the island's
+ * derived tag, the islands directory and the module's absolute path.
+ *
+ * `registerPackageIslandStyleDeclarations` (same module of the scanner) writes
+ * the ADMITTED PACKAGE half in the same shape: a package manifest publishes its
+ * generated component's `openElement.root` and `openElement.styles`, the host
+ * resolves the package module to the same stable module id, and the record
+ * travels the identical plan. One carrier, one reader, one emission state; the
+ * only difference is where the declaration was read from.
  *
  * WHO READS IT: the client build's style-edge discovery
  * (`style-assets.ts` `serverRenderedStyleEdgesPlugin`) is the ONE consumer. It

@@ -94,6 +94,10 @@ export interface GeneratedElementFacts {
   readonly exportName: string;
   /** `@openelement/ui/<file without .tsx>`. */
   readonly module: string;
+  /** The host root the lane compiled this component with. */
+  readonly root: 'light' | 'shadow';
+  /** The authored `.css` specifiers (validated by the consuming build). */
+  readonly styles: readonly string[];
   /** Authored JSDoc summary paragraph; `''` when the module has none. */
   readonly description: string;
   readonly attributes: readonly OpenElementAttribute[];
@@ -438,6 +442,23 @@ export function readGeneratedElementFacts(input: GeneratedElementInput): Generat
     attributes.push(attribute);
   }
 
+  // A `styles` key whose entries are not static string literals cannot be
+  // published: the manifest is the only carrier a consuming build reads, and an
+  // empty list would silently drop the authored sheets.
+  if (admission.declaresStyles && admission.styles.length === 0) {
+    return {
+      kind: 'refused',
+      diagnostics: [
+        refusal(
+          'UI_MANIFEST_STYLES_INVALID',
+          `'${input.file}' declares openElement.styles but no static string specifier could be ` +
+            'read from it; a published declaration must name its stylesheets as string literals',
+          input.file,
+        ),
+      ],
+    };
+  }
+
   return {
     kind: 'admitted',
     facts: {
@@ -445,6 +466,8 @@ export function readGeneratedElementFacts(input: GeneratedElementInput): Generat
       className: identity.className,
       exportName: identity.className,
       module: `${UI_PACKAGE_PREFIX}${input.file.replace(/\.tsx$/, '')}`,
+      root: admission.root === 'shadow-open' ? 'shadow' : 'light',
+      styles: admission.styles,
       description: readAuthoredSummary(parsed.sourceFile, defaultExport.node),
       attributes,
       slots: names.slots.map((name) => ({ name })),

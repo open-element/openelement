@@ -297,6 +297,100 @@ export function admittedTailwindDeclarations(
 }
 
 /**
+ * The `openElement.styles` facts a package manifest declares, validated by the
+ * ONE specifier rule the local island scan applies
+ * (`internal/island-style-specifiers.ts`). A decl-class package component
+ * publishes its host root and its authored sheets in the manifest, so the
+ * consuming build registers the SAME declaration a local island scan records —
+ * no second sidecar read and no second validator.
+ */
+export interface PackageIslandStyleFact {
+  readonly tagName: string;
+  readonly root: 'light' | 'shadow';
+  readonly specifiers: readonly string[];
+}
+
+export function packageIslandStyleDeclarations(
+  packageManifests: readonly OpenElementPackageManifest[],
+): PackageIslandStyleFact[] {
+  const facts: PackageIslandStyleFact[] = [];
+  for (const pkg of packageManifests) {
+    for (const declaration of pkg.declarations) {
+      const styles = declaration.openElement?.styles;
+      if (styles === undefined) continue;
+      const check = checkIslandStyleList([...styles]);
+      if (!check.ok) {
+        throw buildError(
+          PackageIslandErrorCode.STYLES_SHAPE,
+          `Package island "${declaration.tagName}" (${pkg.packageName}) ${check.reason}`,
+        );
+      }
+      facts.push({
+        tagName: declaration.tagName,
+        root: declaration.openElement?.root === 'shadow' ? 'shadow' : 'light',
+        specifiers: [...check.styles],
+      });
+    }
+  }
+  return facts;
+}
+
+/** Where the app that consumes a package lives (the module-id anchors). */
+export interface PackageIslandStyleHost {
+  readonly root: string;
+  readonly workspaceRoot?: string;
+}
+
+/**
+ * Register every package manifest's declared sheets in the build's style
+ * declaration carrier, keyed by the package module's stable module id.
+ *
+ * A specifier the host cannot resolve is skipped: the island pipeline already
+ * reports that package module with its own coded failure, and a style record
+ * for a module the build never transforms would emit an orphan asset. The
+ * caller runs this after every scan that can change either side (local islands
+ * or the admitted package set), so the carrier is rebuilt from the current
+ * context instead of depending on scan order.
+ */
+export function registerPackageIslandStyleDeclarations(
+  packageIslandDecls: readonly IslandDecl[],
+  packageManifests: readonly OpenElementPackageManifest[],
+  host: PackageIslandStyleHost,
+): void {
+  const facts = packageIslandStyleDeclarations(packageManifests);
+  if (facts.length === 0) return;
+  const requireFromRoot = createRequire(join(host.root, 'package.json'));
+  const moduleByTag = new Map<string, string>();
+  for (const declaration of packageIslandDecls) {
+    if (declaration.source !== 'package') continue;
+    const specifier = declaration.modulePath;
+    if (specifier === undefined || specifier === '') continue;
+    try {
+      moduleByTag.set(
+        declaration.tagName,
+        stableModuleId(requireFromRoot.resolve(specifier), host.root, host.workspaceRoot),
+      );
+    } catch {
+      continue;
+    }
+  }
+  for (const fact of facts) {
+    const moduleId = moduleByTag.get(fact.tagName);
+    if (moduleId === undefined) continue;
+    registerIslandStyleDeclaration({
+      tagName: fact.tagName,
+      root: fact.root,
+      moduleId,
+      // Diagnostic-only fields for a package module: the file name and its
+      // directory. The style plan reads moduleId + specifiers + root only.
+      filePath: moduleId.slice(moduleId.lastIndexOf('/') + 1),
+      islandsDir: moduleId.slice(0, Math.max(0, moduleId.lastIndexOf('/'))),
+      specifiers: fact.specifiers,
+    });
+  }
+}
+
+/**
  * Build package island declarations from scanned package manifests.
  *
  * Shared implementation for plugin.ts (build-time scan) and

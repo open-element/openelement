@@ -97,6 +97,7 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
         delegatesFocus: true,
         formAssociated: false,
         declaresStyles: false,
+        styles: [],
         properties: undefined,
       },
     });
@@ -110,6 +111,7 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
         delegatesFocus: false,
         formAssociated: false,
         declaresStyles: false,
+        styles: [],
         properties: undefined,
       },
     });
@@ -120,6 +122,7 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
         delegatesFocus: false,
         formAssociated: false,
         declaresStyles: false,
+        styles: [],
         properties: undefined,
       },
     });
@@ -133,6 +136,7 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
         delegatesFocus: false,
         formAssociated: false,
         declaresStyles: false,
+        styles: [],
         properties: undefined,
       },
     });
@@ -143,6 +147,7 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
         delegatesFocus: false,
         formAssociated: false,
         declaresStyles: false,
+        styles: [],
         properties: undefined,
       },
     });
@@ -156,6 +161,7 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
         delegatesFocus: true,
         formAssociated: false,
         declaresStyles: false,
+        styles: [],
         properties: undefined,
       },
     });

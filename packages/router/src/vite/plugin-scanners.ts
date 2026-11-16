@@ -31,7 +31,10 @@ import type {
   EntryDescriptor,
   ForeignTagScanResult,
 } from './internal/ssg/index.ts';
-import { buildPackageIslandDecls } from './internal/ssg/island-scanner.ts';
+import {
+  buildPackageIslandDecls,
+  registerPackageIslandStyleDeclarations,
+} from './internal/ssg/island-scanner.ts';
 import { resolveIslandDeliveryTags } from './internal/ssg/delivery.ts';
 import type { OpenPluginState } from './plugin-config.ts';
 import type { ModuleWalkResolver } from './internal/module-graph-walk.ts';
@@ -293,6 +296,13 @@ export async function scanPackageIslandsInto(
     `Package islands: ${state.ctx.phase1.packageIslandDecls.map((i) => i.tagName).join(', ')}`,
   );
   syncDerivedNoExternal(state, manifests);
+  // A package component publishes its host root and authored sheets in the
+  // manifest; register them in the build's style declaration carrier so they
+  // travel the same plan a local island's `styles` declaration rides.
+  registerPackageIslandStyleDeclarations(state.ctx.phase1.packageIslandDecls, manifests, {
+    root: state.viteRoot ?? process.cwd(),
+    workspaceRoot: state.workspaceRoot,
+  });
 }
 
 /**
@@ -341,6 +351,14 @@ async function scanIslandsIntoCtx(state: OpenPluginState): Promise<string> {
     islandsRoot,
     islandFiles,
     state.viteRoot ?? process.cwd(),
+  );
+  // The island scan reset the style declaration carrier; re-register the
+  // admitted packages' declared sheets (idempotent, and order-independent with
+  // the package scan that may run before or after this one).
+  registerPackageIslandStyleDeclarations(
+    state.ctx.phase1.packageIslandDecls ?? [],
+    state.ctx.phase1.packageManifests ?? [],
+    { root: state.viteRoot ?? process.cwd(), workspaceRoot: state.workspaceRoot },
   );
   return islandsRoot;
 }

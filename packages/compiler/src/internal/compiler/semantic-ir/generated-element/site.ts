@@ -77,6 +77,13 @@ export interface GeneratedElementSiteAdmission {
    * DSD link prefix. Unstyled modules keep the pre-slice bytes exactly.
    */
   readonly declaresStyles: boolean;
+  /**
+   * The static string entries of the declared `styles` list, in authored order.
+   * The router island scan owns validation; this field is the fact carrier a
+   * package manifest publishes so a consuming build can register the same
+   * declaration a local island scan records.
+   */
+  readonly styles: readonly string[];
   readonly componentName: string;
   /** The default-export node, used for source-located refusals. */
   readonly defaultExportSpan: SourceSpan;
@@ -233,6 +240,14 @@ export interface IslandMetadataFacts {
    * walk from the SAME authored sidecar it already reads for root/focus/props.
    */
   readonly declaresStyles: boolean;
+  /**
+   * The sidecar's `styles` entries that are static string literals, in authored
+   * order. Validation (a safe relative `.css` specifier, the lane, the root) is
+   * the router island scan's admission, which owns the coded refusals; this
+   * list is only the fact carrier so a package manifest can publish the same
+   * declaration the scan records for a local island.
+   */
+  readonly styles: readonly string[];
   /** Sidecar `formAssociated: true`; false covers absent/explicit false. */
   readonly formAssociated: boolean;
   /**
@@ -293,6 +308,21 @@ export type IslandMetadataRead =
   | { readonly kind: 'absent' }
   | { readonly kind: 'read'; readonly facts: IslandMetadataFacts }
   | { readonly kind: 'refused'; readonly diagnostic: IrDiagnostic };
+
+/**
+ * The static string entries of a `styles` initializer. A non-array initializer
+ * or a non-literal element contributes nothing here: the router scan refuses
+ * that shape with its own coded diagnostic, so this reader never becomes a
+ * second validator and never invents a specifier.
+ */
+function staticStyleSpecifiers(initializer: ts.Expression): readonly string[] {
+  if (!ts.isArrayLiteralExpression(initializer)) return [];
+  const specifiers: string[] = [];
+  for (const element of initializer.elements) {
+    if (ts.isStringLiteralLike(element)) specifiers.push(element.text);
+  }
+  return specifiers;
+}
 
 /** The static property name of a key/value pair, or null when unreadable. */
 function staticPropertyName(name: ts.PropertyName): string | null {
@@ -704,6 +734,7 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
   let delegatesFocus = false;
   let delegatesFocusSpan: ts.Node | null = null;
   let declaresStyles = false;
+  let styles: readonly string[] = [];
   let seenFormAssociated = false;
   let formAssociated = false;
   let seenProperties = false;
@@ -774,8 +805,11 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
       continue;
     }
     if (name === 'styles') {
-      // Presence is the compiler fact; the router scan validates the list.
+      // Presence is the compiler fact; the router scan validates the list and
+      // owns the coded refusals. The literals are carried so a package manifest
+      // can publish the declaration without a second sidecar read.
       declaresStyles = true;
+      styles = staticStyleSpecifiers(property.initializer);
       continue;
     }
     if (name === 'properties') {
@@ -876,7 +910,7 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
   }
   return {
     kind: 'read',
-    facts: { root, delegatesFocus, formAssociated, declaresStyles, properties },
+    facts: { root, delegatesFocus, formAssociated, declaresStyles, styles, properties },
   };
 }
 
@@ -1910,6 +1944,7 @@ export function admitGeneratedElementSite(
           delegatesFocus: false,
           formAssociated: false,
           declaresStyles: false,
+          styles: [],
           properties: undefined,
         };
   const propertiesAdmission = admitGeneratedElementProperties(
@@ -1940,6 +1975,7 @@ export function admitGeneratedElementSite(
       delegatesFocus: facts.delegatesFocus,
       formAssociated: facts.formAssociated,
       declaresStyles: facts.declaresStyles,
+      styles: facts.styles,
       propertiesDeclared: propertiesAdmission.kind === 'admitted',
       properties,
       propsParameter: propsParameterOf(fact.node),

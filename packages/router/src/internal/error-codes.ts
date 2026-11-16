@@ -379,6 +379,8 @@ export const PackageIslandErrorCode = {
   PACKAGE_MISSING: 'OE_PACKAGE_ISLAND_PACKAGE_MISSING',
   /** A declaration's `openElement.tailwind` block is malformed. */
   TAILWIND_SHAPE: 'OE_PACKAGE_ISLAND_TAILWIND_SHAPE',
+  /** A declaration's `openElement.styles` list is not an admissible specifier list. */
+  STYLES_SHAPE: 'OE_PACKAGE_ISLAND_STYLES_SHAPE',
 } as const;
 
 /**

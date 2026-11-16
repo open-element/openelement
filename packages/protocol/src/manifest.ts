@@ -79,6 +79,19 @@ export interface OpenElementExtensions {
   module?: string;
   export?: string;
   tailwind?: OpenElementTailwindDeclaration;
+  /**
+   * The host root a generated-element declaration was compiled with. Absent for
+   * a class declaration (its descriptor owns the root) and for a generated
+   * declaration whose sidecar declares none (the descriptor default is light).
+   */
+  root?: 'light' | 'shadow';
+  /**
+   * The authored package-relative `.css` specifiers a generated SHADOW host
+   * declares, published so a consuming build can emit the sheet and hand its
+   * URL to the DSD style-link carrier. Absent when the component declares none;
+   * class declarations deliver their sheets through `static styles` instead.
+   */
+  styles?: readonly string[];
 }
 
 /** One custom element declaration in a package manifest: tag, members and delivery metadata. */
