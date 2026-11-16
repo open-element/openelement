@@ -6,7 +6,9 @@
  *   a second click closes instead of re-opening);
  * - Escape and outside-click light dismiss close it;
  * - focus returns to the trigger after Escape;
- * - the per-instance CSS anchor pair is assigned at activation.
+ * - the per-instance CSS anchor pair: the host half at activation, the
+ *   content half inside the open window (dropped on close so a reconnect's
+ *   re-claim sees the compiled static seeds).
  *
  * The page shell is a shadow-open DSD element, so document-level queries go
  * through the shadow-walker helpers (helpers.ts).
@@ -42,21 +44,47 @@ test.describe('open-dropdown', () => {
     await waitForDropdown(page);
   });
 
-  test('assigns the per-instance anchor pair at activation', async ({ page }) => {
-    const anchor = await page.evaluate<{ name: string; style: string; popover: string }>(
-      `(() => {
-      const host = ${deepFirstExpr('#main-dropdown')};
-      const content = host?.shadowRoot?.querySelector('.content');
-      return {
-        name: host?.style.getPropertyValue('anchor-name') ?? '',
-        style: content?.getAttribute('style') ?? '',
-        popover: content?.getAttribute('popover') ?? '',
-      };
-    })()`,
+  test('assigns the anchor pair: host half at activation, content half inside the open window', async ({
+    page,
+  }) => {
+    // The host half is assigned at activation and stays while closed. The
+    // content half is runtime-written INSIDE the open window only (applied at
+    // `beforetoggle`, dropped on close) — a reconnect re-claims the retained
+    // nodes against the compiled static seeds, so the closed element must
+    // carry no extra inline style.
+    const anchorName = await page.evaluate(
+      `${deepFirstExpr('#main-dropdown')}?.style.getPropertyValue('anchor-name') ?? ''`,
     );
-    expect(anchor.name).toMatch(/^--open-dropdown-trigger-/);
-    expect(anchor.style).toContain(`position-anchor: ${anchor.name}`);
-    expect(anchor.popover).toBe('auto');
+    expect(anchorName).toMatch(/^--open-dropdown-trigger-/);
+    const closedStyle = await page.evaluate(
+      `${deepFirstExpr('#main-dropdown')}?.shadowRoot?.querySelector('.content')` +
+        `?.getAttribute('style') ?? ''`,
+    );
+    expect(closedStyle, 'no runtime content style while closed').not.toContain('position-anchor');
+
+    await page.locator('#dropdown-trigger').click();
+    await expect.poll(() => page.evaluate(popoverOpenExpr)).toBe(true);
+    const openStyle = await page.evaluate(
+      `${deepFirstExpr('#main-dropdown')}?.shadowRoot?.querySelector('.content')` +
+        `?.getAttribute('style') ?? ''`,
+    );
+    expect(openStyle).toContain(`position-anchor: ${anchorName}`);
+
+    await page.locator('#dropdown-trigger').click();
+    await expect.poll(() => page.evaluate(popoverOpenExpr)).toBe(false);
+    const reclosedStyle = await page.evaluate(
+      `${deepFirstExpr('#main-dropdown')}?.shadowRoot?.querySelector('.content')` +
+        `?.getAttribute('style') ?? ''`,
+    );
+    expect(reclosedStyle, 'the runtime content anchor drops on close').not.toContain(
+      'position-anchor',
+    );
+    expect(
+      await page.evaluate(
+        `${deepFirstExpr('#main-dropdown')}?.shadowRoot?.querySelector('.content')` +
+          `?.getAttribute('popover') ?? ''`,
+      ),
+    ).toBe('auto');
   });
 
   test('trigger click toggles the popover open and closed', async ({ page }) => {

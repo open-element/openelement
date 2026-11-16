@@ -43,7 +43,7 @@ export { default as OpenCodeBlock } from './open-code-block.tsx';
 // registered by the build (see docs/adr/ADR-0182).
 export { default as OpenThemeToggle } from './open-theme-toggle.tsx';
 export { default as OpenDialog } from './open-dialog.tsx';
-export { OpenDropdown } from './open-dropdown.tsx';
+export { default as OpenDropdown } from './open-dropdown.tsx';
 
 // Package manifest (WC Package Protocol)
 // Consumers (the router build) read manifest.declarations to derive island metadata.

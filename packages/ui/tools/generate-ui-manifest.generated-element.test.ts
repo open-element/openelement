@@ -160,7 +160,8 @@ test('the tracked CEM is unchanged and keeps the class-authored superclass', () 
       if (
         declaration.tagName === 'open-theme-toggle' ||
         declaration.tagName === 'open-code-block' ||
-        declaration.tagName === 'open-dialog'
+        declaration.tagName === 'open-dialog' ||
+        declaration.tagName === 'open-dropdown'
       ) {
         // The generated declaration has no truthful public superclass: the
         // emitted class extends the non-public OpenElementBase.

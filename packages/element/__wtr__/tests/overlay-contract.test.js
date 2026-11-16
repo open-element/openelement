@@ -22,11 +22,11 @@
 import { assert } from 'chai';
 import { userEvent } from 'vitest/browser';
 import { OpenDialogElement } from '../generated/open-dialog.ts';
-import { OpenDropdown } from '../generated/open-dropdown.ts';
+import { OpenDropdownElement } from '../generated/open-dropdown.ts';
 import { waitFor } from './helpers.js';
 
 customElements.define('open-dialog', OpenDialogElement);
-customElements.define('open-dropdown', OpenDropdown);
+customElements.define('open-dropdown', OpenDropdownElement);
 await Promise.all([
   customElements.whenDefined('open-dialog'),
   customElements.whenDefined('open-dropdown'),

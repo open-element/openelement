@@ -61,11 +61,12 @@
  * the R3 ledger called "orphan-style-asset prevention" — these tests fail to
  * say so.
  *
- * 2026-11-17 lane migration (ADR-0182): open-dialog is now a generated-lane
- * function component — its sheets are declared in the sidecar (no authored
- * imports) and ride the declared-style channel to the same emission state.
- * The `authoredSheets` derivation reads the sidecar list for such modules;
- * the emitted-and-unreferenced facts below are unchanged and still pass.
+ * 2026-11-17 lane migration (ADR-0182): open-dialog and open-dropdown are now
+ * generated-lane function components — their sheets are declared in the
+ * sidecar (no authored imports) and ride the declared-style channel to the
+ * same emission state. The `authoredSheets` derivation reads the sidecar list
+ * for such modules; the emitted-and-unreferenced facts below are unchanged
+ * and still pass.
  */
 import { expect, test } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';

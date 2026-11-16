@@ -345,27 +345,22 @@
     },
     {
       "tagName": "open-dropdown",
-      "className": "OpenDropdown",
-      "superclassName": "OpenElement",
+      "className": "OpenDropdownElement",
       "description": "Popover-API dropdown with CSS Anchor Positioning placement.",
       "slots": [
         {
-          "name": "trigger",
-          "description": "Control used to toggle the dropdown"
+          "name": ""
         },
         {
-          "name": "",
-          "description": "Dropdown content"
+          "name": "trigger"
         }
       ],
       "cssParts": [
         {
-          "name": "trigger",
-          "description": "Trigger wrapper"
+          "name": "trigger"
         },
         {
-          "name": "content",
-          "description": "Popover content"
+          "name": "content"
         }
       ],
       "openElement": {
@@ -375,13 +370,18 @@
         "hydrate": "load",
         "status": "experimental",
         "module": "@openelement/ui/open-dropdown",
-        "export": "OpenDropdown",
+        "export": "OpenDropdownElement",
         "tailwind": {
           "required": true,
           "sources": [
             "./src/theme.css"
           ]
-        }
+        },
+        "root": "shadow",
+        "styles": [
+          "./overlay-recipe.css",
+          "./open-dropdown.css"
+        ]
       }
     }
   ]

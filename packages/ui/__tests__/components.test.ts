@@ -15,7 +15,7 @@
  * nothing here connects an element.
  */
 import { expect, test } from 'vitest';
-import { dialogHostWith, fakeDialog, installDomHarness } from './harness.ts';
+import { dialogHostWith, dropdownHostWith, fakeDialog, installDomHarness } from './harness.ts';
 
 installDomHarness();
 
@@ -290,8 +290,7 @@ test('open-input: formDisabledCallback mirrors onto the property, never the attr
 // ─── open-dropdown: pointerdown popover guard + per-instance anchor (#1061) ──
 
 test('open-dropdown: click toggles the native popover; pointerdown on an open popover swallows the re-open', async () => {
-  const { OpenDropdown } = await import('../src/open-dropdown.tsx');
-  const el = new (OpenDropdown as unknown as new () => AnyComponent)();
+  const { recordDropdownPointerDown, toggleDropdown } = await import('../src/dropdown-machine.ts');
   const state = { open: false, toggles: 0 };
   const content = {
     matches: (selector: string) => selector === ':popover-open' && state.open,
@@ -299,36 +298,53 @@ test('open-dropdown: click toggles the native popover; pointerdown on an open po
       state.open = !state.open;
       state.toggles++;
     },
+    style: { setProperty: () => {} },
   };
-  el.shadowRoot = { querySelector: () => content };
+  const el = dropdownHostWith(content);
 
   // Plain click toggles open.
-  el.toggle();
+  toggleDropdown(el);
   expect(state.open).toEqual(true);
 
   // A mouse press on the trigger while open records the state; the click that
   // follows the native light-dismiss must not re-open the popover.
   state.open = false;
   state.toggles = 0;
-  el.onTriggerPointerDown();
+  recordDropdownPointerDown(el);
   // (pointerdown saw the popover closed, so the click toggles normally.)
-  el.toggle();
+  toggleDropdown(el);
   expect(state.toggles).toEqual(1);
 
   state.open = true;
-  el.onTriggerPointerDown();
-  el.toggle();
+  recordDropdownPointerDown(el);
+  toggleDropdown(el);
   expect(state.toggles, 'the post-pointerdown click is swallowed').toEqual(1);
 });
 
-test('open-dropdown: activation assigns realm-unique anchor names to both halves', async () => {
-  const { OpenDropdown } = await import('../src/open-dropdown.tsx');
-  const first = new (OpenDropdown as unknown as new () => AnyComponent)();
-  const second = new (OpenDropdown as unknown as new () => AnyComponent)();
-  first.onCsrRendered();
-  second.onCsrRendered();
+test('open-dropdown: activation assigns realm-unique anchor names (host half)', async () => {
+  const { activateDropdown } = await import('../src/dropdown-machine.ts');
+  const content = {
+    matches: () => false,
+    togglePopover: () => {},
+    style: { setProperty: () => {}, removeProperty: () => {} },
+    addEventListener: () => {},
+  };
+  const first = dropdownHostWith(content);
+  const second = dropdownHostWith(content);
+  const hostStyles: string[] = [];
+  const firstSet = first.style.setProperty.bind(first.style);
+  first.style.setProperty = (name: string, value: string) => {
+    hostStyles.push(`${name}=${value}`);
+    firstSet(name, value);
+  };
+  activateDropdown(first);
+  activateDropdown(second);
   expect(first.anchorName).not.toEqual(second.anchorName);
   expect(first.anchorName).toContain('--open-dropdown-trigger-');
+  // The host half applies at activation; the content half (`position-anchor`)
+  // rides the open window (beforetoggle) so a reconnect's re-claim of the
+  // retained nodes sees exactly the compiled static seeds.
+  expect(hostStyles).toContain(`anchor-name=${first.anchorName}`);
 });
 
 // ─── open-code-block is a generated (function-component) element ─────────────

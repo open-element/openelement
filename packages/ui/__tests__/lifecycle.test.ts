@@ -22,7 +22,7 @@
  * persistence/multi-toggle on the shipped page).
  */
 import { expect, test } from 'vitest';
-import { dialogHostWith, fakeDialog, installDomHarness } from './harness.ts';
+import { dialogHostWith, dropdownHostWith, fakeDialog, installDomHarness } from './harness.ts';
 import { readInstanceState, writeInstanceState } from '../src/instance-state.ts';
 
 installDomHarness();
@@ -92,31 +92,29 @@ test('open-dialog: each open session enters the top layer exactly once; reopen r
 // packages/element/__wtr__/tests/overlay-contract.test.js ('disconnect/
 // reconnect leaves a working dialog with single-event closes').
 
-// ─── open-dropdown: activation wiring is reconnect-safe ──────────────────────
+// ─── open-dropdown: activation wiring is reconnect-safe (dropdown-machine) ───
 
-test('open-dropdown: focus-return wiring attaches once across dispose/reconnect; anchor name stays stable', async () => {
-  const { OpenDropdown } = await import('../src/open-dropdown.tsx');
-  const el = new (OpenDropdown as unknown as new () => AnyComponent)();
+test('open-dropdown: focus-return wiring attaches once across activate/re-activate; anchor name stays stable', async () => {
+  const { activateDropdown } = await import('../src/dropdown-machine.ts');
   const listenerCounts: Record<string, number> = {};
   const content = {
     matches: () => false,
     togglePopover: () => {},
-    addEventListener: (type: string) => {
-      listenerCounts[type] = (listenerCounts[type] ?? 0) + 1;
-    },
+    style: { setProperty: () => {}, removeProperty: () => {} },
   };
-  el.shadowRoot = { querySelector: (sel: string) => (sel === '.content' ? content : null) };
-
-  el.onCsrRendered();
+  const el = dropdownHostWith(content);
+  el.shadowRoot.addEventListener = (type: string) => {
+    listenerCounts[type] = (listenerCounts[type] ?? 0) + 1;
+  };
+  activateDropdown(el);
   expect(listenerCounts).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1 });
   const anchor = el.anchorName;
   expect(anchor).not.toEqual('');
 
-  // Reconnect: the focusWired guard keeps the listeners at one each, and the
-  // realm-unique anchor name is NOT re-assigned (both halves must keep the
-  // name the SSR/CSR activation paired).
-  el.disconnectedCallback();
-  el.onCsrRendered();
+  // Re-activation (a reconnect re-runs it): the focusWired guard keeps the
+  // listeners at one each, and the realm-unique anchor name is NOT re-assigned
+  // (both halves must keep the name the SSR/CSR activation paired).
+  activateDropdown(el);
   expect(listenerCounts).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1 });
   expect(el.anchorName).toEqual(anchor);
 });

@@ -59,11 +59,11 @@ const fixtures: FixtureSpec[] = [
   {
     // packages/ui production overlay components (#1339 slice): compiled through
     // the same official path; their './component-recipes.ts' /
-    // './instance-state.ts' / './dialog-machine.ts' imports resolve to
-    // packages/ui/src at vitest serve time through the element-browser
-    // project's aliases (no copies committed). open-dialog is a
-    // function-component module, so its host site fact routes it through the
-    // generated-element lane.
+    // './instance-state.ts' / './dialog-machine.ts' / './dropdown-machine.ts'
+    // imports resolve to packages/ui/src at vitest serve time through the
+    // element-browser project's aliases (no copies committed). Both modules
+    // are function components, so their host site facts route them through
+    // the generated-element lane.
     source: join(elementPkg, '../ui/src/open-dialog.tsx'),
     id: 'open-dialog.tsx',
     out: 'open-dialog.ts',
@@ -73,6 +73,7 @@ const fixtures: FixtureSpec[] = [
     source: join(elementPkg, '../ui/src/open-dropdown.tsx'),
     id: 'open-dropdown.tsx',
     out: 'open-dropdown.ts',
+    generatedSite: 'open-dropdown',
   },
 ];
 

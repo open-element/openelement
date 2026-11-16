@@ -420,3 +420,66 @@ the A6 sheet-admission suite. `pnpm run check`. LOCAL.
 
 P1 is unaffected by this slice: `open-dialog` was never a www island, so the
 browser-entry-graph verdict and the remaining class-island set are unchanged.
+
+## Migration record (2026-11-17): the fourth component, `open-dropdown`
+
+`packages/ui/src/open-dropdown.tsx` is a function component with a sidecar
+(`root: 'shadow'`, the two authored stylesheets, and the property-only
+`anchorName` row). The component is deliberately machine-free: the content is
+a native `popover` (top layer, built-in light dismiss) positioned by CSS
+anchor positioning, so the imperative surface is exactly the realm-unique
+anchor-name assignment and the cross-shadow focus-return restoration (#1226)
+— `dropdown-machine.ts`, the same module-helper shape as `dialog-machine.ts`.
+A behavior library (Zag) was evaluated for this component and declined: the
+component has no menu semantics (no items, roving focus or typeahead), the
+platform already owns the hard parts, and the library's popover machine would
+replace the native popover + anchor channel with JS positioning. Zag stays
+the recorded behavior-layer choice for a future component that actually needs
+menu/combobox semantics — the site's search combobox already runs
+`@zag-js/vanilla` in production (`VanillaMachine` + `spreadProps`), which is
+the proof form of that pattern.
+
+### Public-surface delta (enumerated)
+
+- The class's `anchorStyle` readonly signal — a derived
+  `position-anchor: ${anchorName}` — is retired with the class export (the
+  generated lane has no authored getter capability). The declared `anchorName`
+  property survives (property-only row), and the anchor's host half applies at
+  activation. The interface snapshot is regenerated (class type → function
+  type); the manifest/CEM declaration becomes generated
+  (`OpenDropdownElement`, no public superclass) and the manual registration
+  table drops the tag.
+- SSR parity: the generated host wrapper reproduces the class lane's DSD
+  bytes; the content div's static surface (class/part/popover) is unchanged,
+  and the closed element carries no runtime style.
+
+### Two build/runtime facts this migration established
+
+1. **The content's runtime style lives only inside the open window.** A
+   reconnect re-claims the retained nodes against the compiled static seeds
+   (`OEIR_LEAF_CLAIM_MISMATCH`), so a runtime-written inline style on a
+   compiled element counts as an extra static attribute and fails the claim.
+   The `position-anchor` half is therefore applied at `beforetoggle`
+   (synchronously before the open can be observed) and dropped at the
+   synchronous `beforetoggle(closed)` point and on dispose — the closed
+   element's static surface always matches the compiled declaration, and the
+   queued `toggle` task never gates it.
+2. **Popover `beforetoggle`/`toggle` events neither bubble nor compose.** A
+   `composed: false` event's propagation truncates at the shadow boundary —
+   the host (or anything light-side, document capture included) never sees
+   them. The focus-return listeners wire on the retained SHADOW ROOT in
+   capture phase (the shell attaches the root before mounting, so the root
+   exists at hook time while the nodes do not), with focus events filtered by
+   composed path (a slotted light-DOM element's path runs through the slot
+   into the content; the trigger's path — slotted into the trigger wrapper —
+   does not).
+
+Evidence: the dogfood dropdown qualification (anchor pair contract, toggle
+guard, Escape/outside light dismiss, focus return, reconnect) — 33 specs ×
+chromium/firefox/webkit = 99 passed; the element browser overlay-contract
+suite against the generated fixture (10 tests, the anchor-pairing reconnect
+row included); ui 84; compiler 1265 / element 970 / router 1845 / www + tools
++ create + saas + tests 1268 (+1 skipped); manifest/CEM/interface snapshot
+regenerated and checked; `pnpm run check`. LOCAL. P1 unchanged (open-dropdown
+is not a www island; the five www-local class islands remain the P1
+remainder).

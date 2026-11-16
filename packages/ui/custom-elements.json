@@ -351,33 +351,25 @@
       "declarations": [
         {
           "kind": "class",
-          "name": "OpenDropdown",
+          "name": "OpenDropdownElement",
           "tagName": "open-dropdown",
           "customElement": true,
           "description": "Popover-API dropdown with CSS Anchor Positioning placement.",
-          "superclass": {
-            "name": "OpenElement",
-            "package": "@openelement/element"
-          },
           "members": [],
           "slots": [
             {
-              "name": "trigger",
-              "description": "Control used to toggle the dropdown"
+              "name": ""
             },
             {
-              "name": "",
-              "description": "Dropdown content"
+              "name": "trigger"
             }
           ],
           "cssParts": [
             {
-              "name": "trigger",
-              "description": "Trigger wrapper"
+              "name": "trigger"
             },
             {
-              "name": "content",
-              "description": "Popover content"
+              "name": "content"
             }
           ]
         }

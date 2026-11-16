@@ -272,6 +272,10 @@ export default defineConfig({
               find: /^\.\/dialog-machine\.ts$/,
               replacement: `${rootDir}packages/ui/src/dialog-machine.ts`,
             },
+            {
+              find: /^\.\/dropdown-machine\.ts$/,
+              replacement: `${rootDir}packages/ui/src/dropdown-machine.ts`,
+            },
           ],
         },
         test: {

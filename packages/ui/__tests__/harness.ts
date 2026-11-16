@@ -271,3 +271,24 @@ export function dialogHostWith(fake: FakeDialog, mode?: string) {
   el.open = false;
   return el;
 }
+
+/**
+ * A fake generated-element host whose shadow root resolves `.content` to
+ * `content` and whose declared `anchorName` property stands in for the
+ * compiled row: the dropdown-machine helpers take this host shape directly.
+ */
+export function dropdownHostWith(content: Record<string, unknown>) {
+  installDomHarness();
+  // oxlint-disable-next-line no-explicit-any
+  const el = new (globalThis.HTMLElement as unknown as new () => any)();
+  el.shadowRoot = {
+    querySelector: (sel: string) => (sel === '.content' ? content : null),
+    // The focus-return listeners wire on the retained shadow root (the
+    // popover's beforetoggle/toggle events neither bubble nor compose, so the
+    // root is the last node on their truncated path).
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  };
+  el.anchorName = '';
+  return el;
+}

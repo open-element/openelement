@@ -1,5 +1,4 @@
 import { OpenButton } from './open-button.tsx';
-import { OpenDropdown } from './open-dropdown.tsx';
 import { OpenInput } from './open-input.tsx';
 
 // Compiled modules carry no runtime tagName export (the compiled
@@ -8,12 +7,12 @@ import { OpenInput } from './open-input.tsx';
 //
 // A component authored as a function component has no class to register: the
 // build emits its element class from the manifest declaration and the island
-// entry defines it. `open-theme-toggle`, `open-code-block` and `open-dialog`
-// are such components, so they are deliberately absent from this table.
+// entry defines it. `open-theme-toggle`, `open-code-block`, `open-dialog` and
+// `open-dropdown` are such components, so they are deliberately absent from
+// this table.
 const COMPONENTS: ReadonlyArray<readonly [string, CustomElementConstructor]> = [
   ['open-button', OpenButton],
   ['open-input', OpenInput],
-  ['open-dropdown', OpenDropdown],
 ];
 
 /** Explicitly register every first-party UI element. Safe to call repeatedly. */
