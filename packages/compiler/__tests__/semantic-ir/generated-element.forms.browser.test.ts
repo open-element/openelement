@@ -1137,7 +1137,7 @@ describe('button-shape generated element form association (Chromium)', () => {
     }
   });
 
-  test('reset and restore are no-ops: nothing to restore, FormData stays empty', async () => {
+  test('reset and restore are no-ops: the button configuration is untouched', async () => {
     const page = await openPage(buttonBundleFile);
     try {
       const result = await page.evaluate(async (tagName) => {
@@ -1145,22 +1145,48 @@ describe('button-shape generated element form association (Chromium)', () => {
         const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
         customElements.define(tagName, mod.ButtonElement);
         const form = document.createElement('form');
-        const host = document.createElement(tagName) as unknown as ButtonHost;
+        const host = document.createElement(tagName) as unknown as ButtonHost & { label: string };
         host.setAttribute('name', 'b');
+        host.label = 'Send it';
         form.append(host);
         document.body.append(form);
         await tick();
+        const before = {
+          label: host.label,
+          disabled: host.disabled,
+          attribute: host.hasAttribute('disabled'),
+          states: {
+            disabled: host.matches(':state(disabled)'),
+            enabled: host.matches(':state(enabled)'),
+          },
+        };
         host.formResetCallback();
         host.formStateRestoreCallback('restored', 'restore');
         host.formStateRestoreCallback(new File(['x'], 'x.txt'), 'restore');
+        host.formStateRestoreCallback(new FormData(), 'restore');
         await tick();
         return {
+          before,
+          after: {
+            label: host.label,
+            disabled: host.disabled,
+            attribute: host.hasAttribute('disabled'),
+            states: {
+              disabled: host.matches(':state(disabled)'),
+              enabled: host.matches(':state(enabled)'),
+            },
+          },
           formDataKeys: Array.from(new FormData(form).keys()),
-          disabled: host.disabled,
-          enabled: host.matches(':state(enabled)'),
         };
       }, BUTTON_SITE.tag);
-      expect(result).toEqual({ formDataKeys: [], disabled: false, enabled: true });
+      expect(result.after).toEqual(result.before);
+      expect(result.before).toEqual({
+        label: 'Send it',
+        disabled: false,
+        attribute: false,
+        states: { disabled: false, enabled: true },
+      });
+      expect(result.formDataKeys).toEqual([]);
     } finally {
       await page.close();
     }
@@ -1195,6 +1221,188 @@ describe('button-shape generated element form association (Chromium)', () => {
         formDataKeys: [],
         states: { disabled: true, enabled: false },
       });
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('fieldset × author disabled interleavings end fully re-enabled; the fieldset path never writes the attribute', async () => {
+    const page = await openPage(buttonBundleFile);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeFormsButton;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        customElements.define(tagName, mod.ButtonElement);
+        const snapshot = (
+          host: ButtonHost,
+        ): {
+          disabled: boolean;
+          attribute: boolean;
+          states: { disabled: boolean; enabled: boolean };
+        } => ({
+          disabled: host.disabled,
+          attribute: host.hasAttribute('disabled'),
+          states: {
+            disabled: host.matches(':state(disabled)'),
+            enabled: host.matches(':state(enabled)'),
+          },
+        });
+        // Order 1: author first, then the fieldset toggles around it.
+        const formA = document.createElement('form');
+        const fieldsetA = document.createElement('fieldset');
+        const hostA = document.createElement(tagName) as unknown as ButtonHost;
+        fieldsetA.append(hostA);
+        formA.append(fieldsetA);
+        document.body.append(formA);
+        await tick();
+        const aInitial = snapshot(hostA);
+        hostA.disabled = true;
+        await tick();
+        const aAuthored = snapshot(hostA);
+        fieldsetA.disabled = true;
+        await tick();
+        const aAuthoredPlusFieldset = snapshot(hostA);
+        hostA.disabled = false;
+        await tick();
+        const aAuthorClearedUnderFieldset = snapshot(hostA);
+        fieldsetA.disabled = false;
+        await tick();
+        const aFullyReenabled = snapshot(hostA);
+        // Order 2: fieldset first, then the author toggles around it.
+        const formB = document.createElement('form');
+        const fieldsetB = document.createElement('fieldset');
+        const hostB = document.createElement(tagName) as unknown as ButtonHost;
+        fieldsetB.append(hostB);
+        formB.append(fieldsetB);
+        document.body.append(formB);
+        await tick();
+        fieldsetB.disabled = true;
+        await tick();
+        const bFieldset = snapshot(hostB);
+        hostB.disabled = true;
+        await tick();
+        const bFieldsetPlusAuthored = snapshot(hostB);
+        fieldsetB.disabled = false;
+        await tick();
+        const bFieldsetClearedUnderAuthor = snapshot(hostB);
+        hostB.disabled = false;
+        await tick();
+        const bFullyReenabled = snapshot(hostB);
+        return {
+          order1: {
+            aInitial,
+            aAuthored,
+            aAuthoredPlusFieldset,
+            aAuthorClearedUnderFieldset,
+            aFullyReenabled,
+          },
+          order2: {
+            bFieldset,
+            bFieldsetPlusAuthored,
+            bFieldsetClearedUnderAuthor,
+            bFullyReenabled,
+          },
+        };
+      }, BUTTON_SITE.tag);
+      // Order 1: the author attribute is the only attribute ever written; the
+      // fieldset's effective state holds separately and clears cleanly.
+      expect(result.order1.aInitial).toEqual({
+        disabled: false,
+        attribute: false,
+        states: { disabled: false, enabled: true },
+      });
+      expect(result.order1.aAuthored).toEqual({
+        disabled: true,
+        attribute: true,
+        states: { disabled: true, enabled: false },
+      });
+      expect(result.order1.aAuthoredPlusFieldset).toEqual({
+        disabled: true,
+        attribute: true,
+        states: { disabled: true, enabled: false },
+      });
+      // The author clears while the fieldset is still disabled: the reflecting
+      // row goes back to property=false/attribute-absent, the effective state
+      // holds separately — this is exactly where a callback writing the
+      // reflecting attribute would latch a permanent disable (F2 negative).
+      expect(result.order1.aAuthorClearedUnderFieldset).toEqual({
+        disabled: false,
+        attribute: false,
+        states: { disabled: true, enabled: false },
+      });
+      expect(result.order1.aFullyReenabled).toEqual({
+        disabled: false,
+        attribute: false,
+        states: { disabled: false, enabled: true },
+      });
+      // Order 2: the fieldset disable never writes the reflecting attribute.
+      expect(result.order2.bFieldset).toEqual({
+        disabled: false,
+        attribute: false,
+        states: { disabled: true, enabled: false },
+      });
+      expect(result.order2.bFieldsetPlusAuthored).toEqual({
+        disabled: true,
+        attribute: true,
+        states: { disabled: true, enabled: false },
+      });
+      expect(result.order2.bFieldsetClearedUnderAuthor).toEqual({
+        disabled: true,
+        attribute: true,
+        states: { disabled: true, enabled: false },
+      });
+      expect(result.order2.bFullyReenabled).toEqual({
+        disabled: false,
+        attribute: false,
+        states: { disabled: false, enabled: true },
+      });
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('listing is not submitter identity: requestSubmit(host) refuses and no implicit submission fires', async () => {
+    const page = await openPage(buttonBundleFile);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeFormsButton;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        customElements.define(tagName, mod.ButtonElement);
+        const form = document.createElement('form');
+        const host = document.createElement(tagName);
+        host.setAttribute('name', 'b');
+        form.append(host);
+        document.body.append(form);
+        await tick();
+        let submitEvents = 0;
+        form.addEventListener('submit', () => submitEvents++);
+        let thrown: { name: string | null; message: string | null } | null = null;
+        try {
+          form.requestSubmit(host);
+        } catch (error) {
+          thrown = {
+            name: error instanceof Error ? error.name : null,
+            message: error instanceof Error ? error.message : String(error),
+          };
+        }
+        await tick();
+        const afterRequestSubmitHost = { thrown, submitEvents };
+        host.click();
+        await tick();
+        const afterHostClick = submitEvents;
+        return {
+          afterRequestSubmitHost,
+          afterHostClick,
+          listed: Array.from(form.elements).includes(host),
+        };
+      }, BUTTON_SITE.tag);
+      expect(result.afterRequestSubmitHost.thrown).toEqual({
+        name: 'TypeError',
+        message: expect.stringContaining('submit button'),
+      });
+      expect(result.afterRequestSubmitHost.submitEvents).toBe(0);
+      expect(result.afterHostClick).toBe(0);
+      expect(result.listed).toBe(true);
     } finally {
       await page.close();
     }

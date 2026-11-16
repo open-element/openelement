@@ -238,6 +238,18 @@ separate shape field is invented:
     host attribute, so the authored (reflecting) state stays reversible; the
     `disabled`/`enabled` custom states are driven by
     `authorDisabled || effectiveDisabled` exactly as in the value shape.
+    Reversibility is proven across the interleavings: fieldset
+    disable→enable never reflects the effective state into the author
+    property or the host attribute (the attribute gains nothing from the
+    fieldset path), and author-disabled × fieldset toggles in either order
+    end fully re-enabled.
+  - **Listing is not submitter identity.** The button shape claims form
+    ASSOCIATION only — `form.elements` membership and the external
+    `form=<id>` association. It is NOT a native submit/reset button:
+    `form.requestSubmit(<host>)` does not treat the host as a submitter, and
+    no implicit submission is claimed. The class open-button choreography
+    (the author's composed-submit + `requestSubmit()` dispatch from its
+    handler) remains the submit path; this mechanism adds none of it.
   - The recorded live-UI migration gap above still applies to both shapes:
     the effective disabled state reaches the internals custom
     states/validity/submission behavior, not the component's own DOM.
