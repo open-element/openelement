@@ -24,6 +24,7 @@ import { renderToString } from '../../src/public-runtime.ts';
 import { serializeGeneratedElementHtml } from '../../src/internal/compiled/generated-element/dsd-ssr.ts';
 import { __setRequestTimeStyleSheetUrls } from '../../src/internal/compiled/server/style-links.ts';
 import { SSR_REGISTRY_GENERATED_HOSTS } from '@openelement/protocol/registry-markers';
+import { trustedHtml } from '../../src/internal/core/security.ts';
 
 const HOST_TAG = 'oe-generated-page';
 
@@ -59,6 +60,7 @@ function hostProducer(
       tag: HOST_TAG,
       root: options.root ?? ('open' as const),
       content: '<article part="card"><h2>page</h2></article>',
+      ...(lightChildren === undefined ? {} : { lightChildren }),
       ...(attributes === undefined ? {} : { attributes }),
       ...(styleLinks === undefined ? {} : { styleLinks }),
     };
@@ -71,6 +73,26 @@ afterEach(() => {
 });
 
 describe('generated page root dispatch', () => {
+  test('a generated host rendered through __ssr keeps its light children', () => {
+    // The server function lane's `__ssr(tag, props, source, composition)` hands
+    // a shadow host its authored children as `hostChildren` and undeclared
+    // props as host attributes. The root dispatch must carry both to the
+    // producer instead of rendering the host empty.
+    const calls: unknown[][] = [];
+    let html = '';
+    withGeneratedRegistry(new Map([[HOST_TAG, hostProducer(calls)]]), () => {
+      html = renderToString(HOST_TAG, {
+        props: { title: 'Hello' },
+        hostAttrs: [['class', 'frame']],
+        hostChildren: trustedHtml('<div class="slotted"><pre>code</pre></div>'),
+      });
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]![1]).toEqual('<div class="slotted"><pre>code</pre></div>');
+    expect(calls[0]![2]).toEqual([['class', 'frame']]);
+    expect(html).toContain('<div class="slotted"><pre>code</pre></div>');
+  });
+
   test('a paired tag renders through the host producer before any program probe', () => {
     const calls: unknown[][] = [];
     let html = '';

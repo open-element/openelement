@@ -887,12 +887,26 @@ function renderToStringAtDepth(
   if (typeof input === 'string') {
     const rootGeneratedHostRenderer = registeredGeneratedHostRenderer(input);
     if (rootGeneratedHostRenderer !== undefined) {
+      // A generated host reached through the server function lane's `__ssr`
+      // carries authored children (its composition groups) and passthrough host
+      // attributes; a generated PAGE root carries neither. Forward both so a
+      // nested generated host keeps its slotted light DOM — the class path's
+      // nested expansion and this dispatch stay the same host artifact.
+      // Absent author data stays absent: the generated PAGE root passes
+      // neither, and the producer sees exactly what the pre-composition lane
+      // passed (undefined), not an empty list.
+      const hostAttributes =
+        options.hostAttrs === undefined
+          ? undefined
+          : normalizeHostAttributePairs(options.hostAttrs).attributes.map(
+              (attribute) => [attribute.name, attribute.bare ? '' : attribute.value] as const,
+            );
       return renderRegisteredGeneratedHost(
         input,
         rootGeneratedHostRenderer,
         options.props,
-        undefined,
-        undefined,
+        options.hostChildren,
+        hostAttributes,
       );
     }
   }
