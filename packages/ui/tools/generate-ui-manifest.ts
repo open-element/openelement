@@ -37,17 +37,121 @@ const UI_SRC_DIR = new URL('../src/', import.meta.url);
 const UI_PACKAGE_JSON = new URL('../package.json', import.meta.url);
 const OUT_FILE = new URL('../src/generated-manifest.json', import.meta.url);
 
-const pkgVersion = JSON.parse(readFileSync(UI_PACKAGE_JSON, 'utf8')).version;
+const pkg = JSON.parse(readFileSync(UI_PACKAGE_JSON, 'utf8')) as {
+  version: string;
+  exports?: Record<string, unknown>;
+};
+const pkgVersion = pkg.version;
 
 /**
  * The host site fact for one function-component module: the tag the island
  * pipeline will register. The compiler lane never derives a tag, and neither
  * does this tool — the resolver is the caller's host fact, exactly as
- * `GeneratedElementSite.tag` is for the compiler. The live `src/` scan has no
- * tag source yet (phase 2 owns it), so its resolver returns null and a
- * function-shaped module there keeps the fail-loud skip.
+ * `GeneratedElementSite.tag` is for the compiler.
  */
 export type GeneratedElementTagResolver = (file: string) => string | null;
+
+/**
+ * The live tag source for the shipped `src/` scan: the package's own `exports`
+ * map. A published subpath `./open-<name>` whose target is
+ * `./src/open-<name>.tsx` is the identity consumers import, and the same string
+ * `buildClassDeclaration` already derives as `openElement.module`. A module
+ * outside that contract gets no site fact and keeps the fail-loud skip.
+ */
+export function publishedGeneratedElementSites(): ReadonlyMap<string, string> {
+  const sites = new Map<string, string>();
+  for (const [subpath, target] of Object.entries(pkg.exports ?? {})) {
+    if (typeof target !== 'string' || !subpath.startsWith('./open-')) continue;
+    const tag = subpath.slice(2);
+    if (target !== `./src/${tag}.tsx`) continue;
+    sites.set(`${tag}.tsx`, tag);
+  }
+  return sites;
+}
+
+/**
+ * One component's delivery and stability policy, keyed by the PUBLISHED TAG.
+ *
+ * The tag is the public identity that survives the class->function migration,
+ * so one row covers a component on either lane and a migration never needs a
+ * second registry or a policy rename.
+ */
+export interface ComponentPolicy {
+  readonly layer: 'dsd-static' | 'dsd-interactive';
+  // Hand-aligned with HYDRATION_STRATEGIES in
+  // packages/protocol/src/framework.ts (source of truth);
+  // tools cannot import element runtime code.
+  readonly hydrate: 'load' | 'idle' | 'visible' | 'only';
+  // Owner ruling C1 (#1468): the unadopted surface is experimental until each
+  // component has standalone adoption evidence; flipping to 'stable' is a
+  // deliberate per-component decision, never a sweep.
+  readonly status: 'stable' | 'experimental';
+  readonly ssr: boolean;
+  readonly dsd: boolean;
+}
+
+/**
+ * Fail-loud registry: every published @openelement/ui component tag must have
+ * an explicit policy here. An unlisted tag means a new component shipped
+ * without a layering, stability or SSR/DSD decision — throw instead of
+ * silently defaulting.
+ */
+const POLICY_BY_TAG: Readonly<Record<string, ComponentPolicy>> = {
+  'open-button': {
+    layer: 'dsd-interactive',
+    hydrate: 'load',
+    status: 'stable',
+    ssr: true,
+    dsd: true,
+  },
+  'open-input': {
+    layer: 'dsd-interactive',
+    hydrate: 'load',
+    status: 'experimental',
+    ssr: true,
+    dsd: true,
+  },
+  'open-theme-toggle': {
+    layer: 'dsd-interactive',
+    hydrate: 'load',
+    status: 'stable',
+    ssr: true,
+    dsd: true,
+  },
+  'open-code-block': {
+    layer: 'dsd-static',
+    hydrate: 'idle',
+    status: 'stable',
+    ssr: true,
+    dsd: true,
+  },
+  'open-dialog': {
+    layer: 'dsd-interactive',
+    hydrate: 'idle',
+    status: 'experimental',
+    ssr: true,
+    dsd: true,
+  },
+  'open-dropdown': {
+    layer: 'dsd-interactive',
+    hydrate: 'load',
+    status: 'experimental',
+    ssr: true,
+    dsd: true,
+  },
+};
+
+/** The ONE policy lookup, shared by both component lanes. */
+export function componentPolicy(tag: string): ComponentPolicy {
+  const policy = POLICY_BY_TAG[tag];
+  if (policy === undefined) {
+    throw new Error(
+      `No layer/hydrate/status/ssr/dsd policy for component '${tag}': ` +
+        'add it to POLICY_BY_TAG in tools/generate-ui-manifest.ts',
+    );
+  }
+  return policy;
+}
 
 interface ClassComponentMeta {
   readonly origin: 'class';
@@ -59,27 +163,20 @@ interface ClassComponentMeta {
   events: OpenElementEvent[];
   slots: OpenElementSlot[];
   cssParts: OpenElementCssPart[];
-  layer: 'dsd-static' | 'dsd-interactive';
-  // Hand-aligned with HYDRATION_STRATEGIES in
-  // packages/protocol/src/framework.ts (source of truth);
-  // tools cannot import element runtime code.
-  hydrate: 'load' | 'idle' | 'visible' | 'only';
-  // Owner ruling C1 (#1468): the unadopted surface is experimental until each
-  // component has standalone adoption evidence; flipping to 'stable' is a
-  // deliberate per-component decision, never a sweep.
-  status: 'stable' | 'experimental';
+  readonly policy: ComponentPolicy;
 }
 
 /**
  * A function-component module the compiler lane emitted. The facts are the
- * emitted element's own (see `generated-element-facts.ts`); delivery policy is
- * deliberately absent — `layer`/`hydrate`/`status` are UI package policy, not
- * compiler facts, and phase 1 adds no `POLICY_BY_CLASS` entry for fixtures.
+ * emitted element's own (see `generated-element-facts.ts`); the policy row,
+ * when the host supplies one, is UI package policy, not a compiler fact.
  */
 interface GeneratedComponentMeta {
   readonly origin: 'generated-element';
   readonly file: string;
   readonly facts: GeneratedElementFacts;
+  readonly events: OpenElementEvent[];
+  readonly policy?: ComponentPolicy;
 }
 
 type ComponentMeta = ClassComponentMeta | GeneratedComponentMeta;
@@ -92,47 +189,6 @@ const COMPONENT_ORDER = [
   'open-dialog',
   'open-dropdown',
 ];
-
-// Fail-loud registry: every @openelement/ui component class must have an
-// explicit layer/hydrate/status policy here. An unlisted class means a new
-// component shipped without a layering or stability decision — throw instead
-// of silently defaulting.
-// Hand-aligned with HYDRATION_STRATEGIES in
-// packages/protocol/src/framework.ts (source of truth);
-// tools cannot import element runtime code.
-const POLICY_BY_CLASS: Record<string, Pick<ClassComponentMeta, 'layer' | 'hydrate' | 'status'>> = {
-  OpenButton: { layer: 'dsd-interactive', hydrate: 'load', status: 'stable' },
-  OpenInput: { layer: 'dsd-interactive', hydrate: 'load', status: 'experimental' },
-  OpenThemeToggle: { layer: 'dsd-interactive', hydrate: 'load', status: 'stable' },
-  OpenCodeBlock: { layer: 'dsd-static', hydrate: 'idle', status: 'stable' },
-  OpenDialog: { layer: 'dsd-interactive', hydrate: 'idle', status: 'experimental' },
-  OpenDropdown: { layer: 'dsd-interactive', hydrate: 'load', status: 'experimental' },
-};
-
-function policyForClass(
-  className: string,
-): Pick<ClassComponentMeta, 'layer' | 'hydrate' | 'status'> {
-  const policy = POLICY_BY_CLASS[className];
-  if (!policy) {
-    throw new Error(
-      `No layer/hydrate/status policy for component class '${className}': ` +
-        'add it to POLICY_BY_CLASS in tools/generate-ui-manifest.ts',
-    );
-  }
-  return policy;
-}
-
-export function layerFromClass(className: string): ClassComponentMeta['layer'] {
-  return policyForClass(className).layer;
-}
-
-export function hydrateFromClass(className: string): ClassComponentMeta['hydrate'] {
-  return policyForClass(className).hydrate;
-}
-
-export function statusFromClass(className: string): ClassComponentMeta['status'] {
-  return policyForClass(className).status;
-}
 
 function inferAttributeType(name: string): string {
   if (name === 'disabled' || name === 'open' || name === 'required') {
@@ -253,35 +309,55 @@ export function parseSlots(text: string): OpenElementSlot[] {
   return slots;
 }
 
+/**
+ * Read the events a component DISPATCHES.
+ *
+ * Recognition is the inline `…dispatchEvent(new CustomEvent('name', { detail }))`
+ * shape, on both lanes: a constructed event that is never dispatched is not an
+ * event the component fires, so a helper that merely builds a `CustomEvent`
+ * must not become a declaration. The detail type is inferred from the literal
+ * options. A dispatch through a variable is outside the recognized shape (the
+ * six shipped components all dispatch inline), and it is a source-side
+ * heuristic, not a runtime claim.
+ */
 export function parseEvents(text: string): OpenElementEvent[] {
   const events: OpenElementEvent[] = [];
   const seen = new Set<string>();
   const source = parseTypeScript(text, 'component.tsx');
   const visit = (node: ts.Node): void => {
     if (
-      ts.isNewExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      node.expression.text === 'CustomEvent'
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === 'dispatchEvent'
     ) {
-      const [nameNode, optionsNode] = node.arguments ?? [];
-      if (!nameNode || !ts.isStringLiteralLike(nameNode) || seen.has(nameNode.text)) return;
-      const name = nameNode.text;
-      seen.add(name);
-      let detailType: string | undefined;
-      if (optionsNode && ts.isObjectLiteralExpression(optionsNode)) {
-        const detail = optionsNode.properties.find(
-          (property) =>
-            ts.isPropertyAssignment(property) && property.name.getText(source) === 'detail',
-        );
-        if (detail && ts.isPropertyAssignment(detail)) {
-          detailType = inferExpressionType(detail.initializer, source);
+      const [eventNode] = node.arguments;
+      if (
+        eventNode !== undefined &&
+        ts.isNewExpression(eventNode) &&
+        ts.isIdentifier(eventNode.expression) &&
+        eventNode.expression.text === 'CustomEvent'
+      ) {
+        const [nameNode, optionsNode] = eventNode.arguments ?? [];
+        if (nameNode && ts.isStringLiteralLike(nameNode) && !seen.has(nameNode.text)) {
+          const name = nameNode.text;
+          seen.add(name);
+          let detailType: string | undefined;
+          if (optionsNode && ts.isObjectLiteralExpression(optionsNode)) {
+            const detail = optionsNode.properties.find(
+              (property) =>
+                ts.isPropertyAssignment(property) && property.name.getText(source) === 'detail',
+            );
+            if (detail && ts.isPropertyAssignment(detail)) {
+              detailType = inferExpressionType(detail.initializer, source);
+            }
+          }
+          events.push({
+            name,
+            type: detailType ? `CustomEvent<${detailType}>` : 'CustomEvent',
+            description: `Fired on ${name}`,
+          });
         }
       }
-      events.push({
-        name,
-        type: detailType ? `CustomEvent<${detailType}>` : 'CustomEvent',
-        description: `Fired on ${name}`,
-      });
     }
     ts.forEachChild(node, visit);
   };
@@ -342,6 +418,7 @@ function parseDescription(text: string): string {
 
 function buildMeta(file: string, source: string): ClassComponentMeta {
   const tagName = parseTagName(source);
+  const policy = componentPolicy(tagName);
   const className = parseClassName(source, file);
   const observed = parseObservedAttributes(source);
   const attributes: OpenElementAttribute[] = observed.map(({ name, type }) => ({
@@ -366,9 +443,7 @@ function buildMeta(file: string, source: string): ClassComponentMeta {
     events: parseEvents(source),
     slots: parseSlots(source),
     cssParts: parseCssParts(source),
-    layer: layerFromClass(className),
-    hydrate: hydrateFromClass(className),
-    status: statusFromClass(className),
+    policy,
   };
 }
 
@@ -376,9 +451,9 @@ function buildMeta(file: string, source: string): ClassComponentMeta {
  * Read the component declarations under `rootDir`.
  *
  * Dispatch is structural: a class-authored module keeps the existing class
- * branch untouched; a module the generated-element lane owns needs the host
- * site fact (`sites(file)`), and is projected only when the compiler lane
- * actually emitted it. A module that passes the `open-*.tsx` naming convention
+ * branch untouched; a module the generated-element lane owns needs the two host
+ * facts (the site tag and, for the shipped scan, the policy row) and is
+ * projected only when the compiler lane actually emitted it. A module that passes the `open-*.tsx` naming convention
  * but reaches neither branch is NOT filtered out — it would disappear from the
  * manifest, from custom-elements.json, from the packed tarball and from the API
  * reference while `ui-manifest:check`, `ui-cem:check` and `gate:packed` all
@@ -386,9 +461,19 @@ function buildMeta(file: string, source: string): ClassComponentMeta {
  * That is a silent capability loss, so the skip below refuses instead of
  * filtering: it names the files.
  */
+export interface ComponentScanHost {
+  /** The host site fact for function-component modules. */
+  readonly site?: GeneratedElementTagResolver;
+  /**
+   * The policy source for function-component modules. Absent for fixture
+   * roots, where a fixture tag carries no package policy.
+   */
+  readonly policy?: (tag: string) => ComponentPolicy;
+}
+
 function readComponentSources(
   rootDir: URL = UI_SRC_DIR,
-  sites: GeneratedElementTagResolver = () => null,
+  host: ComponentScanHost = {},
 ): ComponentMeta[] {
   const metas: ComponentMeta[] = [];
   const skipped: string[] = [];
@@ -402,14 +487,22 @@ function readComponentSources(
       metas.push(buildMeta(entry.name, source));
       continue;
     }
-    const tag = sites(entry.name);
+    const tag = host.site?.(entry.name) ?? null;
     if (tag === null) {
       skipped.push(entry.name);
       continue;
     }
     const read = readGeneratedElementFacts({ file: entry.name, source, tag });
     if (read.kind === 'admitted') {
-      metas.push({ origin: 'generated-element', file: entry.name, facts: read.facts });
+      metas.push({
+        origin: 'generated-element',
+        file: entry.name,
+        facts: read.facts,
+        // Authored custom events stay a source-side fact on both lanes; the
+        // emitted artifact carries no event table.
+        events: parseEvents(source),
+        ...(host.policy === undefined ? {} : { policy: host.policy(tag) }),
+      });
       continue;
     }
     if (read.kind === 'refused') {
@@ -436,9 +529,9 @@ function readComponentSources(
         'the naming convention but not either shape, so it would be dropped from the manifest, ' +
         'the Custom Elements Manifest, the packed artifact and the API reference unnoticed. ' +
         'Declare the component shape, or rename the file so it is not published. A ' +
-        'function-component module needs a host-supplied generated-element site fact (the tag) ' +
-        'for its compile; the live `src/` scan has no tag source yet ' +
-        '(alpha16-18-execution-plan.md §14.2).',
+        'function-component module needs a host-supplied generated-element site fact: under ' +
+        '`src/` that is a published subpath `./open-<name>` whose target is ' +
+        '`./src/open-<name>.tsx` in package.json exports (alpha16-18-execution-plan.md §17).',
     );
   }
   // The policy order is the published declaration order; the tag tie-break
@@ -466,20 +559,75 @@ function readComponentSources(
  * it is UI package policy, not a compiler fact (phase 1 adds no
  * `POLICY_BY_CLASS` entry).
  */
+/**
+ * The published delivery block: the ONE place a component's policy and its
+ * package identity become `openElement`. Both lanes use it, so a class->function
+ * migration cannot drop the Tailwind requirement, the SSR/DSD promise or the
+ * stability row.
+ *
+ * ADR-0167: every component's internals author Tailwind utilities directly
+ * (alpha15 S lane), so the compile is a REQUIREMENT of this package — the
+ * component stylesheet is what carries the utilities into the shadow roots —
+ * and the package owns the theme source that compile needs. A consumer that
+ * admits this package declares NO Tailwind configuration and still gets styled
+ * components; a consumer that disables the entry fails closed with a coded
+ * diagnostic instead of shipping unstyled components.
+ */
+function openElementDelivery(
+  policy: ComponentPolicy,
+  module: string,
+  exportName: string,
+): NonNullable<OpenElementDeclaration['openElement']> {
+  return {
+    ssr: policy.ssr,
+    dsd: policy.dsd,
+    layer: policy.layer,
+    hydrate: policy.hydrate,
+    status: policy.status,
+    module,
+    export: exportName,
+    tailwind: {
+      required: true,
+      sources: ['./src/theme.css'],
+    },
+  };
+}
+
+export interface GeneratedElementDeclarationOptions {
+  /** Authored custom events parsed from the source (both lanes). */
+  readonly events?: readonly OpenElementEvent[];
+  /** The published policy row; absent for fixture roots with no package policy. */
+  readonly policy?: ComponentPolicy;
+}
+
+/**
+ * Project emitted-element facts into the internal manifest declaration.
+ *
+ * The declaration describes the EMITTED native class, which is what the lane
+ * produced and shipped: `className`/`openElement.export` are the emitted
+ * module's own named export. `superclassName` is deliberately absent — the
+ * emitted class extends the non-public `OpenElementBase`, so there is no
+ * truthful public superclass to name. Delivery policy and events are HOST
+ * facts supplied by the caller (the shipped scan passes the package policy and
+ * the source-parsed events; a fixture root passes neither), so the projection
+ * stays a pure function of its inputs.
+ */
 export function buildGeneratedElementDeclaration(
   facts: GeneratedElementFacts,
+  options: GeneratedElementDeclarationOptions = {},
 ): OpenElementDeclaration {
   return {
     tagName: facts.tag,
     className: facts.className,
     ...(facts.description === '' ? {} : { description: facts.description }),
     ...(facts.attributes.length ? { attributes: [...facts.attributes] } : {}),
+    ...(options.events?.length ? { events: [...options.events] } : {}),
     ...(facts.slots.length ? { slots: [...facts.slots] } : {}),
     ...(facts.cssParts.length ? { cssParts: [...facts.cssParts] } : {}),
-    openElement: {
-      module: facts.module,
-      export: facts.exportName,
-    },
+    openElement:
+      options.policy === undefined
+        ? { module: facts.module, export: facts.exportName }
+        : openElementDelivery(options.policy, facts.module, facts.exportName),
   };
 }
 
@@ -493,33 +641,20 @@ function buildClassDeclaration(meta: ClassComponentMeta): OpenElementDeclaration
     events: meta.events.length ? meta.events : undefined,
     slots: meta.slots.length ? meta.slots : undefined,
     cssParts: meta.cssParts.length ? meta.cssParts : undefined,
-    openElement: {
-      ssr: true,
-      dsd: true,
-      layer: meta.layer,
-      hydrate: meta.hydrate,
-      status: meta.status,
-      module: `@openelement/ui/${meta.file.replace(/\.tsx$/, '')}`,
-      export: meta.className,
-      // ADR-0167: every component's internals author Tailwind utilities
-      // directly (alpha15 S lane), so the compile is a REQUIREMENT of this
-      // package — the component stylesheet is what carries the utilities into
-      // the shadow roots — and the package owns the theme source that compile
-      // needs. A consumer that admits this package declares NO Tailwind
-      // configuration and still gets styled components; a consumer that
-      // disables the entry fails closed with a coded diagnostic instead of
-      // shipping unstyled components.
-      tailwind: {
-        required: true,
-        sources: ['./src/theme.css'],
-      },
-    },
+    openElement: openElementDelivery(
+      meta.policy,
+      `@openelement/ui/${meta.file.replace(/\.tsx$/, '')}`,
+      meta.className,
+    ),
   };
 }
 
 function buildDeclaration(meta: ComponentMeta): OpenElementDeclaration {
   return meta.origin === 'generated-element'
-    ? buildGeneratedElementDeclaration(meta.facts)
+    ? buildGeneratedElementDeclaration(meta.facts, {
+        events: meta.events,
+        ...(meta.policy === undefined ? {} : { policy: meta.policy }),
+      })
     : buildClassDeclaration(meta);
 }
 
@@ -529,15 +664,18 @@ export type GeneratedUiManifest = OpenElementPackageManifest & {
 };
 
 /**
- * Build the manifest for one component root. `sites` is the host site fact
- * resolver for function-component modules; the live `src/` scan passes none
- * (phase 2 owns the live tag source).
+ * Build the manifest for one component root.
+ *
+ * `host` carries the two facts only a host can supply for function-component
+ * modules: the site tag and the policy row. The shipped scan supplies both
+ * (published `exports` subpaths + `POLICY_BY_TAG`); a fixture root supplies only
+ * the site tags and no policy.
  */
 export function buildManifestFromRoot(
   rootDir: URL,
-  sites: GeneratedElementTagResolver = () => null,
+  host: ComponentScanHost = {},
 ): GeneratedUiManifest {
-  const metas = readComponentSources(rootDir, sites);
+  const metas = readComponentSources(rootDir, host);
   const declarations = metas.map(buildDeclaration);
   // No `modules` block (#797): it emitted CEM-style paths like
   // `./open-card.js` that do not exist in the published package (`src/**`),
@@ -558,9 +696,20 @@ export function buildManifestFromRoot(
   };
 }
 
-/** The shipped manifest: the six class-authored components under `src/`. */
+/** The published `src/open-*.tsx` -> tag facts, read once from `exports`. */
+const PUBLISHED_SITES = publishedGeneratedElementSites();
+
+/**
+ * The shipped manifest: the published components under `src/`. The live scan
+ * supplies the two host facts — the published tag and the policy row — so a
+ * function-component module migrates into this manifest without a second
+ * registry.
+ */
 export function buildManifest(): GeneratedUiManifest {
-  return buildManifestFromRoot(UI_SRC_DIR);
+  return buildManifestFromRoot(UI_SRC_DIR, {
+    site: (file) => PUBLISHED_SITES.get(file) ?? null,
+    policy: componentPolicy,
+  });
 }
 
 if (import.meta.main) {

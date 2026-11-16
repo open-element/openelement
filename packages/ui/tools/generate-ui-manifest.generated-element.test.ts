@@ -105,13 +105,17 @@ test('the fixture module really emits the named class the projection uses', () =
 });
 
 test('the fixture root is not part of the shipped manifest (tracked bytes unchanged)', () => {
-  const fixtureManifest = buildManifestFromRoot(pathToFileURL(`${ADMITTED}/`), fixtureSites);
+  const fixtureManifest = buildManifestFromRoot(pathToFileURL(`${ADMITTED}/`), {
+    site: fixtureSites,
+  });
   expect(fixtureManifest.declarations.map((declaration) => declaration.tagName).sort()).toEqual([
     'open-fn-card',
     'open-fn-panel',
   ]);
   // Fixture declarations are emitted-class declarations: no authored-class
-  // superclass, no delivery policy, no invented events.
+  // superclass, no delivery policy (a fixture root supplies no policy row) and
+  // no invented events (the fixture constructs a CustomEvent in a helper but
+  // never dispatches it).
   for (const declaration of fixtureManifest.declarations) {
     expect(declaration.superclassName).toBeUndefined();
     expect(declaration.events).toBeUndefined();
@@ -161,9 +165,9 @@ test('a refused function module in a scanned root fails loudly with the compiler
   // Scanning the whole fixture tree includes the module without the island
   // sidecar: the generator must throw the lane's coded refusal instead of
   // silently dropping that file from the manifest.
-  expect(() => buildManifestFromRoot(pathToFileURL(`${FIXTURES}/`), fixtureSites)).toThrow(
-    /OEIR_GENERATED_ELEMENT_MISSING_SITE_MARKER/,
-  );
+  expect(() =>
+    buildManifestFromRoot(pathToFileURL(`${FIXTURES}/`), { site: fixtureSites }),
+  ).toThrow(/OEIR_GENERATED_ELEMENT_MISSING_SITE_MARKER/);
 });
 
 test('a function module without a host site fact keeps the fail-loud skip', () => {
