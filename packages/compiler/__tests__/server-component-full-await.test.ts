@@ -422,6 +422,49 @@ describe('previously untested refused shapes keep a located OEC9032', () => {
       'the refused shape is the awaited operand or a larger expression',
     );
   });
+
+  test('an authored await of a reserved generated helper is refused as a reserved callee', () => {
+    expectLocatedAwaitRefusal(
+      `
+        export async function Page() {
+          return <p>{await __t("x")}</p>;
+        }
+      `,
+      '__t("x")',
+      'the refused shape is a reserved callee; that callee belongs to the generated constructor module — await the authored function instead',
+    );
+  });
+
+  test('an await of eval is refused as a reserved callee', () => {
+    expectLocatedAwaitRefusal(
+      `
+        export async function Page() {
+          return <p>{await eval("x")}</p>;
+        }
+      `,
+      'eval("x")',
+      'the refused shape is a reserved callee; that callee belongs to the generated constructor module — await the authored function instead',
+    );
+  });
+
+  test('an authored await of an imported server component is refused — composition auto-awaits', () => {
+    expectLocatedAwaitRefusal(
+      `
+        import { Child } from './child.tsx';
+        export async function Page() {
+          return <p>{await Child("a")}</p>;
+        }
+      `,
+      'Child("a")',
+      'the refused shape is a reserved callee; that callee belongs to the generated constructor module — await the authored function instead',
+      {
+        resolveModule: (specifier) =>
+          specifier === './child.tsx'
+            ? 'export async function Child(props: { n: string }) { return <span>{props.n}</span>; }'
+            : undefined,
+      },
+    );
+  });
 });
 
 describe('a Promise is not a normal child (M14-2)', () => {

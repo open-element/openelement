@@ -313,3 +313,33 @@ lane**, not on the M08 generated-leaf chain.
   lower-program}.ts` — admission and lowering.
 - `packages/router/src/vite/internal/server-runtime/page-render.ts` — the shared
   render-function / reserved-`children` checks behind both seams.
+
+## Amendment (2026-11-17): the M14 full-await definition (D-16b) and the located boundary table
+
+Append-only fact record. The 2026-11-09 decision above is unchanged and is not
+re-decided; this amendment records what later slices added to the same
+boundary, per the owner-approved M14 definition (execution plan §16.1 D-16b,
+carrier: [the M14 definition](../architecture/m14-full-await-definition.md)).
+
+- **The admitted set is exactly two positions by definition** (a text child and
+  a nested server-component prop), not an accumulated refusal list. Every
+  refusal prints the stable head sentence plus one per-position clause naming
+  the position and the nearest lawful spelling (M14-1, PR #1776).
+- **The refusal list in Decision item 2 is now carried by named located rows**,
+  extended by later slices: the static-branch shape, an await on a `__ssr` host
+  prop, a list-item attribute, a member-expression callee, the reserved-callee
+  boundary (a generated helper, `eval`, or an authored await of an imported
+  server component — the generated composition call auto-awaits, so the authored
+  await is refused), and the Promise-annotated prop read at a text/attribute
+  sink (M14-2), with the internal `OE_SERVER_TEXT_THENABLE` backstop for
+  untyped reads. The code stays `OEC9032`; this is a message contract, not an
+  admission change.
+- **Verification (LOCAL, 2026-11-17, lane C2).** Clean worktree at
+  `aa1f949d92f4ab3fa2eff64c95bc4f74c9741f9a`: the compiler full-await suite
+  (29 tests, including the three reserved-callee rows added by that
+  verification), the router function-page/entry-guard suites (54) and the
+  element thenable-backstop suite (19) all pass; the full record lives in
+  [the definition's §9](../architecture/m14-full-await-definition.md).
+- This amendment changes no decision above, no admission, and no milestone
+  status. The M14 exit row and the TSX-17 matrix cells stay with the
+  consolidation PR; no signature is recorded here.

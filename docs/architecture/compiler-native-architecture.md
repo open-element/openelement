@@ -273,6 +273,19 @@ Bounded defer, cancellation and streamed regions are **Alpha18**, not this.
 Ordinary `await` and deferred regions are different capabilities and must not be
 conflated in planning or tests.
 
+**2026-11-17 reconciliation (append-only).** The owner-approved M14 definition
+(execution plan §16.1 D-16b, carrier:
+[the M14 definition](./m14-full-await-definition.md)) fixes the admitted set as
+**exactly the two positions** of the bounded grammar above — a text child and a
+nested server-component prop — with nine located `OEC9032` boundary rows (one
+clause per refused position, M14-1) and the Promise-hole closure (a
+`Promise<...>`-annotated prop read is refused at the read; the untyped read is
+guarded by the internal `OE_SERVER_TEXT_THENABLE` backstop, M14-2). All nine
+boundaries and the request-time awaited path carry named consumer rows at
+`aa1f949d9` (LOCAL verification record in the definition's §9). The status
+sentence above still holds: this is the bounded slice, not the M14 exit; the
+exit row and the TSX-17 matrix cells stay with the integration single-writer.
+
 ### 4.7 Class authoring — current fact and approved retirement
 
 **CURRENT FACT:** the only shipping authoring path is the decorated class
