@@ -39,10 +39,12 @@ test('open-ui - explicit registration covers every class-authored component', as
 
   registerOpenUi(registry);
   registerOpenUi(registry);
-  // `open-theme-toggle` is authored as a function component: its element class
-  // is build-emitted and defined by the island entry, so it is deliberately
-  // absent from the manual registration table.
-  const classAuthored = EXPECTED_TAGS.filter((tag) => tag !== 'open-theme-toggle');
+  // `open-theme-toggle` and `open-code-block` are authored as function
+  // components: their element classes are build-emitted and defined by the
+  // island entry, so they are deliberately absent from the manual table.
+  const classAuthored = EXPECTED_TAGS.filter(
+    (tag) => tag !== 'open-theme-toggle' && tag !== 'open-code-block',
+  );
   expect(definitions.size).toEqual(classAuthored.length);
   expect([...definitions.keys()]).toEqual(classAuthored);
 });
@@ -50,7 +52,6 @@ test('open-ui - explicit registration covers every class-authored component', as
 test('open-ui - every component module exports its component', async () => {
   const classExports: Record<string, string> = {
     'open-button': 'OpenButton',
-    'open-code-block': 'OpenCodeBlock',
     'open-dialog': 'OpenDialog',
     'open-dropdown': 'OpenDropdown',
     'open-input': 'OpenInput',
@@ -59,10 +60,15 @@ test('open-ui - every component module exports its component', async () => {
     const mod = await import(`../src/${name}.tsx`);
     expect(mod[exportName], `${name} should export ${exportName}`).toEqual(expect.anything());
   }
-  // The generated component exports the authored function plus its platform
+  // Generated components export the authored function plus their platform
   // facts; the element class exists only in the build output.
-  const generated = await import('../src/open-theme-toggle.tsx');
-  expect(typeof generated.default).toEqual('function');
-  expect(generated.openElement).toMatchObject({ root: 'shadow' });
-  expect('OpenThemeToggle' in generated).toEqual(false);
+  for (const [name, exportName] of [
+    ['open-theme-toggle', 'OpenThemeToggle'],
+    ['open-code-block', 'OpenCodeBlock'],
+  ] as const) {
+    const generated = await import(`../src/${name}.tsx`);
+    expect(typeof generated.default).toEqual('function');
+    expect(generated.openElement).toMatchObject({ root: 'shadow' });
+    expect(exportName in generated).toEqual(false);
+  }
 });

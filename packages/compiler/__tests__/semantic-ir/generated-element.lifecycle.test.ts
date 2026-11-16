@@ -822,7 +822,7 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     expect(factory).toContain('const __oe_teardownSignal = __oe_owner.signal;');
     expect(factory).toContain('__oe_owner.add(() => (');
     expect(factory).toContain(
-      ')({ host: __oe_host.__oe_hostElement, signal: __oe_teardownSignal }));',
+      ')({ host: __oe_host.__oe_hostElement, signal: __oe_teardownSignal, states: __oe_host.__oe_states }));',
     );
     expect(factory).toContain('return { snapshot, __oe_connectEnv };');
     for (const body of ['EnvCard__mount', 'EnvCard__claim']) {
@@ -830,7 +830,7 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
       expect(text).toContain('const __oe_lifecycleEnvHooks = __oe_host.bindings.__oe_connectEnv;');
       expect(text).toContain('for (const __oe_lifecycleEnvHook of __oe_lifecycleEnvHooks)');
       expect(text).toContain(
-        '__oe_lifecycleEnvHook({ host: __oe_host.__oe_hostElement, signal: __oe_scope.signal })',
+        '__oe_lifecycleEnvHook({ host: __oe_host.__oe_hostElement, signal: __oe_scope.signal, states: __oe_host.__oe_states })',
       );
       expect(text).toContain('__oe_scope.add(__oe_lifecycleEnvCleanup)');
       // The zero-argument replay is not emitted for an env-only module.
@@ -890,7 +890,7 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     expect(childSetup).toContain('const __oe_connectEnv = [];');
     expect(childSetup).toContain('__oe_owner.add(() => (');
     expect(childSetup).toContain(
-      ')({ host: __oe_host.__oe_hostElement, signal: __oe_teardownSignal }));',
+      ')({ host: __oe_host.__oe_hostElement, signal: __oe_teardownSignal, states: __oe_host.__oe_states }));',
     );
     expect(childSetup).toContain('return { snapshot, __oe_connectEnv };');
     // The child replays from its OWN retained record and the per-projection

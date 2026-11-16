@@ -157,7 +157,10 @@ test('the tracked CEM is unchanged and keeps the class-authored superclass', () 
     for (const declaration of module.declarations) {
       expect(declaration.kind).toEqual('class');
       expect(declaration.customElement).toEqual(true);
-      if (declaration.tagName === 'open-theme-toggle') {
+      if (
+        declaration.tagName === 'open-theme-toggle' ||
+        declaration.tagName === 'open-code-block'
+      ) {
         // The generated declaration has no truthful public superclass: the
         // emitted class extends the non-public OpenElementBase.
         expect('superclass' in declaration).toEqual(false);

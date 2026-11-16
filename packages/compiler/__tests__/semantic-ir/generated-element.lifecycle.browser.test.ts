@@ -324,6 +324,7 @@ const PROPERTY_CHANGE_SOURCE =
   SIDECAR +
   'function ChangeCard(props: { seed: number }) {\n' +
   '  onPropertyChange((event) => {\n' +
+  '    event.states.add("changed");\n' +
   '    globalThis.__oeChangeJournal.push([event.name, event.value]);\n' +
   '    globalThis.__oeChangeHosts.push(event.host);\n' +
   '    globalThis.__oeChangeAborted.push(event.signal.aborted);\n' +
@@ -695,6 +696,33 @@ describe('16b-LC lifecycle hooks (Chromium)', () => {
       await page.close();
     }
   }, 120_000);
+
+  test('C1b the generated host joins the document-theme broadcast', async () => {
+    const page = await openPage(mainBundle);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeLifecycle;
+        customElements.define(tagName, mod.GeneratedElement);
+        document.documentElement.setAttribute('data-theme', 'light');
+        const host = document.createElement(tagName) as HTMLElement;
+        document.body.append(host);
+        await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+        const initial = host.getAttribute('data-theme');
+        document.documentElement.setAttribute('data-theme', 'dark');
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const updated = host.getAttribute('data-theme');
+        host.remove();
+        document.documentElement.removeAttribute('data-theme');
+        return { initial, updated };
+      }, mainTag);
+      // The shared component sheet's token layer keys its dark overrides off
+      // `:host([data-theme])`; the class lane's manager writes it on connect and
+      // follows the document. A generated host does the same.
+      expect(result).toEqual({ initial: 'light', updated: 'dark' });
+    } finally {
+      await page.close();
+    }
+  });
 
   test('C2 a throwing onConnect releases the earlier cleanup and aborts the pass', async () => {
     const page = await openPage(throwBundle);
@@ -1154,6 +1182,7 @@ describe('16b-LC lifecycle hooks (Chromium)', () => {
         host.seed = 7;
         await tick();
         const afterProperty = [...window.__oeChangeJournal];
+        const stateAfterProperty = host.matches(':state(changed)');
         host.setAttribute('seed', '9');
         await tick();
         const afterAttribute = [...window.__oeChangeJournal];
@@ -1168,6 +1197,7 @@ describe('16b-LC lifecycle hooks (Chromium)', () => {
         return {
           afterConnect,
           afterProperty,
+          stateAfterProperty,
           afterAttribute,
           afterTeardown,
           afterReconnect: [...window.__oeChangeJournal],
@@ -1180,6 +1210,8 @@ describe('16b-LC lifecycle hooks (Chromium)', () => {
       expect(result.afterConnect).toEqual([]);
       // A property write and an attribute write each report the committed row.
       expect(result.afterProperty).toEqual([['seed', 7]]);
+      // The change callback's env carries the element's CustomStateSet.
+      expect(result.stateAfterProperty).toBe(true);
       expect(result.afterAttribute).toEqual([
         ['seed', 7],
         ['seed', 9],

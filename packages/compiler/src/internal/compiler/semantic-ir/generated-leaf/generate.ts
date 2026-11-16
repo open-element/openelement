@@ -488,6 +488,8 @@ const TEARDOWN_SIGNAL_VAR = `${INTERNAL_PREFIX}teardownSignal`;
  * like `__oe_hostElement` is a runtime property and not an exported symbol.
  */
 const PROPERTY_CHANGE_PROPERTY = `${INTERNAL_PREFIX}onPropertyChange`;
+/** The host-record property exposing the element's `CustomStateSet` to the env. */
+const STATES_PROPERTY = `${INTERNAL_PREFIX}states`;
 
 /**
  * Whether any component in the module registers an `onPropertyChange`
@@ -525,7 +527,7 @@ function childHostElementField(state: EmitState, node: FunctionModelComponentRef
   if (!moduleUsesLifecycleEnv(state)) return '';
   const child = state.componentByName.get(node.name);
   if (child === undefined || !child.lifecycle.some((hook) => hook.receivesEnv)) return '';
-  return `, ${HOST_ELEMENT_PROPERTY}: ${state.hostVar}.${HOST_ELEMENT_PROPERTY}`;
+  return `, ${HOST_ELEMENT_PROPERTY}: ${state.hostVar}.${HOST_ELEMENT_PROPERTY}, ${STATES_PROPERTY}: ${state.hostVar}.${STATES_PROPERTY}`;
 }
 
 /** The change channel a retained child setup host forwards (empty otherwise). */
@@ -5639,7 +5641,7 @@ function emitLifecycleEnvReplay(hostRecordProperty: 'bindings' | 'setup'): strin
     `  const ${LIFECYCLE_ENV_HOOKS_VAR} = ${MOUNT_HOST}.${hostRecordProperty}.${GENERATED_ROOT_CONNECT_ENV_RECORD};`,
     `  if (${LIFECYCLE_ENV_HOOKS_VAR} !== undefined) {`,
     `    for (const ${LIFECYCLE_ENV_HOOK_VAR} of ${LIFECYCLE_ENV_HOOKS_VAR}) {`,
-    `      const ${LIFECYCLE_ENV_CLEANUP_VAR} = ${LIFECYCLE_ENV_HOOK_VAR}({ host: ${MOUNT_HOST}.${HOST_ELEMENT_PROPERTY}, signal: ${MOUNT_SCOPE}.signal });`,
+    `      const ${LIFECYCLE_ENV_CLEANUP_VAR} = ${LIFECYCLE_ENV_HOOK_VAR}({ host: ${MOUNT_HOST}.${HOST_ELEMENT_PROPERTY}, signal: ${MOUNT_SCOPE}.signal, states: ${MOUNT_HOST}.${STATES_PROPERTY} });`,
     `      if (typeof ${LIFECYCLE_ENV_CLEANUP_VAR} === "function") ${MOUNT_SCOPE}.add(${LIFECYCLE_ENV_CLEANUP_VAR});`,
     '    }',
     '  }',
@@ -7307,7 +7309,7 @@ function emitComponent(
           [
             `${INTERNAL_PREFIX}owner.add(() => (`,
             { record: hook.record },
-            `)({ host: ${MOUNT_HOST}.${HOST_ELEMENT_PROPERTY}, signal: ${TEARDOWN_SIGNAL_VAR} }));`,
+            `)({ host: ${MOUNT_HOST}.${HOST_ELEMENT_PROPERTY}, signal: ${TEARDOWN_SIGNAL_VAR}, states: ${MOUNT_HOST}.${STATES_PROPERTY} }));`,
           ],
           hook.span,
         );
@@ -7470,7 +7472,7 @@ function emitComponent(
           [
             `${INTERNAL_PREFIX}owner.add(() => (`,
             { record: hook.record },
-            `)({ host: ${MOUNT_HOST}.${HOST_ELEMENT_PROPERTY}, signal: ${TEARDOWN_SIGNAL_VAR} }));`,
+            `)({ host: ${MOUNT_HOST}.${HOST_ELEMENT_PROPERTY}, signal: ${TEARDOWN_SIGNAL_VAR}, states: ${MOUNT_HOST}.${STATES_PROPERTY} }));`,
           ],
           hook.span,
         );
@@ -7618,7 +7620,7 @@ function emitComponent(
   // attaches it; this literal carries it into the mount/claim host the replay
   // prologues read. Guests: modules without the env form keep today's bytes.
   const forwardedHostElement = moduleUsesLifecycleEnv(state)
-    ? `, ${HOST_ELEMENT_PROPERTY}: ${INTERNAL_PREFIX}host.${HOST_ELEMENT_PROPERTY}`
+    ? `, ${HOST_ELEMENT_PROPERTY}: ${INTERNAL_PREFIX}host.${HOST_ELEMENT_PROPERTY}, ${STATES_PROPERTY}: ${INTERNAL_PREFIX}host.${STATES_PROPERTY}`
     : '';
   // The change channel rides the same literal for the depth-1 child setup host.
   const forwardedPropertyChange = moduleUsesPropertyChange(state)

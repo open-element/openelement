@@ -317,45 +317,13 @@ test('open-dropdown: activation assigns realm-unique anchor names to both halves
   expect(first.anchorName).toContain('--open-dropdown-trigger-');
 });
 
-// ─── open-code-block: copy feedback contract ─────────────────────────────────
-
-test('open-code-block: copy success and failure drive the compiled label sink', async () => {
-  const { OpenCodeBlock } = await import('../src/open-code-block.tsx');
-  const originalClipboard = (globalThis as { navigator?: unknown }).navigator;
-  Object.defineProperty(globalThis, 'navigator', {
-    configurable: true,
-    value: { clipboard: { writeText: () => Promise.resolve() } },
-  });
-  try {
-    const el = new (OpenCodeBlock as unknown as new () => AnyComponent)();
-    await el.copy();
-    expect(el.copyLabel).toEqual('Copied!');
-  } finally {
-    Object.defineProperty(globalThis, 'navigator', {
-      configurable: true,
-      value: originalClipboard,
-    });
-  }
-});
-
-test('open-code-block: failed clipboard write shows Failed', async () => {
-  const { OpenCodeBlock } = await import('../src/open-code-block.tsx');
-  const originalNavigator = (globalThis as { navigator?: unknown }).navigator;
-  Object.defineProperty(globalThis, 'navigator', {
-    configurable: true,
-    value: { clipboard: { writeText: () => Promise.reject(new Error('denied')) } },
-  });
-  try {
-    const el = new (OpenCodeBlock as unknown as new () => AnyComponent)();
-    await el.copy();
-    expect(el.copyLabel).toEqual('Failed');
-  } finally {
-    Object.defineProperty(globalThis, 'navigator', {
-      configurable: true,
-      value: originalNavigator,
-    });
-  }
-});
+// ─── open-code-block is a generated (function-component) element ─────────────
+//
+// It no longer exists as a class to instantiate: the compiler emits
+// `OpenCodeBlockElement` and the build registers it. The copy flow (success,
+// failure, custom-state feedback and the reset timer) is asserted against the
+// real shipped element in `www/e2e/ui-behaviour-matrix.spec.ts` (the copy
+// control rows), which is the platform-level form of these rows.
 
 // ─── package manifest: the consumer-facing attribute/event contract ──────────
 // the router build derives island metadata from manifest.declarations (WC Package

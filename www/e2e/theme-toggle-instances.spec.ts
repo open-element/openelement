@@ -109,22 +109,25 @@ test.describe('open-theme-toggle (generated element)', () => {
     const light = await appendToggle(page, 'light');
     const dark = await appendToggle(page, 'dark');
 
-    expect(await light.evaluate((el) => el.getAttribute('data-theme'))).toBe('light');
-    expect(await dark.evaluate((el) => el.getAttribute('data-theme'))).toBe('dark');
+    const buttonTheme = (locator: Locator) =>
+      locator.evaluate((el) =>
+        (el as HTMLElement).shadowRoot?.querySelector('button')?.getAttribute('data-theme'),
+      );
+    // The rendered sink carries the instance's own resolved state.
+    expect(await buttonTheme(light)).toBe('light');
+    expect(await buttonTheme(dark)).toBe('dark');
 
     await light.locator('button').click();
-    await expect
-      .poll(() => light.evaluate((el) => el.getAttribute('data-theme')), { timeout: 10_000 })
-      .toBe('dark');
-    expect(await dark.evaluate((el) => el.getAttribute('data-theme'))).toBe('dark');
+    await expect.poll(() => buttonTheme(light), { timeout: 10_000 }).toBe('dark');
+    // The other instance keeps its own state; only its host attribute follows
+    // the document broadcast (the manager owns that attribute on every host).
+    expect(await buttonTheme(dark)).toBe('dark');
     expect(await docTheme(page)).toBe('dark');
     expect(await storedTheme(page)).toBe('dark');
 
     await dark.locator('button').click();
-    await expect
-      .poll(() => dark.evaluate((el) => el.getAttribute('data-theme')), { timeout: 10_000 })
-      .toBe('light');
-    expect(await light.evaluate((el) => el.getAttribute('data-theme'))).toBe('dark');
+    await expect.poll(() => buttonTheme(dark), { timeout: 10_000 }).toBe('light');
+    expect(await buttonTheme(light)).toBe('dark');
     expect(await docTheme(page)).toBe('light');
     expect(await storedTheme(page)).toBe('light');
   });

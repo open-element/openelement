@@ -87,7 +87,7 @@ binding provenance (the ADR-0180 recognition pattern); none of them is a runtime
 dispatcher, a hook-order slot, a second lifecycle engine or a class adapter.
 
 1. **Lifecycle `env`.** `onConnect` and `onDispose` callbacks receive
-   `env = { host, signal }`. `host` is the owning generated custom element for a
+   `env = { host, signal, states }`. `host` is the owning generated custom element for a
    root, and the nearest ancestor generated element host for a nested hostless
    child. `signal` is an `AbortSignal` valid for one connection and aborted on
    disconnect (a reconnect gets a new signal). Zero-argument callbacks remain
@@ -234,7 +234,7 @@ claim. The owner may accept or revert it.
 | --- | --- |
 | Call site | A direct top-level `onPropertyChange(cb)` in the generated-element root setup, admitted by the same binding-provenance rule as the lifecycle intrinsics (a canonical named import of `@openelement/element`, aliases followed). |
 | Callback form | One inline synchronous arrow/function expression; zero parameters or one event parameter. |
-| Event | `{ host, signal, name, value }` — the generated element (the nearest ancestor generated element for a depth-1 retained hostless child), the instance-lifetime teardown signal, the declared row's name, and its committed value. |
+| Event | `{ host, signal, states, name, value }` — the generated element (the nearest ancestor generated element for a depth-1 retained hostless child), the instance-lifetime teardown signal, the element's `CustomStateSet`, the declared row's name, and its committed value. |
 | Timing | After a DECLARED property commits a new value: a property write and an attribute write both fire it; an unchanged write does not. It never runs at setup. |
 | Ownership | One element-lifetime registration on the instance host record; cleared when the instance is destroyed (explicit teardown or a failed first connect). Setup runs once per instance, so a reconnect does not duplicate it. |
 | Byte identity | Emitted only for modules that use the intrinsic, and the registration channel is forwarded through host-record literals only for them. |
@@ -331,3 +331,19 @@ their bytes.
 
 Nothing in this record claims a stability promise, an owner sign-off, a gate or
 a release condition.
+
+## Migration record (2026-11-16): the second component, `open-code-block`
+
+`packages/ui/src/open-code-block.tsx` is a function component with a sidecar
+(`root: 'shadow'`, the authored stylesheet, and the property-only `copyLabel`
+row). It keeps the copy contract: the button reads the slotted light DOM, the
+clipboard promise writes `copyLabel`, the property-change callback owns the
+`:state(copied)` / `:state(failed)` feedback and the reset timer
+(`copy-feedback.ts`, a module helper — not component state), and `onDispose`
+cancels a pending reset. `@openelement/ui` no longer exports the
+`OpenCodeBlock` class; the authored function takes the name, the manifest/CEM
+declaration becomes generated, and the manual registration table drops the tag.
+
+Evidence: the www behaviour-matrix copy-control rows, the `::part(copy)`
+reachability row and both shipped colour-pair contrast rows against the real
+element; ui manifest/smoke suites. LOCAL.

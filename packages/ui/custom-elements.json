@@ -260,25 +260,19 @@
       "declarations": [
         {
           "kind": "class",
-          "name": "OpenCodeBlock",
+          "name": "OpenCodeBlockElement",
           "tagName": "open-code-block",
           "customElement": true,
           "description": "Code block with a copy button.",
-          "superclass": {
-            "name": "OpenElement",
-            "package": "@openelement/element"
-          },
           "members": [],
           "slots": [
             {
-              "name": "",
-              "description": "Default slot"
+              "name": ""
             }
           ],
           "cssParts": [
             {
-              "name": "copy",
-              "description": "The copy button"
+              "name": "copy"
             }
           ]
         }

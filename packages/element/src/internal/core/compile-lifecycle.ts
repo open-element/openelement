@@ -54,6 +54,7 @@ export function onConnect(
   callback: (env: {
     readonly host: HTMLElement;
     readonly signal: AbortSignal;
+    readonly states: CustomStateSet;
   }) => void | (() => void),
 ): void {
   void callback;
@@ -72,7 +73,11 @@ export function onConnect(
  * callback runs, so `env.signal.aborted` is `true` inside the callback.
  */
 export function onDispose(
-  callback: (env: { readonly host: HTMLElement; readonly signal: AbortSignal }) => void,
+  callback: (env: {
+    readonly host: HTMLElement;
+    readonly signal: AbortSignal;
+    readonly states: CustomStateSet;
+  }) => void,
 ): void {
   void callback;
   outsideCompiler('onDispose');
@@ -94,6 +99,7 @@ export function onPropertyChange(
   callback: (event: {
     readonly host: HTMLElement;
     readonly signal: AbortSignal;
+    readonly states: CustomStateSet;
     readonly name: string;
     readonly value: unknown;
   }) => void,

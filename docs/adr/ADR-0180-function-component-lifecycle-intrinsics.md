@@ -229,3 +229,27 @@ timer scheduler, observable or framework lifecycle context is introduced.
   change every existing hook module's bytes.
 - The retirement conditions above are unchanged. This amendment adds no third
   intrinsic, no lifecycle context, no dispatcher and no server path.
+
+## Amendment (2026-11-16): the `env.states` channel
+
+`onConnect`/`onDispose` callbacks and the `onPropertyChange` event expose the
+element's `CustomStateSet` (`ElementInternals.states`) as a readonly `states`
+field. It is what lets a generated component drive the `:state()` selectors its
+shadow stylesheet already targets (the `open-code-block` copy feedback), without
+a second styling channel.
+
+- The shell exposes it as the compiler-private non-enumerable host-record getter
+  `__oe_states`; the getter attaches the one-shot `ElementInternals` record on
+  first read (shared with the form and closed-root paths) and returns the live
+  set. A component that never reads it never attaches internals.
+- The generated connect/dispose env object and the shell-built change event both
+  carry it; the change event builds it lazily for the same reason.
+- Generated hosts also join the class lane's `themeManager` broadcast
+  (`data-theme` mirror on connect and on document changes): the shared component
+  sheet carries `:root, :host` light defaults whose dark overrides key off
+  `[data-theme]` on the host, so without the mirror a generated shadow root
+  would pin the light tokens in either theme.
+
+Evidence: `packages/compiler/__tests__/semantic-ir/generated-element.lifecycle.browser.test.ts`
+(C1b host theme broadcast, C9 `:state(changed)` from the change env) and the
+www behaviour-matrix contrast rows against the shipped code-block (LOCAL).

@@ -238,19 +238,16 @@
     },
     {
       "tagName": "open-code-block",
-      "className": "OpenCodeBlock",
-      "superclassName": "OpenElement",
+      "className": "OpenCodeBlockElement",
       "description": "Code block with a copy button.",
       "slots": [
         {
-          "name": "",
-          "description": "Default slot"
+          "name": ""
         }
       ],
       "cssParts": [
         {
-          "name": "copy",
-          "description": "The copy button"
+          "name": "copy"
         }
       ],
       "openElement": {
@@ -260,13 +257,17 @@
         "hydrate": "idle",
         "status": "stable",
         "module": "@openelement/ui/open-code-block",
-        "export": "OpenCodeBlock",
+        "export": "OpenCodeBlockElement",
         "tailwind": {
           "required": true,
           "sources": [
             "./src/theme.css"
           ]
-        }
+        },
+        "root": "shadow",
+        "styles": [
+          "./open-code-block.css"
+        ]
       }
     },
     {

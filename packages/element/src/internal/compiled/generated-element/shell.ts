@@ -135,6 +135,11 @@ import {
 } from '@openelement/protocol/errors';
 import type { RootMode } from '@openelement/protocol/part-program';
 import { OpenElementBase } from '../../../open-element-base.ts';
+// The class lane's theme broadcaster: it mirrors the document's `data-theme`
+// onto every connected host (and keeps it in sync), which is what makes the
+// shared token sheet's `:host([data-theme])` overrides apply inside a shadow
+// root. A generated host links the same sheet, so it joins the same manager.
+import { themeManager } from '../../../open-element-styles.ts';
 import { ElementFormController } from '../../../open-element-form.ts';
 import {
   coercePropertyValue,
@@ -1243,11 +1248,16 @@ function notifyPropertyChange(element: HTMLElement, state: ElementState, name: s
   const listeners = state.propertyChangeCallbacks;
   if (listeners.length === 0) return;
   const signal = state.instance?.signal ?? new AbortController().signal;
+  // `states` is a getter so the one-shot ElementInternals record is attached
+  // only for a component that actually reads it.
   const event = {
     host: element,
     signal,
     name,
     value: state.values.get(name),
+    get states(): CustomStateSet {
+      return ensureFormInternals(element, state).states;
+    },
   };
   let firstError: unknown;
   let failed = false;
@@ -1415,10 +1425,19 @@ const HOST_ELEMENT_PROPERTY = '__oe_hostElement';
  */
 const PROPERTY_CHANGE_PROPERTY = '__oe_onPropertyChange';
 
+/**
+ * The compiler-private runtime property that exposes the element's
+ * `CustomStateSet` (`ElementInternals.states`) to a generated component's env.
+ * A getter: the one-shot internals record is attached on first read, so an
+ * element that never touches custom states pays nothing.
+ */
+const INTERNALS_STATES_PROPERTY = '__oe_states';
+
 /** One registered change listener (the env is built by the shell). */
 type PropertyChangeListener = (event: {
   readonly host: HTMLElement;
   readonly signal: AbortSignal;
+  readonly states: CustomStateSet;
   readonly name: string;
   readonly value: unknown;
 }) => void;
@@ -1430,6 +1449,25 @@ function withHostElement<T extends object>(record: T, element: HTMLElement): T {
     enumerable: false,
     configurable: false,
     writable: false,
+  });
+  return record;
+}
+
+/**
+ * Attach the element's custom-state channel to a host record. The getter
+ * attaches `ElementInternals` on first read (the record is shared with the form
+ * and closed-root paths, so a second attach is impossible) and returns the
+ * live `CustomStateSet`.
+ */
+function withInternalsStates<T extends object>(
+  record: T,
+  element: HTMLElement,
+  state: ElementState,
+): T {
+  Object.defineProperty(record, INTERNALS_STATES_PROPERTY, {
+    get: () => ensureFormInternals(element, state).states,
+    enumerable: false,
+    configurable: false,
   });
   return record;
 }
@@ -1456,24 +1494,28 @@ function hostFor(
   state: ElementState,
   element: HTMLElement,
 ): GeneratedElementHost<Record<string, unknown>> {
-  return withPropertyChangeChannel(
-    withHostElement(
-      {
-        // `ensureInstance` publishes the retained setup record before this host is
-        // built; the empty fallback keeps the contract total for a hand-built
-        // descriptor that names neither factory.
-        bindings: state.bindings ?? {},
-        // The one logical instance (LC-2 nesting): the generated root body opens a
-        // pass on it and retains direct hostless children. Omitted while no
-        // instance exists (hand-built descriptor without createInstance); the
-        // retention path is only emitted for a generated root, whose instance is
-        // always established before this host is built.
-        instance: state.instance ?? undefined,
-        props: state.props,
-        propsChanged: state.propsChanged,
-      },
-      element,
+  return withInternalsStates(
+    withPropertyChangeChannel(
+      withHostElement(
+        {
+          // `ensureInstance` publishes the retained setup record before this host is
+          // built; the empty fallback keeps the contract total for a hand-built
+          // descriptor that names neither factory.
+          bindings: state.bindings ?? {},
+          // The one logical instance (LC-2 nesting): the generated root body opens a
+          // pass on it and retains direct hostless children. Omitted while no
+          // instance exists (hand-built descriptor without createInstance); the
+          // retention path is only emitted for a generated root, whose instance is
+          // always established before this host is built.
+          instance: state.instance ?? undefined,
+          props: state.props,
+          propsChanged: state.propsChanged,
+        },
+        element,
+      ),
+      state,
     ),
+    element,
     state,
   );
 }
@@ -1482,14 +1524,18 @@ function instanceHostFor(
   state: ElementState,
   element: HTMLElement,
 ): GeneratedElementInstanceHost<Record<string, unknown>> {
-  return withPropertyChangeChannel(
-    withHostElement(
-      {
-        props: state.props,
-        propsChanged: state.propsChanged,
-      },
-      element,
+  return withInternalsStates(
+    withPropertyChangeChannel(
+      withHostElement(
+        {
+          props: state.props,
+          propsChanged: state.propsChanged,
+        },
+        element,
+      ),
+      state,
     ),
+    element,
     state,
   );
 }
@@ -1780,6 +1826,11 @@ export function createGeneratedElementClass<P extends object = Record<string, un
     connectedCallback(): void {
       const state = stateOf(this);
       if (state.projection !== null || state.connecting) return;
+      // Join the document-theme broadcast before any paint decision: the shared
+      // component sheet carries `:root, :host` light defaults, and its dark
+      // overrides key off `[data-theme]` on the host. Without the mirror a
+      // generated shadow root would pin the light tokens in either theme.
+      themeManager.connect(this);
       // The one-shot ElementInternals record must exist before closed-root
       // discovery; attach it before any property reconciliation so a form value
       // write during reconciliation can publish immediately. A coded failure
@@ -1870,6 +1921,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
 
     disconnectedCallback(): void {
       const state = stateOf(this);
+      themeManager.disconnect(this);
       const projection = state.projection;
       const connection = state.connection;
       state.projection = null;
