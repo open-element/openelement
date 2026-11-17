@@ -57,7 +57,22 @@ function readFixture(file: string): string {
 }
 
 test('declines class-authored modules and leaves the class branch byte-identical', () => {
-  const classSource = readFileSync(new URL('src/open-button.tsx', UI_ROOT), 'utf8');
+  // The subject is an INLINE class-authored module, not a file under src/:
+  // every shipped component migrated to the generated lane (open-button and
+  // open-input were the last two), so the repository no longer contains a
+  // class-authored component to point at. The class branch itself is still
+  // live and still shared, and this is the module that proves it.
+  const classSource = [
+    "import { element, OpenElement } from '@openelement/element';",
+    '',
+    "@element('open-button', { root: 'shadow-open' })",
+    'export class XLegacy extends OpenElement {',
+    '  render(): unknown {',
+    '    return <div>legacy</div>;',
+    '  }',
+    '}',
+    '',
+  ].join('\n');
   // The projection is not the class path: a class-authored module is declined,
   // so generator dispatch keeps it on the untouched class branch.
   expect(
@@ -66,17 +81,18 @@ test('declines class-authored modules and leaves the class branch byte-identical
     kind: 'declined',
   });
 
-  // A relocated class module still produces today's declaration byte-for-byte
+  // A relocated class module produces the class-branch declaration shape
   // (the class branch is shared, not duplicated for fixtures).
   const tempRoot = mkdtempSync(join(tmpdir(), 'ui-manifest-class-'));
   try {
     writeFileSync(join(tempRoot, 'open-button.tsx'), classSource);
     const fixtureRootManifest = buildManifestFromRoot(pathToFileURL(`${tempRoot}/`));
-    const shipped = buildManifest();
-    expect(fixtureRootManifest.declarations).toEqual(
-      shipped.declarations.filter((declaration) => declaration.tagName === 'open-button'),
-    );
     expect(fixtureRootManifest.declarations).toHaveLength(1);
+    const [declaration] = fixtureRootManifest.declarations;
+    expect(declaration.tagName).toEqual('open-button');
+    // The class branch is what carries the superclass fact; the generated
+    // branch deliberately has none (its class extends a non-public base).
+    expect(declaration.superclassName).toEqual('OpenElement');
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -145,7 +161,7 @@ test('the fixture root is not part of the shipped manifest (tracked bytes unchan
   );
 });
 
-test('the tracked CEM is unchanged and keeps the class-authored superclass', () => {
+test('the tracked CEM is unchanged and carries no public superclass for any component', () => {
   const projected = buildCustomElementsManifest();
   validateCustomElementsManifest(projected);
   expect(formatJson(projected)).toEqual(
@@ -157,21 +173,16 @@ test('the tracked CEM is unchanged and keeps the class-authored superclass', () 
     for (const declaration of module.declarations) {
       expect(declaration.kind).toEqual('class');
       expect(declaration.customElement).toEqual(true);
-      if (
-        declaration.tagName === 'open-theme-toggle' ||
-        declaration.tagName === 'open-code-block' ||
-        declaration.tagName === 'open-dialog' ||
-        declaration.tagName === 'open-dropdown' ||
-        declaration.tagName === 'open-input'
-      ) {
-        // The generated declaration has no truthful public superclass: the
-        // emitted class extends the non-public OpenElementBase.
-        expect('superclass' in declaration).toEqual(false);
-        continue;
-      }
-      // The class-authored corpus keeps its truthful public superclass.
-      expect(declaration.superclass?.name).toEqual('OpenElement');
-      expect(declaration.superclass?.package).toEqual('@openelement/element');
+      // EVERY published component now rides the generated lane (open-button and
+      // open-input were the last two class-authored modules), so none of them
+      // has a truthful public superclass: the emitted class extends the
+      // non-public OpenElementBase. The class branch still emits `OpenElement`
+      // for a class-authored module — pinned by the "declines class-authored
+      // modules" row above with a class-shaped source.
+      expect(
+        'superclass' in declaration,
+        `${String(declaration.tagName)} must not name a public superclass`,
+      ).toEqual(false);
     }
   }
 });

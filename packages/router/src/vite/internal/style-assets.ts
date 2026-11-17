@@ -61,6 +61,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type { Plugin, ViteDevServer } from 'vite';
 import {
+  analyzeModuleSemantics,
   type ClassCandidateRegistry,
   compileElementModule,
   compileServerComponentIfAdmitted,
@@ -75,6 +76,7 @@ import {
   styleRequestsForImporter,
 } from '@openelement/compiler';
 import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
+import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
 import { createServerComponentSourceResolver } from './server-component-host.ts';
 import type { IslandStyleDeclaration } from './island-style-declarations.ts';
 import { walkModuleGraph } from './module-graph-walk.ts';
@@ -801,6 +803,14 @@ async function discoverServerRenderedModules(
       // and registering that absence keeps a deleted class from surviving an
       // edit (defect C).
       registerArtifactCandidates(source, file, candidates);
+      // A GENERATED element module is a component module too, but it reaches
+      // neither branch above: it declares no `@element` decorator (the class is
+      // compiler-emitted) and an uncompiled package ships the authored `.tsx`.
+      // Its admission identity is the island policy sidecar, and the manual-mode
+      // report below must count it — otherwise a generated package the app
+      // imports without admitting it is silently undelivered, which is exactly
+      // the failure that report exists to name.
+      if (moduleDeclaresGeneratedElement(source, file)) elementFiles.push(file);
       continue;
     }
     registerStyleEdges(file, artifact.requests, artifact.scopeTag);
@@ -884,6 +894,25 @@ function registerDeclaredIslandStyleEdges(): Map<string, RegisteredStyleRequest>
  * there), so the walk keeps its mouth shut — this report is the manual-mode
  * boundary.
  */
+/**
+ * Whether this module declares a GENERATED element: it carries the island
+ * policy sidecar the generated-element lane reads. The predicate is the
+ * compiler's own module-semantics fact, so every consumer (this walk, the auto
+ * admission derivation, the island scan) sees ONE definition of "component
+ * module" instead of re-deriving it from a decorator spelling.
+ */
+function moduleDeclaresGeneratedElement(source: string, file: string): boolean {
+  try {
+    return analyzeModuleSemantics(source, file, {
+      vocabulary: ROUTER_MODULE_VOCABULARY,
+    }).hasGeneratedElementSidecar;
+  } catch {
+    // An unparseable module is not evidence of a component; the compiler lane
+    // owns that refusal and reports it with its own code.
+    return false;
+  }
+}
+
 function reportUnadmittedComponentPackages(
   this: { warn(message: string): void; info(message: string): void },
   elementFiles: readonly string[],

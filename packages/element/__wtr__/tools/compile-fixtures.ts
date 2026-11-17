@@ -81,6 +81,12 @@ const fixtures: FixtureSpec[] = [
     out: 'open-input.ts',
     generatedSite: 'open-input',
   },
+  {
+    source: join(elementPkg, '../ui/src/open-button.tsx'),
+    id: 'open-button.tsx',
+    out: 'open-button.ts',
+    generatedSite: 'open-button',
+  },
 ];
 
 const outDir = join(suite, 'generated');

@@ -7,14 +7,10 @@
       "declarations": [
         {
           "kind": "class",
-          "name": "OpenButton",
+          "name": "OpenButtonElement",
           "tagName": "open-button",
           "customElement": true,
-          "description": "Button or link control: an `href` property switches the compiled anchor branch (no-JS navigation survives SSR), `variant`/`size` pick the styled surface, and the disabled state follows the reflected host attribute.",
-          "superclass": {
-            "name": "OpenElement",
-            "package": "@openelement/element"
-          },
+          "description": "Button or link control with variant/size surfaces and form participation.",
           "members": [],
           "attributes": [
             {
@@ -22,43 +18,42 @@
               "type": {
                 "text": "string"
               },
-              "description": "variant attribute"
+              "default": "default"
             },
             {
               "name": "size",
               "type": {
                 "text": "string"
               },
-              "description": "size attribute"
+              "default": "md"
             },
             {
               "name": "disabled",
               "type": {
                 "text": "boolean"
               },
-              "default": "false",
-              "description": "disabled attribute"
+              "default": "false"
             },
             {
               "name": "href",
               "type": {
                 "text": "string"
               },
-              "description": "href attribute"
+              "default": ""
             },
             {
               "name": "target",
               "type": {
                 "text": "string"
               },
-              "description": "target attribute"
+              "default": ""
             },
             {
               "name": "type",
               "type": {
                 "text": "string"
               },
-              "description": "type attribute"
+              "default": "button"
             }
           ],
           "events": [
@@ -72,14 +67,12 @@
           ],
           "slots": [
             {
-              "name": "",
-              "description": "Default slot"
+              "name": ""
             }
           ],
           "cssParts": [
             {
-              "name": "control",
-              "description": "The visible button or anchor element"
+              "name": "control"
             }
           ]
         }

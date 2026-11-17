@@ -361,3 +361,54 @@ Firefox, WebKit).
 
 Not claimed: any change to the shell's timing, any new channel, and any 16b-LC
 row above. These are authoring facts about the lane as it stands.
+
+## 2026-11-17 amendment — auto-admission and candidate collection learn the generated lane (facts only)
+
+Migrating `open-button` (the last class-authored `@openelement/ui` component)
+exposed three places that answered "is this module a component module?" with the
+CLASS lane's predicate — `@element` decorator / compiled-program presence — and
+therefore stopped seeing a package whose components are generated.
+
+### The single fact
+
+`analyzeModuleSemantics` now reports `hasGeneratedElementSidecar`: the module
+carries the island policy statement (`export const openElement =
+defineIslandConfig({...})` / `defineComponentConfig({...})`). The statement
+locator moved to `compiler/src/internal/compiler/semantic-core/island-policy-statement.ts`
+so the generated-element lane and the module-semantics fact read ONE definition
+— two readers with their own locator would be the P6/P8 drift class.
+
+Deliberately NOT derived: the TAG. It stays the manifest's identity; the sidecar
+does not spell it, and the fact only answers the module-shape question.
+
+### The three consumers
+
+- **`derived-admission.ts`** (auto `packageIslands`): a package-owned module
+  counts as element evidence when it defines a decorator tag OR carries the
+  sidecar. Without this, importing `@openelement/ui/open-button` under auto
+  admission derived nothing and the component rendered as an unknown element
+  (measured: `<open-button variant="primary">probe</open-button>` with no DSD).
+- **`style-assets.ts`** (the manual-mode "imported but not admitted" report):
+  the element-file collection gains the same predicate, so a generated package
+  the app imports without admitting it is still named instead of silently
+  undelivered.
+- **Auto-admission derivation runs on the app's real render graph** — the fix
+  keeps that contract: no dependency-list or path heuristic was added.
+
+### Recorded gap (NOT fixed here)
+
+`collectShadowClassCandidates` still has no generated-lane branch: the
+generated compiler's result carries no `classCandidates`, because a generated
+component declares its utilities in the sidecar `styles` declarations and the
+build's stylesheet path reads them from there. Consequence: a *config-declared*
+generated component contributes no class candidates through that specific dev
+entry point. The shipped build is unaffected (it compiles the module through the
+generated lane and delivers the sheet), and the row that used to assert
+`contributed > 0` on `@openelement/ui/open-button` now asserts its two real
+contracts separately: package resolution (an authoritative entry, honestly
+empty) and candidate contribution (a class-authored component). Closing this gap
+belongs with the generated-lane candidate collector, not with admission.
+
+Evidence: `packages/router/__tests__/package-import-admission-probe.test.ts`
+(7/7, incl. the four install layouts and the manual-mode report) and
+`packages/router/__tests__/shadow-candidate-collection.test.ts` (4/4).

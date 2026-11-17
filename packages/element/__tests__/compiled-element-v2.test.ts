@@ -1548,51 +1548,61 @@ describe('compiled-element alpha15 - when-branch attribute sinks', () => {
 describe('compiled-element alpha15 - open-button single-slot structure (shipped source)', () => {
   // The shipped component is compiled verbatim — the same bytes the packages
   // ship — so the structure proof cannot drift from the artifact consumers
-  // install. The single-slot rewrite rides the when-branch attribute-sink
-  // unlock: one control element per branch, no hidden sibling, one delegated
-  // click listener on the static display:contents wrapper.
+  // install. open-button now rides the GENERATED lane (`defineComponentConfig`
+  // sidecar + function component), so the structure proof runs through that
+  // lane's emitter; the class-lane analyzer refuses the module by design
+  // (OEC9008, the island policy statement is the only admitted top-level
+  // runtime statement).
+  //
+  // What this row pins is unchanged from the alpha15 rewrite: the single-slot
+  // branch removed the two-sibling slot competition (PR #1611), so exactly ONE
+  // control element exists per state, there are no `hidden` picker sinks, and
+  // the click listener is delegated once on the static wrapper.
   const source = readFileSync(
     new URL('../../../packages/ui/src/open-button.tsx', import.meta.url),
     'utf8',
   );
 
-  test('the control pair compiles to one when Block with branch-owned sinks', () => {
-    const { program } = compileElementProgram(source, '/project/packages/ui/src/open-button.tsx');
-    const blocks = program.blocks;
-    expect(blocks.length, 'exactly one Block (the control when)').toEqual(1);
-    expect(blocks[0].kind).toEqual('when');
-
-    // No hidden sibling pickers: the two `hidden` bool sinks are gone with
-    // the two-slot structure.
-    const hiddenSinks = program.parts.filter(
-      (part: { k: string; name?: string }) => part.k === 'bool' && part.name === 'hidden',
+  test('the control pair compiles to one when branch with branch-owned sinks', async () => {
+    const { compileGeneratedElementIfAdmitted } =
+      await import('../../../packages/compiler/src/internal/compiler/semantic-ir/generated-element/compile.ts');
+    const compiled = compileGeneratedElementIfAdmitted(
+      source,
+      '/project/packages/ui/src/open-button.tsx',
+      {
+        site: { tag: 'open-button' },
+      },
     );
-    expect(hiddenSinks.length, 'no hidden sink survives the single-slot rewrite').toEqual(0);
+    expect(compiled, 'the shipped module is admitted by the generated lane').not.toBeNull();
+    const code = compiled!.code;
 
-    // Click handling is delegated once, on the static wrapper.
-    const eventParts = program.parts.filter((part: { k: string }) => part.k === 'event');
-    expect(eventParts.length, 'one delegated click listener').toEqual(1);
+    // One `when` branch: the two control elements are the then/else arms, never
+    // two siblings that coexist in the tree.
+    expect(code, 'a single when branch').toContain('MARKERS.when');
+    expect((code.match(/emitComment\(MARKERS\.when\)/g) ?? []).length).toEqual(1);
 
-    // The dynamic control attributes are branch-owned sinks.
-    const whenPart = program.parts.find((part: { k: string }) => part.k === 'when') as {
-      on: Array<{ attrs?: string[][] }>;
-      off: Array<{ attrs?: string[][] }>;
-    };
-    const sinkNames = (program.parts as Array<{ k: string; name?: string }>)
-      .filter((part) => part.k === 'attr' || part.k === 'bool' || part.k === 'prop')
-      .map((part) => part.name)
-      .sort();
-    expect(sinkNames).toEqual(['aria-disabled', 'disabled', 'href', 'rel', 'target', 'type']);
+    // No hidden sibling pickers survived the single-slot rewrite.
+    expect(code, 'no hidden sink').not.toMatch(/toggleAttribute\("hidden"/);
 
-    // Each branch carries exactly one slot (the single default slot per branch).
-    const slotCount = (branch: Array<{ attrs?: string[][] }>): number =>
-      branch.reduce(
-        (count, node) => count + (node.attrs?.some(([name]) => name === 'part') ? 1 : 0),
-        0,
-      );
-    expect(whenPart.on.length).toEqual(1);
-    expect(whenPart.off.length).toEqual(1);
-    expect(slotCount(whenPart.on), 'the button branch root').toEqual(1);
-    expect(slotCount(whenPart.off), 'the anchor branch root').toEqual(1);
+    // Click handling is delegated once PER PATH on the static wrapper: the
+    // generated lane emits a mount factory and a claim factory, so the same
+    // single delegated listener appears twice (one per path), never twice
+    // within a path.
+    expect((code.match(/addEventListener\("click"/g) ?? []).length).toEqual(2);
+
+    // Exactly one control element per branch, one default slot each.
+    const buttons = (code.match(/createElement\("button"\)/g) ?? []).length;
+    const anchors = (code.match(/createElement\("a"\)/g) ?? []).length;
+    const slots = (code.match(/createElement\("slot"\)/g) ?? []).length;
+    expect({ buttons, anchors }, 'one control element per branch').toEqual({
+      buttons: 2,
+      anchors: 2,
+    });
+    expect(slots, 'one default slot per branch (mount + claim)').toEqual(4);
+
+    // The dynamic control attributes are branch-owned sinks: the disabled row
+    // reaches the button branch, and the link's href is dropped when disabled.
+    expect(code).toMatch(/toggleAttribute\("disabled"/);
+    expect(code).toMatch(/props \. disabled \s*\?\s*null/);
   });
 });

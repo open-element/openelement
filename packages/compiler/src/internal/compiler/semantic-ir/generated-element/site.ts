@@ -37,6 +37,10 @@ import { camelToKebab, isSafeAttributeName } from '@openelement/protocol/forbidd
 import type { RootMode } from '@openelement/protocol/part-program';
 import { literalValue } from '../../semantic-core/analyze-module.ts';
 import { createModuleIntrinsicBindings } from '../../semantic-core/module-analysis.ts';
+import {
+  hasIslandPolicyStatement as locateIslandPolicyStatement,
+  islandPolicyObjectLiteral as locateIslandPolicyObjectLiteral,
+} from '../../semantic-core/island-policy-statement.ts';
 import { forbiddenSinkReason } from '@openelement/protocol/forbidden-sinks';
 import { type SourceSpan } from '../../semantic-core/scope-resolution.ts';
 import { type FunctionModelComponent } from '../../semantic-core/function-frontend.ts';
@@ -173,42 +177,16 @@ function hasModifier(node: ts.Node, kind: ts.SyntaxKind): boolean {
 }
 
 /**
- * The island policy statement, `export const openElement = defineIslandConfig({ ... })`.
- *
- * This is the STATEMENT shape validated by the class lane's
- * `isIslandConfigStatement`, with one deliberate difference: binding
- * provenance (which local name the injected static-sidecar descriptor binds)
- * is the host's admission decision and is not re-derived here. The compiler
- * package cannot import the router's `defineIslandConfig`; the host's site
- * predicate has already answered that question, and this check is the defense
- * in depth the `OEIR_GENERATED_ELEMENT_MISSING_SITE_MARKER` code names.
+ * The island policy statement locator lives in `semantic-core/island-policy-statement.ts`
+ * — ONE definition shared with the module-semantics fact
+ * `hasGeneratedElementSidecar`, so the two readers cannot disagree about which
+ * statement is the policy. Re-exported through explicit forwarding bindings (not
+ * `export { ... } from`) because the bundler's re-export handling of a name this
+ * module ALSO imports left the inner call site unbound.
  */
-export function hasIslandPolicyStatement(sourceFile: ts.SourceFile): boolean {
-  return islandPolicyObjectLiteral(sourceFile) !== null;
-}
-
-/**
- * The one locator for the sidecar statement's config object literal. Both the
- * marker check and {@link readIslandRoot} read through it, so the two can never
- * disagree about which statement is the island policy.
- */
-function islandPolicyObjectLiteral(sourceFile: ts.SourceFile): ts.ObjectLiteralExpression | null {
-  for (const statement of sourceFile.statements) {
-    if (!ts.isVariableStatement(statement)) continue;
-    const modifiers = ts.getModifiers(statement) ?? [];
-    if (modifiers.length !== 1 || modifiers[0]!.kind !== ts.SyntaxKind.ExportKeyword) continue;
-    const declarations = statement.declarationList.declarations;
-    if (declarations.length !== 1) continue;
-    const declaration = declarations[0]!;
-    if (!ts.isIdentifier(declaration.name) || declaration.name.text !== 'openElement') continue;
-    const initializer = declaration.initializer;
-    if (initializer === undefined || !ts.isCallExpression(initializer)) continue;
-    if (initializer.arguments.length !== 1) continue;
-    const descriptor = initializer.arguments[0]!;
-    if (ts.isObjectLiteralExpression(descriptor)) return descriptor;
-  }
-  return null;
-}
+export const hasIslandPolicyStatement = (sourceFile: ts.SourceFile): boolean =>
+  locateIslandPolicyStatement(sourceFile);
+export const islandPolicyObjectLiteral = locateIslandPolicyObjectLiteral;
 
 /**
  * The result of reading the sidecar's `root` from the authored AST.

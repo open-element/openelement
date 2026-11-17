@@ -1220,7 +1220,7 @@
       },
       "declarations": {
         ".": {
-          "publicShapeSha256": "37dbac50a97c228916e7d3ad46558d48db45f3f810188c1bfa19ded06401f55d",
+          "publicShapeSha256": "21cb804a495bdf30917209d4530eb9c94b68ce765c9b343f8c491523e1c4a9ef",
           "publicSymbols": [
             "ClassCandidateRegistry=type:{all:{call:()=>array(string)};allLight:{call:()=>array(string)};allShadow:{call:()=>array(string)};forModule:{call:(moduleId:string)=>array(string)};has:{call:()=>union(false|true)};register:{call:(moduleId:string,candidates:array(string),options:{shadow:union(false|true)})=>void};remove:{call:(moduleId:string)=>void}}",
             "CompileElementResult=type:{classCandidates?:union(array(string)|undefined);code:string;map:{file:string;mappings:string;names:array(string);sources:array(string);sourcesContent:array(string);version:3;x_openElement?:unknown};program:PartProgramV2;styleRequests?:union(array(string)|undefined)}",
@@ -1230,7 +1230,7 @@
             "EmittedModuleDiagnostic=type:{character:number;code:number;file:string;line:number;message:string}",
             "EmittedModuleTypeCheckOptions=type:{compilerOptions?:union(CompilerOptions|undefined);extraFiles?:union(Readonly<Record<string, string>>|undefined);paths?:union(Record<string, string[]>|undefined)}",
             "GeneratedElementSite=type:{readonly tag:string}",
-            "ModuleSemanticFacts=type:{compiledElementDecorator:union(false|true);compilerInteractionEvents:array(string);defaultCompiledTag?:union(string|undefined);definePage:union(false|true);definedCustomElementTags:array(string);enhancedForm:union(false|true);exportedTagName?:union(string|undefined);moduleSpecifiers?:union(array(string)|undefined);pageComponentName?:union(string|undefined);referencedCustomElementTags:array(string);relativeImports:array(string);serverFunctionComponents:array(string);unsupportedElementDecorator?:union(string|undefined);usesExportedTagName:union(false|true)}",
+            "ModuleSemanticFacts=type:{compiledElementDecorator:union(false|true);compilerInteractionEvents:array(string);defaultCompiledTag?:union(string|undefined);definePage:union(false|true);definedCustomElementTags:array(string);enhancedForm:union(false|true);exportedTagName?:union(string|undefined);hasGeneratedElementSidecar:union(false|true);moduleSpecifiers?:union(array(string)|undefined);pageComponentName?:union(string|undefined);referencedCustomElementTags:array(string);relativeImports:array(string);serverFunctionComponents:array(string);unsupportedElementDecorator?:union(string|undefined);usesExportedTagName:union(false|true)}",
             "ModuleSemanticsOptions=type:{readonly collectSpecifiers?:union(false|true|undefined);readonly vocabulary?:union(array(ModuleVocabularyDescriptor)|undefined)}",
             "ModuleVocabularyDescriptor=type:ModuleVocabularyDescriptor",
             "PluginDiagnosticError=type:{diagnostics:array({character:number;code:string;end:number;file:string;line:number;message:string;start:number});frame:string;id:string;loc:{column:number;file:string;line:number};message:string}",
@@ -1238,7 +1238,7 @@
             "SemanticCoreOptions=type:{readonly staticSidecars?:union(array(StaticSidecarDescriptor)|undefined)}",
             "ServerComponentCompileOptions=type:{readonly compiledTags?:union(array(string)|undefined);readonly resolveModule?:union(undefined|{call:(specifier:string)=>union(string|undefined)})}",
             "StaticSidecarDescriptor=type:StaticSidecarDescriptor",
-            "analyzeModuleSemantics=value:{call:(source:string,fileName:string,options:{readonly collectSpecifiers?:union(false|true|undefined);readonly vocabulary?:union(array(ModuleVocabularyDescriptor)|undefined)})=>{compiledElementDecorator:union(false|true);compilerInteractionEvents:array(string);defaultCompiledTag?:union(string|undefined);definePage:union(false|true);definedCustomElementTags:array(string);enhancedForm:union(false|true);exportedTagName?:union(string|undefined);moduleSpecifiers?:union(array(string)|undefined);pageComponentName?:union(string|undefined);referencedCustomElementTags:array(string);relativeImports:array(string);serverFunctionComponents:array(string);unsupportedElementDecorator?:union(string|undefined);usesExportedTagName:union(false|true)}}",
+            "analyzeModuleSemantics=value:{call:(source:string,fileName:string,options:{readonly collectSpecifiers?:union(false|true|undefined);readonly vocabulary?:union(array(ModuleVocabularyDescriptor)|undefined)})=>{compiledElementDecorator:union(false|true);compilerInteractionEvents:array(string);defaultCompiledTag?:union(string|undefined);definePage:union(false|true);definedCustomElementTags:array(string);enhancedForm:union(false|true);exportedTagName?:union(string|undefined);hasGeneratedElementSidecar:union(false|true);moduleSpecifiers?:union(array(string)|undefined);pageComponentName?:union(string|undefined);referencedCustomElementTags:array(string);relativeImports:array(string);serverFunctionComponents:array(string);unsupportedElementDecorator?:union(string|undefined);usesExportedTagName:union(false|true)}}",
             "clearCompilerDiagnostics=value:{call:()=>void}",
             "clearStyleRequests=value:{call:()=>void}",
             "compileElementModule=value:{call:(code:string,id:string,options:{readonly staticSidecars?:union(array(StaticSidecarDescriptor)|undefined)})=>union(null|{classCandidates?:union(array(string)|undefined);code:string;map:{file:string;mappings:string;names:array(string);sources:array(string);sourcesContent:array(string);version:3;x_openElement?:unknown};program:PartProgramV2;styleRequests?:union(array(string)|undefined)})}",
@@ -1602,9 +1602,9 @@
       },
       "declarations": {
         ".": {
-          "publicShapeSha256": "5bde3dc03032b7c37a0fdee5efa5e15a7b97ba129f96413e8ed834eda1edb212",
+          "publicShapeSha256": "8b82424d5a310494da99dfa1b1b05191eb10c38ca5be7eabc4d64a59fa221c29",
           "publicSymbols": [
-            "OpenButton=type:{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};buttonMode:ReadonlySignal<boolean>;disabled:union(false|true);href:string;linkAriaDisabled:ReadonlySignal<string | null>;linkHref:ReadonlySignal<string | null>;linkRel:ReadonlySignal<string | null>;linkTarget:ReadonlySignal<string | null>;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown};size:string;target:string;type:string;variant:string}|value:{construct:()=>{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};buttonMode:ReadonlySignal<boolean>;disabled:union(false|true);href:string;linkAriaDisabled:ReadonlySignal<string | null>;linkHref:ReadonlySignal<string | null>;linkRel:ReadonlySignal<string | null>;linkTarget:ReadonlySignal<string | null>;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown};size:string;target:string;type:string;variant:string};styles:array(StyleSheetLike)}",
+            "OpenButton=value:{call:(props:{disabled:union(false|true);href:string;size:string;target:string;type:string;variant:string})=>any}",
             "OpenCodeBlock=value:{call:(props:{copyLabel:string})=>any}",
             "OpenDialog=value:{call:(props:{label:string;open:union(false|true)})=>any}",
             "OpenDropdown=value:{call:(props:{anchorName:string})=>any}",
@@ -1630,9 +1630,10 @@
           ]
         },
         "./open-button": {
-          "publicShapeSha256": "577705f0d88a59a824733557479543eede92a462d70c6a577130d2a5d2d993d9",
+          "publicShapeSha256": "c773c1e2e30e610538d730933ed7f780036fb6942b74d378e117df9a6b5b64b7",
           "publicSymbols": [
-            "OpenButton=type:{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};buttonMode:ReadonlySignal<boolean>;disabled:union(false|true);href:string;linkAriaDisabled:ReadonlySignal<string | null>;linkHref:ReadonlySignal<string | null>;linkRel:ReadonlySignal<string | null>;linkTarget:ReadonlySignal<string | null>;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown};size:string;target:string;type:string;variant:string}|value:{construct:()=>{attributeChangedCallback:{call:(name:string,old:union(null|string),val:union(null|string))=>void};buttonMode:ReadonlySignal<boolean>;disabled:union(false|true);href:string;linkAriaDisabled:ReadonlySignal<string | null>;linkHref:ReadonlySignal<string | null>;linkRel:ReadonlySignal<string | null>;linkTarget:ReadonlySignal<string | null>;onCsrRendered:{call:()=>void};onDsdHydrated:{call:()=>void};render:{call:()=>unknown};size:string;target:string;type:string;variant:string};styles:array(StyleSheetLike)}"
+            "default=value:{call:(props:{disabled:union(false|true);href:string;size:string;target:string;type:string;variant:string})=>any}",
+            "openElement=value:{delegatesFocus:true;formAssociated:true;properties:{disabled:{default:false;reflect:true};href:{default:string;reflect:true};size:{default:string;reflect:true};target:{default:string;reflect:true};type:{default:string;reflect:true};variant:{default:string;reflect:true}};root:\"shadow\";styles:array(string)}"
           ]
         },
         "./open-code-block": {

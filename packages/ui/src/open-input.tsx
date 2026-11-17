@@ -48,6 +48,14 @@ import { onConnect, onPropertyChange } from '@openelement/element';
 import { defineComponentConfig } from './component-config.ts';
 import { syncInputDisabled, syncInputValue, type InputHost } from './input-machine.ts';
 
+/**
+ * Platform facts for the generated element: shadow root with delegated focus,
+ * form association (value publication, required→valueMissing, reset/restore and
+ * the fieldset-effective disabled state are the SHELL's mapping), the authored
+ * stylesheet, and the eight declared property rows. Only `value` has no
+ * attribute wire — it is the live property the form contract and the compiled
+ * sinks read.
+ */
 export const openElement = defineComponentConfig({
   root: 'shadow',
   delegatesFocus: true,

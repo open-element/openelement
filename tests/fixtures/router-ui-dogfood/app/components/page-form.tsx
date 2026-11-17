@@ -44,6 +44,13 @@ export default class FormPage extends OpenElement {
         </form>
         <open-input id='invalid' label='Invalid' error='Required field'></open-input>
         <open-input id='native-disabled' label='Off' disabled></open-input>
+        {/* open-button's disabled contract, BOTH shapes, as real SSR entities
+            (e2e/ui-button.spec.ts). They live outside #dogfood-form on purpose:
+            a static disabled control inside it would change the FormData the
+            participation specs assert. */}
+        <open-button id='button-disabled' disabled>Disabled</open-button>
+        <open-button id='link-disabled' href='/roadmap/' disabled>Disabled link</open-button>
+        <open-button id='button-enabled'>Enabled</open-button>
         <form-probe></form-probe>
         <output id='form-output'></output>
       </main>

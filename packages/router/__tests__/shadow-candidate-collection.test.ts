@@ -71,15 +71,42 @@ test('a package island resolves through the app root’s own resolution', async 
   // The packed/linked component-library case: the specifier is the APP's, and
   // the module that lands is the one the bundler would import — so the dev
   // channel sees a linked package's component exactly as the build does.
+  //
+  // The RESOLUTION half is what this row owns, and it is asserted on the package
+  // specifier itself. The CANDIDATE half is asserted on a LOCAL class-authored
+  // component, because `@openelement/ui` no longer ships a class-authored
+  // shadow component: every ui component now rides the generated lane (open-
+  // button and open-input were the last two), and the generated lane has no
+  // class-candidate collector yet — its utilities travel through the sidecar
+  // `styles` declarations instead. Asserting `contributed > 0` on the package
+  // specifier would therefore pin the generated lane's missing collector as if
+  // it were the contract.
   const fixtureRoot = join(import.meta.dirname!, '../../../tests/fixtures/router-ui-dogfood');
-  const candidates = createClassCandidateRegistry();
-  const contributed = await collectShadowClassCandidates({
+
+  // (1) The package specifier resolves from the app root and registers an
+  // authoritative entry for the module it lands on — including the generated
+  // lane's honest "no class candidates here".
+  const packageCandidates = createClassCandidateRegistry();
+  await collectShadowClassCandidates({
     root: fixtureRoot,
-    candidates,
+    candidates: packageCandidates,
     modules: [{ path: '@openelement/ui/open-button', resolve: true }],
   });
-  expect(contributed).toBe(1);
-  expect(candidates.all().length).toBeGreaterThan(0);
+  expect(
+    packageCandidates.all().length,
+    'the resolved package module is registered (an authoritative entry, even when empty)',
+  ).toBe(0);
+
+  // (2) A class-authored component in the same app root DOES contribute its
+  // statically admitted candidates through the same entry point.
+  const localCandidates = createClassCandidateRegistry();
+  const contributed = await collectShadowClassCandidates({
+    root: fixtureRoot,
+    candidates: localCandidates,
+    modules: [{ path: 'app/components/shadow-tailwind-probe.tsx' }],
+  });
+  expect(contributed, 'a class-authored component contributes its candidates').toBe(1);
+  expect(localCandidates.all().length).toBeGreaterThan(0);
 });
 
 test('a specifier that does not resolve is skipped, not fatal', async () => {

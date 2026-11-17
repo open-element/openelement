@@ -161,16 +161,21 @@ export async function deriveAdmittedPackages(
       continue;
     }
     // The SAME compiler analysis the static-component scan uses, with the
-    // derivation's own predicate: a module that DEFINES a custom element
+    // derivation's own predicate: a module that DEFINES a custom element —
     // through the compiled element decorator (named exports included — a
-    // package component need not be the module's default export). The tag
-    // identity itself stays the manifest's; this fact only says "element
-    // module of this owner package". Never a path or import-list guess.
-    let defined: readonly string[] = [];
+    // package component need not be the module's default export), OR through
+    // the generated lane's island policy sidecar (a generated component never
+    // applies the decorator: its element class is compiler-emitted, and the
+    // sidecar statement is the whole authored identity). The tag identity
+    // itself stays the manifest's; this fact only says "element module of this
+    // owner package". Never a path or import-list guess.
+    let isElementModule = false;
     try {
-      defined = analyzeModuleSemantics(source, file, {
+      const semantics = analyzeModuleSemantics(source, file, {
         vocabulary: ROUTER_MODULE_VOCABULARY,
-      }).definedCustomElementTags;
+      });
+      isElementModule =
+        semantics.definedCustomElementTags.length > 0 || semantics.hasGeneratedElementSidecar;
     } catch (e) {
       notes.push({
         code: PackageAdmissionErrorCode.MODULE_UNREADABLE,
@@ -182,7 +187,7 @@ export async function deriveAdmittedPackages(
       });
       continue;
     }
-    if (defined.length === 0) continue;
+    if (!isElementModule) continue;
     staticOwners.add(packageName);
     owners.set(packageName, file);
     const packageRoot = owningPackageRoot(file, packageName);

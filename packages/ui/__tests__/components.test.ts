@@ -19,105 +19,91 @@ import { dialogHostWith, dropdownHostWith, fakeDialog, installDomHarness } from 
 
 installDomHarness();
 
-// oxlint-disable-next-line no-explicit-any
-type AnyComponent = any;
-
 // ─── open-button: click/form choreography (#637, #757) ──────────────────────
+//
+// The choreography now lives in `button-machine.ts` (a compiled component module
+// may carry no top-level helper, so the originated logic moved to a plain .ts
+// module verbatim). These rows keep driving it — same assertions, real subject —
+// with a host stub standing in for the generated element's declared rows.
 
-test('open-button: click dispatches open-click and submits an associated form', async () => {
-  const { OpenButton } = await import('../src/open-button.tsx');
-  const btn = new (OpenButton as unknown as new () => AnyComponent)();
+import { activateButton, type ButtonHost } from '../src/button-machine.ts';
 
-  const events: string[] = [];
-  const fakeForm = {
+/** A host stub: the declared rows plus the event/dispatch surface the helper reads. */
+function buttonHost(rows: Partial<ButtonHost> = {}): ButtonHost {
+  const listeners = new Set<(event: Event) => void>();
+  return Object.assign(new EventTarget(), {
+    disabled: false,
+    href: '',
+    type: 'button',
+    closest: () => null,
+    ...rows,
+    addEventListener: (type: string, listener: (event: Event) => void) => {
+      if (type === 'open-click') listeners.add(listener);
+    },
+    dispatchEvent: (event: Event) => {
+      if (event.type === 'open-click') for (const listener of listeners) listener(event);
+      return true;
+    },
+  }) as unknown as ButtonHost;
+}
+
+function fakeForm(events: string[], prevent = false): HTMLFormElement {
+  return {
     tagName: 'FORM',
-    dispatchEvent: (e: Event) => {
-      events.push(e.type);
+    dispatchEvent: (event: Event) => {
+      if (prevent) event.preventDefault();
+      events.push(event.type);
       return true;
     },
     reset: () => events.push('reset'),
     requestSubmit: () => events.push('requestSubmit'),
-  };
+  } as unknown as HTMLFormElement;
+}
+
+test('open-button: click dispatches open-click and submits an associated form', () => {
+  const events: string[] = [];
+  const host = buttonHost({ type: 'submit', closest: () => fakeForm(events) });
   let openClickSeen = false;
-  btn.addEventListener('open-click', () => {
+  host.addEventListener('open-click', () => {
     openClickSeen = true;
   });
-  btn.closest = () => fakeForm;
-  btn.type = 'submit';
-  btn.handleClick(new Event('click'));
+  const publish = () => host.dispatchEvent(new Event('open-click'));
+  activateButton(host, new Event('click'), publish);
   expect(openClickSeen, 'open-click must fire').toBeTruthy();
   expect(events).toEqual(['submit', 'requestSubmit']);
 });
 
-test('open-button: a prevented submit skips requestSubmit', async () => {
-  const { OpenButton } = await import('../src/open-button.tsx');
-  const btn = new (OpenButton as unknown as new () => AnyComponent)();
+test('open-button: a prevented submit skips requestSubmit', () => {
   const events: string[] = [];
-  const fakeForm = {
-    tagName: 'FORM',
-    dispatchEvent: (e: Event) => {
-      e.preventDefault();
-      events.push(e.type);
-      return true;
-    },
-    reset: () => events.push('reset'),
-    requestSubmit: () => events.push('requestSubmit'),
-  };
-  btn.closest = () => fakeForm;
-  btn.type = 'submit';
-  btn.handleClick(new Event('click'));
+  const host = buttonHost({ type: 'submit', closest: () => fakeForm(events, true) });
+  activateButton(host, new Event('click'), () => {});
   expect(events).toEqual(['submit']);
 });
 
-test('open-button: type=reset resets the form; anchor branch never touches forms (#637)', async () => {
-  const { OpenButton } = await import('../src/open-button.tsx');
-  const btn = new (OpenButton as unknown as new () => AnyComponent)();
+test('open-button: type=reset resets the form; anchor branch never touches forms (#637)', () => {
   const events: string[] = [];
-  const fakeForm = {
-    tagName: 'FORM',
-    dispatchEvent: (e: Event) => {
-      events.push(e.type);
-      return true;
-    },
-    reset: () => events.push('reset'),
-    requestSubmit: () => events.push('requestSubmit'),
-  };
-  btn.closest = () => fakeForm;
-  btn.type = 'reset';
-  btn.handleClick(new Event('click'));
+  const reset = buttonHost({ type: 'reset', closest: () => fakeForm(events) });
+  activateButton(reset, new Event('click'), () => {});
   expect(events).toEqual(['reset']);
 
-  // Anchor branch: navigation control, not a form control.
-  const anchor = new (OpenButton as unknown as new () => AnyComponent)();
-  anchor.closest = () => fakeForm;
-  anchor.href = '/go';
-  anchor.type = 'submit';
-  anchor.handleClick(new Event('click'));
-  expect(events).toEqual(['reset']);
+  // Anchor branch: a navigation control, not a form control.
+  const anchor = buttonHost({ href: '/go', type: 'submit', closest: () => fakeForm(events) });
+  activateButton(anchor, new Event('click'), () => {});
+  expect(events, 'the anchor branch must not submit').toEqual(['reset']);
 });
 
-test('open-button: disabled click prevents default and fires nothing (#757)', async () => {
-  const { OpenButton } = await import('../src/open-button.tsx');
-  const btn = new (OpenButton as unknown as new () => AnyComponent)();
+test('open-button: disabled click prevents default and fires nothing (#757)', () => {
+  const events: string[] = [];
+  const host = buttonHost({ disabled: true, type: 'submit', closest: () => fakeForm(events) });
   let openClickSeen = false;
-  btn.addEventListener('open-click', () => {
+  host.addEventListener('open-click', () => {
     openClickSeen = true;
   });
-  const submits: string[] = [];
-  btn.closest = () => ({
-    dispatchEvent: (e: Event) => {
-      submits.push(e.type);
-      return true;
-    },
-    reset: () => {},
-    requestSubmit: () => {},
-  });
-  btn.disabled = true;
-  btn.type = 'submit';
   const event = new Event('click', { cancelable: true });
-  btn.handleClick(event);
+  const publish = () => host.dispatchEvent(new Event('open-click'));
+  activateButton(host, event, publish);
   expect(openClickSeen).toEqual(false);
-  expect(submits.length).toEqual(0);
+  expect(events.length).toEqual(0);
   expect(event.defaultPrevented).toEqual(true);
 });
 

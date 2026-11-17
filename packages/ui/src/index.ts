@@ -36,7 +36,7 @@
 export { readInstanceState, writeInstanceState } from './instance-state.ts';
 
 // Components
-export { OpenButton } from './open-button.tsx';
+export { default as OpenButton } from './open-button.tsx';
 export { default as OpenInput } from './open-input.tsx';
 export { default as OpenCodeBlock } from './open-code-block.tsx';
 // Authored function component; the element constructor is build-emitted and

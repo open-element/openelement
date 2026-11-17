@@ -11,40 +11,44 @@
   "declarations": [
     {
       "tagName": "open-button",
-      "className": "OpenButton",
-      "superclassName": "OpenElement",
-      "description": "Button or link control: an `href` property switches the compiled anchor branch (no-JS navigation survives SSR), `variant`/`size` pick the styled surface, and the disabled state follows the reflected host attribute.",
+      "className": "OpenButtonElement",
+      "description": "Button or link control with variant/size surfaces and form participation.",
       "attributes": [
         {
           "name": "variant",
           "type": "string",
-          "description": "variant attribute"
+          "default": "default",
+          "reflects": true
         },
         {
           "name": "size",
           "type": "string",
-          "description": "size attribute"
+          "default": "md",
+          "reflects": true
         },
         {
           "name": "disabled",
           "type": "boolean",
-          "description": "disabled attribute",
-          "default": "false"
+          "default": "false",
+          "reflects": true
         },
         {
           "name": "href",
           "type": "string",
-          "description": "href attribute"
+          "default": "",
+          "reflects": true
         },
         {
           "name": "target",
           "type": "string",
-          "description": "target attribute"
+          "default": "",
+          "reflects": true
         },
         {
           "name": "type",
           "type": "string",
-          "description": "type attribute"
+          "default": "button",
+          "reflects": true
         }
       ],
       "events": [
@@ -56,14 +60,12 @@
       ],
       "slots": [
         {
-          "name": "",
-          "description": "Default slot"
+          "name": ""
         }
       ],
       "cssParts": [
         {
-          "name": "control",
-          "description": "The visible button or anchor element"
+          "name": "control"
         }
       ],
       "openElement": {
@@ -73,13 +75,18 @@
         "hydrate": "load",
         "status": "stable",
         "module": "@openelement/ui/open-button",
-        "export": "OpenButton",
+        "export": "OpenButtonElement",
         "tailwind": {
           "required": true,
           "sources": [
             "./src/theme.css"
           ]
-        }
+        },
+        "root": "shadow",
+        "styles": [
+          "./open-button.css"
+        ],
+        "ssrHostExport": "OpenButton__ssrHost"
       }
     },
     {
