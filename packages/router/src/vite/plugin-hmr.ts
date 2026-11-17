@@ -81,6 +81,12 @@ export function createCompilerHooks(
       }
       return packageSites;
     },
+    // The declared-tag provider (alpha16 tag-source slice): the dev host reads
+    // the Phase 1 scan's map lazily because the scan runs in `buildStart` while
+    // this closure is built at plugin creation, and the island rescan replaces
+    // the map — reading it per call keeps the dev transform on the current
+    // facts instead of a snapshot taken before the first scan.
+    () => state.ctx.phase1.declaredElementTags,
   );
 
   const programShape = (program: unknown): string => {

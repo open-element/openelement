@@ -59,7 +59,10 @@ export const IslandErrorCode = {
   DESCRIPTOR_SHAPE: 'OE_ISLAND_DESCRIPTOR_SHAPE',
   /** `hydrate` / `media` disagree or name an unsupported strategy. */
   HYDRATE: 'OE_ISLAND_HYDRATE',
-  /** `tags`/`tagNames` are malformed or contradict each other. */
+  /**
+   * `tags`/`tagNames` are malformed or contradict each other, or a declared
+   * `tag` contradicts the tag the island's own path derives.
+   */
   TAGS: 'OE_ISLAND_TAGS',
   /** `exportNames` is malformed or names a tag outside the delivery set. */
   EXPORT_NAMES: 'OE_ISLAND_EXPORT_NAMES',

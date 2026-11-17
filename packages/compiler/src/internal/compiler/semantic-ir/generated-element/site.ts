@@ -36,7 +36,10 @@ import ts from 'typescript';
 import { camelToKebab, isSafeAttributeName } from '@openelement/protocol/forbidden-sinks';
 import type { RootMode } from '@openelement/protocol/part-program';
 import { literalValue } from '../../semantic-core/analyze-module.ts';
-import { createModuleIntrinsicBindings } from '../../semantic-core/module-analysis.ts';
+import {
+  createModuleIntrinsicBindings,
+  isCustomElementTag,
+} from '../../semantic-core/module-analysis.ts';
 import {
   hasIslandPolicyStatement as locateIslandPolicyStatement,
   islandPolicyObjectLiteral as locateIslandPolicyObjectLiteral,
@@ -171,6 +174,10 @@ function diagnosticAt(
   return { severity: 'error', code, message, span, origin: 'module' };
 }
 
+function tagDiagnostic(sourceFile: ts.SourceFile, node: ts.Node, message: string): IrDiagnostic {
+  return diagnosticAt(sourceFile, node, GENERATED_ELEMENT_DIAGNOSTIC.TAG_INVALID, message);
+}
+
 function hasModifier(node: ts.Node, kind: ts.SyntaxKind): boolean {
   if (!ts.canHaveModifiers(node)) return false;
   return (ts.getModifiers(node) ?? []).some((modifier) => modifier.kind === kind);
@@ -235,6 +242,18 @@ export interface IslandMetadataFacts {
    * that can see the root component's parameter.
    */
   readonly properties: readonly IslandPropertyDeclaration[] | undefined;
+  /**
+   * The custom-element tag the sidecar declares explicitly, or undefined when
+   * it declares none.
+   *
+   * This is the authored identity a module that is neither an island nor a
+   * package declaration can carry: the host's site resolver admits a module
+   * whose sidecar pins a tag, because no path convention or manifest owns its
+   * identity. The descriptor's tag still comes from the host site fact — this
+   * field is the input that resolver reads, never a second emitter source, so
+   * an emitted element and its registration cannot disagree.
+   */
+  readonly tag: string | undefined;
 }
 
 /**
@@ -702,6 +721,12 @@ function readIslandPropertyTable(
  * mapping to `shadow-closed` exists here. `delegatesFocus: true` requires
  * `root: 'shadow'`, exactly as the scanner and the runtime authoring surface
  * enforce it: a light root has no shadow boundary to delegate focus through.
+ *
+ * `tag` is the sidecar's EXPLICIT custom-element identity. It is read here so
+ * the host site resolver can admit a module that is neither an island nor a
+ * package declaration (a page-local component under `app/site-ui/`); the
+ * descriptor still takes its tag from the host site fact, so this read is the
+ * resolver's input, never a second emitter source.
  */
 export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRead {
   const descriptor = islandPolicyObjectLiteral(sourceFile);
@@ -717,6 +742,8 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
   let formAssociated = false;
   let seenProperties = false;
   let properties: readonly IslandPropertyDeclaration[] | undefined;
+  let seenTag = false;
+  let tag: string | undefined;
   for (const property of descriptor.properties) {
     // A spread, a shorthand, a method or a computed key makes the object's key
     // set unprovable: a platform fact could hide behind it, so nothing is read.
@@ -808,6 +835,49 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
       properties = read.declarations;
       continue;
     }
+    if (name === 'tag') {
+      // The authored identity for a module no path convention or manifest
+      // owns. Static-literal only, and screened by the ONE tag predicate the
+      // module analysis already applies to JSX references: a dynamic or
+      // malformed spelling must refuse here rather than become an element the
+      // platform rejects at `customElements.define`.
+      if (seenTag) {
+        return {
+          kind: 'refused',
+          diagnostic: tagDiagnostic(
+            sourceFile,
+            property,
+            'the openElement sidecar declares tag more than once, so the tag fact is ambiguous',
+          ),
+        };
+      }
+      seenTag = true;
+      const initializer = property.initializer;
+      if (!ts.isStringLiteral(initializer)) {
+        return {
+          kind: 'refused',
+          diagnostic: tagDiagnostic(
+            sourceFile,
+            initializer,
+            'openElement.tag must be a static literal, got dynamic value ' +
+              `"${initializer.getText(sourceFile)}"`,
+          ),
+        };
+      }
+      if (!isCustomElementTag(initializer.text)) {
+        return {
+          kind: 'refused',
+          diagnostic: tagDiagnostic(
+            sourceFile,
+            initializer,
+            `openElement.tag "${initializer.text}" is not a valid custom-element name; ` +
+              'use a lowercase hyphenated name such as "open-page-rail"',
+          ),
+        };
+      }
+      tag = initializer.text;
+      continue;
+    }
     if (name === 'formAssociated') {
       if (seenFormAssociated) {
         return {
@@ -888,7 +958,7 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
   }
   return {
     kind: 'read',
-    facts: { root, delegatesFocus, formAssociated, declaresStyles, styles, properties },
+    facts: { tag, root, delegatesFocus, formAssociated, declaresStyles, styles, properties },
   };
 }
 
@@ -1924,6 +1994,7 @@ export function admitGeneratedElementSite(
           declaresStyles: false,
           styles: [],
           properties: undefined,
+          tag: undefined,
         };
   const propertiesAdmission = admitGeneratedElementProperties(
     sourceFile,

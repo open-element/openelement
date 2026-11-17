@@ -53,6 +53,13 @@ interface Facts {
   readonly delegatesFocus: boolean;
   readonly formAssociated: boolean;
   readonly properties: readonly (readonly [string, PropertyFacts])[] | undefined;
+  /**
+   * The declared explicit tag (alpha16 tag-source slice). It is compared too,
+   * because it is the fact the site resolver ranks above the path convention:
+   * one reader accepting a spelling the other refuses would let a module be
+   * admitted to the lane with an identity its own scan does not agree with.
+   */
+  readonly tag: string | undefined;
 }
 
 /**
@@ -76,6 +83,7 @@ function scannerOutcome(source: string): Outcome {
         formAssociated: config?.formAssociated === true,
         properties:
           config?.properties === undefined ? undefined : Object.entries(config.properties),
+        tag: config?.tag,
       },
     };
   } catch (error) {
@@ -96,6 +104,7 @@ function compilerOutcome(source: string): Outcome {
         delegatesFocus: false,
         formAssociated: false,
         properties: undefined,
+        tag: undefined,
       },
     };
   }
@@ -128,6 +137,7 @@ function compilerOutcome(source: string): Outcome {
       delegatesFocus: read.facts.delegatesFocus,
       formAssociated: read.facts.formAssociated,
       properties,
+      tag: read.facts.tag,
     },
   };
 }
@@ -348,6 +358,21 @@ ${module('properties: { count: { default: defaultValue } }')}`,
     name: 'invalid (duplicate formAssociated)',
     source: module('formAssociated: true, formAssociated: false'),
   },
+  // The declared explicit tag (alpha16 tag-source slice): the two readers must
+  // agree on what a valid declaration is, because the resolver ranks it above
+  // the path convention.
+  { name: 'declared tag', source: module("tag: 'profile-card'") },
+  {
+    name: 'declared tag beside the delivery policy',
+    source: module("hydrate: 'idle', tag: 'profile-card'"),
+  },
+  {
+    name: 'invalid (dynamic tag)',
+    source: `const configuredTag = 'profile-card';\n${module('tag: configuredTag')}`,
+  },
+  { name: 'invalid (unhyphenated tag)', source: module("tag: 'profilecard'") },
+  { name: 'invalid (non-string tag literal)', source: module('tag: 1') },
+  { name: 'invalid (duplicate tag)', source: module("tag: 'profile-card', tag: 'other-card'") },
 ];
 
 test('both readers agree on every corpus entry (the drift guard)', () => {
@@ -364,6 +389,7 @@ test('both readers agree on every corpus entry (the drift guard)', () => {
         scanner.facts.root !== compiler.facts.root ||
         scanner.facts.delegatesFocus !== compiler.facts.delegatesFocus ||
         scanner.facts.formAssociated !== compiler.facts.formAssociated ||
+        scanner.facts.tag !== compiler.facts.tag ||
         JSON.stringify(scanner.facts.properties) !== JSON.stringify(compiler.facts.properties)
       );
     })

@@ -865,6 +865,23 @@ export interface IslandConfig {
   tagNames?: readonly string[];
   /** Named constructor exports keyed by delivered custom-element tag. */
   exportNames?: Readonly<Record<string, string>>;
+  /**
+   * The generated element's custom-element tag, declared EXPLICITLY.
+   *
+   * An island's tag is its file path's (`pathToTagName`) and a package
+   * component's is its manifest declaration. A page-local component under a
+   * directory neither convention owns (e.g. `app/site-ui/`) has no tag source
+   * at all, so the build's generated-element site resolver declines it and the
+   * module never compiles. Declaring the tag here is the authored identity that
+   * admits such a module.
+   *
+   * Rank: the package manifest (the most explicit published identity) first,
+   * then this declared tag, then the path convention. A module the path
+   * convention already owns must declare this field only when it agrees with
+   * the derived tag — the build refuses a disagreement rather than ship an
+   * element whose descriptor and registration disagree.
+   */
+  tag?: string;
 }
 
 const ISLAND_CONFIG_FIELDS = new Set([
@@ -880,6 +897,7 @@ const ISLAND_CONFIG_FIELDS = new Set([
   'tags',
   'tagNames',
   'exportNames',
+  'tag',
 ]);
 const ISLAND_DELIVERY_STRATEGIES = [...HYDRATION_STRATEGIES, 'media'] as const;
 const HYDRATION_STRATEGY_SET: ReadonlySet<string> = new Set(ISLAND_DELIVERY_STRATEGIES);
@@ -1218,6 +1236,16 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
     );
   }
   if (config.properties !== undefined) validateIslandProperties(config.properties);
+  if (config.tag !== undefined && !isValidTagName(config.tag)) {
+    // The same platform predicate the generated lane's sidecar read applies:
+    // this face exists to tell the author early, and one rule keeps the two
+    // readers from accepting different spellings.
+    throw authoringError(
+      IslandErrorCode.TAGS,
+      `${ERROR_PREFIX} defineIslandConfig() tag "${String(config.tag)}" is not a valid ` +
+        "custom-element name. Write tag: 'open-page-rail' — a lowercase hyphenated name.",
+    );
+  }
   const tags = config.tags === undefined ? undefined : validateIslandTags(config.tags, 'tags');
   const tagNames =
     config.tagNames === undefined ? undefined : validateIslandTags(config.tagNames, 'tagNames');

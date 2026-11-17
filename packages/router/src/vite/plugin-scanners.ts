@@ -40,6 +40,7 @@ import type { OpenPluginState } from './plugin-config.ts';
 import type { ModuleWalkResolver } from './internal/module-graph-walk.ts';
 import { collectShadowClassCandidates } from './internal/collect-shadow-candidates.ts';
 import { serverComponentAdmissionTags } from './internal/server-component-host.ts';
+import { scanDeclaredElementTags } from './internal/ssg/declared-element-tags.ts';
 import {
   deriveAdmittedPackages,
   mergeAdmittedManifests,
@@ -338,6 +339,71 @@ function syncDerivedNoExternal(
   }
 }
 
+/**
+ * Read every reachable module's sidecar-declared tag into ctx (the
+ * generated-element site resolver's second source).
+ *
+ * The seeds are the same three the package-admission derivation walks (page
+ * routes, local islands, layout modules), so one reachability convention covers
+ * the app's whole authored graph. A page-local component (`app/site-ui/…`) is
+ * reached through its importing route, which is exactly the module the scan
+ * needs to see. The walk's own boundaries ride the build-diagnostics envelope:
+ * a partial map is a reported fact, never a silent one.
+ */
+async function scanDeclaredTagsInto(
+  state: OpenPluginState,
+  routes: readonly RouteEntry[],
+): Promise<void> {
+  const resolve = state.resolveModule;
+  const root = state.viteRoot ?? process.cwd();
+  const routesDir = state.resolvedOptions.routesDir!;
+  const islandsDir = state.resolvedOptions.islandsDir || DEFAULT_ISLANDS_DIR;
+  const seeds: string[] = [];
+  for (const route of routes) {
+    if (route.type !== 'page' || route.special) continue;
+    seeds.push(join(root, routesDir, route.filePath));
+  }
+  for (const file of state.ctx.phase1.islandFiles) {
+    seeds.push(join(root, islandsDir, file));
+  }
+  for (const shell of [
+    state.resolvedOptions.layout,
+    ...Object.values(state.resolvedOptions.layouts ?? {}),
+  ]) {
+    if (!shell || typeof shell !== 'object' || typeof shell.import !== 'string') continue;
+    seeds.push(join(root, shell.import));
+  }
+  if (resolve === undefined) {
+    // The scan is resolver-driven (alias/imports/package specifiers are the
+    // bundler's answers). Rescan paths that never captured one keep the map
+    // empty, which is the pre-slice behavior: the resolver falls through to
+    // the path convention exactly as before.
+    state.ctx.phase1.declaredElementTags = new Map();
+    return;
+  }
+  const scanned = await scanDeclaredElementTags({
+    root,
+    workspaceRoot: state.workspaceRoot,
+    resolve,
+    seeds,
+  });
+  for (const note of scanned.notes) {
+    const envelope = {
+      code: note.code,
+      severity: 'warning',
+      phase: 'build',
+      message: note.message,
+      ...(note.file !== undefined ? { file: note.file } : {}),
+    } as const;
+    recordBuildDiagnostic(envelope);
+    log.warn(formatDiagnosticLine(envelope));
+  }
+  state.ctx.phase1.declaredElementTags = scanned.tags;
+  if (scanned.tags.size > 0) {
+    log.info(`Declared element tags: ${[...scanned.tags.values()].sort().join(', ')}`);
+  }
+}
+
 /** Rescan the islands dir into ctx; returns the islands root for later reuse. */
 async function scanIslandsIntoCtx(state: OpenPluginState): Promise<string> {
   const islandsRoot = join(process.cwd(), state.resolvedOptions.islandsDir || DEFAULT_ISLANDS_DIR);
@@ -402,6 +468,11 @@ export async function rescanRoutes(state: OpenPluginState): Promise<void> {
  */
 export async function rescanIslands(state: OpenPluginState): Promise<void> {
   await scanIslandsIntoCtx(state);
+  // A rescan re-reads the island sources, so the declared-tag provider must be
+  // refreshed in the same pass: an edited sidecar `tag` (or a newly added
+  // page-local component the route graph now reaches) has to replace the stale
+  // map, exactly as `islandMeta` is replaced.
+  await scanDeclaredTagsInto(state, state.ctx.phase1.cachedRoutes || []);
   syncEntryDescriptor(state, state.ctx.phase1.cachedRoutes || []);
 }
 
@@ -652,6 +723,11 @@ export function createBuildStartHook(state: OpenPluginState): Pick<Plugin, 'buil
         const routes = await scanRoutesAndStaticComponents(state);
         const islandsRoot = await scanIslandsIntoCtx(state);
         const islandFiles = state.ctx.phase1.islandFiles;
+
+        // The declared-tag provider (the site resolver's second source). Runs
+        // after the island scan so its seeds include the island files, and
+        // before any transform can ask the resolver for a site fact.
+        await scanDeclaredTagsInto(state, routes);
 
         // Auto admission derives the package set from the scanned graph, so
         // the admission scan runs on EVERY build now — the value may be an

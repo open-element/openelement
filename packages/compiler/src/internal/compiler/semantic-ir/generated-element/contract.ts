@@ -226,6 +226,14 @@ export const GENERATED_ELEMENT_DIAGNOSTIC = {
   /** The sidecar's `formAssociated` is not one boolean literal. */
   FORM_ASSOCIATED_INVALID: 'OEIR_GENERATED_ELEMENT_FORM_ASSOCIATED_INVALID',
   /**
+   * The sidecar's `tag` is not one static string literal, or it is not a valid
+   * custom-element name. The lane refuses rather than admitting a module whose
+   * identity it cannot prove: the tag is the one host fact the compiler cannot
+   * derive, so a dynamic or malformed spelling would either admit the wrong
+   * module or register a name the platform rejects.
+   */
+  TAG_INVALID: 'OEIR_GENERATED_ELEMENT_TAG_INVALID',
+  /**
    * The form-associated declaration cannot be mapped to the bounded mechanics:
    * no declared string `value` property, a non-boolean `required`/`disabled`,
    * or a reflected `disabled` row (the fieldset state must stay reversible).

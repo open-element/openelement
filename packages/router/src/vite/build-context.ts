@@ -57,6 +57,20 @@ class Phase1Meta {
   /** Relative file paths for local islands */
   islandFiles: string[] = [];
 
+  /**
+   * The tags the app's modules declare EXPLICITLY in their island sidecar
+   * (`openElement.tag`), keyed by the same stable module id the compiler
+   * transform derives.
+   *
+   * The generated-element site resolver takes this map as its second source:
+   * after a package manifest's declaration (the most explicit published
+   * identity) and before the islands-directory path convention (the least
+   * explicit). It is what admits a page-local component under a directory no
+   * convention owns (the alpha16 tag-source slice). Empty until the Phase 1
+   * scan runs; a rescan that finds different declarations replaces it.
+   */
+  declaredElementTags: ReadonlyMap<string, string> = new Map();
+
   /** Local island metadata indexed by tag name. */
   islandMeta: Record<string, Partial<IslandDecl>> = {};
 

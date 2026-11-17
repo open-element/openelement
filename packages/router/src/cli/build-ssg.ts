@@ -682,6 +682,10 @@ async function buildSSG(
                 workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
               },
             ),
+            // The same declared-tag provider the client and dev hosts pass
+            // (alpha16 tag-source slice): the SSR half must lower the very
+            // modules the client half compiled, so the source order is shared.
+            ctx.phase1.declaredElementTags,
           ),
         }),
         // serves the server half of the style edge protocol — the

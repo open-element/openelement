@@ -264,3 +264,37 @@ export default DevCard;
     expect(reloads).toEqual(['full-reload']);
   });
 });
+
+describe('alpha16 tag-source slice: a page-local component in the dev host', () => {
+  test('a declared sidecar tag admits a module outside islandsDir to the lane', () => {
+    // The reference case: www/app/site-ui/open-artifact-panel.tsx is neither an
+    // island (no path convention) nor a package declaration, so before the
+    // declared-tag source the dev transform declined it and emitted nothing.
+    const tag = 'open-artifact-panel';
+    const source =
+      "import { defineIslandConfig } from '@openelement/router';\n" +
+      `export const openElement = defineIslandConfig({ tag: '${tag}' });\n` +
+      'function ArtifactPanel() {\n' +
+      '  return <section><slot></slot></section>;\n' +
+      '}\n' +
+      'export default ArtifactPanel;\n';
+
+    // The provider is read lazily on every transform, so a map the Phase 1 scan
+    // populated after the hooks were created answers here.
+    const { state, hooks } = devHost({ viteRoot: '/proj' });
+    const moduleId = '/proj/app/site-ui/open-artifact-panel.tsx';
+
+    // Without the declared map the module is NOT a site: the pre-slice answer.
+    expect(transform(hooks, source, moduleId)).toBeNull();
+
+    state.ctx.phase1.declaredElementTags = new Map([['app/site-ui/open-artifact-panel.tsx', tag]]);
+    const { result } = transformCapturing(hooks, source, moduleId);
+    expect(result).not.toBeNull();
+    expect(result!.code).toContain('createGeneratedElementClass');
+    expect(result!.code).toContain(`__oeElementTag = "${tag}"`);
+    // The tag is the authored one, and the descriptor still takes it from the
+    // host site fact rather than re-reading the sidecar.
+    expect(result!.code).toContain(`tag: "${tag}"`);
+    expect(result!.code).not.toContain('customElements');
+  });
+});

@@ -456,7 +456,13 @@ export function createModuleIntrinsicBindings(
   };
 }
 
-function isCustomElementTag(value: string): boolean {
+/**
+ * The compiler's custom-element tag predicate. Exported for the generated-element
+ * lane's sidecar `tag` read (`semantic-ir/generated-element/site.ts`): the lane
+ * must not carry a second hyphenated-name regex, so the one this module already
+ * applies to JSX references is the one the sidecar fact is screened by.
+ */
+export function isCustomElementTag(value: string): boolean {
   return /^[a-z][a-z0-9]*(-[a-z0-9]+)+$/.test(value);
 }
 

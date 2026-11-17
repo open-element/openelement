@@ -1046,6 +1046,12 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
             root,
             workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
           }),
+          // The sidecar-declared tags the Phase 1 scan read (alpha16
+          // tag-source slice): the second source, after package manifests and
+          // before the islands-directory convention. A page-local component
+          // under `app/site-ui/` has no convention of its own, so its own
+          // sidecar `tag` is the only thing that admits it to the lane.
+          ctx.phase1.declaredElementTags,
         ),
       }),
       // intercepts the compiled modules' authored `.css` imports before

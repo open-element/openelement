@@ -113,6 +113,17 @@ export interface LocalIslandMeta {
    */
   root?: 'light' | 'shadow';
   /**
+   * The tag this island's sidecar declares EXPLICITLY (`openElement.tag`), or
+   * undefined when it declares none. The generated-element site resolver reads
+   * this as its second resolution source: a module the path convention and the
+   * package manifests both miss (a page-local component under `app/site-ui/`)
+   * is admitted only through an authored tag, so the identity is authored
+   * rather than inferred. For an island under `islandsDir` a declared tag must
+   * agree with the derived one; the scan refuses a disagreement instead of
+   * shipping an element whose descriptor and registration disagree.
+   */
+  tag?: string;
+  /**
    * M11 prerequisite — the compiler-owned generated-host identity resolved by
    * this scan from the source it already read (see
    * `generated-element-host-metadata.ts`). Build-only metadata that rides the
@@ -553,7 +564,7 @@ export function buildPackageIslandDecls(
 
 function staticOpenElementError(message: string): OpenElementError {
   return new OpenElementError(
-    `Invalid static island metadata export "openElement": ${message}. Accepted shape: export const openElement = defineIslandConfig({ ssr?: boolean, dsd?: boolean, hydrate?: "load" | "idle" | "visible" | "media" | "only", media?: string, styles?: readonly string[], root?: "light" | "shadow", delegatesFocus?: boolean, formAssociated?: boolean, properties?: Record<string, { reflect?: boolean, attribute?: string | false, default?: string | number | boolean }> }).`,
+    `Invalid static island metadata export "openElement": ${message}. Accepted shape: export const openElement = defineIslandConfig({ ssr?: boolean, dsd?: boolean, hydrate?: "load" | "idle" | "visible" | "media" | "only", media?: string, styles?: readonly string[], root?: "light" | "shadow", delegatesFocus?: boolean, formAssociated?: boolean, properties?: Record<string, { reflect?: boolean, attribute?: string | false, default?: string | number | boolean }>, tag?: string }).`,
     {
       code: 'ISLAND_METADATA_ERROR',
       statusCode: 500,
@@ -577,6 +588,7 @@ type StaticIslandConfig = Pick<
   | 'tags'
   | 'tagNames'
   | 'exportNames'
+  | 'tag'
 >;
 
 function staticEntryKey(name: ts.PropertyName): string {
@@ -998,6 +1010,7 @@ function parseStaticIslandConfig(
         'tags',
         'tagNames',
         'exportNames',
+        'tag',
       ].includes(key)
     ) {
       throw staticOpenElementError(`unsupported openElement metadata key "${key}"`);
@@ -1063,6 +1076,23 @@ function parseStaticIslandConfig(
       meta.properties = parseStaticPropertyTable(sourceFile, raw, 'openElement.properties');
     } else if (key === 'tags' || key === 'tagNames') {
       meta[key] = parseStaticStringArray(raw, `openElement.${key}`);
+    } else if (key === 'tag') {
+      // The explicit authored identity (a page-local component's only tag
+      // source). Static literal, screened by `isValidTagName` — the SAME
+      // predicate the runtime authoring face uses, so the router's two readers
+      // agree. The COMPILER's sidecar read screens with its own
+      // `isCustomElementTag` (the compiler package must not depend on the
+      // element package): it is the stricter spelling, so anything this reader
+      // accepts there is accepted here too. The reverse — a name this reader
+      // rejects (a reserved HTML name, an `xml` prefix) — is refused earlier,
+      // by this scan, before the compiler ever sees it.
+      const value = literalText(raw, 'openElement.tag');
+      if (!isValidTagName(value)) {
+        throw staticOpenElementError(
+          `openElement.tag "${value}" is not a valid custom-element name`,
+        );
+      }
+      meta.tag = value;
     } else {
       meta.exportNames = parseStaticStringRecord(raw, 'openElement.exportNames');
     }
@@ -1391,6 +1421,22 @@ export async function scanIslandMeta(
     const islandConfig = readIslandConfig(source);
     if (!islandConfig) continue;
 
+    // A declared tag must agree with the tag the path derives. The resolver
+    // ranks a declared tag above the path convention, so a disagreement would
+    // ship an element whose descriptor names the authored tag while the island
+    // entry registers (and the client entry splits) the path-derived one — two
+    // identities for one module, i.e. an unregistered element. Fail closed with
+    // the existing producer code instead of picking a winner.
+    if (islandConfig.tag !== undefined && islandConfig.tag !== tagName) {
+      throw buildError(
+        IslandErrorCode.TAGS,
+        `Island "${filePath}" declares openElement.tag "${islandConfig.tag}" but its path ` +
+          `derives "${tagName}". The declared tag outranks the path convention, so the two ` +
+          'identities would disagree: keep the declaration equal to the derived tag, or move ' +
+          'the module out of the islands directory and declare its tag where no path owns it.',
+      );
+    }
+
     // readIslandConfig() already rejects unsupported hydrate values.
     const hydrate = islandConfig.hydrate;
 
@@ -1460,6 +1506,7 @@ export async function scanIslandMeta(
         ? {}
         : { formAssociated: islandConfig.formAssociated }),
       ...(islandConfig.properties === undefined ? {} : { properties: islandConfig.properties }),
+      ...(islandConfig.tag === undefined ? {} : { tag: islandConfig.tag }),
       ...(islandConfig.tags === undefined ? {} : { tags: islandConfig.tags }),
       ...(islandConfig.tagNames === undefined ? {} : { tagNames: islandConfig.tagNames }),
       ...(islandConfig.exportNames === undefined ? {} : { exportNames: islandConfig.exportNames }),

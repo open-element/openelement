@@ -99,6 +99,7 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
         declaresStyles: false,
         styles: [],
         properties: undefined,
+        tag: undefined,
       },
     });
   });
@@ -113,6 +114,7 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
         declaresStyles: false,
         styles: [],
         properties: undefined,
+        tag: undefined,
       },
     });
     expect(readIslandMetadata(parse(island("root: 'light', delegatesFocus: false")))).toEqual({
@@ -124,6 +126,7 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
         declaresStyles: false,
         styles: [],
         properties: undefined,
+        tag: undefined,
       },
     });
   });
@@ -138,6 +141,7 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
         declaresStyles: false,
         styles: [],
         properties: undefined,
+        tag: undefined,
       },
     });
     expect(readIslandMetadata(parse(island("hydrate: 'idle'")))).toEqual({
@@ -149,6 +153,7 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
         declaresStyles: false,
         styles: [],
         properties: undefined,
+        tag: undefined,
       },
     });
   });
@@ -163,6 +168,7 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
         declaresStyles: false,
         styles: [],
         properties: undefined,
+        tag: undefined,
       },
     });
   });
