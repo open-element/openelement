@@ -502,3 +502,44 @@ reverted: it changed nothing measurable, and an inert change left in the tree
 would misrepresent the state.
 
 Non-claim: this note does not move P1. It measures it.
+
+## 2026-11-17 correction — the executor's real entry point, found after the first measurement
+
+The earlier note said M11-3 must "split the element runtime chunk". The probe
+that followed found the actual carrier, which is simpler and more actionable.
+
+**The generated shell does NOT reach the executor.** Walking `shell.ts`'s
+relative-import closure visits 25 modules and hits zero executor entries
+(`facade-host`, `runtime-program`, `runtime/{kernel,program-kernel,hydrate,fresh-dom}`).
+
+**What puts the executor in the shared chunk is the element package's ROOT
+entry.** The 64-module `element-runtime-<hash>.js` contains
+`element/src/index.ts`, `runtime/hydrate-install.ts` and
+`runtime/blocks-install.ts` — the two deliberate side-effect imports at the top
+of `index.ts` that install the hydration executor and the when/each Block
+builders. 47 www modules import `from '@openelement/element'` (the root), which
+is why every island chunk reaches that chunk.
+
+So the split is not "one bundle into two". It is the existing per-feature entry
+table: `./base` (neither install) and `./client-only` (no hydration) already
+exist for exactly this, and `base.ts`'s own doc comment states the rule — use it
+only when every island the page can upgrade is client-only AND no compiled
+element in the page's client graph lowers a conditional or list Block. The
+47-file decision is per-PAGE: a class page that renders `.map(...)` or a
+conditional needs the blocks install, and one that claims SSR DOM needs
+hydration.
+
+**Landed in this slice (verified, but not sufficient alone)**: the compiled leaf
+now imports its primitives from
+`@openelement/element/internal/compiled/leaf-runtime`, a closed entry that
+re-exports the same 40 symbols from their ORIGIN modules and deliberately never
+from `program-kernel.ts` (whose facade re-export is what dragged the executor
+in). Emitted modules show the new specifier; replacing it with the old spelling
+reproduces the previous bytes exactly, which is how the three byte-pin
+re-baselines were justified rather than assumed.
+
+**Not sufficient alone**: the www graph still reports VIOLATED, unchanged, in
+all three cases (`runtime chunk: 1, 64 modules, leaf-runtime absent`) because the
+www islands are class-lane pages and package islands that import the root entry.
+Their chunk is what the checker measures. Flipping P1 requires the 47-file
+per-page entry decision above, which is its own reviewed change.

@@ -294,7 +294,15 @@ import {
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 
 /** Compiler-private runtime entry the emitted module imports from. */
-export const GENERATED_LEAF_RUNTIME_SPECIFIER = '@openelement/element/internal/compiled/runtime';
+// M11-3: the generated leaf imports its primitives from the CLOSED leaf entry,
+// never from the `internal/compiled/runtime` facade. The facade re-exports the
+// generic executor's three endpoints and their kernels, so importing it put the
+// whole executor in every generated island chunk (measured at M10-P1: one
+// 64-module `element-runtime-<hash>.js` reachable from all eight www islands).
+// The leaf entry re-exports the same symbols from their ORIGIN modules and
+// nothing else; see its module doc for why each import site matters.
+export const GENERATED_LEAF_RUNTIME_SPECIFIER =
+  '@openelement/element/internal/compiled/leaf-runtime';
 
 const RUNTIME_IMPORTS = [
   'assertSafeUrlAttribute',

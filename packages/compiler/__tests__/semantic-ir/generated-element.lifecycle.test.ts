@@ -340,11 +340,19 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     }
   });
 
-  test('A8 hook-free modules stay byte-identical to clean HEAD 6bd3667d4 (SHA-256 pins)', () => {
-    // Captured by running the clean HEAD generator on the same sources before
-    // the lifecycle change: these pins are the "uses neither hook keeps the
-    // exact bytes" obligation, covering a hostless leaf, a generated element
-    // root with setup, one without setup, and a depth-1 nested-retention root.
+  test('A8 hook-free modules stay byte-identical to their M11-3 baseline (SHA-256 pins)', () => {
+    // These pins are the "uses neither hook keeps the exact bytes" obligation,
+    // covering a hostless leaf, a generated element root with setup, one without
+    // setup, and a depth-1 nested-retention root.
+    //
+    // 2026-11-17 (M11-3): the baseline moved ONCE for a GLOBAL, mechanical
+    // reason — the emitted leaf imports its runtime primitives from
+    // `@openelement/element/internal/compiled/leaf-runtime` instead of the
+    // `internal/compiled/runtime` facade. That is one import-specifier string in
+    // every module (verified: replacing the new spelling with the old one
+    // reproduces the previous bytes exactly), and it is what stops a generated
+    // island chunk from loading the generic executor. Nothing about the
+    // lifecycle surface changed, which is what these pins actually guard.
     const hostlessWithSetup = frontModule(
       "import { signal } from '@openelement/element';\n" +
         'function Hostless(props) { const s = props.seed; return <span>{s}</span>; }\n',
@@ -352,14 +360,14 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     );
     const hostlessWithSetupLeaf = generateLeafModule(hostlessWithSetup);
     expect(sha256(hostlessWithSetupLeaf.module!)).toBe(
-      '121b63fd46ae0b4997a4fb9683c6dd4ddf57d9e9814e8b9044892d56ab317d71',
+      'fb1ae5f28641db6ad094d64b4038369293037df9210b404895f94fda2e660ed7',
     );
     const hostlessPlain = frontModule(
       'function Plain(props) { return <p>{props.x}</p>; }\n',
       '/proj/src/leaf.tsx',
     );
     expect(sha256(generateLeafModule(hostlessPlain).module!)).toBe(
-      'd6eb754c315b6cf859bc5aff1c6ad3af29b38a099714aaf2d0d87c0d8b2d5025',
+      'b20d1a40affc168631728a4ee51079acf8007fa4edb287c11aac2f8be9f9160b',
     );
     const hostlessSetupSsr = functionText(hostlessWithSetupLeaf.module!, 'Hostless__ssr');
     expect(sha256(hostlessSetupSsr)).toBe(
@@ -382,7 +390,7 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     // below states what changed.
     expect(rootSetup).toContain('  ssrProducer: SeedCard__ssr,');
     expect(sha256(rootSetup)).toBe(
-      '88e555dc0958b096cdfb67a5ff1756fbbe1f655bfba120ef8f939a98858115a8',
+      'e07b0675516972e7e9fb037f897bc13b6295e63ef34e3ddce63c6cac4fecfbba',
     );
     expect(sha256(functionText(rootSetup, 'SeedCard__ssr'))).toBe(
       '328059b07b89719ed2fc03f659a041a022982e21a5837f7628046bae6b473d50',
@@ -399,7 +407,7 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     // Same B4 row as above: the light-root producer is one descriptor line.
     expect(rootPlain).toContain('  ssrProducer: PlainCard__ssr,');
     expect(sha256(rootPlain)).toBe(
-      'c0212f02cea802b52e1b441a89320261ee098d912037a8feddc6ffb598375df3',
+      'ef0659e8e63ea38a51998739a073893ecab9a1b34b04aa0eaedcb79e6cc434d3',
     );
     expect(sha256(functionText(rootPlain, 'PlainCard__ssr'))).toBe(
       '16e96344e5dc9cd26db72789d8bab36f12c2b815b15c646be3da4c383f28bef1',
@@ -421,7 +429,7 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     // Same B4 row: one light-root producer line on a composable light host.
     expect(rootChild).toContain('  ssrProducer: Host__ssr,');
     expect(sha256(rootChild)).toBe(
-      '0413313aded13268d6168e198822f963c049d34aa5c173821a2fea80f5ba7439',
+      '32b9ea75adce82c8bd34d522f371a550311aa17769b4fca44d77e2a97cdc8411',
     );
     expect(sha256(functionText(rootChild, 'Host__ssr'))).toBe(
       'd361eae8d21a2959954c5ca83cf12b68887ed2fe5e4da21a21fd335259526863',
