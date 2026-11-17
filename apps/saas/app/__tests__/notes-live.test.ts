@@ -5,14 +5,14 @@
  * realtime subscription wiring itself is browser-only and verified with
  * Playwright against the real project — see the issue evidence.
  *
- * v0.44: the island module's decorators are compile-time-only input, so the
- * pure logic lives in app/components/notes-live-shared.ts and the class is
- * compiled here through the real compiler before renderToString.
+ * The island is a GENERATED-lane component (alpha16): its element class and DSD
+ * producer are emitted by the compiler from the sidecar, and the pure logic
+ * lives in app/components/notes-live-shared.ts. The SSR row renders through the
+ * emitted `<Name>__ssrHost` producer, the same entry the build uses.
  */
 import { expect, test } from 'vitest';
 import { assertRejectsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
-import { renderToString } from '@openelement/element';
-import { compileComponentClass } from './compile-page.ts';
+import { compileGeneratedIsland } from './compile-page.ts';
 import {
   fetchNotesSnapshot,
   handoffRealtimeAuth,
@@ -27,8 +27,16 @@ import {
 } from '../components/notes-live-shared.ts';
 
 test('notes-live SSR render includes the status and event mount points', async () => {
-  const NotesLive = await compileComponentClass('../islands/notes-live.tsx');
-  const html = renderToString('notes-live', { componentClass: NotesLive });
+  // notes-live is a GENERATED-lane island now: the lane emits its element class
+  // from the sidecar, so the render subject comes from that lane (the class
+  // compiler refuses the module by design — OEC9008).
+  const { ssrHost } = await compileGeneratedIsland('../islands/notes-live.tsx', 'notes-live');
+  // A generated shadow-root island serializes through the compiler-emitted
+  // `<Name>__ssrHost` DSD producer, not through renderToString's class path
+  // (that path serializes a Part Program, which a generated element does not
+  // have).
+  expect(ssrHost, 'the lane emitted the DSD host producer').toBeTypeOf('function');
+  const html = ssrHost!();
   // renderToString throws on a render error (the retired `errors` field was []).
   expect(html.includes("id='live-status'") || html.includes('id="live-status"'), html).toBeTruthy();
   expect(html.includes('realtime:'), html).toBeTruthy();
