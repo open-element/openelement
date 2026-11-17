@@ -594,6 +594,23 @@ function decodeStrictBase64Url(payload: string): string | null {
  * construction (e.g. `packages//element/src/…` would never equal the gate id);
  * the checker rejects the artifact instead of judging a different string.
  */
+/**
+ * The app-root spelling: a workspace-relative directory, OR `.` when the app IS
+ * the workspace root.
+ *
+ * `.` is the honest value for that case — a published consumer installs the app
+ * with no workspace file above it, so `relative(workspaceRoot, root)` is empty
+ * and there is no directory name to report. The general path predicate rejects
+ * `.` because a MODULE or CHUNK id must name a file; an app root is the one field
+ * where "here" is a real location. Without this the capture fails closed as
+ * `app-root-outside-workspace` for every installed app, which made P1 undecidable
+ * exactly where it matters most.
+ */
+export function isBrowserEntryGraphAppRoot(value: unknown): value is string {
+  if (value === '.') return true;
+  return isNormalizedBrowserEntryGraphRelativePath(value);
+}
+
 export function isNormalizedBrowserEntryGraphRelativePath(value: unknown): value is string {
   if (typeof value !== 'string' || value === '') return false;
   // Control characters (including NUL), backslashes and query suffixes never
@@ -967,7 +984,7 @@ function parseArtifact(
   const app = value.app;
   if (
     !isRecord(app) ||
-    !isNormalizedBrowserEntryGraphRelativePath(app.root) ||
+    !isBrowserEntryGraphAppRoot(app.root) ||
     !isNormalizedBrowserEntryGraphRelativePath(app.outDir) ||
     typeof app.base !== 'string'
   ) {

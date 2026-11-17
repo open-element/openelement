@@ -46,6 +46,7 @@ import {
   deriveBrowserEntryGraphSummary,
   evaluateBrowserEntryGraphArtifact,
   executorEntryModuleIds,
+  isBrowserEntryGraphAppRoot,
   isNormalizedBrowserEntryGraphModuleId,
   isNormalizedBrowserEntryGraphRelativePath,
   isNormalizedBrowserEntryGraphVirtualModuleId,
@@ -285,6 +286,25 @@ test('the path validator rejects every non-canonical spelling (exact-match bypas
   for (const value of invalid) {
     expect(isNormalizedBrowserEntryGraphRelativePath(value), value).toBe(false);
     expect(isNormalizedBrowserEntryGraphModuleId(value), value).toBe(false);
+  }
+});
+
+test('an app root may be `.` — the installed-consumer case — while a module may not', () => {
+  // A published consumer installs the app with no workspace file above it, so
+  // `relative(workspaceRoot, root)` is empty and the only honest spelling of the
+  // app root is `.`. Before this, the capture failed closed as
+  // `app-root-outside-workspace` for every installed project, which made the
+  // browser-entry graph undecidable exactly where it matters most.
+  expect(isBrowserEntryGraphAppRoot('.')).toBe(true);
+  expect(isBrowserEntryGraphAppRoot('www')).toBe(true);
+  expect(isBrowserEntryGraphAppRoot('apps/saas')).toBe(true);
+
+  // The module/id predicate is UNCHANGED: `.` is still not a file.
+  expect(isNormalizedBrowserEntryGraphRelativePath('.')).toBe(false);
+
+  // Everything that is wrong for a directory stays wrong for an app root.
+  for (const value of ['', '..', '../x', './x', '/x', 'C:/x', 'a//b', 'a/']) {
+    expect(isBrowserEntryGraphAppRoot(value), value).toBe(false);
   }
 });
 
