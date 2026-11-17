@@ -270,6 +270,14 @@ interface PropertyEmission {
    * keeps the pre-slice wrapper bytes exactly.
    */
   readonly hasAttributeRows: boolean;
+  /**
+   * The host producer must consume the seeder's merged attribute pairs, which
+   * happens for TWO reasons: the descriptor has an attribute-backed row, OR it
+   * has a JSON-seedable non-primitive row (D-18c) whose seed travels as one
+   * shell-owned host attribute. A module with ONLY property-only primitive rows
+   * still emits no attribute seed, keeping those bytes unchanged.
+   */
+  readonly emitsHostAttributeSeed: boolean;
 }
 
 /**
@@ -293,6 +301,7 @@ function buildPropertyEmission(
       identifiers: [],
       usesPropsResolver: false,
       hasAttributeRows: false,
+      emitsHostAttributeSeed: false,
     };
   }
   const factoryLines: string[] = [];
@@ -327,6 +336,10 @@ function buildPropertyEmission(
     identifiers,
     usesPropsResolver,
     hasAttributeRows: properties.some((property) => property.attribute !== null),
+    emitsHostAttributeSeed: properties.some(
+      (property) =>
+        property.attribute !== null || property.type === 'array' || property.type === 'object',
+    ),
   };
 }
 
@@ -563,7 +576,7 @@ export function generateElementModule(
                 '  if (!Array.isArray(styleLinks) || styleLinks.length === 0) throw new Error("OEIR_LEAF_MISSING_VALUE: styleLinks (the styled generated element received no declared stylesheet URLs; mixed generated-element/entry artifacts or a missing style-link carrier)");',
               ]
             : []),
-          ...(propertyEmission.hasAttributeRows
+          ...(propertyEmission.emitsHostAttributeSeed
             ? [
                 `  const ${names.hostPropsVar} = ${names.hostPropsSeed}(${names.descriptor}.properties, props, attributes);`,
                 `  const ${HOST_ATTRIBUTES_VAR} = ${names.hostPropsVar}.${HOST_ATTRIBUTES_KEY};`,

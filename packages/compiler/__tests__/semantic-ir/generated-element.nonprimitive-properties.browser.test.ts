@@ -681,7 +681,7 @@ describe('non-primitive property retention on the generated element (Chromium)',
     }
   });
 
-  test('SSR host folds supplied props through the resolver without a JSON/attribute wire', async () => {
+  test('SSR host folds supplied props through the resolver and seeds the non-primitive rows', async () => {
     const page = await openPage();
     try {
       const result = await page.evaluate((tagName) => {
@@ -725,13 +725,18 @@ describe('non-primitive property retention on the generated element (Chromium)',
         };
       }, SITE.tag);
       expect(result.hostHtml).toContain('server-row');
+      // No PER-ROW attribute is invented: the channel is one JSON seed
+      // attribute (D-18c), never `events=…`/`model=…`.
       expect(result.hostHtml).not.toContain('events=');
       expect(result.hostHtml).not.toContain('model=');
       expect(result.hostHtml).not.toContain('articleHtml=');
-      // SSR bytes show the folded server values; the client instance keeps its
-      // own defaults because no seed wire exists (M11 transport gap).
+      // The seed attribute IS present, and it carries the array/object rows.
+      expect(result.hostHtml).toContain('data-oe-prop-seed');
+      // SSR bytes show the folded server values, and — since D-18c shipped the
+      // transport — the claimed instance starts from the SAME values instead of
+      // silently reverting to its own defaults.
       expect(result.claimedList).toBe('server-row');
-      expect(result.clientEvents).toBe('seed');
+      expect(result.clientEvents).toBe('server');
       expect(result.forgedCode).toBe('OEIR_SHELL_PROPERTY_TYPE_MISMATCH');
       expect(result.unusedForgedCode).toBeNull();
     } finally {
@@ -941,6 +946,124 @@ describe('non-primitive property retention on the generated element (Chromium)',
       expect(result.noSeed.claimedList).toBe('default-row');
     } finally {
       await page.close();
+    }
+  });
+  /**
+   * D-18c / M11-3 — the JSON seed actually round-trips through a real claim.
+   *
+   * The producer half is pinned in the Node suite. These two rows prove the
+   * claim reads it: a supplied array/object row reaches the client instance as
+   * the SAME value the server rendered with, and a seed the descriptor cannot
+   * explain fails closed instead of silently keeping defaults.
+   */
+  test('the SSR prop seed restores supplied non-primitive rows on claim', async () => {
+    const page = await openPage();
+    try {
+      const result = await page.evaluate(
+        async ([tagName, seed]) => {
+          const mod = (window as unknown as { __oeNp: Record<string, unknown> }).__oeNp;
+          const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+          const frame = document.createElement('div');
+          // The REAL path: the caller supplies the non-primitive rows to the
+          // host producer, which serializes them onto the seed attribute itself.
+          // Passing a hand-built attribute would test a wire nobody writes.
+          const withSeed = (mod.NpCard__ssrHost as (p?: unknown, l?: unknown) => string)(
+            JSON.parse(seed as string),
+            undefined,
+          );
+          frame.setHTMLUnsafe(withSeed);
+          const host = frame.firstElementChild as HTMLElement & {
+            events?: Array<{ id: string; body: string }>;
+            model?: { title: string; rows: string[] };
+          };
+          const debugMarkup = withSeed;
+          document.body.append(frame);
+          // Upgrade AFTER the markup is in the document, the ordering the other
+          // SSR verticals use: the parser is what creates the host, and the
+          // claim then runs against an already-parsed DSD tree.
+          customElements.define(tagName as string, mod.NpElement as CustomElementConstructor);
+          await tick();
+          return {
+            debugMarkup,
+            attributeGone: host.getAttribute('data-oe-prop-seed') === null,
+            events: host.events,
+            model: host.model,
+            listText: [...host.shadowRoot!.querySelectorAll('li')]
+              .map((item) => item.textContent)
+              .join(','),
+          };
+        },
+        [
+          SITE.tag,
+          JSON.stringify({
+            events: [{ id: 'from-ssr', body: 'server-row' }],
+            model: { title: 'server-title', rows: ['r1'] },
+          }),
+        ],
+      );
+      // What did the producer actually emit? Asserting this first names the
+      // failure precisely instead of reporting "no events".
+      expect(result.debugMarkup, 'the producer emits the seed attribute').toContain(
+        'data-oe-prop-seed',
+      );
+      expect(result.events).toEqual([{ id: 'from-ssr', body: 'server-row' }]);
+      expect(result.model).toEqual({ title: 'server-title', rows: ['r1'] });
+      // The RENDERED content follows the restored state, so a visitor and the
+      // upgraded component agree.
+      expect(result.listText).toContain('server-row');
+      // Consumed once: the shell removes the transport attribute.
+      expect(result.attributeGone, 'the seed attribute is consumed').toBe(true);
+    } finally {
+      await page.context().close();
+    }
+  });
+
+  test('a prop seed the descriptor cannot explain fails closed', async () => {
+    const page = await openPage();
+    try {
+      const outcome = await page.evaluate(
+        async ([tagName, seed]) => {
+          const mod = (window as unknown as { __oeNp: Record<string, unknown> }).__oeNp;
+          const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+          // A payload the descriptor cannot explain is written STRAIGHT onto the
+          // claim input: the producer only ever emits declared rows, so the
+          // fail-closed path is exactly "markup arrived with a row the
+          // descriptor does not declare".
+          const markup = (mod.NpCard__ssrHost as (p?: unknown, l?: unknown) => string)(
+            undefined,
+            undefined,
+          ).replace('<np-card', `<np-card data-oe-prop-seed='${seed}'`);
+          if (!markup.includes('data-oe-prop-seed')) {
+            return { stage: 'markup', message: markup.slice(0, 120) };
+          }
+          // A custom element's connect failure is thrown from the upgrade, so it
+          // surfaces as a window error rather than a rejected promise.
+          let caught: string | null = null;
+          const onError = (event: ErrorEvent): void => {
+            const error = event.error as { code?: string; message?: string } | undefined;
+            caught ??= `${error?.code ?? ''} ${error?.message ?? event.message}`;
+          };
+          window.addEventListener('error', onError);
+          if (customElements.get(tagName as string) === undefined) {
+            customElements.define(tagName as string, mod.NpElement as CustomElementConstructor);
+          }
+          const frame = document.createElement('div');
+          frame.setHTMLUnsafe(markup);
+          document.body.append(frame);
+          await tick();
+          window.removeEventListener('error', onError);
+          return {
+            stage: 'claim',
+            message: caught,
+            attribute: frame.firstElementChild?.getAttribute('data-oe-prop-seed') ?? null,
+          };
+        },
+        [SITE.tag, JSON.stringify({ undeclaredRow: 1 })],
+      );
+      expect(outcome.message, `${outcome.stage}: ${String(outcome.message)}`).not.toBeNull();
+      expect(String(outcome.message)).toContain('OEIR_SHELL_PROP_SEED_MISMATCH');
+    } finally {
+      await page.context().close();
     }
   });
 });

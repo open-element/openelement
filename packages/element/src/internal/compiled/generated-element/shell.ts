@@ -235,6 +235,36 @@ function hostPropertyAttribute(property: GeneratedElementProperty): string | nul
 const GENERATED_HOST_ATTRIBUTES = '__oeHostAttributes';
 
 /**
+ * The host attribute carrying the JSON seed for NON-PRIMITIVE declared rows
+ * (ADR-0182 D-18c / M11-3). A non-primitive row (`array`/`object`) has no
+ * attribute wire, so before this channel the server rendered the row's DEFAULT
+ * while a supplied value existed only on the client — the content a visitor saw
+ * and the state the component upgraded into were different facts.
+ *
+ * Shape: `{"<rowName>": <json value>, …}`. Only JSON-encodable rows are carried;
+ * `trustedHtml` is excluded on purpose (a brand cannot be reconstructed from
+ * JSON, and promoting a plain string back to it would be a raw-markup channel —
+ * D-18c records that as a separate decision).
+ *
+ * Claim acceptance: the shell parses the payload, validates every name against
+ * the descriptor's JSON-seedable rows, and writes the values BEFORE setup. An
+ * unparseable payload or an unknown row fails closed through the existing
+ * claim-mismatch identity rather than silently keeping the default.
+ */
+const GENERATED_PROP_SEED = 'data-oe-prop-seed';
+
+/** The declared row types a JSON seed may carry (D-18c). */
+const JSON_SEEDABLE_PROPERTY_TYPES: ReadonlySet<string> = new Set(['array', 'object']);
+
+/**
+ * The claim rejected the non-primitive prop seed. It shares the claim-mismatch
+ * FAMILY (the markup and the declared rows disagree) but carries its own
+ * identity because the cause is a wire fact, not a DOM-structure fact: a
+ * consumer seeing this code should look at the seed payload, not at the tree.
+ */
+const PROP_SEED_MISMATCH = 'OEIR_SHELL_PROP_SEED_MISMATCH';
+
+/**
  * Internal identity for a supplied primitive value that has NO SSR→claim
  * attribute channel: a `boolean false` against a presence-default `true`.
  * Rendering it would silently diverge (the server content carries `false` while
@@ -423,6 +453,57 @@ export function seedGeneratedElementHostProperties<P extends object = Record<str
     if (!computedByName.has(pair[0].toLowerCase())) continue;
     merged.push(pair);
   }
+
+  // D-18c / M11-3: the NON-PRIMITIVE half of the same seed. A JSON-seedable row
+  // that the caller supplied is serialized onto one host attribute so the claim
+  // can restore it; without this the server rendered the declared default while
+  // the client value existed only in memory. The row is read ONCE here, which
+  // matches the attribute rows above — the supplied-getter "read per read"
+  // contract is about the fold not running it eagerly and each leaf read
+  // reading again, both still true.
+  const propSeed: Record<string, unknown> = {};
+  for (const property of properties ?? []) {
+    if (!JSON_SEEDABLE_PROPERTY_TYPES.has(property.type)) continue;
+    if (!Object.prototype.hasOwnProperty.call(supplied, property.name)) continue;
+    // NEVER execute an accessor here. The supplied-getter contract is "read per
+    // read, and only when a reader asks": a data property is safe to read once
+    // for the seed, but a getter must be deferred to the content leaf, exactly
+    // as the fold below does. A caller passing a getter for a non-primitive row
+    // therefore gets no seed — the content still renders their value, and the
+    // claim keeps the declared default, which is the pre-D-18c behaviour rather
+    // than a silent double-read.
+    const own = Object.getOwnPropertyDescriptor(supplied, property.name);
+    if (own === undefined || !('value' in own)) continue;
+    const value = own.value;
+    if (value === undefined) continue;
+    // JSON is the wire: a value that cannot round-trip would arrive as a
+    // different fact, so refuse rather than silently degrade to the default.
+    let encoded: string;
+    try {
+      encoded = JSON.stringify(value);
+    } catch {
+      throw new CompiledProgramValidationError(
+        'props',
+        `${UNSEEDABLE_PROPERTY}: ${property.name} is declared property-only but its supplied ` +
+          'value is not JSON-encodable, so the JSON seed cannot carry it faithfully.',
+      );
+    }
+    if (encoded === undefined) {
+      throw new CompiledProgramValidationError(
+        'props',
+        `${UNSEEDABLE_PROPERTY}: ${property.name} is declared property-only but its supplied ` +
+          `value serializes to ${String(encoded)} under JSON; the seed would not round-trip.`,
+      );
+    }
+    propSeed[property.name] = value;
+  }
+  if (Object.keys(propSeed).length > 0) {
+    // One host attribute, one JSON document. The attribute name is
+    // compiler-owned (`data-oe-` prefix, reserved), which is also what lets the
+    // claim treat it as a shell-owned slot instead of a static-seed entry.
+    merged.push([GENERATED_PROP_SEED, JSON.stringify(propSeed)] as const);
+  }
+
   // A supplied prop wins over the attribute wire for CONTENT; the same precedence
   // applies to the host tag so the SSR markup and the claim seed cannot disagree.
   // No computed pair and no caller attributes keeps the historical shape (the
@@ -1420,6 +1501,70 @@ function reconcilePreUpgradeProperties(element: HTMLElement, state: ElementState
 }
 
 /**
+ * Restore the non-primitive declared rows the SSR producer serialized into
+ * {@link GENERATED_PROP_SEED} (ADR-0182 D-18c / M11-3).
+ *
+ * The attribute is the SHELL's slot, not an author attribute: it is written by
+ * the emitted `__ssrHost` and removed here, so the same markup re-claims
+ * identically (the claim's static-seed check excludes it, and an absent seed
+ * leaves every row at its declared default exactly as before).
+ *
+ * Fail closed on anything the descriptor cannot explain: an unparseable
+ * payload, a non-object, an unknown row name, or a row the descriptor does not
+ * declare as JSON-seedable. Silently keeping the default would render a page
+ * whose visible content and upgraded state disagree — the defect this channel
+ * exists to remove — so it uses the existing claim-mismatch identity.
+ */
+function applyGeneratedPropSeed(element: HTMLElement, state: ElementState): void {
+  // A descriptor with no JSON-seedable row can never carry this attribute, so
+  // the shell must not even ASK for it: the constructor/connect path is
+  // contractually attribute-read-free unless a declared row needs one.
+  if (
+    !state.descriptor.properties.some((property) => JSON_SEEDABLE_PROPERTY_TYPES.has(property.type))
+  ) {
+    return;
+  }
+  const raw = element.getAttribute(GENERATED_PROP_SEED);
+  if (raw === null) return;
+  const where = `[${GENERATED_PROP_SEED}]`;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw frameworkError(
+      PROP_SEED_MISMATCH,
+      `[generated-element] ${where} the prop seed is not valid JSON`,
+      {
+        phase: 'csr',
+      },
+    );
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw frameworkError(
+      PROP_SEED_MISMATCH,
+      `[generated-element] ${where} the prop seed must be a JSON object`,
+      { phase: 'csr' },
+    );
+  }
+  const byName = new Map(state.descriptor.properties.map((property) => [property.name, property]));
+  for (const [name, value] of Object.entries(parsed as Record<string, unknown>)) {
+    const property = byName.get(name);
+    if (property === undefined || !JSON_SEEDABLE_PROPERTY_TYPES.has(property.type)) {
+      throw frameworkError(
+        PROP_SEED_MISMATCH,
+        `[generated-element] ${where} the prop seed names "${name}", which is not a ` +
+          'JSON-seedable declared row',
+        { phase: 'csr' },
+      );
+    }
+    writeValue(state, property, coercePropertyWrite(property, value));
+  }
+  // The seed is consumed once: leaving it would make a later re-claim re-apply a
+  // stale value over a user's write.
+  element.removeAttribute(GENERATED_PROP_SEED);
+}
+
+/**
  * The reflect-removal contract: after an attribute is removed the property is
  * back at its declared default, but the attribute mirror is not. Restore it
  * from the CURRENT value (not from the removal's `setProperty` result, whose
@@ -1892,6 +2037,11 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       if (state.form !== null) attachForm(this, state);
       // Must precede createRecipe: the recipe reads host.props on creation.
       reconcilePreUpgradeProperties(this, state);
+      // D-18c / M11-3: restore the non-primitive rows the server serialized.
+      // This runs BEFORE the recipe so setup reads the same values the server
+      // rendered with (a row supplied at SSR time would otherwise fall back to
+      // its declared default on the client).
+      applyGeneratedPropSeed(this, state);
       state.connecting = true;
       // A retained instance is what makes reconnect a re-arm rather than a
       // re-setup. It is resolved inside the try so a root failure allocates no
