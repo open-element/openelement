@@ -412,3 +412,46 @@ belongs with the generated-lane candidate collector, not with admission.
 Evidence: `packages/router/__tests__/package-import-admission-probe.test.ts`
 (7/7, incl. the four install layouts and the manual-mode report) and
 `packages/router/__tests__/shadow-candidate-collection.test.ts` (4/4).
+
+## 2026-11-17 amendment — page-local components are a SEPARATE slice from islands (probe result)
+
+Probing the next consumer surface (`www/app/site-ui/*`, migrated as a trial)
+established a boundary that decides how the remaining P1 work splits.
+
+**A component under a page-adjacent directory (`www/app/site-ui/`, imported for
+registration by a class page) is NOT an island.** The build reports it under
+"Foreign WC tags consumed in JSX" (`open-artifact-panel`, `open-reading-shell`,
+`open-section-frame`, `open-standards-visual`), alongside the 11 real islands.
+Its class-lane SSR worked because the class page's JSX resolves a custom tag
+against the compiled CLASS it registered.
+
+Migrating such a component to a function component therefore does not Just Work:
+the generated element's SSR entry point is keyed to the island/package
+declaration channel (an `ssrHostExport` pair for shadow, the descriptor's
+`ssrProducer` for light), and a class page that merely imports the module for
+registration has no such pair. Measured on `open-section-frame`:
+`<open-section-frame>` serialized with its light children and NO compiled
+content and NO `data-oe-light` marker, because nothing paired the tag with the
+generated host.
+
+Two facts recorded rather than worked around:
+
+1. **The rewrite must preserve the ROOT.** `open-section-frame` was a LIGHT
+   root (`data-oe-light`, content inline in the document tree). Declaring
+   `root: 'shadow'` in a migration would be a behaviour change dressed as one —
+   the site's document stylesheet selects the frame's DOM in the document.
+2. **`serializeLightGeneratedHost` omits the marker.** The light-root producer
+   path added for the local-island case emits `<tag>content</tag>` without
+   `data-oe-light`, which the class lane's serializer always writes. Any
+   generated light host reaching it is missing the ownership marker the claim
+   path and the light-root CSS scope key off.
+
+Neither is fixed here: both belong with the page-local-component channel (the
+pairing mechanism for a generated component that is neither an island nor a
+package declaration). The trial migration was reverted so the site keeps its
+shipped behaviour.
+
+**Consequence for the remaining P1 surface**: the islands
+(`www/app/islands/open-search.tsx`, `apps/saas/app/islands/notes-live.tsx`) and
+the page-local components are DIFFERENT slices. The islands additionally need
+the non-primitive JSON seed channel (D-18c) because both declare array rows.
