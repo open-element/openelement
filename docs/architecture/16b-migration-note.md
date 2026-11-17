@@ -455,3 +455,50 @@ shipped behaviour.
 (`www/app/islands/open-search.tsx`, `apps/saas/app/islands/notes-live.tsx`) and
 the page-local components are DIFFERENT slices. The islands additionally need
 the non-primitive JSON seed channel (D-18c) because both declare array rows.
+
+## 2026-11-17 measurement — why M10-P1 is still VIOLATED, and what M11-3 must actually split
+
+Ran the report-only graph checker on the www build at `0fc4d9cd1`
+(`node tools/repo/check-browser-entry-graph.ts www/dist/client/.vite/oe-browser-entry-graph.json`):
+
+```
+0 MET, 1 VIOLATED — 6 executor-entry modules loaded
+  chunk: islands/element-runtime-C0NhI5Uy.js
+  islands: open-button, open-cinematic-scroll, open-code-block,
+           open-dragon-live-gaze, open-hero-polish, open-page-rail,
+           open-search, open-theme-toggle
+```
+
+Three facts this measurement settles:
+
+1. **The ENTRY is clean.** `islands/client.js` is 4 modules and contains no
+   executor module, before and after the package-island `generatedLane` probe.
+   `clientEntryNeedsElementRuntime` already answers correctly for generated
+   islands, and the emitted entry no longer even defines
+   `__loadElementRuntime` (`grep -c` → 0).
+2. **The violation comes from the ISLAND CHUNKS, not the entry.** Each island
+   chunk statically imports `element-runtime-<hash>.js`, because the generated
+   shell's own module graph reaches it.
+3. **The shared chunk is one 64-module bundle** holding BOTH halves: the
+   generated-element shell (`generated-element/shell.ts`, `root.ts`,
+   `dsd-ssr.ts`, `lifetime-scope.ts`, `runtime/instance-ledger.ts`, …) AND the
+   legacy executor entries (`facade-host.ts`, `runtime-program.ts`,
+   `runtime/{kernel,program-kernel,hydrate,fresh-dom}.ts`). Any generated
+   component importing the shell therefore loads the executor with it.
+
+So M11-3 is not an entry-codegen change (that part is done) and not a
+`generatedLane` propagation fix (tried: propagating `generatedLane` to the
+package-island branch produced **no** change to the graph — the fact was
+already correct on the emitted entry, and the chunk composition is what the
+checker measures). It is a **module-graph split inside `@openelement/element`**:
+the generated-element surface must stop reaching the executor entries, either by
+separating the shell's imports from the legacy runtime modules or by giving the
+generated lane its own entry module that shares the primitives it needs
+(markers, claim invariants, lifetime, security) without pulling
+`facade-host`/`runtime-program`/`kernel`.
+
+Recorded as the M11-3 starting point. The `generatedLane` propagation probe was
+reverted: it changed nothing measurable, and an inert change left in the tree
+would misrepresent the state.
+
+Non-claim: this note does not move P1. It measures it.
