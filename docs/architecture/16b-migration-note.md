@@ -326,6 +326,32 @@ The generated lane has no authoring `computed`, so there is no legitimate reason
 to alias a row-derived value in this lane; the rule therefore costs nothing and
 removes a whole class of "the state is live" bugs.
 
+### R1b — what a tracked JSX slot actually admits (measured)
+
+R1 says "inline the read at its sink". That is necessary but not sufficient: the
+slot grammar is narrower than "any expression". Measured pairs, all compiled in
+this tree:
+
+| spelling at a child slot | result |
+| --- | --- |
+| `{props.count * 2}` | admitted, TWO bound refresh functions (mount + claim) |
+| `const d = props.count * 2; {d}` | admitted, **ZERO** bound refreshes — compiles, SSRs correctly, never updates |
+| `{props.locale === 'zh' ? 'ZH' : 'EN'}` | **refused**: "a conditional branch must be JSX or null" |
+| `{label(props.locale)}` where `const label = (l) => …` | admitted, TWO bound refreshes |
+
+So the rule has three parts:
+
+1. a VALUE (arithmetic, member read, template literal, a call to a
+   component-local `const` ARROW) may be inlined at its slot;
+2. a CONDITIONAL that must yield TEXT cannot be a ternary in a child slot — use
+   a component-local `const` arrow returning the string. Attribute positions DO
+   admit ternaries (`hidden={a ? b : null}` is the documented pattern);
+3. never bind the value to a local first and read the local: that is the
+   zero-refresh row above, and it is invisible in SSR.
+
+A local function DECLARATION called in a tracked slot is refused (OEC9041); the
+`const` arrow form is the one that works.
+
 ### R2 — a static id inside a shadow root belongs in the template, not in a connect-time write
 
 `onConnect` runs as a PROLOGUE, before mount/claim DOM work (the unchanged
