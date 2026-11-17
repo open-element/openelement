@@ -645,3 +645,33 @@ required blocks submission, reset clears, fieldset disabled drops the entry,
 delegatesFocus + per-input events), dogfood 105 × three engines, compiler 1279,
 element 970, router 1845, ui 86, www+tools+create+saas+tests 1268 (+1 skipped),
 `pnpm run check`.
+
+## Implementation plan record (2026-11-17): D-18c's JSON seed, the four landing sites
+
+D-18c chose the direction; this records where it lands and what must be true
+before it ships, because the B8 slice is blocked on all four agreeing.
+
+1. **Producer (emitter).** The host wrapper reads the non-primitive rows the
+   content producer actually READ — never a separate eager pass. The suite that
+   pins the supplied-getter contract (`generated-element.nonprimitive-properties.test.ts`
+   "supplied getters are read per read") fails the moment a prologue starts
+   reading rows to build a seed, so the read must be RECORDED at the sink, not
+   anticipated. The seed travels as one JSON payload on the host artifact.
+2. **Wire (dsd-ssr + host attributes).** The payload needs a host attribute;
+   `serializeGeneratedElementHtml`'s attribute writer validates names and values
+   and rejects duplicates, so the payload is a single declared name with a
+   string value. It joins the claim's `dynamicNames` set (the existing
+   "the shell writes this slot itself" exclusion) instead of the static seed.
+3. **Consumer (shell claim).** On claim, the shell parses the payload, validates
+   it against the declared row TYPES (a structurally divergent seed fails
+   closed through `OEIR_LEAF_CLAIM_MISMATCH`, never a silent default), and
+   writes the values before setup runs. An equal seed writes nothing.
+4. **Boundary.** `trustedHtml` stays OUT (a brand cannot be reconstructed from
+   JSON; D-18c records that as a separate decision). Non-JSON-encodable declared
+   types stay out. Plain objects are never promoted to the brand.
+
+Why it is not landed yet: steps 1-3 each touch exact-byte assertions
+(emitter bytes, DSD bytes, claim seeds) and the change is only correct as a
+whole. Its own evidence matrix is S/K/U/D plus a divergence negative, and it
+unblocks `open-search` (`hits: SearchHit[]`), `notes-live`
+(`events: Array<{id, body}>`) and `open-page-rail` (`items: RailItem[]`).
