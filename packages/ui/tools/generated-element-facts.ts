@@ -98,6 +98,13 @@ export interface GeneratedElementFacts {
   readonly root: 'light' | 'shadow';
   /** The authored `.css` specifiers (validated by the consuming build). */
   readonly styles: readonly string[];
+  /**
+   * The compiler-emitted SSR host producer's export name, or `undefined` for a
+   * light-root declaration (whose SSR is the shell-attached `__ssr` static) or a
+   * leaf that emitted no producer. Read from the compiler's own
+   * `ssrHostExport` return value — never re-derived from the emitted text.
+   */
+  readonly ssrHostExport: string | undefined;
   /** Authored JSDoc summary paragraph; `''` when the module has none. */
   readonly description: string;
   readonly attributes: readonly OpenElementAttribute[];
@@ -472,6 +479,7 @@ export function readGeneratedElementFacts(input: GeneratedElementInput): Generat
       module: `${UI_PACKAGE_PREFIX}${input.file.replace(/\.tsx$/, '')}`,
       root: admission.root === 'shadow-open' ? 'shadow' : 'light',
       styles: admission.styles,
+      ssrHostExport: emitted.ssrHostExport ?? undefined,
       description: readAuthoredSummary(parsed.sourceFile, defaultExport.node),
       attributes,
       slots: names.slots.map((name) => ({ name })),

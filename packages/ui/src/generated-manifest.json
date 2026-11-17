@@ -233,7 +233,8 @@
         "root": "shadow",
         "styles": [
           "./open-theme-toggle.css"
-        ]
+        ],
+        "ssrHostExport": "OpenThemeToggle__ssrHost"
       }
     },
     {
@@ -267,7 +268,8 @@
         "root": "shadow",
         "styles": [
           "./open-code-block.css"
-        ]
+        ],
+        "ssrHostExport": "OpenCodeBlock__ssrHost"
       }
     },
     {
@@ -340,7 +342,8 @@
         "styles": [
           "./overlay-recipe.css",
           "./open-dialog.css"
-        ]
+        ],
+        "ssrHostExport": "OpenDialog__ssrHost"
       }
     },
     {
@@ -381,7 +384,8 @@
         "styles": [
           "./overlay-recipe.css",
           "./open-dropdown.css"
-        ]
+        ],
+        "ssrHostExport": "OpenDropdown__ssrHost"
       }
     }
   ]

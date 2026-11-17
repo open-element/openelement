@@ -605,3 +605,43 @@ islands build, serve, hydrate and pass `cinematic-home.spec.ts` 12/12 in
 chromium; compiler 1279, element 970, router 1845, ui 86, `pnpm run check`.
 The island migrations themselves are NOT landed: they exceed the www client-JS
 budget (352.8 KB vs the 344 KB SLO), which is a separate product decision.
+
+## Amendment (2026-11-17): the package-island SSR host identity (B9)
+
+Append-only fact record. It adds ONE manifest field and the scanner read that
+turns it into the identity the entry already understands; it re-decides nothing.
+
+### What was missing
+
+A **local** island's scan resolves a `generatedElementHost` identity
+(`resolveGeneratedElementHost`) and the entry pairs it through
+`__registerSsrIsland(tag, ctor, hostRenderer)`, which is what makes its SSR emit
+a DSD `<template shadowrootmode>`. A **package** island only had its STYLE
+declarations registered (`packageIslandStyleDeclarations`), so
+`generatedHostExports.get(tag)` was always `undefined` for it and the entry fell
+back to `__registerSsrComponent` — the class path. Consequence: a migrated
+package component server-rendered as a bare host tag with no DSD, so the client
+had nothing to claim, no listener was ever installed, and its form value never
+reached `FormData`.
+
+### The contract this amendment adds
+
+- **Manifest field.** `openElement.ssrHostExport?: string` — the compiler's
+  return-only `<Name>__ssrHost` name, published by the package's own manifest
+  generator from `CompiledGeneratedElement.ssrHostExport`. Absent for a class
+  declaration and for a LIGHT-root generated one (a light root serializes
+  through the shell-attached `__ssr` static, which the entry resolves from the
+  class).
+- **Scanner read.** `buildPackageIslandDecls` turns a published name into the
+  SAME `{ kind: 'producer', component, ssrHostExport }` identity a local scan
+  produces, so one entry path serves both. The name is never re-derived from a
+  `<X>__ssrHost` convention in the router — that is exactly the drift this ADR's
+  M11 record forbids.
+
+Evidence (LOCAL): the dogfood `/form` page now server-renders `<open-input>`
+with `<template shadowrootmode="open" shadowrootdelegatesfocus>` and its style
+links; `ui-form.spec.ts` 6/6 in chromium (FormData carries the typed value,
+required blocks submission, reset clears, fieldset disabled drops the entry,
+delegatesFocus + per-input events), dogfood 105 × three engines, compiler 1279,
+element 970, router 1845, ui 86, www+tools+create+saas+tests 1268 (+1 skipped),
+`pnpm run check`.

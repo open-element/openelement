@@ -643,6 +643,11 @@ export function buildGeneratedElementDeclaration(
       // from them without re-reading or re-compiling the package source.
       root: facts.root,
       ...(facts.styles.length === 0 ? {} : { styles: [...facts.styles] }),
+      // The compiler-emitted SSR host producer's name, published so a consuming
+      // build can pair a PACKAGE island through the same `__registerSsrIsland`
+      // channel a local island uses (ADR-0182; re-deriving the name from a
+      // convention would be the drift that ADR forbids).
+      ...(facts.ssrHostExport === undefined ? {} : { ssrHostExport: facts.ssrHostExport }),
     },
   };
 }

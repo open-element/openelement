@@ -517,11 +517,26 @@ export function buildPackageIslandDecls(
             `Package island "${d.tagName}" declares media without media delivery`,
           );
         }
+        // A package island whose manifest publishes the compiler's
+        // `ssrHostExport` is a GENERATED element, so it must be paired through
+        // `__registerSsrIsland` exactly like a local island — otherwise the
+        // build registers it as a class, its SSR emits no DSD template, and the
+        // client never claims it (the shell then installs no listener at all).
+        //
+        // The name is the compiler's return-only metadata, published by the
+        // package's own manifest generator. Re-deriving it from a `<X>__ssrHost`
+        // convention here would be the drift ADR-0182 forbids.
+        const ssrHostExport = openElement?.ssrHostExport;
+        const generatedElementHost: GeneratedElementHostIdentity | undefined =
+          typeof ssrHostExport === 'string' && ssrHostExport.length > 0
+            ? { kind: 'producer', component: d.className ?? d.tagName, ssrHostExport }
+            : undefined;
         return {
           tagName: d.tagName,
           modulePath,
           isPackage: true,
           source: 'package' as const,
+          ...(generatedElementHost === undefined ? {} : { generatedElementHost }),
           // #638: package island chunks dropped `export default`; the client
           // island factory must read the named export (CEM class name) instead.
           exportName: exportNames?.[d.tagName] ?? d.className,
