@@ -619,3 +619,37 @@ What this record deliberately did NOT change, and why:
 Reading order for anyone judging P1: this record states WHAT is decidable and
 what is not; the checker states the per-artifact verdict; the class-lane
 participation is the reason `www` is VIOLATED.
+
+## The exact dependency chain to P1 MET (measured 2026-11-18)
+
+The `www` artifact names eight islands sharing one chunk:
+
+```
+open-button, open-cinematic-scroll, open-code-block, open-dragon-live-gaze,
+open-hero-polish, open-page-rail, open-search, open-theme-toggle
+```
+
+That chunk (`islands/element-runtime-<hash>.js`) contains BOTH:
+- the generated-element shell (`generated-element/{shell,root,dsd-ssr}.ts`), and
+- the six executor entries (`facade-host`, `runtime-program`,
+  `runtime/{kernel,program-kernel,hydrate,fresh-dom}`).
+
+So the executor is reachable not because any generated component uses it, but
+because the bundler merged two lanes' dependencies into one chunk. Measured, not
+inferred: walking `shell.ts`'s relative-import closure visits **25 modules and
+hits ZERO executor entries**.
+
+Two consequences, both actionable:
+
+1. **Nothing on the generated side keeps the executor alive.** A generated island
+   can be fully migrated and still sit in that chunk; its own contribution is
+   clean.
+2. **P1 flips when the CLASS-lane islands leave the graph.** Of the eight, the
+   remaining class-lane ones are `open-search` and `open-page-rail` (the other six
+   are generated or already migrated). Migrating those two — or removing them
+   from the production browser graph — is the P1 lever, not any change to the
+   generated lane.
+
+This is why the consumer-migration map and the P1 verdict are the same story told
+twice; the map lists what has to move, this record explains why moving it is what
+turns the verdict.
