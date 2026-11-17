@@ -661,3 +661,25 @@ Consequences for the remaining www components:
 - The article-route components pass a large `model` object straight into
   `<open-article-view model={...}>`; that is a declared row, which the JSON seed
   channel now carries, so they are the most tractable of the remaining set.
+
+### Process note: a new package SUBPATH has four consumers, not one
+
+Adding `@openelement/element/internal/compiled/leaf-runtime` cost three CI
+round-trips because the entry has to appear in four places, and the local
+`check` covers none of them:
+
+1. `packages/element/package.json` `exports` (and the generator's table in
+   `packages/router/src/vite/generated-export-files.ts` — the `--check` task
+   compares the two).
+2. `packages/element/README.md` — the pre-push gate refuses an undocumented
+   public subpath.
+3. `vitest.config.ts` aliases — the browser test projects resolve package
+   subpaths to monorepo source through this table, so a missing row surfaces as
+   `Failed to fetch dynamically imported module` in the element-browser suite.
+4. `docs/release/public-interface-snapshot.json` — a new subpath is a public
+   shape delta (`interface:snapshot:write`, which the local `check` does not run).
+
+The test helper `apps/saas/app/__tests__/compile-page.ts` has the same shape for
+its own rewrite table (it must rebase EVERY element subpath, and the emitted tail
+is JSON-quoted while authored imports are not). Both are listed here so the next
+subpath addition does not rediscover them.
