@@ -214,9 +214,7 @@ test.describe('open-button form piercing', () => {
       }
 
       const form = document.createElement('form');
-      const host = document.createElement('open-button') as HTMLElement & {
-        _internals?: { form: HTMLFormElement | null };
-      };
+      const host = document.createElement('open-button') as HTMLElement;
       host.setAttribute('type', 'submit');
       host.textContent = 'Go';
       form.appendChild(host);
@@ -238,10 +236,16 @@ test.describe('open-button form piercing', () => {
       if (!inner) return { error: 'open-button shadow button not rendered' };
       inner.click();
 
+      // The form association is asserted through the PLATFORM's own view, not
+      // through the class lane's private `_internals` field: a generated
+      // element's ElementInternals record is the shell's (a compiled component
+      // never sees it), so `_internals` no longer exists. `form.elements`
+      // membership is what a form-associated custom element is required to
+      // expose, and it is the observable the failure modes would break.
       const outcome = {
         submitEvent,
         openClickSeen,
-        internalsFormIsOuterForm: host._internals?.form === form,
+        listedInOuterForm: [...form.elements].includes(host as unknown as Element),
       };
       form.remove();
       return outcome;
@@ -254,7 +258,8 @@ test.describe('open-button form piercing', () => {
     expect(result.submitEvent).toEqual({ composed: true, bubbles: true });
     // ...and still fires the component's own open-click event.
     expect(result.openClickSeen).toBe(true);
-    // In a real browser the form association comes from ElementInternals.
-    expect(result.internalsFormIsOuterForm).toBe(true);
+    // The element is a form-associated custom element: the platform lists it in
+    // the owning form's `elements` collection.
+    expect(result.listedInOuterForm).toBe(true);
   });
 });
