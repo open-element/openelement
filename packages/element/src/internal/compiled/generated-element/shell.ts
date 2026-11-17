@@ -521,6 +521,18 @@ export interface GeneratedElementDescriptor<P extends object = Record<string, un
    */
   readonly formAssociated?: boolean;
   readonly properties?: readonly GeneratedElementProperty[];
+  /**
+   * The light-root SSR producer the compiler emits as `<Name>__ssr()`: a
+   * parameterless function returning the content HTML the mount would build.
+   *
+   * Present only for a LIGHT (or absent) descriptor root — a shadow root has no
+   * light DOM of its own to serialize, so its SSR path is the `<Name>__ssrHost`
+   * wrapper declared next to the DSD template instead. The shell attaches this
+   * as the class's static `__ssr` so the canonical serializer can reach it from
+   * the registered constructor without a second registry (the class IS the
+   * registration).
+   */
+  readonly ssrProducer?: () => string;
   readonly createRecipe: (owner: LifetimeScope, host: GeneratedElementHost<P>) => Recipe<P>;
   /**
    * The LC-0 descriptor-fixture retention factory (internal descriptor ABI
@@ -646,6 +658,7 @@ interface NormalizedDescriptor {
     host: GeneratedElementInstanceHost<Record<string, unknown>>,
   ) => Readonly<Record<string, unknown>>;
   readonly createBindings?: () => Readonly<Record<string, unknown>>;
+  readonly ssrProducer?: () => string;
 }
 
 interface FormRuntime {
@@ -1105,6 +1118,7 @@ function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Normalized
     properties,
     byAttribute,
     createRecipe: descriptor.createRecipe as NormalizedDescriptor['createRecipe'],
+    ...(descriptor.ssrProducer === undefined ? {} : { ssrProducer: descriptor.ssrProducer }),
     ...(descriptor.createInstance === undefined
       ? {}
       : { createInstance: descriptor.createInstance as NormalizedDescriptor['createInstance'] }),
@@ -2121,6 +2135,18 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         const state = stateOf(this);
         setProperty(this, state, property, coercePropertyWrite(property, value), true);
       },
+    });
+  }
+
+  if (normalized.ssrProducer !== undefined) {
+    // The light-root SSR producer rides the class the serializer already
+    // resolves (`customElements.get(tag)`), so `renderToString` needs no second
+    // lookup table and an unregistered light host still fails closed.
+    Object.defineProperty(GeneratedElementShell, '__ssr', {
+      configurable: true,
+      enumerable: false,
+      writable: false,
+      value: normalized.ssrProducer,
     });
   }
 

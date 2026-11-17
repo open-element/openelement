@@ -266,6 +266,7 @@
  */
 
 import ts from 'typescript';
+import { BOOLEAN_ATTRIBUTES } from '../../semantic-core/attribute-classification.ts';
 import { unsafeStreamFrameAttribute } from '@openelement/protocol/stream-frame-policy';
 import { STATIC_STYLES_MARKER, VOID_TAGS } from '@openelement/protocol/part-program';
 import type {
@@ -3585,9 +3586,18 @@ function emitNode(
           );
           continue;
         }
+        // A static BOOLEAN attribute is a presence marker: the HTML parser
+        // spells it `name=""` and `getAttribute` returns the empty string. The
+        // authored `muted` JSX shorthand folds to the string "true", which would
+        // make the created DOM disagree with the same element parsed from SSR
+        // bytes (and with the class lane). Emitting the canonical empty value
+        // keeps mount and claim byte-equivalent.
+        const staticValue = BOOLEAN_ATTRIBUTES.has(attribute.name.toLowerCase())
+          ? ''
+          : attribute.value;
         push(
           state,
-          `${varName}.setAttribute(${JSON.stringify(attribute.name)}, ${JSON.stringify(attribute.value)});`,
+          `${varName}.setAttribute(${JSON.stringify(attribute.name)}, ${JSON.stringify(staticValue)});`,
           attribute.span,
         );
         continue;
@@ -4127,10 +4137,13 @@ function emitClaimStaticAttributeSeed(
     )
     .map((attribute) => attribute.name);
   const declared = staticAttrs
-    .map(
-      (attribute) =>
-        `{ name: ${JSON.stringify(attribute.name)}, value: ${JSON.stringify(attribute.value)} }`,
-    )
+    .map((attribute) => {
+      // The seed must spell a static BOOLEAN attribute exactly as the mount and
+      // the SSR bytes do (`name=""`), or the claim compares the parsed empty
+      // value against the authored "true" shorthand and fails closed.
+      const seedValue = BOOLEAN_ATTRIBUTES.has(attribute.name.toLowerCase()) ? '' : attribute.value;
+      return `{ name: ${JSON.stringify(attribute.name)}, value: ${JSON.stringify(seedValue)} }`;
+    })
     .join(', ');
   const skip = `[${dynamicNames.map((name) => JSON.stringify(name)).join(', ')}]`;
   state.usesLeafClaimMismatch = true;
@@ -6016,11 +6029,15 @@ function staticSsrNode(node: FunctionModelNode, markers: boolean): string | null
     // known at compile time, so this component has no static SSR form yet.
     if (attribute.kind !== 'static') return null;
     if (unsafeStreamFrameAttribute(attribute.name, attribute.value)) return null;
+    // Same canonical spelling as the mount: a static BOOLEAN attribute renders
+    // as `name=""` (the class lane and the HTML parser's own spelling), so the
+    // SSR bytes and the created DOM agree byte-for-byte.
+    const staticValue = BOOLEAN_ATTRIBUTES.has(attribute.name.toLowerCase()) ? '' : attribute.value;
     attributes.push(
       [
         '" "',
         literalText(`${attribute.name}="`),
-        `escapeAttrValue(${literalText(attribute.value)})`,
+        `escapeAttrValue(${literalText(staticValue)})`,
         literalText('"'),
       ].join(' + '),
     );
@@ -6606,9 +6623,14 @@ function emitDynamicSsrNodes(
       if (attribute.kind === 'static') {
         if (!ATTRIBUTE_PATTERN.test(attribute.name)) return false;
         if (unsafeStreamFrameAttribute(attribute.name, attribute.value)) return false;
+        // Same canonical spelling as the mount and the static producer: a
+        // static BOOLEAN attribute renders `name=""`.
+        const ssrValue = BOOLEAN_ATTRIBUTES.has(attribute.name.toLowerCase())
+          ? ''
+          : attribute.value;
         push(
           state,
-          `${outVar}.push(${JSON.stringify(` ${attribute.name}="`)}, escapeAttrValue(${literalText(attribute.value)}), ${JSON.stringify('"')});`,
+          `${outVar}.push(${JSON.stringify(` ${attribute.name}="`)}, escapeAttrValue(${literalText(ssrValue)}), ${JSON.stringify('"')});`,
           attribute.span,
         );
         continue;

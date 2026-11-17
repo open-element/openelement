@@ -20,6 +20,7 @@ import {
   requestTimeStyleLinks,
 } from './internal/compiled/server/style-links.ts';
 import type { DocumentStyleResources } from './internal/core/html-escape.ts';
+import { escapeAttrValue } from './internal/core/html-escape.ts';
 import type {
   CompiledElementMetadata,
   CompiledPropertyMetadata,
@@ -300,6 +301,30 @@ interface InternalRenderToStringOptions extends Omit<
 
 function classNameOf(ctor: object): string {
   return (ctor as { name?: string }).name ?? 'anonymous';
+}
+
+/**
+ * Serialize one LIGHT-root generated host: the element tag, its canonical
+ * attribute pairs and the compiled content as the host's children.
+ *
+ * The producer is content-only because that is exactly what a light root owns —
+ * its region is the host's children, not a template. The attribute pairs go
+ * through the SAME normalization the shadow host producer receives, so a light
+ * and a shadow host spell the same authored attributes identically.
+ */
+function serializeLightGeneratedHost(
+  tag: string,
+  content: string,
+  authoredAttributes: readonly (readonly [string, unknown])[] | undefined,
+): string {
+  const pairs =
+    authoredAttributes === undefined
+      ? []
+      : normalizeHostAttributePairs(authoredAttributes).attributes.map(
+          (attribute) => [attribute.name, attribute.bare ? '' : attribute.value] as const,
+        );
+  const attributes = pairs.map(([name, value]) => ` ${name}="${escapeAttrValue(value)}"`).join('');
+  return `<${tag}${attributes}>${content}</${tag}>`;
 }
 
 function failUncompiled(ctor: object, tag: string): never {
@@ -927,7 +952,36 @@ function renderToStringAtDepth(
     );
   }
   const program = resolvedClass.__partProgram;
-  if (!program) failUncompiled(resolvedClass, typeof input === 'string' ? input : '<unknown>');
+  if (!program) {
+    // A LIGHT-root generated element serializes its own children, so its
+    // compiled artifact is the shell-attached static `__ssr()` (the compiler
+    // emits the leaf producer and the descriptor's `ssrProducer` row; the shell
+    // installs it on the class). No Part Program, no registry pair, no DSD
+    // wrapper: the host's children ARE the region, exactly as on the client.
+    const lightSsr = (resolvedClass as { __ssr?: unknown }).__ssr;
+    if (typeof lightSsr === 'function') {
+      const rendered = (lightSsr as () => unknown).call(resolvedClass);
+      if (typeof rendered !== 'string') {
+        throw new OpenElementError(
+          `[openElement] the light-root generated element <${
+            typeof input === 'string' ? input : '<unknown>'
+          }> produced ${typeof rendered} instead of an HTML string; the compiler-emitted ` +
+            '`__ssr` producer must always return serialized content.',
+          { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+        );
+      }
+      // The producer is content-only (the shadow lane's `<Name>__ssrHost` wraps
+      // its own DSD template). A light root's region IS the host's children, so
+      // the serializer owns the host element: the tag plus the canonical
+      // attribute pairs, then the compiled content.
+      return serializeLightGeneratedHost(
+        typeof input === 'string' ? input : '<unknown>',
+        rendered,
+        options.hostAttrs,
+      );
+    }
+    failUncompiled(resolvedClass, typeof input === 'string' ? input : '<unknown>');
+  }
   const tag = program.tag;
   if (typeof input === 'string' && input !== tag) {
     throw new OpenElementError(
@@ -1033,6 +1087,22 @@ function renderToStringAtDepth(
                 typeof customElements === 'undefined'
                   ? undefined
                   : (customElements.get(nested.tag) as CompiledComponentConstructor | undefined);
+              // A LIGHT-root generated element serializes its own children and
+              // has no Part Program and no registry pair, so the nested path
+              // reaches its compiled producer through the class static the
+              // shell installed (the same one the root path uses).
+              const nestedLightSsr = (nestedClass as { __ssr?: unknown } | undefined)?.__ssr;
+              if (nestedClass !== undefined && typeof nestedLightSsr === 'function') {
+                const rendered = (nestedLightSsr as () => unknown).call(nestedClass);
+                if (typeof rendered !== 'string') {
+                  throw new OpenElementError(
+                    `[openElement] the nested light-root generated element <${nested.tag}> ` +
+                      `produced ${typeof rendered} instead of an HTML string.`,
+                    { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+                  );
+                }
+                return serializeLightGeneratedHost(nested.tag, rendered, nested.attributes);
+              }
               if (!nestedClass?.__partProgram) {
                 throw new OpenElementError(
                   `[openElement] admitted nested component <${nested.tag}> is not registered with a compiled Part Program.`,

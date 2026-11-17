@@ -556,3 +556,52 @@ focus guard, dialog lost-session re-entry). Dogfood e2e: the closed-surface
 `hasAttribute('style')` tightening plus the reconnect-after-close,
 rename-while-open and dialog reconnect rows. LOCAL runs recorded with the
 implementation commit; no clean-SHA gate claim is made by this amendment.
+
+## Amendment (2026-11-17): the light-root SSR producer row (B4)
+
+Append-only fact record. It adds ONE internal descriptor member and the
+serializer branch that reads it; it re-decides nothing and creates no public
+API promise.
+
+### What was missing
+
+A LIGHT (or absent) root's leaf already emitted the parameterless
+`<Name>__ssr()`, but nothing reached it at request time:
+`entry-orchestrator.ts` deliberately produces no `<Name>__ssrHost` for a light
+root ("never has a host producer by design"), and `renderToString` only
+dispatched through the generated-host registry pair — so every light-root
+generated island failed closed with `OE_PROGRAM_MISSING`.
+
+### The contract this amendment adds
+
+- **Descriptor member (shell-internal).** `GeneratedElementDescriptor.ssrProducer?:
+  () => string` — the compiler emits it ONLY for a light/absent descriptor root
+  whose leaf really emitted `<Name>__ssr`, and the shell attaches it as the
+  class's static `__ssr` (one class = one registration; an unregistered light
+  host still fails closed).
+- **Serializer branch.** `renderToString` — root AND nested — calls that static
+  when the resolved class carries no Part Program, wraps the produced content in
+  the host element with the canonical attribute pairs (`serializeLightGeneratedHost`),
+  and fails closed on a non-string result. The producer stays content-only: a
+  light root's region IS the host's children, which is why the wrapper is the
+  serializer's job and not the producer's.
+- **Byte contract.** A light-root module that emits a producer gains exactly one
+  descriptor line. The A8/R5/R6 byte pins moved ONCE for that capability; the
+  test bodies now also assert the row's presence so the change cannot be
+  re-inherited silently.
+
+### Static boolean attribute spelling (same change set)
+
+The generated lane spelled a JSX boolean shorthand (`muted`, `loop`,
+`playsinline`) as `setAttribute(name, "true")` at three emission sites (mount,
+M08-1a static SSR, M08-1b dynamic SSR) plus the claim static seed, while the
+HTML parser and the class lane spell presence as `name=""`. All four sites now
+emit the canonical empty value, so a created element and the same element
+parsed from SSR bytes agree byte-for-byte. Found by the `cinematic-home` e2e
+suite, which asserts `muted=""`.
+
+Evidence (LOCAL): the migrated `open-dragon-live-gaze` / `open-cinematic-scroll`
+islands build, serve, hydrate and pass `cinematic-home.spec.ts` 12/12 in
+chromium; compiler 1279, element 970, router 1845, ui 86, `pnpm run check`.
+The island migrations themselves are NOT landed: they exceed the www client-JS
+budget (352.8 KB vs the 344 KB SLO), which is a separate product decision.

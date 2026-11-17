@@ -432,6 +432,8 @@ export function generateElementModule(
     hostPropsVar: '__oeHostProps',
     propsResolver: 'resolveGeneratedElementProps',
     ssrHost: `${rootName}__ssrHost`,
+    // The light-root SSR producer name (the leaf's parameterless `<Name>__ssr`).
+    ssrProducer: `${rootName}__ssr`,
   };
   const root = options.root;
   const templateRoot = hostTemplateRoot(root);
@@ -519,6 +521,16 @@ export function generateElementModule(
     // LC-0). Emitted only when the leaf declared it; `createBindings` remains
     // never emitted.
     ...(rootInstanceFactory === null ? [] : [`  createInstance: ${rootInstanceFactory},`]),
+    // A LIGHT (or absent) descriptor root serializes its own children, so its
+    // SSR entry point is the leaf's parameterless `<Name>__ssr` — the shadow
+    // root's `<Name>__ssrHost` DSD wrapper has no light DOM to produce. The row
+    // is emitted only when the leaf really emitted that producer, and the shell
+    // attaches it as the class's static `__ssr` (one class = one registration).
+    ...(root !== undefined && root !== 'light'
+      ? []
+      : exportsSsrFunction(leafText, rootName)
+        ? [`  ssrProducer: ${names.ssrProducer},`]
+        : []),
     '};',
     '',
     `const ${names.element} = createGeneratedElementClass(${names.descriptor});`,

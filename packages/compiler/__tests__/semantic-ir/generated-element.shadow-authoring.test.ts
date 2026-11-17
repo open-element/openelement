@@ -69,6 +69,11 @@ const M09_1A_LIGHT_TAIL = [
   '  root: "light",',
   '  properties: [],',
   '  createRecipe: createProfileRecipe,',
+  // A light root's SSR entry point is the leaf's parameterless producer; the
+  // shell attaches it as the class's static `__ssr` (B4). The shadow lane's
+  // `<Name>__ssrHost` wrapper has no light DOM to produce, so the row is absent
+  // there.
+  '  ssrProducer: Profile__ssr,',
   '};',
   '',
   'const __oeProfileElement = createGeneratedElementClass(__oeElementDescriptor);',
@@ -115,6 +120,9 @@ describe('M09-2a generated shadow host producer', () => {
     expect(result.module).toBe(result.leaf! + M09_1A_LIGHT_TAIL);
     expect(result.tail).not.toContain('__ssrHost');
     expect(result.tail).not.toContain('serializeGeneratedElementHtml');
+    // The light lane's SSR producer is the leaf's own parameterless `__ssr`;
+    // no DSD wrapper and no host producer is involved.
+    expect(result.tail).toContain('ssrProducer: Profile__ssr,');
   });
 
   test('an absent root keeps the same light tail so the shell owns the default', () => {

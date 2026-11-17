@@ -375,8 +375,14 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
         '}\n' +
         'export default SeedCard;\n',
     );
+    // 2026-11-17: the light-root SSR capability (B4) adds ONE descriptor row to
+    // a light/absent-root module whose leaf emitted `__ssr` — the class-attached
+    // `ssrProducer` the serializer reads. That is a new capability, not a change
+    // to the lifecycle surface, so the pin moves once and the shape assertion
+    // below states what changed.
+    expect(rootSetup).toContain('  ssrProducer: SeedCard__ssr,');
     expect(sha256(rootSetup)).toBe(
-      'f5c4423d117ec97aca862066bc5affab24a4486cb413bfdfaf29bb2224d3bc76',
+      '88e555dc0958b096cdfb67a5ff1756fbbe1f655bfba120ef8f939a98858115a8',
     );
     expect(sha256(functionText(rootSetup, 'SeedCard__ssr'))).toBe(
       '328059b07b89719ed2fc03f659a041a022982e21a5837f7628046bae6b473d50',
@@ -390,8 +396,10 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
         '}\n' +
         'export default PlainCard;\n',
     );
+    // Same B4 row as above: the light-root producer is one descriptor line.
+    expect(rootPlain).toContain('  ssrProducer: PlainCard__ssr,');
     expect(sha256(rootPlain)).toBe(
-      '5e78893e33aee71c7a95dc322cc170edee29666f76397e33e15a064cd5e77b8a',
+      'c0212f02cea802b52e1b441a89320261ee098d912037a8feddc6ffb598375df3',
     );
     expect(sha256(functionText(rootPlain, 'PlainCard__ssr'))).toBe(
       '16e96344e5dc9cd26db72789d8bab36f12c2b815b15c646be3da4c383f28bef1',
@@ -410,8 +418,10 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
         '}\n' +
         'export default Host;\n',
     );
+    // Same B4 row: one light-root producer line on a composable light host.
+    expect(rootChild).toContain('  ssrProducer: Host__ssr,');
     expect(sha256(rootChild)).toBe(
-      '8c39f5542cfbbf0ce646a79ff8fc10cb8090b08643b1751f0538f66de1815dc3',
+      '0413313aded13268d6168e198822f963c049d34aa5c173821a2fea80f5ba7439',
     );
     expect(sha256(functionText(rootChild, 'Host__ssr'))).toBe(
       'd361eae8d21a2959954c5ca83cf12b68887ed2fe5e4da21a21fd335259526863',

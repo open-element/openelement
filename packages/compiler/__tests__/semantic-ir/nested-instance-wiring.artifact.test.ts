@@ -449,7 +449,7 @@ describe('T4 depth-1 nested-instance wiring — artifact contract', () => {
     // Captured from HEAD `2545e0ac6` by running that tree's generator on the
     // same source/id/site (byte equality verified against the primed baseline
     // tree; the pin makes the fallback a regression contract).
-    expect(sha256(module)).toBe('d0523ed596cba8a8ae478964210e6492577e486841eaa83ef3e64e5dc0faacea');
+    expect(sha256(module)).toBe('424c37bb2401ee61a26b13b7f75c554113e6e3191f3beec5c2fd40281fd6d700');
     // A reachable root reference keeps the existing mount-cycle refusal, and the
     // marker adds no diagnostic: with and without the root marker the refusal is
     // the same code with the same span.
@@ -470,7 +470,7 @@ describe('T4 depth-1 nested-instance wiring — artifact contract', () => {
     // No retention marker in any factory literal (the factory keeps today's
     // exact `mountHost` bytes).
     expect(module).not.toContain('instance: __oe_host.instance');
-    expect(sha256(module)).toBe('1d99012b74f46779ef73cbdb190372b2bf9ac288975c02a15857d1d9119995b2');
+    expect(sha256(module)).toBe('ac2024e972dfea2384212b424f46b94b43e5d6e8a7b0b8775184d136373ca61f');
     // Hostless leaf (direct leaf tests) stays byte-identical to the pre-change
     // hostless emission too: no marker, no factory, no alias.
     const hostless = generateLeafModule(frontModule(NO_REF_SOURCE));
