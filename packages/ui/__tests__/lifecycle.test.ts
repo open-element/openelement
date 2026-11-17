@@ -94,29 +94,79 @@ test('open-dialog: each open session enters the top layer exactly once; reopen r
 
 // ─── open-dropdown: activation wiring is reconnect-safe (dropdown-machine) ───
 
-test('open-dropdown: focus-return wiring attaches once across activate/re-activate; anchor name stays stable', async () => {
+test('open-dropdown: activation wires the focus-return listeners on the retained root and keeps the anchor stable', async () => {
   const { activateDropdown } = await import('../src/dropdown-machine.ts');
-  const listenerCounts: Record<string, number> = {};
-  const content = {
-    matches: () => false,
-    togglePopover: () => {},
-    style: { setProperty: () => {}, removeProperty: () => {} },
-  };
+  const additions: Record<string, number> = {};
+  const removals: Record<string, number> = {};
+  const content = { matches: () => false, togglePopover: () => {} };
   const el = dropdownHostWith(content);
   el.shadowRoot.addEventListener = (type: string) => {
-    listenerCounts[type] = (listenerCounts[type] ?? 0) + 1;
+    additions[type] = (additions[type] ?? 0) + 1;
   };
+  el.shadowRoot.removeEventListener = (type: string) => {
+    removals[type] = (removals[type] ?? 0) + 1;
+  };
+
   activateDropdown(el);
-  expect(listenerCounts).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1 });
+  expect(additions).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1 });
   const anchor = el.anchorName;
   expect(anchor).not.toEqual('');
+  // Both anchor halves: the host carries `anchor-name` and the custom property
+  // the authored sheet reads; the compiled content leaf stays style-free.
+  expect(el.style.getPropertyValue('anchor-name')).toEqual(anchor);
+  expect(el.style.getPropertyValue('--oe-dropdown-anchor')).toEqual(anchor);
 
-  // Re-activation (a reconnect re-runs it): the focusWired guard keeps the
-  // listeners at one each, and the realm-unique anchor name is NOT re-assigned
-  // (both halves must keep the name the SSR/CSR activation paired).
+  // A reconnect re-runs activation: the previous generation's listeners come
+  // off FIRST and the new generation wires exactly once more, so a queued task
+  // from the dead connection cannot mutate the fresh claim. The realm-unique
+  // anchor name is not re-assigned.
   activateDropdown(el);
-  expect(listenerCounts).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1 });
+  expect(removals).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1 });
+  expect(additions).toEqual({ focusin: 2, beforetoggle: 2, toggle: 2 });
   expect(el.anchorName).toEqual(anchor);
+});
+
+// ─── open-dropdown: element teardown removes the wiring ─────────────────────
+
+test('open-dropdown: element teardown removes the wiring once, idempotently', async () => {
+  const { activateDropdown, disposeDropdownFocusWiring } =
+    await import('../src/dropdown-machine.ts');
+  const removals: Record<string, number> = {};
+  const content = { matches: () => false, togglePopover: () => {} };
+  const el = dropdownHostWith(content);
+  el.shadowRoot.addEventListener = () => {};
+  el.shadowRoot.removeEventListener = (type: string) => {
+    removals[type] = (removals[type] ?? 0) + 1;
+  };
+
+  activateDropdown(el);
+  disposeDropdownFocusWiring(el);
+  expect(removals).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1 });
+  expect(readInstanceState(el, 'focusWired', () => true)).toEqual(false);
+  // Idempotent: a second teardown removes nothing.
+  disposeDropdownFocusWiring(el);
+  expect(removals).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1 });
+});
+
+// ─── open-dropdown: the anchor identity is a host custom property ───────────
+
+test('open-dropdown: renaming the anchor moves the host custom property the sheet reads', async () => {
+  const { syncDropdownAnchor, clearDropdownPositionAnchor } =
+    await import('../src/dropdown-machine.ts');
+  const content = { matches: () => false, togglePopover: () => {} };
+  const el = dropdownHostWith(content);
+  syncDropdownAnchor(el);
+  expect(el.style.getPropertyValue('--oe-dropdown-anchor')).toEqual(el.anchorName);
+
+  el.anchorName = '--author-renamed';
+  syncDropdownAnchor(el);
+  expect(el.style.getPropertyValue('anchor-name')).toEqual('--author-renamed');
+  expect(el.style.getPropertyValue('--oe-dropdown-anchor')).toEqual('--author-renamed');
+
+  // The content leaf never receives an inline declaration, so the reconnect
+  // claim's static-seed compare stays satisfied; the guard clears a stale one.
+  clearDropdownPositionAnchor(el);
+  expect(content.hasAttribute('style')).toEqual(false);
 });
 
 // ─── open-input: activation id stability + focus/blur events ─────────────────

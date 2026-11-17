@@ -27,6 +27,7 @@ import { defineComponentConfig } from './component-config.ts';
 import {
   activateDropdown,
   clearDropdownPositionAnchor,
+  disposeDropdownFocusWiring,
   recordDropdownPointerDown,
   syncDropdownAnchor,
   toggleDropdown,
@@ -62,12 +63,20 @@ function OpenDropdown(props: { anchorName: string }) {
     // half applies at `beforetoggle` — before any open can be observed. A
     // frame of deferral would lose the first-open capture (#1226) to an
     // interaction in the mount frame.
-    activateDropdown(env.host as DropdownHost);
+    const host = env.host as DropdownHost;
+    activateDropdown(host);
   });
   onDispose((env) => {
-    // A disconnect drops the runtime content anchor so a reconnect's re-claim
-    // of the retained nodes sees exactly the compiled static seeds.
-    clearDropdownPositionAnchor(env.host as DropdownHost);
+    // Element-lifetime teardown: drop the runtime content anchor (a reconnect
+    // re-claim sees exactly the compiled static seeds) and remove every
+    // focus-return listener this module wired on the retained root. Both
+    // helpers are idempotent. A disconnect that keeps the element alive is
+    // covered by the connect path: the retained root and nodes survive, so the
+    // next open's beforetoggle re-applies the content half and the next
+    // closed flip clears it.
+    const host = env.host as DropdownHost;
+    clearDropdownPositionAnchor(host);
+    disposeDropdownFocusWiring(host);
   });
   onPropertyChange((event) => {
     if (event.name !== 'anchorName') return;

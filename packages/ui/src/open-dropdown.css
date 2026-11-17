@@ -18,5 +18,11 @@
   top: anchor(bottom);
   left: anchor(left);
   margin: calc(var(--spacing) * 2) 0 0;
+  /* The anchor identity is a CUSTOM PROPERTY the activation sets on the host,
+     never an inline declaration on this compiled leaf: a runtime inline style
+     on a compiled node is an extra static attribute at the reconnect claim
+     (OEIR_LEAF_CLAIM_MISMATCH), while a custom property on the host is
+     outside the seed surface and inherits into this block. */
+  position-anchor: var(--oe-dropdown-anchor, --oe-dropdown-unset);
 }
 

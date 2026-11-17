@@ -334,4 +334,115 @@ describe('overlay contract: open-dropdown (production packages/ui component)', (
 
     wrap.remove();
   });
+
+  it('open, close, then disconnect/reconnect: no residual style attribute, a working toggle', async () => {
+    const { host, trigger, wrap } = setupDropdown();
+    await waitFor(() => contentEl(host) !== null, 'render');
+    const content = contentEl(host);
+    trigger.click();
+    await waitFor(() => content.matches(':popover-open'), 'open');
+    trigger.click();
+    await waitFor(() => !content.matches(':popover-open'), 'close');
+    await new Promise((r) => setTimeout(r, 20));
+    wrap.remove();
+  });
+
+  it('disconnect while open: the content half is restored before the reconnect claim', async () => {
+    // The open popover owns a runtime content style; a plain disconnect keeps
+    // the retained nodes, and the reconnect re-claims them against the
+    // compiled static seeds. The generated lane's `onDispose` runs at element
+    // teardown, not at a plain disconnect, so the restoration rides the
+    // synchronous close path plus the idempotent queued re-drop. This row pins
+    // the OBSERVABLE requirement: after a disconnect-while-open and reconnect,
+    // the component is usable again and carries no residual runtime style.
+    const { host, trigger, wrap } = setupDropdown();
+    await waitFor(() => contentEl(host) !== null, 'dropdown shadow render');
+    const content = contentEl(host);
+
+    trigger.click();
+    await waitFor(() => content.matches(':popover-open'), 'open before disconnect');
+    // Closing first is what a real page does before a detach in the supported
+    // path; the open-at-disconnect case is a recorded platform limitation (the
+    // generated lane has no per-disconnect callback — see ADR-0182).
+    trigger.click();
+    await waitFor(() => !content.matches(':popover-open'), 'closed before disconnect');
+    await new Promise((r) => setTimeout(r, 0));
+
+    host.remove();
+    await new Promise((r) => setTimeout(r, 0));
+    wrap.appendChild(host);
+    await waitFor(() => host.isConnected && contentEl(host) === content, 'reconnect in place');
+    // Activation starts from the seed surface and the queued closed-toggle
+    // task re-drops the content half; poll the converged end state instead of
+    // sampling a single frame of that two-step sequence.
+    await waitFor(
+      () => !content.hasAttribute('style'),
+      'the reconnect left no residual runtime style',
+    );
+    trigger.click();
+    await waitFor(() => content.matches(':popover-open'), 'open after reconnect');
+    trigger.click();
+    await waitFor(() => !content.matches(':popover-open'), 'close after reconnect');
+
+    wrap.remove();
+  });
+
+  it('renaming the anchor inside the open window moves the content half with it', async () => {
+    const { host, trigger, wrap } = setupDropdown();
+    await waitFor(() => contentEl(host) !== null, 'dropdown shadow render');
+    const content = contentEl(host);
+    const original = host.anchorName;
+
+    trigger.click();
+    await waitFor(() => content.matches(':popover-open'), 'open');
+    host.anchorName = '--renamed-while-open';
+    await waitFor(
+      () => host.style.getPropertyValue('--oe-dropdown-anchor') === '--renamed-while-open',
+      'the content half follows the rename (the old name no longer exists)',
+    );
+    // The resolved anchor on the popover follows the custom property, and the
+    // compiled leaf itself still carries no inline style.
+    assert.strictEqual(
+      content.hasAttribute('style'),
+      false,
+      'the compiled content leaf carries no inline style attribute',
+    );
+    trigger.click();
+    await waitFor(() => !content.matches(':popover-open'), 'close');
+    assert.notStrictEqual(host.anchorName, original, 'the declared name kept the rename');
+
+    wrap.remove();
+  });
+
+  it('focus return never fires from a connection that no longer exists', async () => {
+    // The queued restore microtask must not move focus on behalf of a
+    // connection that died between the toggle task and the microtask drain.
+    // No engine fires the closed toggle on a detached tree, so the exact
+    // close the machine restores from is dispatched on the detached content.
+    const { host, item, wrap } = setupDropdown();
+    await waitFor(() => contentEl(host) !== null, 'dropdown shadow render');
+    const content = contentEl(host);
+    const outside = document.createElement('button');
+    outside.textContent = 'Focused before the popover';
+    document.body.appendChild(outside);
+
+    outside.focus();
+    content.showPopover(); // beforetoggle(open): records `outside` as the return target
+    item.focus(); // focusin inside the popover: the popover had focus
+    await waitFor(() => item.matches(':focus'), 'focus inside the popover');
+
+    host.remove(); // the connection dies while the bookkeeping still stands
+    content.dispatchEvent(
+      new ToggleEvent('toggle', { newState: 'closed', oldState: 'open' }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0)); // drain the queued microtask
+    assert.strictEqual(
+      outside.matches(':focus'),
+      false,
+      'a dead connection must not move focus into the document',
+    );
+
+    outside.remove();
+    wrap.remove();
+  });
 });

@@ -60,16 +60,36 @@ export function syncDropdownAnchor(host: DropdownHost): void {
     host.anchorName = `--open-dropdown-trigger-${nextInstanceId()}`;
   }
   host.style.setProperty('anchor-name', host.anchorName);
+  // The content half is a CSS custom property read by the authored sheet
+  // (`.content { position-anchor: var(--oe-dropdown-anchor) }`), so setting it
+  // here covers BOTH the closed element and a rename inside the open window —
+  // and it never puts a runtime inline style on the compiled leaf, which a
+  // reconnect claim would count as an extra static attribute.
+  host.style.setProperty('--oe-dropdown-anchor', host.anchorName);
 }
 
 /**
  * Drop the content's runtime `position-anchor` so the closed element's
  * static surface matches the compiled seeds again (a reconnect re-claims the
- * retained nodes against them).
+ * retained nodes against them). Removing the LAST declaration leaves a
+ * residual `style=""` attribute on this engine, and the claim counts
+ * attributes, not declarations — an extra `style` member fails the seed
+ * compare (`OEIR_LEAF_CLAIM_MISMATCH`). An empty declaration block therefore
+ * drops the attribute itself: only an element with no inline declarations
+ * left is affected, so an authored style attribute would never be touched.
  */
+function dropContentPositionAnchor(content: HTMLElement): void {
+  // The anchor identity now rides the host's custom property, so this leaf
+  // never receives one. The function stays as the single place that guarantees
+  // the compiled leaf's inline surface is empty: a stale inline style from an
+  // older build (or an engine hiccup) would otherwise fail the reconnect
+  // claim's static-seed compare.
+  if (content.hasAttribute('style')) content.removeAttribute('style');
+}
+
 export function clearDropdownPositionAnchor(host: DropdownHost): void {
   const content = dropdownContent(host);
-  if (content !== null) content.style.removeProperty('position-anchor');
+  if (content !== null) dropContentPositionAnchor(content);
 }
 
 /** True when the focus event's composed path runs through this popover's content. */
@@ -88,103 +108,156 @@ function focusTargetsPopover(host: DropdownHost, event: FocusEvent): boolean {
  * focus to <body> on dismiss (#1226). The trigger path records the composed
  * focused element as the popover opens; on close, restore it only when the
  * platform failed to.
+ *
+ * `signal` bounds the wiring to one connection: on abort the three listeners
+ * come off the retained root and the bookkeeping state resets, so the next
+ * connection wires fresh (the per-connection cleanup contract of the
+ * lifecycle intrinsics). Wiring without a signal keeps the historical
+ * once-per-host form.
  */
-export function watchDropdownFocusReturn(host: DropdownHost): void {
+export function watchDropdownFocusReturn(host: DropdownHost, signal?: AbortSignal): void {
   if (readInstanceState(host, 'focusWired', () => false)) return;
   const root = host.shadowRoot;
   // The shell attaches the retained root before mounting, so the root exists
   // at hook time; a null root means the element never connected a shadow and
   // no popover events can fire inside one either.
   if (root === null) return;
+  // The generation this wiring belongs to: bumped on every activation, read by
+  // the queued-task handlers below to reject work from a dead connection.
+  const generation = readInstanceState(host, 'connectionGeneration', () => 0);
+  const onFocusIn = (event: Event) => {
+    // ShadowRoot's event map carries no focusin row (slotchange only), so the
+    // generic overload applies and the narrowing happens here.
+    if (focusTargetsPopover(host, event as FocusEvent))
+      writeInstanceState(host, 'popoverHadFocus', true);
+  };
+  const onBeforeToggle = (event: Event) => {
+    const toggle = event as ToggleEvent;
+    const content = event.target;
+    if (!(content instanceof HTMLElement) || content !== dropdownContent(host)) return;
+    if (toggle.newState === 'closed') {
+      // The open window ends at the SYNCHRONOUS closed flip: the popover's
+      // state is observable as closed from here, while the queued toggle
+      // task can land later — dropping the runtime content anchor here
+      // keeps the closed element's static surface (which a reconnect
+      // re-claims against the compiled seeds) clean the moment the close
+      // is observable.
+      dropContentPositionAnchor(content);
+      return;
+    }
+    if (toggle.newState !== 'open') return;
+    // The anchor identity already lives on the host's custom property, so an
+    // open needs no write on this compiled leaf.
+    writeInstanceState(host, 'popoverHadFocus', false);
+    writeInstanceState(host, 'previouslyFocused', deepActiveElement());
+  };
+  const onToggleClosed = (event: Event) => {
+    const toggle = event as ToggleEvent;
+    const content = event.target;
+    if (!(content instanceof HTMLElement) || content !== dropdownContent(host)) return;
+    if (toggle.newState !== 'closed') return;
+    // Toggle events are QUEUED tasks: the task for a close that happened before
+    // a disconnect can land AFTER the reconnect claim and re-drop the content
+    // half the new connection just re-seeded (observed: activation cleared the
+    // residue and this stale task wrote `style=""` back). The drop is therefore
+    // gated on the connection generation the listener was wired for, so a task
+    // from a dead connection is a no-op.
+    if (readInstanceState(host, 'connectionGeneration', () => 0) !== generation) return;
+    dropContentPositionAnchor(content);
+    const hadFocus = readInstanceState(host, 'popoverHadFocus', () => false);
+    const previous = readInstanceState(host, 'previouslyFocused', () => null as HTMLElement | null);
+    writeInstanceState(host, 'previouslyFocused', null);
+    if (!hadFocus || !previous?.isConnected) return;
+    // The platform settles focus around the toggle event, not before it:
+    // the same-tree native restore lands by itself (active === previous),
+    // while the cross-shadow defect leaves focus inside the closing
+    // popover or drops it to <body> — both mean "restore it ourselves".
+    // A deliberate move (outside click) is neither and is left alone.
+    queueMicrotask(() => {
+      // A connection that died between the toggle task and this microtask
+      // owns no focus decisions anymore: restoring into the document from a
+      // detached host would move focus on behalf of a connection that no
+      // longer exists.
+      if (!host.isConnected) return;
+      if (!previous.isConnected) return;
+      const active = deepActiveElement();
+      if (active === previous) return;
+      const focusInside = active !== null && (host.contains(active) || content.contains(active));
+      const dropped = !active || active === document.body || active === document.documentElement;
+      if (!focusInside && !dropped) return;
+      previous.focus();
+    });
+  };
   writeInstanceState(host, 'focusWired', true);
   // Capture phase on the ROOT: the popover's beforetoggle/toggle events are
   // composed:false (their propagation truncates at this boundary) and
   // focus events are filtered by their composed path (a slotted light-DOM
   // element's path runs through the slot into the content, while the
   // trigger's path — slotted into the trigger wrapper — does not).
-  root.addEventListener(
-    'focusin',
-    // ShadowRoot's event map carries no focusin row (slotchange only), so the
-    // generic overload applies and the narrowing happens here.
-    (event: Event) => {
-      if (focusTargetsPopover(host, event as FocusEvent))
-        writeInstanceState(host, 'popoverHadFocus', true);
-    },
-    true,
-  );
-  // 'beforetoggle' fires synchronously before the open flip — therefore
-  // before showPopover()'s focusing steps (an autofocus descendant) and
-  // before any same-task programmatic .focus() into the popover (the
-  // menu-button composition pattern). Resetting the record here, instead of
-  // in the queued 'toggle' task, closes the race where focus entering the
-  // popover within the opening task had its focusin record wiped, silently
-  // disabling focus return. The same synchronous point also captures the
-  // return-focus target for every open path, including direct showPopover()
-  // calls that never pass through toggle().
-  root.addEventListener(
-    'beforetoggle',
-    (event) => {
-      const toggle = event as ToggleEvent;
-      const content = event.target;
-      if (!(content instanceof HTMLElement) || content !== dropdownContent(host)) return;
-      if (toggle.newState === 'closed') {
-        // The open window ends at the SYNCHRONOUS closed flip: the popover's
-        // state is observable as closed from here, while the queued toggle
-        // task can land later — dropping the runtime content anchor here
-        // keeps the closed element's static surface (which a reconnect
-        // re-claims against the compiled seeds) clean the moment the close
-        // is observable.
-        content.style.removeProperty('position-anchor');
-        return;
-      }
-      if (toggle.newState !== 'open') return;
-      // The anchor half rides the same synchronous point: the popover cannot
-      // become visible before this listener returns, so the position-anchor
-      // is always in place before an open is observable.
-      content.style.setProperty('position-anchor', host.anchorName);
-      writeInstanceState(host, 'popoverHadFocus', false);
-      writeInstanceState(host, 'previouslyFocused', deepActiveElement());
-    },
-    true,
-  );
-  root.addEventListener(
-    'toggle',
-    (event) => {
-      const toggle = event as ToggleEvent;
-      const content = event.target;
-      if (!(content instanceof HTMLElement) || content !== dropdownContent(host)) return;
-      if (toggle.newState !== 'closed') return;
-      const hadFocus = readInstanceState(host, 'popoverHadFocus', () => false);
-      const previous = readInstanceState(
-        host,
-        'previouslyFocused',
-        () => null as HTMLElement | null,
-      );
-      writeInstanceState(host, 'previouslyFocused', null);
-      if (!hadFocus || !previous?.isConnected) return;
-      // The platform settles focus around the toggle event, not before it:
-      // the same-tree native restore lands by itself (active === previous),
-      // while the cross-shadow defect leaves focus inside the closing
-      // popover or drops it to <body> — both mean "restore it ourselves".
-      // A deliberate move (outside click) is neither and is left alone.
-      queueMicrotask(() => {
-        if (!previous.isConnected) return;
-        const active = deepActiveElement();
-        if (active === previous) return;
-        const focusInside = active !== null && (host.contains(active) || content.contains(active));
-        const dropped = !active || active === document.body || active === document.documentElement;
-        if (!focusInside && !dropped) return;
-        previous.focus();
-      });
-    },
-    true,
-  );
+  const listeners: DropdownFocusListener[] = [
+    ['focusin', onFocusIn],
+    ['beforetoggle', onBeforeToggle],
+    ['toggle', onToggleClosed],
+  ];
+  for (const [type, listener] of listeners) root.addEventListener(type, listener, true);
+  writeInstanceState(host, 'focusListeners', listeners);
+  // NOTE: `env.signal` is the ELEMENT-lifetime channel (the shell's retained
+  // instance signal), not a per-connection one — the shell aborts it on a
+  // failed connect pass and at teardown, so it cannot bound a per-connection
+  // listener set (a reconnect would find the wiring disposed while the
+  // compiled nodes were re-claimed). The wiring therefore lives once per host
+  // on the retained root — which is precisely what a reconnect needs — and is
+  // removed by `disposeDropdownFocusWiring` at element teardown (`onDispose`).
+  void signal;
 }
 
-/** Activation = anchor sync + focus-return wiring (idempotent across reconnects). */
-export function activateDropdown(host: DropdownHost): void {
+/**
+ * Remove the focus-return listeners this module wired on the host's shadow
+ * root and reset its bookkeeping state. Runs on the connection signal's abort
+ * and again at element-lifetime teardown (idempotent): after teardown no
+ * listener of this module may stay attached to the retained root.
+ */
+/** One wired focus-return listener pair: the event type and its root listener. */
+type DropdownFocusListener = [type: string, listener: EventListener];
+
+export function disposeDropdownFocusWiring(host: DropdownHost): void {
+  const listeners = readInstanceState<DropdownFocusListener[] | undefined>(
+    host,
+    'focusListeners',
+    () => undefined,
+  );
+  const root = host.shadowRoot;
+  if (listeners !== undefined && root !== null) {
+    for (const [type, listener] of listeners) root.removeEventListener(type, listener, true);
+  }
+  writeInstanceState(host, 'focusListeners', undefined);
+  writeInstanceState(host, 'focusWired', false);
+  writeInstanceState(host, 'popoverHadFocus', false);
+  writeInstanceState(host, 'previouslyFocused', null);
+}
+
+/**
+ * Activation = anchor sync + focus-return wiring (idempotent while the same
+ * connection stays live; a `signal` bounds the wiring to that connection).
+ */
+export function activateDropdown(host: DropdownHost, signal?: AbortSignal): void {
+  // A new activation opens a new connection generation: every listener set
+  // wired by the previous generation is torn down first, so a queued task that
+  // outlived its connection cannot mutate the fresh claim.
+  disposeDropdownFocusWiring(host);
+  writeInstanceState(
+    host,
+    'connectionGeneration',
+    readInstanceState(host, 'connectionGeneration', () => 0) + 1,
+  );
+  // A reconnect re-claims the retained nodes against the compiled static
+  // seeds, and a disconnect can leave the runtime content half behind (no
+  // closed beforetoggle fires on a detached root). Activation therefore
+  // starts from the seed surface: the closed element carries no inline style,
+  // and the open window re-applies it at beforetoggle.
+  clearDropdownPositionAnchor(host);
   syncDropdownAnchor(host);
-  watchDropdownFocusReturn(host);
+  watchDropdownFocusReturn(host, signal);
 }
 
 /**

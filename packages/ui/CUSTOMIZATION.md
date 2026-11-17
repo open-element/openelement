@@ -314,7 +314,12 @@ custom properties.
 
 - Parts: `trigger`, `content`
 - Variables: `--spacing` (the anchor-positioning block's gap; the rest of the
-  content's presentation is authored as Tailwind utilities)
+  content's presentation is authored as Tailwind utilities) and
+  `--oe-dropdown-anchor` (the component's own runtime anchor identity — the
+  activation writes the realm-unique anchor name here, and the authored
+  `.content { position-anchor: var(--oe-dropdown-anchor) }` reads it. It is an
+  internal wiring property, not a theme token; overriding it re-points the
+  popover's anchor.)
 - Shares the overlay recipe for the popover surface.
 
 ### `open-input`

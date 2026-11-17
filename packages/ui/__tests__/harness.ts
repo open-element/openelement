@@ -24,7 +24,18 @@ class TestHTMLElement {
   static observedAttributes?: readonly string[];
 
   shadowRoot: unknown = null;
-  style = { setProperty: (_name: string, _value: string) => {} };
+  // A real read-back so assertion rows can observe the properties the
+  // activation applies (anchor-name and the --oe-dropdown-anchor channel).
+  readonly #styleProps = new Map<string, string>();
+  style = {
+    setProperty: (name: string, value: string) => {
+      this.#styleProps.set(name, value);
+    },
+    getPropertyValue: (name: string) => this.#styleProps.get(name) ?? '',
+    removeProperty: (name: string) => {
+      this.#styleProps.delete(name);
+    },
+  };
 
   readonly #attributes: TestAttributeStore;
   readonly #listeners: TestListenerStore;
@@ -226,9 +237,12 @@ export function installThemeGlobals(harness: ThemeHarness): void {
 export interface FakeDialog {
   open: boolean;
   calls: string[];
+  /** Platform top-layer session mirror: true while `:modal` matches. */
+  modal: boolean;
   show(): void;
   showModal(): void;
   close(): void;
+  matches(selector: string): boolean;
   setAttribute(name: string, value: string): void;
 }
 
@@ -237,6 +251,7 @@ export function fakeDialog(): FakeDialog {
   const fake: FakeDialog = {
     open: false,
     calls,
+    modal: false,
     show: () => {
       calls.push('show');
       fake.open = true;
@@ -244,11 +259,14 @@ export function fakeDialog(): FakeDialog {
     showModal: () => {
       calls.push('showModal');
       fake.open = true;
+      fake.modal = true;
     },
     close: () => {
       calls.push('close');
       fake.open = false;
+      fake.modal = false;
     },
+    matches: (selector: string) => selector === ':modal' && fake.modal,
     setAttribute: (name: string, _value: string) => {
       calls.push(`setAttribute:${name}`);
       if (name === 'open') fake.open = true;
@@ -279,6 +297,15 @@ export function dialogHostWith(fake: FakeDialog, mode?: string) {
  */
 export function dropdownHostWith(content: Record<string, unknown>) {
   installDomHarness();
+  // The compiled content leaf's inline-style guard reads the attribute API.
+  if (typeof (content as { hasAttribute?: unknown }).hasAttribute !== 'function') {
+    const attributes = new Set<string>();
+    Object.assign(content, {
+      hasAttribute: (name: string) => attributes.has(name),
+      removeAttribute: (name: string) => attributes.delete(name),
+      setAttribute: (name: string) => attributes.add(name),
+    });
+  }
   // oxlint-disable-next-line no-explicit-any
   const el = new (globalThis.HTMLElement as unknown as new () => any)();
   el.shadowRoot = {

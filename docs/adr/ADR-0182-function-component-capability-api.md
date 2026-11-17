@@ -483,3 +483,76 @@ row included); ui 84; compiler 1265 / element 970 / router 1845 / www + tools
 regenerated and checked; `pnpm run check`. LOCAL. P1 unchanged (open-dropdown
 is not a www island; the five www-local class islands remain the P1
 remainder).
+
+## Amendment (2026-11-17): the migration products' reconnect/session defects fixed at the consumer boundary
+
+Facts-only correction of the fourth record's two "established" claims and the
+third record's session bookkeeping; no row, milestone or verdict moves. Found
+by a reviewer consumer audit, reproduced end to end at `aa1f949d9` on the real
+compiled dogfood fixture (Chromium) and fixed entirely inside
+`packages/ui` (no compiler or element-shell change).
+
+### Correction 1 — the "closed element's static surface always matches" premise was false
+
+The record stated the runtime content half is "dropped at the synchronous
+`beforetoggle(closed)` point and on dispose", keeping the closed surface
+exactly the compiled declaration. Two real paths broke that premise:
+
+1. This engine leaves a residual `style=""` attribute when `removeProperty`
+   takes out the last declaration. The claim counts ATTRIBUTES, not
+   declarations (`staticAttributeSeedMismatch`), so the empty attribute was an
+   extra static seed member and every open→close→disconnect→reconnect threw
+   `OEIR_LEAF_CLAIM_MISMATCH: static attribute seed count is 4, declared 3
+   (authored packages/ui/src/open-dropdown.tsx:94:7)` — the component was
+   dead after the reconnect. Reproduced on the compiled fixture.
+2. Disconnecting while the popover was open left the runtime content half in
+   place (no closed `beforetoggle` reached the detached root), and the
+   reconnect re-claim failed on that residue the same way. Also reproduced.
+
+Fixes (consumer boundary): the drop helper removes an EMPTIED `style`
+attribute itself (an authored declaration never touches it), and the
+component's per-connection abort drops the content half at disconnect
+(dialog-machine's `env.signal` precedent). The dogfood qualification and the
+`element-browser` overlay-contract suite pin both reconnect paths plus the
+`hasAttribute('style') === false` closed surface.
+
+### Correction 2 — a rename inside the open window kept the content half stale
+
+`syncDropdownAnchor` applied only the host half, so an author rename while the
+popover was open left `position-anchor` naming a value that no longer existed
+— the popover lost its anchor for the whole open window (reproduced). The
+sync now re-applies the content half inside the open window; the closed
+surface invariant is unchanged (no write while closed).
+
+### Correction 3 — the focus-return wiring is connection-scoped
+
+The wiring was once-per-host with no removal path (no signal, no dispose). It
+now records its three listeners, drops them on the connection signal's abort
+and again at element-lifetime teardown (idempotent), and the queued restore
+microtask refuses to move focus when the host is no longer connected — a dead
+connection owns no focus decisions. No engine observed fires the closed
+toggle on a detached tree, so the guard row drives the exact close with a
+synthetic `ToggleEvent` on the detached content.
+
+### Correction 4 — dialog: a lost top-layer session re-enters instead of a zombie
+
+Disconnecting an open modal host drops the platform's `:modal` membership
+while the machine's `modalActive` bookkeeping and `dialog.open` survive on the
+retained nodes; the reconnect sync early-returned and left an open dialog with
+no backdrop, focus containment or inert (reproduced: `dialogOpen: true,
+modal: false` after reconnect). `syncDialogElement` now verifies the live
+session (`dialog.matches(':modal')`) before early-returning; a lost session
+re-enters through the existing #1030 close-first dance. The `open` attribute
+itself stays claim-exempt (a dynamic sink in the emitted seed's skip list) —
+verified against the emitted-claim generator, no shell change needed or made.
+
+### Evidence
+
+Node (ui project): the four new lifecycle rows (connection-signal dispose +
+re-wire, open-window rename, emptied-attribute removal, lost-session
+re-entry). `element-browser` overlay-contract: five new rows (close→reconnect
+toggle, disconnect-while-open→reconnect, open-window rename, dead-connection
+focus guard, dialog lost-session re-entry). Dogfood e2e: the closed-surface
+`hasAttribute('style')` tightening plus the reconnect-after-close,
+rename-while-open and dialog reconnect rows. LOCAL runs recorded with the
+implementation commit; no clean-SHA gate claim is made by this amendment.

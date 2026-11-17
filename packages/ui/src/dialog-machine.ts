@@ -48,6 +48,7 @@ function dialogElement(host: DialogHost): HTMLDialogElement | null {
 export function syncDialogElement(host: DialogHost): void {
   const dialog = dialogElement(host);
   if (!dialog) return;
+
   // True once showModal() has run for the current open session (#1030).
   const modalActive = readInstanceState(host, 'modalActive', () => false);
   if (host.open) {
@@ -55,7 +56,16 @@ export function syncDialogElement(host: DialogHost): void {
       // Modal: showModal() puts the rest of the page on the inert top layer
       // natively — focus, hit-testing, and the accessibility tree are all
       // covered by the platform, so no hand-rolled sibling inert is needed.
-      if (modalActive) return;
+      if (modalActive) {
+        // The bookkeeping says a session is live, but the platform may have
+        // dropped it: disconnecting the host removes the dialog from the top
+        // layer (`:modal` goes false) while this state and `dialog.open`
+        // survive on the retained nodes. A reconnect re-running the sync must
+        // detect the lost session and re-enter instead of presenting a
+        // zombie "open" dialog with no backdrop, focus containment or inert.
+        if (dialog.matches(':modal')) return;
+        writeInstanceState(host, 'modalActive', false);
+      }
       // #1030: the compiled bool sink writes `open` onto the inner <dialog>
       // (SSR DSD / CSR first render), so dialog.open may already be true
       // without showModal() having run — that state presents as NON-modal

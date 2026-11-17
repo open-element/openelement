@@ -77,14 +77,14 @@ function OpenDialog(props: { open: boolean; label: string }) {
   onConnect((env) => {
     // The class lane applied the open state after the shadow DOM existed
     // (onCsrRendered / onDsdHydrated); the generated setup can run before the
-    // template mounts, so the same sync defers one frame. The connection
-    // signal cancels a frame that outlives the connection.
-    const frame = globalThis.requestAnimationFrame(() =>
-      syncOpenDialog(env.host as DialogHost, env.states),
-    );
-    env.signal.addEventListener('abort', () => globalThis.cancelAnimationFrame(frame), {
-      once: true,
-    });
+    // template mounts, so the same sync defers one frame. The frame is NOT
+    // cancelled through `env.signal`: that channel is the element-lifetime
+    // one, and the shell aborts it around connect passes, so cancelling here
+    // would drop the reconnect's own sync (a modal left open across a
+    // disconnect then never re-enters the top layer). The sync is idempotent
+    // and reads the live host, so a stale frame is harmless.
+    const host = env.host as DialogHost;
+    globalThis.requestAnimationFrame(() => syncOpenDialog(host, env.states));
   });
   onPropertyChange((event) => {
     if (event.name !== 'open') return;
