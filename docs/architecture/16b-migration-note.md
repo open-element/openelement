@@ -683,3 +683,39 @@ The test helper `apps/saas/app/__tests__/compile-page.ts` has the same shape for
 its own rewrite table (it must rebase EVERY element subpath, and the emitted tail
 is JSON-quoted while authored imports are not). Both are listed here so the next
 subpath addition does not rediscover them.
+
+## 2026-11-18 ruling — `trustedHtml` stays out of the seed channel
+
+Owner-delegated decision, made from a design review recorded in the lane's
+`TRUSTED-HTML-TRANSPORT-DESIGN.md`. **The D-18c exclusion is kept; no transport is
+built.** The two components previously assumed to be blocked on it must change
+SHAPE instead.
+
+The decisive arguments, each checked against the tree:
+
+1. **The brand is an identity claim about a call site, not a value.** `security.ts`
+   keeps a module-private `WeakSet<object>` and `isTrustedHtmlValue` is
+   set-membership on OBJECT IDENTITY — deliberately not a structural check. Its
+   own comment says "the trust does not serialize". Any transport ends with a call
+   that mints a brand from bytes that crossed a wire, which converts a provable
+   refusal into a silent success. That is the raw-markup channel this repo
+   already forbids in the DSD leaf, in `__h`'s single reserved key, and in D-18c
+   itself.
+2. **The transport would not have unblocked either component anyway.** The
+   generated lane refuses every `innerHTML` sink outright (`OEC9044`,
+   `function-frontend.ts`), and refuses a `signal`/`computed` local as an unbound
+   host binding (`OEIR_GENERATED_ELEMENT_UNBOUND_BINDING`). Measured: for one of
+   the two components the `trustedHtml` count is ZERO and the `computed` count is 21.
+3. **They are not islands and have no sidecar.** They are reached only through
+   page/layout/static-component import graphs, and the client bundle's only
+   scripted entry is the island entry — so a seed for them would today describe a
+   claim that never runs.
+
+Consequence for the remaining surface, stated so the next lane does not re-derive
+it: `open-reading-shell` needs its 21 `computed` rows collapsed or inlined (no
+transport work is useful); `open-article-view` needs its article body to stop
+being a runtime string (which removes the `trustedHtml` row and its sink
+together), or it stays on the class lane, which already works. If a future owner
+overrules this, the only defensible design is a request-scoped unforgeable token
+minted with the brand and verified at the claim — a signing subsystem, recorded
+as its own ADR, and still unable to prove anything about the original call site.
