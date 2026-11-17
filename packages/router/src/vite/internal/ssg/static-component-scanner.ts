@@ -6,6 +6,7 @@ import type { StaticComponentDecl } from '@openelement/protocol/ssg';
 import { normalizeSeparators } from '@openelement/element/build-utils';
 import { analyzeModuleSemantics } from '@openelement/compiler';
 import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
+import { readIslandConfig } from './island-scanner.ts';
 import {
   walkModuleGraph,
   type ModuleWalkDiagnostic,
@@ -111,7 +112,32 @@ export async function scanStaticComponents(
       vocabulary: ROUTER_MODULE_VOCABULARY,
     });
     const collect = !inside(routeRoot, file) && !inside(islandRoot, file);
-    const tagName = collect ? semantics.defaultCompiledTag : undefined;
+    // A CLASS static component carries its tag in the `@element` decorator
+    // (`defaultCompiledTag`). A GENERATED-lane page-local component carries it
+    // in its sidecar (`openElement.tag`) — it has no decorator at all, so
+    // without this second read the scanner reports zero components and the SSG
+    // admission set never contains the tag: the page then renders the host as a
+    // plain unknown element (`__h`) instead of the compiled output.
+    // `readIslandConfig` THROWS on a malformed sidecar (it is the authoritative
+    // reader the island scan uses). This scanner must not inherit that verdict:
+    // a component whose sidecar is broken is the transform's diagnostic to
+    // report, and one bad module here would abort route discovery for the whole
+    // app. Swallow and let the module register as "no tag" — it is reported
+    // nowhere here by design, exactly like an unparseable module in the class
+    // path above.
+    let declaredTag: string | undefined;
+    if (
+      collect &&
+      semantics.defaultCompiledTag === undefined &&
+      semantics.hasGeneratedElementSidecar
+    ) {
+      try {
+        declaredTag = readIslandConfig(source)?.tag;
+      } catch {
+        declaredTag = undefined;
+      }
+    }
+    const tagName = collect ? (semantics.defaultCompiledTag ?? declaredTag) : undefined;
     if (tagName) {
       const modulePath = `/${normalizeSeparators(relative(root, file))}`;
       const existing = byTag.get(tagName);
