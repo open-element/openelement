@@ -536,3 +536,52 @@ test('duplicate sidecar property names are refused before any attribute resoluti
   expect(read.diagnostic.code).toBe(GENERATED_ELEMENT_DIAGNOSTIC.PROPERTY_INVALID);
   expect(read.diagnostic.message).toContain('more than once');
 });
+
+/**
+ * The dependency edge is derived from the expression the compiler EMITS, so an
+ * alias in the JSX position silently downgrades a sink to a setup-time one-shot.
+ *
+ * This is not a shape preference — it is the difference between a reactive
+ * surface and an SSR-only snapshot, and it is invisible in the source (both
+ * spellings read the same, and the aliased one still renders the right value at
+ * mount/claim). The open-input migration found it the hard way: `hidden={noError}`
+ * and `aria-describedby={errorRef}` produced attributes that never cleared when
+ * the `error` row changed, while `aria-invalid` looked fine only because a
+ * helper wrote it by hand.
+ *
+ * The pin: a sink whose JSX expression reads the prop DIRECTLY gets its own
+ * `__oe_refreshN` bound to the prop dependency; a sink whose JSX expression is a
+ * bare local does not. Both mount and claim paths are counted, because the claim
+ * path is the one a DSD page actually runs.
+ */
+test('a sink must read the prop inline to gain a refresh edge (aliases are one-shot)', () => {
+  const TABLE = "properties: { hidden: { default: false }, text: { default: '' } }";
+  const probe = (expression: string, prelude: string): string =>
+    `function Probe(props: { hidden: boolean; text: string }) {\n` +
+    `${prelude}\n` +
+    `  return <div><p hidden={${expression}}>{props.text}</p></div>;\n` +
+    '}\n' +
+    'export default Probe;\n';
+  const aliased = compileGeneratedElementIfAdmitted(
+    island(TABLE, probe('noText', "  const noText = props.text === '';")),
+    FILE,
+    { site: SITE },
+  );
+  const inline = compileGeneratedElementIfAdmitted(
+    island(TABLE, probe("props.text === ''", '')),
+    FILE,
+    { site: SITE },
+  );
+  expect(aliased).not.toBeNull();
+  expect(inline).not.toBeNull();
+
+  /** Refresh functions whose body writes the `hidden` sink. */
+  const boundSinks = (code: string): number =>
+    [...code.matchAll(/function __oe_refresh\d+\(\) \{[\s\S]*?\n {2}\}/g)].filter((match) =>
+      match[0].includes('toggleAttribute("hidden"'),
+    ).length;
+
+  // One bound sink per path (mount + claim).
+  expect(boundSinks(inline!.code), 'the inline expression must be reactive').toBe(2);
+  expect(boundSinks(aliased!.code), 'an aliased sink must not look reactive').toBe(0);
+});

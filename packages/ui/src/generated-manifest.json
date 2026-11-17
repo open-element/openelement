@@ -84,51 +84,48 @@
     },
     {
       "tagName": "open-input",
-      "className": "OpenInput",
-      "superclassName": "OpenElement",
-      "description": "Form-associated text input with a label, an inline error slot, and native constraint validation (required → valueMissing via setValidity).",
+      "className": "OpenInputElement",
+      "description": "Form-associated text input with a label, an error slot and native validity.",
       "attributes": [
         {
           "name": "type",
           "type": "string",
-          "description": "type attribute"
+          "default": "text"
         },
         {
           "name": "placeholder",
           "type": "string",
-          "description": "placeholder attribute"
+          "default": ""
         },
         {
           "name": "label",
           "type": "string",
-          "description": "label attribute"
+          "default": ""
         },
         {
           "name": "name",
           "type": "string",
-          "description": "name attribute"
+          "default": ""
         },
         {
           "name": "value",
           "type": "string",
-          "description": "value attribute"
+          "default": ""
         },
         {
           "name": "disabled",
           "type": "boolean",
-          "description": "disabled attribute",
           "default": "false"
         },
         {
           "name": "required",
           "type": "boolean",
-          "description": "required attribute",
           "default": "false"
         },
         {
           "name": "error",
           "type": "string",
-          "description": "error attribute"
+          "default": ""
         }
       ],
       "events": [
@@ -155,20 +152,16 @@
       ],
       "cssParts": [
         {
-          "name": "wrapper",
-          "description": "The outer input-wrapper div"
+          "name": "wrapper"
         },
         {
-          "name": "label",
-          "description": "The label element"
+          "name": "label"
         },
         {
-          "name": "control",
-          "description": "The input element"
+          "name": "control"
         },
         {
-          "name": "error",
-          "description": "The error message small element"
+          "name": "error"
         }
       ],
       "openElement": {
@@ -178,13 +171,18 @@
         "hydrate": "load",
         "status": "experimental",
         "module": "@openelement/ui/open-input",
-        "export": "OpenInput",
+        "export": "OpenInputElement",
         "tailwind": {
           "required": true,
           "sources": [
             "./src/theme.css"
           ]
-        }
+        },
+        "root": "shadow",
+        "styles": [
+          "./open-input.css"
+        ],
+        "ssrHostExport": "OpenInput__ssrHost"
       }
     },
     {

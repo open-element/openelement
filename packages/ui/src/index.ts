@@ -37,7 +37,7 @@ export { readInstanceState, writeInstanceState } from './instance-state.ts';
 
 // Components
 export { OpenButton } from './open-button.tsx';
-export { OpenInput } from './open-input.tsx';
+export { default as OpenInput } from './open-input.tsx';
 export { default as OpenCodeBlock } from './open-code-block.tsx';
 // Authored function component; the element constructor is build-emitted and
 // registered by the build (see docs/adr/ADR-0182).

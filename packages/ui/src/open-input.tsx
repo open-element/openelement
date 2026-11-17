@@ -2,27 +2,31 @@
  * @openelement/ui - open-input
  *
  * Form-associated text input with a label, an inline error slot, and native
- * constraint validation (required → valueMissing via setValidity).
+ * constraint validation (required -> valueMissing through the shell's M09-2d
+ * form mapping).
  *
- * Experimental (owner ruling C1, #1468): internal implementation may change
- * or be removed before 1.0; the declared `::part` names follow the
+ * Experimental (owner ruling C1, #1468): internal implementation may change or
+ * be removed before 1.0; the declared `::part` names follow the
  * CUSTOMIZATION.md contract (`::part` names never shrink).
  *
- * Compiled authoring. Attribute-backed properties drive the
- * compiled sinks (type/placeholder/label/name/value/disabled/required/error);
- * the form contract (setFormValue, validity mirroring, custom states) stays
- * imperative in methods. Per-instance ids are assigned at activation — SSG
- * renders each page in one process while hydration upgrades in arbitrary
- * order, so the two realms can never share a counter (component-recipes.ts).
+ * Generated authoring. The declared rows drive the compiled sinks; the derived
+ * visibility/ARIA surface is authored as inline JSX expressions (the generated
+ * lane has no authoring `computed`), and the FORM CONTRACT (setFormValue,
+ * required validity, reset/restore, fieldset states) is the SHELL's mapping.
+ * `input-machine.ts` only projects the live value and the disabled surface
+ * (ADR-0182).
  *
- * Features:
- * - Form-associated: participates in native <form> submission via
- *   ElementInternals (setFormValue), including the initial `value`
- *   attribute synced on connect
- * - Native constraint validation: required + empty value maps to
- *   valueMissing via internals.setValidity
- * - Supports label, placeholder, error, disabled, required
- * - Dispatches 'open-input' custom event on value change
+ * TWO CONSTRAINTS SHAPE THIS TEMPLATE, and both come from the generated lane:
+ *
+ * 1. No `value={…}` binding. That name classifies as a DOM-IDL `property`
+ *    channel, and a property slot makes the whole component mount-only — losing
+ *    the SSR producer and the claim path.
+ * 2. Every id is STATIC and therefore part of the compiled attribute seed. A
+ *    claim verifies each node's static attributes, so an id written at connect
+ *    time would fail it with OEIR_LEAF_CLAIM_MISMATCH. A shadow root is its own
+ *    id scope, so the same spelling in every instance is correct — the class
+ *    lane's realm-unique counter existed only to keep SSR and CSR agreeing on a
+ *    document-wide identity, which the shadow boundary makes unnecessary.
  *
  * @csspart wrapper -The outer input-wrapper div
  * @csspart label -The label element
@@ -33,262 +37,163 @@
  * ```html
  * <open-input placeholder="Enter text"></open-input>
  * <open-input type="email" label="Email"></open-input>
- * <form onsubmit="console.info(new FormData(this))">
+ * <form>
  *   <open-input name="username" label="Username"></open-input>
  *   <button type="submit">Submit</button>
  * </form>
  * ```
  */
-import {
-  computed,
-  element,
-  OpenElement,
-  property,
-  type ReadonlySignal,
-  type StyleSheetLike,
-} from '@openelement/element';
-import { nextInstanceId, syncDisabledState } from './component-recipes.ts';
-import openInputStyles from './open-input.css';
+import { onConnect, onPropertyChange } from '@openelement/element';
 
-@element('open-input', {
-  root: 'shadow-open',
+import { defineComponentConfig } from './component-config.ts';
+import { syncInputDisabled, syncInputValue, type InputHost } from './input-machine.ts';
+
+export const openElement = defineComponentConfig({
+  root: 'shadow',
   delegatesFocus: true,
   formAssociated: true,
-})
-export class OpenInput extends OpenElement {
-  static override styles: StyleSheetLike[] = [openInputStyles];
+  styles: ['./open-input.css'],
+  properties: {
+    type: { default: 'text' },
+    placeholder: { default: '' },
+    label: { default: '' },
+    name: { default: '' },
+    value: { default: '' },
+    disabled: { default: false },
+    required: { default: false },
+    error: { default: '' },
+  },
+});
 
-  @property({ reflect: false })
-  type = 'text';
+/** Form-associated text input with a label, an error slot and native validity. */
+function OpenInput(props: {
+  type: string;
+  placeholder: string;
+  label: string;
+  name: string;
+  value: string;
+  disabled: boolean;
+  required: boolean;
+  error: string;
+}) {
+  // EVERY row-derived value below is spelled INLINE at its JSX position, on
+  // purpose. The compiler derives a sink's dependency from the reads it can see
+  // in the expression it emits: `hidden={noError}` sees a local, so it emits a
+  // setup-time one-shot with no `error` edge and never refreshes; the member
+  // read `props.error` inside the expression is what puts the sink on the
+  // `error` row's refresh channel. Naming these in locals is therefore not
+  // styling — it silently makes the whole error surface SSR-only.
+  const hostOf = (event: Event): InputHost =>
+    ((event.currentTarget as HTMLElement).getRootNode() as ShadowRoot).host as InputHost;
 
-  @property({ reflect: false })
-  placeholder = '';
+  // The fieldset-effective disabled state has ONE consumable channel and this is
+  // it: the shell writes `authorDisabled || effectiveDisabled` into the host's
+  // CustomStateSet, and event-time code reads the same set through the standard
+  // `:state(disabled)` selector (m09-2d-forms.md, seams.md). The `props.disabled`
+  // sink does NOT change on a fieldset disable, so without this guard a user can
+  // still type into a locked control and the keystrokes reach the host's value
+  // row — the class lane prevented that by mirroring `formDisabledCallback` onto
+  // the inner `input`, which the generated lane cannot reach (the shell owns the
+  // internals record, not the component's DOM).
+  const lockedByFieldset = (event: Event): boolean => hostOf(event).matches(':state(disabled)');
 
-  @property({ reflect: false })
-  label = '';
-
-  @property({ reflect: false })
-  name = '';
-
-  @property({ reflect: false })
-  value = '';
-
-  @property({ reflect: false, type: Boolean })
-  disabled = false;
-
-  @property({ reflect: false, type: Boolean })
-  required = false;
-
-  @property({ reflect: false })
-  error = '';
-
-  /** Assigned at activation; SSR leaves the ids unset (see header note). */
-  @property({ reflect: false, attribute: false })
-  inputId = '';
-
-  @property({ reflect: false, attribute: false, type: Boolean })
-  noLabel: ReadonlySignal<boolean> = computed(() => this.label === '');
-
-  @property({ reflect: false, attribute: false, type: Boolean })
-  noError: ReadonlySignal<boolean> = computed(() => this.error === '');
-
-  @property({ reflect: false, attribute: false, type: String })
-  idAttr: ReadonlySignal<string | null> = computed(() =>
-    this.inputId === '' ? null : this.inputId,
-  );
-
-  @property({ reflect: false, attribute: false, type: String })
-  errorIdAttr: ReadonlySignal<string | null> = computed(() =>
-    this.inputId === '' ? null : `${this.inputId}-error`,
-  );
-
-  @property({ reflect: false, attribute: false, type: String })
-  ariaInvalidAttr: ReadonlySignal<string | null> = computed(() =>
-    this.error === '' ? null : 'true',
-  );
-
-  /** The required-marker text (' *' when required) — a computed string sink. */
-  @property({ reflect: false, attribute: false, type: String })
-  requiredMark: ReadonlySignal<string> = computed(() => (this.required ? ' *' : ''));
-
-  @property({ reflect: false, attribute: false, type: String })
-  describedByAttr: ReadonlySignal<string | null> = computed(() =>
-    this.error === '' || this.inputId === '' ? null : `${this.inputId}-error`,
-  );
-
-  render(): unknown {
-    return (
-      <div class='flex flex-col gap-2' part='wrapper'>
-        <label
-          class='text-sm font-medium text-muted-foreground tracking-normal'
-          part='label'
-          for={this.idAttr}
-          hidden={this.noLabel}
-        >
-          {this.label}
-          <span>{this.requiredMark}</span>
-        </label>
-        <input
-          id={this.idAttr}
-          // Authored presentation as Tailwind utilities (alpha15 S lane): the
-          // compiler admits these STATIC tokens and the build's component
-          // stylesheet carries the generated rules into this shadow root. The
-          // error state is a `:host(:state(invalid))` rule the sheet owns — one
-          // owner per property, so no dynamic class carries utilities. The
-          // `control` token is the hook open-input.css selects (it is not a
-          // utility); it must stay spelled as the class the sheet owns.
-          class='control w-full px-3 py-2 font-sans text-base text-foreground rounded-md outline-none transition-[border-color,box-shadow] duration-200 ease-out placeholder:text-muted-foreground'
-          part='control'
-          type={this.type}
-          placeholder={this.placeholder}
-          value={this.value}
-          name={this.name}
-          disabled={this.disabled}
-          required={this.required}
-          aria-invalid={this.ariaInvalidAttr}
-          aria-describedby={this.describedByAttr}
-          aria-errormessage={this.describedByAttr}
-          onInput={this.handleInput}
-          onChange={this.handleChange}
-          onFocus={this.handleFocus}
-          onBlur={this.handleBlur}
-        />
-        <small
-          id={this.errorIdAttr}
-          role='alert'
-          class='text-xs text-destructive'
-          part='error'
-          hidden={this.noError}
-        >
-          {this.error}
-        </small>
-      </div>
-    );
-  }
-
-  override onDsdHydrated(): void {
-    this.activate();
-  }
-
-  override onCsrRendered(): void {
-    this.activate();
-  }
-
-  /** Assign the realm-unique id once, then sync the form contract. */
-  private activate(): void {
-    if (this.inputId === '') this.inputId = `input-${nextInstanceId()}`;
-    // The initial `value` arrives before connect (parser attributes), so the
-    // form value and validity sync here rather than in attributeChangedCallback.
-    this.syncFormValue();
-    this.syncValidity();
-    this.updateStates();
-  }
-
-  override attributeChangedCallback(name: string, old: string | null, val: string | null): void {
-    super.attributeChangedCallback(name, old, val);
-    if (old === val) return;
-    if (name === 'value') {
-      // The compiled prop sink writes the live input value in place — no
-      // re-render, so a focused <input> is never replaced mid-typing (#770).
-      this.syncFormValue();
-      this.syncValidity();
+  onConnect((env) => {
+    // Only the control's live PROPERTY is written here: values are not part of
+    // the claim's attribute seed, whereas an id written at this point would be.
+    syncInputValue(env.host as InputHost);
+  });
+  onPropertyChange((event) => {
+    const host = event.host as InputHost;
+    if (event.name === 'value') {
+      syncInputValue(host);
       return;
     }
-    if (name === 'disabled' || name === 'error') {
-      this.updateStates();
+    if (event.name === 'disabled') {
+      syncInputDisabled(host);
     }
-    if (name === 'required') {
-      this.syncValidity();
-    }
-  }
+  });
 
-  private updateStates(): void {
-    if (!this._internals?.states) return;
-    syncDisabledState(this._internals, this.disabled);
-    if (this.error !== '') {
-      this._internals.states.add('invalid');
-    } else {
-      this._internals.states.delete('invalid');
-    }
-  }
-
-  private syncFormValue(): void {
-    this._internals?.setFormValue(this.value);
-  }
-
-  /**
-   * Validity basics (pilot scope): required + empty value → valueMissing.
-   * The inner native <input> is inside the shadow root, so its own
-   * constraints never reach the outer form; mirroring them onto the host
-   * internals is what makes the custom element a real form citizen.
-   * Full constraint mirroring (type=email, minlength, …) is future work.
-   */
-  private syncValidity(): void {
-    const internals = this._internals;
-    // Feature-checked: test stubs and older engines may lack setValidity.
-    if (!internals || typeof internals.setValidity !== 'function') return;
-    if (this.required && this.value === '') {
-      // No anchor: bubble placement is UA-dependent. Reuse the inner input's
-      // localized message when present.
-      const inner = this.shadowRoot?.querySelector('input') as HTMLInputElement | null;
-      internals.setValidity(
-        { valueMissing: true },
-        inner?.validationMessage || 'Please fill out this field.',
-      );
-    } else {
-      internals.setValidity({});
-    }
-  }
-
-  private handleInput(e: Event): void {
-    const input = e.target as HTMLInputElement;
-    // The value attribute is the authoritative channel (legacy parity):
-    // attribute -> compiled signal -> sinks, and the morph surface stays true.
-    this.setAttribute('value', input.value);
-    this.syncFormValue();
-    this.syncValidity();
-    this.dispatchEvent(
-      new CustomEvent('open-input', {
-        detail: { value: input.value },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-  }
-
-  private handleChange(e: Event): void {
-    const input = e.target as HTMLInputElement;
-    this.dispatchEvent(
-      new CustomEvent('open-change', {
-        detail: { value: input.value },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-  }
-
-  private handleFocus(): void {
-    this.dispatchEvent(new CustomEvent('open-focus', { bubbles: true, composed: true }));
-  }
-
-  private handleBlur(): void {
-    this.dispatchEvent(new CustomEvent('open-blur', { bubbles: true, composed: true }));
-  }
-
-  override formResetCallback(): void {
-    super.formResetCallback();
-    this.setAttribute('value', '');
-    this.removeAttribute('error');
-    this.syncFormValue();
-    this.syncValidity();
-  }
-
-  formDisabledCallback(disabled: boolean): void {
-    // Mirror onto the property (reflect: false), not the host attribute: the
-    // platform counts a form-associated custom element's own `disabled`
-    // attribute toward its disabledness, so writing it here would make the
-    // fieldset-driven state irreversible (#1226).
-    this.disabled = disabled;
-    this.updateStates();
-  }
+  return (
+    <div class='flex flex-col gap-2' part='wrapper'>
+      <label
+        class='text-sm font-medium text-muted-foreground tracking-normal'
+        part='label'
+        for='open-input-control'
+        hidden={props.label === ''}
+      >
+        {props.label}
+        <span class='required-mark'></span>
+      </label>
+      <input
+        class='control w-full px-3 py-2 font-sans text-base text-foreground rounded-md outline-none transition-[border-color,box-shadow] duration-200 ease-out placeholder:text-muted-foreground'
+        part='control'
+        id='open-input-control'
+        type={props.type}
+        placeholder={props.placeholder}
+        name={props.name}
+        disabled={props.disabled}
+        required={props.required}
+        aria-invalid={props.error === '' ? null : 'true'}
+        aria-describedby={props.error === '' ? null : 'open-input-error'}
+        aria-errormessage={props.error === '' ? null : 'open-input-error'}
+        onInput={(event: Event) => {
+          const host = hostOf(event);
+          const control = event.target as HTMLInputElement;
+          // A fieldset lock reaches this control ONLY as the host's custom
+          // state (the shell owns the internals record, not this DOM), so the
+          // guard has to be here, at the interaction. Refusing the publish keeps
+          // the value row and FormData clean; re-projecting the row onto the
+          // live control also retracts the keystroke the platform already
+          // inserted, so a locked field never shows text it will not submit.
+          if (lockedByFieldset(event)) {
+            syncInputValue(host);
+            return;
+          }
+          host.value = control.value;
+          if (host.getAttribute('value') !== control.value) {
+            host.setAttribute('value', control.value);
+          }
+          host.dispatchEvent(
+            new globalThis.CustomEvent('open-input', {
+              detail: { value: control.value },
+              bubbles: true,
+              composed: true,
+            }),
+          );
+        }}
+        onChange={(event: Event) => {
+          if (lockedByFieldset(event)) return;
+          const control = event.target as HTMLInputElement;
+          hostOf(event).dispatchEvent(
+            new globalThis.CustomEvent('open-change', {
+              detail: { value: control.value },
+              bubbles: true,
+              composed: true,
+            }),
+          );
+        }}
+        onFocus={(event: Event) => {
+          hostOf(event).dispatchEvent(
+            new globalThis.CustomEvent('open-focus', { bubbles: true, composed: true }),
+          );
+        }}
+        onBlur={(event: Event) => {
+          hostOf(event).dispatchEvent(
+            new globalThis.CustomEvent('open-blur', { bubbles: true, composed: true }),
+          );
+        }}
+      />
+      <small
+        id='open-input-error'
+        role='alert'
+        class='text-xs text-destructive'
+        part='error'
+        hidden={props.error === ''}
+      >
+        {props.error}
+      </small>
+    </div>
+  );
 }
+
+export default OpenInput;

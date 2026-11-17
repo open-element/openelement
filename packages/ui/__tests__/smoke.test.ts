@@ -39,11 +39,17 @@ test('open-ui - explicit registration covers every class-authored component', as
 
   registerOpenUi(registry);
   registerOpenUi(registry);
-  // `open-theme-toggle`, `open-code-block`, `open-dialog` and `open-dropdown`
-  // are authored as function components: their element classes are
+  // `open-theme-toggle`, `open-code-block`, `open-dialog`, `open-dropdown` and
+  // `open-input` are authored as function components: their element classes are
   // build-emitted and defined by the island entry, so they are deliberately
   // absent from the manual table.
-  const generatedTags = ['open-theme-toggle', 'open-code-block', 'open-dialog', 'open-dropdown'];
+  const generatedTags = [
+    'open-theme-toggle',
+    'open-code-block',
+    'open-dialog',
+    'open-dropdown',
+    'open-input',
+  ];
   const classAuthored = EXPECTED_TAGS.filter((tag) => !generatedTags.includes(tag));
   expect(definitions.size).toEqual(classAuthored.length);
   expect([...definitions.keys()]).toEqual(classAuthored);
@@ -52,7 +58,6 @@ test('open-ui - explicit registration covers every class-authored component', as
 test('open-ui - every component module exports its component', async () => {
   const classExports: Record<string, string> = {
     'open-button': 'OpenButton',
-    'open-input': 'OpenInput',
   };
   for (const [name, exportName] of Object.entries(classExports)) {
     const mod = await import(`../src/${name}.tsx`);
@@ -65,6 +70,7 @@ test('open-ui - every component module exports its component', async () => {
     ['open-code-block', 'OpenCodeBlock'],
     ['open-dialog', 'OpenDialog'],
     ['open-dropdown', 'OpenDropdown'],
+    ['open-input', 'OpenInput'],
   ] as const) {
     const generated = await import(`../src/${name}.tsx`);
     expect(typeof generated.default).toEqual('function');

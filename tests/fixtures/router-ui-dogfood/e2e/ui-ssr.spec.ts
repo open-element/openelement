@@ -56,7 +56,14 @@ test.describe('ui dogfood SSR/DSD output', () => {
     const response = await request.get('/form');
     expect(response.ok()).toBe(true);
     const html = await response.text();
-    expect(html).toContain('<open-input id="username" label="Username" name="username" required');
+    // Attribute ORDER is not the contract. The class lane serialized the
+    // attribute set in one order and the generated lane serializes its declared
+    // rows in another; a consumer reads attributes by NAME. Assert the set.
+    const usernameTag = /<open-input\b[^>]*\bid="username"[^>]*>/.exec(html)?.[0] ?? '';
+    expect(usernameTag, 'the open-input host exists').not.toBe('');
+    for (const attribute of ['label="Username"', 'name="username"', 'required']) {
+      expect(usernameTag, `the open-input host carries ${attribute}`).toContain(attribute);
+    }
     // The initial value round-trips through the compiled value sink.
     expect(html).toContain('value="ada@example.com"');
     // The label + required marker are SSR'd inside the shadow template.

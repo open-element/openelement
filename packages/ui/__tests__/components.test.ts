@@ -222,60 +222,20 @@ test('open-dialog: the native close echo of a programmatic close does not re-dis
   expect(el.open).toEqual(false);
 });
 
-// ─── open-input: value channel + events ──────────────────────────────────────
-
-test('open-input: input events write the value attribute and dispatch open-input/open-change', async () => {
-  const { OpenInput } = await import('../src/open-input.tsx');
-  const el = new (OpenInput as unknown as new () => AnyComponent)();
-  const seen: Array<Record<string, unknown>> = [];
-  el.addEventListener('open-input', (e: Event) => {
-    seen.push({ type: 'input', value: (e as CustomEvent).detail.value });
-  });
-  el.addEventListener('open-change', (e: Event) => {
-    seen.push({ type: 'change', value: (e as CustomEvent).detail.value });
-  });
-  el.handleInput({ target: { value: 'abc' } } as unknown as Event);
-  el.handleChange({ target: { value: 'abc' } } as unknown as Event);
-  expect(el.getAttribute('value')).toEqual('abc');
-  expect(seen).toEqual([
-    { type: 'input', value: 'abc' },
-    { type: 'change', value: 'abc' },
-  ]);
-});
-
-test('open-input: activation assigns realm-unique control ids', async () => {
-  const { OpenInput } = await import('../src/open-input.tsx');
-  const first = new (OpenInput as unknown as new () => AnyComponent)();
-  const second = new (OpenInput as unknown as new () => AnyComponent)();
-  expect(first.inputId).toEqual('');
-  first.onCsrRendered();
-  second.onCsrRendered();
-  expect(first.inputId).not.toEqual(second.inputId);
-  expect(first.inputId).toContain('input-');
-});
-
-test('open-input: formResetCallback clears value and error attributes', async () => {
-  const { OpenInput } = await import('../src/open-input.tsx');
-  const el = new (OpenInput as unknown as new () => AnyComponent)();
-  el.setAttribute('value', 'x');
-  el.setAttribute('error', 'bad');
-  el.formResetCallback();
-  expect(el.getAttribute('value')).toEqual('');
-  expect(el.hasAttribute('error')).toEqual(false);
-});
-
-test('open-input: formDisabledCallback mirrors onto the property, never the attribute (#1226)', async () => {
-  const { OpenInput } = await import('../src/open-input.tsx');
-  const el = new (OpenInput as unknown as new () => AnyComponent)();
-  el.formDisabledCallback(true);
-  expect(el.disabled).toEqual(true);
-  // The platform counts a form-associated custom element's own `disabled`
-  // attribute toward its disabledness: writing it would make the
-  // fieldset-driven state irreversible.
-  expect(el.hasAttribute('disabled')).toEqual(false);
-  el.formDisabledCallback(false);
-  expect(el.disabled).toEqual(false);
-});
+// ─── open-input is a generated (function-component) element ─────────────────
+//
+// It no longer exists as a class to instantiate. The five rows that used to
+// drive `handleInput` / `inputId` / `formResetCallback` / `formDisabledCallback`
+// on the class are deliberately not re-spelled against a stub: the generated
+// lane's behaviour lives in the compiler-emitted element (the handlers are
+// inline in the compiled template, the form contract is the shell's mapping),
+// so only the real shipped element can answer them. They are covered by
+// `tests/fixtures/router-ui-dogfood/e2e/ui-form.spec.ts` (FormData submission,
+// valueMissing, reset, the fieldset-effective disabled state and its input
+// refusal, delegatesFocus, per-input events) and
+// `tests/fixtures/router-ui-dogfood/e2e/ui-input-control.spec.ts` (the control
+// surface, the error/ARIA wiring in both directions, `part=control`), both on
+// the built framework in Chromium, Firefox and WebKit.
 
 // ─── open-theme-toggle is a generated (function-component) element ───────────
 //

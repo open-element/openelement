@@ -27,9 +27,6 @@ import { readInstanceState, writeInstanceState } from '../src/instance-state.ts'
 
 installDomHarness();
 
-// oxlint-disable-next-line no-explicit-any
-type AnyComponent = any;
-
 // ─── instance-state: the per-host foundation every lifecycle guard builds on ─
 
 test('instance-state: slots are per-host — writes never leak across instances', () => {
@@ -169,33 +166,13 @@ test('open-dropdown: renaming the anchor moves the host custom property the shee
   expect(content.hasAttribute('style')).toEqual(false);
 });
 
-// ─── open-input: activation id stability + focus/blur events ─────────────────
-
-test('open-input: activation assigns the control id once — reconnect keeps it', async () => {
-  const { OpenInput } = await import('../src/open-input.tsx');
-  const el = new (OpenInput as unknown as new () => AnyComponent)();
-  el.onCsrRendered();
-  const id = el.inputId;
-  expect(id).not.toEqual('');
-  el.disconnectedCallback();
-  el.onCsrRendered();
-  expect(el.inputId, 're-activation must not re-assign the realm-unique id').toEqual(id);
-});
-
-test('open-input: focus and blur dispatch composed open-focus/open-blur events', async () => {
-  const { OpenInput } = await import('../src/open-input.tsx');
-  const el = new (OpenInput as unknown as new () => AnyComponent)();
-  const seen: Array<{ type: string; bubbles: boolean; composed: boolean }> = [];
-  el.addEventListener('open-focus', (e: Event) => {
-    seen.push({ type: e.type, bubbles: e.bubbles, composed: e.composed });
-  });
-  el.addEventListener('open-blur', (e: Event) => {
-    seen.push({ type: e.type, bubbles: e.bubbles, composed: e.composed });
-  });
-  el.handleFocus();
-  el.handleBlur();
-  expect(seen).toEqual([
-    { type: 'open-focus', bubbles: true, composed: true },
-    { type: 'open-blur', bubbles: true, composed: true },
-  ]);
-});
+// ─── open-input is a generated (function-component) element ─────────────────
+//
+// It is no longer a class with `onCsrRendered` / `inputId` / `handleFocus`.
+// The generated lane spells its ids statically inside the shadow template
+// (the shadow boundary is its own id scope, and a connect-time id write would
+// fail the claim's static-seed check) and installs the focus/blur listeners in
+// the compiled template, so the class-time rows above have no subject left.
+// Browser evidence for the shipped element: `ui-input-control.spec.ts`
+// (control surface, error/ARIA both directions) and `ui-form.spec.ts`
+// (delegatesFocus, per-input events, form participation), three engines.

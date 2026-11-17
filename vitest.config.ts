@@ -276,6 +276,10 @@ export default defineConfig({
               find: /^\.\/dropdown-machine\.ts$/,
               replacement: `${rootDir}packages/ui/src/dropdown-machine.ts`,
             },
+            {
+              find: /^\.\/input-machine\.ts$/,
+              replacement: `${rootDir}packages/ui/src/input-machine.ts`,
+            },
           ],
         },
         test: {

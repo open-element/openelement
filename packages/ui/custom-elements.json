@@ -91,14 +91,10 @@
       "declarations": [
         {
           "kind": "class",
-          "name": "OpenInput",
+          "name": "OpenInputElement",
           "tagName": "open-input",
           "customElement": true,
-          "description": "Form-associated text input with a label, an inline error slot, and native constraint validation (required → valueMissing via setValidity).",
-          "superclass": {
-            "name": "OpenElement",
-            "package": "@openelement/element"
-          },
+          "description": "Form-associated text input with a label, an error slot and native validity.",
           "members": [],
           "attributes": [
             {
@@ -106,58 +102,56 @@
               "type": {
                 "text": "string"
               },
-              "description": "type attribute"
+              "default": "text"
             },
             {
               "name": "placeholder",
               "type": {
                 "text": "string"
               },
-              "description": "placeholder attribute"
+              "default": ""
             },
             {
               "name": "label",
               "type": {
                 "text": "string"
               },
-              "description": "label attribute"
+              "default": ""
             },
             {
               "name": "name",
               "type": {
                 "text": "string"
               },
-              "description": "name attribute"
+              "default": ""
             },
             {
               "name": "value",
               "type": {
                 "text": "string"
               },
-              "description": "value attribute"
+              "default": ""
             },
             {
               "name": "disabled",
               "type": {
                 "text": "boolean"
               },
-              "default": "false",
-              "description": "disabled attribute"
+              "default": "false"
             },
             {
               "name": "required",
               "type": {
                 "text": "boolean"
               },
-              "default": "false",
-              "description": "required attribute"
+              "default": "false"
             },
             {
               "name": "error",
               "type": {
                 "text": "string"
               },
-              "description": "error attribute"
+              "default": ""
             }
           ],
           "events": [
@@ -192,20 +186,16 @@
           ],
           "cssParts": [
             {
-              "name": "wrapper",
-              "description": "The outer input-wrapper div"
+              "name": "wrapper"
             },
             {
-              "name": "label",
-              "description": "The label element"
+              "name": "label"
             },
             {
-              "name": "control",
-              "description": "The input element"
+              "name": "control"
             },
             {
-              "name": "error",
-              "description": "The error message small element"
+              "name": "error"
             }
           ]
         }

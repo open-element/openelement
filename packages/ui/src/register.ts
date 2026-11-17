@@ -1,5 +1,4 @@
 import { OpenButton } from './open-button.tsx';
-import { OpenInput } from './open-input.tsx';
 
 // Compiled modules carry no runtime tagName export (the compiled
 // program owns the tag), so the registration table lives here, beside the
@@ -12,7 +11,6 @@ import { OpenInput } from './open-input.tsx';
 // this table.
 const COMPONENTS: ReadonlyArray<readonly [string, CustomElementConstructor]> = [
   ['open-button', OpenButton],
-  ['open-input', OpenInput],
 ];
 
 /** Explicitly register every first-party UI element. Safe to call repeatedly. */

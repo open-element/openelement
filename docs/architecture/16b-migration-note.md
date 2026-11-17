@@ -302,3 +302,62 @@ form below; the remaining OWED items are unchanged.
   of D-17b in execution-plan §17 still applies.
 - Still OWED in `16b-LC`: depth ≥ 2, recipe/list placement, non-retained
   targets, pre-DOM timing, and the remaining signed-inventory rows.
+
+## 2026-11-17 amendment — authoring rule: a sink's dependency edge is its EMITTED expression (facts only)
+
+Two migration findings from `open-input` that hold for every generated
+component, recorded here because neither is visible in the source and both
+produce a silently SSR-only surface.
+
+### R1 — the JSX expression must read the prop inline; an alias downgrades the sink to a one-shot
+
+The compiler derives a sink's dependency from the reads it can see **in the
+expression it emits**. `hidden={props.error === ''}` emits a `__oe_refreshN`
+bound to the `error` row; `const noError = props.error === ''` followed by
+`hidden={noError}` emits a bare setup-time write with no edge, and the attribute
+then never changes after mount/claim.
+
+Both spellings render the right value at mount and at claim, so DOM assertions
+on the initial state cannot tell them apart — only a change to the row can. Pin:
+`generated-element.properties.test.ts` "a sink must read the prop inline to gain
+a refresh edge" (inline: one bound sink per path; aliased: zero).
+
+The generated lane has no authoring `computed`, so there is no legitimate reason
+to alias a row-derived value in this lane; the rule therefore costs nothing and
+removes a whole class of "the state is live" bugs.
+
+### R2 — a static id inside a shadow root belongs in the template, not in a connect-time write
+
+`onConnect` runs as a PROLOGUE, before mount/claim DOM work (the unchanged
+ADR-0173 timing limit recorded in `m09-generated-element-shell.md`). Any
+attribute it writes onto a compiled node is therefore a runtime write against a
+claim that verified a STATIC attribute seed — `OEIR_LEAF_CLAIM_MISMATCH`, thrown
+before any listener is installed, which reads in the browser as "the component
+is inert".
+
+The class lane's realm-unique id counter existed to keep SSR and CSR agreeing on
+one DOCUMENT-wide identity. A shadow root is its own id scope, so the generated
+lane spells the ids literally in the template: they join the static seed, the
+claim passes, and the same spelling in every instance is correct rather than
+merely tolerated.
+
+### R3 — the fieldset-effective disabled state reaches component code only through the custom state
+
+`m09-2d-forms.md` records that the shell owns the internals record and never
+touches the component's DOM, so a fieldset disable does not change
+`props.disabled` and does not reach the inner control. A migrated control
+therefore has to consume it at the interaction, through
+`host.matches(':state(disabled)')` — the same single channel `seams.md` already
+declared.
+
+A migrated control that omits that guard accepts keystrokes into a locked field
+and publishes them into its value row: measured on `open-input` before the guard
+existed (`hostValue: "hacked"`, control not natively disabled). The class lane
+was safe only because `formDisabledCallback` mirrored the lock onto the inner
+`input`; the generated lane must guard the handler instead. Evidence:
+`tests/fixtures/router-ui-dogfood/e2e/ui-form.spec.ts` "a disabled fieldset seats
+the effective state, refuses input, and drops out of FormData" (Chromium,
+Firefox, WebKit).
+
+Not claimed: any change to the shell's timing, any new channel, and any 16b-LC
+row above. These are authoring facts about the lane as it stands.
