@@ -543,3 +543,35 @@ all three cases (`runtime chunk: 1, 64 modules, leaf-runtime absent`) because th
 www islands are class-lane pages and package islands that import the root entry.
 Their chunk is what the checker measures. Flipping P1 requires the 47-file
 per-page entry decision above, which is its own reviewed change.
+
+### The boundary that decides M11-3's order: a class page cannot drop the root entry
+
+Following the correction above one step further settles the sequencing.
+
+The hydration executor is consumed through a seam, not through the root entry's
+identity: `runtime/kernel.ts` imports `hydrationExecutor` from
+`runtime/hydrate-seam.ts`, and `hydrate-install.ts` is the only thing that
+installs it. So any graph that runs a COMPILED CLASS element's claim path
+reaches the seam, and dropping the root entry's side-effect import does not
+remove the executor from the graph — it removes the INSTALL, which makes the
+claim fail closed at runtime.
+
+That is why 47 www modules import `from '@openelement/element'`: almost all of
+them are compiled CLASS components (`layout.tsx` plus the article-route
+components), and a class component's claim needs the installed executor. Moving
+their import to `./base` or `./client-only` would be a build that ships and a
+runtime that throws.
+
+**Consequence for P1 and for M11-3.** P1 can only be satisfied by removing the
+CLASS lane's participation from the production browser graphs — the same
+retirement the five proofs (P1–P5) describe — not by re-pointing imports. The
+generated-lane islands already avoid the executor (measured: shell closure = 25
+modules, 0 executor hits; entry chunk = 4 modules with no
+`__loadElementRuntime`). What keeps the chunk alive is the class pages sharing
+it.
+
+So the remaining order is: finish the consumer migrations (which is where the
+class components in `www/app/components/` and `apps/saas/` still are), then P1
+flips as a consequence, and P2–P5 record it. This slice's leaf entry is the
+first half of that story: it removes the generated lane's OWN contribution to
+the executor's reach, so when the class lane leaves, nothing keeps it.
