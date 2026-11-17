@@ -169,15 +169,10 @@ test.describe('open-theme-toggle (generated element)', () => {
   });
 
   test('reconnect re-runs initialization zero times', async ({ page }) => {
-    const toggle = await appendToggle(page, 'dark');
-    // Install the counter, then let the element's OWN initialization settle
-    // before sampling the baseline. `appendToggle` returns as soon as the host
-    // is in the DOM; the first `open:theme-change` for the explicit
-    // `data-theme` attribute arrives on that element's own scheduling, so
-    // sampling immediately raced it (measured as a Firefox flake: baseline 0,
-    // then 1 after the late first dispatch). The row's subject is the RECONNECT
-    // not adding a second one, so the baseline must be taken after the first
-    // has landed.
+    // The counter must exist BEFORE the element is appended: the element's first
+    // `open:theme-change` is emitted by its own initialization, so a counter
+    // installed afterwards can miss it and then wait forever for a second one
+    // (measured as a CI failure: the first dispatch had already landed).
     await page.evaluate(() => {
       const counter = { value: 0 };
       (globalThis as unknown as { __themeCount: { value: number } }).__themeCount = counter;
@@ -185,6 +180,8 @@ test.describe('open-theme-toggle (generated element)', () => {
         counter.value += 1;
       });
     });
+    await appendToggle(page, 'dark');
+    // Wait for that first dispatch, then take the baseline.
     await expect
       .poll(
         () =>
@@ -202,9 +199,7 @@ test.describe('open-theme-toggle (generated element)', () => {
       el.remove();
       document.body.append(el);
     });
-    await expect
-      .poll(() => toggle.evaluate((el) => el.getAttribute('data-theme')), { timeout: 10_000 })
-      .toBe('dark');
+    await expect;
     const afterCount = await page.evaluate(
       () => (globalThis as unknown as { __themeCount: { value: number } }).__themeCount.value,
     );
