@@ -22,6 +22,18 @@
  *     chunk fetched on the first search open, so no byte of it reaches first
  *     paint). totalJsKB moved 400 → 344 (~5% headroom) now that CSS bytes
  *     left the JS total; the earlier raise existed to admit that runtime.
+ *   - 2026-11-17 (owner decision): totalJsKB 344 → 376. The Alpha16
+ *     generated-element migration moves islands off the class lane, and a
+ *     generated island carries its own compiled recipe instead of sharing the
+ *     class runtime's one chunk. Measured at the first two moved islands
+ *     (`open-dragon-live-gaze`, `open-cinematic-scroll`): 353.5 KiB total, i.e.
+ *     +8.8 KiB for two islands. 376 keeps ~6% headroom over that measurement
+ *     and covers the remaining three www islands plus normal drift; it is a
+ *     deliberate product decision, not a measurement artefact. Lowering this
+ *     value again is the way to tighten the SLO. (P1's end state removes the
+ *     generic executor from the shared chunk once every island has moved —
+ *     re-measure and re-decide the budget at that point rather than carrying
+ *     this number as permanent slack.)
  *     The self-hosted Prism runtime (~40 KiB) that an older paragraph counted
  *     was retired with the build-time highlighter (#1552) — code highlighting
  *     is static page HTML with zero client-JS cost.
@@ -34,7 +46,7 @@
  */
 export const SITE_BUDGET = {
   islandKB: 84,
-  totalJsKB: 344,
+  totalJsKB: 376,
 } as const;
 
 /**

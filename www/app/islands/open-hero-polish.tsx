@@ -17,177 +17,192 @@
  * magnetism (scroll-out still runs; it is scroll-driven, not animation).
  */
 
-import { element, OpenElement } from '@openelement/element';
 import { defineIslandConfig } from '@openelement/router';
+import { onConnect, onDispose } from '@openelement/element';
 import { HERO_CURSOR_CSS } from '../site-ui/hero-cursor-css.ts';
 import { readInstanceState, writeInstanceState } from '@openelement/ui/instance-state';
 
 export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true });
 
-@element('open-hero-polish')
-export default class HeroPolish extends OpenElement {
-  // Rules moved to the linked document stylesheet (www/site-chrome.css).
-  override connectedCallback(): void {
-    super.connectedCallback();
-    const root = this.getRootNode();
-    const scope: ShadowRoot | HTMLElement =
-      root instanceof ShadowRoot ? root : (this.parentElement ?? document.body);
-    const hero = scope.querySelector<HTMLElement>('.hero-main');
-    if (!hero) return;
-    const reduced = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-    const fine = globalThis.matchMedia?.('(pointer: fine)').matches ?? false;
+function OpenHeroPolish() {
+  onConnect((env) => {
+    // The connect hook runs before the template mounts and before the hero is
+    // queryable: run the whole activation on the next frame, and let the
+    // CONNECTION-lifetime signal's abort release it (the class lane's
+    // disconnectedCallback is that same point).
+    const host = env.host;
+    globalThis.requestAnimationFrame(() => {
+      const root = host.getRootNode();
+      const scope: ShadowRoot | HTMLElement =
+        root instanceof globalThis.ShadowRoot
+          ? root
+          : (host.parentElement ?? globalThis.document.body);
+      const hero = scope.querySelector<HTMLElement>('.hero-main');
+      if (!hero) return;
+      const reduced = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+      const fine = globalThis.matchMedia?.('(pointer: fine)').matches ?? false;
 
-    const cleanups: Array<() => void> = [];
+      const cleanups: Array<() => void> = [];
 
-    // ── scroll-out: one passive listener, one var ──
-    if (!reduced) {
-      let scheduled = false;
-      const update = (): void => {
-        scheduled = false;
-        const rect = hero.getBoundingClientRect();
-        const p = Math.min(1, Math.max(0, -rect.top / (rect.height * 0.85)));
-        hero.style.setProperty('--hero-exit', p.toFixed(4));
-      };
-      const schedule = (): void => {
-        if (!scheduled) {
-          scheduled = true;
-          writeInstanceState(this, 'frame', requestAnimationFrame(update));
-        }
-      };
-      globalThis.addEventListener('scroll', schedule, { passive: true });
-      globalThis.addEventListener('resize', schedule, { passive: true });
-      update();
-      cleanups.push(() => {
-        globalThis.removeEventListener('scroll', schedule);
-        globalThis.removeEventListener('resize', schedule);
-      });
-    }
-
-    // ── cursor + magnetism: fine pointers, full motion only ──
-    if (!reduced && fine) {
-      // static styles scope to this element's shadow root; the
-      // cursor must track across the hero in the light parent scope, so the
-      // stylesheet has to be injected there at runtime instead.
-      const styleEl = document.createElement('style');
-      styleEl.textContent = HERO_CURSOR_CSS;
-      scope.appendChild(styleEl);
-      const cursor = document.createElement('div');
-      cursor.className = 'hero-cursor';
-      cursor.setAttribute('aria-hidden', 'true');
-      const dot = document.createElement('i');
-      dot.className = 'dot';
-      const ring = document.createElement('i');
-      ring.className = 'ring';
-      cursor.append(dot, ring);
-      scope.appendChild(cursor);
-
-      let tx = -100;
-      let ty = -100;
-      let rx = -100;
-      let ry = -100;
-      let inside = false;
-      let cursorRaf = 0;
-
-      // Magnetic state lives per-CTA: current offset chases target offset.
-      const magnets: Array<{ el: HTMLElement; cx: number; cy: number; tx: number; ty: number }> =
-        [];
-      for (const el of hero.querySelectorAll<HTMLElement>('.hero-foot .action')) {
-        magnets.push({ el, cx: 0, cy: 0, tx: 0, ty: 0 });
+      // ── scroll-out: one passive listener, one var ──
+      if (!reduced) {
+        let scheduled = false;
+        const update = (): void => {
+          scheduled = false;
+          const rect = hero.getBoundingClientRect();
+          const p = Math.min(1, Math.max(0, -rect.top / (rect.height * 0.85)));
+          hero.style.setProperty('--hero-exit', p.toFixed(4));
+        };
+        const schedule = (): void => {
+          if (!scheduled) {
+            scheduled = true;
+            writeInstanceState(host, 'frame', globalThis.requestAnimationFrame(update));
+          }
+        };
+        globalThis.addEventListener('scroll', schedule, { passive: true });
+        globalThis.addEventListener('resize', schedule, { passive: true });
+        update();
+        cleanups.push(() => {
+          globalThis.removeEventListener('scroll', schedule);
+          globalThis.removeEventListener('resize', schedule);
+        });
       }
 
-      const frame = (): void => {
-        cursorRaf = 0;
-        rx += (tx - rx) * 0.18;
-        ry += (ty - ry) * 0.18;
-        cursor.style.setProperty('--dx', `${tx}px`);
-        cursor.style.setProperty('--dy', `${ty}px`);
-        cursor.style.setProperty('--rx', `${rx.toFixed(1)}px`);
-        cursor.style.setProperty('--ry', `${ry.toFixed(1)}px`);
-        let magnetsAwake = false;
-        for (const m of magnets) {
-          m.cx += (m.tx - m.cx) * 0.2;
-          m.cy += (m.ty - m.cy) * 0.2;
-          if (Math.abs(m.cx) > 0.05 || Math.abs(m.cy) > 0.05 || m.tx !== 0 || m.ty !== 0) {
-            magnetsAwake = true;
-            m.el.style.transform = `translate3d(${m.cx.toFixed(1)}px, ${m.cy.toFixed(1)}px, 0)`;
-          }
-        }
-        const ringSettled = Math.abs(rx - tx) < 0.3 && Math.abs(ry - ty) < 0.3;
-        if (inside || !ringSettled || magnetsAwake) {
-          cursorRaf = requestAnimationFrame(frame);
-        }
-      };
-      const kick = (): void => {
-        if (!cursorRaf) cursorRaf = requestAnimationFrame(frame);
-      };
+      // ── cursor + magnetism: fine pointers, full motion only ──
+      if (!reduced && fine) {
+        // static styles scope to this element's shadow root; the
+        // cursor must track across the hero in the light parent scope, so the
+        // stylesheet has to be injected there at runtime instead.
+        const styleEl = globalThis.document.createElement('style');
+        styleEl.textContent = HERO_CURSOR_CSS;
+        scope.appendChild(styleEl);
+        const cursor = globalThis.document.createElement('div');
+        cursor.className = 'hero-cursor';
+        cursor.setAttribute('aria-hidden', 'true');
+        const dot = globalThis.document.createElement('i');
+        dot.className = 'dot';
+        const ring = globalThis.document.createElement('i');
+        ring.className = 'ring';
+        cursor.append(dot, ring);
+        scope.appendChild(cursor);
 
-      const onMove = (event: PointerEvent): void => {
-        if (event.pointerType !== 'mouse') return;
-        tx = event.clientX;
-        ty = event.clientY;
-        const rect = hero.getBoundingClientRect();
-        const nowInside =
-          tx >= rect.left && tx <= rect.right && ty >= rect.top && ty <= rect.bottom;
-        if (nowInside !== inside) {
-          inside = nowInside;
-          cursor.classList.toggle('on', inside);
+        let tx = -100;
+        let ty = -100;
+        let rx = -100;
+        let ry = -100;
+        let inside = false;
+        let cursorRaf = 0;
+
+        // Magnetic state lives per-CTA: current offset chases target offset.
+        const magnets: Array<{ el: HTMLElement; cx: number; cy: number; tx: number; ty: number }> =
+          [];
+        for (const el of hero.querySelectorAll<HTMLElement>('.hero-foot .action')) {
+          magnets.push({ el, cx: 0, cy: 0, tx: 0, ty: 0 });
         }
-        if (inside) {
-          // window-level listeners see retargeted targets for shadow-DOM
-          // hits — walk the composed path to find the real one.
-          const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
-          const real = path.find((n): n is Element => n instanceof Element) ?? null;
-          cursor.classList.toggle('hover', Boolean(real?.closest('a, button')));
+
+        const frame = (): void => {
+          cursorRaf = 0;
+          rx += (tx - rx) * 0.18;
+          ry += (ty - ry) * 0.18;
+          cursor.style.setProperty('--dx', `${tx}px`);
+          cursor.style.setProperty('--dy', `${ty}px`);
+          cursor.style.setProperty('--rx', `${rx.toFixed(1)}px`);
+          cursor.style.setProperty('--ry', `${ry.toFixed(1)}px`);
+          let magnetsAwake = false;
           for (const m of magnets) {
-            const r = m.el.getBoundingClientRect();
-            const dx = tx - (r.left + r.width / 2);
-            const dy = ty - (r.top + r.height / 2);
-            const near = Math.abs(dx) < r.width && Math.abs(dy) < r.height * 2.2;
-            m.tx = near ? Math.max(-8, Math.min(8, dx * 0.18)) : 0;
-            m.ty = near ? Math.max(-6, Math.min(6, dy * 0.22)) : 0;
+            m.cx += (m.tx - m.cx) * 0.2;
+            m.cy += (m.ty - m.cy) * 0.2;
+            if (Math.abs(m.cx) > 0.05 || Math.abs(m.cy) > 0.05 || m.tx !== 0 || m.ty !== 0) {
+              magnetsAwake = true;
+              m.el.style.transform = `translate3d(${m.cx.toFixed(1)}px, ${m.cy.toFixed(1)}px, 0)`;
+            }
           }
-        } else {
+          const ringSettled = Math.abs(rx - tx) < 0.3 && Math.abs(ry - ty) < 0.3;
+          if (inside || !ringSettled || magnetsAwake) {
+            cursorRaf = globalThis.requestAnimationFrame(frame);
+          }
+        };
+        const kick = (): void => {
+          if (!cursorRaf) cursorRaf = globalThis.requestAnimationFrame(frame);
+        };
+
+        const onMove = (event: PointerEvent): void => {
+          if (event.pointerType !== 'mouse') return;
+          tx = event.clientX;
+          ty = event.clientY;
+          const rect = hero.getBoundingClientRect();
+          const nowInside =
+            tx >= rect.left && tx <= rect.right && ty >= rect.top && ty <= rect.bottom;
+          if (nowInside !== inside) {
+            inside = nowInside;
+            cursor.classList.toggle('on', inside);
+          }
+          if (inside) {
+            // window-level listeners see retargeted targets for shadow-DOM
+            // hits — walk the composed path to find the real one.
+            const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+            const real = path.find((n): n is Element => n instanceof globalThis.Element) ?? null;
+            cursor.classList.toggle('hover', Boolean(real?.closest('a, button')));
+            for (const m of magnets) {
+              const r = m.el.getBoundingClientRect();
+              const dx = tx - (r.left + r.width / 2);
+              const dy = ty - (r.top + r.height / 2);
+              const near = Math.abs(dx) < r.width && Math.abs(dy) < r.height * 2.2;
+              m.tx = near ? Math.max(-8, Math.min(8, dx * 0.18)) : 0;
+              m.ty = near ? Math.max(-6, Math.min(6, dy * 0.22)) : 0;
+            }
+          } else {
+            for (const m of magnets) {
+              m.tx = 0;
+              m.ty = 0;
+            }
+          }
+          kick();
+        };
+        const onLeave = (): void => {
+          inside = false;
+          cursor.classList.remove('on');
           for (const m of magnets) {
             m.tx = 0;
             m.ty = 0;
           }
-        }
-        kick();
-      };
-      const onLeave = (): void => {
-        inside = false;
-        cursor.classList.remove('on');
-        for (const m of magnets) {
-          m.tx = 0;
-          m.ty = 0;
-        }
-        kick();
-      };
-      globalThis.addEventListener('pointermove', onMove, { passive: true });
-      document.documentElement.addEventListener('pointerleave', onLeave, { passive: true });
-      cleanups.push(() => {
-        globalThis.removeEventListener('pointermove', onMove);
-        document.documentElement.removeEventListener('pointerleave', onLeave);
-        cancelAnimationFrame(cursorRaf);
-        for (const m of magnets) m.el.style.transform = '';
-        cursor.remove();
-        styleEl.remove();
+          kick();
+        };
+        globalThis.addEventListener('pointermove', onMove, { passive: true });
+        globalThis.document.documentElement.addEventListener('pointerleave', onLeave, {
+          passive: true,
+        });
+        cleanups.push(() => {
+          globalThis.removeEventListener('pointermove', onMove);
+          globalThis.document.documentElement.removeEventListener('pointerleave', onLeave);
+          globalThis.cancelAnimationFrame(cursorRaf);
+          for (const m of magnets) m.el.style.transform = '';
+          cursor.remove();
+          styleEl.remove();
+        });
+      }
+
+      writeInstanceState(host, 'cleanup', () => {
+        for (const fn of cleanups) fn();
+        globalThis.cancelAnimationFrame(readInstanceState(host, 'frame', () => 0));
       });
-    }
-
-    writeInstanceState(this, 'cleanup', () => {
-      for (const fn of cleanups) fn();
-      cancelAnimationFrame(readInstanceState(this, 'frame', () => 0));
     });
-  }
+    env.signal.addEventListener(
+      'abort',
+      () => {
+        readInstanceState<(() => void) | undefined>(host, 'cleanup', () => undefined)?.();
+        writeInstanceState(host, 'cleanup', undefined);
+      },
+      { once: true },
+    );
+  });
+  onDispose((env) => {
+    const host = env.host;
+    readInstanceState<(() => void) | undefined>(host, 'cleanup', () => undefined)?.();
+    writeInstanceState(host, 'cleanup', undefined);
+  });
 
-  override disconnectedCallback(): void {
-    readInstanceState<(() => void) | undefined>(this, 'cleanup', () => undefined)?.();
-    writeInstanceState(this, 'cleanup', undefined);
-    super.disconnectedCallback();
-  }
-
-  render() {
-    return <span aria-hidden='true'></span>;
-  }
+  return <span aria-hidden='true'></span>;
 }
+
+export default OpenHeroPolish;
