@@ -19,8 +19,8 @@ saas islands: notes-live
 | --- | --- | --- |
 | open-standards-visual | 3 declared rows, 1 `computed` | inline the computed → migrate NOW |
 | open-page-rail | app-local `readingChromeStrings` called in JSX child + attribute (OEC9043) | strings must become declared rows or be inlined |
-| open-reading-shell | 21 `computed`/`trustedHtml` sites, hosts 4 child components | `trustedHtml` transport (D-18c excluded it) |
-| open-article-view | 8 `computed`/`trustedHtml`, receives the article `model` | same `trustedHtml` decision |
+| open-reading-shell | **21 `computed`, ZERO `trustedHtml`** (measured 2026-11-18); hosts 4 child components | computed support: collapse the 21 rows or inline them. No transport work is useful |
+| open-article-view | **6 `computed`, ONE `trustedHtml` sink** (measured 2026-11-18), receives the article `model` | the body must stop being a runtime string (removes the row and its sink) — or it stays class-lane |
 | open-artifact-panel | (no rows; verify) | → migrate NOW if clean |
 
 ## www/app/islands — 1 module
@@ -45,6 +45,7 @@ No class islands remain.
 1. open-standards-visual + open-artifact-panel (clean, no design decision)
 2. the tag-source decision (unblocks layout + non-island page-local components)
 3. the app-local-value decision (unblocks rail + search)
-4. the trustedHtml transport decision (unblocks article-view + reading-shell,
-   which in turn unblocks the 40 generated routes)
+4. computed support for the generated lane (unblocks reading-shell), and a
+   non-runtime body shape for article-view — NOT a trustedHtml transport, which
+   was ruled out on 2026-11-18 (see 16b-migration-note.md)
 5. then M10 P1 flips as a consequence, and P2-P5 record it
