@@ -625,3 +625,39 @@ them. The trial migration was reverted.
 
 This is the LAST structural blocker between the current state and the remaining
 consumer migrations. Everything below it is mechanical.
+
+### The second boundary: an app-local module's value cannot be CALLED in a JSX slot
+
+Retrying `open-page-rail` inside `app/islands/` (where the lane DOES admit the
+module) surfaced a different gate:
+
+```
+OEC9043 [OEIR_UNCLASSIFIED_BINDING] binding 'readingChromeStrings' has an unknown
+value kind in a tracked slot; import 'readingChromeStrings' from
+'../site-ui/chrome-strings.ts' was not classified by the host
+```
+
+The generated lane classifies every value that appears in a tracked slot
+(a JSX child, an attribute value). A named import from an app-local module is not
+in that classification set: the host's admission descriptors
+(`StaticSidecarDescriptor`, `ModuleVocabularyDescriptor`) carry only
+`'static-sidecar'`, `'page-definition'` and `'element-registration'` kinds — there
+is no "ordinary function value from an arbitrary module" kind, by design, because
+admitting one would make the lane depend on the whole app module graph.
+
+`notes-live` migrated cleanly because its app-local import is only CALLED INSIDE
+`onConnect`/`onDispose` callbacks, whose bodies are not value-classified. The rail
+calls `readingChromeStrings(props.locale)` directly in a JSX child and an
+attribute, which is exactly the classified position.
+
+Consequences for the remaining www components:
+
+- `open-page-rail` can still migrate, but the localised strings must come from a
+  lane-admitted source: either the two labels become declared rows the caller
+  passes (they are pure derivations of `locale`), or the strings are inlined.
+  Either is a component-shape decision, not a mechanism gap.
+- `open-search` is the harder case: its controller (Zag combobox) is consulted
+  from render-time reads, so the same gate applies more broadly.
+- The article-route components pass a large `model` object straight into
+  `<open-article-view model={...}>`; that is a declared row, which the JSON seed
+  channel now carries, so they are the most tractable of the remaining set.
