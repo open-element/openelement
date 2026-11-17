@@ -257,6 +257,13 @@ export default defineConfig({
               replacement: `${rootDir}packages/element/src/internal/compiled/runtime.ts`,
             },
             {
+              // The generated leaf's closed entry (M11-3). Listed AFTER the
+              // facade because these are distinct exact specifiers, not
+              // prefixes of one another — the alias matcher is exact.
+              find: '@openelement/element/internal/compiled/leaf-runtime',
+              replacement: `${rootDir}packages/element/src/internal/compiled/leaf-runtime.ts`,
+            },
+            {
               find: '@openelement/element',
               replacement: `${rootDir}packages/element/src/index.ts`,
             },
