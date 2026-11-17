@@ -1186,6 +1186,11 @@ describe('16b-LC lifecycle hooks (Chromium)', () => {
         host.setAttribute('seed', '9');
         await tick();
         const afterAttribute = [...window.__oeChangeJournal];
+        // Removing the attribute resolves the declared row to its default and is
+        // a committed change in its own right.
+        host.removeAttribute('seed');
+        await tick();
+        const afterAttributeRemoval = [...window.__oeChangeJournal];
         host.dispose(true);
         host.seed = 11;
         await tick();
@@ -1199,6 +1204,7 @@ describe('16b-LC lifecycle hooks (Chromium)', () => {
           afterProperty,
           stateAfterProperty,
           afterAttribute,
+          afterAttributeRemoval,
           afterTeardown,
           afterReconnect: [...window.__oeChangeJournal],
           hostMatch: window.__oeChangeHosts.every((element) => element === host),
@@ -1216,16 +1222,26 @@ describe('16b-LC lifecycle hooks (Chromium)', () => {
         ['seed', 7],
         ['seed', 9],
       ]);
+      // Removing the attribute resolves the row back to its declared default and
+      // IS a committed change (the value moves 9 -> 0), so the channel reports
+      // it. This path had no row before; the open-input error projection depends
+      // on it.
+      expect(result.afterAttributeRemoval).toEqual([
+        ['seed', 7],
+        ['seed', 9],
+        ['seed', 0],
+      ]);
       // Teardown clears the element-lifetime listeners.
-      expect(result.afterTeardown).toEqual(result.afterAttribute);
+      expect(result.afterTeardown).toEqual(result.afterAttributeRemoval);
       // A fresh instance registers exactly once (no duplicate from the old one).
       expect(result.afterReconnect).toEqual([
         ['seed', 7],
         ['seed', 9],
+        ['seed', 0],
         ['seed', 13],
       ]);
       expect(result.hostMatch).toBe(true);
-      expect(result.aborted).toEqual([false, false, false]);
+      expect(result.aborted).toEqual([false, false, false, false]);
       expect(result.errors).toEqual([]);
     } finally {
       await page.close();
