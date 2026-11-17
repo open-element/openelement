@@ -780,3 +780,47 @@ DECLARATION called in a tracked slot is refused (OEC9041), which is a sharp edge
 worth a test if that idiom becomes the documented migration pattern.
 
 Verified: probe pairs above compiled in this tree; compiler suite green.
+
+### Third gap measured: a static generated light producer has no children channel
+
+Two defects on the page-local path were fixed (`01a63e27f`): the declared tag now
+reaches the SSG admission set, and `__ssr` now recognizes a generated light root.
+With those in place the emitted content DOES contain the component's full
+`<section part="panel">` shell and its `<slot>` elements — verified by reading
+the emitted `P__ssr()` body, so the earlier "missing shell" was admission, not
+serialization.
+
+What remains, measured: a fully static generated component's producer is
+PARAMETERLESS — `export function P__ssr()` — and its `<slot>` elements are
+emitted EMPTY with no per-slot marker:
+
+```
+"<section>" + markerText(rangeMarker(0)) + "<p>" +
+  "<slot name=\"label\"></slot>" + "</p>" + … + "</section>"
+```
+
+The class lane substitutes projections because it serializes a Part Program whose
+structure it can walk (`serializedSeams` + `consumedProjections`). A generated
+light content is a finished STRING, and the only markers in it are RANGE markers
+around element subtrees — not anchors at the slot positions. So there is no
+reliable way for the serializer to inject the caller's children into the right
+slot from outside.
+
+Consequences, stated so the next lane does not try the two shortcuts I rejected:
+
+- **String-replacing `<slot …>` is not acceptable.** Without a marker the
+  replacement would have to pattern-match markup, which is exactly the
+  source-text surgery this repo forbids (and it would break the moment a slot
+  gains an attribute or a consumer nests one).
+- **Giving the producer a `children` parameter is not obviously right either.**
+  It would make a supposedly pure content producer take a caller-supplied value,
+  and every other generated producer (the shadow `__ssrHost` included) is
+  content-only.
+
+So this is a COMPILER slice: emit a per-slot anchor (the same marker discipline
+the claim path already uses) so the serializer can substitute without parsing.
+It is required before a page-local component that RECEIVES children can migrate;
+a leaf-only page-local component is unaffected.
+
+`open-artifact-panel` is therefore still class-lane, and its trial migration is
+reverted. It takes three slotted children at five call sites.
