@@ -333,6 +333,27 @@ const PROPERTY_CHANGE_SOURCE =
   '}\n' +
   'export default ChangeCard;\n';
 
+/**
+ * The change channel on the shape the ui components actually are: a
+ * FORM-ASSOCIATED element with a SHADOW root. The C9 row above is a light root,
+ * so this pair is what proves the channel is not lane/root specific.
+ */
+const FORM_SHADOW_CHANGE_SOURCE =
+  `import { onPropertyChange } from '@openelement/element';\n` +
+  "import { defineIslandConfig } from '@openelement/router';\n" +
+  'export const openElement = defineIslandConfig({\n' +
+  "  root: 'shadow',\n" +
+  '  formAssociated: true,\n' +
+  "  properties: { seed: { default: 0 }, error: { default: '' } },\n" +
+  '});\n' +
+  'function FormShadowCard(props: { seed: number; error: string }) {\n' +
+  '  onPropertyChange((event) => {\n' +
+  '    globalThis.__oeFsJournal.push([event.name, event.value]);\n' +
+  '  });\n' +
+  '  return <p>{props.error}</p>;\n' +
+  '}\n' +
+  'export default FormShadowCard;\n';
+
 interface PageRuntime {
   GeneratedElement: CustomElementConstructor;
   __oeElementTag: string;
@@ -1243,6 +1264,64 @@ describe('16b-LC lifecycle hooks (Chromium)', () => {
       expect(result.hostMatch).toBe(true);
       expect(result.aborted).toEqual([false, false, false, false]);
       expect(result.errors).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 120_000);
+
+  test('C9b the change channel also fires on a form-associated SHADOW root', async () => {
+    const compiled = compileIsland('lifecycle-form-shadow-change', FORM_SHADOW_CHANGE_SOURCE);
+    const tag = compiled.tag;
+    const bundle = await buildBundle(
+      tempDir,
+      compiled.code,
+      'form-shadow-change',
+      '__oeFsMod',
+      compiled.component,
+    );
+    const page = await openPage(bundle);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        globalThis.__oeFsJournal = [];
+        void 0;
+        const mod = globalThis.__oeFsMod as unknown as {
+          GeneratedElement: CustomElementConstructor;
+        };
+        const tick = globalThis.__oeTick;
+        customElements.define(tagName, mod.GeneratedElement);
+        const host = document.createElement(tagName);
+        document.body.append(host);
+        await tick();
+        const afterConnect = [...globalThis.__oeFsJournal];
+        host.setAttribute('seed', '4');
+        await tick();
+        const afterAttribute = [...globalThis.__oeFsJournal];
+        host.setAttribute('error', 'boom');
+        await tick();
+        const afterError = [...globalThis.__oeFsJournal];
+        host.removeAttribute('error');
+        await tick();
+        return {
+          afterConnect,
+          afterAttribute,
+          afterError,
+          afterRemoval: [...globalThis.__oeFsJournal],
+          hasShadow: Boolean(host.shadowRoot),
+        };
+      }, tag);
+      // Setup/connect report nothing; each committed declared row does.
+      expect(result.hasShadow, 'the shadow root exists').toBe(true);
+      expect(result.afterConnect).toEqual([]);
+      expect(result.afterAttribute).toEqual([['seed', 4]]);
+      expect(result.afterError).toEqual([
+        ['seed', 4],
+        ['error', 'boom'],
+      ]);
+      expect(result.afterRemoval).toEqual([
+        ['seed', 4],
+        ['error', 'boom'],
+        ['error', ''],
+      ]);
     } finally {
       await page.close();
     }
