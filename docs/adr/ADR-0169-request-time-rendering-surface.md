@@ -1,6 +1,6 @@
 # ADR-0169: The request-time rendering surface — server function pages and the `./server` constructor helpers
 
-- Status: ACCEPTED; AMENDED 2026-11-09 (bounded full-await server-function seam; see the amendment at the end) (implemented: `packages/compiler/src/internal/compiler/semantic-core/server-component.ts`,
+- Status: ACCEPTED; AMENDED 2026-11-09 (bounded full-await server-function seam; see the amendment at the end), AMENDED 2026-11-17 (M14 definition and located boundary table) and AMENDED 2026-11-18 (the "bounded slice" wording reconciled against the definition — the change is bounded, the milestone claim is not made) (implemented: `packages/compiler/src/internal/compiler/semantic-core/server-component.ts`,
   `packages/element/src/server.ts` (`@openelement/element/server`),
   `packages/router/src/authoring.ts` (`kind: 'function-page'`))
 - Decided: 2026-10-18 (alpha15 server lane; record written in the alpha15
@@ -346,3 +346,43 @@ carrier: [the M14 definition](../architecture/m14-full-await-definition.md)).
 - This amendment changes no decision above, no admission, and no milestone
   status. The M14 exit row and the TSX-17 matrix cells stay with the
   consolidation PR; no signature is recorded here.
+
+## Amendment (2026-11-18): the "bounded slice" wording, reconciled against the definition
+
+Append-only fact record, following the same form as the two amendments above.
+It does not rewrite either of them and it re-decides nothing. It records the
+reconciliation `m14-full-await-definition.md` §6 item 2 asks the consolidation
+PR to make: the description of this merge as a *bounded slice* is correct about
+the **change** (one bounded merge, PR #1748, one seam) and is **not** a claim
+about the **milestone**. The owner-approved definition
+([the M14 definition](../architecture/m14-full-await-definition.md), execution
+plan §16.1 D-16b) makes the two positions admitted by #1748 — a text child
+(D1) and a nested server-component prop (D2) — the *whole* of Alpha16 "full
+await", not a subset of a larger surface still to be built: "the two positions
+in §2 are the whole admitted set, and every other position is outside the
+definition by decision, with a named carrier (§3)". Reading "bounded slice" as
+"part of an unstated whole" is therefore the misreading this paragraph
+retires; the remaining refusal positions are permanent boundaries carried by
+GitHub issue #1801 / Alpha18 §7, not unfinished M14 work.
+
+What the wording change does **not** do:
+
+- It does not mark M14 met. The definition says so twice — §1 "The record
+  changes no milestone status" and §7 "**No milestone-status change.** M14
+  stays In progress; this is not M14 Met" — and the ledger row still reads
+  `In progress`, M14 exit not met, for the reasons the ledger records at
+  `1b23f677e7e315a479aad385033ff6b60dfc5926` — including the absent in-repo
+  fixture for the D2 authored spelling. The exit verdict is the ledger's and the
+  integration single-writer's, not this ADR's.
+- It does not widen the grammar, add a third await position, or convert any
+  `OEC9032` refusal into an admission. Decision item 2 above is unchanged.
+- It does not claim streaming, defer, cancellation or per-fragment output;
+  those remain Alpha18 (ADR-0158/ADR-0174 boundary), as Decision item 5 says.
+- It claims no version, tag, publication, ABI freeze or public API addition.
+
+Verification of the recorded cells is at the clean worktree
+`1b23f677e7e315a479aad385033ff6b60dfc5926` (LOCAL, Node `v24.18.0`): compiler
+full-await suite 1 file / 29 passed, router function-page + entry-guard suites
+3 files / 54 passed, element thenable-backstop suite 1 file / 19 passed. The
+per-cell matrix record is the
+[TSX-17 annex](../architecture/alpha16-18-semantic-test-matrix.md#tsx-17-recorded-results--server-async-boundary-m14-full-await).

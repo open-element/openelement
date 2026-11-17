@@ -288,6 +288,34 @@ definition's §9). The status
 sentence above still holds: this is the bounded slice, not the M14 exit; the
 exit row and the TSX-17 matrix cells stay with the integration single-writer.
 
+**2026-11-18 reconciliation of the "bounded full-await" wording (append-only).**
+The noun phrase above — "bounded full-await … a bounded M14 slice, not M14
+exit" — is reconciled here, because it reads as a claim about the milestone
+that the definition does not make. *Bounded* qualifies the **change**: one
+bounded merge (`#1748`), one admission bridge, one lowering walk, one published
+seam, and exactly two admitted await positions. It does **not** mean "the first
+installment of a larger Alpha16 await surface". Per
+[the M14 definition](./m14-full-await-definition.md) §1/§7 the two positions are
+"the whole admitted set, and every other position is outside the definition by
+decision, with a named carrier (§3)" — so the nine `OEC9032` boundaries are
+permanent negatives carried by GitHub issue #1801 / Alpha18 §7, not M14 work
+outstanding. The table row above ("Are ordinary async server components
+supported?") therefore means: supported **for the defined surface**, which *is*
+full await as Alpha16 defines it; it is not a partial implementation of some
+undocumented broader grammar.
+
+This paragraph changes no decision, no admission and no status. In particular it
+does **not** make the milestone met: the progress ledger's M14 row still reads
+`In progress`, M14 exit **not met**, and it names the remaining gaps at
+`1b23f677e7e315a479aad385033ff6b60dfc5926` — chiefly that the defined D2
+authored spelling (`<Child value={await load()} />`) has no in-repo fixture, and
+that the TSX-17 `T+`/`T−` cells have no type-check fixture. The `C+`/`C−`/`S`/`F`
+cells are recorded in the
+[TSX-17 annex](./alpha16-18-semantic-test-matrix.md#tsx-17-recorded-results--server-async-boundary-m14-full-await).
+The Alpha18 boundary sentence above (bounded defer, cancellation and streamed
+regions; ordinary `await` and deferred regions are different capabilities) is
+unchanged.
+
 ### 4.7 Class authoring — current fact and approved retirement
 
 **CURRENT FACT:** the only shipping authoring path is the decorated class
