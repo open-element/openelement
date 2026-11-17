@@ -187,7 +187,13 @@ export function serializeGeneratedElementHtml(input: GeneratedElementSsrInput): 
           'the document-level adoption channel, not its own subtree',
       );
     }
-    return `<${tag}${attributes}>${content}</${tag}>`;
+    // The marker is the light-root OWNERSHIP fact (its region is the host's
+    // children), so it is written here exactly as the class lane's serializer
+    // writes it: authored attributes first, the marker last. The name is spelled
+    // literally because this module is the browser-safe producer LEAF and must
+    // not take a package dependency for one constant (the leaf's import set is
+    // pinned by `generated-element-dsd-ssr.test.ts`).
+    return `<${tag}${attributes} data-oe-light>${content}</${tag}>`;
   }
   // The canonical marked-link writer is shared with the class serializer: one
   // node shape, one URL rule. The template spelling itself stays owned by

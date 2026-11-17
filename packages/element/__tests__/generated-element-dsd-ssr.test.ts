@@ -68,8 +68,12 @@ test('a closed shadow root uses the same template spelling and the same host sha
 });
 
 test('a light root emits no template and refuses light children', () => {
+  // The light-root OWNERSHIP marker is part of the contract, not decoration:
+  // the class lane's serializer always writes it, and the claim path plus the
+  // light-root CSS scope both key off it. Authored attributes stay first and the
+  // marker last, so the spelling matches the class lane's byte-for-byte.
   expect(serializeGeneratedElementHtml({ tag: 'x-card', root: 'light', content: CONTENT })).toBe(
-    '<x-card><p id="panel">hello</p></x-card>',
+    '<x-card data-oe-light><p id="panel">hello</p></x-card>',
   );
   const error = refusal(() =>
     serializeGeneratedElementHtml({

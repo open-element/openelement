@@ -324,7 +324,16 @@ function serializeLightGeneratedHost(
           (attribute) => [attribute.name, attribute.bare ? '' : attribute.value] as const,
         );
   const attributes = pairs.map(([name, value]) => ` ${name}="${escapeAttrValue(value)}"`).join('');
-  return `<${tag}${attributes}>${content}</${tag}>`;
+  // The marker is the light-root OWNERSHIP fact, not an authored attribute: the
+  // class lane's serializer always writes it, and the claim path plus the
+  // light-root CSS scope both key off it. A generated light host that omitted it
+  // would serialize the right CONTENT under the wrong ownership contract, and
+  // the divergence would only surface when something asked the DOM whose
+  // children those were.
+  // Order matches the class lane's serializer (authored attributes first, the
+  // marker last), so a consumer keying off attribute order — a snapshot, a
+  // string patch, a CSS attribute selector list — sees one spelling.
+  return `<${tag}${attributes} data-oe-light>${content}</${tag}>`;
 }
 
 function failUncompiled(ctor: object, tag: string): never {
