@@ -719,3 +719,38 @@ together), or it stays on the class lane, which already works. If a future owner
 overrules this, the only defensible design is a request-scoped unforgeable token
 minted with the brand and verified at the claim — a signing subsystem, recorded
 as its own ADR, and still unable to prove anything about the original call site.
+
+## 2026-11-18 ruling — no `computed` support in the generated lane; inline instead
+
+Owner-delegated decision from a design study of `open-reading-shell` (21 `computed`
+fields, zero `trustedHtml`). **The lane gains no component-authored `computed`.**
+The 21 fields inline at their sinks; the two that produce arrays change to an
+inline form of the same value.
+
+The reason is not effort, it is correctness. The generated shell's `props` is a
+frozen record of plain getters over a `Map` with ONE coarse `propsChanged`
+signal (`shell.ts` `createState`). A `computed` closed over that record tracks
+no signal, so it would compute once and go permanently stale after the first
+property write — the exact "silently SSR-only surface" class this lane exists to
+remove. Admitting it would ship a mechanism whose first bug is invisible in SSR.
+
+Measured, so the migration rule is not advice but a fact:
+
+- `return <p>{props.count * 2}</p>` → two bound refresh functions (mount +
+  claim), i.e. reactive;
+- `const doubled = props.count * 2; return <p>{doubled}</p>` → **zero** bound
+  refreshes. The module compiles, SSR renders correctly, and the value never
+  updates again.
+
+That pair is why 16b-migration-note R1 (inline the read at its sink) is a
+correctness rule, not a style preference, and it is why the lane's own refusal of
+a non-`local` resource is right: a `computed` local is a `local` kind whose
+reactivity the emitter cannot reproduce.
+
+Corollary the study also verified: a local `const` ARROW is admitted and stays
+reactive, so the one real cost (a locale-string helper at ~9 sinks) needs no new
+capability — a component-local arrow already expresses it. A local function
+DECLARATION called in a tracked slot is refused (OEC9041), which is a sharp edge
+worth a test if that idiom becomes the documented migration pattern.
+
+Verified: probe pairs above compiled in this tree; compiler suite green.
