@@ -575,3 +575,53 @@ class components in `www/app/components/` and `apps/saas/` still are), then P1
 flips as a consequence, and P2–P5 record it. This slice's leaf entry is the
 first half of that story: it removes the generated lane's OWN contribution to
 the executor's reach, so when the class lane leaves, nothing keeps it.
+
+### Why a page-local component cannot be migrated yet: it has no TAG
+
+Attempting `open-page-rail` (the www table of contents) settled the remaining
+question about `www/app/site-ui/*`. The build failed with:
+
+```
+<open-page-rail> (OpenPageRail) has no compiled Part Program
+```
+
+and the reason is upstream of any registration: **the generated lane never
+recognized the module at all.**
+
+`createGeneratedElementSiteResolver` — the ONE source of a generated module's
+tag — derives it from exactly two places:
+
+1. a package island's manifest (`packageSites`), or
+2. the islands directory, via `transformIslandSource` + `pathToTagName`.
+
+A module under `www/app/site-ui/` is neither. With no site, the transform
+declines the module (by design: "recording a host identity here would be a fact
+the build never honours"), so no element class and no `__ssrHost` is emitted, and
+the class page that imports it for registration keeps rendering the class-lane
+version — or, after a naive function-component rewrite, an unknown element.
+
+So the missing piece is not a registration hook in `entry-orchestrator` (that
+half already exists and already pairs `__registerSsrIsland`), and not a
+`StaticComponentDecl` field. It is a **tag source** for a component that is
+neither an island nor a package declaration.
+
+Three candidate designs, none settled, and the choice is the owner's because each
+changes the authoring surface:
+
+- **A sidecar `tag` field** (`defineComponentConfig({ tag: 'open-page-rail' })`).
+  Explicit, no inference, and it makes the component's identity authored rather
+  than derived. Costs: a new sidecar key, and the duplicate-tag guard must cover
+  it.
+- **Derive from the module filename in a configured component root** (the
+  islands rule generalized to a `componentsDir`). Cheapest, but it re-introduces
+  the path-derived tag identity the package lane deliberately avoids.
+- **Derive from JSX usage** (the class page names `<open-page-rail>`). No
+  authored change, but it is inference from a consumer, and a tag typo would
+  silently create an unregistered element instead of failing closed.
+
+Until one is chosen, `open-page-rail` and `open-search` stay class-lane, and the
+www article-route components (which also live outside the islands tree) stay with
+them. The trial migration was reverted.
+
+This is the LAST structural blocker between the current state and the remaining
+consumer migrations. Everything below it is mechanical.
