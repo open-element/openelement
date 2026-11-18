@@ -570,11 +570,22 @@ function lightSsrProducer(
           : () => materialiseDefault(property),
       });
     }
-    return (producer as (props: unknown, host: undefined) => unknown).call(
+    // The seeded record's non-enumerable `__oeHostAttributes` is the canonical
+    // attribute channel: the declared-attribute rows AND the JSON seed for
+    // `attribute: false` rows. A light root has no `<Name>__ssrHost` wrapper to
+    // return it, and its serializer (unlike the DSD producer) writes the host tag
+    // itself, so the pairs must ride back to that caller. Exposed as a second
+    // property on the result rather than a changed return type, so the content
+    // string the shadow path and every existing caller expect is unchanged.
+    const content = (producer as (props: unknown, host: undefined) => unknown).call(
       undefined,
       resolved,
       undefined,
     );
+    const hostAttributes = (seeded as Record<string, unknown>)[GENERATED_HOST_ATTRIBUTES] as
+      | readonly (readonly [string, string])[]
+      | undefined;
+    return { content, hostAttributes };
   };
 }
 

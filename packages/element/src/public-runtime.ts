@@ -323,6 +323,51 @@ function classNameOf(ctor: object): string {
  * fails closed with the serializer's validation identity, exactly like the
  * class lane's `projectedChildren` check.
  */
+/**
+ * The light-root class static's result: the serialized content plus the seeded
+ * host attribute pairs (`__oeHostAttributes`) it computed but has no wrapper to
+ * return. A string is the pre-existing shape and carries no pairs, so an older
+ * emitted module keeps rendering byte-identically.
+ */
+interface LightSsrResult {
+  readonly content: string;
+  readonly hostAttributes: readonly (readonly [string, string])[] | undefined;
+}
+
+function lightResult(rendered: unknown, lane: string, tag: string): LightSsrResult {
+  if (typeof rendered === 'string') return { content: rendered, hostAttributes: undefined };
+  if (
+    rendered !== null &&
+    typeof rendered === 'object' &&
+    typeof (rendered as LightSsrResult).content === 'string'
+  ) {
+    return rendered as LightSsrResult;
+  }
+  throw new OpenElementError(
+    `[openElement] the ${lane} generated element <${tag}> produced ${typeof rendered} instead ` +
+      'of an HTML string; the compiler-emitted `__ssr` producer must always return serialized ' +
+      'content.',
+    { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+  );
+}
+
+/**
+ * Merge the caller's authored attribute pairs with the ones the class static
+ * seeded. The seeded pair for a name REPLACES the authored one: it is the
+ * canonical converted value the claim will re-read, and the JSON seed is
+ * emitted only by the seeder.
+ */
+function mergeHostAttributes(
+  authored: readonly (readonly [string, unknown])[] | undefined,
+  seeded: readonly (readonly [string, string])[] | undefined,
+): readonly (readonly [string, unknown])[] | undefined {
+  if (seeded === undefined || seeded.length === 0) return authored;
+  const byName = new Map<string, unknown>();
+  for (const [name, value] of authored ?? []) byName.set(name, value);
+  for (const [name, value] of seeded) byName.set(name, value);
+  return [...byName];
+}
+
 function serializeLightGeneratedHost(
   tag: string,
   content: string,
@@ -1007,18 +1052,15 @@ function renderToStringAtDepth(
       // Before this, a light-root component with any row threw on `props.x`.
       const rendered = (lightSsr as (input?: unknown, attributes?: unknown) => unknown).call(
         resolvedClass,
-        undefined,
+        options.props,
         options.hostAttrs,
       );
-      if (typeof rendered !== 'string') {
-        throw new OpenElementError(
-          `[openElement] the light-root generated element <${
-            typeof input === 'string' ? input : '<unknown>'
-          }> produced ${typeof rendered} instead of an HTML string; the compiler-emitted ` +
-            '`__ssr` producer must always return serialized content.',
-          { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
-        );
-      }
+      const light = lightResult(
+        rendered,
+        'light-root',
+        typeof input === 'string' ? input : '<unknown>',
+      );
+      const renderedContent = light.content;
       // The producer is content-only (the shadow lane's `<Name>__ssrHost` wraps
       // its own DSD template). A light root's region IS the host's children, so
       // the serializer owns the host element: the tag plus the canonical
@@ -1026,8 +1068,8 @@ function renderToStringAtDepth(
       // substituted into the producer's anchored slots.
       return serializeLightGeneratedHost(
         typeof input === 'string' ? input : '<unknown>',
-        rendered,
-        options.hostAttrs,
+        renderedContent,
+        mergeHostAttributes(options.hostAttrs, light.hostAttributes),
         options.projectedChildren,
       );
     }
@@ -1146,14 +1188,8 @@ function renderToStringAtDepth(
               if (nestedClass !== undefined && typeof nestedLightSsr === 'function') {
                 const rendered = (
                   nestedLightSsr as (input?: unknown, attributes?: unknown) => unknown
-                ).call(nestedClass, undefined, nested.attributes);
-                if (typeof rendered !== 'string') {
-                  throw new OpenElementError(
-                    `[openElement] the nested light-root generated element <${nested.tag}> ` +
-                      `produced ${typeof rendered} instead of an HTML string.`,
-                    { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
-                  );
-                }
+                ).call(nestedClass, nested.properties, nested.attributes);
+                const nestedLight = lightResult(rendered, 'nested light-root', nested.tag);
                 // The nested host's authored children arrive as the parent
                 // serializer's own per-slot groups (`nested.projectedChildren`),
                 // exactly the map the class-lane nested expansion hands a light
@@ -1162,8 +1198,8 @@ function renderToStringAtDepth(
                 // fails closed inside the serializer.
                 return serializeLightGeneratedHost(
                   nested.tag,
-                  rendered,
-                  nested.attributes,
+                  nestedLight.content,
+                  mergeHostAttributes(nested.attributes, nestedLight.hostAttributes),
                   nested.projectedChildren,
                 );
               }
