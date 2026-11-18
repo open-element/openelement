@@ -653,3 +653,32 @@ Two consequences, both actionable:
 This is why the consumer-migration map and the P1 verdict are the same story told
 twice; the map lists what has to move, this record explains why moving it is what
 turns the verdict.
+
+## CORRECTION (2026-11-18): the P1 lever is NOT the two islands
+
+An earlier section of this record said P1 flips when `open-search` and
+`open-page-rail` migrate. That was wrong, and a migration attempt disproved it.
+
+Measured: the shared `element-runtime` chunk contains `element/src/index.ts`,
+`runtime/hydrate-install.ts`, `runtime/blocks-install.ts` and
+`open-element-implementation.ts`. Those are pulled in by the **34 class
+components** that import `from '@openelement/element'` (the root entry, whose top
+two statements install the hydration executor and the when/each builders).
+`layout.tsx` is not in that chunk — it is the ARTICLE-ROUTE components and the
+other class pages that reach the root entry.
+
+So migrating an island does not change the chunk: the island's own lane fact is
+irrelevant to what else the chunk carries. The migration attempt confirmed it —
+the verdict before and after was byte-identical, with `open-page-rail` still
+listed among the chunk's islands.
+
+The real lever, therefore, is: **no production browser graph may import
+`@openelement/element`'s ROOT entry.** That is a 34-file question across
+`www/app/components/article-routes/` (27 generated modules), `www/app/site-ui/`
+and `layout.tsx` — the consumer-migration map, not the island list. It also
+explains why `./base`/`./client-only` exist and why moving a CLASS page onto them
+is not possible: a class component's claim needs the installed executor
+(recorded earlier in 16b-migration-note.md).
+
+This correction supersedes the "exact dependency chain" section above wherever the
+two disagree.
