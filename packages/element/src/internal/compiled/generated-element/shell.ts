@@ -517,6 +517,67 @@ export function seedGeneratedElementHostProperties<P extends object = Record<str
   return seeded;
 }
 
+/**
+ * Wrap a light-root producer so it receives the same seeded, resolved props a
+ * shadow root's `__ssrHost` gives its template.
+ *
+ * `input` is what an SSR caller can supply — the host attribute pairs the
+ * serializer already carries, or a plain props record. Both are folded through
+ * the SAME two helpers the shadow lane uses (`seedGeneratedElementHostProperties`
+ * for the attribute wire, `resolveGeneratedElementProps` for the declared
+ * defaults), so a light and a shadow root cannot disagree about what a row's
+ * server value is.
+ */
+function lightSsrProducer(
+  descriptor: NormalizedDescriptor,
+  producer: () => unknown,
+): (input?: unknown, attributes?: readonly (readonly [string, string])[]) => unknown {
+  return (input?: unknown, attributes?: readonly (readonly [string, string])[]) => {
+    const supplied =
+      input !== null && typeof input === 'object' ? (input as Record<string, unknown>) : undefined;
+    // The seeder is typed against the PUBLIC property row (`default`) while the
+    // shell holds the NORMALIZED one (`defaultValue`); projecting between them is
+    // this wrapper's job. Passing normalized rows straight through made the
+    // seeder see `default: undefined` and take its boolean-presence branch for a
+    // STRING row.
+    const rows = descriptor.properties.map((property) => ({
+      name: property.name,
+      attribute: property.attribute,
+      type: property.type,
+      reflect: property.reflect,
+      ...(property.defaultValue === undefined ? {} : { default: property.defaultValue }),
+    }));
+    const seeded = seedGeneratedElementHostProperties(rows, supplied, attributes);
+    // Resolve to the complete server props record from the ALREADY-NORMALIZED
+    // rows: `resolveGeneratedElementProps` would re-normalize a descriptor this
+    // shell has already built, and its `createRecipe`/`tag` requirements are the
+    // emitter's contract, not something a server render should have to restate.
+    // The semantics are the resolver's: a supplied row wins (each read re-reads
+    // the caller's record), an omitted one uses the declared default.
+    const resolved: Record<string, unknown> = Object.create(null);
+    for (const property of descriptor.properties) {
+      // Read through the SEEDED record, not the caller's input: the seeder is
+      // what resolves an attribute-pair source and applies the declared default,
+      // and it is getter-backed so each read re-reads the caller's value (the
+      // per-read contract). Reading `supplied` directly would bypass the
+      // attribute channel entirely.
+      const hasSeeded = Object.prototype.hasOwnProperty.call(seeded, property.name);
+      Object.defineProperty(resolved, property.name, {
+        enumerable: true,
+        configurable: false,
+        get: hasSeeded
+          ? () => (seeded as Record<string, unknown>)[property.name]
+          : () => materialiseDefault(property),
+      });
+    }
+    return (producer as (props: unknown, host: undefined) => unknown).call(
+      undefined,
+      resolved,
+      undefined,
+    );
+  };
+}
+
 /** The host record the generated recipe factory consumes. */
 export interface GeneratedElementHost<P extends object = Record<string, unknown>> {
   /**
@@ -2296,7 +2357,17 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       configurable: true,
       enumerable: false,
       writable: false,
-      value: normalized.ssrProducer,
+      // The compiler-emitted producer takes `(props, host)` — a light root's
+      // content is a function of its declared rows, exactly like a shadow
+      // root's template. The SHADOW lane gets its props from the `<Name>__ssrHost`
+      // wrapper, which seeds them from the host attribute pairs. A light root has
+      // no wrapper (`ssrHostExport` is null by design), so the caller of the
+      // class static is the only place left to seed — and it used to call the
+      // producer with NO arguments, which meant EVERY light-root component with
+      // a declared row threw on `props.x` while a rowless one worked. Do the
+      // seeding HERE, inside the class static, so both light call sites (root and
+      // nested) get it without each having to know the mechanism.
+      value: lightSsrProducer(normalized, normalized.ssrProducer),
     });
   }
 

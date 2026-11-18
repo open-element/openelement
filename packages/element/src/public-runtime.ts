@@ -1002,7 +1002,14 @@ function renderToStringAtDepth(
     // wrapper: the host's children ARE the region, exactly as on the client.
     const lightSsr = (resolvedClass as { __ssr?: unknown }).__ssr;
     if (typeof lightSsr === 'function') {
-      const rendered = (lightSsr as () => unknown).call(resolvedClass);
+      // Pass the host attribute pairs: the class static now folds them through
+      // the shell's own seeder/resolver so a declared row gets its server value.
+      // Before this, a light-root component with any row threw on `props.x`.
+      const rendered = (lightSsr as (input?: unknown, attributes?: unknown) => unknown).call(
+        resolvedClass,
+        undefined,
+        options.hostAttrs,
+      );
       if (typeof rendered !== 'string') {
         throw new OpenElementError(
           `[openElement] the light-root generated element <${
@@ -1137,7 +1144,9 @@ function renderToStringAtDepth(
               // shell installed (the same one the root path uses).
               const nestedLightSsr = (nestedClass as { __ssr?: unknown } | undefined)?.__ssr;
               if (nestedClass !== undefined && typeof nestedLightSsr === 'function') {
-                const rendered = (nestedLightSsr as () => unknown).call(nestedClass);
+                const rendered = (
+                  nestedLightSsr as (input?: unknown, attributes?: unknown) => unknown
+                ).call(nestedClass, undefined, nested.attributes);
                 if (typeof rendered !== 'string') {
                   throw new OpenElementError(
                     `[openElement] the nested light-root generated element <${nested.tag}> ` +

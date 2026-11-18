@@ -268,3 +268,100 @@ describe('light-root slot anchors — the __ssr composition route', () => {
     );
   });
 });
+
+/**
+ * The light-root PROPS channel (regression).
+ *
+ * A light-root generated element's producer takes `(props, host)` — its content
+ * is a function of its declared rows, exactly like a shadow root's template. But
+ * a light root has no `<Name>__ssrHost` wrapper (that exists only for a template
+ * root), so nothing seeded the producer and both call sites invoked it with NO
+ * arguments. The result: EVERY light-root generated component with a declared
+ * row threw on `props.x` during SSR, while a rowless one worked — which is why
+ * the only in-tree light fixture (no `properties` table) never caught it.
+ *
+ * This builds a REAL shell class from a descriptor with one row and renders it
+ * through the real serializer, so the class static's seeding is what is under
+ * test, not a hand-written producer.
+ */
+describe('light-root props channel', () => {
+  /**
+   * A light-root generated producer takes `(props, host)`, but a light root has
+   * no `<Name>__ssrHost` wrapper to seed it — and both runtime call sites used to
+   * invoke it with NO arguments. So EVERY light-root component with a declared
+   * row threw on `props.x` during SSR while a rowless one worked, which is why
+   * the only in-tree light fixture (no `properties` table) never caught it.
+   *
+   * This uses the REAL compiler so the descriptor, the producer and the class
+   * static are the emitter's, not a hand-built stand-in.
+   */
+  test('a light-root component with a declared row renders through SSR', async () => {
+    const { compileGeneratedElementIfAdmitted } =
+      await import('../../compiler/src/internal/compiler/semantic-ir/generated-element/compile.ts');
+    const source = [
+      "import { defineIslandConfig } from '@openelement/router';",
+      'export const openElement = defineIslandConfig({',
+      "  root: 'light',",
+      "  tag: 'oe-light-row-probe',",
+      "  properties: { label: { default: 'fallback' } },",
+      '});',
+      'export default function Probe(props: { label: string }) {',
+      "  return <p class='row'>{props.label}</p>;",
+      '}',
+      '',
+    ].join('\n');
+    const compiled = compileGeneratedElementIfAdmitted(source, '/proj/src/islands/probe.tsx', {
+      site: { tag: 'oe-light-row-probe' },
+    });
+    expect(compiled, 'the lane admits the probe').not.toBeNull();
+
+    // The emitted producer takes props — that is the shape the class static must
+    // feed.
+    expect(compiled!.code).toMatch(/export function Probe__ssr\(__oe_props/);
+    // And the class carries the wrapped producer, not the raw one.
+    expect(compiled!.code).toContain('ssrProducer:');
+
+    // The REAL end-to-end: import the emitted module, register it the way the
+    // serializer looks a generated light host up, and render. Before the fix this
+    // threw `Cannot read properties of undefined (reading 'label')` — the
+    // producer was invoked with no arguments.
+    const { mkdtempSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { pathToFileURL } = await import('node:url');
+    const dir = mkdtempSync(join(tmpdir(), 'oe-light-row-'));
+    const rewritten = compiled!.code
+      .replaceAll(
+        '@openelement/element/internal/compiled/leaf-runtime',
+        pathToFileURL(join(import.meta.dirname!, '../src/internal/compiled/leaf-runtime.ts')).href,
+      )
+      .replaceAll(
+        '@openelement/element/internal/compiled/generated-element/shell',
+        pathToFileURL(
+          join(import.meta.dirname!, '../src/internal/compiled/generated-element/shell.ts'),
+        ).href,
+      );
+    const file = join(dir, 'probe.ts');
+    writeFileSync(file, rewritten, 'utf8');
+    const mod = (await import(pathToFileURL(file).href)) as { default: unknown };
+    const Element = mod.default;
+
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'customElements');
+    const registry: Record<string, unknown> = {
+      get: (tag: string) => (tag === 'oe-light-row-probe' ? Element : undefined),
+    };
+    registry[SSR_REGISTRY_GENERATED_HOSTS] = new Map();
+    Object.defineProperty(globalThis, 'customElements', { configurable: true, value: registry });
+    try {
+      const rendered = renderToString('oe-light-row-probe');
+      expect(rendered, 'the declared default reaches the producer').toContain('fallback');
+      const supplied = renderToString('oe-light-row-probe', {
+        hostAttrs: [['label', 'from-attribute']],
+      });
+      expect(supplied, 'an authored attribute supplies the row').toContain('from-attribute');
+    } finally {
+      if (original) Object.defineProperty(globalThis, 'customElements', original);
+      else delete (globalThis as Record<string, unknown>).customElements;
+    }
+  });
+});
