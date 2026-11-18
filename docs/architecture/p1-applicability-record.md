@@ -706,3 +706,45 @@ unmeasured — that is a gap in this record, not a claim that they pass.
 Practical consequence for ordering: there is no useful way to "work on P1" or
 "work on P4" separately. The single lever is the class-component migration, and
 these two verdicts are what it produces.
+
+## FINAL attribution (2026-11-18, three single-variable builds)
+
+The `open-page-rail` migration was attempted and **did not move either verdict**:
+6 executor entries → 6, `__partProgram` 1 → 1. The migration was reverted
+(it also introduced a real output regression: 14 server-function pages emitted
+`items="[object Object],…"` on the rail host because `__ssr`'s undeclared-prop
+passthrough stringifies an object; functional but dirty bytes, and the fix lives
+in the element package's `__ssr`, not in a component).
+
+Its measurements isolated the REAL carriers, each verified by changing ONE thing
+and re-running the checker:
+
+| change | executor entries | `__partProgram` |
+| --- | --- | --- |
+| baseline | 6 | 1 |
+| rail migrated | 6 | 1 |
+| + package-island `generatedLane` propagation | **3** | **0** |
+| + that AND `packages/ui/src` moved onto `/lifecycle` + `/logger` | **MET** | **0** |
+
+So the two levers, in order:
+
+1. **`packages/router/src/vite/internal/ssg/client-island-entries.ts` never sets
+   `generatedLane` on the `packageIslandDecls` branch** — only the local-island
+   branch above it reads the scan fact. Every `@openelement/ui` package island is
+   therefore treated as class-lane by `clientEntryNeedsElementRuntime`, which
+   keeps the lazy full-surface runtime load alive. This one defect accounts for
+   three of the six entries.
+2. **`packages/ui/src` imports from the element package's ROOT entry** in three
+   places (`open-code-block`, `open-theme-toggle` for their intrinsics,
+   `component-recipes.ts` for `createLogger`), which re-installs the hydration and
+   Block installs. Moving them onto `/lifecycle` and `/logger` closes the rest.
+
+Also recorded, a NEW authoring trap (R2's counterpart): the scrollspy deferral
+alone is not enough — a disconnect keeps the generated DOM (LC-0 scope), so the
+previous observer's `aria-current` survives into the next claim and fails the
+static-seed check. The teardown must REMOVE the marks, restoring the declared
+seed. Verified not pre-existing by stashing the migration and rerunning the same
+probe on the baseline (clean).
+
+`open-page-rail` itself is therefore NOT the lever and stays class-lane; the two
+`packages/` changes above are.
