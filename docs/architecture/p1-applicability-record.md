@@ -682,3 +682,27 @@ is not possible: a class component's claim needs the installed executor
 
 This correction supersedes the "exact dependency chain" section above wherever the
 two disagree.
+
+## P1–P5 as ONE dependency graph (measured 2026-11-18)
+
+The plan says P1–P5 are judged separately at one SHA. That is right, but three of
+them share ONE root cause, and knowing that changes the work order.
+
+| proof | what it asks | measured state | shares a root cause with |
+| --- | --- | --- | --- |
+| P1 | no production browser entry loads the generic executor | VIOLATED — the shared chunk carries `facade-host`, `runtime-program`, `kernel`, `program-kernel`, `hydrate`, `fresh-dom` | **P4** |
+| P2 | server consumers read the new structure, not the old schema | not yet measured to a verdict | — |
+| P3 | build/SSG facts, not source-text markers | **clean**: a repo-wide scan of `packages/router/src` for `@element(` text matching returns zero non-test hits | — |
+| P4 | narrow ABI; no `__partProgram` in production output | **VIOLATED, same chunk**: `__partProgram` appears only in `islands/element-runtime-<hash>.js`, alongside those three executor modules | **P1** |
+| P5 | retired exports gone + migration note + signed inventory | not yet measured to a verdict | — |
+
+So P1 and P4 flip TOGETHER, and both flip when the 34 class components that import
+`@openelement/element`'s ROOT entry stop doing so. They are not two problems; they
+are one problem with two verdicts.
+
+P3 is already clean and needs only a recorded check, not work. P2 and P5 are
+unmeasured — that is a gap in this record, not a claim that they pass.
+
+Practical consequence for ordering: there is no useful way to "work on P1" or
+"work on P4" separately. The single lever is the class-component migration, and
+these two verdicts are what it produces.
