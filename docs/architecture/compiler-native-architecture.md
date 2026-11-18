@@ -308,9 +308,12 @@ This paragraph changes no decision, no admission and no status. In particular it
 does **not** make the milestone met: the progress ledger's M14 row still reads
 `In progress`, M14 exit **not met**, and it names the remaining gaps at
 `1b23f677e7e315a479aad385033ff6b60dfc5926` — chiefly that the defined D2
-authored spelling (`<Child value={await load()} />`) has no in-repo fixture, and
-that the TSX-17 `T+`/`T−` cells have no type-check fixture. The `C+`/`C−`/`S`/`F`
-cells are recorded in the
+authored spelling (`<Child value={await load()} />`) has no row in the
+compile/emit suite. The TSX-17 `T+`/`T−` cells now carry recorded results: the
+type-check fixture
+`packages/compiler/__tests__/server-component-full-await.typecheck.test.ts`
+type-checks that D2 spelling and pins the un-awaited-Promise negative, while the
+`C+`/`C−`/`S`/`F` cells remain recorded in the
 [TSX-17 annex](./alpha16-18-semantic-test-matrix.md#tsx-17-recorded-results--server-async-boundary-m14-full-await).
 The Alpha18 boundary sentence above (bounded defer, cancellation and streamed
 regions; ordinary `await` and deferred regions are different capabilities) is
