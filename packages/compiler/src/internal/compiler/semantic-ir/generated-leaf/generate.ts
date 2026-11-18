@@ -353,6 +353,10 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
     predicate: (body) => body.includes('textSlotMarker('),
   },
   {
+    symbol: 'slotAnchorMarker',
+    predicate: (body) => body.includes('slotAnchorMarker('),
+  },
+  {
     symbol: 'assertWhenAnchor',
     predicate: (body) => body.includes('assertWhenAnchor('),
   },
@@ -3196,6 +3200,109 @@ function textOrdinal(state: EmitState, node: FunctionModelNode): number | null {
   return ordinal;
 }
 
+/**
+ * Pre-order ordinals for every `<slot>` an SSR producer emits from `nodes`,
+ * descending into condition branches and list templates.
+ *
+ * This is the SSR view, not the mount/claim chunk view: the SSR producers INLINE
+ * both node kinds into the SAME function, so their slots share one ordinal
+ * sequence. A reusable-JSX body is emitted as its own render function and is
+ * therefore not part of this map (it gets none — see `emitSsrRecipeHelpers`).
+ */
+type SlotAnchors = ReadonlyMap<FunctionModelNode, number>;
+
+function ssrSlotAnchorOrdinals(nodes: readonly FunctionModelNode[]): SlotAnchors {
+  const ordinals = new Map<FunctionModelNode, number>();
+  let next = 0;
+  const visit = (list: readonly FunctionModelNode[]): void => {
+    for (const node of list) {
+      if (node.kind === 'element') {
+        if (node.tag === 'slot') {
+          ordinals.set(node, next);
+          next += 1;
+        }
+        visit(node.children);
+        continue;
+      }
+      if (node.kind === 'fragment') visit(node.children);
+      else if (node.kind === 'condition') {
+        visit(node.consequent);
+        if (node.alternate !== null) visit(node.alternate);
+      } else if (node.kind === 'list') visit(node.template);
+    }
+  };
+  visit(nodes);
+  return ordinals;
+}
+
+/**
+ * Walk the whole component once, before emission, to answer the two questions
+ * the per-chunk maps cannot answer:
+ *
+ * - does this light root contain a `<slot>` at all? (none → emit nothing)
+ * - does every `<slot>` declare a STATIC `name`? The anchor carries the name in
+ *   its marker text so the serializer needs no second lookup, and a `name={…}`
+ *   binding has no compile-time value to carry — the module is refused rather
+ *   than baking a guess that would point a projection at a slot the producer
+ *   never named.
+ *
+ * A shadow root's children are distributed by the platform (`<slot>` in the
+ * shadow tree plus light DOM after the template), and a hostless leaf module is
+ * not a host at all, so both answers are "emit nothing" and keep their
+ * pre-slice bytes.
+ */
+function lightSlotAnchorsEnabled(state: EmitState, lightRoot: boolean): boolean {
+  if (!lightRoot) return false;
+  let found = false;
+  let refused = false;
+  const visit = (list: readonly FunctionModelNode[]): void => {
+    for (const node of list) {
+      if (node.kind === 'element') {
+        if (node.tag === 'slot') {
+          found = true;
+          if (slotNameOf(node) === null) {
+            refused = true;
+            diag(
+              state,
+              'OEIR_LEAF_UNSUPPORTED_SLOT_NAME',
+              'a light-root <slot> must declare a static name: the slot anchor carries the name ' +
+                'in its marker text so the serializer needs no second lookup, and a dynamic ' +
+                'name={…} binding has no compile-time value to carry',
+              node.span,
+            );
+          }
+        }
+        visit(node.children);
+        continue;
+      }
+      if (node.kind === 'fragment') visit(node.children);
+      else if (node.kind === 'condition') {
+        visit(node.consequent);
+        if (node.alternate !== null) visit(node.alternate);
+      } else if (node.kind === 'list') visit(node.template);
+    }
+  };
+  visit(state.component.roots);
+  return found && !refused;
+}
+
+/**
+ * The slot name one `<slot>` element declares, read the way the element lane's
+ * `slotNameOf` reads it: the static `name` attribute's value, `''` (the default
+ * slot) when there is none. `null` is the "no compile-time name" case — a
+ * dynamic `name={…}` — which the anchor cannot carry.
+ */
+function slotNameOf(node: FunctionModelNode): string | null {
+  if (node.kind !== 'element') return null;
+  let name = '';
+  for (const attribute of node.attributes) {
+    if (attribute.name !== 'name') continue;
+    if (attribute.kind !== 'static') return null;
+    name = attribute.value;
+  }
+  return name;
+}
+
 type TextParserContext =
   | { readonly kind: 'flow' }
   | {
@@ -5983,7 +6090,10 @@ function emitClaimFunction(
  * use. A second escape table in the compiler would be exactly the drift P6
  * forbids.
  */
-function staticSsrDirectory(ranges: readonly FunctionModelNode[]): string | null {
+function staticSsrDirectory(
+  ranges: readonly FunctionModelNode[],
+  slots: SlotAnchors | null,
+): string | null {
   const parts: string[] = [];
   for (const [ordinal, range] of ranges.entries()) {
     // The mount suppresses directories inside a range (`allowDirectory` false
@@ -5991,7 +6101,7 @@ function staticSsrDirectory(ranges: readonly FunctionModelNode[]): string | null
     // `oe:r` pair. The SSR form is the same tree: markers stop at this range
     // layer. Emitting markers into the interior would put nested comments
     // there and the directory parser would refuse its own SSR output.
-    const inner = staticSsrNode(range, false);
+    const inner = staticSsrNode(range, false, slots);
     if (inner === null) return null;
     parts.push(
       `"<!--" + markerText(rangeMarker(${ordinal})) + "-->"`,
@@ -6002,10 +6112,14 @@ function staticSsrDirectory(ranges: readonly FunctionModelNode[]): string | null
   return parts.length === 0 ? '""' : parts.join(' + ');
 }
 
-function staticSsrExpression(nodes: readonly FunctionModelNode[], markers: boolean): string | null {
+function staticSsrExpression(
+  nodes: readonly FunctionModelNode[],
+  markers: boolean,
+  slots: SlotAnchors | null,
+): string | null {
   const parts: string[] = [];
   for (const node of normalizeTextRuns(nodes)) {
-    const part = staticSsrNode(node, markers);
+    const part = staticSsrNode(node, markers, slots);
     if (part === null) return null;
     parts.push(part);
   }
@@ -6016,9 +6130,13 @@ function literalText(value: string): string {
   return JSON.stringify(value);
 }
 
-function staticSsrNode(node: FunctionModelNode, markers: boolean): string | null {
+function staticSsrNode(
+  node: FunctionModelNode,
+  markers: boolean,
+  slots: SlotAnchors | null,
+): string | null {
   if (node.kind === 'text') return `escapeText(${literalText(node.value)})`;
-  if (node.kind === 'fragment') return staticSsrExpression(node.children, markers);
+  if (node.kind === 'fragment') return staticSsrExpression(node.children, markers, slots);
   if (node.kind !== 'element') return null;
   if (!TAG_PATTERN.test(node.tag)) return null;
   const isVoid = VOID_TAGS.has(node.tag);
@@ -6060,11 +6178,39 @@ function staticSsrNode(node: FunctionModelNode, markers: boolean): string | null
   const directory = markers ? staticElementDirectory(node.children) : null;
   const children =
     directory === null
-      ? staticSsrExpression(node.children, markers)
-      : staticSsrDirectory(directory);
+      ? staticSsrExpression(node.children, markers, slots)
+      : staticSsrDirectory(directory, slots);
   if (children === null) return null;
   const close = `"</${node.tag}>"`;
-  return [open, ...attributes, '">"', children, close].join(' + ');
+  // The slot anchor brackets the slot ELEMENT'S INTERIOR, not the element: the
+  // serializer substitutes the caller's children for the fallback content and
+  // keeps the `<slot>` node itself, which is exactly the shape the class lane's
+  // projected-children channel produces (`<slot name="x">…projection…</slot>`).
+  // A light root is the only root whose children are projections; the caller
+  // gates `slots` to that case, and a slotless tree passes null, so its bytes
+  // stay byte-identical.
+  if (node.tag !== 'slot' || slots === null) {
+    return [open, ...attributes, '">"', children, close].join(' + ');
+  }
+  const ordinal = slots.get(node);
+  const name = ordinal === undefined ? null : slotNameOf(node);
+  // A slot this producer's map does not cover (a reusable-JSX body is its own
+  // render helper and is not part of the root's map) is emitted UNANCHORED, not
+  // refused: an unprojected slot must still render its fallback, and a
+  // projection into it fails closed at the serializer because no anchor names
+  // it. A non-static name never reaches here — `lightSlotAnchorsEnabled` refused it.
+  if (name === null || ordinal === undefined) {
+    return [open, ...attributes, '">"', children, close].join(' + ');
+  }
+  return [
+    open,
+    ...attributes,
+    '">"',
+    `"<!--" + markerText(slotAnchorMarker(${ordinal}, ${literalText(name)})) + "-->"`,
+    children,
+    `"<!--" + markerText(slotAnchorMarker(${ordinal}, ${literalText(name)}, true)) + "-->"`,
+    close,
+  ].join(' + ');
 }
 
 /**
@@ -6407,7 +6553,7 @@ function emitSsrRecipeHelpers(
     push(state, `const ${outVar} = [];`);
     const outerDepth = state.recipeDepth;
     state.recipeDepth = outerDepth + 1;
-    const emitted = emitDynamicSsrNodes(state, prepared, outVar, true, records);
+    const emitted = emitDynamicSsrNodes(state, prepared, outVar, true, records, null);
     state.recipeDepth = outerDepth;
     state.textOrdinals = outerOrdinals;
     if (!emitted) return false;
@@ -6431,6 +6577,7 @@ function emitDynamicSsrNodes(
   outVar: string,
   markers: boolean,
   records: ReadonlyMap<string, LoweredExpressionRecord>,
+  slots: SlotAnchors | null,
 ): boolean {
   const list = state.emitTextBoundaries ? normalizeTextRuns(nodes) : nodes;
   for (const node of list) {
@@ -6439,7 +6586,7 @@ function emitDynamicSsrNodes(
       continue;
     }
     if (node.kind === 'fragment') {
-      if (!emitDynamicSsrNodes(state, node.children, outVar, markers, records)) return false;
+      if (!emitDynamicSsrNodes(state, node.children, outVar, markers, records, slots)) return false;
       continue;
     }
     if (node.kind === 'dynamic-text') {
@@ -6477,7 +6624,7 @@ function emitDynamicSsrNodes(
       const thenOrdinals = state.textOrdinals;
       const preparedThen = emissionNodes(state, node.consequent);
       state.textOrdinals = textSlotOrdinals(preparedThen);
-      if (!emitDynamicSsrNodes(state, preparedThen, outVar, markers, records)) {
+      if (!emitDynamicSsrNodes(state, preparedThen, outVar, markers, records, slots)) {
         state.textOrdinals = thenOrdinals;
         return false;
       }
@@ -6489,7 +6636,7 @@ function emitDynamicSsrNodes(
         const elseOrdinals = state.textOrdinals;
         const preparedElse = emissionNodes(state, node.alternate);
         state.textOrdinals = textSlotOrdinals(preparedElse);
-        if (!emitDynamicSsrNodes(state, preparedElse, outVar, markers, records)) {
+        if (!emitDynamicSsrNodes(state, preparedElse, outVar, markers, records, slots)) {
           state.textOrdinals = elseOrdinals;
           return false;
         }
@@ -6543,7 +6690,7 @@ function emitDynamicSsrNodes(
       // A component reference inside an entry cannot re-read props on a keyed
       // reuse (M06b1b), so the SSR walk keeps mount's refusal.
       state.listDepth += 1;
-      const entriesEmitted = emitDynamicSsrNodes(state, prepared, outVar, markers, records);
+      const entriesEmitted = emitDynamicSsrNodes(state, prepared, outVar, markers, records, slots);
       state.listDepth -= 1;
       state.textOrdinals = outerOrdinals;
       if (!outerEntryName) state.entryNames.delete(node.parameter);
@@ -6617,6 +6764,20 @@ function emitDynamicSsrNodes(
       );
       return false;
     }
+    // A light-root `<slot>` anchor: the pair brackets the slot element's
+    // INTERIOR (after the open tag, around the fallback content), so the
+    // serializer substitutes the caller's children for the fallback while the
+    // `<slot>` node itself stays — the same shape the class lane's
+    // projected-children channel produces. Both halves carry the slot NAME so a
+    // substitution needs no lookup. `slots` is non-null only for a light root
+    // that contains a slot (`lightSlotAnchorsEnabled`), so a shadow/absent root
+    // and a slotless light tree emit exactly the pre-slice bytes.
+    const slotOrdinal = node.tag === 'slot' && slots !== null ? slots.get(node) : undefined;
+    // A slot outside this producer's map (a reusable-JSX body is a separate
+    // render helper) renders UNANCHORED: its fallback must still appear, and a
+    // projection into it fails closed at the serializer because no anchor names
+    // it.
+    const slotName = slotOrdinal === undefined ? null : slotNameOf(node);
     push(state, `${outVar}.push(${literalText(`<${node.tag}`)});`, node.span);
     for (const attribute of node.attributes) {
       if (
@@ -6647,6 +6808,13 @@ function emitDynamicSsrNodes(
     }
     push(state, `${outVar}.push(">");`, node.span);
     if (isVoid) continue;
+    if (slotOrdinal !== null && slotName !== null) {
+      push(
+        state,
+        `${outVar}.push("<!--", markerText(slotAnchorMarker(${slotOrdinal}, ${literalText(slotName)})), "-->");`,
+        node.span,
+      );
+    }
     const directory =
       markers && directoryParentAllowed(node.tag) ? staticElementDirectory(node.children) : null;
     if (directory !== null) {
@@ -6656,15 +6824,22 @@ function emitDynamicSsrNodes(
           `${outVar}.push("<!--", markerText(rangeMarker(${ordinal})), "-->");`,
           range.span,
         );
-        if (!emitDynamicSsrNodes(state, [range], outVar, false, records)) return false;
+        if (!emitDynamicSsrNodes(state, [range], outVar, false, records, slots)) return false;
         push(
           state,
           `${outVar}.push("<!--", markerText(rangeMarker(${ordinal}, true)), "-->");`,
           range.span,
         );
       }
-    } else if (!emitDynamicSsrNodes(state, node.children, outVar, markers, records)) {
+    } else if (!emitDynamicSsrNodes(state, node.children, outVar, markers, records, slots)) {
       return false;
+    }
+    if (slotOrdinal !== null && slotName !== null) {
+      push(
+        state,
+        `${outVar}.push("<!--", markerText(slotAnchorMarker(${slotOrdinal}, ${literalText(slotName)}, true)), "-->");`,
+        node.span,
+      );
     }
     push(state, `${outVar}.push(${literalText(`</${node.tag}>`)});`, node.span);
   }
@@ -6798,6 +6973,7 @@ function emitDynamicSsrFunction(
   component: FunctionModelComponent,
   records: ReadonlyMap<string, LoweredExpressionRecord>,
   componentByName: ReadonlyMap<string, FunctionModelComponent>,
+  slots: SlotAnchors | null,
 ): SsrEmission | null {
   const propsName = component.propsParam;
   const projectsChildren = componentProjectsChildren(component);
@@ -6848,7 +7024,7 @@ function emitDynamicSsrFunction(
   }
   const outVar = nextName(state, 'out');
   push(state, `const ${outVar} = [];`);
-  if (!emitDynamicSsrNodes(state, component.roots, outVar, true, records)) {
+  if (!emitDynamicSsrNodes(state, component.roots, outVar, true, records, slots)) {
     return state.diagnostics.length > 0 ? failedSsr(state) : null;
   }
   push(state, `return ${outVar}.join("");`);
@@ -6907,6 +7083,12 @@ function emitDynamicSsrFunction(
  * component with an admitted dynamic slot gets the M08-1b
  * `__ssr(props, host)` form. Returns `null` when the tree is outside the
  * producer slice.
+ *
+ * `lightRoot` is the ONE gate for the slot-anchor family. It is true only for
+ * the root component of a light-descriptor generated element; a shadow root's
+ * children are distributed by the platform (a `<slot>` in the shadow tree plus
+ * light DOM after `</template>`) and a hostless leaf module is not a host, so
+ * both emit no anchor and keep their pre-slice bytes.
  */
 function emitSsrFunction(
   file: string,
@@ -6914,12 +7096,31 @@ function emitSsrFunction(
   rootDirectory: readonly FunctionModelNode[] | null,
   records: ReadonlyMap<string, LoweredExpressionRecord>,
   componentByName: ReadonlyMap<string, FunctionModelComponent>,
+  lightRoot: boolean,
 ): SsrEmission | null {
+  // The gate runs FIRST, on its own emit state: a dynamic slot name must be
+  // refused before any byte is emitted, and both producer shapes below share the
+  // resulting map so a static and a dynamic tree cannot disagree about an
+  // ordinal. A null map means "emit nothing" — the byte-identity cases, where no
+  // emission site is reached at all.
+  const state = ssrEmitState(
+    component,
+    file,
+    component.propsParam,
+    componentByName,
+    componentProjectsChildren(component),
+  );
+  const enabled = lightSlotAnchorsEnabled(state, lightRoot);
+  if (state.diagnostics.length > 0) return failedSsr(state);
+  // The SSR producers INLINE conditions and list templates (mount/claim emit
+  // them as their own chunks), so this map descends into both: a slot inside a
+  // branch still needs an ordinal, and it must be the one the producer writes.
+  const slots = enabled ? ssrSlotAnchorOrdinals(component.roots) : null;
   let expression: string | null;
   if (rootDirectory !== null) {
-    expression = staticSsrDirectory(rootDirectory);
+    expression = staticSsrDirectory(rootDirectory, slots);
   } else {
-    expression = staticSsrExpression(component.roots, true);
+    expression = staticSsrExpression(component.roots, true, slots);
   }
   if (expression !== null) {
     return {
@@ -6934,7 +7135,7 @@ function emitSsrFunction(
       placements: [],
     };
   }
-  return emitDynamicSsrFunction(file, component, records, componentByName);
+  return emitDynamicSsrFunction(file, component, records, componentByName, slots);
 }
 
 function emitComponent(
@@ -6946,6 +7147,7 @@ function emitComponent(
   rootInstance: string | undefined,
   retention: RetentionPlan | null,
   claimStyleLinkPrefix: boolean,
+  lightRoot: boolean,
 ): EmittedComponent {
   const propsName = component.propsParam;
   const projectsChildren = componentProjectsChildren(component);
@@ -7728,7 +7930,7 @@ function emitComponent(
   const ssr =
     claim === null
       ? null
-      : emitSsrFunction(file, component, rootDirectory, records, componentByName);
+      : emitSsrFunction(file, component, rootDirectory, records, componentByName, lightRoot);
   if (ssr !== null && ssr.diagnostics.length > 0) {
     return {
       lines: [],
@@ -8009,6 +8211,18 @@ export function generateLeafModule(
      * the pre-slice claim unchanged.
      */
     readonly claimStyleLinkPrefix?: boolean;
+    /**
+     * Compiler-private LIGHT-root marker: `true` when the generated element this
+     * module becomes has a LIGHT descriptor root (or an absent root, which the
+     * shell defaults to light). The light-root root component then emits a
+     * `oe:s:` / `oe:/s:` anchor pair inside each `<slot>` element so the
+     * serializer can substitute caller children into exactly that slot without
+     * pattern-matching markup.
+     *
+     * Omitted (hostless leaf modules, shadow roots, every pre-slice caller)
+     * emits today's bytes exactly: no anchor, no runtime import.
+     */
+    readonly lightRoot?: boolean;
   } = {},
 ): GeneratedLeafModule {
   const records = new Map(module.expressions.expressions.map((record) => [record.id, record]));
@@ -8082,6 +8296,13 @@ export function generateLeafModule(
       options.rootInstance,
       retention,
       options.claimStyleLinkPrefix === true,
+      // Only the ROOT component of a light-root generated element emits slot
+      // anchors: a nested/child component in the same module is a separate host
+      // whose root kind is its own descriptor's, and the leaf generator has no
+      // fact for it. Restricting the gate to `options.rootInstance` keeps the
+      // anchor exactly where the serializer can consume it and leaves every
+      // other component's bytes untouched.
+      options.lightRoot === true && component.name === options.rootInstance,
     );
     diagnostics.push(...emitted.diagnostics);
     if (emitted.diagnostics.length > 0) continue;

@@ -207,8 +207,10 @@ export {
   parseEachMarker,
   parseEntryKeyMarker,
   parseRangeMarker,
+  parseSlotAnchorMarker,
   parseTextSlotMarker,
   rangeMarker,
+  slotAnchorMarker,
   textSlotMarker,
   type Marker,
 } from './runtime/markers.ts';

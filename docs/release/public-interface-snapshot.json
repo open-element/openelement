@@ -982,7 +982,7 @@
           ]
         },
         "./internal/compiled/leaf-runtime": {
-          "publicShapeSha256": "9a1253b7984d4ba55162547873a55c52198300752831f24d628a9225e7d3ff60",
+          "publicShapeSha256": "9535cfd2df71d2c40193d2a89299d61fb37f4c8f7fc62c14bdd2e99549cdd42a",
           "publicSymbols": [
             "MARKERS=value:{each:{readonly [MARKER_BRAND]:true;readonly text:string};eachEnd:{readonly [MARKER_BRAND]:true;readonly text:string};when:{readonly [MARKER_BRAND]:true;readonly text:string};whenEnd:{readonly [MARKER_BRAND]:true;readonly text:string}}",
             "assertEachAnchor=value:{call:(node:union(Node|null|undefined),where:string,origin:union(undefined|{readonly column:number;readonly file:string;readonly line:number}))=>void}",
@@ -1022,12 +1022,13 @@
             "removeNodes=value:{call:(nodes:array(Node))=>void}",
             "retainChildInstance=value:{call:<T>(owner:{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal},siteKey:string,structuralOwner:union(null|{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal}),setup:{call:(instanceScope:{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal})=>T})=>{readonly record:T;readonly scope:{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal}}}",
             "runUntracked=value:{call:<T>(fn:{call:()=>T})=>T}",
+            "slotAnchorMarker=value:{call:(ordinal:number,name:string,end:union(false|true))=>{readonly [MARKER_BRAND]:true;readonly text:string}}",
             "textSlotMarker=value:{call:(ordinal:number,end:union(false|true))=>{readonly [MARKER_BRAND]:true;readonly text:string}}",
             "tryEncodeListKey=value:{call:(value:unknown)=>union(null|string)}"
           ]
         },
         "./internal/compiled/runtime": {
-          "publicShapeSha256": "339da71658f2cd4d1b95265b725ab817252879ebdcb3fa3d0e80974b28b4bcca",
+          "publicShapeSha256": "808427b8f1e280593d37b18438f18f1fdc085db35b23be17bccf144fed698efd",
           "publicSymbols": [
             "BlockHydrationOwner=type:{anchor:Comment;end:Comment;kind:\"block\";parent:Node;part:union(ProgramEachPart|ProgramWhenPart)}",
             "ClaimFunction=type:{call:(scope:{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal},props:Readonly<P>,parent:Node)=>array(Node)}",
@@ -1101,6 +1102,7 @@
             "parseEachMarker=value:{call:(value:union(null|string))=>union(\"end\"|\"start\"|null)}",
             "parseEntryKeyMarker=value:{call:(value:union(null|string))=>union(null|{readonly token:string})}",
             "parseRangeMarker=value:{call:(value:union(null|string))=>union(null|{end:union(false|true);ordinal:number})}",
+            "parseSlotAnchorMarker=value:{call:(value:union(null|string))=>union(null|{end:union(false|true);name:string;ordinal:number})}",
             "parseTextSlotMarker=value:{call:(value:union(null|string))=>union(null|{end:union(false|true);ordinal:number})}",
             "rangeMarker=value:{call:(ordinal:number,end:union(false|true))=>{readonly [MARKER_BRAND]:true;readonly text:string}}",
             "readEntryKeyMarker=value:{call:(node:union(Node|null|undefined),where:string,origin:union(undefined|{readonly column:number;readonly file:string;readonly line:number}))=>string}",
@@ -1114,6 +1116,7 @@
             "runUntracked=value:{call:<T>(fn:{call:()=>T})=>T}",
             "runtimeProbe=value:{reset:{call:()=>void};snapshot:{call:()=>Readonly<RuntimeProbeCounts>}}",
             "serializeToHtml=value:{call:(program:PartProgramV2,host:{handlers:Record<string, CompiledEventHandler>;onUpdateError?:union(undefined|{call:(error:unknown)=>void});refs?:union(Record<string, CompiledRefHandler>|undefined);signals:Record<string, SignalLike<unknown>>})=>string}",
+            "slotAnchorMarker=value:{call:(ordinal:number,name:string,end:union(false|true))=>{readonly [MARKER_BRAND]:true;readonly text:string}}",
             "staticAttributeSeedMismatch=value:{call:(element:Element,declared:array({readonly name:string;readonly value:string}),dynamicNames:array(string))=>union(null|string)}",
             "textSlotMarker=value:{call:(ordinal:number,end:union(false|true))=>{readonly [MARKER_BRAND]:true;readonly text:string}}",
             "tryEncodeListKey=value:{call:(value:unknown)=>union(null|string)}"

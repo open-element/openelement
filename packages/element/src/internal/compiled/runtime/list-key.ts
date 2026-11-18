@@ -9,6 +9,10 @@
  * — `n:` round-trips through `Number`/`String`, `s:` checks hex shape (not
  * UTF-8 well-formedness).
  *
+ * The hex spelling itself is NOT defined here: `./utf8-hex.ts` owns it, because
+ * the slot-anchor marker payload uses the same encoding. One alphabet, one
+ * encoder, no second table to drift.
+ *
  * An unsupported key fails with the internal coded error
  * `OEIR_LEAF_UNSUPPORTED_KEY`, deliberately absent from the public catalogue.
  *
@@ -16,6 +20,7 @@
  */
 
 import { frameworkError } from '@openelement/protocol/errors';
+import { encodeUtf8Hex, isCanonicalUtf8Hex } from './utf8-hex.ts';
 
 /** Internal identity of an unsupported list key; never a public runtime code. */
 export const LEAF_UNSUPPORTED_KEY = 'OEIR_LEAF_UNSUPPORTED_KEY';
@@ -27,9 +32,6 @@ export const LEAF_UNSUPPORTED_KEY = 'OEIR_LEAF_UNSUPPORTED_KEY';
  * not each own a copy.
  */
 export const LIST_KEY_UNSUPPORTED = 'u';
-
-const UTF8 = new TextEncoder();
-const HEX = '0123456789abcdef';
 
 function unsupported(): never {
   throw frameworkError(
@@ -47,17 +49,11 @@ function isWellFormed(value: string): boolean {
   return (value as string & { isWellFormed(): boolean }).isWellFormed();
 }
 
-function utf8Hex(value: string): string {
-  let hex = '';
-  for (const byte of UTF8.encode(value)) hex += HEX[byte >> 4] + HEX[byte & 15];
-  return hex;
-}
-
 /** Encode one supported key. Unsupported values throw, never stringify. */
 export function encodeListKey(value: unknown): string {
   if (typeof value === 'string') {
     if (!isWellFormed(value)) unsupported();
-    return `s:${utf8Hex(value)}`;
+    return `s:${encodeUtf8Hex(value)}`;
   }
   if (typeof value === 'number' && Number.isFinite(value)) {
     return `n:${Object.is(value, -0) ? '0' : String(value)}`;
@@ -80,13 +76,6 @@ export function tryEncodeListKey(value: unknown): string | null {
   }
 }
 
-const HEX_PAYLOAD = /^[0-9a-f]*$/;
-
-function isCanonicalHexPayload(payload: string): boolean {
-  // `$` also matches before a final line terminator; compare the whole match.
-  return payload.length % 2 === 0 && HEX_PAYLOAD.exec(payload)?.[0] === payload;
-}
-
 /** `true` exactly when payload is a finite double's `String()` spelling. */
 function isCanonicalNumberPayload(payload: string): boolean {
   const value = Number(payload);
@@ -102,7 +91,7 @@ function isCanonicalNumberPayload(payload: string): boolean {
  */
 export function isCanonicalListKeyToken(token: unknown): boolean {
   if (typeof token !== 'string') return false;
-  if (token.startsWith('s:')) return isCanonicalHexPayload(token.slice(2));
+  if (token.startsWith('s:')) return isCanonicalUtf8Hex(token.slice(2));
   if (token.startsWith('n:')) return isCanonicalNumberPayload(token.slice(2));
   return token === 'b:0' || token === 'b:1';
 }

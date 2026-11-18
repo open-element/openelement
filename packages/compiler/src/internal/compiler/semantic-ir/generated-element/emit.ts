@@ -382,6 +382,11 @@ export function generateElementModule(
     ...(options.authoredSource === undefined ? {} : { authoredSource: options.authoredSource }),
     ...(rootInstanceName === undefined ? {} : { rootInstance: rootInstanceName }),
     ...(styleLinkPrefix ? { claimStyleLinkPrefix: true } : {}),
+    // Slot anchors are a LIGHT-root feature only: a light root's children are
+    // projections into its own `<slot>` elements, so its producer must name
+    // them. A shadow root distributes its light children through the platform
+    // and a hostless module is not a host, so both keep the pre-slice bytes.
+    ...(hostTemplateRoot(options.root) === null ? { lightRoot: true } : {}),
   });
   const leafText = leaf.module;
   if (leafText === null) {

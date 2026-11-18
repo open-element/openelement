@@ -45,6 +45,8 @@ import { signal } from './internal/signal/index.ts';
 import { serializeStyleLinks } from './internal/compiled/server/index.ts';
 import type { CompiledProgramHost, CompiledSignalLike } from './internal/compiled/server/index.ts';
 import { type TrustedHtml, trustedHtmlValue } from './internal/core/security.ts';
+import { substituteSlotAnchors } from './internal/compiled/slot-anchors.ts';
+import { CompiledProgramValidationError } from './internal/compiled/runtime/values.ts';
 
 export { collectPublicProps } from './internal/core/props-utils.ts';
 export type { SsrAdmissionDecision } from '@openelement/protocol/render';
@@ -305,17 +307,27 @@ function classNameOf(ctor: object): string {
 
 /**
  * Serialize one LIGHT-root generated host: the element tag, its canonical
- * attribute pairs and the compiled content as the host's children.
+ * attribute pairs and the compiled content (with caller projections
+ * substituted into it) as the host's children.
  *
  * The producer is content-only because that is exactly what a light root owns —
  * its region is the host's children, not a template. The attribute pairs go
  * through the SAME normalization the shadow host producer receives, so a light
  * and a shadow host spell the same authored attributes identically.
+ *
+ * `projectedChildren` is the compiled children channel's light-side half. A
+ * generated light producer names each of its `<slot>` elements with an
+ * `oe:s:` / `oe:/s:` anchor pair, so substitution is a walk over the producer's
+ * OWN marker comments — there is no markup pattern match and no second parse of
+ * the content. A projection that names a slot the content does not declare
+ * fails closed with the serializer's validation identity, exactly like the
+ * class lane's `projectedChildren` check.
  */
 function serializeLightGeneratedHost(
   tag: string,
   content: string,
   authoredAttributes: readonly (readonly [string, unknown])[] | undefined,
+  projectedChildren?: ReadonlyMap<string, string>,
 ): string {
   const pairs =
     authoredAttributes === undefined
@@ -333,7 +345,28 @@ function serializeLightGeneratedHost(
   // Order matches the class lane's serializer (authored attributes first, the
   // marker last), so a consumer keying off attribute order — a snapshot, a
   // string patch, a CSS attribute selector list — sees one spelling.
-  return `<${tag}${attributes} data-oe-light>${content}</${tag}>`;
+  const children = projectSlotAnchors(content, projectedChildren);
+  return `<${tag}${attributes} data-oe-light>${children}</${tag}>`;
+}
+
+/**
+ * Substitute caller projections into a generated light producer's anchored slot
+ * regions, translating this module's one failure shape into the serializer's
+ * existing validation identity.
+ *
+ * The substitution itself lives in `./internal/compiled/slot-anchors.ts`: it
+ * walks the producer's OWN slot-anchor comments and never inspects element
+ * markup, so there is no second HTML parser here and no markup pattern match.
+ */
+function projectSlotAnchors(
+  content: string,
+  projectedChildren: ReadonlyMap<string, string> | undefined,
+): string {
+  const result = substituteSlotAnchors(content, projectedChildren);
+  if ('path' in result) {
+    throw new CompiledProgramValidationError(result.path, result.message);
+  }
+  return result.html;
 }
 
 function failUncompiled(ctor: object, tag: string): never {
@@ -982,11 +1015,13 @@ function renderToStringAtDepth(
       // The producer is content-only (the shadow lane's `<Name>__ssrHost` wraps
       // its own DSD template). A light root's region IS the host's children, so
       // the serializer owns the host element: the tag plus the canonical
-      // attribute pairs, then the compiled content.
+      // attribute pairs, then the compiled content with the caller's projections
+      // substituted into the producer's anchored slots.
       return serializeLightGeneratedHost(
         typeof input === 'string' ? input : '<unknown>',
         rendered,
         options.hostAttrs,
+        options.projectedChildren,
       );
     }
     failUncompiled(resolvedClass, typeof input === 'string' ? input : '<unknown>');
@@ -1110,7 +1145,18 @@ function renderToStringAtDepth(
                     { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
                   );
                 }
-                return serializeLightGeneratedHost(nested.tag, rendered, nested.attributes);
+                // The nested host's authored children arrive as the parent
+                // serializer's own per-slot groups (`nested.projectedChildren`),
+                // exactly the map the class-lane nested expansion hands a light
+                // child. A generated light host substitutes them into its
+                // anchored slots; a projection naming a slot it does not declare
+                // fails closed inside the serializer.
+                return serializeLightGeneratedHost(
+                  nested.tag,
+                  rendered,
+                  nested.attributes,
+                  nested.projectedChildren,
+                );
               }
               if (!nestedClass?.__partProgram) {
                 throw new OpenElementError(

@@ -48,6 +48,7 @@ export {
   markerText,
   parseEntryKeyMarker,
   rangeMarker,
+  slotAnchorMarker,
   textSlotMarker,
 } from './runtime/markers.ts';
 
