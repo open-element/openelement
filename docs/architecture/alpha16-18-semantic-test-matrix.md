@@ -98,13 +98,13 @@ the slices that the release gates on (TSX-04, 06, 07, 09, 10, 14, 18, 23, 30).
 | TSX-11 spread order/removal | R | R | R | R | R | R | R | R | n/a | R | R | o |
 | TSX-12 events/callbacks/refs | R | R | R | R | R | R | n/a | R | R | R | R | o |
 | TSX-13 context isolation | R | R | R | R | R | R | R | R | R | R | R | o |
-| TSX-14 CE connection lifetime | R | R | R | R | R | R | n/a | R | R | R | R | o |
+| TSX-14 CE connection lifetime | not claimed — no type-check fixture exists | not claimed — no type-check fixture exists | pass | pass | pass | pass | n/a | pass | pass | pass | pass | not claimed — M12 packed proof covers one island, not this row |
 | TSX-15 runtime renderability | R | R | R | R | R | R | R | R | n/a | R | R | o |
 | TSX-16 iterables | R | R | R | R | R | R | R | R | n/a | R | R | o |
 | TSX-17 server async boundary | not claimed — no type-check fixture exists | not claimed — no type-check fixture exists | pass | pass | n/a | n/a | pass | n/a | n/a | pass | o | o |
 | TSX-18 SSR seed/claim fidelity | R | R | pass | R | n/a | pass | pass | pass | pass | pass | R | o |
 | TSX-19 error/cleanup containment | R | R | R | R | R | R | R | R | R | R | R | o |
-| TSX-20 native CE / third-party WC | R | R | R | R | R | R | n/a | R | R | R | R | R |
+| TSX-20 native CE / third-party WC | not claimed — no type-check fixture exists | not claimed — no type-check fixture exists | pass | pass | pass | pass | n/a | pass | pass | pass | pass | pass |
 | TSX-21 precompiled package | R | R | R | R | R | R | R | R | R | R | o | R |
 | TSX-22 HMR/source locations | R | R | R | R | R | R | R | n/a | n/a | R | o | n/a |
 | TSX-23 one recipe inserted twice | R | R | R | R | R | R | R | R | R | R | R | R |
@@ -923,6 +923,44 @@ helper's optional last argument. The directory range interior is excluded:
 `B`, no packed consumer `P`, no TSX-30 `F`, no directory range-interior DOM
 path, no entry-internal condition/list/composition, no `property` channel, no
 request-scoped props/bindings lifecycle, no production wiring, no public ABI.
+
+## TSX-14 / TSX-20 recorded results — generated CE boundary (M09-4)
+
+```
+case:      TSX-14 CE connection lifetime
+phase:     M (mount) / U (update) / K (claim) / D (dispose) / F (failure)
+result:    pass
+sha:       422960a23
+artifact:  packages/element/__wtr__/tests/compiled-lifecycle.test.js, run through
+           `OE_BROWSER_MATRIX=full vp run --no-cache --fail-if-no-match
+           --filter @openelement/element browser:test` →
+           21 files / 99 tests passed
+engines:   chromium 147.0.7727.15, firefox 148.0.2, webkit 26.4
+notes:     the element-browser project is the ONLY three-engine conformance
+           surface in the repo (the compiler's own .browser.test.ts files launch
+           chromium directly); a generated element's connection lifetime is
+           therefore recorded HERE, not from the compiler suite.
+```
+
+```
+case:      TSX-20 native CE / third-party WC
+phase:     M / U / K / D / F / P
+result:    pass
+sha:       422960a23
+artifact:  the same three-engine gate (native CE registration, upgrade from
+           plain HTML, slot/slotchange and the foreign-host rows live in
+           lit-host.test.js + composed-event.test.js + overlay-contract.test.js),
+           plus the packed proof `consumer:packaged-element`
+           (9 PASS across chromium/firefox/webkit) for the P column
+engines:   chromium 147.0.7727.15, firefox 148.0.2, webkit 26.4
+notes:     T+/T- are not claimed: neither the generated-element nor the CE
+           interop corpus has a TypeScript type-check fixture, the same gap
+           recorded for TSX-17.
+```
+
+Not claimed by these two rows: any engine revision beyond the three above, the
+server matrix, or an M09 exit. `B` is filled from the element-browser gate's full
+matrix, which the release lane runs through `browser:gate:full`.
 
 ## TSX-17 recorded results — server async boundary (M14 full-await)
 
