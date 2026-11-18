@@ -748,3 +748,116 @@ probe on the baseline (clean).
 
 `open-page-rail` itself is therefore NOT the lever and stays class-lane; the two
 `packages/` changes above are.
+
+## The blocking structure: #1544 and P1 are in direct conflict
+
+Chasing the last measurement to ground found a structural conflict, not a missing
+import.
+
+`elementRuntimeChunkName` groups by PACKAGE ROOT:
+
+```ts
+if (!id.startsWith(`${identity.packageRoot}/`)) return undefined;
+return ELEMENT_RUNTIME_CHUNK_NAME;
+```
+
+So ANY module from `@openelement/element` — the generated shell AND the six
+executor entries AND the class lane — is forced into ONE chunk. That is #1544's
+deliberate design (one shared runtime per page, never per-island copies), and it
+means:
+
+- every island that imports the generated shell imports the chunk;
+- the chunk contains the executor;
+- therefore P1 cannot reach MET while both live in one package, no matter how many
+  components migrate or how narrow their imports become.
+
+Confirmed by the measurements in this record: propagating `generatedLane` removed
+the entry's own `__loadElementRuntime` loader (verified: 0 occurrences) and moving
+`packages/ui` onto `/lifecycle` + `/logger` removed its root-entry reaches — yet
+the verdict did not move, because the shell and the executor still share a package
+and therefore a chunk.
+
+The options, none of which a component migration can deliver:
+
+1. **Split the package** — give the executor its own package (or its own
+   package-root-level grouping identity) so `elementRuntimeChunkName` can group the
+   shell without it. Largest change; cleanest result.
+2. **Give the generated shell its own chunk group** — a second grouping rule that
+   claims the generated-element subtree first. Cheaper, but the shell's own imports
+   may still reach shared modules.
+3. **Change what P1 measures** — declare that "the executor is in the same chunk as
+   the shell" is acceptable because no RUNTIME PATH loads it. That is a verdict
+   change, and it must be the owner's, not a migration's.
+
+Recorded rather than chosen: all three are ADR decisions about package and chunk
+layout. The tree currently carries two improvements found on the way (the
+package-island `generatedLane` fact and the ui package's narrow imports); neither
+regresses anything, and neither flips the verdict on its own.
+
+## SUPERSEDED (2026-11-19): the "structural conflict" was a measurement error
+
+Kept above as history, because the reasoning is instructive rather than merely
+wrong: it assumed the P1 predicate only reached the runtime through island
+chunks. The record's own evaluator says otherwise — `reachableChunkFiles`
+(`browser-entry-graph-artifact.ts`) seeds from the ENTRY chunk and follows
+`imports` **and** `dynamicImports`, so the entry's own lazy
+`element-services-*` import is enough to load the executor. A second chunk group
+(B) could therefore never flip the verdict, and the "package split" (A) would
+have paid a published-boundary change to solve a bundling problem it does not
+cause. Both options are withdrawn. No ADR was written for either.
+
+The real lever was a single component lane fact. `clientEntryNeedsElementRuntime`
+returns true as soon as ONE admitted island is class-lane, and `open-page-rail`
+was the last one in the www client graph. This record's "34 class components"
+attribution was also wrong: the article-route class modules are server-side
+templates and never enter the client graph.
+
+## FINAL VERDICTS (2026-11-19, candidate 0807bdd84)
+
+P1–P5 judged separately on one tree. Every number below is from a clean
+`site:build` at that commit.
+
+| proof | verdict | evidence |
+| --- | --- | --- |
+| P1 executor unreachable | **MET** | checker: `1 MET, 0 VIOLATED, 0 UNPROVEN`; artifact `status: complete`, 8 islands; the emitted `element-runtime-<hash>.js` holds 38 modules and NONE of the six executor entries (was 66 modules with all six) |
+| P2 server reads the new structure | **MET** | 68 production HTML pages server-render a generated CE through the compiler-emitted producer, and the non-primitive `attribute:false` row travels on `data-oe-prop-seed` (ADR-0182 D-18c) rather than a fabricated attribute. The former NOT-MET clause "no production generated module is server-rendered" is now false on the live site |
+| P3 build facts not source-text markers | **MET** | the only `@element(` hits in `packages/router/src` are five DIAGNOSTIC MESSAGE strings plus doc comments — no control flow reads them. The one text test, `island-blocks-scan.ts` `compiledArtifactMightUseBlocks`, is deliberately one-directional: a `"blocks": [{` hit is PROOF of blocks in a packed (already-compiled) module the scan cannot re-derive, and absence is never concluded from text — absence is only ever proven by compiling authoring source |
+| P4 narrow ABI, no `__partProgram` in production | **MET** | zero occurrences across the whole `www/dist/client` tree. The two hits in `www/dist/**/*.html` are the API-reference pages' PROSE describing what the ABI version string covers — documentation content, not a payload |
+| P5 retired exports + migration note + inventory | **MET** | no VNode renderer, no `css` template tag, no legacy `h(`/`createElement` in the public surface (36 exports); the migration note carries R1/R1b/R1c/R1d/R4 plus the two new authoring facts below; the public-interface snapshot is regenerated and reproducible |
+
+### What P1 actually took (three defects found by building, not by reading)
+
+1. `browserEntryGraphPlugin` was fed `hydrate: 'none'` islands. Those emit no
+   client module by design, so the island-attribution pass threw
+   `island-chunk-unresolved` and made the WHOLE artifact `incomplete` — an
+   evidence defect that reported UNPROVEN where the answer was MET.
+2. A generated light-root host spelled a declared `array`/`object` row as
+   `items="[object Object],…"` on 14 server-function pages, because both light
+   host writers handed caller pairs to the class lane's `String()` algebra. Fixed
+   by having the seeder report which rows the JSON seed carries and dropping those
+   names on both sides — one channel, one reader.
+3. Dropping the lazy `element-services` import also dropped the only installer of
+   `ensureDeepFragmentNavigation`/`ensurePreHydrationClickCapture`. The fix is a
+   new executor-free surface (`@openelement/element/document-services`, value
+   closure four modules) plus removing `pre-upgrade-events.ts`'s single executor
+   edge — it imported program-kernel's `fail()` micro-factory for one throw, and
+   now calls the error façade origin with the same code, phase and message.
+
+B2's test was restated from an implementation shape ("the entry has no static edge
+to the runtime chunk") to the property it was proxying ("a page with no
+client-activatable island must not fetch the runtime"), asserted over the built
+pages and the artifact the P1 checker already judges. Its old phrasing would have
+forbidden the fix; the property permits it and still bites (three negative
+controls run).
+
+### Two authoring facts this migration proved
+
+- An island module whose default export is a RE-EXPORT is structurally declined
+  by the generated lane (`{"kind":"lane-declined","reason":"compiler-declined"}`).
+  The component body must live in the island module itself; `open-search` already
+  had that shape and is the reference.
+- `onConnect` handlers are replayed in the claim/mount PROLOGUE — before the
+  generated region exists — so a handler that scans the rendered subtree must
+  defer one macrotask. `installRailScrollspy` records its state BEFORE its
+  empty-target early return, so scanning early binds the host to zero links
+  permanently rather than merely missing one pass.
