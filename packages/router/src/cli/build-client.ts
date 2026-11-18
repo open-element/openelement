@@ -1181,11 +1181,21 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
         workspaceRoot: findBuildWorkspaceRootOrUndefined(root) ?? root,
         clientEntryModuleId: RESOLVED_CLIENT_ENTRY_ID,
         getElementPackageRoot: () => elementRuntimeIdentity?.packageRoot ?? null,
-        islands: islandEntries.map((entry) => ({
-          tag: entry.tagName,
-          specifier: entry.modulePath,
-          strategy: entry.strategy,
-        })),
+        // Only the islands that actually enter the client bundle. A
+        // `hydrate: 'none'` island is SSR-only by design — the generated entry
+        // emits no import for it, so its module is absent from the emitted
+        // chunks by construction (the same `strategy !== 'none'` fact
+        // `clientEntryNeedsElementRuntime` consumes). Handing it to the
+        // island-attribution pass would be a category error, not a missing
+        // module: the writer's `island-chunk-unresolved` contract stays
+        // fail-closed for islands that SHOULD be there.
+        islands: islandEntries
+          .filter((entry) => entry.strategy !== 'none')
+          .map((entry) => ({
+            tag: entry.tagName,
+            specifier: entry.modulePath,
+            strategy: entry.strategy,
+          })),
         islandModuleIds,
       }),
     ],

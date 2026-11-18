@@ -11,6 +11,12 @@ import { join } from 'node:path';
 import { SITE_BUDGET } from '../site-budget.ts';
 import { PAGEFIND_UI_SUITE_FILES } from '../build-pagefind.ts';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import {
+  type BrowserEntryGraphArtifact,
+  EXECUTOR_ENTRY_RELATIVE_MODULES,
+  executorEntryModuleIds,
+  evaluateBrowserEntryGraphArtifact,
+} from '../../packages/router/src/vite/internal/browser-entry-graph-artifact.ts';
 
 const DIST = join(import.meta.dirname ?? '.', '..', 'dist');
 
@@ -307,12 +313,34 @@ test('build output: the element runtime ships as the one shared chunk islands ne
     `Island chunks must not embed the element runtime: ${islandsEmbeddingRuntime.join(', ')}`,
   ).toEqual([]);
 
-  // B2/#1544: the generated client entry no longer statically imports the
-  // shared chunk itself — the runtime is reached through the entry's DYNAMIC
-  // import of the element-services surface module, whose one static import is
-  // the shared chunk. Both halves are asserted: the direct edge is gone, and
-  // the lazy edge still lands on the emitted chunk, so island hydration keeps
-  // its runtime.
+  // B2/#1544 — THE PROPERTY, stated directly. A page must not pay the element
+  // runtime floor for code it cannot run:
+  //
+  //   1. the page floor (the client entry's whole STATIC closure, which every
+  //      page downloads) must not carry the generic Part Program executor;
+  //   2. a page whose island manifest carries no client-activatable island must
+  //      not fetch the runtime at all — no modulepreload, no reference to the
+  //      emitted chunk's filename.
+  //
+  // The old phrasing of this test — "the entry must have NO static edge to the
+  // shared runtime chunk" — was only ever a PROXY for (1)+(2) on the shape that
+  // existed when it was written (a class-lane island was present, so the entry
+  // emitted a lazy runtime loader and therefore no static edge). It is retired:
+  // on the all-generated-lane shape `clientEntryNeedsElementRuntime()` is false,
+  // the lazy loader and its `element-services-*` import are gone, and the entry
+  // installs the two document-level services from the executor-free
+  // `@openelement/element/document-services` surface instead — which is a
+  // STATIC import, and (because the #1544 chunk grouping puts every module under
+  // the element package root in one chunk) necessarily reaches the shared
+  // element-runtime chunk. Asserting the absence of that edge would now assert
+  // the absence of the document services. The property below holds either way:
+  // it is about what the page floor CONTAINS and what an island-free page
+  // FETCHES, not about which import form wired it.
+  //
+  // Anti-vacuity: the executor half is judged from the build's own emitted
+  // evidence (`.vite/oe-browser-entry-graph.json`, the same artifact the P1
+  // checker `tools/repo/check-browser-entry-graph.ts` judges), and the
+  // island-free-page half is measured over every emitted `.html`.
   const manifest = JSON.parse(
     readFileSync(join(DIST, 'client', '.vite', 'manifest.json'), 'utf8'),
   ) as Record<string, { imports?: string[]; dynamicImports?: string[] }>;
@@ -336,16 +364,14 @@ test('build output: the element runtime ships as the one shared chunk islands ne
     ).toContain(runtimeKey);
   }
 
-  // B2 gap (a): the DIRECT edge being gone is not enough, and this is the
-  // assertion that says so. Vite homes its injected preload helper in
-  // whichever chunk first needs it; www's `open-search` island carries a
-  // nested dynamic import, so the helper landed in that ISLAND chunk, the
-  // entry statically imported the island chunk to reach the helper, and the
-  // runtime came back transitively — with the direct-edge assertion above
-  // still green. The real property is about the entry's whole STATIC closure,
-  // so walk it: over the vite manifest's `imports` keys only (`dynamicImports`
-  // is a different field and is deliberately not followed — the entry reaches
-  // the runtime through exactly those edges).
+  // B2 gap (a): the DIRECT edge is not the property; the entry's whole STATIC
+  // closure is. Vite homes its injected preload helper in whichever chunk first
+  // needs it; www's `open-search` island carries a nested dynamic import, so the
+  // helper once landed in that ISLAND chunk, the entry statically imported the
+  // island chunk to reach the helper, and the runtime came back transitively —
+  // with a direct-edge assertion still green. So walk the closure: over the vite
+  // manifest's `imports` keys only (`dynamicImports` is a different field and is
+  // deliberately not followed — that is how islands are reached).
   const staticClosure: string[] = [];
   const queue = [...(entry.imports ?? [])];
   while (queue.length > 0) {
@@ -354,11 +380,6 @@ test('build output: the element runtime ships as the one shared chunk islands ne
     staticClosure.push(key);
     for (const next of manifest[key]?.imports ?? []) queue.push(next);
   }
-  expect(
-    staticClosure,
-    `B2 gap (a): the client entry's static closure must not reach the shared element-runtime chunk ` +
-      `(${runtimeKey}); closure: ${staticClosure.join(', ') || '(empty)'}`,
-  ).not.toContain(runtimeKey);
   // Nor an island chunk: an island in the entry's static closure is the exact
   // shape that smuggles the runtime back in, and it is what the island chunk's
   // own runtime import means the moment one appears.
@@ -382,6 +403,129 @@ test('build output: the element runtime ships as the one shared chunk islands ne
   expect(
     manifest[helperKeys[0]]?.imports ?? [],
     `The dedicated vite-helper chunk must be a leaf: ${helperKeys[0]} imports something`,
+  ).toEqual([]);
+
+  // (a) EXECUTOR ABSENCE IN THE PAGE FLOOR — judged on the emitted evidence, not
+  // on an import shape. `.vite/oe-browser-entry-graph.json` is written by the
+  // same client build into the same directory as the manifest above, and it is
+  // the ONE truth source for "does a production browser entry load the generic
+  // executor": the P1 checker recomputes this predicate from raw chunk/module
+  // facts. Chunk keys in the Vite manifest are not module ids, so the module-id
+  // claim can only be made against this artifact.
+  const graphPath = join(DIST, 'client', '.vite', 'oe-browser-entry-graph.json');
+  expect(
+    existsSync(graphPath),
+    `B2 (a): the browser-entry graph artifact is missing (${graphPath}) — the client build must ` +
+      `write it, or the page floor's executor absence is unproven`,
+  ).toBeTruthy();
+  const graph = JSON.parse(readFileSync(graphPath, 'utf8')) as BrowserEntryGraphArtifact;
+  // `status: 'incomplete'` is the writer saying it could not observe the whole
+  // graph (unknown virtual ids, missing chunks); a verdict derived from it would
+  // be a guess, so it is a failure here, not a pass.
+  expect(
+    graph.status,
+    `B2 (a): the browser-entry graph artifact is not complete (status: ${String(graph.status)})`,
+  ).toBe('complete');
+  expect(
+    graph.predicate.loadedViolations,
+    `B2 (a): the page floor loads executor entry modules: ${graph.predicate.loadedViolations
+      .map((violation) => `${violation.moduleId} (chunk ${violation.chunkFile})`)
+      .join(', ')}`,
+  ).toEqual([]);
+  // The bundled evaluator recomputes that predicate from the chunk/module facts
+  // instead of trusting the writer's summary — the same recomputation the P1
+  // checker runs, so a forger-of-summaries (or a writer bug) reds here too.
+  expect(
+    evaluateBrowserEntryGraphArtifact(graph).verdict,
+    'B2 (a): the recomputed browser-entry graph verdict must be MET (no executor entry loaded)',
+  ).toBe('MET');
+
+  // (b) AN ISLAND-FREE PAGE MUST NOT FETCH THE RUNTIME. The build's own
+  // projection owns which pages get the runtime preload: postprocess.ts
+  // `injectElementRuntimePreload` emits exactly one
+  // `<link rel="modulepreload" ... data-open-element-runtime-preload>` per page
+  // whose island manifest is non-empty, and skips the rest.
+  //
+  // First half: the runtime chunk itself carries no executor entry module, so
+  // nothing an island-free page would fetch is the executor.
+  const executorIds = executorEntryModuleIds(graph.element.packageRoot);
+  expect(
+    executorIds.slice().sort(),
+    "B2 (b): the executor-entry table must match the artifact's own (one revision, one claim)",
+  ).toEqual(graph.predicate.executorEntry.slice().sort());
+  const runtimeChunkFile = `islands/${runtimeChunks[0]}`;
+  const runtimeChunk = graph.chunks.find((chunk) => chunk.file === runtimeChunkFile);
+  expect(
+    runtimeChunk,
+    `B2 (b): the emitted runtime chunk ${runtimeChunkFile} is absent from the browser-entry graph artifact's chunk list`,
+  ).toBeTruthy();
+  const executorModulesInRuntime = runtimeChunk!.modules
+    .map((module) => module.id)
+    .filter((id) => executorIds.includes(id));
+  expect(
+    executorModulesInRuntime,
+    `B2 (b): the shared element-runtime chunk must hold no executor entry module; found: ${executorModulesInRuntime.join(', ')}`,
+  ).toEqual([]);
+  // Anti-vacuity: an empty table would satisfy the filter above trivially.
+  expect(
+    EXECUTOR_ENTRY_RELATIVE_MODULES.length,
+    'B2 (b): the executor-entry table is empty — the assertions above would be vacuous',
+  ).toBeGreaterThan(0);
+
+  // Second half: the projection's own partition, measured over the built dist.
+  // A page that carries NO preload link is a page the build judged island-free;
+  // its bytes must not name the runtime chunk's file. Measured on the current
+  // build: 78 emitted pages, 78 carry the preload link, 0 do not (every www
+  // page carries at least one client-activatable island host). The "no link"
+  // bucket is therefore empty TODAY — the assertion is kept as a live guard: it
+  // activates on its own the moment an island-free page is emitted, and it
+  // cannot be satisfied by inventing one.
+  const preloadAttribute = 'data-open-element-runtime-preload';
+  const pages: string[] = [];
+  const walkHtml = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walkHtml(path);
+      else if (entry.name.endsWith('.html')) pages.push(path);
+    }
+  };
+  walkHtml(DIST);
+  expect(
+    pages.length,
+    `B2 (b): no emitted .html under ${DIST} — nothing was measured`,
+  ).toBeGreaterThan(0);
+  const pagesWithPreload: string[] = [];
+  const islandFreePagesThatFetchRuntime: string[] = [];
+  for (const page of pages) {
+    const html = readFileSync(page, 'utf8');
+    if (html.includes(preloadAttribute)) {
+      pagesWithPreload.push(page);
+      continue;
+    }
+    if (html.includes(runtimeChunks[0]!)) islandFreePagesThatFetchRuntime.push(page);
+  }
+  // Report the partition so a reader can see what was measured: today 78 of 78
+  // pages carry the link and 0 do not, so the island-free bucket is EMPTY and
+  // the assertion below is a live guard rather than a currently-exercised
+  // branch. The counts ride every failure message.
+  const pagesWithoutPreload = pages.length - pagesWithPreload.length;
+  // Anti-vacuity, and the one guard that keeps the empty bucket honest: if the
+  // projection's marker spelling ever changes, EVERY page lands in the "without"
+  // bucket and the island-free assertion would pass while measuring nothing. At
+  // least one page must be seen carrying the link, which proves the marker is
+  // what the build actually writes.
+  expect(
+    pagesWithPreload.length,
+    `B2 (b): no emitted page carries the ${preloadAttribute} link — the marker the assertion ` +
+      `partitions on was not detected on any of ${pages.length} pages, so the island-free check ` +
+      `would be measuring nothing`,
+  ).toBeGreaterThan(0);
+  expect(
+    islandFreePagesThatFetchRuntime,
+    `B2 (b): pages with no client-activatable island must not reference the runtime chunk ` +
+      `(${runtimeChunks[0]}); found ${pagesWithPreload.length} pages with the preload link and ` +
+      `${pagesWithoutPreload} without, of which the following still fetch it: ` +
+      `${islandFreePagesThatFetchRuntime.map((page) => page.slice(DIST.length + 1)).join(', ')}`,
   ).toEqual([]);
 });
 

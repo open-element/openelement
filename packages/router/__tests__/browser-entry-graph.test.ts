@@ -495,6 +495,118 @@ test('T2 real Vite build of the generated shell + neutral primitives is MET', as
   }
 });
 
+test('T2b an SSR-only (hydrate:none) island is not an island-attribution input', async () => {
+  // A `hydrate: 'none'` island has NO module in the emitted client bundle by
+  // design: the generated entry emits no import for it. Feeding it to the
+  // island-attribution pass asked the writer to resolve a module that cannot
+  // exist there, and the writer's fail-closed contract turned the WHOLE
+  // artifact incomplete (`island-chunk-unresolved` / `module-not-in-chunk`),
+  // which the checker reports as UNPROVEN rather than a verdict. The build's
+  // own `strategy !== 'none'` filter keeps that artifact complete while the
+  // writer keeps refusing a genuinely absent island (next test).
+  const root = await makeTempRoot();
+  await writeFixtureFile(
+    join(root, 'package.json'),
+    JSON.stringify({ name: 'oe-browser-graph-ssr-only', private: true, type: 'module' }),
+  );
+  await writeFixtureFile(
+    join(root, 'vite.config.ts'),
+    [
+      "import { openElement } from '@openelement/router/vite';",
+      "import { defineConfig } from 'vite';",
+      '',
+      "export default defineConfig({ base: '/', plugins: [...openElement({ layout: false })] });",
+      '',
+    ].join('\n'),
+  );
+  await writeFixtureFile(join(root, 'app', 'components', 'probe-home.tsx'), PAGE_CLASS);
+  await writeFixtureFile(
+    join(root, 'app', 'islands', 'probe-counter.tsx'),
+    ISLAND_CLASS.replace("hydrate: 'load'", "hydrate: 'none'"),
+  );
+  await writeFixtureFile(
+    join(root, 'app', 'islands', 'probe-counter.css'),
+    ':host { display: inline-block; }\n',
+  );
+  // The route is the same page as T1; only the island's strategy differs.
+  await writeFixtureFile(
+    join(root, 'app', 'routes', 'index.tsx'),
+    [
+      "import { definePage } from '@openelement/router';",
+      "import ProbeHome from '../components/probe-home.tsx';",
+      '',
+      "export default definePage(ProbeHome, { head: { title: 'ssr-only probe' } });",
+      '',
+    ].join('\n'),
+  );
+  await linkRouterPackages(root);
+
+  const build = await runRouterBuild(root);
+  expect(build.code, build.output).toBe(0);
+  const artifactPath = join(root, 'dist', 'client', GRAPH_ASSET);
+  expect(existsSync(artifactPath), `artifact missing; build output:\n${build.output}`).toBe(true);
+  const artifact = JSON.parse(await readFile(artifactPath, 'utf8')) as BrowserEntryGraphArtifact;
+
+  // The capture completed and the SSR-only island is absent from the island
+  // list — not present-with-a-missing-chunk.
+  expect(artifact.status, JSON.stringify(artifact, null, 2)).toBe('complete');
+  expect(artifact.islands).toEqual([]);
+  // A complete capture is a verdict, not UNPROVEN, at the checker boundary.
+  const evaluation = evaluateBrowserEntryGraphArtifact(artifact);
+  expect(evaluation.reason, evaluation.detail ?? 'no detail').toBeNull();
+  expect(evaluation.islandCount).toBe(0);
+});
+
+test('T2c the writer still fails closed on a strategy-resolved island with no emitted module', () => {
+  // The complement of T2b: the build-side filter must not weaken the writer.
+  // An island the build DOES feed (strategy !== 'none') whose resolved module
+  // the emitted bundle does not carry is a broken capture, not a category
+  // error — the artifact must stay `incomplete` / `island-chunk-unresolved`.
+  // The id is a real workspace-relative spelling that simply is not in the
+  // bundle, so it normalizes and reaches the chunk-attribution check.
+  const missingModuleId = 'www/app/islands/probe-absent.ts';
+  const specifier = './app/islands/probe-absent.ts';
+  const plugin = browserEntryGraphPlugin({
+    ...directPluginOptions(join(REPO_ROOT, 'www')),
+    islands: [{ tag: 'probe-absent', specifier, strategy: 'load' }],
+    islandModuleIds: new Map([[specifier, missingModuleId]]),
+  });
+  const emitted: Array<{ fileName: string; source: string }> = [];
+  const context = {
+    emitFile: (asset: { fileName: string; source: string }) => emitted.push(asset),
+    getModuleInfo: (id: string) => ({ id }),
+  };
+  (
+    plugin.generateBundle as unknown as (this: unknown, options: object, bundle: object) => void
+  ).call(
+    context,
+    {},
+    {
+      'islands/client.js': {
+        type: 'chunk',
+        fileName: 'islands/client.js',
+        isEntry: true,
+        isDynamicEntry: false,
+        facadeModuleId: '\0virtual:open-client-entry',
+        imports: [],
+        dynamicImports: [],
+        implicitlyLoadedBefore: [],
+        modules: { '\0virtual:open-client-entry': { renderedLength: 10 } },
+      },
+    },
+  );
+  expect(emitted).toHaveLength(1);
+  const artifact = JSON.parse(emitted[0]!.source) as {
+    status: string;
+    reason: string;
+    diagnostics: string[];
+  };
+  expect(artifact.status).toBe('incomplete');
+  expect(artifact.reason).toBe('island-chunk-unresolved');
+  expect(artifact.diagnostics).toEqual(['module-not-in-chunk']);
+  expect(evaluateBrowserEntryGraphArtifact(artifact).verdict).toBe('UNPROVEN');
+});
+
 test('T3 a parsed-but-unused executor entry is a diagnostic, not a gate failure', async () => {
   const root = await makeDirectFixture(
     'parsed-only',

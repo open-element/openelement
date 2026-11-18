@@ -127,3 +127,39 @@ test('open-search keeps its view compiler-owned and its browser state external',
   expect(result!.code.match(/addEventListener\("click"/g)?.length).toBe(6);
   expect(result!.code.match(/addEventListener\("input"/g)?.length).toBe(2);
 });
+
+test('open-page-rail keeps its view compiler-owned and its browser state external', async () => {
+  const url = new URL('../app/islands/open-page-rail.tsx', import.meta.url);
+  const source = await readFile(url, 'utf8');
+  expect(source).toContain("root: 'light'");
+  expect(source).toContain('ssr: true');
+  expect(source).toContain("from '../site-ui/open-page-rail-controller.ts'");
+  // The generated lane, not the class lane: the module must be admitted by the
+  // generated-element transform and must not declare an @element class. The
+  // component body lives HERE rather than in a re-exported site-ui module: the
+  // lane structurally declines a module whose default export is a re-export or
+  // an imported identifier, and a declined module never sets `generatedLane`.
+  expect(source).not.toContain('extends OpenElement');
+  const result = compileGeneratedElementIfAdmitted(source, url.pathname, {
+    site: { tag: 'open-page-rail' },
+  });
+  expect(result, 'open-page-rail must be admitted by the generated-element lane').not.toBeNull();
+  expect(result!.component).toEqual('OpenPageRail');
+  // The class lane's two `computed` rows (`onThisPage` / `overview`) are GONE
+  // from the table: the generated lane has no authoring `computed`, so each
+  // derivation is a component-local const arrow read at its sink
+  // (16b-migration-note R1/R1b) and stays reactive there.
+  const rows = descriptorRows(result!.code);
+  expect(rows.map((row) => row.name)).toEqual(['items', 'locale']);
+  // `items` is the property-only JSON-seed row (ADR-0182 D-18c): a rendered
+  // outline has no attribute spelling, so the seed is its only host wire.
+  // `locale` keeps its kebab attribute channel and its English fallback.
+  for (const row of rows.filter((candidate) => candidate.name === 'items')) {
+    expect(row.attribute).toBeNull();
+    expect(row.type).toBe('array');
+  }
+  expect(rows.find((row) => row.name === 'locale')).toMatchObject({
+    attribute: 'locale',
+    type: 'string',
+  });
+});

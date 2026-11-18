@@ -264,6 +264,17 @@ function hostPropertyAttribute(property: GeneratedElementProperty): string | nul
 const GENERATED_HOST_ATTRIBUTES = '__oeHostAttributes';
 
 /**
+ * Compiler-private record key carrying the names of the declared rows whose ONLY
+ * host wire is the JSON prop seed. Non-enumerable, beside the pairs, and written
+ * by the same seeder that decided the payload — never re-derived by a consumer,
+ * because the derivation would also claim rows the seed does not actually carry
+ * (a supplied getter is deliberately not read, so it gets no seed) and that
+ * difference is exactly the one that would turn a filtered pair into a lost
+ * value.
+ */
+const GENERATED_PROP_SEED_ROWS = '__oePropSeedRows';
+
+/**
  * The host attribute carrying the JSON seed for NON-PRIMITIVE declared rows
  * (ADR-0182 D-18c / M11-3). A non-primitive row (`array`/`object`) has no
  * attribute wire, so before this channel the server rendered the row's DEFAULT
@@ -543,6 +554,18 @@ export function seedGeneratedElementHostProperties<P extends object = Record<str
     configurable: false,
     writable: false,
   });
+  // The rows this seed actually carries, beside the pairs. A row with no
+  // attribute channel has exactly ONE host wire — this seed — so a caller pair
+  // naming it must not become text on the host tag. Only the seeder can name
+  // that set honestly (it is the code that decided what the payload holds), and
+  // a consumer re-deriving it from the descriptor would be a second, looser
+  // rule that also dropped a row supplied through no channel at all.
+  Object.defineProperty(seeded, GENERATED_PROP_SEED_ROWS, {
+    value: Object.keys(propSeed),
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
   return seeded;
 }
 
@@ -614,7 +637,20 @@ function lightSsrProducer(
     const hostAttributes = (seeded as Record<string, unknown>)[GENERATED_HOST_ATTRIBUTES] as
       | readonly (readonly [string, string])[]
       | undefined;
-    return { content, hostAttributes };
+    // The declared rows whose ONLY host wire is the JSON seed — the seeder's own
+    // verdict, read off the record beside the pairs rather than re-derived. A row
+    // with no attribute channel has exactly ONE host wire (that seed); the
+    // descriptor refuses an attribute for it and `observedAttributes` never
+    // observes one, so a caller pair naming it is not a second spelling of the
+    // row: it is a raw value the light writer's normalizer would `String()`,
+    // turning an array into `[object Object],…`. The light host writer drops such
+    // a pair on both sides (the seeded list still carries the caller's verbatim
+    // pair for these rows); the value reaches the claim on `data-oe-prop-seed`
+    // alone. A row the seed does NOT carry stays listed nowhere and keeps its
+    // bytes, so this cannot silently discard a value.
+    const seedRows = ((seeded as Record<string, unknown>)[GENERATED_PROP_SEED_ROWS] ??
+      []) as readonly string[];
+    return { content, hostAttributes, seedRows };
   };
 }
 

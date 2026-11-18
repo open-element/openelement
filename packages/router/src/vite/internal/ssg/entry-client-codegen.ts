@@ -297,6 +297,27 @@ export const ELEMENT_SERVICES_RUNTIME_SPECIFIERS = {
 } as const;
 
 /**
+ * The machine-independent virtual specifier for the document-services wrapper
+ * ({@linkcode ./element-document-services.ts}), the third narrow element
+ * surface beside the lazy `element-services-*` trio above.
+ *
+ * It exists because the two document-level services the entry installs —
+ * deep fragment navigation and the pre-hydration click capture — used to
+ * arrive only as a side effect of the LAZY element-runtime import. A page whose
+ * islands are all generated-lane emits no such import (M11-3 / the P1 win), so
+ * both services stopped being installed there; the deep-fragment regression is
+ * the measured consequence. This surface carries the two installers and no
+ * executor entry, so a generated-lane page floor can install them without
+ * loading the generic Part Program executor.
+ *
+ * Same resolution rule as the trio: the generated entry is a virtual module,
+ * so it carries this stable id and each client-entry host resolves it through
+ * {@linkcode resolveElementServicesRuntimeModule}.
+ */
+export const ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER =
+  'virtual:open-client-runtime/element-document-services.ts';
+
+/**
  * Resolve one {@linkcode ELEMENT_SERVICES_RUNTIME_SPECIFIERS} id to the real
  * wrapper module, or null when the id is not one of ours. Both client-entry
  * hosts call this from their `resolveId` hook — `cli/build-client.ts` for the
@@ -318,6 +339,8 @@ export function resolveElementServicesRuntimeModule(id: string): string | null {
       return runtimeModulePath('./ssg/element-services-client-only.ts');
     case ELEMENT_SERVICES_RUNTIME_SPECIFIERS.base:
       return runtimeModulePath('./ssg/element-services-base.ts');
+    case ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER:
+      return runtimeModulePath('./ssg/element-document-services.ts');
     default:
       return null;
   }
@@ -567,12 +590,54 @@ var __loadElementRuntime = function () {
     : '';
 
   const schedulerImport = `import { createIslandScheduler as __schedule } from '${VIRTUAL_RUNTIME_SPECIFIERS.scheduler}';`;
+  // ── Document services: one installer per emission shape ──────────────────
+  //
+  // The two document-level services (deep fragment navigation, pre-hydration
+  // click capture) must be installed on EVERY client-JS page, and the installer
+  // is chosen by whether the entry already fetches the element-runtime chunk:
+  //
+  //   - `needsElementRuntime` FALSE (every island is generated-lane, M11-3):
+  //     no `__loadElementRuntime` exists, so nothing else would ever install
+  //     them — that was the measured regression (`#start` never got
+  //     `data-open-target`). This shape installs them STATICALLY from the
+  //     executor-free `document-services` surface, at entry evaluation, because
+  //     a direct load with a `#hash` must scroll into a DSD subtree before any
+  //     island activates.
+  //   - `needsElementRuntime` TRUE: the lazy `element-services` import below is
+  //     the installer, and its `.then()` keeps both calls. It is deliberately
+  //     NOT made static here: this shape's emitted bytes are pinned by the ABI
+  //     hash in entry-client-codegen/generated-lane.test.ts, and more
+  //     importantly `requireEntryStaticGraphFreeOfRuntime` fails the build when
+  //     the entry statically reaches the shared runtime chunk — which a static
+  //     import from the element package always does, since #1544 groups every
+  //     module under that package root into `element-runtime-<hash>.js`. On
+  //     this shape the chunk is fetched anyway, so the lazy install costs no
+  //     extra bytes and stays the single owner.
+  //
+  // The condition is exactly the generator's own executor-lane fact, so the
+  // two shapes cannot disagree about who installs the services.
+  const staticDocumentServices = !needsElementRuntime;
+  const documentServicesImport = staticDocumentServices
+    ? `import { ensureDeepFragmentNavigation as __installDeepFragments, ensurePreHydrationClickCapture as __installPreHydrationCapture } from '${ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER}';\n`
+    : '';
+  const documentServicesInstall = staticDocumentServices
+    ? `// Generated-lane page floor: install the document-level services here, once,
+// at entry evaluation. Neither is reachable from the compiler-emitted shell, and
+// this entry carries no element-runtime loader — without these two calls
+// fragment navigation inside nested shadow roots and the pre-upgrade capture
+// simply do not exist on the page. Both installers are idempotent per document
+// (an \`installed\` / registry-entry check), so a later module repeating the call
+// is a no-op rather than a second listener set.
+__installDeepFragments();
+__installPreHydrationCapture(document, __tags);
+`
+    : '';
   const enhanceImport =
     options.enhancedForms === true
       ? `import { createEnhanceClient } from '${VIRTUAL_RUNTIME_SPECIFIERS.enhance}';\n`
       : '';
   const importsBlock = `${schedulerImport}
-${enhanceImport}
+${documentServicesImport}${enhanceImport}
 ${loggerBlock}
 
 ${runtimeLoader}`;
@@ -590,20 +655,20 @@ var __map = {
 ${islandMap}
 };
 var __tags = [${tags}];
-${
-  // The call below is safe only because `runtimeLoader` — the definition of
-  // `__loadElementRuntime` — is emitted above in importsBlock. The 88bda88bf
-  // regression class was a shared block calling a binding that one emission
-  // shape did not define; generated-entry-gate.test.ts pins that shape check.
-  options.enhancedForms === true
-    ? `// B2: the form-enhancement layer is a document-level enhancement that uses
+${documentServicesInstall}${
+    // The call below is safe only because `runtimeLoader` — the definition of
+    // `__loadElementRuntime` — is emitted above in importsBlock. The 88bda88bf
+    // regression class was a shared block calling a binding that one emission
+    // shape did not define; generated-entry-gate.test.ts pins that shape check.
+    options.enhancedForms === true
+      ? `// B2: the form-enhancement layer is a document-level enhancement that uses
 // the element runtime's services (pre-upgrade capture, deep fragment
 // navigation), so its presence is a genuine trigger for the lazy runtime
 // import — a page with enhanced forms but no islands still gets the runtime.
 __loadElementRuntime();
 `
-    : ''
-}
+      : ''
+  }
 ${activationLines.length > 0 ? `\n${activationLines.join('\n\n')}\n` : ''}
 
 var __scheduler = __schedule({

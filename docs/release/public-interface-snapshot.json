@@ -588,6 +588,7 @@
         "./build-utils": "./src/build-utils.ts",
         "./client-only": "./src/client-only.ts",
         "./css-modules": "./src/css-modules.d.ts",
+        "./document-services": "./src/document-services.ts",
         "./html": "./src/html.ts",
         "./internal/compiled/generated-element/shell": "./src/internal/compiled/generated-element/shell.ts",
         "./internal/compiled/leaf-runtime": "./src/internal/compiled/leaf-runtime.ts",
@@ -949,6 +950,14 @@
             "trustedHtml=value:{call:(html:string)=>{readonly html:string}}",
             "unsafeStreamFrameAttribute=value:(name: string, value: string) => boolean",
             "wrapInDocument=value:{call:(html:string,options:{allowHeadExtrasScripts?:union(false|true|undefined);clientScript?:union(string|undefined);cspNonce?:union(string|undefined);dangerouslyHeadFragments?:union(array(string)|undefined);devScripts?:union(string|undefined);headExtras?:union(string|undefined);lang?:union(string|undefined);links?:union(array({href:string;hreflang?:union(string|undefined);rel:string})|undefined);meta?:union(undefined|{description?:union(string|undefined);tags?:union(array(Record<string, string | number | boolean>)|undefined)});scripts?:union(array({code?:union(string|undefined);src?:union(string|undefined);type?:union(string|undefined)})|undefined);streamBootstrap?:union(string|undefined);structuredData?:union(array(Record<string, unknown>)|undefined);styleLinks?:union(array(string)|undefined);title?:union(string|undefined)})=>string}"
+          ]
+        },
+        "./document-services": {
+          "publicShapeSha256": "e4ca3389d4ca44147547196e4d54d83046449d86eaaa6be818ed214878d9430a",
+          "publicSymbols": [
+            "deepGetElementById=value:{call:(id:string,root:union(Document|ShadowRoot))=>union(HTMLElement|null)}",
+            "ensureDeepFragmentNavigation=value:{call:(options:{enabled?:union(false|true|undefined)})=>void}",
+            "ensurePreHydrationClickCapture=value:{call:(root:union(EventTarget|undefined),pendingTags:union(array(string)|undefined))=>void}"
           ]
         },
         "./html": {

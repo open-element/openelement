@@ -274,6 +274,17 @@ export default defineConfig({
               replacement: `${rootDir}packages/element/src/lifecycle.ts`,
             },
             {
+              // The document-services subpath (generated-lane page floor). Same
+              // rule as the lifecycle entry above: the bare element alias below
+              // would rewrite this into `src/index.ts/document-services`, so the
+              // specific entry comes first. This subpath must resolve for the
+              // browser conformance project too, because it is the surface the
+              // generated client entry now imports statically and the suite
+              // pins its zero-executor closure.
+              find: '@openelement/element/document-services',
+              replacement: `${rootDir}packages/element/src/document-services.ts`,
+            },
+            {
               find: '@openelement/element',
               replacement: `${rootDir}packages/element/src/index.ts`,
             },

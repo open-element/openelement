@@ -106,6 +106,10 @@ export const ROUTER_CLIENT_RUNTIME_ENTRIES = [
   'src/vite/internal/ssg/element-services-full.ts',
   'src/vite/internal/ssg/element-services-client-only.ts',
   'src/vite/internal/ssg/element-services-base.ts',
+  // The generated-lane page floor's document-services wrapper: the entry
+  // carries its specifier as a STRING too (same reason as the trio above), so
+  // the pack module graph has no edge to it either.
+  'src/vite/internal/ssg/element-document-services.ts',
 ] as const;
 
 /** Strip ANSI color escapes for stable log scans. */

@@ -1020,3 +1020,82 @@ pre-`16b-EB` output: no `guardUpdate` import, no channel property on the host
 literals, and the unchanged two-name `bindSignalWrites` call. Pins:
 `generated-element.error-boundary.test.ts` B4 (a module using all three older
 intrinsics plus a tracked slot and an event handler) and B5 (the SSR producer).
+
+## 2026-11-19 amendment — R4: a full generated-lane page has no runtime loader, so document services come from the executor-free subpath (facts only)
+
+### R4 — the page floor cannot re-install document services through the lazy `element-services` import
+
+The rule, stated flatly: **a page whose islands are ALL generated-lane has no
+element-runtime loader.** `clientEntryNeedsElementRuntime()` returns false for
+that shape (M11-3), so the generated entry emits no `__loadElementRuntime` and no
+dynamic `import()` of the `element-services-*` surface. Any document-level
+service the entry needs must come from the executor-free
+`@openelement/element/document-services` surface
+(`packages/element/src/document-services.ts`, wrapper
+`packages/router/src/vite/internal/ssg/element-document-services.ts`) —
+**never** by restoring the lazy `element-services` import, which would re-emit
+the loader and give back the P1 win this shape exists to keep.
+
+Two document-level services were installed by that lazy import as a side effect,
+and only by it: deep fragment navigation across nested shadow roots (#1090) and
+the bounded pre-hydration click capture. Measured regression on the
+all-generated-lane shape: `page-structure.spec.ts`'s "deep fragments scroll
+inside DSD" case fails because `#start` never receives `data-open-target`. The
+two installers are the same function objects the root entry exports, so the
+narrow surface forks no implementation.
+
+The shape, measured:
+
+- The entry now carries a STATIC import edge to the shared
+  `element-runtime-<hash>.js` chunk — unavoidable, because the #1544 chunk
+  grouping puts every module under the resolved element package root in that one
+  chunk, and the wrapper is one of them. The old build-output assertion "the
+  entry has no static edge to the runtime chunk" was a PROXY for the real
+  property on the shape it was written for (class-lane present ⇒ lazy loader ⇒
+  no static edge). It is retired and restated as the property itself
+  (`www/__tests__/build-output.test.ts`): the page floor carries no executor
+  entry module (judged from the emitted `.vite/oe-browser-entry-graph.json`
+  artifact, the same evidence the P1 checker judges), the runtime chunk holds no
+  executor entry, and a page without the runtime modulepreload does not
+  reference the runtime chunk. Asserting the edge's ABSENCE would now assert the
+  absence of the document services.
+- Static install cost: **324 KB → 328 KB raw, 87 KB → 89 KB gzip**. That is the
+  whole price of the surface, and it is floor bytes every page already pays
+  (nothing new is fetched by any island).
+- **P1 stays MET.** The emitted `element-runtime-<hash>.js` chunk holds 38
+  modules and NO executor entry; the checker's verdict on
+  `www/dist/client/.vite/oe-browser-entry-graph.json` is unchanged. The static
+  edge lands on a chunk that is executor-free by construction, which is exactly
+  why the surface's zero-executor closure is pinned in
+  `packages/element/__tests__/document-services-subpath.test.ts` — one executor
+  edge into either leaf would make the page floor load the generic Part Program
+  executor.
+- e2e: **368/368 passing**, with the previously failing deep-fragment case green.
+
+### The two authoring facts this migration proved
+
+**(i) A default export that is a RE-EXPORT is structurally declined by the
+generated lane.** An island module written as `export { default } from
+'./component.tsx'` (or any re-export of the component) is recorded as
+`{"kind":"lane-declined","reason":"compiler-declined"}`: the lane decides from
+the module's own body, and a re-exported default is a binding it cannot see
+through. The component body must live IN the island module itself, the way
+`www/app/islands/open-search.tsx` does. The consequence is silent — the island
+degrades to the class lane (or to no generated host at all) rather than erroring
+— so this is the first thing to check when a migration "works" but produces no
+generated host producer.
+
+**(ii) `onConnect` runs in the claim/mount PROLOGUE, before the generated DOM
+walk.** The handler is emitted into the prologue of the claim/mount path
+(`shell.ts` runs it from `connectedCallback` before `claimRecipe` /
+`insertRecipe`), so it executes BEFORE the generated lane walks the rendered
+subtree. A handler that scans that subtree (querying for descendant nodes,
+measuring, attaching listeners per child) therefore sees a region that is not the
+rendered tree yet. One MACROTASK (`setTimeout(…, 0)`) lands the scan after the
+synchronous connect pass, which is exactly when the class lane's
+`connectedCallback` used to run — this is what `www/app/islands/open-page-rail.tsx`
+does. The failure is permanent, not a missed first pass: a scanner that records
+its state before its empty-target early return binds the host to zero targets for
+the life of the connection. Handlers that only read `env.host` / props / signals
+need no deferral.
+

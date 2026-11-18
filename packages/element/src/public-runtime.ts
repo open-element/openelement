@@ -337,6 +337,15 @@ function classNameOf(ctor: object): string {
 interface LightSsrResult {
   readonly content: string;
   readonly hostAttributes: readonly (readonly [string, string])[] | undefined;
+  /**
+   * The declared rows whose ONLY host wire is the JSON seed (`array`/`object`).
+   * The shell owns that set; the light writer only needs the names. A caller
+   * pair addressed to one of them has no attribute channel — the descriptor
+   * refuses one and `observedAttributes` never observes it — so the writer must
+   * not spell it as text. Absent for the string shape (an older emitted module),
+   * which keeps the pre-existing bytes.
+   */
+  readonly seedRows?: readonly string[];
 }
 
 function lightResult(rendered: unknown, lane: string, tag: string): LightSsrResult {
@@ -361,15 +370,37 @@ function lightResult(rendered: unknown, lane: string, tag: string): LightSsrResu
  * seeded. The seeded pair for a name REPLACES the authored one: it is the
  * canonical converted value the claim will re-read, and the JSON seed is
  * emitted only by the seeder.
+ *
+ * `seedRows` names the rows the JSON seed ALREADY carries — the seeder's own
+ * verdict, never re-derived here. A declared `array`/`object` row is
+ * property-only: the descriptor refuses an attribute for it and
+ * `observedAttributes` never observes one, so a pair naming it is not a second
+ * spelling of the row. Leaving it on the tag is worse than redundant — the host
+ * writer normalizes pairs through the class lane's value algebra, which is
+ * `String()` for anything that is not `class`/`style`, so an array arrives as
+ * `items="[object Object],…"`. Both sides are dropped for those names, and the
+ * value travels on `data-oe-prop-seed` alone (the ONE channel
+ * `applyGeneratedPropSeed` reads). Primitive rows and static attributes keep
+ * their bytes; a row the seed does not carry is untouched.
  */
 function mergeHostAttributes(
-  authored: readonly (readonly [string, unknown])[] | undefined,
+  authored: readonly (readonly [name: string, value: unknown])[] | undefined,
   seeded: readonly (readonly [string, string])[] | undefined,
-): readonly (readonly [string, unknown])[] | undefined {
-  if (seeded === undefined || seeded.length === 0) return authored;
+  seedRows: readonly string[] | undefined,
+): readonly (readonly [name: string, value: unknown])[] | undefined {
+  const carried = (name: string): boolean => seedRows?.includes(name) === true;
+  const authoredPairs =
+    seedRows === undefined || seedRows.length === 0 || authored === undefined
+      ? authored
+      : authored.filter(([name]) => !carried(name));
+  const seededPairs =
+    seedRows === undefined || seedRows.length === 0 || seeded === undefined
+      ? seeded
+      : seeded.filter(([name]) => !carried(name));
+  if (seededPairs === undefined || seededPairs.length === 0) return authoredPairs;
   const byName = new Map<string, unknown>();
-  for (const [name, value] of authored ?? []) byName.set(name, value);
-  for (const [name, value] of seeded) byName.set(name, value);
+  for (const [name, value] of authoredPairs ?? []) byName.set(name, value);
+  for (const [name, value] of seededPairs) byName.set(name, value);
   return [...byName];
 }
 
@@ -1074,7 +1105,7 @@ function renderToStringAtDepth(
       return serializeLightGeneratedHost(
         typeof input === 'string' ? input : '<unknown>',
         renderedContent,
-        mergeHostAttributes(options.hostAttrs, light.hostAttributes),
+        mergeHostAttributes(options.hostAttrs, light.hostAttributes, light.seedRows),
         options.projectedChildren,
       );
     }
@@ -1204,7 +1235,11 @@ function renderToStringAtDepth(
                 return serializeLightGeneratedHost(
                   nested.tag,
                   nestedLight.content,
-                  mergeHostAttributes(nested.attributes, nestedLight.hostAttributes),
+                  mergeHostAttributes(
+                    nested.attributes,
+                    nestedLight.hostAttributes,
+                    nestedLight.seedRows,
+                  ),
                   nested.projectedChildren,
                 );
               }
