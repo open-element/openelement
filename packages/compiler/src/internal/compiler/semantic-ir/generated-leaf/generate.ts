@@ -404,6 +404,12 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
     symbol: 'runUntracked',
     predicate: (body) => body.includes('runUntracked('),
   },
+  // `16b-EB`: the update-phase isolation contract. Registered by the same body
+  // predicate, so a module without an `onError` handler never imports it.
+  {
+    symbol: 'guardUpdate',
+    predicate: (body) => body.includes('guardUpdate('),
+  },
   {
     symbol: 'claimStaticSiblingRange',
     predicate: (_body, _usesClaimRecipe, usesDirectory) => usesDirectory,
@@ -503,6 +509,21 @@ const TEARDOWN_SIGNAL_VAR = `${INTERNAL_PREFIX}teardownSignal`;
 const PROPERTY_CHANGE_PROPERTY = `${INTERNAL_PREFIX}onPropertyChange`;
 /** The host-record property exposing the element's `CustomStateSet` to the env. */
 const STATES_PROPERTY = `${INTERNAL_PREFIX}states`;
+/**
+ * `16b-EB`: the compiler-private host-record property that registers the
+ * element-lifetime `onError` handler. The shell owns the capture points and the
+ * handler list; generated code only registers through this channel, exactly like
+ * `__oe_onPropertyChange`. Registration is FORWARDED through host literals only
+ * for modules that use the intrinsic, so every other module keeps its bytes.
+ */
+const ERROR_HANDLER_PROPERTY = `${INTERNAL_PREFIX}onError`;
+/**
+ * `16b-EB`: the compiler-private host-record property that carries the
+ * update-phase error sink into `guardUpdate`. A GETTER on the shell side, so
+ * registration order cannot matter; generated code only reads it where a refresh
+ * subscription is opened.
+ */
+const ERROR_REPORT_PROPERTY = `${INTERNAL_PREFIX}reportError`;
 
 /**
  * Whether any component in the module registers an `onPropertyChange`
@@ -524,7 +545,11 @@ function moduleUsesPropertyChange(state: EmitState): boolean {
  */
 function moduleUsesLifecycleEnv(state: EmitState): boolean {
   for (const component of state.componentByName.values()) {
-    if (component.lifecycle.some((hook) => hook.kind !== 'property-change' && hook.receivesEnv)) {
+    if (
+      component.lifecycle.some(
+        (hook) => hook.kind !== 'property-change' && hook.kind !== 'error' && hook.receivesEnv,
+      )
+    ) {
       return true;
     }
   }
@@ -552,6 +577,49 @@ function childPropertyChangeField(state: EmitState, node: FunctionModelComponent
   }
   return `, ${PROPERTY_CHANGE_PROPERTY}: ${state.hostVar}.${PROPERTY_CHANGE_PROPERTY}`;
 }
+
+/**
+ * Whether any component in the module registers an `onError` handler
+ * (`16b-EB`). The registration AND the update-phase sink ride the host-record
+ * literals only for such a module, so every other module keeps its exact bytes
+ * (including every `guardUpdate` call, which stays a two-name call).
+ */
+function moduleUsesErrorBoundary(state: EmitState): boolean {
+  for (const component of state.componentByName.values()) {
+    if (component.lifecycle.some((hook) => hook.kind === 'error')) return true;
+  }
+  return false;
+}
+
+/**
+ * The `16b-EB` channels a RETAINED reference-site host literal forwards to a
+ * depth-1 child that declares `onError`: the registration channel (so the
+ * child's `<Name>__setup` can register on the element's one handler list) and
+ * the update-phase sink (so the child's own refresh subscriptions are guarded).
+ * Empty otherwise, so every other module and reference site keeps its bytes.
+ */
+function childErrorBoundaryField(state: EmitState, node: FunctionModelComponentRef): string {
+  if (!moduleUsesErrorBoundary(state)) return '';
+  const child = state.componentByName.get(node.name);
+  if (child === undefined || !child.lifecycle.some((hook) => hook.kind === 'error')) return '';
+  return `, ${ERROR_HANDLER_PROPERTY}: ${state.hostVar}.${ERROR_HANDLER_PROPERTY}, ${ERROR_REPORT_PROPERTY}: ${state.hostVar}.${ERROR_REPORT_PROPERTY}`;
+}
+
+/**
+ * The `16b-EB` update-phase sink alone, for the `__oe_childHost` literal a
+ * retained child's MOUNT/CLAIM body reads. Registration belongs to the setup
+ * host, but the refresh subscriptions are opened by the mount/claim body, so it
+ * needs the sink there too. Without this the child's refresh would call
+ * `guardUpdate(fn, undefined)` and propagate — the enclosing element's handler
+ * would never see the throw. Empty otherwise, keeping every other site's bytes.
+ */
+function childErrorReportField(state: EmitState, node: FunctionModelComponentRef): string {
+  if (!moduleUsesErrorBoundary(state)) return '';
+  const child = state.componentByName.get(node.name);
+  if (child === undefined || !child.lifecycle.some((hook) => hook.kind === 'error')) return '';
+  return `, ${ERROR_REPORT_PROPERTY}: ${state.hostVar}.${ERROR_REPORT_PROPERTY}`;
+}
+
 /**
  * 16b-LC retained-child: the module-local setup factory a RETAINED hostless child exposes to
  * its retaining reference site (`<Name>__setup`). Synthesized from the
@@ -1939,18 +2007,34 @@ function emitDependencySubscriptions(
   },
 ): void {
   const handler = options?.ignoreSignalValue === true ? `() => ${refreshVar}()` : refreshVar;
+  // `16b-EB`: a module that registers an `onError` handler submits its refresh
+  // closures through the executor's existing `guardUpdate` (the ONE
+  // update-phase isolation contract: a throw is reported to the sink and never
+  // rethrown, so the subscription stays live for the next write). The sink is
+  // the shell's compiler-private reporter, read off the host record HERE, at
+  // subscribe time, so a refresh registered before the handler still reaches it
+  // (the reporter re-reads the live list at dispatch time).
+  //
+  // A module WITHOUT the intrinsic keeps the exact two-name call: `bindSignalWrites`
+  // is handed the bare refresh, which is byte-identical to the pre-`16b-EB`
+  // output and allocates no wrapper. The predicate reads the SAME module-wide
+  // fact that forwards the sink through the host literals, so a new emission
+  // site cannot forget the guard.
+  const guarded = moduleUsesErrorBoundary(state)
+    ? `guardUpdate(${handler}, ${state.hostVar}.${ERROR_REPORT_PROPERTY})`
+    : handler;
   for (const dependency of dependencies) {
     if (dependency.fromProps) {
       push(
         state,
-        `for (const ${MOUNT_DEP_LOOP} of ${state.hostVar}.propDeps) bindSignalWrites(${state.scopeVar}, ${MOUNT_DEP_LOOP}, ${JSON.stringify(dependency.name)}, ${handler});`,
+        `for (const ${MOUNT_DEP_LOOP} of ${state.hostVar}.propDeps) bindSignalWrites(${state.scopeVar}, ${MOUNT_DEP_LOOP}, ${JSON.stringify(dependency.name)}, ${guarded});`,
         anchor,
       );
       continue;
     }
     push(
       state,
-      `bindSignalWrites(${state.scopeVar}, ${dependency.name}, ${JSON.stringify(dependency.name)}, ${handler});`,
+      `bindSignalWrites(${state.scopeVar}, ${dependency.name}, ${JSON.stringify(dependency.name)}, ${guarded});`,
       anchor,
     );
   }
@@ -2078,7 +2162,19 @@ function emitClientOnlyInstall(
       return;
     }
     const listenerVar = nextName(state, 'eventListener');
-    push(state, `const ${listenerVar} = (event) => ${handlerVar}(event);`, span);
+    // `16b-EB`: a module that registers an `onError` handler routes a throwing
+    // listener through the executor's `guardUpdate` with the shell's sink, so an
+    // author handler failure is reported instead of escaping as uncaught
+    // platform dispatch. A module WITHOUT the intrinsic keeps the unwrapped
+    // listener (the pre-existing contract: platform dispatch is not a
+    // suppression point).
+    push(
+      state,
+      moduleUsesErrorBoundary(state)
+        ? `const ${listenerVar} = guardUpdate((event) => ${handlerVar}(event), ${state.hostVar}.${ERROR_REPORT_PROPERTY});`
+        : `const ${listenerVar} = (event) => ${handlerVar}(event);`,
+      span,
+    );
     push(
       state,
       `${elementVar}.addEventListener(${quoteGeneratedJavaScriptValue(eventName)}, ${listenerVar});`,
@@ -2513,7 +2609,7 @@ function emitComponentRef(
     : `() => ({})`;
   push(
     state,
-    `const ${setupHostVar} = { bindings: ${state.hostVar}.bindings, propDeps: ${depList}${childHostElementField(state, node)}${childPropertyChangeField(state, node)} };`,
+    `const ${setupHostVar} = { bindings: ${state.hostVar}.bindings, propDeps: ${depList}${childHostElementField(state, node)}${childPropertyChangeField(state, node)}${childErrorBoundaryField(state, node)} };`,
     span,
   );
   push(
@@ -2524,7 +2620,7 @@ function emitComponentRef(
   push(state, `const ${scopeVar} = ${state.scopeVar}.child();`, span);
   push(
     state,
-    `const ${hostVar} = { bindings: ${setupHostVar}.bindings, propDeps: ${setupHostVar}.propDeps, instance: ${instanceVar}.scope, setup: ${instanceVar}.record${childHostElementField(state, node)} };`,
+    `const ${hostVar} = { bindings: ${setupHostVar}.bindings, propDeps: ${setupHostVar}.propDeps, instance: ${instanceVar}.scope, setup: ${instanceVar}.record${childHostElementField(state, node)}${childErrorReportField(state, node)} };`,
     span,
   );
   push(state, `let ${nodesVar};`);
@@ -5520,7 +5616,7 @@ function emitClaimComponentRef(
     : `() => ({})`;
   push(
     state,
-    `const ${setupHostVar} = { bindings: ${state.hostVar}.bindings, propDeps: ${depList}${childHostElementField(state, node)}${childPropertyChangeField(state, node)} };`,
+    `const ${setupHostVar} = { bindings: ${state.hostVar}.bindings, propDeps: ${depList}${childHostElementField(state, node)}${childPropertyChangeField(state, node)}${childErrorBoundaryField(state, node)} };`,
     span,
   );
   push(
@@ -5531,7 +5627,7 @@ function emitClaimComponentRef(
   push(state, `const ${scopeVar} = ${state.scopeVar}.child();`, span);
   push(
     state,
-    `const ${hostVar} = { bindings: ${setupHostVar}.bindings, propDeps: ${setupHostVar}.propDeps, instance: ${instanceVar}.scope, setup: ${instanceVar}.record${childHostElementField(state, node)} };`,
+    `const ${hostVar} = { bindings: ${setupHostVar}.bindings, propDeps: ${setupHostVar}.propDeps, instance: ${instanceVar}.scope, setup: ${instanceVar}.record${childHostElementField(state, node)}${childErrorReportField(state, node)} };`,
     span,
   );
   push(state, `let ${nodesVar};`);
@@ -5682,7 +5778,7 @@ interface SetupLocal {
  * callback expression the factory emits verbatim as an ordinary closure.
  */
 interface AdmittedLifecycleHook {
-  readonly kind: 'connect' | 'dispose' | 'property-change';
+  readonly kind: 'connect' | 'dispose' | 'property-change' | 'error';
   readonly record: LoweredExpressionRecord;
   /** `true` when the authored callback declares the one admitted env parameter. */
   readonly receivesEnv: boolean;
@@ -7358,6 +7454,7 @@ function emitComponent(
   const connectHooks = admittedHooks.filter((hook) => hook.kind === 'connect');
   const disposeHooks = admittedHooks.filter((hook) => hook.kind === 'dispose');
   const changeHooks = admittedHooks.filter((hook) => hook.kind === 'property-change');
+  const errorHooks = admittedHooks.filter((hook) => hook.kind === 'error');
 
   // T3 / 16b-LC-1: the ROOT's local snapshots are element-lifetime setup, not
   // per-projection work. They move into one module-local factory the shell's
@@ -7567,6 +7664,25 @@ function emitComponent(
         hook.span,
       );
     }
+    for (const hook of errorHooks) {
+      // `16b-EB` registration only. The SHELL owns both capture points (the
+      // connect/claim catch it already had, and the update-phase sink below),
+      // the env it builds, and the teardown clearing; generated code never calls
+      // the callback itself, so there is no second error channel. The callback
+      // is handed to the channel verbatim: the shell always calls it with the
+      // `{ host, signal, states, error }` env, and a zero-parameter authored
+      // callback simply ignores it (same contract as the change channel's
+      // event).
+      pushParts(
+        setupState,
+        [
+          `if (${MOUNT_HOST}.${ERROR_HANDLER_PROPERTY} !== undefined) ${MOUNT_HOST}.${ERROR_HANDLER_PROPERTY}((`,
+          { record: hook.record },
+          '));',
+        ],
+        hook.span,
+      );
+    }
     const recordFields = localLines.map((line) => line.name);
     if (connectHooks.some((hook) => !hook.receivesEnv)) {
       recordFields.push(GENERATED_ROOT_CONNECT_RECORD);
@@ -7727,6 +7843,21 @@ function emitComponent(
         hook.span,
       );
     }
+    for (const hook of errorHooks) {
+      // `16b-EB`: same registration shape as the root factory. The child's setup
+      // host carries the channel because the retaining reference site forwarded
+      // it (see `childErrorBoundaryField`), so both the handler list and the
+      // update-phase sink belong to the ONE enclosing generated element.
+      pushParts(
+        setupState,
+        [
+          `if (${MOUNT_HOST}.${ERROR_HANDLER_PROPERTY} !== undefined) ${MOUNT_HOST}.${ERROR_HANDLER_PROPERTY}((`,
+          { record: hook.record },
+          '));',
+        ],
+        hook.span,
+      );
+    }
     const setupFields = localLines.map((line) => line.name);
     if (connectHooks.some((hook) => !hook.receivesEnv)) {
       setupFields.push(GENERATED_ROOT_CONNECT_RECORD);
@@ -7858,6 +7989,14 @@ function emitComponent(
   const forwardedPropertyChange = moduleUsesPropertyChange(state)
     ? `, ${PROPERTY_CHANGE_PROPERTY}: ${INTERNAL_PREFIX}host.${PROPERTY_CHANGE_PROPERTY}`
     : '';
+  // `16b-EB`: the registration channel AND the update-phase sink ride the same
+  // literal, so the root setup can register its handler and the body's refresh
+  // subscriptions can be guarded. Guests: modules without the intrinsic keep
+  // today's bytes, including every two-argument `guardUpdate(fn)` call, which
+  // then keeps the pre-`16b-EB` propagating form.
+  const forwardedErrorBoundary = moduleUsesErrorBoundary(state)
+    ? `, ${ERROR_HANDLER_PROPERTY}: ${INTERNAL_PREFIX}host.${ERROR_HANDLER_PROPERTY}, ${ERROR_REPORT_PROPERTY}: ${INTERNAL_PREFIX}host.${ERROR_REPORT_PROPERTY}`
+    : '';
   if (state.requiresPropsChanged) {
     // The root instance's defining scope is the host props channel: the
     // original OEIR_LEAF_MISSING_VALUE contract stays at factory creation.
@@ -7865,11 +8004,11 @@ function emitComponent(
       `  const ${INTERNAL_PREFIX}propsChanged = ${INTERNAL_PREFIX}host.propsChanged; if (${INTERNAL_PREFIX}propsChanged === undefined) throw new Error("OEIR_LEAF_MISSING_VALUE: propsChanged");`,
     );
     factoryLines.push(
-      `  const ${mountHostVar} = { bindings: ${INTERNAL_PREFIX}host.bindings, propDeps: [${INTERNAL_PREFIX}propsChanged]${forwardedInstance}${forwardedHostElement}${forwardedPropertyChange} };`,
+      `  const ${mountHostVar} = { bindings: ${INTERNAL_PREFIX}host.bindings, propDeps: [${INTERNAL_PREFIX}propsChanged]${forwardedInstance}${forwardedHostElement}${forwardedPropertyChange}${forwardedErrorBoundary} };`,
     );
   } else {
     factoryLines.push(
-      `  const ${mountHostVar} = { bindings: ${INTERNAL_PREFIX}host.bindings, propDeps: []${forwardedInstance}${forwardedHostElement}${forwardedPropertyChange} };`,
+      `  const ${mountHostVar} = { bindings: ${INTERNAL_PREFIX}host.bindings, propDeps: []${forwardedInstance}${forwardedHostElement}${forwardedPropertyChange}${forwardedErrorBoundary} };`,
     );
   }
   const claim =

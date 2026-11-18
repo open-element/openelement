@@ -93,3 +93,9 @@ export { encodeListKey, tryEncodeListKey } from './runtime/list-key.ts';
 // Signal writes and untracked evaluation.
 export { bindSignalWrites } from './runtime/bindings.ts';
 export { runUntracked } from './runtime/bindings.ts';
+// `16b-EB`: the ONE update-phase isolation contract a generated element body
+// uses for its refresh/each/event handlers. It is the executor's existing
+// `guardUpdate` (report to the supplied sink, never rethrow) — re-exported from
+// its origin module, not re-implemented, and NOT imported by any module that
+// does not register an `onError` handler.
+export { guardUpdate } from './runtime/bindings.ts';

@@ -900,3 +900,121 @@ migration:
 Until a class caller can render a generated child through the child's own
 descriptor, `open-page-rail` stays class-lane, and so does `open-reading-shell`
 (its only caller relationship is the same shape).
+
+## 2026-11-18 amendment — `16b-EB`: `onError` and the generated lane's three capture points
+
+`onError(cb)` is the FOURTH compiler-erased intrinsic of the generated-element
+lane. It is the author-facing error boundary; the class lane's
+`ErrorBoundary`/`_captureError` service is NOT reused, and no second error
+channel, scheduler or retry loop is introduced.
+
+### Admission is the existing rule, unchanged
+
+Placement and provenance are exactly `16b-LC`'s (`function-frontend.ts`
+`buildLifecycleHook`): a direct top-level statement of an admitted
+generated-element setup, callee resolved by BINDING PROVENANCE (a named import
+of `@openelement/element`, aliases followed), exactly one inline
+arrow/function-expression callback, no type arguments, no generator, no `async`,
+and zero or one plain `env` parameter (identifier or object binding pattern; no
+rest, optional or default form). Refusals keep the existing `OEC9042` form code;
+a non-intrinsic statement keeps the existing `OEC9041` component-body refusal.
+No new diagnostic identity and no new public error code.
+
+The generator owns placement, as for the other three names: the handler is
+carried only by the generated element ROOT setup or a depth-1 retained hostless
+child setup. Depth >= 2, recipe/list bodies and non-retained targets fail closed
+at the AUTHORED span with the existing `OEIR_LEAF_INVALID_ARTIFACT`.
+
+### The env is `{ host, signal, states, error }`
+
+`host` is the generated element the failing work belongs to (the nearest ancestor
+generated element for a depth-1 retained hostless child), `signal` is the
+`LifetimeScope` signal of the phase that threw, `states` is a getter over the one
+element-lifetime `ElementInternals` record (attached only if the handler reads
+it), and `error` is the thrown value EXACTLY as thrown — never wrapped. The
+zero-argument form is admitted and simply ignores the env, exactly like the
+other three intrinsics.
+
+### The three capture points
+
+| phase | capture point | what was already there | with a registered handler | with NO handler |
+| --- | --- | --- | --- | --- |
+| connect / claim | the shell's `connectedCallback` `catch` (covers `rootFor`, setup, `createRecipe`, mount, claim and the `onConnect` replay) | rollback of the failed attempt (instance pass abort, connection scope, first-connect instance teardown, retained-child release) then **rethrow** | the SAME rollback runs, then the handler runs and the error does not escape | the pre-`16b-EB` rollback-then-rethrow, byte-identical |
+| update / refresh | the executor's existing `guardUpdate(fn, sink)` that the generated `bindSignalWrites` subscription and `each`/`when` refresh closures are wrapped in | a throw propagated out of the signal writer (out of the property setter) | reported to the handler; the subscription stays live, so the next write writes | `guardUpdate(fn)` keeps the propagating form — generated text is the unchanged two-name call |
+| event dispatch | the same `guardUpdate` wrapper around the emitted DOM listener | a throw escaped as uncaught platform dispatch | reported to the handler; the listener stays installed | the unwrapped `(event) => handler(event)` listener, unchanged |
+
+**What "defined state after a caught connect error" means concretely.** The
+element is exactly where the pre-existing rollback leaves it, minus the escape:
+
+- `state.projection` and `state.connection` are `null` — the failed attempt
+  mounted/claimed nothing;
+- no generated DOM was inserted, and none of the attempt's listeners,
+  subscriptions or child scopes survive (the connection scope and the failed
+  first-connect instance are both disposed, and a failed first connect destroys
+  its instance so setup re-runs on a NEW one);
+- the region fact is **not** rewritten by the failure, so the next connect makes
+  the same mount-vs-claim decision it would have made;
+- `state.connecting` is `false` (the `finally` runs on both paths);
+- the handler's list is **snapshotted before** the rollback clears it, so the
+  boundary reports the error even when the failure destroyed the very instance
+  that registered it;
+- a later reconnect retries from scratch and succeeds once the throw source is
+  gone (Chromium row D1 proves the retry and that the retried element's listener
+  works).
+
+`env.signal.aborted` distinguishes the phases honestly: the connect env carries
+that connection's signal, which the rollback already aborted, so it is `true`; an
+update-phase env carries the instance-lifetime signal, so it is `false` while the
+instance lives.
+
+### No silent swallow, and a throwing handler
+
+- No handler registered ⇒ every capture point keeps its pre-`16b-EB`
+  behaviour. There is no default handler, no `console.error`, no
+  `window.onerror` installation.
+- A handler that itself throws **replaces** the original: its error is what
+  escapes, thrown after the rollback completed. Every registered handler is
+  still run (the same first-error rule the change channel uses), and `env.error`
+  keeps the original reachable. Chromium row D3 pins that the original is NOT
+  the surfaced error.
+
+### Async rejections are OUT OF SCOPE for this slice — and why
+
+No capture point promises to catch a rejection. The two `LifetimeScope` signals
+are the honest hook (`env.signal` aborts at the start of a disconnection and the
+instance signal at teardown start), but wiring them to rejections would require
+either a scheduler or a global `unhandledrejection` listener — both forbidden by
+this slice, and neither attributable to one element: a browser reports an
+unhandled rejection without saying which element produced it. So a rejected
+promise inside an authored callback behaves exactly as it did before `16b-EB`:
+it is unhandled, and the platform reports it. An author who wants a boundary over
+async work uses `env.signal` with their own `catch`. Recorded here as the
+deliberate boundary, not as an oversight.
+
+### SSR
+
+`__ssr` runs NO handler and does NOT swallow a producer throw. Both halves are
+deliberate:
+
+- an `onError` callback is CLIENT-owned. It is erased into the compiled module
+  and registered on a host record the shell builds at connect time; a server
+  render has no element, no connection scope and no handler registry. There is
+  nothing to run, so emitting a server-side call would be a second error channel
+  invented for one phase.
+- a producer throw still fails the render. The generated `<Name>__ssr` is
+  untouched (its bytes are byte-identical to the same component without the
+  hook), so the server keeps its pre-`16b-EB` behaviour: a throwing producer
+  fails `renderToString`. Chromium row D6 asserts both halves.
+
+The fallback story for SSR, then, is: **no fallback inside this slice**. A
+server-side boundary needs a decision about what a failed island's bytes are
+(omit the island? serialize a fallback tree? fail the page?), and that decision
+belongs to the serializer lane, not here.
+
+### Bytes
+
+A module that does not use the intrinsic is byte-identical to its
+pre-`16b-EB` output: no `guardUpdate` import, no channel property on the host
+literals, and the unchanged two-name `bindSignalWrites` call. Pins:
+`generated-element.error-boundary.test.ts` B4 (a module using all three older
+intrinsics plus a tracked slot and an event handler) and B5 (the SSR producer).

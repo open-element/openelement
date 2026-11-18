@@ -100,9 +100,38 @@
  * structural index are a strong hold while reachable, not a GC cleanup
  * contract. Depth >= 2 retention (a retained child retaining its own children)
  * and cross-ledger transactions remain OWED and are NOT claimed by this seam;
- * a child body emits today's legacy text for its own references. The shell has
- * no author `onConnect`/`onDispose` callbacks and makes no claim about
- * focus/selection or other platform state across the disconnect window.
+ * a child body emits today's legacy text for its own references. The shell runs
+ * no author `onConnect`/`onDispose` callback ITSELF: the generated mount/claim
+ * prologue replays the retained callbacks on the per-connection scope the shell
+ * hands it, and the shell owns only the scope those callbacks register on. It
+ * makes no claim about focus/selection or other platform state across the
+ * disconnect window.
+ *
+ * ERROR BOUNDARY (`16b-EB`): the shell is the ONE owner of the author-facing
+ * `onError` handler list and of the two capture points it can honestly attribute
+ * to one element. The compiled setup registers a handler through the
+ * compiler-private `__oe_onError` host-record property (non-enumerable, like the
+ * change channel). At a capture point the shell builds
+ * `{ host, signal, states, error }` and runs every handler:
+ *
+ * 1. the `connectedCallback` catch that already existed — the same rollback runs
+ *    (unchanged), then the handler runs instead of the error escaping, leaving
+ *    the element in its defined post-failure state (no projection, no listeners,
+ *    region fact intact, a later reconnect retries);
+ * 2. the update phase, through the `__oe_reportError` sink the generated
+ *    `guardUpdate(fn, sink)` call passes for refresh subscriptions and DOM
+ *    listeners — the executor's existing helper, so the subscription and the
+ *    listener stay live for the next write/dispatch.
+ *
+ * An async REJECTION is deliberately NOT a capture point: there is no scheduler
+ * and no global `unhandledrejection` listener, so a rejection is not
+ * attributable to one element. With NO registered handler every capture point
+ * keeps its pre-`16b-EB` behaviour exactly (rethrow and roll back at connect,
+ * propagate out of the signal writer or the platform dispatch otherwise). The
+ * handler list is cleared wherever the change list is cleared, so no handler
+ * runs after its owner is gone. No exported symbol or type is added: both
+ * channels are runtime properties on the host records the compiler already
+ * builds.
  *
  * Explicit teardown is `dispose(true)` on the element; it removes only the node
  * range the shell mounted or claimed and destroys the retained instance in the
@@ -895,6 +924,27 @@ interface ElementState {
    * so a listener never runs after its owner is gone.
    */
   readonly propertyChangeCallbacks: PropertyChangeListener[];
+  /**
+   * Element-lifetime `onError` handlers (`16b-EB`). The compiled setup
+   * registers through the internal `__oe_onError` runtime property on the
+   * instance host record; the list is cleared with the instance at teardown so
+   * a handler never runs after its owner is gone.
+   *
+   * An EMPTY list is the pre-`16b-EB` behaviour: every capture point rethrows
+   * exactly as it did before this channel existed. The shell does not install a
+   * global `window` listener, a scheduler or a retry loop — the capture points
+   * are the two places that already had a `try`/`catch` or a dispatch seam
+   * (connect/claim, and the `guardUpdate` wrapper around update-phase work).
+   */
+  readonly errorHandlers: ErrorHandler[];
+  /**
+   * The one update-phase reporter closure this element hands to generated
+   * `guardUpdate` calls, created lazily on first read. It re-reads
+   * {@linkcode errorHandlers} at dispatch time, so caching it cannot go stale:
+   * a handler registered after a subscription is still honored, and a list
+   * cleared by teardown makes the reporter rethrow (the unchanged behaviour).
+   */
+  errorReporter: ((error: unknown) => void) | null;
 }
 
 const states = new WeakMap<HTMLElement, ElementState>();
@@ -1384,6 +1434,8 @@ function createState(descriptor: NormalizedDescriptor): ElementState {
     reflecting: false,
     ownPropertiesReconciled: false,
     propertyChangeCallbacks: [],
+    errorHandlers: [],
+    errorReporter: null,
   };
 }
 
@@ -1691,6 +1743,37 @@ const HOST_ELEMENT_PROPERTY = '__oe_hostElement';
 const PROPERTY_CHANGE_PROPERTY = '__oe_onPropertyChange';
 
 /**
+ * The compiler-private runtime property that registers the element-lifetime
+ * `onError` handler(s) (`16b-EB`). Same posture as
+ * `__oe_onPropertyChange`: a NON-enumerable property on the host records the
+ * compiler-owned setup factory receives, so no exported type or symbol changes
+ * and a depth-1 retained child's generated setup host can forward the channel
+ * as a plain property.
+ */
+const ERROR_HANDLER_PROPERTY = '__oe_onError';
+
+/**
+ * The compiler-private runtime property that hands generated code its
+ * update-phase error sink (`16b-EB`).
+ *
+ * It is a GETTER, deliberately: registration order must not matter. A depth-1
+ * retained child registers its handler from `<Name>__setup`, which runs AFTER
+ * the retaining reference site already built the host literals, and a module
+ * whose root has no `onError` but whose child does must still guard the child's
+ * refreshes.
+ *
+ * The getter always returns the ONE cached reporter closure for this element;
+ * the closure re-reads the live handler list at DISPATCH time and rethrows the
+ * original error when the list is empty. That keeps the "no handler ⇒ unchanged
+ * propagation" rule true even for a refresh subscribed before its handler was
+ * registered, and it is why an empty list cannot leave a stale swallowing
+ * closure behind. A module with no `onError` intrinsic never reads this
+ * property: its generated subscriptions stay the bare two-name
+ * `bindSignalWrites` call.
+ */
+const ERROR_REPORT_PROPERTY = '__oe_reportError';
+
+/**
  * The compiler-private runtime property that exposes the element's
  * `CustomStateSet` (`ElementInternals.states`) to a generated component's env.
  * A getter: the one-shot internals record is attached on first read, so an
@@ -1705,6 +1788,19 @@ type PropertyChangeListener = (event: {
   readonly states: CustomStateSet;
   readonly name: string;
   readonly value: unknown;
+}) => void;
+
+/**
+ * One registered `16b-EB` error handler. Registered by the compiled setup
+ * through {@linkcode ERROR_HANDLER_PROPERTY}; the shell builds the env at the
+ * capture point, because only the shell knows which signal owns the failing
+ * phase.
+ */
+type ErrorHandler = (env: {
+  readonly host: HTMLElement;
+  readonly signal: AbortSignal;
+  readonly states: CustomStateSet;
+  readonly error: unknown;
 }) => void;
 
 /** Attach the owning element to a host record without changing its shape. */
@@ -1755,29 +1851,166 @@ function withPropertyChangeChannel<T extends object>(record: T, state: ElementSt
   return record;
 }
 
+/**
+ * Attach the element-lifetime `onError` registration channel to a host record
+ * (`16b-EB`). Both host records carry it, exactly like the change channel, so a
+ * depth-1 retained child's generated setup host can forward the SAME channel as
+ * a plain property. An element with no compiled `onError` never calls it and
+ * pays one non-enumerable define per host record.
+ */
+function withErrorHandlerChannel<T extends object>(record: T, state: ElementState): T {
+  Object.defineProperty(record, ERROR_HANDLER_PROPERTY, {
+    value: (handler: ErrorHandler): void => {
+      state.errorHandlers.push(handler);
+    },
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  return record;
+}
+
+/**
+ * Attach the update-phase error sink to a host record (`16b-EB`).
+ *
+ * A getter, so the reader observes whatever handlers are registered when a
+ * refresh is subscribed (a retained child registers from its `<Name>__setup`,
+ * which runs after the parent's host literals were built). The closure is
+ * cached on the state because it re-reads the handler list at dispatch time —
+ * caching it cannot make it stale.
+ */
+function withErrorReportChannel<T extends object>(
+  record: T,
+  element: HTMLElement,
+  state: ElementState,
+): T {
+  Object.defineProperty(record, ERROR_REPORT_PROPERTY, {
+    get: () => (state.errorReporter ??= errorReporterFor(element, state)),
+    enumerable: false,
+    configurable: false,
+  });
+  return record;
+}
+
+/**
+ * Run a captured `16b-EB` throw through one snapshot of registered handlers.
+ *
+ * `handlers` is passed explicitly because the CONNECT capture point must run the
+ * handlers of the instance that failed AFTER that instance's rollback has
+ * already cleared the live list. Every handler runs (a throwing handler must not
+ * hide the others), and the FIRST handler error is rethrown in place of the
+ * original: the boundary's own failure is what the page needs to see, while the
+ * original value stays reachable through `env.error`.
+ *
+ * An EMPTY snapshot means "no boundary": the caller keeps its unchanged
+ * rethrow/rollback path. This function never swallows silently.
+ *
+ * The env is built here: `host` is the element the failing work belongs to,
+ * `signal` is the signal of the phase that threw (the per-connection scope for a
+ * connect/claim failure — by dispatch time it is aborted, because rollback
+ * disposed that connection; the instance-lifetime signal otherwise), and
+ * `states` is a getter so the one-shot internals record is attached only for a
+ * handler that reads it.
+ */
+function runErrorHandlers(
+  element: HTMLElement,
+  state: ElementState,
+  signal: AbortSignal,
+  error: unknown,
+  handlers: readonly ErrorHandler[],
+): void {
+  const env = {
+    host: element,
+    signal,
+    error,
+    get states(): CustomStateSet {
+      return ensureFormInternals(element, state).states;
+    },
+  };
+  // Snapshot: a handler that registers another handler must not run it for the
+  // error that was raised before its registration.
+  let firstError: unknown;
+  let failed = false;
+  for (const handler of [...handlers]) {
+    try {
+      handler(env);
+    } catch (handlerError) {
+      if (!failed) {
+        firstError = handlerError;
+        failed = true;
+      }
+    }
+  }
+  if (failed) throw firstError;
+}
+
+/**
+ * A shared already-aborted signal for the one case where a capture point has no
+ * live scope to name: a connect-phase failure that happened BEFORE any
+ * connection/instance scope existed. A handler that inspects `signal.aborted`
+ * then correctly learns "there is no live connection".
+ */
+const NO_LIVE_SCOPE_CONTROLLER = new AbortController();
+NO_LIVE_SCOPE_CONTROLLER.abort();
+const NO_LIVE_SCOPE_SIGNAL = NO_LIVE_SCOPE_CONTROLLER.signal;
+
+/**
+ * The update-phase error reporter a host record exposes to generated code
+ * (`16b-EB`). Generated code passes it as `guardUpdate`'s second argument.
+ *
+ * The reporter re-reads the LIVE handler list at DISPATCH time, not at
+ * subscribe time: a handler registered later in the same setup still owns a
+ * refresh subscribed earlier, and a list cleared by teardown cannot leave a
+ * stale closure that silently swallows. When the list is empty the original
+ * error is rethrown — that is the unchanged pre-`16b-EB` propagating behaviour.
+ *
+ * The signal is read at dispatch time too, so a reconnect (the instance is
+ * retained) and a teardown are both reported against the right lifetime.
+ */
+function errorReporterFor(element: HTMLElement, state: ElementState): (error: unknown) => void {
+  return (error: unknown): void => {
+    const handlers = state.errorHandlers;
+    if (handlers.length === 0) throw error;
+    runErrorHandlers(
+      element,
+      state,
+      state.instance?.signal ?? NO_LIVE_SCOPE_SIGNAL,
+      error,
+      handlers,
+    );
+  };
+}
+
 function hostFor(
   state: ElementState,
   element: HTMLElement,
 ): GeneratedElementHost<Record<string, unknown>> {
   return withInternalsStates(
-    withPropertyChangeChannel(
-      withHostElement(
-        {
-          // `ensureInstance` publishes the retained setup record before this host is
-          // built; the empty fallback keeps the contract total for a hand-built
-          // descriptor that names neither factory.
-          bindings: state.bindings ?? {},
-          // The one logical instance (LC-2 nesting): the generated root body opens a
-          // pass on it and retains direct hostless children. Omitted while no
-          // instance exists (hand-built descriptor without createInstance); the
-          // retention path is only emitted for a generated root, whose instance is
-          // always established before this host is built.
-          instance: state.instance ?? undefined,
-          props: state.props,
-          propsChanged: state.propsChanged,
-        },
-        element,
+    withErrorReportChannel(
+      withErrorHandlerChannel(
+        withPropertyChangeChannel(
+          withHostElement(
+            {
+              // `ensureInstance` publishes the retained setup record before this host is
+              // built; the empty fallback keeps the contract total for a hand-built
+              // descriptor that names neither factory.
+              bindings: state.bindings ?? {},
+              // The one logical instance (LC-2 nesting): the generated root body opens a
+              // pass on it and retains direct hostless children. Omitted while no
+              // instance exists (hand-built descriptor without createInstance); the
+              // retention path is only emitted for a generated root, whose instance is
+              // always established before this host is built.
+              instance: state.instance ?? undefined,
+              props: state.props,
+              propsChanged: state.propsChanged,
+            },
+            element,
+          ),
+          state,
+        ),
+        state,
       ),
+      element,
       state,
     ),
     element,
@@ -1790,14 +2023,21 @@ function instanceHostFor(
   element: HTMLElement,
 ): GeneratedElementInstanceHost<Record<string, unknown>> {
   return withInternalsStates(
-    withPropertyChangeChannel(
-      withHostElement(
-        {
-          props: state.props,
-          propsChanged: state.propsChanged,
-        },
-        element,
+    withErrorReportChannel(
+      withErrorHandlerChannel(
+        withPropertyChangeChannel(
+          withHostElement(
+            {
+              props: state.props,
+              propsChanged: state.propsChanged,
+            },
+            element,
+          ),
+          state,
+        ),
+        state,
       ),
+      element,
       state,
     ),
     element,
@@ -2158,6 +2398,21 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       } catch (error) {
         state.connection = null;
         state.projection = null;
+        // `16b-EB` connect/claim capture point. The ROLLBACK below is the
+        // pre-existing one and runs identically whether or not a boundary is
+        // registered: the failed attempt's listeners, subscriptions and child
+        // scopes are released, the instance pass is aborted, and a failed FIRST
+        // connect destroys its instance. Only the LAST step changes — with a
+        // registered handler the error is reported instead of escaping.
+        //
+        // The handler list is SNAPSHOT here, before the rollback clears it (a
+        // failed first connect destroys its instance, and the list dies with
+        // it). The env's signal is the connection scope's own signal, captured
+        // before disposal: by the time the handler runs the connection is gone,
+        // so `signal.aborted === true` is the honest answer, and a reconnect
+        // gets a fresh scope and a fresh signal.
+        const capturedHandlers = [...state.errorHandlers];
+        const capturedSignal = connection?.signal ?? NO_LIVE_SCOPE_SIGNAL;
         // A failed mount/claim aborted the root instance pass (LC-2): evict
         // exactly the entries created in this attempt and keep every
         // pre-existing retained entry (with its previous structural index) for
@@ -2179,6 +2434,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
           state.instance = null;
           state.bindings = null;
           state.propertyChangeCallbacks.length = 0;
+          state.errorHandlers.length = 0;
           // Failed-first-connect rollback (LC-2): release every retained child
           // bookkeeping entry and plain-dispose its retained scope BEFORE the
           // instance is destroyed. The ledger is not a GC contract, and the
@@ -2189,6 +2445,14 @@ export function createGeneratedElementClass<P extends object = Record<string, un
           release.push(() => instance.dispose(true));
         }
         releaseIgnoringErrors(release);
+        // No handler: the pre-`16b-EB` rethrow, unchanged. With a handler the
+        // boundary owns the error. A handler that itself throws REPLACES the
+        // original — its error is what escapes, and it is thrown from here after
+        // the rollback completed, so the element is still in its defined state.
+        if (capturedHandlers.length > 0) {
+          runErrorHandlers(this, state, capturedSignal, error, capturedHandlers);
+          return;
+        }
         throw error;
       } finally {
         state.connecting = false;
@@ -2267,6 +2531,11 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       // The instance is being destroyed: drop its change listeners before any
       // teardown cleanup runs, so none can observe a dying owner.
       state.propertyChangeCallbacks.length = 0;
+      // `16b-EB`: the boundary dies with its owner. A teardown cleanup that
+      // throws after this point is NOT routed to a handler whose element is
+      // being destroyed — it surfaces through the existing first-error rule,
+      // exactly as before this channel existed.
+      state.errorHandlers.length = 0;
 
       if (!detachOwnedNodes) {
         // Plain disposal releases the ownership record with the projection and
