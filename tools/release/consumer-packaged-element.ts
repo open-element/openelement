@@ -230,7 +230,11 @@ export default {
                   ? 'shadow.js.map'
                   : path === '/shadow-s3'
                     ? 'shadow-s3.html'
-                    : 'index.html';
+                    : path === '/shadow-mismatch'
+                      ? 'shadow-mismatch.html'
+                      : path === '/shadow-mismatch-control'
+                        ? 'shadow-mismatch-control.html'
+                        : 'index.html';
       return new Response(await readFile(join(consumer, file), 'utf8'), {
         headers: {
           'content-type': /\.js$/.test(file)
@@ -498,6 +502,71 @@ export default {
     await writeFile(join(consumer, 'shadow.js'), shadowJs);
     await writeFile(join(consumer, 'shadow.js.map'), JSON.stringify(shadowMap));
     await writeFile(join(consumer, 'shadow-s3.html'), shadowPage);
+    // M12-S3 mismatch negative: the SAME document plus one pre-activation
+    // corruption of the claimed root's static-attribute seed. The probe script
+    // is injected ahead of the deferred module, so it runs after the parser has
+    // adopted the DSD template and before the generated claim: the claim walks
+    // corrupted bytes, exactly the drift the static-seed rule exists to catch.
+    // The control is the same builder with a no-op corruption (set the value
+    // back to itself), so "the same page without the corruption claims cleanly"
+    // is byte-identical except for that one statement.
+    const mismatchProbe = (corruption: string) => `<script>
+(function () {
+  var host = document.querySelector('proof-shadow');
+  var shadow = host.shadowRoot;
+  var card = shadow.querySelector('#proof-shadow-card');
+  var declaredKind = card.getAttribute('data-kind');
+  window.__m3 = {
+    declaredKind: declaredKind,
+    shadowHtml: shadow.innerHTML,
+    errors: [],
+    records: []
+  };
+  // Fail-closed evidence: the shell rethrows when no onError handler is
+  // registered, so the refusal reaches the page as an uncaught coded error.
+  window.addEventListener('error', function (event) {
+    var error = event.error;
+    window.__m3.errors.push({
+      name: error && error.name,
+      code: error && error.code,
+      phase: error && error.phase,
+      severity: error && error.severity,
+      recoverable: error && error.recoverable,
+      message: String((error && error.message) || event.message)
+    });
+  });
+  var observer = new MutationObserver(function (entries) {
+    for (var i = 0; i < entries.length; i++) window.__m3.records.push(entries[i].type);
+  });
+  ${corruption}
+  // Observe AFTER the corruption so the log is claim-period writes only.
+  observer.observe(shadow, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    characterData: true
+  });
+})();
+</script>`;
+    const mismatchDocument = (corruption: string) =>
+      shadowPage.replace(
+        '<script type="module" src="/shadow.js"></script>',
+        `${mismatchProbe(corruption)}<script type="module" src="/shadow.js"></script>`,
+      );
+    // Corrupt exactly one static attribute VALUE on the claimed root. The
+    // emitted claim declares this element's static set as
+    // `[{id}, {data-kind}]` and compares values exactly
+    // (`staticAttributeSeedMismatch`), so appending a suffix trips that arm and
+    // nothing else: the attribute is not queried, not reflected, and no other
+    // rule looks at it.
+    await writeFile(
+      join(consumer, 'shadow-mismatch.html'),
+      mismatchDocument(`card.setAttribute('data-kind', declaredKind + '-corrupt');`),
+    );
+    await writeFile(
+      join(consumer, 'shadow-mismatch-control.html'),
+      mismatchDocument(`card.setAttribute('data-kind', declaredKind);`),
+    );
     console.log(
       `PASS packed S3 build: generated module ${shadowJs.length}B, SSR host ${(serverHostHtml as string).length}B, ` +
         `source map ${shadowMapEvidence.matchingSegments}/${shadowMapEvidence.totalSegments} authored segments`,
@@ -965,12 +1034,321 @@ export default {
           ? `probe liveSubs claim=${liveSubscriptions(claimProbe)} cycles=${liveSubscriptions(cyclesProbe)} dispose=${liveSubscriptions(disposeProbe)} reconnect=${liveSubscriptions(reconnectProbe)}`
           : 'probe unavailable (separate packed-shell instance or no counters)';
 
+        // ---- M12-S3 mismatch negative (the S3 row's last missing word) ----
+        //
+        // `claim-invariants.ts` `staticAttributeSeedMismatch` compares a claimed
+        // element's static attribute seed by NAME, ORDER and EXACT VALUE. The
+        // page's classic probe script rewrites ONE value on the claimed root
+        // BEFORE the deferred module registers the class, so the claim walks
+        // corrupted server bytes. The generated claim raises
+        // `leafClaimMismatch` (`OEIR_LEAF_CLAIM_MISMATCH`, name/phase/severity/
+        // recoverable fixed there), `claimRecipe` rolls the projection back
+        // WITHOUT deleting the borrowed nodes, and — no `onError` handler is
+        // registered on this element — the shell rethrows, so the refusal
+        // escapes as an uncaught coded error rather than a silent adoption.
+        //
+        // BOTH halves are asserted: the refusal (identity + zero writes + no
+        // projection) and the documented post-failure retry (a failed connect
+        // leaves the region fact and the reconcilation flag in place, so
+        // repairing the byte and reconnecting claims the SAME shadow tree and
+        // the re-claimed element is live). The no-corruption control runs on
+        // the identical document so the negative cannot pass trivially.
+        const mismatchPage = await shadowBrowser.newPage();
+        let mismatchEvidence!: {
+          declaredKind: string | null;
+          errorCode: string | null;
+          errorName: string | null;
+          errorPhase: string | null;
+          errorSeverity: string | null;
+          errorRecoverable: boolean | null;
+          errorMessage: string;
+          errorCount: number;
+          errorCountAfterRetry: number;
+          mutationCount: number;
+          mutationTypes: string[];
+          corruptedKind: string | null;
+          title: string | null;
+          listCount: number;
+          projections: number | null;
+          probeUsable: boolean;
+          syncedAfterFailure: boolean;
+          retriedTitle: string | null;
+          retriedListCount: number;
+          retriedKind: string | null;
+          retriedConditionGone: boolean;
+        };
+        let controlEvidence!: {
+          errorCount: number;
+          mutationCount: number;
+          mutationTypes: string[];
+          declaredKind: string | null;
+          kind: string | null;
+          title: string | null;
+          listCount: number;
+          projections: number | null;
+        };
+        try {
+          // The claim is attempted during upgrade, which the module's
+          // `customElements.define` triggers synchronously for the already-parsed
+          // host. The registry answering proves the attempt happened; the two
+          // frames are this leg's existing settle idiom for the post-claim tick.
+          const settleFrames = (target: typeof mismatchPage): Promise<unknown> =>
+            target.evaluate(
+              () =>
+                new Promise<void>((resolve) =>
+                  requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+                ),
+            );
+          await mismatchPage.goto(`${serverOrigin}/shadow-mismatch`);
+          await mismatchPage.waitForFunction(
+            () => typeof customElements.get('proof-shadow') === 'function',
+          );
+          // Deterministic: the refusal is an uncaught error, so wait for the
+          // probe's error log rather than relying on a fixed delay. The wait is
+          // bounded and NON-FATAL on purpose: when the corruption is neutralized
+          // the page legitimately raises nothing, and the assertions below must
+          // be the thing that reports it — a harness timeout would hide which
+          // expectation failed and turn a broken negative into an infrastructure
+          // failure. The frames after it cover the no-error path.
+          await mismatchPage
+            .waitForFunction(
+              () =>
+                (window as unknown as { __m3?: { errors: unknown[] } }).__m3!.errors.length >= 1,
+              undefined,
+              { timeout: 3_000 },
+            )
+            .catch(() => undefined);
+          await settleFrames(mismatchPage);
+          // One more task turn for the engines that dispatch the error event
+          // after module evaluation returns.
+          await mismatchPage.evaluate(
+            () => new Promise<void>((resolve) => setTimeout(resolve, 50)),
+          );
+          mismatchEvidence = await mismatchPage.evaluate(async () => {
+            const scope = window as unknown as {
+              __m3: {
+                declaredKind: string | null;
+                errors: Array<{
+                  name?: string;
+                  code?: string;
+                  phase?: string;
+                  severity?: string;
+                  recoverable?: boolean;
+                  message?: string;
+                }>;
+                records: string[];
+              };
+              __oeProbe?: { snapshot: () => Record<string, number> };
+            };
+            const m3 = scope.__m3;
+            const settle = () =>
+              new Promise<void>((resolve) =>
+                requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+              );
+            const host = document.querySelector('proof-shadow')! as HTMLElement & {
+              open: boolean;
+            };
+            const shadow = host.shadowRoot!;
+            const snapshot = scope.__oeProbe ? scope.__oeProbe.snapshot() : null;
+            const first = m3.errors[0] ?? null;
+            // "Not silently accepted": the refused claim registered nothing, so
+            // a declared-property write must NOT reach the retained shadow tree.
+            // The branch is present because the server rendered it (`open`
+            // defaults to true); a live projection would remove it. The write is
+            // then undone so the retry below starts from the server state.
+            host.open = false;
+            await settle();
+            const syncedAfterFailure = shadow.querySelector('#shadow-condition') === null;
+            const afterFailure = {
+              declaredKind: m3.declaredKind,
+              errorName: first?.name ?? null,
+              errorCode: first?.code ?? null,
+              errorPhase: first?.phase ?? null,
+              errorSeverity: first?.severity ?? null,
+              errorRecoverable: first?.recoverable ?? null,
+              errorMessage: first?.message ?? '',
+              errorCount: m3.errors.length,
+              mutationCount: m3.records.length,
+              mutationTypes: [...new Set(m3.records)],
+              corruptedKind:
+                shadow.querySelector('#proof-shadow-card')?.getAttribute('data-kind') ?? null,
+              title: shadow.querySelector('#shadow-title')?.textContent ?? null,
+              listCount: shadow.querySelectorAll('#shadow-list li').length,
+              projections: snapshot === null ? null : (snapshot.projections ?? null),
+              probeUsable: snapshot !== null,
+              syncedAfterFailure,
+            };
+            // Recovery half: undo the probe write, repair the corrupted value,
+            // then reconnect. The shell's failed-first-connect rollback keeps the
+            // region fact and deliberately leaves a later reconnect to retry.
+            host.open = true;
+            await settle();
+            shadow
+              .querySelector('#proof-shadow-card')!
+              .setAttribute('data-kind', m3.declaredKind ?? '');
+            host.remove();
+            document.body.append(host);
+            await settle();
+            const retried = host.shadowRoot!;
+            // The retry claim's liveness probe: a declared-property write only
+            // reaches the shadow tree if the re-claim actually produced a
+            // projection.
+            host.open = false;
+            await settle();
+            return {
+              ...afterFailure,
+              errorCountAfterRetry: m3.errors.length,
+              retriedTitle: retried.querySelector('#shadow-title')?.textContent ?? null,
+              retriedListCount: retried.querySelectorAll('#shadow-list li').length,
+              retriedKind:
+                retried.querySelector('#proof-shadow-card')?.getAttribute('data-kind') ?? null,
+              retriedConditionGone: retried.querySelector('#shadow-condition') === null,
+            };
+          });
+          const controlPage = await shadowBrowser.newPage();
+          try {
+            await controlPage.goto(`${serverOrigin}/shadow-mismatch-control`);
+            await controlPage.waitForFunction(
+              () => typeof customElements.get('proof-shadow') === 'function',
+            );
+            await controlPage.waitForFunction(
+              () =>
+                (window as unknown as { __m3?: { declaredKind: string } }).__m3!.declaredKind
+                  .length > 0,
+            );
+            await settleFrames(controlPage);
+            controlEvidence = await controlPage.evaluate(() => {
+              const scope = window as unknown as {
+                __m3: {
+                  declaredKind: string | null;
+                  errors: unknown[];
+                  records: string[];
+                };
+                __oeProbe?: { snapshot: () => Record<string, number> };
+              };
+              const shadow = document.querySelector('proof-shadow')!.shadowRoot!;
+              const snapshot = scope.__oeProbe ? scope.__oeProbe.snapshot() : null;
+              return {
+                errorCount: scope.__m3.errors.length,
+                mutationCount: scope.__m3.records.length,
+                mutationTypes: [...new Set(scope.__m3.records)],
+                declaredKind: scope.__m3.declaredKind,
+                kind: shadow.querySelector('#proof-shadow-card')?.getAttribute('data-kind') ?? null,
+                title: shadow.querySelector('#shadow-title')?.textContent ?? null,
+                listCount: shadow.querySelectorAll('#shadow-list li').length,
+                projections: snapshot === null ? null : (snapshot.projections ?? null),
+              };
+            });
+          } finally {
+            await controlPage.close();
+          }
+          const MISMATCH_IDENTITY = 'OEIR_LEAF_CLAIM_MISMATCH';
+          // The negative control first: without the corruption this exact
+          // document claims cleanly, so the mismatch assertions below cannot
+          // pass because the page was already broken.
+          assert.strictEqual(
+            controlEvidence.declaredKind,
+            'packed-shadow',
+            'the probe must read the claimed root or the negative is vacuous',
+          );
+          assert.strictEqual(
+            controlEvidence.errorCount,
+            0,
+            'uncorrupted page raised no claim error',
+          );
+          assert.strictEqual(
+            controlEvidence.mutationCount,
+            0,
+            `uncorrupted control must claim with 0 mutations, saw ${controlEvidence.mutationTypes.join(',')}`,
+          );
+          assert.strictEqual(controlEvidence.kind, 'packed-shadow');
+          assert.strictEqual(controlEvidence.title, 'server title');
+          assert.strictEqual(controlEvidence.listCount, 3);
+          if (controlEvidence.projections !== null) {
+            assert.ok(
+              controlEvidence.projections >= 1,
+              'the uncorrupted control adopted a projection',
+            );
+          }
+          // The refusal: the identity the code actually raises, exactly once.
+          assert.strictEqual(
+            mismatchEvidence.errorCode,
+            MISMATCH_IDENTITY,
+            `corrupted static seed must raise ${MISMATCH_IDENTITY}, saw ` +
+              `${String(mismatchEvidence.errorCode)} (${mismatchEvidence.errorMessage})`,
+          );
+          assert.strictEqual(mismatchEvidence.errorName, 'OpenElementError');
+          assert.strictEqual(mismatchEvidence.errorPhase, 'csr');
+          assert.strictEqual(mismatchEvidence.errorRecoverable, false);
+          assert.ok(
+            mismatchEvidence.errorMessage.startsWith(
+              `${MISMATCH_IDENTITY}: static attribute data-kind has value`,
+            ),
+            `the refusal names the corrupted seed: ${mismatchEvidence.errorMessage}`,
+          );
+          assert.strictEqual(
+            mismatchEvidence.corruptedKind,
+            `${mismatchEvidence.declaredKind}-corrupt`,
+            'the corruption really reached the claim input',
+          );
+          assert.strictEqual(
+            mismatchEvidence.errorCount,
+            1,
+            'one refusal, not a retry loop or a repeated report',
+          );
+          assert.strictEqual(
+            mismatchEvidence.mutationCount,
+            0,
+            `the refused claim must write nothing, saw ${mismatchEvidence.mutationTypes.join(',')}`,
+          );
+          assert.strictEqual(
+            mismatchEvidence.syncedAfterFailure,
+            false,
+            'the refused claim left no live projection for a declared write to reach',
+          );
+          assert.strictEqual(
+            mismatchEvidence.title,
+            'server title',
+            'the refused claim left the borrowed bytes in place',
+          );
+          assert.strictEqual(mismatchEvidence.listCount, 3);
+          if (mismatchEvidence.probeUsable) {
+            assert.strictEqual(
+              mismatchEvidence.projections,
+              0,
+              'the refused claim must not produce a projection',
+            );
+          }
+          // The recovery half: repair + reconnect claims the same tree, and the
+          // re-claimed element is live.
+          assert.strictEqual(
+            mismatchEvidence.errorCountAfterRetry,
+            1,
+            'the repaired retry must not raise a second claim error',
+          );
+          assert.strictEqual(mismatchEvidence.retriedKind, mismatchEvidence.declaredKind);
+          assert.strictEqual(mismatchEvidence.retriedTitle, 'server title');
+          assert.strictEqual(
+            mismatchEvidence.retriedListCount,
+            3,
+            'retry claims one list, no duplicate',
+          );
+          assert.strictEqual(
+            mismatchEvidence.retriedConditionGone,
+            true,
+            'the repaired retry claim is live (a declared write reached the shadow tree)',
+          );
+        } finally {
+          await mismatchPage.close();
+        }
         console.log(
           `PASS ${type.name()} ${shadowBrowser.version()} (packed, LOCAL): shadow generated S3 SSR->claim bytes, ` +
             `0 claim mutations, pre-activation input, source map ${shadowMapEvidence.matchingSegments}/${shadowMapEvidence.totalSegments} authored segments; ` +
             `S2 reorderMutations=${reorder.mutationCount} conditionMutations=${conditionOff.mutationCount}/${conditionOn.mutationCount}; ` +
             `condition-present-reorder-gap={mutations:${conditionPresentGap.mutationCount},types:${conditionPresentGap.mutationTypes.join('+')},conditionNodes:${conditionPresentGap.recreatedConditionNodes},present:${conditionPresentGap.conditionStillPresent}}; ` +
-            `pre-teardown-order=${preTeardown.order.join(',')} dispose-reconnect-order=${teardown.reconnectTexts.join(',')}; ${probeLine}`,
+            `pre-teardown-order=${preTeardown.order.join(',')} dispose-reconnect-order=${teardown.reconnectTexts.join(',')}; ` +
+            `mismatch=${mismatchEvidence.errorCode} mismatchMutations=${mismatchEvidence.mutationCount} ` +
+            `mismatchControlMutations=${controlEvidence.mutationCount} mismatchRetryLive=${mismatchEvidence.retriedConditionGone}; ${probeLine}`,
         );
       } finally {
         await shadowBrowser.close();
