@@ -859,3 +859,44 @@ a leaf-only page-local component is unaffected.
 
 `open-artifact-panel` is therefore still class-lane, and its trial migration is
 reverted. It takes three slotted children at five call sites.
+
+### Third boundary: a CLASS page's nested expansion bypasses the generated descriptor
+
+`open-page-rail` cannot migrate yet, for a reason none of its own code decides.
+Its five call sites are CLASS pages and class components
+(`open-article-view.tsx`, `roadmap.tsx`, `reference.tsx`, `errors.tsx`,
+`changelog.tsx`), which render `<open-page-rail items={…} locale={…}>` through
+the class lane's nested expansion. That expansion serializes the rows as ORDINARY
+host attributes:
+
+```
+<open-page-rail items="[{&quot;id&quot;:&quot;request-boundary&quot;,…}]" locale="en">
+```
+
+Measured consequences in the built page:
+- `items` becomes a huge attribute string instead of riding the JSON seed the
+  generated descriptor declares (`attribute: false`);
+- `data-oe-light` is absent, so the generated light serializer never runs.
+
+So a class caller does not consult the CALLEE's descriptor at all — it applies its
+own attribute rules. That is the mirror image of the second boundary (a generated
+component cannot call an app-local value in a tracked slot): the two lanes can
+compose ONLY through the mechanisms each recognises, and a class caller's nested
+expansion is not one of them for a generated light child.
+
+Two mechanisms this slice DID land while probing it, both independent of the
+migration:
+
+1. `__ssr` for a light root now returns `{ content, hostAttributes }` so the
+   seeded `data-oe-prop-seed` pairs reach the host tag (`f71f45373`). A string
+   result is still accepted, so an older emitted module is byte-identical.
+2. The scrollspy deferral pattern works and is written down: `onConnect`
+   schedules the install on a task, `env.signal`'s abort cancels it (the signal is
+   per-connection and aborts BEFORE the returned cleanups, so a stale task cannot
+   fire into the next claim). `@openelement/ui/instance-state` was tried first and
+   rejected — importing it pulled the cinematic-scroll island's chunk into the
+   rail's chunk.
+
+Until a class caller can render a generated child through the child's own
+descriptor, `open-page-rail` stays class-lane, and so does `open-reading-shell`
+(its only caller relationship is the same shape).
