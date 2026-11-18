@@ -2,7 +2,7 @@
 /** One passive coordinator for the Cinematic V2 native scroll timeline. */
 
 import { defineIslandConfig } from '@openelement/router';
-import { onConnect, onDispose } from '@openelement/element';
+import { onConnect, onDispose } from '@openelement/element/lifecycle';
 import { readInstanceState, writeInstanceState } from '@openelement/ui/instance-state';
 
 export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true });

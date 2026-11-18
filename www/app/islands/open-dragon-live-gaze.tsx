@@ -6,7 +6,7 @@
  * host over on connect and takes it back when the connection ends.
  */
 import { defineIslandConfig } from '@openelement/router';
-import { onConnect, onDispose } from '@openelement/element';
+import { onConnect, onDispose } from '@openelement/element/lifecycle';
 import {
   installDragonLiveGaze,
   uninstallDragonLiveGaze,

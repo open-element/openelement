@@ -18,7 +18,7 @@
  */
 
 import { defineIslandConfig } from '@openelement/router';
-import { onConnect, onDispose } from '@openelement/element';
+import { onConnect, onDispose } from '@openelement/element/lifecycle';
 import { HERO_CURSOR_CSS } from '../site-ui/hero-cursor-css.ts';
 import { readInstanceState, writeInstanceState } from '@openelement/ui/instance-state';
 

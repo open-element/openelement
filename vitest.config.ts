@@ -264,6 +264,16 @@ export default defineConfig({
               replacement: `${rootDir}packages/element/src/internal/compiled/leaf-runtime.ts`,
             },
             {
+              // The lifecycle-intrinsic subpath (A16-LANE-M, M10-P1/P4). The
+              // bare element alias below would rewrite this into
+              // `src/index.ts/lifecycle`, so the specific entry comes first —
+              // same rule as the generated-element entries above. Listed here
+              // rather than relying on the exports map because the browser
+              // conformance project resolves only through this table.
+              find: '@openelement/element/lifecycle',
+              replacement: `${rootDir}packages/element/src/lifecycle.ts`,
+            },
+            {
               find: '@openelement/element',
               replacement: `${rootDir}packages/element/src/index.ts`,
             },

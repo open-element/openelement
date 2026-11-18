@@ -23,6 +23,7 @@ export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = 
     'internal/compiled/runtime': 'src/internal/compiled/runtime.ts',
     'jsx-dev-runtime': 'src/jsx-dev-runtime.ts',
     'jsx-runtime': 'src/jsx-runtime.ts',
+    lifecycle: 'src/lifecycle.ts',
     logger: 'src/logger.ts',
     'no-blocks': 'src/no-blocks.ts',
     server: 'src/server.ts',

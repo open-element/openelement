@@ -525,6 +525,87 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     expect(module).not.toContain('@openelement/element"');
   });
 
+  test('A10b the tree-shakeable /lifecycle subpath is the SAME intrinsic', () => {
+    // A16-LANE-M (M10-P1/P4): the intrinsics are compiler-ERASED, so an authored
+    // import exists only to satisfy binding provenance. Importing them from the
+    // side-effect-free `@openelement/element/lifecycle` subpath keeps the root
+    // entry (whose `sideEffects` flag carries the hydration/Blocks installs) out
+    // of the client graph. Admission is otherwise identical.
+    const source =
+      SIDECAR +
+      "import { onConnect, onDispose } from '@openelement/element/lifecycle';\n" +
+      'function SubpathHook(props: { seed: number }) {\n' +
+      '  onConnect((env) => { globalThis.__oeSubpathHost = env.host; });\n' +
+      '  onDispose(() => { globalThis.__oeSubpathDispose = 1; });\n' +
+      '  return <p>{props.seed}</p>;\n' +
+      '}\n' +
+      'export default SubpathHook;\n';
+    const module = compileIsland('lifecycle-subpath', source);
+    // The hook is carried into the retained factory and the intrinsic call is
+    // erased; the authored specifier is gone from the emitted module, exactly as
+    // it is for the root-entry spelling. The env form lands in its own recorded
+    // bucket (`__oe_connectEnv`), the same as the root-entry spelling does.
+    expect(functionText(module, '__oe_rootInstance')).toContain('__oe_connectEnv.push((');
+    // The authored ROOT-ENTRY and /lifecycle specifiers are both gone from the
+    // emitted IMPORT list: the module imports only the internal leaf-runtime
+    // artifact target. (The inline source map still carries the authored text,
+    // so the assertion is scoped to the import statements.)
+    const emittedImports = module
+      .split('\n')
+      .filter((line) => line.startsWith('import '))
+      .join('\n');
+    expect(emittedImports).not.toContain('/lifecycle');
+    expect(emittedImports).not.toContain('from "@openelement/element"');
+    expect(emittedImports).toContain('@openelement/element/internal/compiled/leaf-runtime');
+
+    // Aliases are followed for the subpath spelling too.
+    const aliased =
+      SIDECAR +
+      "import { onConnect as connect } from '@openelement/element/lifecycle';\n" +
+      'function SubpathAliased(props: { seed: number }) {\n' +
+      '  connect(() => { globalThis.__oeSubpathAlias = 1; });\n' +
+      '  return <p>{props.seed}</p>;\n' +
+      '}\n' +
+      'export default SubpathAliased;\n';
+    const aliasedModule = compileIsland('lifecycle-subpath-alias', aliased);
+    expect(functionText(aliasedModule, '__oe_rootInstance')).toContain('__oe_connect.push((');
+    expect(aliasedModule).not.toContain('connect(() =>');
+
+    // Every other admission rule is unchanged: a third subpath and a foreign
+    // module both fall through to the unchanged statement refusal.
+    const frontendCodes = (
+      text: string,
+      admission: { admission: 'root'; root: string },
+    ): string[] =>
+      compileFunctionModule(text, '/proj/src/subpath.tsx', {
+        importClassifier: GENERATED_ELEMENT_IMPORT_CLASSIFIER,
+        lifecycleAdmission: admission,
+      }).diagnostics.map((diagnostic) => diagnostic.code);
+    const rootAdmission = { admission: 'root', root: 'Root' } as const;
+    const hook = 'onConnect(() => { globalThis.__oeX = 1; });';
+    for (const specifier of [
+      '@openelement/element/lifecycle/extra',
+      '@openelement/element/no-blocks',
+    ]) {
+      expect(
+        frontendCodes(
+          `import { onConnect } from '${specifier}';\n` +
+            `function Root(props) {\n  ${hook}\n  return <p>{props.x}</p>;\n}\n`,
+          rootAdmission,
+        ),
+        specifier,
+      ).toEqual(['OEC9041']);
+    }
+    // A malformed hook on the new specifier keeps the same OEC9042 form code.
+    expect(
+      frontendCodes(
+        "import { onConnect } from '@openelement/element/lifecycle';\n" +
+          'function Root(props) {\n  onConnect();\n  return <p>{props.x}</p>;\n}\n',
+        rootAdmission,
+      ),
+    ).toEqual(['OEC9042']);
+  });
+
   test('A11 host-binding reads keep the existing fail-closed gates', () => {
     // A signal is a host binding in the generated element lane (unchanged M09
     // boundary): a hook reading it is refused by the existing gate.

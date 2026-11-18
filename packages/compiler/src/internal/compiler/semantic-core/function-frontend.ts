@@ -82,6 +82,34 @@ const CODES = {
   security: 'OEC9044',
 } as const;
 
+/**
+ * The module specifiers the lifecycle intrinsics may be imported from
+ * (A16-LANE-M, M10-P1/P4).
+ *
+ * Both spellings name the SAME three functions: `@openelement/element/lifecycle`
+ * is a side-effect-free subpath that re-exports the identical fail-closed
+ * stand-ins, and exists only so an author module's import survives tree
+ * shaking — the root entry is flagged in `sideEffects` (it carries the
+ * hydration and Block install edges), so importing an intrinsic the compiler
+ * will ERASE from the root dragged the generic executor into the client graph
+ * for a binding the emitted module never references.
+ *
+ * Admission is otherwise IDENTICAL for both spellings: the same import form,
+ * the same three imported names, the same placement/arity/shape rules. A
+ * subpath other than this one stays a foreign module (unchanged fall-through to
+ * the pre-existing component-body grammar), and an unrelated name imported
+ * from `/lifecycle` is not an intrinsic.
+ */
+const LIFECYCLE_INTRINSIC_SPECIFIERS: ReadonlySet<string> = new Set([
+  '@openelement/element',
+  '@openelement/element/lifecycle',
+]);
+
+/** True when `specifier` is a canonical lifecycle-intrinsic module. */
+function isLifecycleIntrinsicSpecifier(specifier: string): boolean {
+  return LIFECYCLE_INTRINSIC_SPECIFIERS.has(specifier);
+}
+
 // ─── Component model (compiler-private; M05/M06 consumers) ─────────────────
 
 /** One lowered expression reference: registry id + evaluation mode. */
@@ -706,11 +734,14 @@ class FunctionFrontendBuilder {
    *
    * Recognition is binding provenance, exactly like the `element`/`property`
    * decorator intrinsics: the callee must be a value-position identifier whose
-   * resolved binding is a named import of '@openelement/element' (aliases
-   * followed) whose imported name is `onConnect`/`onDispose`. A local shadow,
-   * a namespace member or a foreign module's same-named function is NOT an
-   * intrinsic and falls through to the pre-existing component-body grammar
-   * (its `ExpressionStatement` refusal is the unchanged diagnostic).
+   * resolved binding is a named import of '@openelement/element' or
+   * '@openelement/element/lifecycle' (aliases followed) whose imported name is
+   * `onConnect`/`onDispose`/`onPropertyChange`. The two specifiers name the
+   * same intrinsics — the subpath is the tree-shakeable spelling and admits
+   * under exactly the same rules. A local shadow, a namespace member, a third
+   * subpath or a foreign module's same-named function is NOT an intrinsic and
+   * falls through to the pre-existing component-body grammar (its
+   * `ExpressionStatement` refusal is the unchanged diagnostic).
    *
    * The callback is lowered as an ordinary authored expression in `handler`
    * mode (no tracked dependencies; type-erased). Its reads are classified by
@@ -755,7 +786,7 @@ class FunctionFrontendBuilder {
     if (!ts.isIdentifier(callee)) return null;
     const binding = this.resolved.resolveIdentifier(callee);
     if (binding === undefined || binding.origin.form !== 'import') return null;
-    if (binding.origin.specifier !== '@openelement/element') return null;
+    if (!isLifecycleIntrinsicSpecifier(binding.origin.specifier)) return null;
     const importedName = binding.origin.importedName;
     if (
       importedName !== 'onConnect' &&

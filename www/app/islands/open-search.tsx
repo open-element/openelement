@@ -1,7 +1,7 @@
 /** @jsxImportSource @openelement/element */
 /** Compiler-owned search view; browser behavior lives in open-search-controller.ts. */
 
-import { onConnect, onDispose } from '@openelement/element';
+import { onConnect, onDispose } from '@openelement/element/lifecycle';
 import { defineIslandConfig } from '@openelement/router';
 import {
   closeSearchFromResults,

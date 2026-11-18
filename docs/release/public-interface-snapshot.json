@@ -594,6 +594,7 @@
         "./internal/compiled/runtime": "./src/internal/compiled/runtime.ts",
         "./jsx-dev-runtime": "./src/jsx-dev-runtime.ts",
         "./jsx-runtime": "./src/jsx-runtime.ts",
+        "./lifecycle": "./src/lifecycle.ts",
         "./logger": "./src/logger.ts",
         "./no-blocks": "./src/no-blocks.ts",
         "./server": "./src/server.ts"
@@ -1137,6 +1138,14 @@
             "JSX=namespace:Element,ElementAttributesProperty,ElementChildrenAttribute,ElementClass,IntrinsicAttributes,IntrinsicElements",
             "jsx=value:{call:(_type:unknown,_props:unknown)=>{readonly __compiledJsxElement:typeof __compiledJsxElement}}",
             "jsxs=value:{call:(_type:unknown,_props:unknown)=>{readonly __compiledJsxElement:typeof __compiledJsxElement}}"
+          ]
+        },
+        "./lifecycle": {
+          "publicShapeSha256": "6625005e2f1239c17f242d4f4df791d8f0d95eb9b65cfa596d13c561d1c857be",
+          "publicSymbols": [
+            "onConnect=value:{call:(callback:{call:(env:{readonly host:HTMLElement;readonly signal:AbortSignal;readonly states:CustomStateSet})=>union(void|{call:()=>void})})=>void}",
+            "onDispose=value:{call:(callback:{call:(env:{readonly host:HTMLElement;readonly signal:AbortSignal;readonly states:CustomStateSet})=>void})=>void}",
+            "onPropertyChange=value:{call:(callback:{call:(event:{readonly host:HTMLElement;readonly name:string;readonly signal:AbortSignal;readonly states:CustomStateSet;readonly value:unknown})=>void})=>void}"
           ]
         },
         "./logger": {
