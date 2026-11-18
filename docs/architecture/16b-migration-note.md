@@ -1098,4 +1098,3 @@ does. The failure is permanent, not a missed first pass: a scanner that records
 its state before its empty-target early return binds the host to zero targets for
 the life of the connection. Handlers that only read `env.host` / props / signals
 need no deferral.
-
