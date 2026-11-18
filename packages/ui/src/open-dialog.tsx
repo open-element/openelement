@@ -11,7 +11,7 @@
  * the inner <dialog> and the declared `label` drives the aria-label/text
  * sinks; the top-layer/modal choreography (showModal/show/close) and the
  * close-echo guards stay imperative in the dialog-machine module helper, run
- * from the lifecycle intrinsics (ADR-0182). The class lane's `show` / `close`
+ * from the lifecycle intrinsics. The class lane's `show` / `close`
  * / `toggle` methods are property sugar and are retired with the class export:
  * drive the declared `open` property instead (`el.open = true`).
  *

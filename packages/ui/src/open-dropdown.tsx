@@ -10,8 +10,8 @@
  * Generated authoring. The compiled template carries the trigger span and the
  * native popover content; the realm-unique anchor-name assignment and the
  * cross-shadow focus-return restoration stay imperative in the
- * dropdown-machine module helper, run from the lifecycle intrinsics
- * (ADR-0182). The class lane's `anchorStyle` readonly signal — a derived
+ * dropdown-machine module helper, run from the lifecycle intrinsics.
+ * The class lane's `anchorStyle` readonly signal — a derived
  * `position-anchor: ${anchorName}` — is retired with the class export: the
  * activation helper applies both anchor halves imperatively, and a consumer
  * who needs the value derives it from the declared `anchorName` property.

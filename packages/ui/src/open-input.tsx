@@ -13,8 +13,7 @@
  * visibility/ARIA surface is authored as inline JSX expressions (the generated
  * lane has no authoring `computed`), and the FORM CONTRACT (setFormValue,
  * required validity, reset/restore, fieldset states) is the SHELL's mapping.
- * `input-machine.ts` only projects the live value and the disabled surface
- * (ADR-0182).
+ * `input-machine.ts` only projects the live value and the disabled surface.
  *
  * TWO CONSTRAINTS SHAPE THIS TEMPLATE, and both come from the generated lane:
  *
