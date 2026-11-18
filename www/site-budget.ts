@@ -37,6 +37,19 @@
  *     The self-hosted Prism runtime (~40 KiB) that an older paragraph counted
  *     was retired with the build-time highlighter (#1552) — code highlighting
  *     is static page HTML with zero client-JS cost.
+ *   - 2026-11-18: totalJsKB 376 → 408, on the `open-search` migration — the
+ *     fourth and largest www island to move, and the one the previous entry's
+ *     "covers the remaining three www islands plus normal drift" intended to
+ *     absorb. It did not: the search island is the biggest of the five (its
+ *     compiled recipe mounts a dialog, a combobox shell and a keyed hit list),
+ *     and it went 21.7 → 47.0 KiB (+25.3 KiB) while the shared runtime chunk
+ *     grew 125.0 → 127.3 KiB (+2.3 KiB). Baseline 359.4 KiB → 390.0 KiB
+ *     measured, i.e. +30.6 KiB; 408 keeps ~4.4% headroom over that measurement
+ *     and leaves the 376-era headroom intact for `open-page-rail`, which is
+ *     still class-lane (its `computed` rows block it) and still to move.
+ *     Same standing instruction as above: lowering this is how the SLO is
+ *     tightened, and P1's end state — the generic executor leaving the shared
+ *     chunk once every island has moved — is the next re-measure point.
  *
  * Exceeding either value fails the official-Site build test; the build
  * manifest reports against the same numbers. Lowering these values is the
@@ -46,7 +59,7 @@
  */
 export const SITE_BUDGET = {
   islandKB: 84,
-  totalJsKB: 376,
+  totalJsKB: 408,
 } as const;
 
 /**

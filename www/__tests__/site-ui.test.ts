@@ -1,20 +1,35 @@
 import { expect, test } from 'vitest';
-import { compileElementProgram } from '@openelement/compiler';
+import { compileElementProgram, compileGeneratedElementIfAdmitted } from '@openelement/compiler';
 import { REPOSITORY_URL } from '../app/site-ui/open-layout-navigation.ts';
 import { readFile } from 'node:fs/promises';
 
 /**
- * The compiler admits no sidecar by default (#1468): compiling an island
- * module injects the host's island admission descriptor (the same one the
- * router build injects).
+ * The emitted descriptor's `properties` rows, read off the generated module.
+ *
+ * The generated lane publishes no runtime metadata object the way a compiled
+ * class's Part Program does, so the emitted descriptor literal IS the row
+ * table contract. Parsing it here pins the rows without restating them.
  */
-const ISLAND_SIDECARS = [
-  {
-    moduleSpecifier: '@openelement/router',
-    exportName: 'defineIslandConfig',
-    kind: 'static-sidecar',
-  },
-] as const;
+function descriptorRows(code: string): Array<{
+  name: string;
+  attribute: string | null;
+  type: string;
+  reflect: boolean;
+}> {
+  const rows: Array<{ name: string; attribute: string | null; type: string; reflect: boolean }> =
+    [];
+  const pattern =
+    /\{ name: ("(?:[^"\\]|\\.)*"), attribute: (null|"(?:[^"\\]|\\.)*"), type: ("(?:[^"\\]|\\.)*"), reflect: (true|false)/g;
+  for (const match of code.matchAll(pattern)) {
+    rows.push({
+      name: JSON.parse(match[1]!) as string,
+      attribute: match[2] === 'null' ? null : (JSON.parse(match[2]!) as string),
+      type: JSON.parse(match[3]!) as string,
+      reflect: match[4] === 'true',
+    });
+  }
+  return rows;
+}
 
 const siteModules = [
   ['open-standards-visual', '../app/site-ui/open-standards-visual.tsx'],
@@ -54,18 +69,28 @@ test('app/layout.tsx is the compiled shell convention (no island declaration)', 
 test('open-search keeps its view compiler-owned and its browser state external', async () => {
   const url = new URL('../app/islands/open-search.tsx', import.meta.url);
   const source = await readFile(url, 'utf8');
-  expect(source).toContain("defineIslandConfig({ hydrate: 'load', ssr: true })");
-  expect(source).toContain("@element('open-search')");
+  expect(source).toContain("root: 'light'");
+  expect(source).toContain('ssr: true');
   expect(source).toContain("from '../site-ui/open-search-controller.ts'");
-  const result = compileElementProgram(source, url.pathname, {
-    staticSidecars: ISLAND_SIDECARS,
+  // The generated lane, not the class lane: the module must be admitted by the
+  // generated-element transform and must not declare an @element class.
+  expect(source).not.toContain('extends OpenElement');
+  const result = compileGeneratedElementIfAdmitted(source, url.pathname, {
+    site: { tag: 'open-search' },
   });
-  expect(result.program.tag).toEqual('open-search');
-  // The view is property-driven (C-5): the shell passes the page-locale chrome
-  // copy as attributes (searchChromeStrings), while the empty/error message
-  // and the hit list are compiled properties the controller writes; hits
-  // render through one list Block with container-delegated click dismissal.
-  expect(result.program.metadata.properties.map((property) => property.name)).toEqual([
+  expect(result, 'open-search must be admitted by the generated-element lane').not.toBeNull();
+  expect(result!.component).toEqual('OpenSearch');
+  // Presentational rows only. The class lane's two `computed` rows
+  // (`hideSkeleton` / `hideEmpty`) are GONE from the table: the generated lane
+  // has no authoring `computed`, so each derivation inlines at its `hidden`
+  // sink (16b-migration-note R1/R1b) and both stay reactive there.
+  expect(result!.code).toContain('toggleAttribute("hidden", Boolean((props . hasHits');
+  expect(result!.code).toContain('toggleAttribute("hidden", Boolean((!  props . searching');
+  // The row table the shell seeds from the host attributes. `hits` is the
+  // property-only JSON-seed row (ADR-0182 D-18c); the other twelve carry an
+  // attribute channel except the two controller-written booleans.
+  const rows = descriptorRows(result!.code);
+  expect(rows.map((row) => row.name)).toEqual([
     'locale',
     'triggerLabel',
     'dialogLabel',
@@ -77,8 +102,17 @@ test('open-search keeps its view compiler-owned and its browser state external',
     'hasHits',
     'searching',
     'hits',
-    'hideSkeleton',
-    'hideEmpty',
   ]);
-  expect(result.program.parts.filter((part) => part.k === 'event').length).toEqual(4);
+  expect(rows.find((row) => row.name === 'locale')).toMatchObject({
+    attribute: 'locale',
+    reflect: true,
+  });
+  for (const row of rows.filter((candidate) => candidate.name === 'hits')) {
+    expect(row.attribute).toBeNull();
+    expect(row.type).toBe('array');
+  }
+  // Four authored event bindings — trigger open, backdrop dismiss, input
+  // search, results-click dismiss — emitted once per path (mount + claim).
+  expect(result!.code.match(/addEventListener\("click"/g)?.length).toBe(6);
+  expect(result!.code.match(/addEventListener\("input"/g)?.length).toBe(2);
 });

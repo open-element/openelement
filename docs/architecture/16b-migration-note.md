@@ -352,6 +352,41 @@ So the rule has three parts:
 A local function DECLARATION called in a tracked slot is refused (OEC9041); the
 `const` arrow form is the one that works.
 
+### R1c — a BARE boolean attribute is STATIC; an expression is DYNAMIC (measured)
+
+This is the inverse of the intuition, and it is invisible in SSR. Measured on the
+real compiler:
+
+| JSX | claim static seed | runtime write is |
+| --- | --- | --- |
+| `hidden` (bare shorthand) | `[{ name: "hidden", value: "" }]` | **a claim violation** |
+| `hidden={true}` | `[]` + `hidden` in the dynamic skip list | safe |
+
+Same rendered bytes (`hidden=""`), opposite safety. A bare boolean is literalized
+into the static seed; ANY expression — even a constant — joins the claim's dynamic
+skip list. So a component whose CONTROLLER owns an attribute at run time must
+spell it as an expression, and the repo's `react/jsx-boolean-value` lint rule wants
+exactly the broken spelling, so that one line needs a disable with the reason.
+
+The same trap has a second face: `hidden={!props.searching}` looks safer and is
+worse. The props record has ONE coarse change signal, so that write re-runs on
+every props commit — when results land (`searching: false`, the dialog must stay
+open) it slams the overlay shut. A CONSTANT expression binds no dependency, so it
+never refreshes and the controller stays the sole runtime writer.
+
+### R1d — a static directory of sibling elements is consumed permanently
+
+Three plain sibling `<span>`s compile to a static-sibling DIRECTORY, and a
+directory claim that commits every declared range stays permanent. A reconnect
+then re-claims a directory it can never reopen and throws
+`OE_RUNTIME_STATIC_RANGE_MISMATCH`. Rendering the same three elements from a small
+list (`{[0, 1, 2].map((row) => <span key={row} … />)}`) produces the same bytes and
+re-arms on every connection.
+
+Both findings came from ONE migration (`open-search`) whose acceptance was a live
+e2e: a markup assertion would have passed while the dialog was broken after every
+reconnect.
+
 ### R2 — a static id inside a shadow root belongs in the template, not in a connect-time write
 
 `onConnect` runs as a PROLOGUE, before mount/claim DOM work (the unchanged
