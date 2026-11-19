@@ -72,4 +72,4 @@ there (`git show 3b5c7a9a^:docs/audit/2026-07-27-application-loop-framework-rese
 - [ADR-0179-unix-philosophy-absorption.md](./ADR-0179-unix-philosophy-absorption.md)
 - [ADR-0180-function-component-lifecycle-intrinsics.md](./ADR-0180-function-component-lifecycle-intrinsics.md)
 - [ADR-0181-generated-element-ssr-and-retention.md](./ADR-0181-generated-element-ssr-and-retention.md)
-- [ADR-0182-function-component-capability-api.md](./ADR-0182-function-component-capability-api.md) — ACCEPTED: owner sign-off recorded 2026-11-19
+- [ADR-0182-function-component-capability-api.md](./ADR-0182-function-component-capability-api.md)
