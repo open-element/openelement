@@ -61,6 +61,7 @@ import {
   elementRuntimeChunkName,
   requireElementRuntimeChunk,
   requireEntryStaticGraphFreeOfRuntime,
+  requireExecutorChunkUnreachableFromIslands,
   resolveElementRuntimeIdentity,
 } from '../vite/internal/element-runtime-chunk.ts';
 import { requireViteHelperChunk, viteHelperChunkName } from '../vite/internal/vite-helper-chunk.ts';
@@ -913,6 +914,30 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
                   return packageIslandChunkName(id, packageDeclIdentities()) ?? null;
                 },
                 priority: 0,
+                // B1 layer-5, MEASURED on the real www build: a
+                // `codeSplitting` group pulls the captured modules'
+                // dependency closure into its own chunk by default
+                // (`includeDependenciesRecursively` defaults to `true` in
+                // rolldown 1.1.5 — see the shipped
+                // `CodeSplittingGroup.includeDependenciesRecursively`
+                // doc). The callback therefore decided `element-runtime`
+                // for 37 modules and they still shipped inside
+                // `islands/element-executor-*.js` (43 modules), because
+                // the six executor entries import them. The grouping
+                // answer of a module is not the chunk it lands in unless
+                // this is off; the emitted-chunk guards below compare
+                // chunk membership, and both of them read the pre-fix
+                // layout as "the runtime split across two chunks".
+                //
+                // Turning the recursive capture off makes the group a
+                // module-level decision, which is what the two tables are
+                // written against (exact package-relative identity). The
+                // documented trade — a higher chance of circular chunks —
+                // is accepted here because the alternative is a chunk
+                // whose membership the decision function cannot predict,
+                // and the emitted-graph guards already fail the build
+                // rather than shipping a layout they cannot name.
+                includeDependenciesRecursively: false,
               },
             ],
           },
@@ -1180,6 +1205,16 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
     if (entryNeedsElementRuntime) {
       requireElementRuntimeChunk(collectClientBuildChunks(outputs), elementRuntimeIdentity);
     }
+
+    // B1's complementary half: the executor entries the split homes in their
+    // own `element-executor` group must stay off every page floor (the entry
+    // and every island chunk). No entry or island may STATICALLY reach the
+    // executor; a class island pulls it lazily, only when it renders. Zero
+    // executor chunks (a pure generated-lane build) passes — nothing to reach.
+    requireExecutorChunkUnreachableFromIslands(
+      collectClientBuildChunks(outputs),
+      elementRuntimeIdentity,
+    );
 
     // B2 gap (a), fail closed, both halves:
     //

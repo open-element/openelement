@@ -234,6 +234,18 @@ export const ClientBuildErrorCode = {
    */
   ENTRY_STATIC_GRAPH_REACHES_RUNTIME: 'OE_CLIENT_BUILD_ENTRY_STATIC_GRAPH_REACHES_RUNTIME',
   /**
+   * A page floor — the client entry or an island chunk — statically reaches the
+   * dedicated element-executor chunk (the six generic-executor entry modules
+   * {@linkcode EXECUTOR_ENTRY_RELATIVE_MODULES} names, homed in the
+   * `element-executor` group by B1's split). The class-island executor surface
+   * is a lazy pull: an island only needs it when a class island renders, so a
+   * static edge from a page floor makes the executor an unconditional download
+   * on every page and moves the P1 load surface into the floor — the exact
+   * pre-split graph the split removed. The build fails instead of shipping it.
+   */
+  ELEMENT_EXECUTOR_REACHABLE_FROM_ISLANDS:
+    'OE_CLIENT_BUILD_ELEMENT_EXECUTOR_REACHABLE_FROM_ISLANDS',
+  /**
    * The emitted client graph carries Vite's injected preload helper modules,
    * but they are not homed in the single `vite-helper` chunk
    * (`vite-helper-chunk.ts`). Anywhere else — typically inside a lazily-loaded

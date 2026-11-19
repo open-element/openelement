@@ -18,12 +18,14 @@ import { afterAll, expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { OpenElementError } from '@openelement/element';
 import {
+  ELEMENT_EXECUTOR_CHUNK_NAME,
   ELEMENT_RUNTIME_CHUNK_NAME,
   type ElementRuntimeIdentity,
   elementRuntimeChunkName,
   findElementRuntimeChunkFile,
   requireElementRuntimeChunk,
   requireEntryStaticGraphFreeOfRuntime,
+  requireExecutorChunkUnreachableFromIslands,
   resolveElementRuntimeIdentity,
 } from '../src/vite/internal/element-runtime-chunk.ts';
 import type { ClientBuildChunk } from '../src/vite/client-asset-manifest.ts';
@@ -445,4 +447,89 @@ test('requireEntryStaticGraphFreeOfRuntime finds the runtime behind an island re
     'statically reaches the shared element runtime',
   );
   expect(error.code).toEqual(ClientBuildErrorCode.ENTRY_STATIC_GRAPH_REACHES_RUNTIME);
+});
+
+// ─── requireExecutorChunkUnreachableFromIslands: B1's complementary half ──
+//
+// The split homes the six generic-executor entry modules in their own
+// `element-executor` group so the leaf primitives every generated island needs
+// no longer drag the executor entries along. This guard asserts the other half:
+// no page floor (the entry, or any `island-*` chunk) may STATICALLY reach the
+// executor group — a class island pulls it lazily, only when it renders.
+
+const EXECUTOR_FILE = `islands/${ELEMENT_EXECUTOR_CHUNK_NAME}-Zx9qp.js`;
+
+function executorChunk(fileName = EXECUTOR_FILE): ClientBuildChunk {
+  // One of the six executor entries the split groups under the executor name.
+  return emittedChunk(fileName, ['/site/packages/element/src/internal/compiled/runtime/kernel.ts'], []);
+}
+
+test('requireExecutorChunkUnreachableFromIslands accepts the post-split lazy graph', () => {
+  // The generated-lane island statically imports the LEAF runtime (a different
+  // chunk), never the executor; the executor is a dynamic target the island
+  // loads only when a class island renders. Static edges do not reach it.
+  expect(() =>
+    requireExecutorChunkUnreachableFromIslands(
+      [
+        emittedChunk('islands/client.js', ['\0virtual:open-client-entry'], [], true),
+        emittedChunk(RUNTIME_FILE, ['/site/packages/element/src/index.ts'], []),
+        emittedChunk(ISLAND_FILE, ['/site/app/islands/open-search.tsx'], [RUNTIME_FILE]),
+        executorChunk(),
+      ],
+      WORKSPACE_IDENTITY,
+    ),
+  ).not.toThrow();
+});
+
+test('requireExecutorChunkUnreachableFromIslands fails when an island statically reaches the executor', () => {
+  const error = assertThrowsIncludes(
+    () =>
+      requireExecutorChunkUnreachableFromIslands(
+        [
+          emittedChunk('islands/client.js', ['\0virtual:open-client-entry'], [], true),
+          emittedChunk(ISLAND_FILE, ['/site/app/islands/class-open.tsx'], [EXECUTOR_FILE]),
+          executorChunk(),
+        ],
+        WORKSPACE_IDENTITY,
+      ),
+    OpenElementError,
+    'statically reaches the element-executor chunk',
+  );
+  expect(error.code).toEqual(ClientBuildErrorCode.ELEMENT_EXECUTOR_REACHABLE_FROM_ISLANDS);
+  expect(error.phase).toEqual('build');
+  // The trail names the whole hop that carried the edge.
+  expect(error.message).toContain(ISLAND_FILE);
+  expect(error.message).toContain(EXECUTOR_FILE);
+});
+
+test('requireExecutorChunkUnreachableFromIslands fails when the entry reaches the executor transitively', () => {
+  const error = assertThrowsIncludes(
+    () =>
+      requireExecutorChunkUnreachableFromIslands(
+        [
+          emittedChunk('islands/client.js', ['\0virtual:open-client-entry'], ['islands/mid.js'], true),
+          emittedChunk('islands/mid.js', ['/site/app/mid.ts'], [EXECUTOR_FILE]),
+          executorChunk(),
+        ],
+        WORKSPACE_IDENTITY,
+      ),
+    OpenElementError,
+    'statically reaches the element-executor chunk',
+  );
+  expect(error.code).toEqual(ClientBuildErrorCode.ELEMENT_EXECUTOR_REACHABLE_FROM_ISLANDS);
+  expect(error.message).toContain('islands/client.js -> islands/mid.js -> ');
+});
+
+test('requireExecutorChunkUnreachableFromIslands passes when the graph carries no executor chunk', () => {
+  // A pure generated-lane build emits no executor chunk: there is nothing to
+  // reach, and the guard answers honestly instead of failing.
+  expect(() =>
+    requireExecutorChunkUnreachableFromIslands(
+      [
+        emittedChunk('islands/client.js', ['\0virtual:open-client-entry'], [], true),
+        emittedChunk(RUNTIME_FILE, ['/site/packages/element/src/index.ts'], []),
+      ],
+      WORKSPACE_IDENTITY,
+    ),
+  ).not.toThrow();
 });

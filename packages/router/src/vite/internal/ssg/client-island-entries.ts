@@ -18,6 +18,22 @@ import { resolveIslandHydrate, resolveIslandSsrDsd } from './island-scanner.ts';
 import { readGeneratedElementHost } from './generated-element-host-metadata.ts';
 import type { ClientIslandDeliveryEntry, IslandDeliveryStrategy } from './delivery.ts';
 
+/**
+ * The ONE generated-lane verdict, read off the island scan's generated-host
+ * identity (M11-3 lane fact). A `lane-declined`/`lane-refused` module is not
+ * owned by the generated lane, so only the three owned kinds set the client
+ * entry's lane fact. Both branches call this: the local branch with the scan's
+ * carrier, the package branch with the carrier the package declaration carries.
+ */
+function ownsGeneratedLane(host: ReturnType<typeof readGeneratedElementHost>): boolean {
+  return (
+    host !== undefined &&
+    (host.kind === 'producer' ||
+      host.kind === 'missing-producer' ||
+      host.kind === 'light-no-producer')
+  );
+}
+
 type ScannedIslandMeta = Partial<IslandDecl> & {
   hydrate?: IslandDeliveryStrategy;
   media?: string;
@@ -57,14 +73,8 @@ export function buildClientIslandEntries(options: {
         upgradeStrategy,
       ) as IslandDeliveryStrategy;
       // M11-3 lane fact: the scan's compiler-owned generated-host identity is
-      // the ONE source. A `lane-declined`/`lane-refused` module is not owned by
-      // the generated lane (the class lane or the transform owns it/fails it).
-      const generatedHost = readGeneratedElementHost(meta);
-      const generatedLane =
-        generatedHost !== undefined &&
-        (generatedHost.kind === 'producer' ||
-          generatedHost.kind === 'missing-producer' ||
-          generatedHost.kind === 'light-no-producer');
+      // the ONE source (see ownsGeneratedLane).
+      const generatedLane = ownsGeneratedLane(readGeneratedElementHost(meta));
       return {
         tagName,
         // #460: resolve() emits drive-letter backslash paths on Windows; convert
@@ -98,10 +108,17 @@ export function buildClientIslandEntries(options: {
         (island as IslandDecl & { hydrate?: IslandDeliveryStrategy }).hydrate,
         upgradeStrategy,
       ) as IslandDeliveryStrategy;
+      // M11-3 lane fact, SAME single source as the local branch: the package
+      // declaration carries the compiler-owned generated-host identity the
+      // manifest published (`buildPackageIslandDecls`) or the scan resolved
+      // (`attachPackageIslandHostIdentities`). Read it through the one accessor
+      // and the one verdict — never re-derive it from a published name here.
+      const generatedLane = ownsGeneratedLane(readGeneratedElementHost(island));
       return {
         tagName: island.tagName,
         modulePath: island.modulePath,
         isPackage: island.source === 'package' || island.isPackage === true,
+        ...(generatedLane ? { generatedLane: true as const } : {}),
         // #638: forward the named export so the client factory reads
         // mod[exportName] (UI package chunks dropped `export default`).
         exportName: island.exportName,
