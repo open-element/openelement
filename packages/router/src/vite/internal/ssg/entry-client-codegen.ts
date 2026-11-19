@@ -85,6 +85,23 @@ function quoteSingle(value: string): string {
     .replaceAll('\u2029', '\\u2029')}'`;
 }
 
+/**
+ * One declaration's normalized identity, for a conflict message that names BOTH
+ * sources. The dedup below must never resolve a disagreement by keeping the
+ * first declaration silently: the message has to say which two declarations
+ * collided and on which side of the generated/class lane each sits, because the
+ * lane fact decides whether the activation factory loads the executor runtime.
+ */
+function describeClientIslandDeclaration(entry: NormalizedClientIsland): string {
+  const source = entry.isPackage ? 'package' : 'local';
+  const lane = entry.generatedLane === true ? 'generated-lane' : 'class-lane';
+  return (
+    `${source} ${lane} declaration ` +
+    `(module ${entry.modulePath}, strategy ${entry.strategy}, ` +
+    `media ${entry.media ?? 'none'}, export ${entry.exportName ?? 'default'})`
+  );
+}
+
 /** Expand one capability declaration into its one-to-many element names. */
 function expandClientIslandEntries(
   entries: readonly ClientIslandDeliveryInput[],
@@ -111,13 +128,23 @@ function expandClientIslandEntries(
       };
       const prior = seen.get(tagName);
       if (prior) {
+        // M-4b: `generatedLane` is part of the declaration identity, not
+        // decoration. It decides whether the factory waits for (and loads) the
+        // executor runtime (`islandImportFactory` / `activationGroupKey`), so
+        // two declarations that agree on module/strategy/media/export but
+        // disagree on the lane are NOT interchangeable. Fail closed and name
+        // both sources instead of silently keeping the first one.
         if (
           prior.modulePath !== item.modulePath ||
           prior.strategy !== item.strategy ||
           prior.media !== item.media ||
-          prior.exportName !== item.exportName
+          prior.exportName !== item.exportName ||
+          prior.generatedLane !== item.generatedLane
         ) {
-          throw new Error(`Conflicting island capability declarations for ${tagName}`);
+          throw new Error(
+            `Conflicting island capability declarations for ${tagName}: ` +
+              `${describeClientIslandDeclaration(prior)} vs ${describeClientIslandDeclaration(item)}`,
+          );
         }
         continue;
       }

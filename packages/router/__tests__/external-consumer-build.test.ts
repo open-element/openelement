@@ -388,26 +388,19 @@ test('external consumer: both islands attribute to exactly one emitted chunk eac
 test('external consumer: the client chunk bundles the browser condition and the alias target', async () => {
   const distDir = join(fixture.appDir, 'dist');
   const clientIslands = await readdir(join(distDir, 'client', 'islands'));
-  // The fixture has ONE island, so every islands/*.js file is either the
-  // island's own chunk or a shared chunk it reaches; the condition/alias
-  // resolution homes wherever the emitted graph puts it. The assertions judge
-  // the client graph's CONTENT, never a chunk layout (layout is not the
-  // property under test).
-  const readIsland = (fileName: string): Promise<string> =>
-    readFile(join(distDir, 'client', 'islands', fileName), 'utf8');
-  // The fixture has ONE island, so every islands/*.js file is either the
-  // island's own chunk or a shared chunk it reaches; the condition/alias
-  // modules home wherever the emitted graph puts them. Concatenating the
-  // islands directory is the whole static closure of the client graph.
-  const code = (
-    await Promise.all(
-      clientIslands
-        .filter((file) => file.endsWith('.js'))
-        .map(async (file) => await readIsland(file)),
-    )
-  ).join('\n');
+  // Single-chunk read, as before the executor-split experiment (withdrawn in
+  // 07963b738 — this assertion was not rolled back with it). The pre-split
+  // layout is back: the local island's own chunk IS the whole static closure of
+  // the modules it reaches, so the condition/alias resolution must be IN that
+  // chunk — the assertions judge the client graph's CONTENT, and reading one
+  // chunk is the honest unit for a one-importer static edge. The fixture has
+  // TWO islands (the first test in this file proves both own a chunk); only
+  // oe-proof-counter's closure reaches these marker modules, so reading its
+  // chunk is exactly the closure under test, not a sample of it.
+  const counterChunk = clientIslands.find((file) => file.startsWith('island-oe-proof-counter'))!;
+  const code = await readFile(join(distDir, 'client', 'islands', counterChunk), 'utf8');
   // The browser-condition target of @acme/conditions was bundled (not the
-  // import or require target), and the user alias resolved into the client graph.
+  // import or require target), and the user alias resolved into the chunk.
   expect(code).toContain('condition-browser-target');
   expect(code).toContain('shared-alias-target');
   expect(code).not.toContain('condition-import-target');

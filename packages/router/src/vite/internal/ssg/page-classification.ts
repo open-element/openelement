@@ -66,7 +66,10 @@ import ts from 'typescript';
 import { dirname, join, normalize } from 'pathe';
 import type { IslandDecl } from '@openelement/protocol/ssg';
 import type { RouteEntry } from '../../framework.ts';
-import { readGeneratedElementHost } from './generated-element-host-metadata.ts';
+import {
+  ownsGeneratedLaneKind,
+  readGeneratedElementHost,
+} from './generated-element-host-metadata.ts';
 import type { PageRouteDecl } from '@openelement/protocol/ssg';
 import { buildError } from '../../../internal/error-codes.ts';
 import type { GeneratedElementHostIdentity } from './generated-element-host-metadata.ts';
@@ -438,12 +441,6 @@ export function buildPageModuleFacts(facts: PageModuleSourceFacts): PageModuleFa
  * Generation side: classify one route into a page kind.
  * ------------------------------------------------------------------------- */
 
-const GENERATED_LANE_OWNED_KINDS = new Set<GeneratedElementHostIdentity['kind']>([
-  'producer',
-  'missing-producer',
-  'light-no-producer',
-]);
-
 /**
  * Classify one page module from its build facts plus the optional resolved
  * generated-element island. Pure: the caller owns the fail-closed verdict.
@@ -466,11 +463,10 @@ export function classifyPageModule(
     owners.push(`server function page "${facts.functionPage}" (server component lane)`);
     kinds.add('function-page');
   }
-  if (
-    resolvedIsland !== undefined &&
-    resolvedIsland.generatedLaneKind !== undefined &&
-    GENERATED_LANE_OWNED_KINDS.has(resolvedIsland.generatedLaneKind)
-  ) {
+  if (resolvedIsland !== undefined && ownsGeneratedLaneKind(resolvedIsland.generatedLaneKind)) {
+    // M-4a/P6: the owned-kind verdict is the generated-host identity owner's
+    // (generated-element-host-metadata.ts). This classifier and the client
+    // island entry read that one predicate; neither keeps a kind list.
     owners.push(`generated element <${resolvedIsland.tagName}> (generated-element lane)`);
     kinds.add('generated-element-page');
   }

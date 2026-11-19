@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the root-facade implementation boundary is ONE surface — the server-render entry (`renderToString`: compiled Part Program serializer dispatch, generated-host registry pairing, light-host attribute writing, property seeding), the pre-upgrade capture bootstrap over the claim capture/replay seam, and the core/protocol/signal surface a compiled module resolves against — because a page root and a NESTED host must render and seed through the same decision table (serializer selection, host-attribute merge, prop seed) rather than two that can disagree; the boundary is that it is NOT a package subpath: it hosts no compiler, no second serializer and no DOM executor of its own, and every compiled/runtime fact it re-exports keeps its own owner.
 /**
  * Deliberate root-facade implementation boundary. Not a package subpath.
  *

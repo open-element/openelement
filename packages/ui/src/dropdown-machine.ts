@@ -109,11 +109,15 @@ function focusTargetsPopover(host: DropdownHost, event: FocusEvent): boolean {
  * focused element as the popover opens; on close, restore it only when the
  * platform failed to.
  *
- * `signal` bounds the wiring to one connection: on abort the three listeners
- * come off the retained root and the bookkeeping state resets, so the next
- * connection wires fresh (the per-connection cleanup contract of the
- * lifecycle intrinsics). Wiring without a signal keeps the historical
- * once-per-host form.
+ * The wiring is ELEMENT-lifetime, not connection-lifetime: `signal` is the
+ * shell's instance-lifetime teardown signal, so it cannot bound a
+ * per-connection listener set (a reconnect would find the wiring disposed
+ * while the compiled nodes were re-claimed). It is accepted for the intrinsic
+ * call contract and deliberately ignored (`void signal`); the listeners live
+ * once per host on the retained root and are removed by
+ * `disposeDropdownFocusWiring` at activation and at teardown. ADR-0182's
+ * 2026-11-20 correction records this reading; the earlier connection-signal
+ * wording was wrong.
  */
 export function watchDropdownFocusReturn(host: DropdownHost, signal?: AbortSignal): void {
   if (readInstanceState(host, 'focusWired', () => false)) return;
@@ -213,9 +217,9 @@ export function watchDropdownFocusReturn(host: DropdownHost, signal?: AbortSigna
 
 /**
  * Remove the focus-return listeners this module wired on the host's shadow
- * root and reset its bookkeeping state. Runs on the connection signal's abort
- * and again at element-lifetime teardown (idempotent): after teardown no
- * listener of this module may stay attached to the retained root.
+ * root and reset its bookkeeping state. Runs at activation (before re-wiring)
+ * and at element-lifetime teardown (idempotent): after teardown no listener of
+ * this module may stay attached to the retained root.
  */
 /** One wired focus-return listener pair: the event type and its root listener. */
 type DropdownFocusListener = [type: string, listener: EventListener];
@@ -237,8 +241,10 @@ export function disposeDropdownFocusWiring(host: DropdownHost): void {
 }
 
 /**
- * Activation = anchor sync + focus-return wiring (idempotent while the same
- * connection stays live; a `signal` bounds the wiring to that connection).
+ * Activation = anchor sync + focus-return wiring. The wiring is element-lifetime
+ * (idempotent while the same connection stays live); the optional `signal` is
+ * accepted for the intrinsic call contract and deliberately ignored — see
+ * `watchDropdownFocusReturn`.
  */
 export function activateDropdown(host: DropdownHost, signal?: AbortSignal): void {
   // A new activation opens a new connection generation: every listener set

@@ -28,18 +28,38 @@
  * what {@linkcode ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER} resolves to, on
  * the same one-resolution-rule the scheduler/enhance specifiers use.
  *
- * THE CHUNK CAVEAT. `elementRuntimeChunkName` groups EVERY module under the
- * resolved `@openelement/element` package root into `element-runtime-<hash>.js`
- * (#1544), and this wrapper's single import sits under that root — so a build
- * whose entry statically imports this module is a build whose entry statically
- * reaches the shared runtime chunk. `requireEntryStaticGraphFreeOfRuntime`
- * fails such a build by design. The static import is therefore emitted ONLY
- * when the entry would already fetch that chunk (a class-lane island or the
- * enhanced-form layer): on precisely those pages the services were already
- * installed by the lazy loader, so the static call is the single installer and
- * the chunk is not new bytes. On a generated-lane-only page the entry takes
- * the lazy branch instead (it must — see the caller), and the deep-fragment
- * half is installed from the executor-free subpath.
+ * THE CHUNK CAVEAT, per emission shape (B2 restated). The #1544 chunk rule
+ * (`elementRuntimeChunkName`) groups EVERY module under the resolved
+ * `@openelement/element` package root into `element-runtime-<hash>.js`, and
+ * this wrapper's single import sits under that root — so a build whose entry
+ * statically imports this module is a build whose entry statically reaches the
+ * shared runtime chunk. The entry therefore emits this static import on
+ * exactly ONE shape: `needsElementRuntime === false`
+ * (`staticDocumentServices = !needsElementRuntime` in
+ * `entry-client-codegen.ts`), i.e. a page whose client-activatable islands are
+ * ALL generated-lane (M11-3). That shape IS the generated-lane page floor: the
+ * entry carries client JS but no `__loadElementRuntime` and no lazy
+ * `element-services-*` import, so nothing else would install the two services;
+ * this static import and its two calls are the one installer there. The
+ * reverse is what must not be written: on the needs-runtime shape (a
+ * class-lane island, or the enhanced-form layer) the entry deliberately does
+ * NOT static-import this module — the lazy loader already fetches the chunk
+ * and installs both services, so a static edge would duplicate the installer
+ * for no service, and `requireEntryStaticGraphFreeOfRuntime` fails the build
+ * when the entry statically reaches the runtime chunk on that shape (the guard
+ * runs only when the entry needs the runtime — see
+ * `build-client.ts`/`element-runtime-chunk.ts`).
+ *
+ * The B2 property is therefore stated over the emitted evidence per shape, not
+ * as "the entry has no static edge to the runtime chunk": on the
+ * all-generated-lane shape that edge is expected, and the property becomes "the
+ * page floor carries no executor entry module, and a page with no
+ * client-activatable island fetches no runtime". See
+ * `www/__tests__/build-output.test.ts` (the direct property, its retired-proxy
+ * comment and its negative controls) and
+ * `docs/architecture/16b-migration-note.md` (the measured 324→328 KB raw /
+ * 87→89 KB gzip static install cost, and why the old edge-absence assertion was
+ * only a proxy for this one).
  */
 export {
   ensureDeepFragmentNavigation,

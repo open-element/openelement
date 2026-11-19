@@ -26,6 +26,28 @@
  * Calling an intrinsic at runtime still fails closed with the same identity as
  * the root-entry spelling — the stand-ins are the SAME functions, re-exported,
  * not a second implementation.
+ *
+ * TWO SURFACE FACTS A GENERATED-LANE AUTHOR MUST KNOW (owner direction
+ * 2026-11-20 — the surfaces are kept, not renamed; see ADR-0182's recorded
+ * ambiguity):
+ *
+ * - `provideContext` means something DIFFERENT on each entry. The ROOT entry
+ *   exports the class lane's HOST-SIDE primitive
+ *   `provideContext(host, context, value): Unsubscribe` (a direct host write);
+ *   this subpath exports the `16b-CTX` compiler INTRINSIC
+ *   `provideContext(context, read): void` (a per-owner provider the compiler
+ *   erases into the retained setup factory). Same exported name, different
+ *   signatures and different mechanisms: TypeScript tells them apart by the
+ *   import path, and the compiler's binding-provenance admission resolves the
+ *   intrinsic spelling from this module's specifier.
+ * - `onError` (`16b-EB`, the author-facing error boundary) is exported ONLY
+ *   from the ROOT entry: this side-effect-free subpath deliberately does not
+ *   re-export it, so a generated-lane module that registers an error boundary
+ *   must import it from `@openelement/element`. That root import keeps the
+ *   root's `sideEffects` flag — and with it the generic executor — in the
+ *   client graph; that is a known, recorded P1 cost of choosing the error
+ *   boundary, accepted for this slice rather than hidden by a second spelling
+ *   here.
  */
 export {
   onConnect,

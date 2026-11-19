@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the packed-Element consumer proof is ONE qualification lifecycle — fresh-tarball assertion, one hermetic npm install, one scratch author project, one packed-declaration walk, then the class-authored, generated-CE and packed-shadow legs whose real-browser assertions all read that same installed tree through one local HTTP server — so splitting per leg would fork the install, freshness, teardown and boundary scans; the boundary is that it qualifies the PACKED tarballs only (no workspace source, no router installed) and each leg states its own scope limits instead of claiming the M12/M13 matrices.
 /** Packed Element author -> Vite compile -> separate plain-HTML browser proof (#1338). */
 import { tmpdir } from 'node:os';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';

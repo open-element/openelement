@@ -169,6 +169,10 @@ import { OpenElementBase } from '../../../open-element-base.ts';
 // shared token sheet's `:host([data-theme])` overrides apply inside a shadow
 // root. A generated host links the same sheet, so it joins the same manager.
 import { themeManager } from '../../../open-element-styles.ts';
+// The runtime-only host attribute fact (the JSON seed name included) lives in
+// ONE DOM-free leaf so the hydration executor can derive its exemption from the
+// same source without importing this shell module. See that leaf for the why.
+import { GENERATED_PROP_SEED } from './runtime-only-host-attributes.ts';
 import { ElementFormController } from '../../../open-element-form.ts';
 import {
   coercePropertyValue,
@@ -275,24 +279,12 @@ const GENERATED_HOST_ATTRIBUTES = '__oeHostAttributes';
  */
 const GENERATED_PROP_SEED_ROWS = '__oePropSeedRows';
 
-/**
- * The host attribute carrying the JSON seed for NON-PRIMITIVE declared rows
- * (ADR-0182 D-18c / M11-3). A non-primitive row (`array`/`object`) has no
- * attribute wire, so before this channel the server rendered the row's DEFAULT
- * while a supplied value existed only on the client — the content a visitor saw
- * and the state the component upgraded into were different facts.
- *
- * Shape: `{"<rowName>": <json value>, …}`. Only JSON-encodable rows are carried;
- * `trustedHtml` is excluded on purpose (a brand cannot be reconstructed from
- * JSON, and promoting a plain string back to it would be a raw-markup channel —
- * D-18c records that as a separate decision).
- *
- * Claim acceptance: the shell parses the payload, validates every name against
- * the descriptor's JSON-seedable rows, and writes the values BEFORE setup. An
- * unparseable payload or an unknown row fails closed through the existing
- * claim-mismatch identity rather than silently keeping the default.
- */
-const GENERATED_PROP_SEED = 'data-oe-prop-seed';
+// The JSON seed host attribute ({@link GENERATED_PROP_SEED}) is the shell's own
+// wire: this seeder writes it, the claim reads and removes it. Its name and the
+// runtime-only attribute set it belongs to are single-sourced in the DOM-free
+// `runtime-only-host-attributes.ts` leaf (imported above), which the compiled
+// hydration executor also reads — so the writer and the claim exemption cannot
+// drift again (C-1).
 
 /** The declared row types a JSON seed may carry (D-18c). */
 const JSON_SEEDABLE_PROPERTY_TYPES: ReadonlySet<string> = new Set(['array', 'object']);
@@ -337,11 +329,24 @@ function primitiveRowFallback(property: GeneratedElementProperty): unknown {
  * Precedence mirrors the shell's initial state: a supplied property value (the
  * parent's in-process channel, which also travelled as a host attribute) wins
  * over the attribute wire; a primitive row supplied by neither falls back to
- * its declared default. Non-primitive rows (`array`/`object`/`trustedHtml`)
- * have no attribute channel and their generated factory default materialises
- * per CLIENT instance; this host path deliberately does not fabricate one (no
- * server->client value wire), so an unsupplied non-primitive row stays absent
- * rather than pretending a seed exists.
+ * its declared default.
+ *
+ * The non-primitive family is TWO different facts and is documented separately:
+ *
+ * - an UNSUPPLIED `array`/`object` row is not fabricated here: its generated
+ *   factory default materialises per CLIENT instance, so this fold leaves the
+ *   row absent rather than pretending a server value exists (the shell
+ *   resolver still supplies the declared default lazily until a claim writes
+ *   it);
+ * - a SUPPLIED, JSON-encodable `array`/`object` row DOES travel to the claim:
+ *   it is serialized into one {@link GENERATED_PROP_SEED} host attribute
+ *   (ADR-0182 D-18c / M11-3), and the shell restores it BEFORE setup so the
+ *   server bytes and the upgraded state are the same fact. The value is read
+ *   once here; a supplied getter is deliberately deferred to the content leaf
+ *   and therefore gets no seed. `trustedHtml` stays excluded on purpose — a
+ *   brand cannot be reconstructed from JSON, and promoting a plain string back
+ *   to it would be a raw-markup channel (D-18c records that as a separate
+ *   decision).
  *
  * Pure: the input records are never mutated.
  */
@@ -1412,8 +1417,10 @@ function lazyDefaultFor(property: NormalizedProperty): () => unknown {
  *   `__proto__`-sensitive assignment.
  *
  * The generated `<Name>__ssrHost` calls this helper with the descriptor +
- * caller props; M11 owns producing that in-process record (no server→client
- * seed / JSON wire exists here).
+ * caller props; M11 owns producing that in-process record. The non-primitive
+ * JSON seed is the SEEDER's channel (`data-oe-prop-seed`, produced by
+ * `seedGeneratedElementHostProperties` and restored by the claim), never a
+ * second value wire invented here.
  */
 export function resolveGeneratedElementProps<P extends object = Record<string, unknown>>(
   descriptor: GeneratedElementDescriptor<P>,
@@ -1690,7 +1697,8 @@ function reconcilePreUpgradeProperties(element: HTMLElement, state: ElementState
  * payload, a non-object, an unknown row name, or a row the descriptor does not
  * declare as JSON-seedable. Silently keeping the default would render a page
  * whose visible content and upgraded state disagree — the defect this channel
- * exists to remove — so it uses the existing claim-mismatch identity.
+ * exists to remove — so it throws the shell's own seed-mismatch identity
+ * ({@link PROP_SEED_MISMATCH}) instead of keeping the default.
  */
 function applyGeneratedPropSeed(element: HTMLElement, state: ElementState): void {
   // A descriptor with no JSON-seedable row can never carry this attribute, so
@@ -2507,6 +2515,23 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       // This runs BEFORE the recipe so setup reads the same values the server
       // rendered with (a row supplied at SSR time would otherwise fall back to
       // its declared default on the client).
+      //
+      // DELIBERATE PLACEMENT (C-10): this call sits OUTSIDE the `16b-EB` try
+      // below, so a malformed/unknown seed throws before the boundary and its
+      // rollback exist. That is the decision, not an oversight:
+      //   - nothing is mounted yet (no recipe, projection or connection scope;
+      //     the try's rollback can only release resources created inside it),
+      //     so there is no half-applied element to roll back;
+      //   - the boundary's handler list is the INSTANCE's, populated when the
+      //     compiled setup runs inside the try — a first connect has no author
+      //     `onError` to attribute this to, and a seed the descriptor cannot
+      //     explain is a defect in the delivered markup/program contract, not
+      //     element work a handler could repair or retry;
+      //   - the seed is consumed once, so a claim that got past this point does
+      //     not re-enter the decision on reconnect.
+      // The failure therefore stays fail-closed and loud (an uncaught error
+      // carrying `OEIR_SHELL_PROP_SEED_MISMATCH`), the same pre-try input-
+      // validation posture as pre-upgrade reconciliation above.
       applyGeneratedPropSeed(this, state);
       state.connecting = true;
       // A retained instance is what makes reconnect a re-arm rather than a

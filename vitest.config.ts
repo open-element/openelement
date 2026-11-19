@@ -285,6 +285,19 @@ export default defineConfig({
               replacement: `${rootDir}packages/element/src/document-services.ts`,
             },
             {
+              // The shared component-logger subpath (#1804 B-1). Same rule as
+              // the lifecycle entry above: the bare element alias below would
+              // rewrite this into `src/index.ts/logger`, so the specific entry
+              // comes first. This table is a hand-maintained second source of
+              // truth (P6), so it is guarded by the consumer-form drift test
+              // `packages/element/__tests__/browser-alias-table-drift.test.ts`
+              // — a new `@openelement/element/<sub>` import in the browser
+              // consumer graph fails that test until an exact entry is added
+              // here.
+              find: '@openelement/element/logger',
+              replacement: `${rootDir}packages/element/src/logger.ts`,
+            },
+            {
               find: '@openelement/element',
               replacement: `${rootDir}packages/element/src/index.ts`,
             },

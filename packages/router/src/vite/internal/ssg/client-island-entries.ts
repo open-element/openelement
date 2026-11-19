@@ -15,24 +15,11 @@ import type { IslandDecl } from '@openelement/protocol/ssg';
 
 import { fsPathToModuleSpecifier } from './module-specifier.ts';
 import { resolveIslandHydrate, resolveIslandSsrDsd } from './island-scanner.ts';
-import { readGeneratedElementHost } from './generated-element-host-metadata.ts';
+import {
+  ownsGeneratedLaneKind,
+  readGeneratedElementHost,
+} from './generated-element-host-metadata.ts';
 import type { ClientIslandDeliveryEntry, IslandDeliveryStrategy } from './delivery.ts';
-
-/**
- * The ONE generated-lane verdict, read off the island scan's generated-host
- * identity (M11-3 lane fact). A `lane-declined`/`lane-refused` module is not
- * owned by the generated lane, so only the three owned kinds set the client
- * entry's lane fact. Both branches call this: the local branch with the scan's
- * carrier, the package branch with the carrier the package declaration carries.
- */
-function ownsGeneratedLane(host: ReturnType<typeof readGeneratedElementHost>): boolean {
-  return (
-    host !== undefined &&
-    (host.kind === 'producer' ||
-      host.kind === 'missing-producer' ||
-      host.kind === 'light-no-producer')
-  );
-}
 
 type ScannedIslandMeta = Partial<IslandDecl> & {
   hydrate?: IslandDeliveryStrategy;
@@ -73,8 +60,9 @@ export function buildClientIslandEntries(options: {
         upgradeStrategy,
       ) as IslandDeliveryStrategy;
       // M11-3 lane fact: the scan's compiler-owned generated-host identity is
-      // the ONE source (see ownsGeneratedLane).
-      const generatedLane = ownsGeneratedLane(readGeneratedElementHost(meta));
+      // the ONE source, and its verdict is the identity owner's ONE predicate —
+      // never a second kind list here (see ownsGeneratedLaneKind).
+      const generatedLane = ownsGeneratedLaneKind(readGeneratedElementHost(meta)?.kind);
       return {
         tagName,
         // #460: resolve() emits drive-letter backslash paths on Windows; convert
@@ -112,8 +100,9 @@ export function buildClientIslandEntries(options: {
       // declaration carries the compiler-owned generated-host identity the
       // manifest published (`buildPackageIslandDecls`) or the scan resolved
       // (`attachPackageIslandHostIdentities`). Read it through the one accessor
-      // and the one verdict — never re-derive it from a published name here.
-      const generatedLane = ownsGeneratedLane(readGeneratedElementHost(island));
+      // and the identity owner's one verdict — never re-derive it from a
+      // published name, and never re-list the owned kinds here.
+      const generatedLane = ownsGeneratedLaneKind(readGeneratedElementHost(island)?.kind);
       return {
         tagName: island.tagName,
         modulePath: island.modulePath,

@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the authored-sheet channel is ONE artifact lifecycle — registry edge, `\0`-virtual graph id, one Vite-processed text, content hash, emitted `.css` name, client asset manifest entry, SSR-declared URL, dev-server resource and the adapters handed to the module graph must all name the same sheet — so the resolve/load/transform/emit/serve phases live together instead of forking that identity; the boundary is that this file owns only that channel (the compiler requests edges, the runtime adopts sheets) and never renders or executes component code, and every path fails closed on an edge it cannot attribute.
 /**
  * The style-edge intercept (#1558; the #1553 protocol after the file-based
  * authoring retirement). The router client build is the sole owner of the
