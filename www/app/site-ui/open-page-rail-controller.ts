@@ -113,5 +113,13 @@ export function uninstallRailScrollspy(host: RailHost): void {
   const state = states.get(host);
   if (!state) return;
   state.observer?.disconnect();
+  // Teardown must UNDO the marks, not just stop the observer: a disconnect
+  // keeps the generated DOM (the LC-0 retained-region scope), so a leftover
+  // aria-current mark survives into the next connect's claim and fails its
+  // static-attribute-seed check (the marks live outside the authored seed).
+  // Restoring the declared state here makes the retained DOM re-claimable
+  // exactly like the first activation.
+  markCurrent(state, '');
+  state.intersecting.clear();
   states.delete(host);
 }
