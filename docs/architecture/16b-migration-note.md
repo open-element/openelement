@@ -49,15 +49,28 @@ M09-2e); no row flips to closed and no sign-off is recorded.
 | Two `/internal/*` artifact-resolution export subpaths | named deviation, no exemption | ADR-0137 §1 remains in force; ADR-0177 owns the written retirement condition | **OPEN — deviation registered 2026-11-14; the subpath set now numbers four** (the two ADR-0177 subpaths plus `./internal/compiled/leaf-runtime` and the public `./lifecycle`; ADR-0182's retirement conditions carry the events); `packages/element/package.json`:16-17 unchanged. | `graph:check` zero importers outside `packages/element`; `esm:boundary-check` no external resolution; snapshot zero `publicSymbols`; `gate:release` + `gate:packed` green at one SHA. Byte attribution in the full reachable page closure also remains owed (ADR-0174:42-50, :12-13). |
 
 Before the 2026-11-15 amendments, none of the five `16b-*` slices had an
-implementation slice. `16b-LC` (lifecycle) is now **PARTIAL**: the
-generated-element ROOT author lifecycle hooks are delivered, while nested/hostless
-hooks and the connection-scope helper channel are OWED (see the amendment
-below). `16b-EB` (error boundary) was DELIVERED 2026-11-18 (the `onError`
-intrinsic with the three capture points — see the 2026-11-18 amendment below and
-seams row 101). `16b-CTX` (context, TSX-13) and `16b-REF` (refs) still have no
-implementation slice and must be delivered inside Alpha16b; they may not be
-deferred to Alpha17 (§13.2:385-387). None of them is claimed
-here.
+implementation slice. **State as of 2026-11-19** — the paragraph that used to
+stand here said `16b-EB`, `16b-CTX` and `16b-REF` had no implementation slice;
+all three now do, and each is recorded in its own amendment below:
+
+- `16b-LC` (lifecycle) remains **PARTIAL**: the generated-element ROOT author
+  lifecycle hooks are delivered, while nested/hostless hooks and the
+  connection-scope helper channel are still OWED.
+- `16b-EB` (error boundary) — delivered (`ee0434c9f`): `onError` with the
+  shell's three capture points.
+- `16b-REF` (refs) — delivered (`d135576d0`): `ref(cb?)` is a compiler-erased
+  declaration intrinsic riding the EXISTING `ref` JSX channel, so no second
+  attachment mechanism exists; lifetime is proven across mount, claim,
+  disconnect and reconnect.
+- `16b-CTX` (context, TSX-13) — delivered (`e8ea72b95`): `provideContext` /
+  `useContext` over the generated owner tree with hostless owners, nested
+  shadowing, sibling-subtree isolation, provider-change re-read, disconnect
+  cleanup, reconnect re-registration, AND server rendering (the enclosing
+  scope rides the producer argument list, so per-render isolation is
+  structural).
+
+Each amendment records what is NOT claimed. None of them flips a milestone
+status in `alpha16-18-progress.md` by itself; that is the milestone ledger's job.
 
 ## Two non-exception items, unchanged (§13.3:427-435)
 
