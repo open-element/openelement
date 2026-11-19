@@ -436,7 +436,6 @@ async function loadRequestTimeHandler(
         allowHeadExtrasScripts: desc.document.allowHeadExtrasScripts,
       },
       desc.isSSG,
-      desc.renderer,
     );
   }
   const harness = `
