@@ -138,9 +138,11 @@ export const CLASS_SHELL_RELATIVE_MODULES: readonly string[] = [
   'src/internal/compiled/runtime/hydrate-recovery.ts',
   // `parts` — Part-program execution helpers; imports `program-kernel`.
   'src/internal/compiled/runtime/parts.ts',
-  // `pre-upgrade-events` — the pre-upgrade capture replay; imports
-  // `program-kernel`, and is imported by the class shell itself.
-  'src/internal/compiled/runtime/pre-upgrade-events.ts',
+  // (`pre-upgrade-events` LEFT this table 2026-11-20: the r2 document-services
+  // lane cut its program-kernel edge to the protocol ORIGIN
+  // (`@openelement/protocol/errors`), and the generated page floor installs its
+  // click capture through the executor-free document-services subpath — so the
+  // module now homes with the runtime primitives, executor-free by measurement.)
   // `revive` — revive/upgrade of a claimed instance; imports `parts` and
   // `program-kernel`.
   'src/internal/compiled/runtime/revive.ts',
