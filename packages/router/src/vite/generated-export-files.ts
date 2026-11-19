@@ -17,6 +17,7 @@ export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = 
     'build-utils': 'src/build-utils.ts',
     'client-only': 'src/client-only.ts',
     'css-modules': 'src/css-modules.d.ts',
+    'document-services': 'src/document-services.ts',
     html: 'src/html.ts',
     'internal/compiled/generated-element/shell': 'src/internal/compiled/generated-element/shell.ts',
     'internal/compiled/leaf-runtime': 'src/internal/compiled/leaf-runtime.ts',
