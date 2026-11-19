@@ -892,7 +892,11 @@ the correction and points here.
   rather than public, P7 short form and the retirement wording, with ADR-0177
   staying the single record owner of the internal-subpath deviation.
 
-All three authorizations are same-day (2026-11-20). No other subpath is added,
+All three authorizations are same-day (2026-11-20). The delegated owner
+authorization recorded in this section **is** the release-owner review ADR-0182
+D-18b asks for: the review is the owner's own sign-off act, which the owner
+performed by delegating this remediation in-session and may supersede at any
+time. No other subpath is added,
 removed or renamed by this PR; the exports-map change is enumerated by the
 regenerated `docs/release/public-interface-snapshot.json`. Two derived pointers
 that name the older subpath counts — the `packages/element/package.json:5`
@@ -924,7 +928,14 @@ and none is a blocker this section waives:
    dispositioned by construction fixes in the test code, and the medium
    `tools/repo/check-dependency-age.ts` case by a written safety-review dismissal
    reason or a by-construction fix. The per-alert record (thread + dismissal) is
-   the canonical one, not this plan.
+   the canonical one, not this plan. **Recorded disposition (2026-11-20):**
+   4257 and 4256 were already fixed on the PR by `397de4139` / `7767e6d9e`
+   (merge-ref alert states `fixed`); 4249 and 4248 are fixed in this remediation
+   by construction in the two router test files; 4247 is **dismissed** with a
+   written `won't fix` rationale (per-character allowlist rebuild + name grammar
+   + registry host allowlist; CodeQL char-level taint model cannot model the
+   rebuild; pre-existing on main, check-run green) — the dismissal, not this
+   plan, is the canonical record.
 5. **P1's checker is report-only.** `browser-graph:check`
    (`tools/repo/check-browser-entry-graph.ts`) exists but is wired into no
    required gate. Wiring it is a gate-policy change with no existing
