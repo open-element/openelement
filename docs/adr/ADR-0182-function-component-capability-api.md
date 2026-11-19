@@ -1142,3 +1142,47 @@ seed channel (D-18c / M11-3)"), an ancestor of this PR's head. The shipped wire,
 its identity and its known debt are recorded in the 2026-11-20 seed amendment
 above; the §17.3 acceptance-evidence row for D-17c is owned by the 2026-11-20
 evidence re-record and the PR body, not by this note.
+
+## Evidence re-recorded (2026-11-20)
+
+Append-only evidence section. It records the 2026-11-20 head re-record for the
+delivery-line claims this record carries; it rewrites no earlier evidence
+paragraph and creates no milestone, gate, exit or release claim. The measured
+commit is `f514c1290539993f9bdbeca9b02b6f99ca0a4dff`. The later commit
+`434a624d39496eed70d29df4c1bba3fef17cca56` changes only one JSON annotation and
+one test comment; it neither changes behavior nor is re-measured.
+
+**Five-field record.** commit: `f514c1290539993f9bdbeca9b02b6f99ca0a4dff`
+(HEAD did not move across the run). status: clean at measurement —
+`git status --porcelain` showed only the pre-existing
+`?? .cc-agent-transcript.jsonl`; every artifact used is Git-ignored. provenance:
+`LOCAL /private/tmp/oe-a16-closure-B` at the cited commit — a LOCAL record only,
+not a CI run/job, and no CI column is written. commands and results: per row
+below. Full log:
+`.artifacts/pr1804-remediation-20261120/02-evidence/EVIDENCE-RUN.md`.
+
+| claim | command → result at the measured commit |
+| --- | --- |
+| P1 — the generic executor is unreachable from the production browser entry graph | `./node_modules/.bin/vp run --no-cache --fail-if-no-match site:build` (exit 0, `gate ok: 6 step(s)`, 30 s) → `node tools/repo/check-browser-entry-graph.ts www/dist/client/.vite/oe-browser-entry-graph.json`: `1 artifact(s) — 1 MET, 0 VIOLATED, 0 UNPROVEN; verdict: MET`; `loadedModuleCount` 135, 13 chunks, 8 islands, `0/6` executor entries; runtime chunk 41 module-table entries (40 workspace + 1 `node_modules/@preact/signals-core`) |
+| P2 — the server reads the new structure | the `find`/`grep` count block → 78 HTML files, **78/78** carry a generated host; host counts `open-page-rail` 68 / `open-search` 78 / `open-theme-toggle` 78 / `open-code-block` 278 / `open-button` 18; `data-oe-prop-seed` 68 pages / 68 occurrences; `items="[object Object]"` 0 pages. (The "through the compiler-emitted producer" attribution is advisory in the re-record — counts only were recomputed) |
+| P3 — build/SSG facts rather than a source-text read | `grep -rn '@element(' packages/router/src` → **10 hits**: diagnostic messages, doc comments, and one generator (`vite/plugin-mdx-lower.ts:204` EMITS an `@element(...)` template literal; no control flow reads a source marker) |
+| P4 — no `__partProgram` in the production payload | `grep` over `www/dist/client` → files 0 / occurrences 0; over `www/dist/**/*.html` → **2 files / 6 occurrences, all API-reference prose (en+zh reference pages)** |
+| P5 — retired exports, migration note and inventory tracked | `./node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot` → `Public interface snapshot matches (6 packages).` (exit 0, 21 s); the retired-export census and the migration-note rows were not re-censused (advisory for a fresh census) |
+| M12 — packed-consumer recorded evidence | `./node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/tools-release pack:dry-run` (exit 0, 46 s) then `./node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/tools-release consumer:packaged-element` → **9 PASS / 0 FAIL**, 19 s; HEAD tarballs element 218917 B / compiler 199674 B / protocol 54634 B; packed S3 generated module 228924 B; engines chromium 147.0.7727.15 / firefox 148.0.2 / webkit 26.4. **Recorded evidence, not a declared exit** (one app, one island; the harness's own scope limits stand) |
+| M13 — site-side three-engine recorded evidence | `./node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/www e2e:browsers` → **1092 passed (expected 1090 + 2 flaky), 0 failed, 2 flaky retry-cleared, 26.0 min**, exit 0; per project chromium 368 / 0 / 0 / 0 flaky, firefox 361 / 0 / 0 / 2 flaky, webkit 363 / 0 / 0 / 0; engines chromium 147.0.7727.15 / firefox 148.0.2 / webkit 26.4; the two flaky identities are recorded (firefox `/reference/` axe engine timeout; firefox theme-toggle expected `light` received `dark`). **Recorded evidence, not a declared exit** — the exact-SHA dispatch record and the server matrix remain the plan §18.6 follow-up |
+
+Per-row records live in [the P1 applicability record](../architecture/p1-applicability-record.md)
+(section `FINAL VERDICTS — re-recorded 2026-11-20 at f514c1290539993f9bdbeca9b02b6f99ca0a4dff`),
+the [progress ledger](../architecture/alpha16-18-progress.md) M10–M13 rows and the
+[capability inventory](../architecture/alpha16-capability-inventory.md) section
+`Final-SHA matrix (2026-11-20)`. This section is the ADR-layer pointer to those
+records, not a second copy of the numbers, and nothing here is an exit or a
+release qualification.
+
+**Historical "LOCAL." evidence paragraphs.** The migration records and the B4/B9
+amendments earlier in this file state "LOCAL." with per-run counts and carry no
+commit/status/command/provenance record of their own; those counts are that
+head's local values. They **stay historical (advisory only)** and are not
+upgraded by this section. The delivery-line evidence for the same claims is this
+section and the per-row records it cites; where the two readings disagree, this
+section's re-recorded values and the cited row records are the later reading.

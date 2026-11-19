@@ -57,7 +57,10 @@ all three now do, and each is recorded in its own amendment below:
   lifecycle hooks are delivered, while nested/hostless hooks and the
   connection-scope helper channel are still OWED.
 - `16b-EB` (error boundary) — delivered (`ee0434c9f`): `onError` with the
-  shell's three capture points.
+  shell's capture points (the 2026-11-20 later reading in the EB amendment below
+  corrects the count to **two** — the connect/claim pass, plus update/refresh and
+  event dispatch through one `guardUpdate` sink; no SSR fallback exists, deferred
+  to Alpha17 by plan §18.3).
 - `16b-REF` (refs) — delivered (`d135576d0`): `ref(cb?)` is a compiler-erased
   declaration intrinsic riding the EXISTING `ref` JSX channel, so no second
   attachment mechanism exists; lifetime is proven across mount, claim,
@@ -1054,6 +1057,20 @@ intrinsics plus a tracked slot and an event handler) and B5 (the SSR producer).
 > inventory's "three capture points … and an SSR fallback … MIGRATED" row was
 > wrong and is corrected in the 2026-11-20 remediation.
 
+**Evidence status (2026-11-20).** The later reading above agrees with the
+owner-approved plan amendment `alpha16-18-execution-plan.md` §18.3: the delivered
+minimum obligation is the `onError` boundary plus the **two** capture points, the
+SSR fallback is deferred to Alpha17 as a named carry (not a §13.3 exception), and
+the capability inventory's `16b-EB` row plus this section are corrected to that
+truth. At the 2026-11-20 measured commit
+`f514c1290539993f9bdbeca9b02b6f99ca0a4dff` (clean worktree, LOCAL
+`/private/tmp/oe-a16-closure-B`) **no focused `16b-EB` command was re-run**: the
+boundary guard file `packages/compiler/__tests__/semantic-ir/generated-element.error-boundary.test.ts`
+is exercised inside the compiler suite that passed in full (`95 files / 1386
+tests passed, exit 0, 91.83 s`), which is suite-level exercise, not a focused EB
+record. No SSR fallback evidence exists in this tree and none is claimed; the
+fallback's delivery conditions are listed in plan §18.3.
+
 ## 2026-11-19 amendment — R4: a full generated-lane page has no runtime loader, so document services come from the executor-free subpath (facts only)
 
 ### R4 — the page floor cannot re-install document services through the lazy `element-services` import
@@ -1263,6 +1280,27 @@ in `docs/release/public-interface-snapshot.json`.
   detach with cleanup-before-clear ordering); claim populate with the ADOPTED
   server node; a throwing cleanup still clearing `current`; an SSR producer that
   builds nothing and runs no notification.
+
+**Re-run (2026-11-20, delivery-line evidence).** The two focused files were re-run
+at the measured commit `f514c1290539993f9bdbeca9b02b6f99ca0a4dff` on the clean
+remediation worktree (`git status --porcelain` showed only the pre-existing
+`?? .cc-agent-transcript.jsonl`; every artifact output is Git-ignored):
+
+```bash
+./node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/compiler test packages/compiler/__tests__/semantic-ir/generated-element.ref-handle.test.ts packages/compiler/__tests__/semantic-ir/generated-element.ref-handle.browser.test.ts packages/compiler/__tests__/semantic-ir/generated-element.context.test.ts packages/compiler/__tests__/semantic-ir/generated-element.context.browser.test.ts
+```
+
+→ **4 files / 46 tests passed, exit 0, 5 s**; the `16b-REF` half is
+**17 Node rows** (`generated-element.ref-handle.test.ts`) + **4 Chromium rows**
+(`generated-element.ref-handle.browser.test.ts`) = **21 tests / 2 files**. The
+2026-11-19 guard-form text above says "16 Node rows"; the re-run measures **17**
+(a per-head +1 recorded here), and the older 16 stays the recorded historical
+value. Provenance: `LOCAL /private/tmp/oe-a16-closure-B` at
+`f514c1290539993f9bdbeca9b02b6f99ca0a4dff` (LOCAL only; no CI identity). The
+later commit `434a624d39496eed70d29df4c1bba3fef17cca56` changes only one JSON
+annotation and one test comment; it neither changes behavior nor is re-measured.
+This is a recorded re-run, not the exit: it changes no milestone, gate or release
+status, and the 2026-11-19 numbers keep their historical standing.
 
 LOCAL evidence, single engine. Not M09 exit, not the M13 matrix, and no claim is
 made here about `16b-REF` completion — every row of the migration note keeps the
@@ -1505,6 +1543,27 @@ the same body-text predicate every other optional runtime symbol uses.
   RENDER-mode rows: synchronous provided-value resolution, nearest-first
   shadowing with `owner()` and sibling isolation, two-scope independence, and the
   default answer with no protocol request installed.
+
+**Re-run (2026-11-20, delivery-line evidence).** The two `16b-CTX` focused files
+were re-run in the same command as the `16b-REF` re-run (recorded in that
+section), at the measured commit `f514c1290539993f9bdbeca9b02b6f99ca0a4dff` on
+the clean remediation worktree:
+
+```bash
+./node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/compiler test packages/compiler/__tests__/semantic-ir/generated-element.ref-handle.test.ts packages/compiler/__tests__/semantic-ir/generated-element.ref-handle.browser.test.ts packages/compiler/__tests__/semantic-ir/generated-element.context.test.ts packages/compiler/__tests__/semantic-ir/generated-element.context.browser.test.ts
+```
+
+→ **4 files / 46 tests passed, exit 0, 5 s**; the `16b-CTX` half is
+`generated-element.context.test.ts` **19 tests** + `generated-element.context.browser.test.ts`
+**6 tests** = **25 tests / 2 files** — matching the "19 Node rows + 6 Chromium
+rows" guard form above. The 9 additive rows in
+`packages/element/__tests__/compiled-runtime/context.test.ts` were **not** run as
+a separate focused command by this re-run (the run covered the two compiler-project
+files); they are inside the `@openelement/element` suite that passed at the same
+commit (132 files / 1036 tests), which is suite-level coverage, not a focused
+substitute. Provenance: `LOCAL /private/tmp/oe-a16-closure-B` at
+`f514c1290539993f9bdbeca9b02b6f99ca0a4dff` (LOCAL only; no CI identity). This is
+a recorded re-run, not the exit: it changes no milestone, gate or release status.
 
 LOCAL evidence, single engine. Not M09 exit, not the M13 matrix, and no claim is
 made here about `16b-CTX` completion — every row of the migration note keeps the

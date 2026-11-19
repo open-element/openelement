@@ -210,3 +210,43 @@ including the 2026-11-16 addendum's "P1–P5 keep their recorded `NOT MET`
 states". This is an append-only later reading: no five-field record above is
 rewritten, no row is upgraded, and no milestone, exit or release claim is
 created.
+
+## Re-record (2026-11-20)
+
+Append-only re-record note. The rows above keep their original commits and their
+original `LOCAL` provenance; this appendix was **not** re-run at the 2026-11-20
+head, so under the per-record rule of the
+[evidence baseline](./evidence-baseline.md) and the per-head rule of the
+[progress ledger](./alpha16-18-progress.md) §2, the rows stay historical for
+delivery (the committed history is unchanged). The measured commit of the
+2026-11-20 re-record is
+`f514c1290539993f9bdbeca9b02b6f99ca0a4dff`; the later commit
+`434a624d39496eed70d29df4c1bba3fef17cca56` changes only one JSON annotation and
+one test comment, so it neither changes behavior nor is re-measured.
+
+- **What the re-record measures (delivery-line evidence).** P1 (`site:build` →
+  checker `1 MET, 0 VIOLATED, 0 UNPROVEN`; 8 islands, `loadedModuleCount` 135,
+  13 chunks, `0/6` executor entries, runtime chunk 41 module-table entries), P2
+  (78/78 pages carry a generated host; host counts 68/78/78/278/18;
+  `data-oe-prop-seed` 68 pages), P3 (10 `@element(` hits — diagnostic
+  messages/comments plus the `plugin-mdx-lower.ts:204` generator), P4 (client
+  tree 0; HTML **2 files / 6 occurrences, all API-reference prose (en+zh
+  reference pages)**), the three Node suites (element 132 files / 1036 tests,
+  compiler 95 / 1386, router 166 / 1876), the element browser suite (7 files /
+  33 tests), M12 (9 PASS / 0 FAIL), M13 (1092 passed / 0 failed / 2 flaky
+  retry-cleared, 26.0 min) and the M14 focused commands (32 / 54 / 19). The
+  four-part records are the P1 applicability record's
+  `FINAL VERDICTS — re-recorded 2026-11-20` section, the progress ledger M10–M14
+  rows, the capability inventory's `Final-SHA matrix (2026-11-20)`, the migration
+  note's 16b-REF/16b-CTX re-runs and ADR-0182's
+  `## Evidence re-recorded (2026-11-20)` section.
+- **What was not re-run and is not upgraded.** The qualification and vertical
+  rows in this appendix — the interop qualification recorded at `2545e0ac6`, the
+  2026-11-16 verticals at `4fb4ac635`, the final feature head `61b7eeac0`, and
+  the §6 `P1 is NOT MET` record — were not re-executed by the 2026-11-20 run;
+  they remain the historical rows above, `advisory only` for delivery, and no
+  row is upgraded to `CI`. The delivery-line P1 verdict is the 2026-11-20
+  re-record (MET), not the historical §6 row; the later reading above already
+  says so and this section points at the evidence.
+- No milestone, gate, exit, closeout or release claim is created, moved or
+  declared here.

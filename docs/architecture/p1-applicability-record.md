@@ -13,6 +13,7 @@ handed; the APPLICABLE APP LIST below is a claim of this record, not of the tool
 
 - Branch: `work/a16-lane-g`
 - Tree: `f88aea0faa98c6250c158174e382699bdcb6a28d` (dirty only with build outputs; `git status --porcelain` is empty — every artifact below is under a Git-ignored `dist/`)
+- Re-pointed 2026-11-20: the FINAL VERDICTS below are re-recorded at `f514c1290539993f9bdbeca9b02b6f99ca0a4dff` (see `## FINAL VERDICTS — re-recorded 2026-11-20 at f514c1290539993f9bdbeca9b02b6f99ca0a4dff`); the earlier lane-G `Tree: f88aea0fa…` record above stays as history
 - Toolchain: Node v24.18.0, pnpm 12.8.1, vite-plus 1.4.0, vite 8.1.6
 - Date: 2026-11-18
 - All commands run from the repository root of `<repo>`
@@ -812,6 +813,8 @@ was the last one in the www client graph. This record's "34 class components"
 attribution was also wrong: the article-route class modules are server-side
 templates and never enter the client graph.
 
+**SUPERSEDED for delivery: the candidate below is not an ancestor of the PR head; see the re-recorded section.**
+
 ## FINAL VERDICTS (2026-11-19, candidate 0807bdd84)
 
 P1–P5 judged separately on one tree. Every number below is from a clean
@@ -861,3 +864,68 @@ controls run).
   defer one macrotask. `installRailScrollspy` records its state BEFORE its
   empty-target early return, so scanning early binds the host to zero links
   permanently rather than merely missing one pass.
+
+## FINAL VERDICTS — re-recorded 2026-11-20 at f514c1290539993f9bdbeca9b02b6f99ca0a4dff
+
+Re-measured on the PR #1804 remediation branch, on one tree, at the commit in
+the heading. The five-field evidence record for every row below is
+`.artifacts/pr1804-remediation-20261120/02-evidence/EVIDENCE-RUN.md` (raw logs in
+its `raw/` directory); this section is the in-repo reading of that record. The
+2026-11-19 table above is kept as history: its numbers are that tree's per-tree
+values, not the delivery-line record.
+
+The measured commit is `f514c1290539993f9bdbeca9b02b6f99ca0a4dff`. The later
+commit `434a624d39496eed70d29df4c1bba3fef17cca56` changes only one JSON
+annotation and one test comment; it neither changes behavior nor is re-measured.
+
+Shared five-field record for the rows below:
+
+| Field | Record |
+| --- | --- |
+| commit | `f514c1290539993f9bdbeca9b02b6f99ca0a4dff` — HEAD did not move across the run |
+| status | clean at measurement: `git status --porcelain` showed only the pre-existing `?? .cc-agent-transcript.jsonl`; every artifact used (`www/dist/`, the packed tarballs, `.artifacts/site-e2e-*.json`) is Git-ignored |
+| provenance | `LOCAL /private/tmp/oe-a16-closure-B` at the cited commit — a LOCAL record only, not a CI run/job; it writes no CI column |
+| environment | macOS (darwin), 8 cores / 16 GB; Node `v24.18.0`; pnpm `12.8.1`; Playwright `1.59.1` (chromium `147.0.7727.15`, firefox `148.0.2`, webkit `26.4`) |
+
+| proof | verdict | measured command → result (HEAD) |
+| --- | --- | --- |
+| P1 executor unreachable | **MET** | `./node_modules/.bin/vp run --no-cache --fail-if-no-match site:build` (build prerequisite; exit 0, `gate ok: 6 step(s)`, 30 s) → `node tools/repo/check-browser-entry-graph.ts www/dist/client/.vite/oe-browser-entry-graph.json`: `1 artifact(s) — 1 MET, 0 VIOLATED, 0 UNPROVEN; verdict: MET`; artifact `status: complete`, `loadedModuleCount` **135**, `chunkCount` **13**, `islandCount` **8**, `executorEntriesLoaded` **0/6**; the runtime chunk `islands/element-runtime-*.js` module table holds **41** entries (40 workspace source + 1 `node_modules/@preact/signals-core`); artifact sha256 `4da5eb5b11e63907081b0e0b4a9ab152d27e479b53dc803fe2f60fd16f8a7a1f` |
+| P2 server reads the new structure | **MET** (counts re-measured; the causal attribution is advisory — see boundaries) | `find www/dist -name '*.html' -type f \| wc -l` → **78**; pages containing `<open-` → **78/78**; host counts `open-page-rail` **68** / `open-search` **78** / `open-theme-toggle` **78** / `open-code-block` **278** / `open-button` **18**; `data-oe-prop-seed` → **68** pages / **68** occurrences; `items="[object Object]"` → **0** pages |
+| P3 build facts not source-text markers | **MET** | `grep -rn '@element(' packages/router/src \| wc -l` → **10 hits** — diagnostic messages and doc comments plus one generator: `authoring.ts:11,525,816,836,1164,1193` (diagnostic strings / doc comments), `vite/internal/server-runtime/renderer-runtime.ts:140` (comment), `vite/internal/collect-shadow-candidates.ts:131` (comment recording the removed `@element(` prefilter), `vite/plugin-mdx.ts:6` (comment), and `vite/plugin-mdx-lower.ts:204`, which **EMITS** an `@element(...)` template literal — a generator, not a detector: no control flow reads a source marker |
+| P4 narrow ABI, no `__partProgram` in production | **MET** | `grep -rl` / `grep -ro '__partProgram' www/dist/client` → **files=0, occurrences=0**; `grep -rl` / `grep -ro --include='*.html' '__partProgram' www/dist` → **2 files / 6 occurrences, all API-reference prose (en+zh reference pages)**: `www/dist/reference/index.html` and `www/dist/zh/reference/index.html`, each 3 (e.g. "the statics a generated module carries (`__partProgram`, `__compiledProperties`, …)") |
+| P5 retired exports + migration note + inventory | **MET for the re-measured part; enumeration half advisory** | `./node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot` → `Public interface snapshot matches (6 packages).` (exit 0, 21 s): the snapshot is regenerated and reproducible at the candidate. The retired-export census ("36 exports") and the migration-note row list are the 2026-11-19 record and were **not re-censused** by this run; they stay advisory for a fresh census and are not counted as re-measured here |
+
+### Counting basis: what "38 modules" meant, and what HEAD measures
+
+- **2026-11-19 record**: "38 modules" was the `0807bdd84` per-tree value for the
+  emitted `element-runtime-<hash>.js` chunk, written without a counting basis;
+  it is not reproducible on the delivery head (that candidate is not an ancestor
+  of the PR head).
+- **Review measurement at `07963b738`**: **40** modules = 39 `packages/*` source
+  modules + 1 `node_modules/@preact/signals-core` module.
+- **HEAD `f514c1290` measurement**: the runtime chunk module table holds **41**
+  entries = **40 workspace source modules + 1 `node_modules` module**
+  (`@preact/signals-core/dist/signals-core.module.js`);
+  `runtimeChunk.modulesOutsideNodeModules` **40** and
+  `modulesUnderNodeModules` **1**. This is a per-head value (Wave 1 added a
+  module) and must not be compared directly with 38 or with 40. The checker's
+  separate `loadedModuleCount` is **135** = 136 chunk-table ids minus one id
+  whose `renderedLength` is 0 (`www/.openElement/tailwind.css`).
+- The verdict-bearing number is unchanged: **0/6** executor entries loaded (the
+  six `EXECUTOR_ENTRY_RELATIVE_MODULES` each `loaded=no`).
+
+### Boundaries of this re-record
+
+- P2's "server reads through the compiler-emitted producer rather than a Part
+  Program read" is a behavioral attribution carried from the 2026-11-19 record
+  and its compiler guard tests; the re-run recomputed only the counts (78/78
+  pages, host counts, seed counts), so that attribution is **advisory** here and
+  is not claimed as re-proven.
+- P3's one-directional blocks-scan argument (the `island-blocks-scan.ts`
+  `compiledArtifactMightUseBlocks` text test) is part of the 2026-11-19 record
+  and was not re-run; only the `@element(` source scan was recomputed.
+- P5's export enumeration and the migration-note row list were not re-run (see
+  the P5 row).
+- Nothing here is a CI record, a milestone exit, a gate record or a release
+  claim; the record's admissibility is bounded by
+  [the evidence baseline](./evidence-baseline.md).
