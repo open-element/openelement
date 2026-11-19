@@ -1,5 +1,5 @@
 /** Shared helpers and visual recipes for the public UI primitives. */
-import { createLogger, type Logger } from '@openelement/element';
+import { createLogger, type Logger } from '@openelement/element/logger';
 
 /**
  * Shared component logger. Compiled modules may not carry runtime top-level

@@ -42,7 +42,7 @@
  * </form>
  * ```
  */
-import { onConnect, onPropertyChange } from '@openelement/element';
+import { onConnect, onPropertyChange } from '@openelement/element/lifecycle';
 
 import { defineComponentConfig } from './component-config.ts';
 import { syncInputDisabled, syncInputValue, type InputHost } from './input-machine.ts';

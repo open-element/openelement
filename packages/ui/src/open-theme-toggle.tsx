@@ -25,7 +25,7 @@
  * <open-theme-toggle theme="light"></open-theme-toggle>
  * ```
  */
-import { onConnect, onPropertyChange } from '@openelement/element';
+import { onConnect, onPropertyChange } from '@openelement/element/lifecycle';
 import { defineComponentConfig } from './component-config.ts';
 import { log } from './component-recipes.ts';
 import { readInstanceState, writeInstanceState } from './instance-state.ts';

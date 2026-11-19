@@ -42,7 +42,7 @@
  * - `label` - Title text and aria-label of the dialog
  * - `mode` - `modal` (default, showModal()) or `non-modal` (show()); read at open time
  */
-import { onConnect, onPropertyChange } from '@openelement/element';
+import { onConnect, onPropertyChange } from '@openelement/element/lifecycle';
 
 import { defineComponentConfig } from './component-config.ts';
 import {

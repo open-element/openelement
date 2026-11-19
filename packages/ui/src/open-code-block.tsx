@@ -24,7 +24,7 @@
  * </open-code-block>
  * ```
  */
-import { onDispose, onPropertyChange } from '@openelement/element';
+import { onDispose, onPropertyChange } from '@openelement/element/lifecycle';
 import { defineComponentConfig } from './component-config.ts';
 import { cancelCopyReset, scheduleCopyReset } from './copy-feedback.ts';
 import { log } from './component-recipes.ts';

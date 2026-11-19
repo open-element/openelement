@@ -21,7 +21,7 @@
  * @csspart trigger - Trigger wrapper
  * @csspart content - Popover content
  */
-import { onConnect, onDispose, onPropertyChange } from '@openelement/element';
+import { onConnect, onDispose, onPropertyChange } from '@openelement/element/lifecycle';
 
 import { defineComponentConfig } from './component-config.ts';
 import {
