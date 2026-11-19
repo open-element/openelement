@@ -232,6 +232,7 @@ This shell is a bounded M09-0 slice. It does **not** implement or claim:
   registration decision or package export. The descriptor remains internal and
   is not an author API. M09-1, M09-2, M09-3 and M09-4 are not started by this
   record; M13 three-engine and packed-consumer evidence are also not claimed.
+  (Superseded 2026-11-18: M09-1b/2/3/4 landed — see `alpha16-18-progress.md` §5.)
 - The M08 dynamic-text residual (adjacent text slots coalesce into one Text
   node) is unchanged here; this slice's claim case deliberately uses one dynamic
   text slot per element.

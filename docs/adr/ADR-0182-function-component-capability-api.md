@@ -1,6 +1,6 @@
 # ADR-0182: Function-component capability API (experience edition), workspace-package islands, and the property JSON seed channel
 
-- Status: PROPOSED (draft; pending owner sign-off)
+- Status: ACCEPTED (owner sign-off 2026-11-19)
 - Date: 2026-11-16
 - Owner direction: 2026-11-16 — D1 = A (workspace-package generated islands
   migrate inside Alpha16, targeting the Alpha16 release line), D2 = the
@@ -194,8 +194,8 @@ Boundaries recorded by this direction:
 | Field | Value |
 | --- | --- |
 | Owner direction recorded | 2026-11-16 (D1 = A, D2 = experience edition, D3 = B) |
-| Owner sign-off | ____________________________ (pending; blank by design) |
-| Sign-off date | ____________________________ (pending) |
+| Owner sign-off | SisyphusZheng (verbal approval in review session, recorded 2026-11-19) |
+| Sign-off date | 2026-11-19 |
 | Formal amendment carrier | `docs/architecture/alpha16-18-execution-plan.md` §17 (draft, same pending state) |
 
 This draft does not move itself from PROPOSED to an accepted record, and the
@@ -206,6 +206,41 @@ Implementation slices may proceed under the direction recorded above (given by
 the owner on 2026-11-16); the blank sign-off blocks any claim that a capability
 is delivered, that a §17.3 evidence row is satisfied, or that any gate, exit or
 release condition is met.
+
+**Sign-off amendment (2026-11-19):** the owner approved this record verbally in
+the 2026-11-19 review session and the sign-off line above now carries that
+record. The paragraph above is kept as history of the pre-sign-off state; the
+accepted record is the current text.
+
+## Retirement conditions (P5)
+
+```
+RETIRE onError / onPropertyChange / the env.states channel WHEN interface:snapshot
+  no longer lists the names on the @openelement/element subpaths AND the authoring
+  model that replaces function components lands ; VERIFY gate:source AND
+  gate:release GREEN AT one SHA ; RECORD 16b-MN + public-interface-snapshot ;
+  OWNER single owner
+RETIRE the ./lifecycle public subpath WHEN interface:snapshot no longer lists it AND
+  every shipped intrinsic is reachable from the root subpaths alone ;
+  VERIFY gate:source GREEN AT one SHA ; RECORD 16b-MN + snapshot ; OWNER single owner
+RETIRE the ./internal/compiled/leaf-runtime internal subpath WHEN the Alpha17
+  precompiled distribution replaces the closed leaf entry AND no emitted module
+  imports it ; VERIFY gate:source GREEN AT one SHA ; RECORD 16b-MN row ;
+  OWNER single owner
+RETIRE the workspace-package island site admission WHEN the P1 browser-entry-graph
+  artifact reports MET for every applicable production app at one clean SHA AND
+  the package-island branch of the entry scan carries the same lane fact as local
+  islands ; VERIFY gate:source AND gate:packed GREEN AT that SHA ;
+  RECORD 16b-MN + browser-entry-graph evidence ; OWNER single owner
+RETIRE the data-oe-prop-seed JSON seed channel WHEN a canonical server→client seed
+  contract replaces the attribute carrier or the capability is removed ;
+  VERIFY gate:source GREEN AT one SHA ; RECORD 16b-MN + the M09-2d amendment ;
+  OWNER single owner
+```
+
+Each condition is an event on a standard artifact (`public-interface-snapshot.json`,
+`gate:source`/`gate:release`, the P1 browser-entry-graph report), never a date
+or a "next review".
 
 ## What this record does not do
 

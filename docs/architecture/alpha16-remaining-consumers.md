@@ -8,12 +8,13 @@ summary: Measured map of every class-lane module left in the production apps, an
 
 Every remaining class-lane module and the ONE design decision each needs.
 
-## Already migrated (10)
+## Already migrated (12)
 ui: open-theme-toggle, open-code-block, open-dialog, open-dropdown, open-input, open-button
-www islands: open-cinematic-scroll, open-dragon-live-gaze, open-hero-polish
+www islands: open-cinematic-scroll, open-dragon-live-gaze, open-hero-polish, open-search
+www site-ui: open-artifact-panel
 saas islands: notes-live
 
-## www/app/site-ui — 5 modules
+## www/app/site-ui — 4 modules remaining (5 measured minus open-artifact-panel, migrated)
 
 | module | blocker | decision needed |
 | --- | --- | --- |
@@ -21,11 +22,13 @@ saas islands: notes-live
 | open-page-rail | app-local `readingChromeStrings` called in JSX child + attribute (OEC9043) | strings must become declared rows or be inlined |
 | open-reading-shell | **21 `computed`, ZERO `trustedHtml`** (measured 2026-11-18); hosts 4 child components | computed support: collapse the 21 rows or inline them. No transport work is useful |
 | open-article-view | **6 `computed`, ONE `trustedHtml` sink** (measured 2026-11-18), receives the article `model` | the body must stop being a runtime string (removes the row and its sink) — or it stays class-lane |
-| open-artifact-panel | (no rows; verify) | → migrate NOW if clean |
+| open-artifact-panel | MIGRATED at `0a1aad095` (2026-11-18) | removed from the remaining set |
 
-## www/app/islands — 1 module
-open-search: Zag combobox controller consulted from render-time reads → same
-OEC9043 gate as the rail, plus controller ownership.
+## www/app/islands — 0 modules
+open-search MIGRATED at `37effae9c` (2026-11-18): the compiler-owned view island now
+runs on `@openelement/element/lifecycle`; the Zag combobox controller stays a
+site-UI collaborator read at event time, which the lane admitted. Kept here as
+history of the last measured blocker.
 
 ## www/app/components/article-routes — 40 generated modules
 All are `generate-site-article-routes.ts` output: one `model` row + `locale`,
