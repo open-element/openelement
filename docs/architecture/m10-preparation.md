@@ -1,7 +1,7 @@
 ---
 status: active
 topic: M10-0 preparation (unsigned)
-summary: Unsigned M10-0 preparation: current-source capability inventory, replacement reachability gaps, an observer over the emitted browser entry graph and per-file migration methods; P1–P5 NOT MET, no sign-off.
+summary: Unsigned M10-0 preparation: current-source capability inventory, replacement reachability gaps, an observer over the emitted browser entry graph and per-file migration methods; the P1–P5 NOT MET statements are the 2026-11-15 reading (2026-11-20 later reading points at the re-record), no sign-off.
 ---
 
 # M10-0 preparation — unsigned capability inventory and migration method
@@ -673,3 +673,12 @@ necessarily the minimal range. The Git-ignored `www/dist` and `apps/saas/dist`
 in this checkout are build output, not evidence: the §5 addendum records the
 2026-11-15 commands, the per-app artifacts and their `sha256` values, but no
 exact-SHA/clean-tree record backs them.
+
+## Later reading (2026-11-20)
+
+**P1–P5/M10/M11 status follows the 2026-11-20 re-record in the head
+[progress ledger](./alpha16-18-progress.md) and the
+[P1 applicability record](./p1-applicability-record.md); the `NOT MET`
+statements in this file are the state as recorded at the time of writing.** This
+is an append-only later reading: it rewrites none of the 2026-11-15 record, is
+not an M10-0 inventory sign-off, and neither claims nor closes any P5 evidence.

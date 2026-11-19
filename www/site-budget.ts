@@ -50,6 +50,9 @@
  *     Same standing instruction as above: lowering this is how the SLO is
  *     tightened, and P1's end state — the generic executor leaving the shared
  *     chunk once every island has moved — is the next re-measure point.
+ *   - 2026-11-20 (owner-approved, delegated remediation session): the two
+ *     raises above are ratified as owner decisions; measured head total
+ *     332.9 KiB (81.6% of 408); next re-measure point remains the P1 end state.
  *
  * Exceeding either value fails the official-Site build test; the build
  * manifest reports against the same numbers. Lowering these values is the

@@ -125,6 +125,12 @@ record:
   `docs/architecture/seams.md`; there is no waiver.
 
 - Recorder: PR #1804 (`fix/taoup-remediation`)
-- Basis: `#1470` (predicate consolidation), PR #1804 head SHA, and the
+- Basis: `#1470` (predicate consolidation), PR #1804 head
+  `07963b738cea5f49bd84e0dc841b5309aa8cfdd3` at the 2026-11-20 remediation
+  (later commits are carried by PR #1804), and the
   `docs/adr/ADR-0163-seam-single-ownership.md` precedent
 - Owner sign-off: Owner, 2026-11-17 (date: 2026-11-17)
+- Sign-off amendment 2026-11-20 (delegated): the PR #1804 remediation records
+  its decisions under the owner's 2026-11-20 in-session delegation
+  (execution-plan §18.7); this line records the delegation for the remediation
+  change set and is not a personal written signature.

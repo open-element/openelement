@@ -213,3 +213,13 @@ This amendment records no owner sign-off, milestone exit or release claim.
   adoption (GH #1800); the dev server has no emitted-asset carrier, records the
   explicit unavailable state and fails closed; no M09/M11 status, P5 evidence,
   version, tag or publication is created.
+
+## Later reading (2026-11-20)
+
+P1–P5/M10/M11 status follows the 2026-11-20 re-record in the head
+[progress ledger](../architecture/alpha16-18-progress.md) and the
+[P1 applicability record](../architecture/p1-applicability-record.md); the
+`P1 stays NOT MET` sentence under "Consequences and limits" above is the state
+as recorded at the time of writing. This later reading is append-only: it
+rewrites no decision above, creates no milestone evidence, P5 evidence or
+release claim, and adds no owner sign-off.

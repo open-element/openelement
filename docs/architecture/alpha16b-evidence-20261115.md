@@ -199,3 +199,14 @@ for P1, does not execute M12/M13 and does not flip any milestone or status row.
   commit before citing it as gate evidence.
 - `LOCAL` and `CI` stay separate labels: the CI record does not upgrade a LOCAL
   row's provenance, and a green local run is never written into a CI column.
+
+## Later reading (2026-11-20)
+
+**P1–P5/M10/M11 status follows the 2026-11-20 re-record in the head
+[progress ledger](./alpha16-18-progress.md) and the
+[P1 applicability record](./p1-applicability-record.md); the `NOT MET`
+statements in this file are the state as recorded at the time of writing**,
+including the 2026-11-16 addendum's "P1–P5 keep their recorded `NOT MET`
+states". This is an append-only later reading: no five-field record above is
+rewritten, no row is upgraded, and no milestone, exit or release claim is
+created.

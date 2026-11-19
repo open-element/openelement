@@ -67,9 +67,9 @@ there (`git show 3b5c7a9a^:docs/audit/2026-07-27-application-loop-framework-rese
 - [ADR-0174-generated-code-runtime-and-compatibility.md](./ADR-0174-generated-code-runtime-and-compatibility.md) — AMENDED: slice order, Alpha16a/16b split with the release gate intact, and approved retirement of the serialized Part Program protocol; implementation pending (2026-11-03)
 - [ADR-0175-alpha16a-m07-decisions-and-current-view.md](./ADR-0175-alpha16a-m07-decisions-and-current-view.md)
 - [ADR-0176-alpha16-plan-amendments-registry.md](./ADR-0176-alpha16-plan-amendments-registry.md)
-- [ADR-0177-internal-artifact-resolution-subpaths.md](./ADR-0177-internal-artifact-resolution-subpaths.md)
+- [ADR-0177-internal-artifact-resolution-subpaths.md](./ADR-0177-internal-artifact-resolution-subpaths.md) — AMENDED: the third `/internal/*` subpath `./internal/compiled/leaf-runtime` is named (2026-11-20), and the one written retirement condition now reads across three internal subpaths with this record as the single owner
 - [ADR-0178-release-line-qualification-anchor.md](./ADR-0178-release-line-qualification-anchor.md)
 - [ADR-0179-unix-philosophy-absorption.md](./ADR-0179-unix-philosophy-absorption.md)
 - [ADR-0180-function-component-lifecycle-intrinsics.md](./ADR-0180-function-component-lifecycle-intrinsics.md)
 - [ADR-0181-generated-element-ssr-and-retention.md](./ADR-0181-generated-element-ssr-and-retention.md)
-- [ADR-0182-function-component-capability-api.md](./ADR-0182-function-component-capability-api.md)
+- [ADR-0182-function-component-capability-api.md](./ADR-0182-function-component-capability-api.md) — AMENDED: 2026-11-20 remediation amendments — approved carrier (execution-plan §18), the two public subpaths, the open-button/open-input migration records, the JSON seed identity/wire, the dropdown Correction 3 correction, `useHost` FUTURE/OWED, the `provideContext` accepted ambiguity, the `16b-EB` delivery truth and the client-JS SLO ratification

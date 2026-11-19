@@ -162,3 +162,13 @@ The record becomes effective as an exit record only when the §4 blocking set
 is cleared — B1 closed by a decision or B1–B2 explicitly accepted as scope in a
 dated §14-style amendment, and the remaining blockers closed or explicitly
 accepted. This owner sign-off does not discharge those.
+
+## Later reading (2026-11-20)
+
+**P1–P5/M10/M11 status follows the 2026-11-20 re-record in the head
+[progress ledger](./alpha16-18-progress.md) and the
+[P1 applicability record](./p1-applicability-record.md); the `NOT MET`
+statements and the blocking set in this docket are the state as recorded at the
+time of writing.** The docket's job is decision and provenance history, not a
+verdict: this later reading is append-only, flips no row, records no §13.5/P5
+sign-off, and claims no M09 exit or release.

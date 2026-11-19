@@ -710,3 +710,435 @@ Why it is not landed yet: steps 1-3 each touch exact-byte assertions
 whole. Its own evidence matrix is S/K/U/D plus a divergence negative, and it
 unblocks `open-search` (`hits: SearchHit[]`), `notes-live`
 (`events: Array<{id, body}>`) and `open-page-rail` (`items: RailItem[]`).
+
+## Amendment (2026-11-20): carrier and sign-off state
+
+Append-only fact record. Owner-approved 2026-11-20 under the delegated
+in-session remediation authorization recorded in
+[execution-plan §18](../architecture/alpha16-18-execution-plan.md) (§18.7 for the
+record form). It re-decides nothing in the sections above; where they describe a
+pending state, this is the later reading.
+
+- The **approved carrier** of this record's direction is now execution-plan §18.
+  §17 stays as written: its "draft; formal sign-off pending" title, its
+  intentionally blank §17.2 table and its "this draft does not move itself"
+  paragraph are the **historical state of the pre-2026-11-20 carrier**, not a
+  current blocker and not a signature in force.
+- This record's own head is read the same way. The "Proposed decision (pending
+  owner sign-off)" heading, the "Sign-off status (pending — intentionally
+  blank)" heading and carrier row ("§17 (draft, same pending state)"), and the
+  "What this record does not do" sentence "It records no owner sign-off" are
+  kept as written for the same reason; the accepted state is: the direction was
+  owner-approved (2026-11-16 direction; the 2026-11-19 verbal sign-off already
+  recorded above; the decisions of the 2026-11-20 remediation recorded in the
+  amendments below under the delegation in plan §18.7). The blank line in
+  "Sign-off status" is still not a signature and this amendment does not fill
+  it.
+- What the old pending state blocked is now stated precisely: the capabilities
+  whose delivery is recorded in this file's 2026-11-20 amendments are delivery
+  facts of their implementation records (plan §18 carries the authority); this
+  ADR records no gate, milestone exit, P5 evidence or release result of its own,
+  and the §13.5 P5 sign-off remains the owner's own line in the consolidation
+  PR (plan §18.6).
+
+## Amendment (2026-11-20): the two public subpaths — `./lifecycle` and `./document-services`
+
+Append-only decision record. Owner-approved 2026-11-20 (delegated in-session
+remediation authorization; plan §18.7). It authorizes the two public export
+subpaths this change publishes and enumerates their interface. It creates no
+version, tag, publication, public-API freeze, milestone exit or release claim.
+
+### Decision
+
+`@openelement/element` publishes two **public** export subpaths beyond the
+surface this record originally enumerated:
+
+- `./lifecycle` → `src/lifecycle.ts`: the compiler-erased author intrinsics
+  `onConnect`, `onDispose`, `onPropertyChange`, `provideContext`, `ref`,
+  `useContext` — six public symbols in the regenerated
+  `docs/release/public-interface-snapshot.json`.
+- `./document-services` → `src/document-services.ts`: the generated-lane page
+  floor — `deepGetElementById`, `ensureDeepFragmentNavigation`,
+  `ensurePreHydrationClickCapture` — three public symbols in the same snapshot.
+
+Why the subpaths exist, and why they are **public** rather than `/internal/*`:
+
+- `./lifecycle` is author-facing. The package root is flagged in `sideEffects`
+  (it carries the hydration and Block install edges), so an author module that
+  imports these intrinsics from the root drags the generic executor into the
+  browser graph for bindings the compiler then deletes. The subpath is a
+  deliberate facade: it re-exports the fail-closed stand-ins from
+  `internal/core/compile-lifecycle.ts`, has no side effects and reaches no
+  executor entry (`packages/element/src/lifecycle.ts`).
+- `./document-services` is the narrow page floor the generated client entry must
+  install statically once every island is generated-lane and no runtime loader
+  is emitted; without it a fully generated page silently loses deep fragment
+  navigation and the bounded pre-upgrade click capture
+  (`packages/element/src/document-services.ts`; the seam and its missing-behaviour
+  contract are registered in `docs/architecture/seams.md`).
+- Both subpath targets live **outside** `internal/`, i.e. both are deliberate
+  facade modules, so ADR-0137 §1 ("public package entries expose deliberate
+  facade modules and never name an `internal/` module") is honored without an
+  exemption. The third new subpath this change publishes,
+  `./internal/compiled/leaf-runtime`, is the one that needs a named deviation —
+  ADR-0177 carries it (see that record's 2026-11-20 amendment).
+
+### P7 four questions
+
+1. **Can the platform do this?** Yes — both are ordinary package `exports`
+   entries over modules that already exist; no new mechanism, registry or second
+   resolution path is introduced.
+2. **Can the cost be paid at compile time?** Yes — `./lifecycle` is entirely
+   compile-time: the compiler erases the calls into the generated instance
+   factory and the emitted module imports nothing from the subpath.
+   `./document-services` adds no implementation (three re-exports) and installs
+   by call rather than by import side effect, so it stays tree-shakeable.
+3. **If runtime, does it read as platform code and honor the server contract?**
+   `./lifecycle` never runs — outside the compiler pipeline its stand-ins fail
+   closed with the existing `JSX_OUTSIDE_COMPILER` identity. `./document-services`
+   runs document-level listeners installed by the generated entry and adds no
+   server path; no SSR bytes change.
+4. **Nearest prior art, and is the difference deliberate?** The prior art is the
+   repository's existing deliberate facade subpaths (`./client-only`, `./no-blocks`,
+   `./base` under ADR-0155/ADR-0166) and the emitted-code artifact-resolution
+   deviation (ADR-0177). The difference is deliberate: these two facades exist so
+   the author's and the page floor's graphs can stay executor-free — the P1
+   defect this change removes — while their targets stay outside `internal/`, so
+   ADR-0137 §1 is not deviated from.
+
+### Retirement conditions (P5)
+
+The block "Retirement conditions (P5)" above already owns the `./lifecycle` row;
+this amendment adds the `./document-services` row and states that both are
+predicates on existing artifacts at one SHA, never dates or "next reviews". This
+record remains the single owner of both events (§17.4-style; no second owner).
+
+```
+RETIRE ./lifecycle WHEN interface:snapshot no longer lists it AND every shipped
+  intrinsic is reachable from the root subpaths alone ; VERIFY gate:source GREEN
+  AT one SHA ; RECORD 16b-MN + snapshot ; OWNER single owner
+RETIRE ./document-services WHEN a page whose islands are all generated-lane can
+  load the element runtime again, so the shell owns the two document-level
+  installs AND the router wrapper element-document-services.ts is deleted with
+  this surface AND interface:snapshot no longer lists it ; VERIFY gate:source
+  GREEN AT one SHA ; RECORD 16b-MN + snapshot + the seams.md row ;
+  OWNER single owner
+```
+
+The `./document-services` condition is the same event `docs/architecture/seams.md`
+records for the page-floor seam ("RETIRE this seam when the shell owns these
+installs"), restated here as the subpath's P5 condition; neither carrier is a
+second owner, both name the same predicate.
+
+## Amendment (2026-11-20): the two remaining ui migration records — `open-button` and `open-input`
+
+Append-only record. Owner-approved 2026-11-20 (delegated in-session remediation
+authorization; plan §18.7). It adds the migration records the four dated records
+above did not carry, in their format: what migrated, the enumerated public-surface
+delta, the behaviour that is preserved, and where the evidence lives.
+
+D-18a names `open-button` because it is the docs-site island; `open-input` is
+recorded for two reasons: the same class-export retirement landed in the same
+migration train (all six `@openelement/ui` components are function components
+now, and `registerOpenUi`'s class table is empty), and it is a published subpath
+consumed through the workspace-package island path — the ui dogfood fixture
+declares `packageIslands: ['@openelement/ui']` and its `/form` page consumes
+`open-input`/`open-button`. This record's own rule ("every public delta must be
+enumerated") is what makes both records mandatory rather than optional.
+
+## Migration record (2026-11-20): the fifth component, `open-button`
+
+`packages/ui/src/open-button.tsx` is a function component with a sidecar
+(`root: 'shadow'`, `delegatesFocus: true`, `formAssociated: true`, the authored
+stylesheet, and the six reflected rows `variant` / `size` / `disabled` / `href` /
+`target` / `type`). The compiled template is ONE `when` branch (`href !== ''`
+picks `<a>`, otherwise `<button>`) with one default slot per branch, so exactly
+one control element exists in any state — the earlier two-sibling/hidden-sink
+shape assigned the author's text into the hidden anchor's slot (PR #1611 audit).
+The click choreography lives in `button-machine.ts` (dispatch order, form
+submit/reset, the #757 disabled guard); the shell owns the `:state(disabled)`
+fact; `@openelement/ui` no longer exports the `OpenButton` class, the authored
+function takes the name, the manifest/CEM declaration becomes generated
+(`OpenButtonElement`, no public superclass), the manual registration table drops
+the tag, and the interface snapshot is regenerated (class type → function type).
+
+### Public-surface delta (enumerated)
+
+- The `OpenButton` **class export** is retired with the migration: the same name
+  is now the authored function component and is not constructible; the element
+  constructor exists only in the build output after registration.
+- Five readonly computed signals are **retired with the class export**:
+  `buttonMode`, `linkHref`, `linkTarget`, `linkRel`, `linkAriaDisabled`. The
+  generated lane has no authored getter/computed capability; consumers derive
+  those values from the declared `href` / `target` / `disabled` rows (the
+  template spells them inline at their JSX position, which is also why they
+  refresh).
+- The class's private internals sync (`syncInternals` → `syncDisabledState`) is
+  retired: the shell seats `authorDisabled || effectiveDisabled` as the host
+  custom state and the sheet selects `:host(:state(disabled))`, so the class's
+  call was a second writer of that fact.
+- Behaviour that is preserved: `open-click` (bubbles, composed; authored in the
+  component because the manifest event recognizer scans module-local dispatch
+  sites, while the helper owns fire-then-act and the disabled guard), the
+  #757/#1061 disabled-anchor href removal, `type` submit/reset through the
+  machine (the generated element is form-associated but is not a native submit
+  button, so `type` is deliberately not bound on the button branch), reflected
+  variant/size styling, `::part(control)`, `delegatesFocus`, and the SSR
+  link/button branch (link mode server-serializes a navigable `<a>`).
+
+Evidence: the ui manifest/smoke/contract suites, the www behaviour matrix and
+the routes that consume `<open-button>`, the ui dogfood `/form` submit rows, and
+the regenerated interface snapshot. LOCAL; the exact consumer-form rows and their
+head run belong to the 2026-11-20 evidence re-record and the PR body, not to this
+record.
+
+## Migration record (2026-11-20): the sixth component, `open-input`
+
+`packages/ui/src/open-input.tsx` is a function component with a sidecar
+(`root: 'shadow'`, `delegatesFocus: true`, `formAssociated: true`, the authored
+stylesheet, and the eight declared rows `type` / `placeholder` / `label` /
+`name` / `value` / `disabled` / `required` / `error`, where `value` is the live
+property the interaction path writes). `input-machine.ts` projects the live
+`value` property and the disabled surface; the form contract itself (value
+publication, `required → valueMissing`, reset/restore, the fieldset-effective
+disabled state) is the shell's M09-2d mapping, not component code. The ids are **static**
+(`open-input-control`, `open-input-error`) inside the shadow scope; the class
+lane's realm-unique counter existed only to keep SSR and CSR agreeing on a
+document-wide identity, which the shadow boundary makes unnecessary — and a
+static id is part of the compiled attribute seed instead of a post-claim write.
+
+### Public-surface delta (enumerated)
+
+- The `OpenInput` **class export** is retired with the migration: the same name
+  is the authored function component; the element constructor exists only in the
+  build output after registration (`OpenInputElement`), the manifest/CEM
+  declaration becomes generated, the manual registration table drops the tag,
+  and the interface snapshot is regenerated.
+- The class's `inputId` property is **retired** (static in-shadow ids replace the
+  realm-unique counter).
+- Seven readonly computed signals are **retired with the class export**:
+  `noLabel`, `noError`, `idAttr`, `errorIdAttr`, `ariaInvalidAttr`,
+  `requiredMark`, `describedByAttr`. The label/error/ARIA surface is authored as
+  inline JSX expressions so the compiler derives the `label` / `error` row
+  dependencies; naming those values in locals would silently make the whole
+  error surface SSR-only (16b-migration-note R1).
+- The class's private form/state mirroring (`activate`, `updateStates`,
+  `syncFormValue`, `syncValidity`, `handleInput`, `handleChange`, `handleFocus`,
+  `handleBlur`) is retired: the shell owns the internals record and the form
+  contract, and the template owns the interaction handlers.
+- Behaviour that is preserved: FormData value publication, `required → valueMissing`,
+  value reset/clear and restore, the fieldset-effective disabled state (through
+  the shell's `:state(disabled)` channel plus the interaction guard), `delegatesFocus`,
+  the four `::part`s (`wrapper` / `label` / `control` / `error`), the label and
+  error slots with their ARIA wiring, and the event surface — `open-input`
+  (detail `{ value }`), `open-change`, `open-focus`, `open-blur`, all bubbles and
+  composed.
+
+Evidence: the www behaviour matrix rows for forms, the ui manifest/smoke
+suites, the ui dogfood `/form` page (FormData carries the typed value, required
+blocks submission, reset clears, fieldset disabled drops the entry,
+`delegatesFocus` + per-input events) and the regenerated interface snapshot.
+LOCAL; the exact rows and their head run belong to the 2026-11-20 evidence
+re-record and the PR body, not to this record.
+
+## Amendment (2026-11-20): the JSON seed channel — true identity and wire
+
+Append-only fact record. Owner-approved 2026-11-20 (delegated in-session
+remediation authorization; plan §18.7). D-18c and the "Implementation plan
+record" above stay as written; this amendment records what actually landed and
+is the later reading where the two disagree.
+
+### Fail-closed identity
+
+- The channel's own identity is **`OEIR_SHELL_PROP_SEED_MISMATCH`**, raised by the
+  shell claim for an unparseable payload, a non-object payload, a row name the
+  compiled descriptor does not declare, or a declared row that is not
+  JSON-seedable. It is an internal `OEIR_` identity: not a member of the exported
+  error catalogue and no public-snapshot change.
+- A seed value that does not match its declared row's type fails through the
+  existing write guard's identity, **`OEIR_SHELL_PROPERTY_TYPE_MISMATCH`** — so a
+  payload can never be written as a value the row's contract rejects.
+- D-18c's parenthetical (`OEIR_LEAF_CLAIM_MISMATCH` at "Claim acceptance") is the
+  pre-landing wording and stays as history. The claim-mismatch identity keeps the
+  DOM/structure and divergent-value facts it already owned; the seed's wire-side
+  refusal carries its own code because the cause is a wire fact, not a
+  DOM-structure fact.
+
+### Transport and wire
+
+D-18c recorded the exact transport as undecided. The implementation is ONE
+shell-owned host attribute, **`data-oe-prop-seed`**, carrying a JSON object
+`{"<rowName>": <json value>, …}` — written by the emitted host producer (the
+serializer's seed fold) from supplied non-primitive rows and read/consumed once
+by the shell claim BEFORE the recipe runs. One attribute rather than one per row,
+because a per-row attribute would invent a dialect the client's
+`observedAttributes` never observes.
+
+Wire contract, including the known debt:
+
+- **No version marker, no self-describing header.** The payload is a bare JSON
+  object whose names are validated against the compiled descriptor. A future
+  change to the payload grammar must add an explicit format version rather than
+  reinterpret an old payload; today "format version 1" is the implicit contract,
+  and the absent marker is recorded here as **known debt**, not as a promise.
+- **Consume-once.** The shell removes the attribute on read, so a second claim
+  never re-applies a stale value over a user write.
+- **Admitted rows only.** Declared `array`/`object` rows; `trustedHtml` stays
+  structurally excluded (a brand cannot be reconstructed from JSON, and promoting
+  a plain string back to it would be a raw-markup channel — D-18c's separate
+  decision).
+- **Inert when there is no seedable row.** A descriptor with no JSON-seedable row
+  never reads the attribute (the shell's connect path is contractually
+  attribute-read-free unless a declared row needs a wire), so an attribute
+  present on such an element is inert rather than diagnosed.
+- **Equal seed writes nothing.** The value write is guarded by identity, so a
+  seed equal to the current value mutates nothing; a structurally divergent
+  payload fails closed as above rather than silently keeping the default.
+- **Trust class.** A seeded value is the same trust class as a direct property
+  write: a payload name is only ever matched against the compiled descriptor's
+  declared row names (an unknown name fails closed), and the admitted value is
+  assigned as that row's value rather than merged into a target object — so no
+  key in the payload reaches an assignment sink, no raw-markup channel is added,
+  and the shell does not deep-filter `__proto__`/`constructor` names inside an
+  admitted value. The hostile-payload negative and any deep-key policy remain
+  **OWED evidence rows** of the seed suite (named in the 2026-11-20 evidence
+  re-record), not closed by this amendment.
+
+## Amendment (2026-11-20): correction to Correction 3 — the dropdown focus-return wiring is element-lifetime, not connection-signal scoped
+
+Append-only factual correction. Owner-approved 2026-11-20 (delegated in-session
+remediation authorization; plan §18.7). The 2026-11-17 "Correction 3" section
+above stays as written; its sentence "It now records its three listeners, drops
+them on the connection signal's abort and again at element-lifetime teardown
+(idempotent)" is superseded by this reading.
+
+The implemented mechanism (`packages/ui/src/dropdown-machine.ts`,
+`packages/ui/src/open-dropdown.tsx`):
+
+- `env.signal` is the **element-lifetime** channel (aborted on a failed connect
+  pass and at element teardown), not a per-connection signal. It cannot bound a
+  per-connection listener set: a reconnect would find the wiring disposed while
+  the compiled nodes were re-claimed. `watchDropdownFocusReturn` therefore
+  receives the optional signal and deliberately ignores it (`void signal`), and
+  the component calls `activateDropdown(host)` without passing `env.signal`.
+- The wiring is once per host on the **retained shadow root**, but it IS
+  re-established per connection: each `activateDropdown` first tears down the
+  previous generation's wiring and bumps a `connectionGeneration` gate, then
+  wires fresh listeners. A queued `toggle` task that outlived its connection is
+  a no-op through that gate, and the queued focus-restore microtask refuses to
+  move focus when the host is no longer connected.
+- Teardown is at **element lifetime**: `onDispose` calls
+  `disposeDropdownFocusWiring(host)` (idempotent, also called by the next
+  activation).
+
+The functional guarantees Correction 3 claimed are preserved: no listener of this
+module survives teardown, a dead connection makes no focus decision, and a
+reconnect ends with exactly one wired listener set. What changes is the mechanism
+and the scope of `env.signal` — the connection bookkeeping is the
+`connectionGeneration` gate plus the activation-time dispose, not the signal's
+abort. The three JSDoc paragraphs in `dropdown-machine.ts` that still describe the
+connection-scoped form are the companion correction this remediation records as
+required (an ADR is append-only, so they cannot be corrected here); this record
+is the authoritative statement of the semantics.
+
+## Amendment (2026-11-20): `useHost` is FUTURE/OWED
+
+Append-only status record. Owner-approved 2026-11-20 (delegated in-session
+remediation authorization; plan §18.7).
+
+D-18b item 4 lists `useHost` as part of the experience edition. It is **not
+implemented** and is recorded as **FUTURE/OWED** (Alpha17 or later): there is no
+export on `./lifecycle` or the root surface, no compiler recognition, no snapshot
+symbol and no consumer evidence. The delivered host-access channel of this
+edition is `env.host` on the lifecycle, change and error callbacks (the owning
+generated element for a root; the nearest ancestor generated element host for a
+depth-1 retained hostless child). `useHost` is **not** counted in the delivered
+experience-edition surface, this ADR creates no implementation obligation for it,
+and if it lands it needs its own public-delta record and P7 review.
+
+## Amendment (2026-11-20): `provideContext` — an accepted same-name, different-meaning surface
+
+Append-only decision record. Owner-approved 2026-11-20 (delegated in-session
+remediation authorization; plan §18.7). It changes no export and adds no
+diagnostic.
+
+Two different functions carry the name `provideContext` in this package:
+
+- **Root surface (host-side).** `provideContext(host, context, value)` — the
+  class-lane/tree primitive that provides a value on a host element and returns
+  an unsubscribe handle (`packages/element/src/internal/core/signal-context.ts`,
+  re-exported by `packages/element/src/public-surface.ts`).
+- **`./lifecycle` surface (generated lane).** `provideContext(context, read)` —
+  the compiler-erased provider intrinsic admitted by binding provenance from a
+  named import of `@openelement/element` or `@openelement/element/lifecycle`;
+  the thunk is re-read on connect and after every declared-row commit
+  (`packages/element/src/internal/core/compile-lifecycle.ts`).
+
+**Decision: keep both, recorded as an accepted ambiguity.** Renaming either
+would add another public-surface delta to this change; a compiler diagnostic
+would have to guess intent, because binding provenance already separates the two
+call shapes. **Authoring guidance:** inside a generated (function) component,
+import `provideContext` from `@openelement/element/lifecycle`; the root export is
+the host-side helper. The root module deliberately does not re-export the
+intrinsic, and `packages/element/src/public-surface.ts` already carries this
+guidance to readers; this amendment is the owner-facing record of the same
+decision (the code-side JSDoc carries the pointer).
+
+## Amendment (2026-11-20): `16b-EB` delivery truth — two capture points, SSR fallback deferred
+
+Append-only fact record. Owner-approved 2026-11-20 (delegated in-session
+remediation authorization; plan §18.7). It records what the `16b-EB` slice
+actually delivered and matches the §13.2 obligation change recorded in
+execution-plan §18.3.
+
+- **Delivered:** the author-facing error boundary (`onError`) with **two** capture
+  points — (1) the connect/claim pass, where the shell's `connectedCallback` catch
+  already covered mount, claim, setup and the `onConnect` replay as one instance
+  pass, and (2) the update phase, through the generated `guardUpdate(fn, sink)`
+  channel for refresh subscriptions and DOM listeners. The shell owns the handler
+  list and both capture points (`packages/element/src/internal/compiled/generated-element/shell.ts`).
+  The callback receives `{ host, signal, states, error }`; with no registered
+  handler both capture points keep the pre-`16b-EB` rethrow/rollback behaviour
+  (no silent swallow); a handler that throws replaces the original error; the
+  handler list is cleared wherever the change list is cleared, so no handler runs
+  after its owner is gone; an async rejection is deliberately not a capture point
+  (no scheduler, no global rejection listener, and not attributable to one
+  element). Both channels are compiler-private runtime properties on the host
+  records the compiler already builds — no exported symbol or type is added.
+- **Not delivered:** an SSR fallback. Execution-plan §18.3 amends the §13.2
+  `16b-EB` minimum obligation accordingly and defers the SSR fallback to
+  **Alpha17** as a named carry (with the carry's delivery conditions listed
+  there). That is a plan obligation change, **not** a §13.3 scope exception.
+- The boundary reset policy remains OPEN (D-18b) and no author-facing reset API
+  is part of the delivery; the capability inventory's `16b-EB` row and the
+  `16b-MN` `16b-EB` section are corrected to this truth by the 2026-11-20
+  remediation (capture points only; no SSR fallback; the Alpha17 carry).
+
+## Amendment (2026-11-20): the client-JS SLO — 344 → 376 → 408 KiB ratified
+
+Append-only decision record. Owner-approved 2026-11-20 (delegated in-session
+remediation authorization; plan §18.7; the full decision record is
+execution-plan §18.4 and the measurement notes live in `www/site-budget.ts`).
+
+The sentence in the 2026-11-17 "light-root SSR producer row (B4)" amendment —
+"they exceed the www client-JS budget (352.8 KB vs the 344 KB SLO)" and "the
+island migrations themselves are NOT landed" — is history: it was written before
+the two owner-approved raises and before the islands landed. The SLO is now
+`totalJsKB: 408` (`islandKB: 84` unchanged): 344 → 376 on 2026-11-17 (first two
+migrated generated islands; ~6% headroom) and 376 → 408 on 2026-11-18 (the
+`open-search` migration; ~4.4% headroom over the measured 390.0 KiB). Both raises
+are owner-approved — the first already carried the "(owner decision)" label, the
+second is ratified by the 2026-11-20 delegated approval. The next re-measure point
+is the P1 end state (every island migrated, the executor leaves the shared
+chunk); 408 is not permanent slack and lowering it remains the only way to
+tighten the SLO.
+
+## Status update (2026-11-20): D-18c's seed is landed at `17cd3cd57`
+
+The "Implementation plan record (2026-11-17)" above ends with "Why it is not
+landed yet". That paragraph is the pre-landing state and stays as history; the
+channel landed at commit `17cd3cd57` ("feat(element): ship the non-primitive JSON
+seed channel (D-18c / M11-3)"), an ancestor of this PR's head. The shipped wire,
+its identity and its known debt are recorded in the 2026-11-20 seed amendment
+above; the §17.3 acceptance-evidence row for D-17c is owned by the 2026-11-20
+evidence re-record and the PR body, not by this note.

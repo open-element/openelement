@@ -120,3 +120,97 @@ queue that does not exist.
   server-contract change; (4) precedent = ADR-0155 / ADR-0166 written retirement
   conditions, with the deliberate difference that these subpaths are
   emitted-code import targets rather than author-facing entry variants.
+
+## Amendment (2026-11-20): the third `/internal/*` subpath, `./internal/compiled/leaf-runtime`
+
+Append-only amendment. Owner-approved 2026-11-20 under the delegated in-session
+remediation authorization recorded in
+[execution-plan §18](../architecture/alpha16-18-execution-plan.md) (§18.5 for the
+authorization, §18.7 for the record form). The Context and Decision sections
+above stay as written; this amendment records that their premise — "two export
+subpaths", "the public surface is neither widened nor renamed" — no longer
+describes the tree, and states the later reading.
+
+### The third subpath and why it is internal
+
+`packages/element/package.json` publishes a third internal artifact-resolution
+subpath alongside the two above:
+
+```
+"./internal/compiled/leaf-runtime": "./src/internal/compiled/leaf-runtime.ts",
+```
+
+It is the **generated-leaf runtime entry** (M11-3). The compiled-leaf modules the
+compiler emits (mount/claim/SSR factories) import their primitives from here
+instead of from the `internal/compiled/runtime` facade. The reason is the facade's
+reach: it re-exports `serializeToHtml`, `createFreshDom`, `hydrateExistingDom` and
+their kernels, so a generated island chunk that imported the facade pulled the
+whole generic executor into its chunk (measured at M10-P1: one 64-module
+`element-runtime-<hash>.js` holding both the generated-element shell and the six
+executor endpoints, reachable from every island). The generated lane never calls
+those endpoints, so the entry is a **closed set, not a convenience index**: every
+symbol resolves to a leaf-safe module (`values`, `markers`, `claim-invariants`,
+`recipe`, `instance-ledger`, `static-sibling-ranges`, `list-key`, `bindings`,
+`observability`, `signal/*`), and importing from `program-kernel.ts` — even just
+to re-export `removeNodes` — would put the executor back in the graph, which is
+exactly the defect the entry removes.
+
+It is `internal` rather than public for the same reason as the two subpaths above:
+it is an emitted-code import target the consumer never writes, its resolution has
+to go through standard package `exports` with no build alias, and it names an
+`internal/` module directly — so it is a **named deviation from ADR-0137 §1**, not
+a deliberate facade. That last clause is what separates it from the two new
+public subpaths this change publishes (`./lifecycle`, `./document-services`):
+those are facade modules whose targets live outside `internal/` and are authorized
+by ADR-0182's 2026-11-20 subpath amendment; this one is the deviation, and this
+record stays its single owner.
+
+The Decision's sentence "`packages/element/package.json`:16-17 (`exports`) is
+unchanged — the public surface is neither widened nor renamed" described that
+change set, not a standing freeze. This PR widens the exports map with three
+subpaths, each authorized by its own record: this amendment for
+`./internal/compiled/leaf-runtime`, and ADR-0182's 2026-11-20 amendment for the
+two public ones.
+
+### P7 (short form)
+
+1. **Platform.** The package `exports` map and the module graph — the same
+   platform as the two subpaths above, not a new registry.
+2. **Compile-time cost.** None at runtime: the entry is a closed re-export set,
+   and its only consumer is emitted code. The cost is bare attribution
+   (`ADR-0174`:42-50, :118-119), which stays an open obligation exactly as the
+   Context records for the other two.
+3. **Runtime / server contract.** No runtime or server-contract change; the
+   closed set *removes* a module edge and adds none.
+4. **Prior art and deliberate difference.** Precedent = the two subpaths of this
+   record and ADR-0155/ADR-0166's written retirement conditions. The deliberate
+   difference is that this is a closed emitted-code leaf set whose whole value is
+   the absence of the executor edge: a "convenience index" reading would recreate
+   the measured defect, so the closed-set rule is part of the decision, not a
+   style note.
+
+### Later reading of the retirement condition: three subpaths, one owner
+
+The Decision's retirement condition says "Both `/internal/*` export subpaths
+retire … either specifier … either subpath". The later reading is: **all three
+internal artifact-resolution subpaths are covered by the ONE written retirement
+condition of this record**, applied per subpath — `graph:check` reports zero
+importers outside `packages/element`, `esm:boundary-check` reports no external
+resolution, the snapshot records zero `publicSymbols` behind the subpath, and
+`gate:release` + `gate:packed` are green at that one SHA; §1 of ADR-0137 remains
+in force throughout and no fixed version, date or exemption is granted.
+
+This record remains the **single record owner** of the internal-subpath deviation
+and of that condition. The ADR-0182 public-subpath conditions are separate events
+for separate surfaces and do not own this deviation.
+
+### Derived pointers, not additional owners
+
+`packages/element/package.json`:5's annotation still says "the two
+./internal/compiled/* artifact-resolution subpaths", and
+the `16b-MN` row (`docs/architecture/16b-migration-note.md`) says "the subpath set now numbers
+four" (the two ADR-0177 subpaths, `./internal/compiled/leaf-runtime`, and the
+public `./lifecycle`). Both are **derived pointers**, not second owners: the
+authority is this record. They are stale in their counts (two → three internal
+subpaths, plus the separate public ones) and are corrected when next touched; this
+record's reading does not depend on their wording.

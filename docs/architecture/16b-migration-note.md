@@ -121,6 +121,14 @@ Owed, and the reason this is PARTIAL, not delivered:
 - signal reads inside a hook remain a host-binding read and are refused by the
   unchanged `UNBOUND_BINDING` gate.
 
+> **Later reading (2026-11-20).** The "Owed" list above is the 2026-11-15 state
+> and two of its items are stale: depth-1 nested/hostless hooks are delivered
+> (`56394eb67`; the 2026-11-16 amendment below) and the connection-scope helper
+> parameter is delivered in `env = { host, signal }` form (the second 2026-11-16
+> amendment below). Still owed in `16b-LC`: depth ≥ 2, recipe/list placement,
+> non-retained targets, pre-DOM timing and the remaining signed-inventory rows.
+> The 2026-11-20 remediation corrects the matching capability-inventory row.
+
 ### Generated-island style channel — PARTIAL: declaration and build pipeline delivered, application OWED
 
 `IslandConfig.styles` is now declared and validated on a LIGHT-root
@@ -1034,6 +1042,18 @@ literals, and the unchanged two-name `bindSignalWrites` call. Pins:
 `generated-element.error-boundary.test.ts` B4 (a module using all three older
 intrinsics plus a tracked slot and an event handler) and B5 (the SSR producer).
 
+> **Later reading (2026-11-20).** Two corrections to this section's headline
+> claim. (1) The delivered boundary is the **capture points only**: the
+> `connectedCallback` catch (connect/claim) plus the existing
+> `guardUpdate(fn, sink)` wrapping (update/refresh and event dispatch share that
+> one sink) — two capture points, not the three the heading says. (2) No SSR
+> fallback exists in this slice (the "no fallback inside this slice" paragraph
+> above is the true statement); the SSR fallback is deferred to Alpha17 by the
+> owner-approved plan amendment of 2026-11-20 — a named carry, not a §13.3
+> exception — see `alpha16-18-execution-plan.md` §18.3. The capability
+> inventory's "three capture points … and an SSR fallback … MIGRATED" row was
+> wrong and is corrected in the 2026-11-20 remediation.
+
 ## 2026-11-19 amendment — R4: a full generated-lane page has no runtime loader, so document services come from the executor-free subpath (facts only)
 
 ### R4 — the page floor cannot re-install document services through the lazy `element-services` import
@@ -1210,6 +1230,13 @@ authored span with `OEC9042` and a message that names the allowed positions.
   and the handle is never built on the server.
 - No `useHost`-style host accessor (a separate D-17b item) and no change to
   `env.host`.
+
+> **Later reading (2026-11-20).** `useHost` is recorded as **FUTURE/OWED**: it is
+> listed in ADR-0182 D-18b-4 and execution plan §17.1 as a separate D-17b item,
+> it is NOT implemented, and it is not part of the experience edition's
+> delivered surface. The 2026-11-20 remediation records that status (ADR-0182
+> amendment + the capability inventory) and deliberately does not implement it;
+> `env.host` (connection-scope) stays the only delivered host access.
 
 ### Bytes
 
@@ -1482,3 +1509,35 @@ the same body-text predicate every other optional runtime symbol uses.
 LOCAL evidence, single engine. Not M09 exit, not the M13 matrix, and no claim is
 made here about `16b-CTX` completion — every row of the migration note keeps the
 state it records.
+
+## 2026-11-20 later reading — lifecycle author guidance for the generated lane (documentation only)
+
+This is an append-only author-guidance note; it changes no export, no compiler
+admission, no bytes and no status. It is the documentation half of the
+2026-11-20 remediation (the code-side JSDoc is
+`packages/element/src/lifecycle.ts`; the decisions are the ADR-0182 amendments
+of the same date).
+
+- **Import the generated-lane intrinsics** (`onConnect`, `onDispose`,
+  `provideContext`, `useContext`, `onError`, `ref`) as named imports from the
+  package root, or — on a page that must not reach the element executor — from
+  `@openelement/element/lifecycle`. They are compiler-erased at the authored
+  site; the import path does not add a runtime dispatcher.
+- **`onError` is exported only from the root entry.** `@openelement/element/lifecycle`
+  does not re-export it, so a generated component that needs the 16b-EB boundary
+  imports `onError` from `@openelement/element` (the root entry's
+  sideEffects keep the executor in the graph). This is a recorded known
+  P1-budget trade-off, not a bug: no production consumer in the tree uses
+  `onError` today, and adding the re-export is a public-surface decision, not a
+  migration side effect.
+- **`provideContext` has two different meanings by import path.** The root
+  entry's `provideContext(host, context, value)` is the class-lane host-side
+  helper; `@openelement/element/lifecycle`'s `provideContext(context, read)` is
+  the generated-lane intrinsic. They are distinct functions that share one
+  exported name; TypeScript disambiguates them by import path, but the compiler
+  admits both spellings, so there is no compile-time diagnostic for a
+  wrong-signature use. ACCEPTED ambiguity (ADR-0182 2026-11-20 amendment):
+  authors of generated components use the `/lifecycle` form for the generated
+  lane and never the root three-argument host form inside a compiled setup.
+- **`useHost` is FUTURE/OWED.** It is listed in ADR-0182 D-18b-4 and execution
+  plan §17.1 but not implemented; `env.host` is the only delivered host access.

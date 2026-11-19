@@ -75,6 +75,7 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 | 25 | legacy allocation-only 绑定工厂（descriptor `createBindings`，M09-0 shell 测试遗留） | `packages/element/src/internal/compiled/generated-element/shell.ts`（descriptor `createBindings` 字段及其 allocation-only 契约注释，条目引用 `:448-470`） | 条件到即删（M09 shell 测试全部迁移到 `createInstance` 后删除） |
 | 26 | rolldown-vite `buildStart` 诊断面 workaround（#1616 报告先行契约） | `packages/router/src/vite/internal/build-diagnostics.ts`（"The interim contract, until the bundler is fixed"，条目引用 `:91`） | 条件到即删（rolldown-vite 修复对应缺陷后删除） |
 | 27 | #1558 前已发布产物的 permissive 样式边兼容读 | `packages/compiler/src/internal/compiler/compiled-artifact-style-requests.ts`（PERMISSIVE 读，条目引用 `:23-25`） | 条件到即删（#1558 前发布的产物退出受支持窗口后收紧为严格准入） |
+| 28 | `registerOpenUi` published-API 空操作垫片（`@openelement/ui`） | `packages/ui/src/register.ts` | 条件到即删（`@openelement/ui` 不再发布该 export / 全部消费方改用 generated entry，或下一个 breaking alpha 时删除） |
 
 没有"现在删"项：扫描发现的文本级残余（脚本头部陈旧的 `deno run` 用法
 散文）已在 alpha8/alpha10 清理；其余命中要么已含书面退役条件，要么是
@@ -487,3 +488,11 @@ native 选择缝是主产物，不再作为垫片登记。）
 - 退役条件：#1558 前发布的产物版本退出受支持窗口（消费方按
   [m01-consumer-migration-matrix.md](./m01-consumer-migration-matrix.md) 完成重编译迁移）之后，把这段 permissive 读收紧为对 ONE 样式创作语法（`semantic-core/style-imports.ts`）的严格准入；届时旧形状在打包消费证据上 fail closed，而不是静默走旧路径。
 - 处置：条件到即删。
+
+### 28. `registerOpenUi` published-API 空操作垫片（`@openelement/ui`）——条件到即删
+
+- 所有者：`@openelement/ui`（`packages/ui/src/register.ts` 是唯一声明点：`registerOpenUi(registry?)` 的签名、空注册表语义与其文档注释都由该模块拥有；2026-11-20 owner-approved delegated remediation 决定保留该 published API 并登记，不删除）。
+- 方向：published API 调用方（`registerOpenUi(registry?)`）→ 空注册表（无副作用）；该调用今天不注册任何元素，返回值 `void`。
+- 存在原因：`registerOpenUi` 是已发布的公开 API，外部消费者可能仍在 import 或调用它，删除属于 P5 退役决定而不是一次迁移的副作用。函数体为空的唯一原因是六个 first-party UI 组件（`open-input`、`open-button` 等）已全部迁移到 generated lane，类组件注册表已空；它因此成为纯兼容面而不是功能面。
+- 退役条件：当 `@openelement/ui` 不再发布该 export，或全部消费方改用 generated entry 时删除 `registerOpenUi`（连同 `packages/ui/src/register.ts` 的导出与其 snapshot 行）；或随下一次 breaking alpha 删除（该 export 属 experience-edition 面，不需要兼容适配器）。删除时同步更新 `docs/release/public-interface-snapshot.json` 与 ADR-0182 的实现记录。
+- 处置：条件到即删（2026-11-20 登记：保留 published API，条件到即执行删除，不等下一次评审）。
