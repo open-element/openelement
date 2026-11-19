@@ -104,8 +104,11 @@ const INSTALLED_IDENTITY: ElementRuntimeIdentity = {
 };
 
 test('elementRuntimeChunkName matches exactly the module ids under the package root', () => {
+  // B1-final: index.ts is the capital-C `OpenElement` facade and its two
+  // side-effect installers — the CLASS-SHELL table homes it in the executor
+  // group, never the runtime chunk every generated island imports.
   expect(elementRuntimeChunkName('/site/packages/element/src/index.ts', WORKSPACE_IDENTITY)).toBe(
-    ELEMENT_RUNTIME_CHUNK_NAME,
+    ELEMENT_EXECUTOR_CHUNK_NAME,
   );
   expect(
     elementRuntimeChunkName(
@@ -142,9 +145,11 @@ test('elementRuntimeChunkName never matches on a substring or sibling-prefix hit
 });
 
 test('elementRuntimeChunkName strips query suffixes and a null identity matches nothing', () => {
+  // Same identity answer with the query stripped — and the same executor
+  // grouping the class shell takes (B1-final).
   expect(
     elementRuntimeChunkName('/site/packages/element/src/index.ts?v=123', WORKSPACE_IDENTITY),
-  ).toBe(ELEMENT_RUNTIME_CHUNK_NAME);
+  ).toBe(ELEMENT_EXECUTOR_CHUNK_NAME);
   expect(elementRuntimeChunkName('/site/packages/element/src/index.ts', null)).toBe(undefined);
 });
 
@@ -153,7 +158,7 @@ test('requireElementRuntimeChunk accepts the emitted chunk carrying runtime modu
     fileName: 'islands/element-runtime-Bh4sh.js',
     facadeModuleId: null,
     modules: {
-      '/site/packages/element/src/index.ts': {},
+      '/site/packages/element/src/jsx-runtime.ts': {},
       '/site/packages/element/src/html.ts': {},
     },
   };
@@ -166,7 +171,7 @@ test('requireElementRuntimeChunk accepts the emitted chunk carrying runtime modu
     [
       {
         fileName: 'islands/element-runtime-Bh4sh.js',
-        facadeModuleId: '/site/packages/element/src/index.ts',
+        facadeModuleId: '/site/packages/element/src/jsx-runtime.ts',
         modules: {},
       },
     ],
@@ -201,7 +206,7 @@ test('requireElementRuntimeChunk rejects a runtime homed inside an island chunk'
       facadeModuleId: '/site/app/islands/open-badge.ts',
       modules: {
         '/site/app/islands/open-badge.ts': {},
-        '/site/packages/element/src/index.ts': {},
+        '/site/packages/element/src/jsx-runtime.ts': {},
       },
     },
   ];
@@ -219,7 +224,7 @@ test('requireElementRuntimeChunk rejects a runtime split across chunks', () => {
     {
       fileName: 'islands/element-runtime-Bh4sh.js',
       facadeModuleId: null,
-      modules: { '/site/packages/element/src/index.ts': {} },
+      modules: { '/site/packages/element/src/jsx-runtime.ts': {} },
     },
     {
       fileName: 'islands/island-open-badge-9qf3dl.js',
@@ -334,7 +339,7 @@ test('requireEntryStaticGraphFreeOfRuntime accepts the post-B2 entry graph', () 
       [
         emittedChunk('islands/client.js', ['\0virtual:open-client-entry'], [HELPER_FILE], true),
         emittedChunk(HELPER_FILE, ['\0vite/preload-helper.js'], []),
-        emittedChunk(RUNTIME_FILE, ['/site/packages/element/src/index.ts'], []),
+        emittedChunk(RUNTIME_FILE, ['/site/packages/element/src/jsx-runtime.ts'], []),
         emittedChunk(
           ISLAND_FILE,
           ['/site/app/islands/open-search.tsx'],
@@ -361,7 +366,7 @@ test('requireEntryStaticGraphFreeOfRuntime fails closed on the measured pre-fix 
             ['/site/app/islands/open-search.tsx'],
             [RUNTIME_FILE, 'islands/rolldown-runtime-DK3Fl9T5.js'],
           ),
-          emittedChunk(RUNTIME_FILE, ['/site/packages/element/src/index.ts'], []),
+          emittedChunk(RUNTIME_FILE, ['/site/packages/element/src/jsx-runtime.ts'], []),
         ],
         WORKSPACE_IDENTITY,
       ),
@@ -386,7 +391,7 @@ test('requireEntryStaticGraphFreeOfRuntime ignores dynamic edges', () => {
         emittedChunk('islands/client.js', ['\0virtual:open-client-entry'], [HELPER_FILE], true),
         emittedChunk(HELPER_FILE, ['\0vite/preload-helper.js'], []),
         emittedChunk(ISLAND_FILE, ['/site/app/islands/open-search.tsx'], [RUNTIME_FILE]),
-        emittedChunk(RUNTIME_FILE, ['/site/packages/element/src/index.ts'], []),
+        emittedChunk(RUNTIME_FILE, ['/site/packages/element/src/jsx-runtime.ts'], []),
       ],
       WORKSPACE_IDENTITY,
     ),
@@ -413,7 +418,7 @@ test('requireEntryStaticGraphFreeOfRuntime fails closed when no entry chunk is i
   const error = assertThrowsIncludes(
     () =>
       requireEntryStaticGraphFreeOfRuntime(
-        [emittedChunk(RUNTIME_FILE, ['/site/packages/element/src/index.ts'], [])],
+        [emittedChunk(RUNTIME_FILE, ['/site/packages/element/src/jsx-runtime.ts'], [])],
         WORKSPACE_IDENTITY,
       ),
     OpenElementError,
@@ -439,7 +444,7 @@ test('requireEntryStaticGraphFreeOfRuntime finds the runtime behind an island re
           ),
           emittedChunk('islands/mid-a.js', ['/site/app/mid-a.ts'], ['islands/mid-b.js']),
           emittedChunk('islands/mid-b.js', ['/site/app/mid-b.ts'], [RUNTIME_FILE]),
-          emittedChunk(RUNTIME_FILE, ['/site/packages/element/src/index.ts'], []),
+          emittedChunk(RUNTIME_FILE, ['/site/packages/element/src/jsx-runtime.ts'], []),
         ],
         WORKSPACE_IDENTITY,
       ),
@@ -461,7 +466,11 @@ const EXECUTOR_FILE = `islands/${ELEMENT_EXECUTOR_CHUNK_NAME}-Zx9qp.js`;
 
 function executorChunk(fileName = EXECUTOR_FILE): ClientBuildChunk {
   // One of the six executor entries the split groups under the executor name.
-  return emittedChunk(fileName, ['/site/packages/element/src/internal/compiled/runtime/kernel.ts'], []);
+  return emittedChunk(
+    fileName,
+    ['/site/packages/element/src/internal/compiled/runtime/kernel.ts'],
+    [],
+  );
 }
 
 test('requireExecutorChunkUnreachableFromIslands accepts the post-split lazy graph', () => {
@@ -472,7 +481,7 @@ test('requireExecutorChunkUnreachableFromIslands accepts the post-split lazy gra
     requireExecutorChunkUnreachableFromIslands(
       [
         emittedChunk('islands/client.js', ['\0virtual:open-client-entry'], [], true),
-        emittedChunk(RUNTIME_FILE, ['/site/packages/element/src/index.ts'], []),
+        emittedChunk(RUNTIME_FILE, ['/site/packages/element/src/jsx-runtime.ts'], []),
         emittedChunk(ISLAND_FILE, ['/site/app/islands/open-search.tsx'], [RUNTIME_FILE]),
         executorChunk(),
       ],
@@ -482,6 +491,10 @@ test('requireExecutorChunkUnreachableFromIslands accepts the post-split lazy gra
 });
 
 test('requireExecutorChunkUnreachableFromIslands fails when an island statically reaches the executor', () => {
+  // The island must be attributed GENERATED for the guard to fail: an
+  // unattributed (or class) island legitimately imports the executor, so the
+  // lane map carries the generated verdict this negative case is about.
+  const lanes = new Map<string, IslandChunkLane>([[ISLAND_FILE, 'generated']]);
   const error = assertThrowsIncludes(
     () =>
       requireExecutorChunkUnreachableFromIslands(
@@ -491,6 +504,7 @@ test('requireExecutorChunkUnreachableFromIslands fails when an island statically
           executorChunk(),
         ],
         WORKSPACE_IDENTITY,
+        lanes,
       ),
     OpenElementError,
     'statically reaches the element-executor chunk',
@@ -507,7 +521,12 @@ test('requireExecutorChunkUnreachableFromIslands fails when the entry reaches th
     () =>
       requireExecutorChunkUnreachableFromIslands(
         [
-          emittedChunk('islands/client.js', ['\0virtual:open-client-entry'], ['islands/mid.js'], true),
+          emittedChunk(
+            'islands/client.js',
+            ['\0virtual:open-client-entry'],
+            ['islands/mid.js'],
+            true,
+          ),
           emittedChunk('islands/mid.js', ['/site/app/mid.ts'], [EXECUTOR_FILE]),
           executorChunk(),
         ],
@@ -527,7 +546,7 @@ test('requireExecutorChunkUnreachableFromIslands passes when the graph carries n
     requireExecutorChunkUnreachableFromIslands(
       [
         emittedChunk('islands/client.js', ['\0virtual:open-client-entry'], [], true),
-        emittedChunk(RUNTIME_FILE, ['/site/packages/element/src/index.ts'], []),
+        emittedChunk(RUNTIME_FILE, ['/site/packages/element/src/jsx-runtime.ts'], []),
       ],
       WORKSPACE_IDENTITY,
     ),

@@ -377,8 +377,8 @@ test('error codes: the client island build reports build-phase codes', () => {
           },
           {
             fileName: 'islands/element-runtime-Bh4sh.js',
-            facadeModuleId: '/site/packages/element/src/index.ts',
-            modules: { '/site/packages/element/src/index.ts': {} },
+            facadeModuleId: '/site/packages/element/src/jsx-runtime.ts',
+            modules: { '/site/packages/element/src/jsx-runtime.ts': {} },
             imports: [],
           },
         ],

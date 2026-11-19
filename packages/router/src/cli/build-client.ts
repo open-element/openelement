@@ -47,6 +47,7 @@ import type { ClientAssetManifest } from '@openelement/protocol/client-assets';
 import {
   type ClientAssetIslandInput,
   createClientAssetManifest,
+  buildIslandChunkLaneMap,
   collectClientBuildChunks,
   findClientEntryStyles,
   packageIslandChunkName,
@@ -1206,14 +1207,38 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       requireElementRuntimeChunk(collectClientBuildChunks(outputs), elementRuntimeIdentity);
     }
 
+    // The lane join reads the SAME Vite manifest the asset manifest builder
+    // consumes below (the island identity → emitted chunk join), so the guard's
+    // floor set and the shipped island assets cannot disagree about which chunk
+    // homes an island.
+    const guardViteManifest = await readViteClientManifest(
+      join(clientOutDir, '.vite', 'manifest.json'),
+    );
+
     // B1's complementary half: the executor entries the split homes in their
-    // own `element-executor` group must stay off every page floor (the entry
-    // and every island chunk). No entry or island may STATICALLY reach the
-    // executor; a class island pulls it lazily, only when it renders. Zero
-    // executor chunks (a pure generated-lane build) passes — nothing to reach.
+    // own `element-executor` group must stay off every page floor: the entry
+    // chunk and every GENERATED-lane island chunk. A generated-lane island
+    // statically imports the leaf runtime only; a class-lane island's runtime IS
+    // the executor, so its static import of the executor is the legitimate
+    // class shape, not a page floor. Zero executor chunks (a pure generated-lane
+    // build) passes — nothing to reach. The lane map is the client build's own
+    // island identity joined to the
+    // emitted chunk (`buildIslandChunkLaneMap`): only GENERATED-lane island
+    // chunks are floor roots, a class-lane island's static import of the
+    // executor is its legitimate runtime. An unattributable chunk is absent
+    // and the guard reads it as `class` — a join gap must not fail a build on
+    // a fact the join could not establish.
+    const guardChunks = collectClientBuildChunks(outputs);
     requireExecutorChunkUnreachableFromIslands(
-      collectClientBuildChunks(outputs),
+      guardChunks,
       elementRuntimeIdentity,
+      buildIslandChunkLaneMap({
+        root,
+        islands: clientAssetIslands,
+        viteManifest: guardViteManifest,
+        chunks: guardChunks,
+        resolvedIslandModuleIds: islandModuleIds,
+      }),
     );
 
     // B2 gap (a), fail closed, both halves:

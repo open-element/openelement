@@ -144,6 +144,15 @@ export const CLASS_SHELL_RELATIVE_MODULES: readonly string[] = [
   // `revive` — revive/upgrade of a claimed instance; imports `parts` and
   // `program-kernel`.
   'src/internal/compiled/runtime/revive.ts',
+  // `hydrate-install` — the side-effect install of the hydration executor
+  // (#1416); imports `runtime.ts`, i.e. the six entries. Grouped here so its
+  // importer below cannot bridge the executor into the runtime chunk.
+  'src/internal/compiled/runtime/hydrate-install.ts',
+  // `no-blocks` — the no-Block public entry; its deliberate
+  // `hydrate-install` side-effect import (the B2 half-measure) makes it an
+  // executor-side consumer, and it was the bridge that kept the six entries
+  // statically reachable after every other shell module moved.
+  'src/no-blocks.ts',
 ];
 
 /**
@@ -305,7 +314,8 @@ export function requireElementRuntimeChunk(
   }
   const carrying = chunks.filter((chunk) =>
     [chunk.facadeModuleId ?? '', ...Object.keys(chunk.modules ?? {})].some(
-      (rawId) => rawId !== '' && elementRuntimeChunkName(rawId, identity) === ELEMENT_RUNTIME_CHUNK_NAME,
+      (rawId) =>
+        rawId !== '' && elementRuntimeChunkName(rawId, identity) === ELEMENT_RUNTIME_CHUNK_NAME,
     ),
   );
   if (carrying.length === 0) {
@@ -422,6 +432,18 @@ export function requireEntryStaticGraphFreeOfRuntime(
 }
 
 /**
+ * One emitted island chunk's lane, as the client build read it off the island
+ * entry (the M11-3 lane fact, `ClientIslandDeliveryEntry.generatedLane`).
+ *
+ * The distinction is the whole point of the guard's narrowing: a GENERATED-lane
+ * island imports the leaf primitives and must never statically reach the
+ * executor, while a CLASS-lane island's runtime IS the executor — its static
+ * import of the class shell and the executor entries is the legitimate class
+ * shape, not an accidental page floor.
+ */
+export type IslandChunkLane = 'generated' | 'class';
+
+/**
  * B1's own property, asserted on the emitted graph: no page floor statically
  * reaches the dedicated element-executor chunk.
  *
@@ -433,14 +455,20 @@ export function requireEntryStaticGraphFreeOfRuntime(
  * keeps the executor a lazy pull: a class island loads it only when a class
  * island actually renders.
  *
- * The floor is every `isEntry` chunk AND every chunk whose file name starts
- * with `island-` (package and local island chunks alike). A generated-lane
- * island statically imports the leaf primitives; if that closure reaches the
- * executor group, the executor is on the page floor for pages that declared a
- * class island it never renders — the pre-split shape. Static edges only, by
+ * The floor is every `isEntry` chunk AND every GENERATED-lane `island-*` chunk
+ * (the lane is the island entry's M11-3 fact, joined to the emitted chunk file
+ * by the caller as {@linkcode islandLaneByChunkFile}). A generated-lane island
+ * statically imports the leaf primitives; if that closure reaches the executor
+ * group, the executor is on the page floor for pages that declared a class
+ * island it never renders — the pre-split shape. A class-lane island chunk is
+ * NOT a floor root: the class lane's runtime IS the executor, so its static
+ * import of the executor entries and the class shell is the legitimate class
+ * shape. Unattributed chunks read as `class` (fail-open there): a join gap must
+ * not fail a build on a fact the join could not establish, and the generated
+ * side — the side the guard protects — stays fail-closed. Static edges only, by
  * construction: the walk follows `OutputChunk.imports` and never
- * `dynamicImports`, so a class island's own `import()` of the executor stays
- * invisible here, which is the point.
+ * `dynamicImports`, so a lazy `import()` of the executor stays invisible here,
+ * which is the point.
  *
  * Fail-closed on the guard's own inputs matches
  * {@linkcode requireEntryStaticGraphFreeOfRuntime}'s posture. Zero executor
@@ -450,6 +478,7 @@ export function requireEntryStaticGraphFreeOfRuntime(
 export function requireExecutorChunkUnreachableFromIslands(
   chunks: readonly ClientBuildChunk[],
   identity: ElementRuntimeIdentity | null,
+  islandLaneByChunkFile?: ReadonlyMap<string, IslandChunkLane>,
 ): void {
   const executorFiles = new Set(
     chunks
@@ -464,10 +493,21 @@ export function requireExecutorChunkUnreachableFromIslands(
   );
   if (executorFiles.size === 0) return;
   const byFile = new Map(chunks.map((chunk) => [chunk.fileName, chunk]));
+  const laneOf = (chunk: ClientBuildChunk): IslandChunkLane =>
+    // Fail-open in the only safe direction: a chunk the caller could not
+    // attribute is read as the CLASS lane, whose static executor import is the
+    // legitimate shape. The generated side — the side this guard protects —
+    // stays fail-closed: once the join proves a chunk generated-lane, any
+    // static edge from it to the executor fails the build.
+    islandLaneByChunkFile?.get(chunk.fileName) ?? 'class';
   const isFloor = (chunk: ClientBuildChunk): boolean => {
     if (chunk.isEntry === true) return true;
     const base = chunk.fileName.slice(chunk.fileName.lastIndexOf('/') + 1);
-    return base.startsWith('island-');
+    if (!base.startsWith('island-')) return false;
+    // Only the GENERATED lane is a page floor: a class island's runtime is the
+    // executor, so its static import of the executor group is the shape the
+    // split gives it, never an accident to fail on.
+    return laneOf(chunk) === 'generated';
   };
   const floorFiles = chunks.filter(isFloor).map((chunk) => chunk.fileName);
   // Breadth-first parent links, so a failure can name the whole hop sequence
@@ -493,9 +533,10 @@ export function requireExecutorChunkUnreachableFromIslands(
           `The emitted client graph statically reaches the ${ELEMENT_EXECUTOR_CHUNK_NAME} chunk ` +
             `(the six generic-executor entry modules) from a page floor: ` +
             `${[...pathTo(file), imported].join(' -> ')}. ` +
-            `A class island must pull the executor lazily, only when it renders; a static edge ` +
-            `from the entry or an island chunk makes the executor an unconditional download on ` +
-            `every page, so the build fails instead of shipping the pre-split floor`,
+            `A generated-lane island imports the leaf runtime only; a static edge from the ` +
+            `entry or from a generated-lane island chunk makes the executor an unconditional ` +
+            `download on pages that declared no class island, so the build fails instead of ` +
+            `shipping the pre-split floor`,
         );
       }
       parent.set(imported, file);

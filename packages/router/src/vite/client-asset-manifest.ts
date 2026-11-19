@@ -28,6 +28,7 @@ import { readFile } from 'node:fs/promises';
 import { join, relative } from 'pathe';
 import { normalizeSeparators } from '@openelement/element/build-utils';
 import { buildError, ClientAssetErrorCode } from '../internal/error-codes.ts';
+import type { IslandChunkLane } from './internal/element-runtime-chunk.ts';
 import type { ClientAssetManifest, ClientIslandAsset } from '@openelement/protocol/client-assets';
 import {
   type ClientIslandDeliveryEntry,
@@ -484,4 +485,76 @@ export async function createClientAssetManifest(options: {
     resolvedIslandModuleIds: options.resolvedIslandModuleIds,
     styleFileNames: options.styleFileNames,
   });
+}
+
+/**
+ * The emitted island chunk -> lane map B1's executor guard reads
+ * (`requireExecutorChunkUnreachableFromIslands`'s `islandLaneByChunkFile`).
+ *
+ * The lane is the island entry's M11-3 fact (`generatedLane`), joined to the
+ * chunk the emitted graph homes the island module in - the SAME join the asset
+ * manifest performs (module ids, never output file names), so this map cannot
+ * attribute a chunk by a rule the manifest that ships the island does not share.
+ *
+ * Fail-open by design, and in the one direction that is safe: a chunk this join
+ * cannot attribute (a specifier the identity pass did not resolve, a module the
+ * emitted graph does not carry) is simply absent from the map, and the guard
+ * reads an absent chunk as the CLASS lane. The generated side stays
+ * fail-closed: once an island is PROVEN generated-lane and its chunk is named,
+ * a static edge from that chunk to the executor fails the build. Conflicting
+ * evidence (a chunk carrying both lanes) likewise reads as `class` - the
+ * generated (failing) lane is only raised on unanimous proof.
+ */
+export function buildIslandChunkLaneMap(options: {
+  root: string;
+  islands: readonly ClientAssetIslandInput[];
+  viteManifest: Record<string, ViteClientManifestEntry>;
+  chunks: readonly ClientBuildChunk[];
+  /** The client build's identity map - see {@linkcode buildClientAssetManifest}. */
+  resolvedIslandModuleIds?: ReadonlyMap<string, string>;
+}): Map<string, IslandChunkLane> {
+  const { root, islands, viteManifest, chunks } = options;
+  const resolvedIds = options.resolvedIslandModuleIds;
+  const fileByModuleId = new Map<string, string>();
+  for (const chunk of chunks) {
+    const ids = new Set<string>(Object.keys(chunk.modules ?? {}));
+    if (chunk.facadeModuleId) ids.add(chunk.facadeModuleId);
+    for (const rawId of ids) {
+      const id = normalizeModuleId(rawId);
+      if (!fileByModuleId.has(id)) fileByModuleId.set(id, chunk.fileName);
+    }
+  }
+  const fileByManifestKey = new Map<string, string>();
+  for (const [src, entry] of Object.entries(viteManifest)) {
+    if (entry.file) fileByManifestKey.set(normalizeSeparators(src), entry.file);
+  }
+
+  const laneByChunkFile = new Map<string, IslandChunkLane>();
+  for (const island of islands) {
+    let file: string | undefined;
+    if (island.sourceFile) {
+      file =
+        fileByModuleId.get(normalizeSeparators(island.sourceFile)) ??
+        fileByManifestKey.get(normalizeSeparators(relative(root, island.sourceFile)));
+    } else {
+      try {
+        const id = resolveIslandModuleId(
+          fileByModuleId,
+          island.entry.modulePath,
+          `${island.entry.tagName} (${island.entry.modulePath})`,
+          resolvedIds?.get(island.entry.modulePath),
+        );
+        file = fileByModuleId.get(id);
+      } catch {
+        // Unattributable this pass: no lane map entry, the guard reads `class`
+        // (the shape that legitimately imports the executor) - see the doc.
+        file = undefined;
+      }
+    }
+    if (file === undefined) continue;
+    const lane: IslandChunkLane = island.entry.generatedLane === true ? 'generated' : 'class';
+    const prior = laneByChunkFile.get(file);
+    laneByChunkFile.set(file, prior === undefined ? lane : prior === lane ? lane : 'class');
+  }
+  return laneByChunkFile;
 }
