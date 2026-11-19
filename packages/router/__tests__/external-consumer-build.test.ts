@@ -388,16 +388,17 @@ test('external consumer: both islands attribute to exactly one emitted chunk eac
 test('external consumer: the client chunk bundles the browser condition and the alias target', async () => {
   const distDir = join(fixture.appDir, 'dist');
   const clientIslands = await readdir(join(distDir, 'client', 'islands'));
-  // Post executor-split, a class-lane island statically imports the
-  // element-executor chunk; the condition/alias resolution may home in either
-  // the island chunk or the executor chunk it reaches. Read BOTH sides of that
-  // static edge before judging what was bundled.
+  // The fixture has ONE island, so every islands/*.js file is either the
+  // island's own chunk or a shared chunk it reaches; the condition/alias
+  // resolution homes wherever the emitted graph puts it. The assertions judge
+  // the client graph's CONTENT, never a chunk layout (layout is not the
+  // property under test).
   const readIsland = (fileName: string): Promise<string> =>
     readFile(join(distDir, 'client', 'islands', fileName), 'utf8');
   // The fixture has ONE island, so every islands/*.js file is either the
-  // island's own chunk or a shared chunk it reaches (executor/runtime/helper/
-  // program). The condition/alias modules home wherever the post-split graph
-  // puts them; concatenating the islands directory is the whole static closure.
+  // island's own chunk or a shared chunk it reaches; the condition/alias
+  // modules home wherever the emitted graph puts them. Concatenating the
+  // islands directory is the whole static closure of the client graph.
   const code = (
     await Promise.all(
       clientIslands

@@ -20,19 +20,6 @@
  *
  * {@linkcode findElementRuntimeChunkFile} is the same identity used by the
  * head projection that modulepreloads the chunk on island-bearing pages.
- *
- * SPLIT (2026-11-19, B1-final): the single group was physically merging the
- * six generic-executor entry modules with the leaf primitives every generated
- * island needs, so a generated-lane island chunk (which statically imports the
- * leaf primitives) made all six executor entries reachable and the P1 checker
- * judged the graph VIOLATED. The grouping identity is now two names over one
- * package root: {@linkcode ELEMENT_EXECUTOR_CHUNK_NAME} for exactly the six
- * entries {@linkcode EXECUTOR_ENTRY_RELATIVE_MODULES} names, and
- * {@linkcode ELEMENT_RUNTIME_CHUNK_NAME} for every other package module. The
- * leaf primitives must never share a chunk with an executor entry, and
- * {@linkcode requireExecutorChunkUnreachableFromIslands} enforces the other
- * half: no page floor (entry or island chunk) may statically import the
- * executor group.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -40,122 +27,9 @@ import { dirname, join } from 'pathe';
 import { normalizeSeparators } from '@openelement/element/build-utils';
 import { buildError, ClientBuildErrorCode } from '../../internal/error-codes.ts';
 import type { ClientBuildChunk } from '../client-asset-manifest.ts';
-import { EXECUTOR_ENTRY_RELATIVE_MODULES } from './browser-entry-graph-artifact.ts';
 
 /** The emitted shared chunk's name (chunkFileNames appends the hash). */
 export const ELEMENT_RUNTIME_CHUNK_NAME = 'element-runtime';
-
-/**
- * The dedicated chunk that homes the six generic-executor entry modules (the
- * P1 load surface, {@linkcode EXECUTOR_ENTRY_RELATIVE_MODULES} — imported from
- * the gate's single table, never copied). Kept apart from
- * {@linkcode ELEMENT_RUNTIME_CHUNK_NAME} so leaf primitives never ride the
- * same chunk as an executor entry; see the module header.
- */
-export const ELEMENT_EXECUTOR_CHUNK_NAME = 'element-executor';
-
-/**
- * The shared primitives BOTH lanes import — the second reviewed table (the
- * first is {@linkcode EXECUTOR_ENTRY_RELATIVE_MODULES}, imported from the
- * gate's artifact so the physical split and the judged list cannot drift).
- *
- * Why a table at all, when the fallthrough answer is already
- * {@linkcode ELEMENT_RUNTIME_CHUNK_NAME}: the split callback answers for ONE
- * module id at a time, and the bundler homes a module that two groups both
- * reach by the first explicit group to CLAIM it. These three modules are
- * imported by the six executor entries and by the generated (side-effect-free)
- * lane, so with only the executor rule expressed they ride the executor group
- * — measured on the real www build: the island chunk statically imported
- * `element-executor-*.js` through them and the P1 checker judged the graph
- * VIOLATED. Naming them here makes the claim explicit and first, so the
- * executor group can never take them, and a future executor entry that imports
- * a new shared primitive is added HERE, with a rationale line, instead of
- * silently re-merging the two chunks.
- *
- * Package-relative, exact identity, same matching rule as the executor table
- * (`elementRuntimeChunkName` compares the resolved id against these strings
- * after stripping the resolved package root — one rule, two tables).
- */
-export const SHARED_PRIMITIVE_RELATIVE_MODULES: readonly string[] = [
-  // `property-conversion` — the shell's prop/style normalisation, imported by
-  // shell.ts's generate lane and by the executor entries alike.
-  'src/internal/core/property-conversion.ts',
-  // `security` — the trusted-html / URL policy surface, both lanes.
-  'src/internal/core/security.ts',
-  // `signal-framework` — the signal core every reactive primitive stands on.
-  'src/internal/signal/framework.ts',
-];
-
-/**
- * The third reviewed table: the CLASS-SHELL modules — the class-lane's
- * implementation host and the executor resources it is the only browser
- * consumer of. They group into {@linkcode ELEMENT_EXECUTOR_CHUNK_NAME}, NOT
- * the runtime chunk.
- *
- * Why a table at all, and why this direction: these modules are element-package
- * modules that the six executor entries' own dependency closure owns. Naming
- * only the six in the executor group left them claimed by the fallthrough
- * `element-runtime` group, so the emitted runtime chunk imported the executor
- * chunk — measured on the real www build before this table existed:
- * `islands/element-runtime-*.js` statically imported
- * `islands/element-executor-*.js`, which made all six executor entries
- * reachable from every page floor and the P1 checker judged the graph
- * VIOLATED.
- *
- * The claim is behavioural, not stylistic: a class ISLAND is the only browser
- * consumer of this host. `src/open-element-implementation.ts` is the class
- * lane's implementation (`facade-host.ts` + `runtime/kernel.ts` are its :53 and
- * :63 imports); `src/index.ts` is the capital-C `OpenElement` authoring facade
- * whose two side-effect imports (`hydrate-install`, `blocks-install`) install
- * the very resources the executor entries execute; and the five runtime
- * resources below are reached only through those two. So the class shell
- * belongs to the executor side of the split — the side a class island pulls
- * lazily — and must never sit in the chunk every generated-lane island
- * statically imports.
- *
- * Membership is measured, never guessed: every id here was proven, by a
- * scripted walk over the emitted `oe-browser-entry-graph.json` (backward
- * closure over static element-package imports from the six executor entries),
- * to reach an executor entry from INSIDE the runtime chunk. When a new module
- * shows up in that walk it is added here, one line plus one rationale, and
- * never by widening a prefix.
- */
-export const CLASS_SHELL_RELATIVE_MODULES: readonly string[] = [
-  // `index` — the capital-C `OpenElement` facade (`export *` from
-  // `public-surface.ts` plus the claim and Block installers); the class lane's
-  // public door, and the reason the installers below ship.
-  'src/index.ts',
-  // `open-element-implementation` — the class shell itself: facade-host plus
-  // the compiled kernel. Imported by `open-element.ts`, i.e. by class islands.
-  'src/open-element-implementation.ts',
-  // `blocks-install` — `index`'s Block-builder install; pulls `blocks.ts`,
-  // which imports the executor's `fresh-dom` and `program-kernel` entries.
-  'src/internal/compiled/runtime/blocks-install.ts',
-  // `blocks` — the Block builders' execution path (executor resource).
-  'src/internal/compiled/runtime/blocks.ts',
-  // `hydrate-recovery` — the recovery path for a failed claim; imports the
-  // `hydrate` executor entry and `parts`/`program-kernel`.
-  'src/internal/compiled/runtime/hydrate-recovery.ts',
-  // `parts` — Part-program execution helpers; imports `program-kernel`.
-  'src/internal/compiled/runtime/parts.ts',
-  // (`pre-upgrade-events` LEFT this table 2026-11-20: the r2 document-services
-  // lane cut its program-kernel edge to the protocol ORIGIN
-  // (`@openelement/protocol/errors`), and the generated page floor installs its
-  // click capture through the executor-free document-services subpath — so the
-  // module now homes with the runtime primitives, executor-free by measurement.)
-  // `revive` — revive/upgrade of a claimed instance; imports `parts` and
-  // `program-kernel`.
-  'src/internal/compiled/runtime/revive.ts',
-  // `hydrate-install` — the side-effect install of the hydration executor
-  // (#1416); imports `runtime.ts`, i.e. the six entries. Grouped here so its
-  // importer below cannot bridge the executor into the runtime chunk.
-  'src/internal/compiled/runtime/hydrate-install.ts',
-  // `no-blocks` — the no-Block public entry; its deliberate
-  // `hydrate-install` side-effect import (the B2 half-measure) makes it an
-  // executor-side consumer, and it was the bridge that kept the six entries
-  // statically reachable after every other shell module moved.
-  'src/no-blocks.ts',
-];
 
 /**
  * The runtime entry the native generated client entry imports — and the
@@ -208,20 +82,12 @@ export function resolveElementRuntimeIdentity(resolvedEntryId: string): ElementR
 }
 
 /**
- * The chunk-grouping decision for one module id: under the resolved package
- * root (query suffixes stripped, separators normalized, prefix boundary exact
- * so a sibling like `element-next/` never matches), the six executor entries
- * {@linkcode EXECUTOR_ENTRY_RELATIVE_MODULES} names and the class shell
- * {@linkcode CLASS_SHELL_RELATIVE_MODULES} names group into
- * {@linkcode ELEMENT_EXECUTOR_CHUNK_NAME}; the primitives both lanes import
- * ({@linkcode SHARED_PRIMITIVE_RELATIVE_MODULES}) and every other package
- * module group into {@linkcode ELEMENT_RUNTIME_CHUNK_NAME}. Outside the root
- * (or with a null identity — the specifier the identity pass never resolved)
- * the answer is undefined, matching nothing by construction.
- *
- * The split is exact-identity on the package-relative path: the executor table
- * is the very list the P1 checker gates on, so the physical chunk boundary and
- * the judged module list cannot drift.
+ * The chunk-grouping decision for one module id: the shared runtime chunk's
+ * name when the id sits under the resolved package root (query suffixes
+ * stripped, separators normalized, prefix boundary exact so a sibling like
+ * `element-next/` never matches), undefined otherwise. A null identity —
+ * the specifier the identity pass never resolved — matches nothing by
+ * construction.
  */
 export function elementRuntimeChunkName(
   moduleId: string,
@@ -229,31 +95,8 @@ export function elementRuntimeChunkName(
 ): string | undefined {
   if (!identity) return undefined;
   const id = normalizeSeparators(moduleId.split('?', 1)[0]);
-  const prefix = `${identity.packageRoot}/`;
-  if (!id.startsWith(prefix)) return undefined;
-  const packageRelative = id.slice(prefix.length);
-  // Order is the whole mechanism, and it is a three-table cascade, each step
-  // exact-identity on the same package-relative string so no module is ever
-  // claimed by two tables:
-  //
-  //  1. CLASS_SHELL → executor. The class-lane host and the executor resources
-  //     only it (and the six entries) import. Claimed for the EXECUTOR first so
-  //     the runtime-chunk import can never pick them up: before this table
-  //     existed, `element-runtime` statically imported `element-executor`
-  //     through exactly this closure.
-  //  2. SHARED_PRIMITIVE → runtime. Primitive modules BOTH lanes import, which
-  //     the executor group must never take, or the leaf primitives every
-  //     generated island needs would ride the executor chunk again.
-  //  3. EXECUTOR entries → executor; every other package module → runtime.
-  if ((CLASS_SHELL_RELATIVE_MODULES as readonly string[]).includes(packageRelative)) {
-    return ELEMENT_EXECUTOR_CHUNK_NAME;
-  }
-  if ((SHARED_PRIMITIVE_RELATIVE_MODULES as readonly string[]).includes(packageRelative)) {
-    return ELEMENT_RUNTIME_CHUNK_NAME;
-  }
-  return (EXECUTOR_ENTRY_RELATIVE_MODULES as readonly string[]).includes(packageRelative)
-    ? ELEMENT_EXECUTOR_CHUNK_NAME
-    : ELEMENT_RUNTIME_CHUNK_NAME;
+  if (!id.startsWith(`${identity.packageRoot}/`)) return undefined;
+  return ELEMENT_RUNTIME_CHUNK_NAME;
 }
 
 /**
@@ -316,8 +159,7 @@ export function requireElementRuntimeChunk(
   }
   const carrying = chunks.filter((chunk) =>
     [chunk.facadeModuleId ?? '', ...Object.keys(chunk.modules ?? {})].some(
-      (rawId) =>
-        rawId !== '' && elementRuntimeChunkName(rawId, identity) === ELEMENT_RUNTIME_CHUNK_NAME,
+      (rawId) => rawId !== '' && elementRuntimeChunkName(rawId, identity) !== undefined,
     ),
   );
   if (carrying.length === 0) {
@@ -391,8 +233,7 @@ export function requireEntryStaticGraphFreeOfRuntime(
     chunks
       .filter((chunk) =>
         [chunk.facadeModuleId ?? '', ...Object.keys(chunk.modules ?? {})].some(
-          (rawId) =>
-            rawId !== '' && elementRuntimeChunkName(rawId, identity) === ELEMENT_RUNTIME_CHUNK_NAME,
+          (rawId) => rawId !== '' && elementRuntimeChunkName(rawId, identity) !== undefined,
         ),
       )
       .map((chunk) => chunk.fileName),
@@ -425,120 +266,6 @@ export function requireEntryStaticGraphFreeOfRuntime(
             `${[...pathTo(file), imported].join(' -> ')}. ` +
             `A page whose island manifest is empty would download the runtime anyway (B2), so ` +
             `the build fails instead of shipping the pre-B2 floor`,
-        );
-      }
-      parent.set(imported, file);
-      queue.push(imported);
-    }
-  }
-}
-
-/**
- * One emitted island chunk's lane, as the client build read it off the island
- * entry (the M11-3 lane fact, `ClientIslandDeliveryEntry.generatedLane`).
- *
- * The distinction is the whole point of the guard's narrowing: a GENERATED-lane
- * island imports the leaf primitives and must never statically reach the
- * executor, while a CLASS-lane island's runtime IS the executor — its static
- * import of the class shell and the executor entries is the legitimate class
- * shape, not an accidental page floor.
- */
-export type IslandChunkLane = 'generated' | 'class';
-
-/**
- * B1's own property, asserted on the emitted graph: no page floor statically
- * reaches the dedicated element-executor chunk.
- *
- * The split in {@linkcode elementRuntimeChunkName} homes the six generic-
- * executor entry modules in their own `element-executor` group so the leaf
- * primitives every generated island needs no longer drag the executor entries
- * along. The complementary half — {@linkcode requireElementRuntimeChunk} proves
- * the runtime is homed; this proves no floor can reach the executor — is what
- * keeps the executor a lazy pull: a class island loads it only when a class
- * island actually renders.
- *
- * The floor is every `isEntry` chunk AND every GENERATED-lane `island-*` chunk
- * (the lane is the island entry's M11-3 fact, joined to the emitted chunk file
- * by the caller as {@linkcode islandLaneByChunkFile}). A generated-lane island
- * statically imports the leaf primitives; if that closure reaches the executor
- * group, the executor is on the page floor for pages that declared a class
- * island it never renders — the pre-split shape. A class-lane island chunk is
- * NOT a floor root: the class lane's runtime IS the executor, so its static
- * import of the executor entries and the class shell is the legitimate class
- * shape. Unattributed chunks read as `class` (fail-open there): a join gap must
- * not fail a build on a fact the join could not establish, and the generated
- * side — the side the guard protects — stays fail-closed. Static edges only, by
- * construction: the walk follows `OutputChunk.imports` and never
- * `dynamicImports`, so a lazy `import()` of the executor stays invisible here,
- * which is the point.
- *
- * Fail-closed on the guard's own inputs matches
- * {@linkcode requireEntryStaticGraphFreeOfRuntime}'s posture. Zero executor
- * chunks — a pure generated-lane build with no class island — is the honest
- * answer: there is nothing to reach, and the guard returns.
- */
-export function requireExecutorChunkUnreachableFromIslands(
-  chunks: readonly ClientBuildChunk[],
-  identity: ElementRuntimeIdentity | null,
-  islandLaneByChunkFile?: ReadonlyMap<string, IslandChunkLane>,
-): void {
-  const executorFiles = new Set(
-    chunks
-      .filter((chunk) =>
-        [chunk.facadeModuleId ?? '', ...Object.keys(chunk.modules ?? {})].some(
-          (rawId) =>
-            rawId !== '' &&
-            elementRuntimeChunkName(rawId, identity) === ELEMENT_EXECUTOR_CHUNK_NAME,
-        ),
-      )
-      .map((chunk) => chunk.fileName),
-  );
-  if (executorFiles.size === 0) return;
-  const byFile = new Map(chunks.map((chunk) => [chunk.fileName, chunk]));
-  const laneOf = (chunk: ClientBuildChunk): IslandChunkLane =>
-    // Fail-open in the only safe direction: a chunk the caller could not
-    // attribute is read as the CLASS lane, whose static executor import is the
-    // legitimate shape. The generated side — the side this guard protects —
-    // stays fail-closed: once the join proves a chunk generated-lane, any
-    // static edge from it to the executor fails the build.
-    islandLaneByChunkFile?.get(chunk.fileName) ?? 'class';
-  const isFloor = (chunk: ClientBuildChunk): boolean => {
-    if (chunk.isEntry === true) return true;
-    const base = chunk.fileName.slice(chunk.fileName.lastIndexOf('/') + 1);
-    if (!base.startsWith('island-')) return false;
-    // Only the GENERATED lane is a page floor: a class island's runtime is the
-    // executor, so its static import of the executor group is the shape the
-    // split gives it, never an accident to fail on.
-    return laneOf(chunk) === 'generated';
-  };
-  const floorFiles = chunks.filter(isFloor).map((chunk) => chunk.fileName);
-  // Breadth-first parent links, so a failure can name the whole hop sequence
-  // that carried the edge instead of only its last hop — the same parent-chain
-  // shape requireEntryStaticGraphFreeOfRuntime uses.
-  const parent = new Map<string, string | null>(floorFiles.map((file) => [file, null]));
-  const pathTo = (file: string): string[] => {
-    const path: string[] = [];
-    for (let at: string | null = file; at !== null; at = parent.get(at) ?? null) path.unshift(at);
-    return path;
-  };
-  const seen = new Set<string>();
-  const queue = [...floorFiles];
-  while (queue.length > 0) {
-    const file = queue.shift() as string;
-    if (seen.has(file)) continue;
-    seen.add(file);
-    for (const imported of byFile.get(file)?.imports ?? []) {
-      if (!byFile.has(imported) || seen.has(imported)) continue;
-      if (executorFiles.has(imported)) {
-        throw buildError(
-          ClientBuildErrorCode.ELEMENT_EXECUTOR_REACHABLE_FROM_ISLANDS,
-          `The emitted client graph statically reaches the ${ELEMENT_EXECUTOR_CHUNK_NAME} chunk ` +
-            `(the six generic-executor entry modules) from a page floor: ` +
-            `${[...pathTo(file), imported].join(' -> ')}. ` +
-            `A generated-lane island imports the leaf runtime only; a static edge from the ` +
-            `entry or from a generated-lane island chunk makes the executor an unconditional ` +
-            `download on pages that declared no class island, so the build fails instead of ` +
-            `shipping the pre-split floor`,
         );
       }
       parent.set(imported, file);

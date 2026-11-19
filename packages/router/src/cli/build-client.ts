@@ -47,7 +47,6 @@ import type { ClientAssetManifest } from '@openelement/protocol/client-assets';
 import {
   type ClientAssetIslandInput,
   createClientAssetManifest,
-  buildIslandChunkLaneMap,
   collectClientBuildChunks,
   findClientEntryStyles,
   packageIslandChunkName,
@@ -62,7 +61,6 @@ import {
   elementRuntimeChunkName,
   requireElementRuntimeChunk,
   requireEntryStaticGraphFreeOfRuntime,
-  requireExecutorChunkUnreachableFromIslands,
   resolveElementRuntimeIdentity,
 } from '../vite/internal/element-runtime-chunk.ts';
 import { requireViteHelperChunk, viteHelperChunkName } from '../vite/internal/vite-helper-chunk.ts';
@@ -915,30 +913,6 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
                   return packageIslandChunkName(id, packageDeclIdentities()) ?? null;
                 },
                 priority: 0,
-                // B1 layer-5, MEASURED on the real www build: a
-                // `codeSplitting` group pulls the captured modules'
-                // dependency closure into its own chunk by default
-                // (`includeDependenciesRecursively` defaults to `true` in
-                // rolldown 1.1.5 — see the shipped
-                // `CodeSplittingGroup.includeDependenciesRecursively`
-                // doc). The callback therefore decided `element-runtime`
-                // for 37 modules and they still shipped inside
-                // `islands/element-executor-*.js` (43 modules), because
-                // the six executor entries import them. The grouping
-                // answer of a module is not the chunk it lands in unless
-                // this is off; the emitted-chunk guards below compare
-                // chunk membership, and both of them read the pre-fix
-                // layout as "the runtime split across two chunks".
-                //
-                // Turning the recursive capture off makes the group a
-                // module-level decision, which is what the two tables are
-                // written against (exact package-relative identity). The
-                // documented trade — a higher chance of circular chunks —
-                // is accepted here because the alternative is a chunk
-                // whose membership the decision function cannot predict,
-                // and the emitted-graph guards already fail the build
-                // rather than shipping a layout they cannot name.
-                includeDependenciesRecursively: false,
               },
             ],
           },
@@ -1216,40 +1190,6 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
     if (entryNeedsElementRuntime) {
       requireElementRuntimeChunk(collectClientBuildChunks(outputs), elementRuntimeIdentity);
     }
-
-    // The lane join reads the SAME Vite manifest the asset manifest builder
-    // consumes below (the island identity → emitted chunk join), so the guard's
-    // floor set and the shipped island assets cannot disagree about which chunk
-    // homes an island.
-    const guardViteManifest = await readViteClientManifest(
-      join(clientOutDir, '.vite', 'manifest.json'),
-    );
-
-    // B1's complementary half: the executor entries the split homes in their
-    // own `element-executor` group must stay off every page floor: the entry
-    // chunk and every GENERATED-lane island chunk. A generated-lane island
-    // statically imports the leaf runtime only; a class-lane island's runtime IS
-    // the executor, so its static import of the executor is the legitimate
-    // class shape, not a page floor. Zero executor chunks (a pure generated-lane
-    // build) passes — nothing to reach. The lane map is the client build's own
-    // island identity joined to the
-    // emitted chunk (`buildIslandChunkLaneMap`): only GENERATED-lane island
-    // chunks are floor roots, a class-lane island's static import of the
-    // executor is its legitimate runtime. An unattributable chunk is absent
-    // and the guard reads it as `class` — a join gap must not fail a build on
-    // a fact the join could not establish.
-    const guardChunks = collectClientBuildChunks(outputs);
-    requireExecutorChunkUnreachableFromIslands(
-      guardChunks,
-      elementRuntimeIdentity,
-      buildIslandChunkLaneMap({
-        root,
-        islands: clientAssetIslands,
-        viteManifest: guardViteManifest,
-        chunks: guardChunks,
-        resolvedIslandModuleIds: islandModuleIds,
-      }),
-    );
 
     // B2 gap (a), fail closed, both halves:
     //
