@@ -1064,7 +1064,7 @@ SSR fallback is deferred to Alpha17 as a named carry (not a §13.3 exception), a
 the capability inventory's `16b-EB` row plus this section are corrected to that
 truth. At the 2026-11-20 measured commit
 `f514c1290539993f9bdbeca9b02b6f99ca0a4dff` (clean worktree, LOCAL
-`/private/tmp/oe-a16-closure-B`) **no focused `16b-EB` command was re-run**: the
+the remediation worktree) **no focused `16b-EB` command was re-run**: the
 boundary guard file `packages/compiler/__tests__/semantic-ir/generated-element.error-boundary.test.ts`
 is exercised inside the compiler suite that passed in full (`95 files / 1386
 tests passed, exit 0, 91.83 s`), which is suite-level exercise, not a focused EB
@@ -1295,7 +1295,7 @@ remediation worktree (`git status --porcelain` showed only the pre-existing
 (`generated-element.ref-handle.browser.test.ts`) = **21 tests / 2 files**. The
 2026-11-19 guard-form text above says "16 Node rows"; the re-run measures **17**
 (a per-head +1 recorded here), and the older 16 stays the recorded historical
-value. Provenance: `LOCAL /private/tmp/oe-a16-closure-B` at
+value. Provenance: `LOCAL` — a clean worktree at the cited commit;
 `f514c1290539993f9bdbeca9b02b6f99ca0a4dff` (LOCAL only; no CI identity). The
 later commit `434a624d39496eed70d29df4c1bba3fef17cca56` changes only one JSON
 annotation and one test comment; it neither changes behavior nor is re-measured.
@@ -1561,7 +1561,7 @@ rows" guard form above. The 9 additive rows in
 a separate focused command by this re-run (the run covered the two compiler-project
 files); they are inside the `@openelement/element` suite that passed at the same
 commit (132 files / 1036 tests), which is suite-level coverage, not a focused
-substitute. Provenance: `LOCAL /private/tmp/oe-a16-closure-B` at
+substitute. Provenance: `LOCAL` — a clean worktree at the cited commit;
 `f514c1290539993f9bdbeca9b02b6f99ca0a4dff` (LOCAL only; no CI identity). This is
 a recorded re-run, not the exit: it changes no milestone, gate or release status.
 

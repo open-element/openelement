@@ -884,7 +884,7 @@ Shared five-field record for the rows below:
 | --- | --- |
 | commit | `f514c1290539993f9bdbeca9b02b6f99ca0a4dff` — HEAD did not move across the run |
 | status | clean at measurement: `git status --porcelain` showed only the pre-existing `?? .cc-agent-transcript.jsonl`; every artifact used (`www/dist/`, the packed tarballs, `.artifacts/site-e2e-*.json`) is Git-ignored |
-| provenance | `LOCAL /private/tmp/oe-a16-closure-B` at the cited commit — a LOCAL record only, not a CI run/job; it writes no CI column |
+| provenance | `LOCAL` — a clean worktree at the cited commit; a LOCAL record only, not a CI run/job (it writes no CI column). The absolute checkout path is deliberately not written into tracked text (`check-no-machine-paths`); the untracked evidence run records it. |
 | environment | macOS (darwin), 8 cores / 16 GB; Node `v24.18.0`; pnpm `12.8.1`; Playwright `1.59.1` (chromium `147.0.7727.15`, firefox `148.0.2`, webkit `26.4`) |
 
 | proof | verdict | measured command → result (HEAD) |

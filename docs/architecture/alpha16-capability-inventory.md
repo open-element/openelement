@@ -142,7 +142,7 @@ in the table):
 - **status:** clean at measurement — `git status --porcelain` showed only the
   pre-existing `?? .cc-agent-transcript.jsonl`; every artifact used is
   Git-ignored.
-- **provenance:** `LOCAL /private/tmp/oe-a16-closure-B` at the cited commit — a
+- **provenance:** `LOCAL` — a clean worktree at the cited commit; a
   LOCAL record only, not a CI run/job; it writes no CI column.
 - **environment:** macOS (darwin), 8 cores / 16 GB; Node `v24.18.0`; pnpm
   `12.8.1`; Playwright `1.59.1` (chromium `147.0.7727.15`, firefox `148.0.2`,

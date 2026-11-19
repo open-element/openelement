@@ -1156,7 +1156,7 @@ one test comment; it neither changes behavior nor is re-measured.
 (HEAD did not move across the run). status: clean at measurement —
 `git status --porcelain` showed only the pre-existing
 `?? .cc-agent-transcript.jsonl`; every artifact used is Git-ignored. provenance:
-`LOCAL /private/tmp/oe-a16-closure-B` at the cited commit — a LOCAL record only,
+`LOCAL` — a clean worktree at the cited commit; a LOCAL record only,
 not a CI run/job, and no CI column is written. commands and results: per row
 below. Full log:
 `.artifacts/pr1804-remediation-20261120/02-evidence/EVIDENCE-RUN.md`.
