@@ -1227,3 +1227,245 @@ in `docs/release/public-interface-snapshot.json`.
 LOCAL evidence, single engine. Not M09 exit, not the M13 matrix, and no claim is
 made here about `16b-REF` completion — every row of the migration note keeps the
 state it records.
+
+## 2026-11-19 amendment — `16b-CTX`: `provideContext` / `useContext` and the generated owner scope tree
+
+`provideContext(token, () => value)` and `const value = useContext(token)` are the
+SIXTH and SEVENTH compiler-erased intrinsics of the generated-element lane. They
+are the author-facing CONTEXT capability (CAP-09). The class lane's host-side
+`provideContext` / `consumeContext` pair is NOT reused as the author surface and
+no second context engine is introduced: the generated lane drives the ONE
+`CompiledContextService` (`compiled/runtime/context.ts`) in an additive
+owner-scope mode.
+
+### What ADR-0182 decided, and what it left open
+
+ADR-0182 D-18b item 3 fixes the NAME PAIR and the SCOPE RULE: "`provideContext` /
+`useContext` scope tree … Context is provided and consumed over the generated
+owner tree, hostless owners included, with nearest-owning-component lookup,
+sibling-subtree isolation and per-SSR-request isolation (the TSX-13
+obligations)". It then records that "the default representation, provider
+lifetime and whether context values are reactive stay OPEN and are implementation
+decisions". This slice implements exactly that: the ADR's names and owner-tree
+rule are followed verbatim, and the three open questions are answered below with
+the tree's own semantics rather than by inventing a different API.
+
+The ADR is PROPOSED with a blank owner sign-off, so — like `16b-EB` and
+`16b-REF` — this amendment claims no capability completion, no §17.3 evidence
+row and no gate/exits/release qualification.
+
+### The shape, and the evidence that decided it
+
+The semantic authority is
+`packages/element/src/internal/compiled/runtime/context.ts`. Two facts there
+decided the shape, and neither uses a new reactivity model:
+
+1. **A provider publishes by RE-PROVIDING.** `provideContext(host, key, value)`
+   disposes the previous record for the same host/key, reuses its signal and
+   installs a fresh listener, so a changed value is "provide again" — that is
+   the file's existing repeated-provide path. The generated lane therefore takes
+   the provider's value as a VALUE THUNK (`provideContext(token, () => value)`),
+   never a snapshot, and re-reads it on connect and after a declared-property
+   commit.
+2. **A consumer's value lives in ONE consumer-local signal.** `consumeContext`
+   creates it and the service bridges it to the nearest provider. So
+   `useContext(token)` returns a SIGNAL the tracked-slot machinery already
+   subscribes to through `bindSignalWrites` — not a value, and not a second
+   reactive system. It also means the signal object can be RETAINED (the setup
+   factory builds it once), which is what makes a reconnect write into the same
+   object.
+
+So the API is:
+
+```tsx
+import { provideContext, useContext } from '@openelement/element/lifecycle';
+
+function Inner(props: { mode: string }) {
+  provideContext(Theme, () => 'inner-' + props.mode);   // a THUNK, re-read
+  const theme = useContext(Theme);                       // ONE signal
+  return <span>{theme.value}</span>;                     // a tracked slot
+}
+```
+
+`provideContext` is a STATEMENT intrinsic (like `onConnect`), `useContext` a
+declaration intrinsic (like `ref(cb?)`). The provider's second argument being a
+thunk is the one signature decision the ADR left open: it is what lets "provider
+changed" be the lane's existing change channel — a declared-property commit —
+instead of an author `computed`, which this lane deliberately does not have.
+
+### Ownership: the owner tree, hostless owners included
+
+The generated lane's owners are not all elements: a component reference creates
+no element, so two sibling hostless children share one element host. Anchoring
+their providers on that host would leak one sibling's value into the other. The
+owner-scope mode therefore gives every generated component owner a SCOPE:
+
+| owner | scope | why |
+| --- | --- | --- |
+| the generated element ROOT | the element's anchor scope | a root provider must cover every depth-1 child |
+| a DEPTH-1 retained hostless child | `anchor.owner()` — a CHILD of the anchor | the child's provider is invisible to its siblings, visible to its subtree, and still resolves the anchor's ancestors |
+| any deeper owner | none (refused at build) | depth >= 2 retention is OWED by ADR-0181; a context intrinsic there fails closed |
+
+A generated element's anchor finds its OWN parent through the nearest generated
+ANCESTOR element (crossing shadow roots through `host`), re-resolved on every
+connect, so a reconnect after a DOM move joins the right tree exactly as the
+protocol consumer bridge re-resolves its provider.
+
+### Lifetime: connect, provider change, disconnect, reconnect
+
+| phase | what happens |
+| --- | --- |
+| connect | the anchor scope connects BEFORE the retained setup factory runs, because that factory is where providers register and consumers are built. Providers publish their thunk's value; consumers resolve the nearest published record into their retained signal |
+| provider change | a DECLARED property commit (property write or attribute write) calls the shell's one `refreshProviders`, which re-reads every published thunk and republishes only a CHANGED value; an unchanged write notifies nobody |
+| disconnect | every consumer bridge is released exactly once and every provider is marked unpublished — a disconnected scope answers nothing and observes nothing. The intents and the signals survive |
+| reconnect | the scope connects again, republishes from the retained intents (re-reading the CURRENT row values), and re-resolves every consumer into the SAME signal object. No stale registration, no double registration |
+| teardown | `dispose()` drops the owner tree, the provider records and the consumer bridges; a later connect creates a NEW scope ("dispose is not disconnect" applies to context too) |
+
+### SSR: context RESOLVES AT RENDER TIME, and a consumer reader is claimable
+
+The consumer value is resolved by the render itself, from the provider that is
+already in scope. There is no second engine and no second scope tree: the
+emitted `__ssr` producer drives the SAME `CompiledContextService`, in a
+`forRender()` mode that is published from birth and never consults the DOM.
+
+**The mechanism.** The render scope is a PARAMETER threaded through the
+producer's own call graph, never module state:
+
+```js
+export function Root__ssr(__oe_props, __oe_host, __oe_ssrContext) {
+  const __oe_contextScope =
+    __oe_ssrContext === undefined ? createRenderContextScope() : __oe_ssrContext.owner();
+  __oe_contextScope.provider((Theme), (() =>  props . seed));
+  const theme = __oe_contextScope.use((Theme));   // written BEFORE this returns
+  ...
+}
+```
+
+- A MODULE-ROOT producer (called by the shadow host wrapper or the light
+  serializer, both of which pass no scope) creates the render's anchor: one
+  scope per producer call.
+- A NESTED producer receives the CALLER's scope and joins it as `owner()` —
+  byte-for-byte the same owner shape the client's retained depth-1 child setup
+  emits (`anchor.owner()`), so server and client cannot disagree about who owns
+  what.
+- Providers publish before consumers resolve in both phases, so a component that
+  provides and consumes reads its OWN value. `CompiledContextService.use()`
+  writes the nearest published value synchronously in render mode, then falls
+  back to the context's declared default.
+
+**Per-render isolation (TSX-13's third obligation) is now delivered, not
+vacuous.** The state lives in a function parameter and a per-call object, so two
+concurrent renders cannot observe each other. There is no module-level "current
+render", no global registry and no server-side scope tree. Node row C18 renders
+the same module twice with different provider values in one tick (and interleaves
+two hand-built scopes) and each reads only its own.
+
+**The claim discipline.** Lifting the decline means the existing gate now emits
+BOTH artifacts for a consumer-reading component: `<Name>__ssr` carries the
+resolved value as ordinary escaped text inside the lane's existing text-slot
+markers, and `<Name>__claim` walks those markers with the unchanged static-seed
+checks. Because the server and the client resolve from one rule over one provider
+tree, a matching claim writes nothing — Chromium row X5 counts DOM mutations
+during the claim of the producer's own bytes and requires ZERO. X6 then writes a
+declared property and requires the consumer to follow, so a claim that merely
+retained the server text without a live connection would fail.
+
+**Fail-closed boundary, stated precisely.** A `Context` token cannot exist
+without a default: `createContext(key, defaultValue)` requires one, and the
+type carries it (`Context<T>.defaultValue`). "Consumer with no resolvable
+provider and no declared default" is therefore not a representable state, so the
+render path has no case to diagnose and the declared default is the lawful
+answer — the same answer the client engine gives. Node row C17 pins it. What
+*is* refused, at the authored span with the existing identities: a context
+intrinsic at depth ≥ 2 or in a recipe/list body (`OEIR_LEAF_INVALID_ARTIFACT`,
+unchanged), and a provider thunk reading a host binding
+(`OEIR_GENERATED_ELEMENT_UNBOUND_BINDING`, unchanged).
+
+**Remaining limitation.** `useContext` still returns a SIGNAL, and the server
+resolves it ONCE per producer call: a server render has no later write, so no
+server-side reactivity is claimed (there is nothing to react to before the bytes
+leave). A consumer value that changes during the same render — for example from
+a provider thunk that reads a mutable external — is therefore read at its
+declaration point, not re-read before serialization.
+
+A second, narrower limit: a component whose tree is FULLY STATIC keeps its
+parameterless `<Name>__ssr()` and therefore registers no server-side provider
+even when it calls `provideContext`. That is unobservable by construction — a
+static producer admits no dynamic-text slot (so no consumer read) and no
+component reference or insertion site (so nothing in its rendered subtree can
+resolve its provider) — and a sibling reference could not see it anyway, on
+either phase. Measured: `probe-static` emits `export function Static__ssr()` and
+no `createRenderContextScope` import. A depth >= 2 owner tree is still OWED by
+ADR-0181 and still refused.
+
+### What is NOT claimed
+
+- No server-side **provider** transport: nothing seeds a provider value from the
+  wire. The server value is computed by the same provider thunks the client
+  runs, from the same props the render was given; a provider whose value would
+  have to come from a client-only channel still fails closed (host-binding thunk)
+  or renders from its authored expression.
+- No server-side **reactivity**: a render resolves each consumer once. Nothing is
+  re-read between resolution and serialization.
+- No component ref, no `useHost`, no `computed`: unchanged from the other slice
+  records.
+- No depth >= 2 owner tree: a context intrinsic in a non-retained target, a
+  recipe/list body or a depth-2 component fails closed at the authored span.
+- No provider `computed`-style laziness, and no `useContext` outside a component
+  body.
+- No change to the class lane: the host-side `provideContext(host, context,
+  value)` / `consumeContext` pair, `CompiledContextService`'s protocol path and
+  every existing kernel call keep their behaviour; the owner-scope and
+  render-mode methods are additive, share the service's consumer set,
+  subscription map and exactly-once disconnect release, and the render mode
+  cannot reach the protocol path at all (its element is `null` by construction).
+
+### Bytes
+
+A module that does not use either intrinsic is byte-identical to its
+pre-`16b-CTX` output. The `16b-REF` SHA-256 pins in
+`generated-element.context.test.ts` C6 hold for the four-intrinsics, plain and
+local fixtures, and the whole pre-existing compiler suite passes unchanged.
+
+A module that DOES use an intrinsic gains exactly the lines its phase needs: the
+retained-factory scope/provider/consumer in the client body, and (new here) a
+scope declaration plus the provider/consumer pair in the producer body. A
+producer that neither provides, consumes nor references a context user gains
+nothing — not even the `createRenderContextScope` import, which is registered by
+the same body-text predicate every other optional runtime symbol uses.
+
+### Guard form
+
+- `packages/compiler/__tests__/semantic-ir/generated-element.context.test.ts` —
+  19 Node rows: erasure (no intrinsic import or call in the emitted module), the
+  retained-factory construction with exactly one construction site per PHASE, the
+  THUNK-not-snapshot rule, the existing `bindSignalWrites` subscription channel,
+  a nested owner's `owner()` child scope in both phases, the pre-change SHA pins,
+  the claimable-and-serializable consumer reader with its scope parameter, the
+  depth-1 retained consumer, aliased and `/lifecycle`-subpath admission, the model
+  kind, every call-shape refusal, provenance negatives, the depth>=2 placement
+  refusal, the fail-closed public import, the existing `UNBOUND_BINDING` gate for
+  a provider thunk reading a host binding, and the four SERVER rows: the provided
+  value in the bytes with nested shadowing and sibling isolation (C16), the
+  declared default with no provider (C17), per-call isolation across concurrent
+  renders (C18), and the scope parameter joined as `owner()` (C19).
+- `packages/compiler/__tests__/semantic-ir/generated-element.context.browser.test.ts`
+  — 6 Chromium rows: nested shadowing with sibling-owner isolation (TSX-13);
+  provider update on a property write and on an attribute write with an
+  unchanged write notifying nobody; disconnect cleanup (a detached provider
+  reads nothing); reconnect re-registration (republishes from the retained
+  intent with the CURRENT value, exactly one registration, a live connection
+  afterwards); the SSR→claim vertical (the producer's own bytes carry the
+  provided value and the claim of those bytes mutates nothing, X5); and the
+  claimed value staying the rendered one while the connection stays live (X6).
+- `packages/element/__tests__/compiled-runtime/context.test.ts` — 9 additive
+  rows for the engine itself: nearest owner-scope provider, sibling isolation,
+  the declared default, disconnect/reconnect without duplicates, the
+  changed-value-only republish with the service-disposed identity, plus four
+  RENDER-mode rows: synchronous provided-value resolution, nearest-first
+  shadowing with `owner()` and sibling isolation, two-scope independence, and the
+  default answer with no protocol request installed.
+
+LOCAL evidence, single engine. Not M09 exit, not the M13 matrix, and no claim is
+made here about `16b-CTX` completion — every row of the migration note keeps the
+state it records.

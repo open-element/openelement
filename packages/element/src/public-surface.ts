@@ -105,18 +105,35 @@ export { element, property } from './public-runtime.ts';
  * element-lifetime listener registration on the instance host record for
  * `onPropertyChange` (fired by the shell after a declared row commits a value);
  * one error-handler registration on that same record for `onError` (run by the
- * shell at its connect/claim, update and event-dispatch capture points); and,
- * for `ref`, one handle object built in the retained setup factory and handed
- * to that node's existing JSX `ref` attribute, which populates `current` on
+ * shell at its connect/claim, update and event-dispatch capture points); for
+ * `ref`, one handle object built in the retained setup factory and handed to
+ * that node's existing JSX `ref` attribute, which populates `current` on
  * attach (mount AND server-DOM claim), clears it on detach and repopulates it
- * on reconnect. They are not a runtime dispatcher and not a second lifecycle
+ * on reconnect; and, for `useContext` (`16b-CTX`), `const value =
+ * useContext(token)` is one persistent consumer-local signal the retained
+ * factory builds, so a tracked slot reading `.value` refreshes when a provider
+ * changes. They are not a runtime dispatcher and not a second lifecycle
  * engine: outside a compiled generated element module the standalone functions
  * fail closed instead of silently doing nothing. Nested/hostless component
  * hooks and connection-scope helpers are the additive slices recorded in
  * ADR-0180. May move to a dedicated authoring subpath with the rest of the
  * intrinsics at the B1.2 surface freeze.
+ *
+ * `16b-CTX`'s PROVIDER intrinsic is deliberately NOT re-exported here: this
+ * module already exports the class lane's host-side `provideContext(host,
+ * context, value)` under that name. An author writes the provider intrinsic as
+ * `import { provideContext } from '@openelement/element/lifecycle'` (documented
+ * in the README's subpath row), which is the same spelling the class lane uses
+ * — the difference is the receiver mode, not the name.
  */
-export { onConnect, onDispose, onError, onPropertyChange, ref } from './public-runtime.ts';
+export {
+  onConnect,
+  onDispose,
+  onError,
+  onPropertyChange,
+  ref,
+  useContext,
+} from './public-runtime.ts';
 
 // ─── HTML utilities (re-export from core) ────────────────
 

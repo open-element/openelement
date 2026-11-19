@@ -602,7 +602,7 @@
       },
       "declarations": {
         ".": {
-          "publicShapeSha256": "c2fed78ca1bf07ba5bc8348343698a53829dbebe2ef5170b8b9a496502a8dfb0",
+          "publicShapeSha256": "26444ba2efbc76056e424413888466b2105116e41070180c0a93313ec6b2a363",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -702,6 +702,7 @@
             "signal=value:{call:<T>(initialValue:T)=>WritableSignal<T>}",
             "trustedHtml=value:{call:(html:string)=>{readonly html:string}}",
             "unsafeStreamFrameAttribute=value:(name: string, value: string) => boolean",
+            "useContext=value:{call:<T>(context:{readonly defaultValue:T;readonly key:symbol})=>{readonly value:T;subscribe:{call:(fn:{call:(value:T)=>void})=>{call:()=>void}}}}",
             "wrapInDocument=value:{call:(html:string,options:{allowHeadExtrasScripts?:union(false|true|undefined);clientScript?:union(string|undefined);cspNonce?:union(string|undefined);dangerouslyHeadFragments?:union(array(string)|undefined);devScripts?:union(string|undefined);headExtras?:union(string|undefined);lang?:union(string|undefined);links?:union(array({href:string;hreflang?:union(string|undefined);rel:string})|undefined);meta?:union(undefined|{description?:union(string|undefined);tags?:union(array(Record<string, string | number | boolean>)|undefined)});scripts?:union(array({code?:union(string|undefined);src?:union(string|undefined);type?:union(string|undefined)})|undefined);streamBootstrap?:union(string|undefined);structuredData?:union(array(Record<string, unknown>)|undefined);styleLinks?:union(array(string)|undefined);title?:union(string|undefined)})=>string}"
           ]
         },
@@ -733,7 +734,7 @@
           ]
         },
         "./base": {
-          "publicShapeSha256": "c2fed78ca1bf07ba5bc8348343698a53829dbebe2ef5170b8b9a496502a8dfb0",
+          "publicShapeSha256": "26444ba2efbc76056e424413888466b2105116e41070180c0a93313ec6b2a363",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -833,6 +834,7 @@
             "signal=value:{call:<T>(initialValue:T)=>WritableSignal<T>}",
             "trustedHtml=value:{call:(html:string)=>{readonly html:string}}",
             "unsafeStreamFrameAttribute=value:(name: string, value: string) => boolean",
+            "useContext=value:{call:<T>(context:{readonly defaultValue:T;readonly key:symbol})=>{readonly value:T;subscribe:{call:(fn:{call:(value:T)=>void})=>{call:()=>void}}}}",
             "wrapInDocument=value:{call:(html:string,options:{allowHeadExtrasScripts?:union(false|true|undefined);clientScript?:union(string|undefined);cspNonce?:union(string|undefined);dangerouslyHeadFragments?:union(array(string)|undefined);devScripts?:union(string|undefined);headExtras?:union(string|undefined);lang?:union(string|undefined);links?:union(array({href:string;hreflang?:union(string|undefined);rel:string})|undefined);meta?:union(undefined|{description?:union(string|undefined);tags?:union(array(Record<string, string | number | boolean>)|undefined)});scripts?:union(array({code?:union(string|undefined);src?:union(string|undefined);type?:union(string|undefined)})|undefined);streamBootstrap?:union(string|undefined);structuredData?:union(array(Record<string, unknown>)|undefined);styleLinks?:union(array(string)|undefined);title?:union(string|undefined)})=>string}"
           ]
         },
@@ -852,7 +854,7 @@
           ]
         },
         "./client-only": {
-          "publicShapeSha256": "c2fed78ca1bf07ba5bc8348343698a53829dbebe2ef5170b8b9a496502a8dfb0",
+          "publicShapeSha256": "26444ba2efbc76056e424413888466b2105116e41070180c0a93313ec6b2a363",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -952,6 +954,7 @@
             "signal=value:{call:<T>(initialValue:T)=>WritableSignal<T>}",
             "trustedHtml=value:{call:(html:string)=>{readonly html:string}}",
             "unsafeStreamFrameAttribute=value:(name: string, value: string) => boolean",
+            "useContext=value:{call:<T>(context:{readonly defaultValue:T;readonly key:symbol})=>{readonly value:T;subscribe:{call:(fn:{call:(value:T)=>void})=>{call:()=>void}}}}",
             "wrapInDocument=value:{call:(html:string,options:{allowHeadExtrasScripts?:union(false|true|undefined);clientScript?:union(string|undefined);cspNonce?:union(string|undefined);dangerouslyHeadFragments?:union(array(string)|undefined);devScripts?:union(string|undefined);headExtras?:union(string|undefined);lang?:union(string|undefined);links?:union(array({href:string;hreflang?:union(string|undefined);rel:string})|undefined);meta?:union(undefined|{description?:union(string|undefined);tags?:union(array(Record<string, string | number | boolean>)|undefined)});scripts?:union(array({code?:union(string|undefined);src?:union(string|undefined);type?:union(string|undefined)})|undefined);streamBootstrap?:union(string|undefined);structuredData?:union(array(Record<string, unknown>)|undefined);styleLinks?:union(array(string)|undefined);title?:union(string|undefined)})=>string}"
           ]
         },
@@ -998,7 +1001,7 @@
           ]
         },
         "./internal/compiled/leaf-runtime": {
-          "publicShapeSha256": "850466cc3d9d03b6564ab7338166c3efc625f5fd87320a4e49b54e14af30e924",
+          "publicShapeSha256": "4e4f2145b63580a02df4d3ac964ba5524b078d673800e9fcd9c562fe643c1942",
           "publicSymbols": [
             "MARKERS=value:{each:{readonly [MARKER_BRAND]:true;readonly text:string};eachEnd:{readonly [MARKER_BRAND]:true;readonly text:string};when:{readonly [MARKER_BRAND]:true;readonly text:string};whenEnd:{readonly [MARKER_BRAND]:true;readonly text:string}}",
             "assertEachAnchor=value:{call:(node:union(Node|null|undefined),where:string,origin:union(undefined|{readonly column:number;readonly file:string;readonly line:number}))=>void}",
@@ -1016,6 +1019,7 @@
             "claimRecipe=value:{call:<P>(insertingOwner:{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal},recipe:{readonly claim?:union(undefined|{call:(scope:{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal},props:Readonly<P>,parent:Node)=>array(Node)});readonly createProps:{call:()=>P};readonly definitionOwner:{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal};readonly mount:{call:(scope:{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal},props:Readonly<P>)=>array(Node)};readonly source:string},parent:Node)=>{dispose:{call:(detachOwnedNodes:union(false|true|undefined))=>void};readonly nodes:array(Node);readonly owner:{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal};readonly props:Readonly<P>;readonly region:number}}",
             "claimStaticSiblingRange=value:{call:(directory:{readonly declaration:array(array({readonly attributes?:union(array({readonly name:string;readonly value:string})|undefined);readonly children?:union(recursive(readonly DeclaredStaticNode[])|undefined);readonly kind:union(\"element\"|\"text\");readonly localName?:union(string|undefined);readonly nodeValue?:union(null|string|undefined)}));readonly parent:union(Element|ShadowRoot);readonly source:string},expected:union(number|{readonly start:Node}),insertingOwner:{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal},activate:{call:(scope:{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal},interior:array(Node))=>void})=>{dispose:{call:(detachOwnedNodes:union(false|true|undefined))=>void};readonly end:Node;readonly interior:array(Node);readonly ordinal:number;readonly owner:{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal};readonly start:Node}}",
             "createRecipe=value:{call:<P =unknown>(options:{claim?:union(undefined|{call:(scope:{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal},props:Readonly<P>,parent:Node)=>array(Node)});createProps?:union(undefined|{call:()=>P});definitionOwner:{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal};mount:{call:(scope:{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal},props:Readonly<P>)=>array(Node)};source?:union(string|undefined)})=>{readonly claim?:union(undefined|{call:(scope:{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal},props:Readonly<P>,parent:Node)=>array(Node)});readonly createProps:{call:()=>P};readonly definitionOwner:{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal};readonly mount:{call:(scope:{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal},props:Readonly<P>)=>array(Node)};readonly source:string}}",
+            "createRenderContextScope=value:{call:()=>{owner:{call:()=>recursive(ContextScopeChannel)};provider:{call:(token:{readonly defaultValue:unknown;readonly key:symbol},read:{call:()=>unknown})=>void};use:{call:(token:{readonly defaultValue:unknown;readonly key:symbol})=>unknown}}}",
             "displayValue=value:{call:(value:unknown)=>string}",
             "emitComment=value:{call:(marker:{readonly [MARKER_BRAND]:true;readonly text:string})=>Comment}",
             "encodeListKey=value:{call:(value:unknown)=>string}",
@@ -1157,12 +1161,14 @@
           ]
         },
         "./lifecycle": {
-          "publicShapeSha256": "d2737eb09520c45b32d7ebe2e657f2c6b88fbb13d95bc0de4c426158c29dbd76",
+          "publicShapeSha256": "f737fcac7a8977a2c5bbdc0eb98cc76ff4dcf96bd21f76a7b206237b11ce2e25",
           "publicSymbols": [
             "onConnect=value:{call:(callback:{call:(env:{readonly host:HTMLElement;readonly signal:AbortSignal;readonly states:CustomStateSet})=>union(void|{call:()=>void})})=>void}",
             "onDispose=value:{call:(callback:{call:(env:{readonly host:HTMLElement;readonly signal:AbortSignal;readonly states:CustomStateSet})=>void})=>void}",
             "onPropertyChange=value:{call:(callback:{call:(event:{readonly host:HTMLElement;readonly name:string;readonly signal:AbortSignal;readonly states:CustomStateSet;readonly value:unknown})=>void})=>void}",
-            "ref=value:{call:<T extends Element =Element>(callback:union(undefined|{call:(element:union(T|null))=>union(void|{call:()=>void})}))=>{call:(element:union(Element|null))=>void;readonly current:union(T|null)}}"
+            "provideContext=value:{call:<T>(context:{readonly defaultValue:T;readonly key:symbol},read:{call:()=>T})=>void}",
+            "ref=value:{call:<T extends Element =Element>(callback:union(undefined|{call:(element:union(T|null))=>union(void|{call:()=>void})}))=>{call:(element:union(Element|null))=>void;readonly current:union(T|null)}}",
+            "useContext=value:{call:<T>(context:{readonly defaultValue:T;readonly key:symbol})=>{readonly value:T;subscribe:{call:(fn:{call:(value:T)=>void})=>{call:()=>void}}}}"
           ]
         },
         "./logger": {
@@ -1176,7 +1182,7 @@
           ]
         },
         "./no-blocks": {
-          "publicShapeSha256": "c2fed78ca1bf07ba5bc8348343698a53829dbebe2ef5170b8b9a496502a8dfb0",
+          "publicShapeSha256": "26444ba2efbc76056e424413888466b2105116e41070180c0a93313ec6b2a363",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -1276,6 +1282,7 @@
             "signal=value:{call:<T>(initialValue:T)=>WritableSignal<T>}",
             "trustedHtml=value:{call:(html:string)=>{readonly html:string}}",
             "unsafeStreamFrameAttribute=value:(name: string, value: string) => boolean",
+            "useContext=value:{call:<T>(context:{readonly defaultValue:T;readonly key:symbol})=>{readonly value:T;subscribe:{call:(fn:{call:(value:T)=>void})=>{call:()=>void}}}}",
             "wrapInDocument=value:{call:(html:string,options:{allowHeadExtrasScripts?:union(false|true|undefined);clientScript?:union(string|undefined);cspNonce?:union(string|undefined);dangerouslyHeadFragments?:union(array(string)|undefined);devScripts?:union(string|undefined);headExtras?:union(string|undefined);lang?:union(string|undefined);links?:union(array({href:string;hreflang?:union(string|undefined);rel:string})|undefined);meta?:union(undefined|{description?:union(string|undefined);tags?:union(array(Record<string, string | number | boolean>)|undefined)});scripts?:union(array({code?:union(string|undefined);src?:union(string|undefined);type?:union(string|undefined)})|undefined);streamBootstrap?:union(string|undefined);structuredData?:union(array(Record<string, unknown>)|undefined);styleLinks?:union(array(string)|undefined);title?:union(string|undefined)})=>string}"
           ]
         },

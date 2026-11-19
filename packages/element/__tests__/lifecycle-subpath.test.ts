@@ -39,7 +39,14 @@ const LIFECYCLE_SOURCE = new URL('../src/lifecycle.ts', import.meta.url);
 const LIFECYCLE_EXPORTS = Object.keys(lifecycleEntry).sort();
 
 test('the subpath exports exactly the compiler-erased intrinsics', () => {
-  expect(LIFECYCLE_EXPORTS).toEqual(['onConnect', 'onDispose', 'onPropertyChange', 'ref']);
+  expect(LIFECYCLE_EXPORTS).toEqual([
+    'onConnect',
+    'onDispose',
+    'onPropertyChange',
+    'provideContext',
+    'ref',
+    'useContext',
+  ]);
 });
 
 test('the subpath re-exports the SAME function objects as the root entry', () => {
@@ -49,6 +56,12 @@ test('the subpath re-exports the SAME function objects as the root entry', () =>
   expect(lifecycleEntry.onDispose).toBe(rootEntry.onDispose);
   expect(lifecycleEntry.onPropertyChange).toBe(rootEntry.onPropertyChange);
   expect(lifecycleEntry.ref).toBe(rootEntry.ref);
+  // `16b-CTX`: the scope-tree pair. `provideContext` is the PROVIDER intrinsic on
+  // this subpath while the root entry keeps the class lane's host-side
+  // `provideContext(host, context, value)` primitive under that name — two
+  // different functions with the same exported name, which is exactly why the
+  // identity assertion below is scoped to the names whose meaning is shared.
+  expect(lifecycleEntry.useContext).toBe(rootEntry.useContext);
 });
 
 test('calling an intrinsic from the subpath fails closed with the root identity', () => {
@@ -60,6 +73,16 @@ test('calling an intrinsic from the subpath fails closed with the root identity'
     // silent no-op here would hand the author an object whose `current` never
     // moves and whose callback never runs.
     ['ref', () => lifecycleEntry.ref(() => undefined)],
+    // `16b-CTX`: the consumer fails closed too — a silent no-op would hand the
+    // author a signal that never receives a provider value.
+    ['useContext', () => lifecycleEntry.useContext({ key: Symbol('t'), defaultValue: 0 })],
+    // The PROVIDER intrinsic fails closed the same way. It is asserted against
+    // the subpath only: the root entry exports the class lane's different
+    // `provideContext(host, context, value)` under that name.
+    [
+      'provideContext',
+      () => lifecycleEntry.provideContext({ key: Symbol('t'), defaultValue: 0 }, () => 0),
+    ],
   ] as const) {
     let thrown: unknown;
     try {
@@ -73,6 +96,7 @@ test('calling an intrinsic from the subpath fails closed with the root identity'
     expect((thrown as OpenElementError).message, intrinsic).toContain(intrinsic);
     // The message is IDENTICAL to the root spelling's, so an error report
     // cannot tell which entry the author imported.
+    if (intrinsic === 'provideContext') continue;
     const fromRoot = (() => {
       try {
         rootEntry[intrinsic](() => undefined);
@@ -108,7 +132,14 @@ test('the subpath module has no module-scope side effect and no executor path', 
     .filter((line) => line !== '');
   // One re-export statement, nothing else executable at module scope.
   expect(statements).toEqual([
-    "export { onConnect, onDispose, onPropertyChange, ref } from './internal/core/compile-lifecycle.ts';",
+    'export {',
+    'onConnect,',
+    'onDispose,',
+    'onPropertyChange,',
+    'provideContext,',
+    'ref,',
+    'useContext,',
+    "} from './internal/core/compile-lifecycle.ts';",
   ]);
   // The dependency is the leaf stand-in module, never the public surface (which
   // pulls OpenElement → the class lane → the executor) and never an

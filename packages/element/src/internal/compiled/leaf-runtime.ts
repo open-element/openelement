@@ -99,3 +99,10 @@ export { runUntracked } from './runtime/bindings.ts';
 // its origin module, not re-implemented, and NOT imported by any module that
 // does not register an `onError` handler.
 export { guardUpdate } from './runtime/bindings.ts';
+
+// `16b-CTX` SERVER half: the per-render owner scope an emitted `__ssr` producer
+// builds for one call. It is the SAME engine the client anchor uses
+// (`runtime/context.ts` `CompiledContextService.forRender`), re-exported from its
+// origin module and imported only by a module that renders a context consumer —
+// a module without the intrinsic keeps its bytes and its module graph.
+export { createRenderContextScope } from './runtime/context.ts';

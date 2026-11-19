@@ -75,6 +75,7 @@ export {
   onError,
   onPropertyChange,
   ref,
+  useContext,
 } from './internal/core/compile-lifecycle.ts';
 export {
   DANGEROUS_KEYS,

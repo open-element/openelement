@@ -251,17 +251,36 @@ export const GENERATED_ELEMENT_DIAGNOSTIC = {
  * refusals. Only the two factory names the function grammar admits are named;
  * every other import stays host-classified by the caller.
  */
+/**
+ * The two specifiers that name the same factory/intrinsic symbols. The
+ * tree-shakeable `/lifecycle` subpath re-exports the identical functions, so it
+ * classifies identically — a consumer imported from either spelling is a real
+ * signal, and the tracked-slot dependency rule must not depend on which one the
+ * author happened to use.
+ */
+const FACTORY_SPECIFIERS: ReadonlySet<string> = new Set([
+  '@openelement/element',
+  '@openelement/element/lifecycle',
+]);
+
 export const GENERATED_ELEMENT_IMPORT_CLASSIFIER: ImportClassifier = {
   classifySymbol: (specifier, importedName) => {
-    if (specifier !== '@openelement/element') return undefined;
+    if (!FACTORY_SPECIFIERS.has(specifier)) return undefined;
     if (importedName === 'signal' || importedName === 'computed') return 'factory';
+    // `16b-CTX`: `useContext(token)` PRODUCES a signal (one persistent
+    // consumer-local signal the compiler builds), so a tracked slot reading
+    // `consumer.value` is a real reactive dependency. Classifying it as a
+    // factory whose result is a signal is what makes that dependency rule the
+    // lane's existing one instead of a new ValueKind.
+    if (importedName === 'useContext') return 'factory';
     return 'value';
   },
   classifyValue: () => undefined,
   classifyCall: (specifier, importedName) => {
-    if (specifier !== '@openelement/element') return undefined;
+    if (!FACTORY_SPECIFIERS.has(specifier)) return undefined;
     if (importedName === 'signal') return { call: 'signal' };
     if (importedName === 'computed') return { call: 'computed' };
+    if (importedName === 'useContext') return { call: 'signal' };
     return undefined;
   },
 };

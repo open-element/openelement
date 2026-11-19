@@ -2,8 +2,9 @@
  * Runtime fail-closed stand-ins for the compile-time-only lifecycle/change
  * intrinsics `onConnect` / `onDispose` (`16b-LC` author surface, option 1a),
  * `onPropertyChange` (experience-edition change channel, execution-plan §17),
- * `onError` (`16b-EB` author-facing error boundary) and `ref` (`16b-REF`
- * author-facing node handle).
+ * `onError` (`16b-EB` author-facing error boundary), `ref` (`16b-REF`
+ * author-facing node handle) and `provideContext` / `useContext` (`16b-CTX`
+ * author-facing scope tree).
  *
  * The OpenElement compiler (the generated-element lane in
  * `@openelement/compiler`) recognizes these calls by binding provenance — a
@@ -191,4 +192,75 @@ export function ref<T extends globalThis.Element = globalThis.Element>(
 } {
   void callback;
   outsideCompiler('ref');
+}
+
+/**
+ * Compiler-recognized PROVIDER intrinsic (`16b-CTX`): declares that this
+ * component provides `context` with the current value of `read` to its subtree.
+ *
+ * ```tsx
+ * const ThemeContext = createContext(Symbol('theme'), 'light');
+ *
+ * function App() {
+ *   provideContext(ThemeContext, () => props.theme);
+ *   return <Child />;
+ * }
+ * ```
+ *
+ * The second argument is a VALUE THUNK, deliberately: the compiler erases this
+ * call into the component's retained setup record and re-reads the thunk on
+ * connect and after every declared-row commit, so a provider follows the
+ * lane's one change channel (a property write) rather than introducing a second
+ * reactivity model. A `computed` would be the class lane's answer; this lane
+ * deliberately has no author `computed`.
+ *
+ * Published over the generated owner tree, hostless owners included: provider
+ * discovery is the Community Context Protocol `context-request` composed event,
+ * so the nearest ancestor provider wins and two sibling subtrees cannot see each
+ * other. A provider registers on connect, unregisters exactly once on
+ * disconnect, and registers again on reconnect.
+ *
+ * Erased by the compiler; calling it at runtime fails closed.
+ */
+export function provideContext<T>(
+  context: {
+    readonly key: symbol;
+    readonly defaultValue: T;
+  },
+  read: () => T,
+): void {
+  void context;
+  void read;
+  outsideCompiler('provideContext');
+}
+
+/**
+ * Compiler-recognized CONSUMER intrinsic (`16b-CTX`): declares a tracked
+ * consumer of `context` for this component and returns the signal its value
+ * lives in.
+ *
+ * ```tsx
+ * const theme = useContext(ThemeContext);
+ * return <p>{theme.value}</p>;   // a tracked slot: refreshes on provider change
+ * ```
+ *
+ * The returned signal is ONE persistent consumer-local signal: the compiler
+ * erases this call into the component's retained setup record, so a reconnect
+ * re-reads the nearest provider into the SAME object and a tracked slot keeps
+ * exactly one subscription target for the whole element lifetime. Lookup follows
+ * the nearest owning component, so an inner provider shadows an outer one and a
+ * component with no ancestor provider reads the context's declared default.
+ *
+ * Reading `.value` in a tracked slot is the supported use — this is the lane's
+ * reactive channel, unlike `ref`'s `current`. Reading it inside a handler also
+ * works (the signal is live), but only tracked slots refresh.
+ *
+ * Erased by the compiler; calling it at runtime fails closed.
+ */
+export function useContext<T>(context: { readonly key: symbol; readonly defaultValue: T }): {
+  readonly value: T;
+  subscribe(fn: (value: T) => void): () => void;
+} {
+  void context;
+  outsideCompiler('useContext');
 }

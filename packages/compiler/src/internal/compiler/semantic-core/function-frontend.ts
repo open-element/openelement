@@ -242,8 +242,14 @@ export interface FunctionModelResource {
    * already has), lowered in `handler` mode; `null` means "handle only, no
    * notification". A `ref` handle differs from `local` in that its initializer
    * is not evaluated once as a snapshot — the compiler emits the handle itself.
+   *
+   * `context` is a `16b-CTX` CONSUMER (`const value = useContext(token)`): the
+   * name is bound to ONE persistent consumer-local Signal the compiler builds in
+   * the retained setup factory, so a tracked slot reading `.value` is a real
+   * reactive dependency (unlike `ref`) and a reconnect re-reads the nearest
+   * provider into the same object. `expression` carries the lowered TOKEN.
    */
-  readonly kind: 'signal' | 'computed' | 'local' | 'ref';
+  readonly kind: 'signal' | 'computed' | 'local' | 'ref' | 'context';
   /** Lowered initializer/derivation; absent when the declared form has none. */
   readonly expression: FunctionExpressionRef | null;
   /**
@@ -282,6 +288,24 @@ export interface FunctionModelLifecycleHook {
   readonly span: SourceSpan;
 }
 
+/**
+ * One admitted `16b-CTX` PROVIDER statement of a generated component setup.
+ *
+ * `provideContext(token, () => value)` is erased into the retained setup
+ * factory, which registers it on the component's owner scope. The value is a
+ * THUNK by contract: the emitted closure is re-read on connect and after every
+ * declared-property commit, so "provider changed" is this lane's existing change
+ * channel and no second reactivity model is introduced (the lane deliberately
+ * has no author `computed`).
+ */
+export interface FunctionModelContextProvider {
+  /** The lowered context token expression (usually a static module import). */
+  readonly token: FunctionExpressionRef;
+  /** The lowered value thunk — an inline arrow/function expression. */
+  readonly value: FunctionExpressionRef;
+  readonly span: SourceSpan;
+}
+
 /** One function component of the module. */
 export interface FunctionModelComponent {
   readonly name: string;
@@ -296,6 +320,11 @@ export interface FunctionModelComponent {
    * generator is the only consumer.
    */
   readonly lifecycle: readonly FunctionModelLifecycleHook[];
+  /**
+   * The admitted `16b-CTX` provider statements, in authored order. Empty for a
+   * component that provides nothing; the generator is the only consumer.
+   */
+  readonly contextProviders: readonly FunctionModelContextProvider[];
   readonly span: SourceSpan;
 }
 
@@ -770,6 +799,7 @@ class FunctionFrontendBuilder {
 
     const resources: FunctionModelResource[] = [];
     const lifecycle: FunctionModelLifecycleHook[] = [];
+    const contextProviders: FunctionModelContextProvider[] = [];
     const body = node.body;
     if (body === undefined) {
       this.fail(node, CODES.shape, 'a function component must have a body');
@@ -786,6 +816,15 @@ class FunctionFrontendBuilder {
           if (lifecycleHook === 'refused') continue;
           if (lifecycleHook !== null) {
             lifecycle.push(lifecycleHook);
+            continue;
+          }
+          // `16b-CTX`: a direct top-level `provideContext(token, () => value)`.
+          // Also a compiler-erased intrinsic with no model node of its own: the
+          // generator emits the registration inside the retained setup factory.
+          const contextProvider = this.buildContextProvider(statement, candidate.name);
+          if (contextProvider === 'refused') continue;
+          if (contextProvider !== null) {
+            contextProviders.push(contextProvider);
             continue;
           }
         }
@@ -852,6 +891,7 @@ class FunctionFrontendBuilder {
       recipes,
       roots,
       lifecycle,
+      contextProviders,
       span: spanOf(this.sourceFile, node),
     };
   }
@@ -1006,6 +1046,160 @@ class FunctionFrontendBuilder {
     };
   }
 
+  /**
+   * `16b-CTX` — the imported name when `call` invokes a canonical context
+   * intrinsic (a named import of `@openelement/element` or
+   * `@openelement/element/lifecycle`), or `null` for anything else.
+   *
+   * Recognition is BINDING PROVENANCE only: a local shadow, a namespace member
+   * and a foreign module's same-named function are NOT the intrinsic and keep
+   * every pre-existing refusal.
+   */
+  private contextIntrinsicImport(call: ts.CallExpression): 'provideContext' | 'useContext' | null {
+    const callee = unwrap(call.expression);
+    if (!ts.isIdentifier(callee)) return null;
+    const binding = this.resolved.resolveIdentifier(callee);
+    if (binding === undefined || binding.origin.form !== 'import') return null;
+    if (!isLifecycleIntrinsicSpecifier(binding.origin.specifier)) return null;
+    const importedName = binding.origin.importedName;
+    if (importedName === 'provideContext') return 'provideContext';
+    if (importedName === 'useContext') return 'useContext';
+    return null;
+  }
+
+  /**
+   * `16b-CTX` — admit one direct top-level `provideContext(token, () => value)`
+   * statement of a generated component setup.
+   *
+   * The call shape is deliberately as narrow as the other intrinsics: exactly two
+   * arguments, no type arguments, the token lowered in `setup` mode (it is read
+   * once, and in practice is a static module import), and the value as an INLINE
+   * synchronous arrow/function expression taking no parameters — the THUNK whose
+   * re-read is the lane's provider-change event. Refusals use the existing
+   * `OEC9042` form code; no new diagnostic identity is introduced.
+   *
+   * Placement is the generator's verdict, like the lifecycle intrinsics: the
+   * frontend admits module-wide and the emitter decides whether the component is
+   * a retained setup body. Returns `null` when the statement is not this
+   * intrinsic at all, so the pre-existing component-body grammar keeps its
+   * refusal for a non-intrinsic statement.
+   */
+  private buildContextProvider(
+    statement: ts.ExpressionStatement,
+    componentName: string,
+  ): FunctionModelContextProvider | 'refused' | null {
+    if (!this.admitsLifecycle(componentName)) return null;
+    const expression = statement.expression;
+    if (!ts.isCallExpression(expression)) return null;
+    if (this.contextIntrinsicImport(expression) !== 'provideContext') return null;
+    const writtenName = 'provideContext';
+    if (expression.typeArguments !== undefined || expression.arguments.length !== 2) {
+      this.fail(
+        statement,
+        CODES.form,
+        `${writtenName}(token, () => value) takes exactly a context token and one inline value thunk`,
+      );
+      return 'refused';
+    }
+    const token = this.expression(unwrap(expression.arguments[0]!), 'setup');
+    if (token === null) return 'refused';
+    const thunk = unwrap(expression.arguments[1]!);
+    if (!ts.isArrowFunction(thunk) && !ts.isFunctionExpression(thunk)) {
+      this.fail(
+        statement,
+        CODES.form,
+        `${writtenName}(...) needs an INLINE arrow/function-expression value thunk; a plain value or ` +
+          'an indirect function reference is outside the admitted context slice',
+      );
+      return 'refused';
+    }
+    if (thunk.asteriskToken !== undefined) {
+      this.fail(statement, CODES.form, `${writtenName}(...) cannot take a generator value thunk`);
+      return 'refused';
+    }
+    const modifiers = ts.canHaveModifiers(thunk) ? ts.getModifiers(thunk) : undefined;
+    if (modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) === true) {
+      this.fail(
+        statement,
+        CODES.form,
+        `the ${writtenName} value thunk must be synchronous; an async provider value is outside ` +
+          'the context slice',
+      );
+      return 'refused';
+    }
+    if (thunk.parameters.length !== 0) {
+      this.fail(
+        statement,
+        CODES.form,
+        `the ${writtenName} value thunk takes no parameters (it is re-read, not called with a value)`,
+      );
+      return 'refused';
+    }
+    const value = this.expression(thunk, 'handler');
+    if (value === null) return 'refused';
+    return { token, value, span: spanOf(this.sourceFile, statement) };
+  }
+
+  /**
+   * `16b-CTX` — the imported name when `call` invokes a canonical `useContext`
+   * intrinsic, or `null`.
+   */
+  private useContextIntrinsicImport(call: ts.CallExpression): string | null {
+    return this.contextIntrinsicImport(call) === 'useContext' ? 'useContext' : null;
+  }
+
+  /**
+   * `16b-CTX` — admit one `const value = useContext(token)` declaration as a
+   * component-scope CONSUMER.
+   *
+   * The call takes exactly one argument (the token, lowered in `setup` mode) and
+   * no type arguments. The declared name is bound to the compiler-owned
+   * consumer-local Signal, so — unlike a `ref` handle — reading `.value` in a
+   * tracked slot is the SUPPORTED use and needs no read-position gate.
+   *
+   * The declaration must be `const`: the retained setup record aliases it and
+   * the signal identity is the contract (a reconnect writes into the SAME
+   * object), so a reassignable binding would imply something the emitted code
+   * cannot honour. Refusals keep `OEC9042`.
+   */
+  private buildContextConsumer(
+    declaration: ts.VariableDeclaration,
+    name: string,
+    call: ts.CallExpression,
+  ): FunctionModelResource | null {
+    if (
+      call.typeArguments !== undefined ||
+      call.arguments.length !== 1 ||
+      this.useContextIntrinsicImport(call) === null
+    ) {
+      this.fail(
+        call,
+        CODES.form,
+        'useContext(token) takes exactly one context token and no type arguments',
+      );
+      return null;
+    }
+    const list = declaration.parent;
+    if (!ts.isVariableDeclarationList(list) || (list.flags & ts.NodeFlags.Const) === 0) {
+      this.fail(
+        call,
+        CODES.form,
+        'a useContext consumer must be declared with const: the consumer signal identity is the ' +
+          'contract and the emitted alias is not reassignable',
+      );
+      return null;
+    }
+    const expression = this.expression(unwrap(call.arguments[0]!), 'setup');
+    if (expression === null) return null;
+    return {
+      name,
+      kind: 'context',
+      expression,
+      recipeId: null,
+      span: spanOf(this.sourceFile, declaration),
+    };
+  }
+
   private buildDeclaration(declaration: ts.VariableDeclaration): FunctionModelResource | null {
     if (!ts.isIdentifier(declaration.name)) {
       this.fail(declaration, CODES.form, 'only plain identifier declarations are admitted');
@@ -1032,6 +1226,17 @@ class FunctionFrontendBuilder {
         recipeId,
         span: spanOf(this.sourceFile, declaration),
       };
+    }
+    // `16b-CTX`: a `useContext(token)` declaration is a compiler-erased
+    // CONSUMER, not a lowered snapshot. It is recognized BEFORE the generic
+    // signal/computed branch on purpose: the host classifier reports
+    // `useContext` as a factory whose result is a signal (so a tracked slot
+    // reading `.value` is an ordinary reactive dependency), and this branch is
+    // what turns that classification into the lane's own consumer RESOURCE —
+    // one persistent consumer-local signal built by the retained setup factory,
+    // so a reconnect writes into the SAME object.
+    if (ts.isCallExpression(value) && this.useContextIntrinsicImport(value) !== null) {
+      return this.buildContextConsumer(declaration, name, value);
     }
     const binding = this.resolved.resolveIdentifier(declaration.name);
     const kind = binding?.value;

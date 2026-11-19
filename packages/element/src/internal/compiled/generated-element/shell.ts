@@ -181,6 +181,7 @@ import { LifetimeScope } from '../lifetime-scope.ts';
 import { abortInstancePass, releaseRetainedChildren } from '../runtime/instance-ledger.ts';
 import { claimRecipe, insertRecipe, type Projection, type Recipe } from '../runtime/recipe.ts';
 import { CompiledProgramValidationError, removeNodes } from '../runtime/values.ts';
+import { CompiledContextService, contextChannelFor } from '../runtime/context.ts';
 import { signal } from '../../signal/framework.ts';
 import type { WritableSignal } from '../../signal/types.ts';
 import {
@@ -981,6 +982,15 @@ interface ElementState {
    * cleared by teardown makes the reporter rethrow (the unchanged behaviour).
    */
   errorReporter: ((error: unknown) => void) | null;
+  /**
+   * The ONE `16b-CTX` context scope of this generated element (`null` until a
+   * module that uses the intrinsics asks for it). It is created by the compiled
+   * setup through the compiler-private `__oe_context` channel and retained for
+   * the element lifetime: the owner-scope tree, the provider intents and the
+   * consumer bridges all live there, and the shell drives its connection
+   * lifecycle beside the instance/connection scopes.
+   */
+  context: CompiledContextService | null;
 }
 
 const states = new WeakMap<HTMLElement, ElementState>();
@@ -1472,6 +1482,7 @@ function createState(descriptor: NormalizedDescriptor): ElementState {
     propertyChangeCallbacks: [],
     errorHandlers: [],
     errorReporter: null,
+    context: null,
   };
 }
 
@@ -1523,6 +1534,12 @@ function setProperty(
   bumpProps(state);
   syncFormProperty(state, property);
   notifyPropertyChange(element, state, property.name);
+  // `16b-CTX`: a declared-row commit is this runtime's ONE provider-change
+  // event. The providers re-read their value thunks and republish only what
+  // actually changed, so a subscribed consumer observes the new value exactly
+  // once and an unchanged write notifies nobody. No author `computed` and no
+  // extra subscription channel is introduced.
+  state.context?.refreshProviders();
 }
 
 /**
@@ -1839,6 +1856,99 @@ type ErrorHandler = (env: {
   readonly error: unknown;
 }) => void;
 
+/**
+ * The compiler-private runtime property that hands generated code its `16b-CTX`
+ * context scope.
+ *
+ * A GETTER on the host records, deliberately: registration order must not
+ * matter, and a depth-1 retained child's setup host forwards the same channel.
+ * The getter returns the SAME adapter object for a given element, so repeated
+ * reads cannot build a second owner chain.
+ *
+ * The emitted text names three calls, not the service:
+ *
+ * - `use(token)` — one persistent consumer-local signal.
+ * - `provider(token, read)` — one owner-scope provider with a value thunk.
+ * - `owner()` — a CHILD owner scope of this one. A hostless generated component
+ *   (one that creates no element) calls this once in its retained setup and
+ *   registers there, so it is a child of the element anchor rather than the
+ *   anchor itself. Two sibling hostless children therefore cannot see each
+ *   other's providers, while both still resolve the element's ancestors.
+ *
+ * The ROOT uses the anchor directly (no `owner()`), which is what makes a root
+ * provider visible to every depth-1 child.
+ */
+const CONTEXT_SCOPE_PROPERTY = '__oe_context';
+
+/**
+ * One memoised adapter per `CompiledContextService`, so identity is stable.
+ *
+ * The adapter itself lives in the context engine (`contextChannelFor`), because
+ * the SAME three-call shape backs the CLIENT anchor and the SERVER render scope:
+ * one spelling in emitted code, one adapter type, and the phase decides which
+ * scope is behind it. The shell only memoises nothing here — it reads the engine
+ * function directly — so there cannot be two adapter definitions to drift.
+ */
+
+/**
+ * Attach the `16b-CTX` context-scope channel to a host record.
+ *
+ * Both host records carry it (the instance record the setup factory receives and
+ * the connection record the recipe receives), exactly like the change and error
+ * channels, so a depth-1 retained child's generated setup host forwards the SAME
+ * channel as a plain property and its `owner()` lands on the element's anchor.
+ */
+function withContextChannel<T extends object>(
+  record: T,
+  element: HTMLElement,
+  state: ElementState,
+): T {
+  Object.defineProperty(record, CONTEXT_SCOPE_PROPERTY, {
+    get: () => contextChannelFor(contextScopeFor(element, state)),
+    enumerable: false,
+    configurable: false,
+  });
+  return record;
+}
+
+/**
+ * The ONE context scope of this element, created on first use.
+ *
+ * Its parent resolver walks the generated ANCESTOR element chain, so a nested
+ * generated element's consumers resolve through its ancestors' scopes as well as
+ * its own. The resolver is consulted on every connect, so a reconnect after a
+ * DOM move joins the right tree and a reconnect in place re-joins the same one.
+ */
+function contextScopeFor(element: HTMLElement, state: ElementState): CompiledContextService {
+  if (state.context !== null) return state.context;
+  const scope = new CompiledContextService(element, () => nearestGeneratedContextScope(element));
+  state.context = scope;
+  return scope;
+}
+
+/**
+ * The nearest generated ANCESTOR element's context scope, or null.
+ *
+ * Crosses shadow roots through `host` (a shadow root's host is a legitimately
+ * generated element ancestor), skips the element itself, and stops at the
+ * outermost generated element — a class-lane or foreign ancestor contributes
+ * nothing, exactly like the protocol path where a non-providing ancestor is
+ * silent.
+ */
+function nearestGeneratedContextScope(element: HTMLElement): CompiledContextService | null {
+  let node: Node | null = element.parentNode;
+  while (node !== null) {
+    if (node instanceof HTMLElement) {
+      const candidate = states.get(node);
+      if (candidate?.context != null) return candidate.context;
+      node = node.parentNode;
+      continue;
+    }
+    node = node instanceof ShadowRoot ? node.host : node.parentNode;
+  }
+  return null;
+}
+
 /** Attach the owning element to a host record without changing its shape. */
 function withHostElement<T extends object>(record: T, element: HTMLElement): T {
   Object.defineProperty(record, HOST_ELEMENT_PROPERTY, {
@@ -2021,29 +2131,33 @@ function hostFor(
   state: ElementState,
   element: HTMLElement,
 ): GeneratedElementHost<Record<string, unknown>> {
-  return withInternalsStates(
-    withErrorReportChannel(
-      withErrorHandlerChannel(
-        withPropertyChangeChannel(
-          withHostElement(
-            {
-              // `ensureInstance` publishes the retained setup record before this host is
-              // built; the empty fallback keeps the contract total for a hand-built
-              // descriptor that names neither factory.
-              bindings: state.bindings ?? {},
-              // The one logical instance (LC-2 nesting): the generated root body opens a
-              // pass on it and retains direct hostless children. Omitted while no
-              // instance exists (hand-built descriptor without createInstance); the
-              // retention path is only emitted for a generated root, whose instance is
-              // always established before this host is built.
-              instance: state.instance ?? undefined,
-              props: state.props,
-              propsChanged: state.propsChanged,
-            },
-            element,
+  return withContextChannel(
+    withInternalsStates(
+      withErrorReportChannel(
+        withErrorHandlerChannel(
+          withPropertyChangeChannel(
+            withHostElement(
+              {
+                // `ensureInstance` publishes the retained setup record before this host is
+                // built; the empty fallback keeps the contract total for a hand-built
+                // descriptor that names neither factory.
+                bindings: state.bindings ?? {},
+                // The one logical instance (LC-2 nesting): the generated root body opens a
+                // pass on it and retains direct hostless children. Omitted while no
+                // instance exists (hand-built descriptor without createInstance); the
+                // retention path is only emitted for a generated root, whose instance is
+                // always established before this host is built.
+                instance: state.instance ?? undefined,
+                props: state.props,
+                propsChanged: state.propsChanged,
+              },
+              element,
+            ),
+            state,
           ),
           state,
         ),
+        element,
         state,
       ),
       element,
@@ -2058,19 +2172,23 @@ function instanceHostFor(
   state: ElementState,
   element: HTMLElement,
 ): GeneratedElementInstanceHost<Record<string, unknown>> {
-  return withInternalsStates(
-    withErrorReportChannel(
-      withErrorHandlerChannel(
-        withPropertyChangeChannel(
-          withHostElement(
-            {
-              props: state.props,
-              propsChanged: state.propsChanged,
-            },
-            element,
+  return withContextChannel(
+    withInternalsStates(
+      withErrorReportChannel(
+        withErrorHandlerChannel(
+          withPropertyChangeChannel(
+            withHostElement(
+              {
+                props: state.props,
+                propsChanged: state.propsChanged,
+              },
+              element,
+            ),
+            state,
           ),
           state,
         ),
+        element,
         state,
       ),
       element,
@@ -2419,6 +2537,14 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         // The connection scope is created per successful connect and disposed
         // plain on disconnect; the instance above is retained across it.
         connection = instance.child();
+        // `16b-CTX`: the context owner tree joins the connection before the
+        // recipe is created, so the mount/claim body's consumers resolve against
+        // an already-connected scope. The compiled setup has ALREADY run (above)
+        // and registered this element's providers and consumer declarations —
+        // `connect()` publishes those intents and bridges the consumers, which is
+        // exactly the engine's own "registration then connect" order. A
+        // descriptor that never touches the channel never created a scope.
+        state.context?.connect();
         const recipe = normalized.createRecipe(connection, hostFor(state, this));
         // Reconnect and dispose(false) retain the region; dispose(true) marks it
         // absent and the next connect mounts even when foreign nodes remain in
@@ -2459,7 +2585,13 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         // Keep any ownership recorded by an earlier successful mount/claim: a
         // failed re-claim borrowed no new DOM and must not adopt the host's
         // children. The recipe/projection rolled back its own child scope.
-        const release: Array<() => void> = [() => connection?.dispose(false)];
+        const release: Array<() => void> = [
+          // `16b-CTX`: a failed attempt leaves no published provider and no
+          // consumer bridge behind. Disconnect (not dispose) keeps the scope and
+          // its intents, so a retry republishes them on the next connect.
+          () => state.context?.disconnect(),
+          () => connection?.dispose(false),
+        ];
         if (!hadInstance && state.instance !== null) {
           // Setup was created by THIS connect and never became the retained
           // instance: dispose it in detach mode (a failed setup attaches no
@@ -2509,7 +2641,15 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       // current non-detach path). The connection scope owns no DOM; dispose it
       // after the projection so a reconnect re-arms on a fresh scope. Both run,
       // and the projection's error (the first one) is what surfaces.
-      captureCleanupFailures([() => projection?.dispose(false), () => connection?.dispose(false)]);
+      // `16b-CTX`: disconnect the context scope with the connection. Providers
+      // unpublish and consumer bridges unsubscribe exactly once, so a
+      // disconnected element neither answers nor observes. The scope and its
+      // intents survive for the reconnect.
+      captureCleanupFailures([
+        () => state.context?.disconnect(),
+        () => projection?.dispose(false),
+        () => connection?.dispose(false),
+      ]);
     }
 
     attributeChangedCallback(
@@ -2590,6 +2730,11 @@ export function createGeneratedElementClass<P extends object = Record<string, un
             if (instance !== null) releaseRetainedChildren(instance);
           },
           () => instance?.dispose(false),
+          // `16b-CTX`: the context scope dies with the instance. Disposing it
+          // drops the owner tree, the provider records and the consumer
+          // bridges; a later connect creates a NEW scope, which is what
+          // "dispose is not disconnect" means for context too.
+          () => state.context?.dispose(),
         ]);
         return;
       }
@@ -2601,6 +2746,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       if (hadOwnedRegion) state.regionState = 'absent';
       captureCleanupFailures([
         () => projection?.dispose(true),
+        () => state.context?.dispose(),
         // The projection's range cleanup normally removes the region; remove
         // the recorded owned range explicitly as well so a throwing cleanup
         // cannot leave it behind. This is still only the owned range: never
