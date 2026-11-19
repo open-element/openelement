@@ -92,26 +92,31 @@ export { element, property } from './public-runtime.ts';
 
 /**
  * @experimental Compile-time-only lifecycle/change intrinsics (`16b-LC` plus
- * the experience-edition change channel), and the author-facing error boundary
- * (`16b-EB`): the generated-element lane admits direct top-level
- * `onConnect(cb)` / `onDispose(cb)` / `onPropertyChange(cb)` / `onError(cb)`
- * calls in the ROOT setup of a generated element module by binding provenance
- * (a canonical named import of '@openelement/element', aliases followed) and
- * ERASES them into compiler-owned code — a connect callback list in the
- * retained `__oe_rootInstance` record, replayed by the generated mount/claim
- * prologue on the per-connection scope; instance cleanups for `onDispose`; one
+ * the experience-edition change channel), the author-facing error boundary
+ * (`16b-EB`) and the node-handle factory (`16b-REF`): the generated-element
+ * lane admits direct top-level `onConnect(cb)` / `onDispose(cb)` /
+ * `onPropertyChange(cb)` / `onError(cb)` calls in the ROOT setup of a generated
+ * element module, and a `const handle = ref(cb?)` declaration anywhere in an
+ * admitted component body, by binding provenance (a canonical named import of
+ * '@openelement/element', aliases followed) and ERASES them into
+ * compiler-owned code — a connect callback list in the retained
+ * `__oe_rootInstance` record, replayed by the generated mount/claim prologue on
+ * the per-connection scope; instance cleanups for `onDispose`; one
  * element-lifetime listener registration on the instance host record for
  * `onPropertyChange` (fired by the shell after a declared row commits a value);
- * and one error-handler registration on that same record for `onError` (run by
- * the shell at its connect/claim, update and event-dispatch capture points).
- * They are not a runtime dispatcher and not a second lifecycle engine: outside
- * a compiled generated element root setup the standalone functions fail closed
- * instead of silently dropping the callback. Nested/hostless component hooks
- * and connection-scope helpers are the additive slices recorded in ADR-0180.
- * May move to a dedicated authoring subpath with the rest of the intrinsics at
- * the B1.2 surface freeze.
+ * one error-handler registration on that same record for `onError` (run by the
+ * shell at its connect/claim, update and event-dispatch capture points); and,
+ * for `ref`, one handle object built in the retained setup factory and handed
+ * to that node's existing JSX `ref` attribute, which populates `current` on
+ * attach (mount AND server-DOM claim), clears it on detach and repopulates it
+ * on reconnect. They are not a runtime dispatcher and not a second lifecycle
+ * engine: outside a compiled generated element module the standalone functions
+ * fail closed instead of silently doing nothing. Nested/hostless component
+ * hooks and connection-scope helpers are the additive slices recorded in
+ * ADR-0180. May move to a dedicated authoring subpath with the rest of the
+ * intrinsics at the B1.2 surface freeze.
  */
-export { onConnect, onDispose, onError, onPropertyChange } from './public-runtime.ts';
+export { onConnect, onDispose, onError, onPropertyChange, ref } from './public-runtime.ts';
 
 // ─── HTML utilities (re-export from core) ────────────────
 

@@ -1,8 +1,9 @@
 /**
  * Runtime fail-closed stand-ins for the compile-time-only lifecycle/change
  * intrinsics `onConnect` / `onDispose` (`16b-LC` author surface, option 1a),
- * `onPropertyChange` (experience-edition change channel, execution-plan §17) and
- * `onError` (`16b-EB` author-facing error boundary).
+ * `onPropertyChange` (experience-edition change channel, execution-plan §17),
+ * `onError` (`16b-EB` author-facing error boundary) and `ref` (`16b-REF`
+ * author-facing node handle).
  *
  * The OpenElement compiler (the generated-element lane in
  * `@openelement/compiler`) recognizes these calls by binding provenance — a
@@ -149,4 +150,45 @@ export function onError(
 ): void {
   void callback;
   outsideCompiler('onError');
+}
+
+/**
+ * Compiler-recognized node-handle factory (`16b-REF`): declares a REF HANDLE
+ * for one intrinsic DOM node of this component.
+ *
+ * The returned value is handed to that node's existing JSX `ref` attribute:
+ *
+ * ```tsx
+ * const field = ref<HTMLInputElement>((element) => {
+ *   element?.focus();
+ *   return () => {/* detach cleanup *\/};
+ * });
+ * // … return <input ref={field} />;
+ * ```
+ *
+ * The handle is the same object for the whole element lifetime: the compiler
+ * erases this call into the retained instance factory, so a reconnect, a claim
+ * of server DOM and an update all observe one handle rather than a per-pass
+ * copy. It is a REF CHANNEL VALUE, not a reactive source: `current` is written
+ * when the node attaches, cleared when it detaches, and it notifies nothing —
+ * a tracked slot reading `current` would be a one-shot value, which is why the
+ * compiler admits a handle ONLY in a `ref` attribute expression.
+ *
+ * The optional callback is the attach/detach notification the existing `ref`
+ * channel already defines: called with the element on attach, and with `null`
+ * on detach AFTER the cleanup it returned has run. Because the handle rides the
+ * same `ref` channel, the cleanup ordering, the once-per-detach rule and the
+ * scope ownership are the existing ones — this intrinsic adds no second
+ * attachment mechanism.
+ *
+ * Erased by the compiler; calling it at runtime fails closed.
+ */
+export function ref<T extends globalThis.Element = globalThis.Element>(
+  callback?: (element: T | null) => void | (() => void),
+): {
+  (element: globalThis.Element | null): void;
+  readonly current: T | null;
+} {
+  void callback;
+  outsideCompiler('ref');
 }

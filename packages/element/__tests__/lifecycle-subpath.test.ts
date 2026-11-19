@@ -16,9 +16,9 @@
  *    no module-scope call, and its import list reaches neither
  *    `public-surface.ts` nor any executor entry. A bundler may therefore drop
  *    it entirely once compilation removes the calls.
- * 2. The subpath exports EXACTLY the three intrinsics the compiler admits —
- *    no fourth name, and nothing else from the public surface.
- * 3. The three exported functions are the SAME function objects the root entry
+ * 2. The subpath exports EXACTLY the intrinsics the compiler admits — no
+ *    extra name, and nothing else from the public surface.
+ * 3. The exported functions are the SAME function objects the root entry
  *    exports (`===`), so the runtime stand-in identity cannot fork: calling an
  *    intrinsic outside the compiler fails closed with the same error class,
  *    code, phase and message from either entry.
@@ -38,8 +38,8 @@ const LIFECYCLE_SOURCE = new URL('../src/lifecycle.ts', import.meta.url);
 /** Every module-scope name the subpath exports, sorted. */
 const LIFECYCLE_EXPORTS = Object.keys(lifecycleEntry).sort();
 
-test('the subpath exports exactly the three compiler-erased intrinsics', () => {
-  expect(LIFECYCLE_EXPORTS).toEqual(['onConnect', 'onDispose', 'onPropertyChange']);
+test('the subpath exports exactly the compiler-erased intrinsics', () => {
+  expect(LIFECYCLE_EXPORTS).toEqual(['onConnect', 'onDispose', 'onPropertyChange', 'ref']);
 });
 
 test('the subpath re-exports the SAME function objects as the root entry', () => {
@@ -48,6 +48,7 @@ test('the subpath re-exports the SAME function objects as the root entry', () =>
   expect(lifecycleEntry.onConnect).toBe(rootEntry.onConnect);
   expect(lifecycleEntry.onDispose).toBe(rootEntry.onDispose);
   expect(lifecycleEntry.onPropertyChange).toBe(rootEntry.onPropertyChange);
+  expect(lifecycleEntry.ref).toBe(rootEntry.ref);
 });
 
 test('calling an intrinsic from the subpath fails closed with the root identity', () => {
@@ -55,6 +56,10 @@ test('calling an intrinsic from the subpath fails closed with the root identity'
     ['onConnect', () => lifecycleEntry.onConnect(() => undefined)],
     ['onDispose', () => lifecycleEntry.onDispose(() => undefined)],
     ['onPropertyChange', () => lifecycleEntry.onPropertyChange(() => undefined)],
+    // `16b-REF`: the handle factory fails closed with the SAME identity; a
+    // silent no-op here would hand the author an object whose `current` never
+    // moves and whose callback never runs.
+    ['ref', () => lifecycleEntry.ref(() => undefined)],
   ] as const) {
     let thrown: unknown;
     try {
@@ -103,7 +108,7 @@ test('the subpath module has no module-scope side effect and no executor path', 
     .filter((line) => line !== '');
   // One re-export statement, nothing else executable at module scope.
   expect(statements).toEqual([
-    "export { onConnect, onDispose, onPropertyChange } from './internal/core/compile-lifecycle.ts';",
+    "export { onConnect, onDispose, onPropertyChange, ref } from './internal/core/compile-lifecycle.ts';",
   ]);
   // The dependency is the leaf stand-in module, never the public surface (which
   // pulls OpenElement → the class lane → the executor) and never an

@@ -1098,3 +1098,132 @@ does. The failure is permanent, not a missed first pass: a scanner that records
 its state before its empty-target early return binds the host to zero targets for
 the life of the connection. Handlers that only read `env.host` / props / signals
 need no deferral.
+
+## 2026-11-19 amendment — `16b-REF`: `ref(cb?)` and the generated lane's node handle
+
+`ref(cb?)` is the FIFTH compiler-erased intrinsic of the generated-element lane.
+It is the author-facing REFS capability (CAP-11); the class lane's
+`this.<field>` ref grammar is NOT reused, and no second attachment mechanism,
+sink kind or ABI change is introduced.
+
+### The shape, and the evidence that decided it
+
+The emitter ALREADY had an intrinsic `ref` JSX CHANNEL (`m09-2c`,
+`generated-leaf/generate.ts` `emitClientOnlyInstall`): on attach it evaluates
+the expression once, validates it is callable, calls it with the element, keeps
+the returned cleanup, and on detach runs that cleanup and then calls the
+expression with `null`. It also classifies `ref` in the frontend's `handler`
+mode and excludes it from SSR bytes and from the claim attribute seed. What the
+channel could NOT express was **a handle that survives a mount/claim/reconnect**:
+the author had only a local, and the retained setup factory aliases setup
+values through a `const`, so a `let field = null` written from a `ref` callback
+never survives — measured on the real compiler, the emitted alias is
+`const field = __oe_requireRootSetup("field")` and the assignment throws
+`TypeError: Assignment to constant variable`.
+
+So the slice adds a HANDLE VALUE whose callable form is exactly what the
+existing channel already accepts, and builds it inside the retained setup
+factory. That is why the chosen authoring surface is a declaration intrinsic
+rather than a new JSX attribute form:
+
+```tsx
+import { ref } from '@openelement/element/lifecycle';
+
+const field = ref<HTMLInputElement>((element) => {
+  element?.focus();
+  return () => {/* detach cleanup */};
+});
+// … return <input ref={field} />;
+```
+
+`ref <JSX attribute>` is unchanged and stays the plain-callback channel; the new
+name is the HANDLE FACTORY. A `ref` attribute value that is a handle is
+indistinguishable from a callback to the emitter, which is the point: no sink
+kind is added and the attach/detach/cleanup ordering is the existing one.
+
+### Admission is the existing rule, unchanged
+
+Placement and provenance follow `16b-LC`/`16b-EB` (`function-frontend.ts`
+`buildRefHandle`): a `const` declaration whose initializer is a call resolved by
+BINDING PROVENANCE (a named import of `@openelement/element` or
+`@openelement/element/lifecycle`, aliases followed) to `ref`. The call takes at
+most one argument, and that argument (when present) is an INLINE synchronous
+arrow/function expression with zero or one plain-identifier parameter. Refusals
+keep the existing `OEC9042` form code; no new diagnostic identity and no new
+public error code.
+
+The handle must be declared `const`. The handle IDENTITY is the contract
+("reconnect observes the same object"), and the emitted alias is not
+reassignable, so a `let` fails closed at build instead of diverging at runtime.
+
+`ref(...)` is a DECLARATION form, not a value. A call in any other position
+(`ref={ref(cb)}`, a property initializer, a nested call inside a notification)
+is refused at the authored span with the same `OEC9042`; without that refusal it
+would survive into the emitted module as a call to the fail-closed stand-in and
+throw at MOUNT — a build defect surfacing as a runtime one.
+
+### Lifetime: mount, claim, disconnect, reconnect
+
+| phase | what happens |
+| --- | --- |
+| mount | the retained factory builds ONE handle object (`current = null`, plus the optional notification); the mount body aliases it and the existing `ref` channel attaches it, so `current` is the CREATED node |
+| claim | the same alias; the channel attaches the ADOPTED server node, so `current` is the node from the DSD template (asserted by identity in Chromium) |
+| update | nothing: the handle is not a tracked slot and no update path touches it; a node rewrite in place keeps the same reference |
+| disconnect | the channel's scope cleanup runs the notification's returned cleanup, then calls the handle with `null`, which clears `current` — cleanup BEFORE clear, so a cleanup observing `current` still sees the node |
+| reconnect | the retained record still holds the SAME handle object (a reconnect is a new connection, not a new instance), so the channel re-attaches and `current` is repopulated |
+
+Exactly one construction site is emitted per handle, and the cleanup runs
+exactly once per detach even when it throws (the channel's `try { cleanup() }
+finally { handle(null) }`).
+
+### `current` is not a reactive source — and the compiler says so
+
+`current` is written on attach and cleared on detach; it notifies nothing. A
+TRACKED slot reading it would therefore emit a one-shot value that never
+refreshes — the "silently SSR-only surface" class this lane exists to remove.
+A handle may be read from a `handler`-mode expression (a `ref` attribute, the
+`ref(...)` notification, `onConnect`/`onDispose`/`onPropertyChange`/`onError`
+bodies, a DOM event handler); a read from a tracked slot fails closed at the
+authored span with `OEC9042` and a message that names the allowed positions.
+
+### What is NOT claimed
+
+- No component ref (a handle to a child COMPONENT instance) — ADR-0182 keeps
+  that FUTURE.
+- No reactivity: reading `current` in a tracked slot is refused, not converted.
+- No ref on a custom-element host or inside a list-entry template: those remain
+  the pre-existing `OEIR_LEAF_UNSUPPORTED_ATTRIBUTE` refusals of the channel.
+- No SSR handle and no server notification: `<Name>__ssr` bytes are unchanged
+  and the handle is never built on the server.
+- No `useHost`-style host accessor (a separate D-17b item) and no change to
+  `env.host`.
+
+### Bytes
+
+A module that does not use the intrinsic is byte-identical to its
+pre-`16b-REF` output. Pins in `generated-element.ref-handle.test.ts` R5 hold
+the three pre-change SHA-256 values captured from the clean tree, including a
+module using all FOUR older intrinsics. The seam is registered in
+[`seams.md`](./seams.md), and the public delta is the one `ref` export recorded
+in `docs/release/public-interface-snapshot.json`.
+
+### Guard form
+
+- `packages/compiler/__tests__/semantic-ir/generated-element.ref-handle.test.ts`
+  — 16 Node rows: erasure (no intrinsic import or call in the emitted module),
+  the retained-factory construction with exactly one construction site, reuse of
+  the EXISTING channel text, the handle-only form, the pre-change SHA pins, SSR
+  byte identity, depth-1 retained-child carry, aliased and `/lifecycle`-subpath
+  admission, the model kind, every callback/element-form refusal, the `let`
+  refusal, provenance negatives, the tracked-slot read refusal, and the
+  fail-closed public import.
+- `packages/compiler/__tests__/semantic-ir/generated-element.ref-handle.browser.test.ts`
+  — 4 Chromium rows: mount populate → disconnect clear → reconnect repopulate
+  the SAME handle object with the same retained node (and one cleanup per
+  detach with cleanup-before-clear ordering); claim populate with the ADOPTED
+  server node; a throwing cleanup still clearing `current`; an SSR producer that
+  builds nothing and runs no notification.
+
+LOCAL evidence, single engine. Not M09 exit, not the M13 matrix, and no claim is
+made here about `16b-REF` completion — every row of the migration note keeps the
+state it records.

@@ -1906,6 +1906,15 @@ function declareReads(state: EmitState, record: LoweredExpressionRecord): boolea
       continue;
     }
     const resource = state.component.resources.find((candidate) => candidate.name === read.name);
+    if (resource !== undefined && resource.kind === 'ref') {
+      // `16b-REF`: the handle is a component-local compiler-owned value, so a
+      // read of it is a closure capture (never a host binding). Reading it in a
+      // TRACKED slot is a different question: `current` is not a reactive
+      // source, so the frontend admits the handle only in a `ref` attribute
+      // expression and the read never reaches a refresh subscription.
+      state.localResources.add(read.name);
+      continue;
+    }
     if (resource !== undefined && resource.kind !== 'local') {
       state.hostBindings.add(read.name);
       state.requiredBindings.add(read.name);
@@ -2861,14 +2870,22 @@ function setupGatewayPasses(
   component: FunctionModelComponent,
   records: ReadonlyMap<string, LoweredExpressionRecord>,
 ): boolean {
+  // `signal`/`computed` are the only host-binding resource kinds. A `local`
+  // snapshot and a `16b-REF` handle are BOTH retained setup values: the handle
+  // is built by the factory (its notification callback, when present, reads the
+  // same captured scope), so both belong in `setupLocals`.
   const hostBindings = new Set(
-    component.resources.filter((resource) => resource.kind !== 'local').map((r) => r.name),
+    component.resources
+      .filter((resource) => resource.kind === 'signal' || resource.kind === 'computed')
+      .map((r) => r.name),
   );
   const setupLocals = new Set(
     component.resources
       .filter(
         (resource) =>
-          resource.kind === 'local' && resource.recipeId === null && resource.expression !== null,
+          (resource.kind === 'local' || resource.kind === 'ref') &&
+          resource.recipeId === null &&
+          (resource.kind === 'ref' || resource.expression !== null),
       )
       .map((resource) => resource.name),
   );
@@ -2884,9 +2901,8 @@ function setupGatewayPasses(
     if (!record.reads.every((read) => setupReadAllowed(read, setupLocals))) return false;
   }
   for (const resource of component.resources) {
-    if (resource.kind !== 'local' || resource.recipeId !== null || resource.expression === null) {
-      continue;
-    }
+    if (resource.recipeId !== null || resource.expression === null) continue;
+    if (resource.kind !== 'local' && resource.kind !== 'ref') continue;
     const record = records.get(resource.expression.id);
     if (record === undefined) return false;
     if (record.lowered.includes(RECIPE_REFERENCE_CALLEE)) return false;
@@ -2975,7 +2991,7 @@ function planRetention(
       component.lifecycle.length > 0 ||
       component.resources.some(
         (resource) =>
-          resource.kind === 'local' && resource.recipeId === null && resource.expression !== null,
+          (resource.kind === 'local' || resource.kind === 'ref') && resource.recipeId === null,
       )
     ) {
       setupBodies.add(name);
@@ -5768,8 +5784,65 @@ function emitClaimTimeRecipes(
 /** One component-local setup snapshot (M03 "evaluate once" resource). */
 interface SetupLocal {
   readonly name: string;
-  readonly record: LoweredExpressionRecord;
+  /**
+   * `local` is a snapshot evaluated once in the retained setup factory; `ref`
+   * is a `16b-REF` NODE HANDLE the factory builds (one object for the whole
+   * element lifetime) and the emitted `ref` channel drives.
+   */
+  readonly kind: 'local' | 'ref';
+  /**
+   * The record the factory evaluates for a `local`. For a `ref` this is the
+   * OPTIONAL attach/detach notification callback (the same record the plain
+   * `ref` channel admits), or `null` for a handle-only declaration.
+   */
+  readonly record: LoweredExpressionRecord | null;
   readonly span: SpanLike;
+}
+
+/**
+ * The `16b-REF` handle expression the retained setup factory emits.
+ *
+ * A handle is a CALLABLE with one `current` field, which is exactly what the
+ * existing intrinsic `ref` channel already accepts: the channel validates
+ * `typeof handler === "function"`, calls it with the element on attach, keeps
+ * the returned cleanup for detach, and calls it with `null` after that cleanup
+ * ran. So the handle IS the channel value — the ref slice adds no sink kind, no
+ * second attachment mechanism and no new cleanup ordering; it only makes the
+ * handle survive mount/claim/reconnect by building it in the retained factory.
+ *
+ * Attach order: `current` is populated BEFORE the notification runs, so an
+ * author callback observing the handle sees the node. Detach order is the
+ * channel's existing one: the notification's cleanup runs first (while
+ * `current` still names the node), then this handle is called with `null`,
+ * which clears `current` and forwards `null` to the notification.
+ */
+function emitSetupBinding(state: EmitState, local: SetupLocal): void {
+  if (local.kind === 'local') {
+    if (local.record === null) return;
+    pushParts(state, [`const ${local.name} = (`, { record: local.record }, ');'], local.span);
+    return;
+  }
+  const handle = local.name;
+  // The `current` seed and the two writes live in the closure; the notification
+  // (if any) is the ONE authored record, passed in verbatim.
+  const tail = ` fn.current = null; return fn; })();`;
+  if (local.record === null) {
+    pushParts(
+      state,
+      [`const ${handle} = (() => { const fn = (element) => { fn.current = element; };${tail}`],
+      local.span,
+    );
+    return;
+  }
+  pushParts(
+    state,
+    [
+      `const ${handle} = (() => { const notify = (`,
+      { record: local.record },
+      `); const fn = (element) => { fn.current = element; return notify(element); };${tail}`,
+    ],
+    local.span,
+  );
 }
 
 /**
@@ -5953,12 +6026,28 @@ function emitClaimFunction(
     if (!IDENTIFIER_PATTERN.test(resource.name) || resource.name.startsWith(INTERNAL_PREFIX)) {
       continue;
     }
+    if (resource.kind === 'ref') {
+      // `16b-REF`: a handle is a compiler-owned value, not a lowered snapshot;
+      // only its OPTIONAL notification record needs read classification. A
+      // DECLARED notification that cannot be resolved fails closed through
+      // `recordFor`'s own diagnostic — it never silently degrades to the
+      // handle-only form, which would drop the author's callback.
+      if (resource.expression === null) {
+        localLines.push({ name: resource.name, kind: 'ref', record: null, span: resource.span });
+        continue;
+      }
+      const record = recordFor(state, resource.expression, records);
+      if (record === null || !declareReads(state, record)) continue;
+      state.localResources.add(resource.name);
+      localLines.push({ name: resource.name, kind: 'ref', record, span: resource.span });
+      continue;
+    }
     if (resource.kind === 'local') {
       if (resource.recipeId !== null || resource.expression === null) continue;
       const record = recordFor(state, resource.expression, records);
       if (record === null || !declareReads(state, record)) continue;
       state.localResources.add(resource.name);
-      localLines.push({ name: resource.name, record, span: resource.span });
+      localLines.push({ name: resource.name, kind: 'local', record, span: resource.span });
       continue;
     }
     state.hostBindings.add(resource.name);
@@ -5986,9 +6075,7 @@ function emitClaimFunction(
     } else if (leafSetup) {
       emitSetupAlias(state, localLines, LEAF_SETUP_HOST_PROPERTY);
     } else {
-      for (const line of localLines) {
-        pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
-      }
+      for (const line of localLines) emitSetupBinding(state, line);
     }
     push(state, `const ${rootAdoptedVar} = [];`);
   }
@@ -6046,9 +6133,7 @@ function emitClaimFunction(
     } else if (leafSetup) {
       emitSetupAlias(state, localLines, LEAF_SETUP_HOST_PROPERTY);
     } else {
-      for (const line of localLines) {
-        pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
-      }
+      for (const line of localLines) emitSetupBinding(state, line);
     }
     if (state.childrenRecipeVar !== null) {
       push(state, `const ${state.childrenRecipeVar} = ${MOUNT_PROPS}.children;`);
@@ -6968,6 +7053,10 @@ function ssrReachableLocalResourceNames(
 ): ReadonlySet<string> {
   const localRecords = new Map<string, LoweredExpressionRecord>();
   for (const resource of component.resources) {
+    // A `16b-REF` handle is a CLIENT-ONLY channel value (its `ref` attribute
+    // never renders SSR bytes and its notification never runs on the server),
+    // so it is never a server-reachable local. Its notification callback is not
+    // a value the producer reads either.
     if (resource.kind !== 'local' || resource.recipeId !== null || resource.expression === null) {
       continue;
     }
@@ -7082,6 +7171,15 @@ function emitDynamicSsrFunction(
   const reachableLocalResources = ssrReachableLocalResourceNames(component, records);
   for (const resource of component.resources) {
     if (!IDENTIFIER_PATTERN.test(resource.name) || resource.name.startsWith(INTERNAL_PREFIX)) {
+      continue;
+    }
+    if (resource.kind === 'ref') {
+      // `16b-REF`: the handle exists on the CLIENT only. The `ref` channel
+      // renders no SSR bytes and its notification never runs on the server, so
+      // the producer neither builds the handle nor evaluates the callback —
+      // exactly the phase-labelled setup-pruning rule the plain `ref` channel
+      // already follows for client-only setup locals.
+      state.localResources.add(resource.name);
       continue;
     }
     if (resource.kind === 'local') {
@@ -7342,6 +7440,22 @@ function emitComponent(
       );
       continue;
     }
+    if (resource.kind === 'ref') {
+      // `16b-REF`: a handle is a compiler-owned value, not a lowered snapshot;
+      // only its OPTIONAL notification record needs read classification. A
+      // DECLARED notification that cannot be resolved fails closed through
+      // `recordFor`'s own diagnostic — it never silently degrades to the
+      // handle-only form, which would drop the author's callback.
+      if (resource.expression === null) {
+        localLines.push({ name: resource.name, kind: 'ref', record: null, span: resource.span });
+        continue;
+      }
+      const record = recordFor(state, resource.expression, records);
+      if (record === null || !declareReads(state, record)) continue;
+      state.localResources.add(resource.name);
+      localLines.push({ name: resource.name, kind: 'ref', record, span: resource.span });
+      continue;
+    }
     if (resource.kind === 'local') {
       // A reusable JSX value has no lowered initializer: its recipe is emitted
       // by `emitRecipes` only when at least one insertion site references it.
@@ -7350,7 +7464,7 @@ function emitComponent(
       if (record === null) continue;
       if (!declareReads(state, record)) continue;
       state.localResources.add(resource.name);
-      localLines.push({ name: resource.name, record, span: resource.span });
+      localLines.push({ name: resource.name, kind: 'local', record, span: resource.span });
       continue;
     }
     state.hostBindings.add(resource.name);
@@ -7469,7 +7583,7 @@ function emitComponent(
   // here preserves the pre-change emitted text instead of writing a factory
   // that references a name it never declares.
   const setupReadsHostBinding = localLines.some((line) =>
-    line.record.reads.some(
+    (line.record?.reads ?? []).some(
       (read) =>
         state.hostBindings.has(read.name) ||
         state.hostBindings.has(read.binding.name) ||
@@ -7563,7 +7677,9 @@ function emitComponent(
     }
     const setupReadsProps =
       localLines.some((line) =>
-        line.record.reads.some((read) => read.name === 'props' || read.binding.name === 'props'),
+        (line.record?.reads ?? []).some(
+          (read) => read.name === 'props' || read.binding.name === 'props',
+        ),
       ) ||
       admittedHooks.some((hook) =>
         hook.record.reads.some((read) => read.name === 'props' || read.binding.name === 'props'),
@@ -7587,9 +7703,7 @@ function emitComponent(
       placements: [],
       segmentKeys: new Set(),
     };
-    for (const line of localLines) {
-      pushParts(setupState, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
-    }
+    for (const line of localLines) emitSetupBinding(setupState, line);
     // `16b-LC` option 1a: the connect callbacks are RECORDED, not replayed
     // here. The root mount/claim prologue replays them on the per-connection
     // scope, so "setup runs once" and "the callback runs on every connection"
@@ -7756,7 +7870,9 @@ function emitComponent(
     }
     const setupReadsProps =
       localLines.some((line) =>
-        line.record.reads.some((read) => read.name === 'props' || read.binding.name === 'props'),
+        (line.record?.reads ?? []).some(
+          (read) => read.name === 'props' || read.binding.name === 'props',
+        ),
       ) ||
       admittedHooks.some((hook) =>
         hook.record.reads.some((read) => read.name === 'props' || read.binding.name === 'props'),
@@ -7778,9 +7894,7 @@ function emitComponent(
       placements: [],
       segmentKeys: new Set(),
     };
-    for (const line of localLines) {
-      pushParts(setupState, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
-    }
+    for (const line of localLines) emitSetupBinding(setupState, line);
     // `16b-LC` nested/hostless depth-1: the connect callbacks are RECORDED in
     // the same retained setup record the locals use; the child mount/claim
     // prologue replays them on its per-projection scope. `onDispose` registers
@@ -7888,9 +8002,7 @@ function emitComponent(
   } else if (leafSetup) {
     emitSetupAlias(state, localLines, LEAF_SETUP_HOST_PROPERTY);
   } else {
-    for (const line of localLines) {
-      pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
-    }
+    for (const line of localLines) emitSetupBinding(state, line);
   }
   // One read of the children recipe per mount (M06b2a): every projection site
   // inserts this same recipe value, and dynamic children content refreshes
