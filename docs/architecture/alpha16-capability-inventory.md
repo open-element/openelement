@@ -31,6 +31,20 @@ per-component property/attribute channel. Form participation is PARTIAL: the
 bounded mechanism is delivered and its non-claims are recorded. Everything listed
 under "Still owed" is genuinely unfinished, not deferred paperwork.
 
+## Slice index (§13.2 obligation → row)
+
+§13.2 names five Alpha16b obligation slices. The rows above are organised by
+capability, so this index maps each slice ID to the rows that satisfy it — a
+reader holding the plan should not have to infer the correspondence.
+
+| Slice | Capability | Rows in this document | State |
+| --- | --- | --- | --- |
+| `16b-LC` | Class lifecycle (CAP-03) | author lifecycle: connect / disconnect / property change | **PARTIAL** — root scope delivered; nested/hostless hooks and the connection-scope helper channel are in "Still owed" |
+| `16b-EB` | Error boundary (CAP-05) | error boundary | **MIGRATED** (`ee0434c9f`) |
+| `16b-CTX` | Context (CAP-09) | context provider / consumer | **MIGRATED** (`e8ea72b95`) |
+| `16b-REF` | Refs (CAP-11) | node refs | **MIGRATED** (`d135576d0`) |
+| `16b-MN` | Migration note (CAP-26) | this document plus `16b-migration-note.md` | **TRACKED** — both are tracked and indexed; the owner sign-off is the remaining §13.5 item |
+
 ## Capability map
 
 | Capability | Class authoring (retiring) | Generated lane (replacement) | State |
