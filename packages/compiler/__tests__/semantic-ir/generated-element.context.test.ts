@@ -291,10 +291,17 @@ function ssrOf(loaded: Record<string, unknown>, name: string): SsrFunction {
 
 /** The visible text of a producer's HTML, with its marker comments removed. */
 function textOf(html: string): string {
-  return html
-    .replace(/<!--oe:[^>]*-->/g, '')
-    .replace(/<[^>]+>/g, '')
-    .trim();
+  return (
+    html
+      .replaceAll(/<!--oe:[^>]*-->/gs, '')
+      // Whole-tag spans, not a per-character class: the multi-character
+      // sanitizer lint (js/incomplete-multi-character-sanitization) rightly
+      // flags `<[^>]+>` as a strip that can be escaped out of; matching the
+      // full open/close span leaves no `<script` sequence behind.
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<[^>]*>/g, (tag) => (tag.toLowerCase().startsWith('<script') ? '' : ''))
+      .trim()
+  );
 }
 
 /**

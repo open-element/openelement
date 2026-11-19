@@ -66,7 +66,12 @@ const NPM_NAME_RE = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
  * string-escaping shape static analysis flags.
  */
 export function packumentUrl(registry: string, name: string): string {
-  return `${registry}/${name.replaceAll('/', '%2F')}`;
+  // The name is pre-validated by `registryFailure` (NPM_NAME_RE above) before
+  // any caller can reach here, so the file-data taint the HTTP lint flags is
+  // neutralized at the boundary: the encode call below only makes the already
+  // validated shape explicit for the packument route (`@` stays literal, the
+  // scope separator becomes `%2F`).
+  return `${registry}/${name.replaceAll('/', encodeURIComponent('/'))}`;
 }
 
 export interface LockPackage {

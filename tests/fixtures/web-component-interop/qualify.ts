@@ -2332,7 +2332,8 @@ export async function verifyGeneratedSsrHostNegatives(
   ];
   const results: GeneratedSsrHostNegativeEvidence[] = [];
   for (const { mode, expected } of modes) {
-    let restore = (): void => {};
+    // Assigned in both branches below; the initial no-op is never read.
+    let restore: () => void;
     if (mode === 'wrong-props') {
       const original = await readFile(pagePath, 'utf8');
       const pattern = new RegExp(

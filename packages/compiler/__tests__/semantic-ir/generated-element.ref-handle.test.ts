@@ -320,7 +320,7 @@ describe('16b-REF node handle — emitted artifact contract (Node)', () => {
 
   test('R7 a handle declared in a depth-1 retained hostless child rides its own setup factory', () => {
     const source =
-      SIDECAR.replace('seed: { default: 0 }', 'seed: { default: 0 }') +
+      SIDECAR +
       "import { ref } from '@openelement/element';\n" +
       'function Child(props: { seed: number }) {\n' +
       '  const inner = ref<HTMLElement>();\n' +
