@@ -323,17 +323,18 @@ test('build output: the element runtime ships as the one shared chunk islands ne
     entry.imports ?? [],
     `B2: the shared element-runtime chunk (${runtimeKey}) must not be a direct static import of the client entry`,
   ).not.toContain(runtimeKey);
+  // P1 (post-executor-split, all www islands on the generated lane): a build
+  // with zero class-lane islands emits NO element-services dynamic edge at all
+  // — the check-browser-entry-graph verdict (MET) is the authority for that
+  // surface. When a class-lane island exists, the services surface must be a
+  // lazy edge that statically imports the shared runtime chunk.
   const servicesKey = (entry.dynamicImports ?? []).find((key) => /element-services/.test(key));
-  expect(
-    servicesKey,
-    `The entry must lazily import the element-services surface; dynamicImports: ${(
-      entry.dynamicImports ?? []
-    ).join(', ')}`,
-  ).toBeTruthy();
-  expect(
-    manifest[servicesKey!]?.imports ?? [],
-    `The lazily imported element-services module must statically import the shared runtime chunk (${runtimeKey})`,
-  ).toContain(runtimeKey);
+  if (servicesKey !== undefined) {
+    expect(
+      manifest[servicesKey]?.imports ?? [],
+      `The lazily imported element-services module must statically import the shared runtime chunk (${runtimeKey})`,
+    ).toContain(runtimeKey);
+  }
 
   // B2 gap (a): the DIRECT edge being gone is not enough, and this is the
   // assertion that says so. Vite homes its injected preload helper in

@@ -33,7 +33,6 @@ function descriptorRows(code: string): Array<{
 
 const siteModules = [
   ['open-standards-visual', '../app/site-ui/open-standards-visual.tsx'],
-  ['open-page-rail', '../app/site-ui/open-page-rail.tsx'],
   ['open-reading-shell', '../app/site-ui/open-reading-shell.tsx'],
   ['open-article-view', '../app/site-ui/open-article-view.tsx'],
 ] as const;
@@ -64,6 +63,18 @@ test('app/layout.tsx is the compiled shell convention (no island declaration)', 
     result.program.metadata.properties.find((property) => property.name === 'repositoryHref')
       ?.default,
   ).toEqual(REPOSITORY_URL);
+});
+
+test('open-page-rail keeps its view compiler-owned on the generated lane', async () => {
+  const url = new URL('../app/islands/open-page-rail.tsx', import.meta.url);
+  const source = await readFile(url, 'utf8');
+  const result = compileGeneratedElementIfAdmitted(source, url.pathname, {
+    site: { tag: 'open-page-rail' },
+  });
+  expect(result, 'open-page-rail must be admitted by the generated-element lane').not.toBeNull();
+  expect(String(result?.diagnostics ?? '')).not.toContain('OEC');
+  // The scrollspy controller stays a site-UI collaborator, event-time only.
+  expect(source).toContain("from '../site-ui/open-page-rail-controller.ts'");
 });
 
 test('open-search keeps its view compiler-owned and its browser state external', async () => {

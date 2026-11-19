@@ -388,10 +388,25 @@ test('external consumer: both islands attribute to exactly one emitted chunk eac
 test('external consumer: the client chunk bundles the browser condition and the alias target', async () => {
   const distDir = join(fixture.appDir, 'dist');
   const clientIslands = await readdir(join(distDir, 'client', 'islands'));
-  const counterChunk = clientIslands.find((file) => file.startsWith('island-oe-proof-counter'))!;
-  const code = await readFile(join(distDir, 'client', 'islands', counterChunk), 'utf8');
+  // Post executor-split, a class-lane island statically imports the
+  // element-executor chunk; the condition/alias resolution may home in either
+  // the island chunk or the executor chunk it reaches. Read BOTH sides of that
+  // static edge before judging what was bundled.
+  const readIsland = (fileName: string): Promise<string> =>
+    readFile(join(distDir, 'client', 'islands', fileName), 'utf8');
+  // The fixture has ONE island, so every islands/*.js file is either the
+  // island's own chunk or a shared chunk it reaches (executor/runtime/helper/
+  // program). The condition/alias modules home wherever the post-split graph
+  // puts them; concatenating the islands directory is the whole static closure.
+  const code = (
+    await Promise.all(
+      clientIslands
+        .filter((file) => file.endsWith('.js'))
+        .map(async (file) => await readIsland(file)),
+    )
+  ).join('\n');
   // The browser-condition target of @acme/conditions was bundled (not the
-  // import or require target), and the user alias resolved into the chunk.
+  // import or require target), and the user alias resolved into the client graph.
   expect(code).toContain('condition-browser-target');
   expect(code).toContain('shared-alias-target');
   expect(code).not.toContain('condition-import-target');
