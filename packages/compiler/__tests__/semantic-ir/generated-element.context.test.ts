@@ -291,17 +291,25 @@ function ssrOf(loaded: Record<string, unknown>, name: string): SsrFunction {
 
 /** The visible text of a producer's HTML, with its marker comments removed. */
 function textOf(html: string): string {
-  return (
-    html
-      .replaceAll(/<!--oe:[^>]*-->/gs, '')
-      // Whole-tag spans, not a per-character class: the multi-character
-      // sanitizer lint (js/incomplete-multi-character-sanitization) rightly
-      // flags `<[^>]+>` as a strip that can be escaped out of; matching the
-      // full open/close span leaves no `<script` sequence behind.
-      .replace(/<script[\s\S]*?<\/script>/gi, '')
-      .replace(/<[^>]*>/g, (tag) => (tag.toLowerCase().startsWith('<script') ? '' : ''))
-      .trim()
-  );
+  // Extraction, not sanitization: the output is built character-by-character
+  // from the spans BETWEEN tags, so no substring of the input (including any
+  // `<script` sequence) survives into the result as markup. This is why the
+  // sanitizer lints stay quiet — there is no cleaned-up tainted string, there
+  // is a freshly assembled plain-text one.
+  let out = '';
+  let inTag = false;
+  for (const ch of html) {
+    if (ch === '<') {
+      inTag = true;
+      continue;
+    }
+    if (ch === '>') {
+      inTag = false;
+      continue;
+    }
+    if (!inTag) out += ch;
+  }
+  return out.trim();
 }
 
 /**

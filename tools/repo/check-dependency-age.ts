@@ -66,12 +66,21 @@ const NPM_NAME_RE = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
  * string-escaping shape static analysis flags.
  */
 export function packumentUrl(registry: string, name: string): string {
-  // The name is pre-validated by `registryFailure` (NPM_NAME_RE above) before
-  // any caller can reach here, so the file-data taint the HTTP lint flags is
-  // neutralized at the boundary: the encode call below only makes the already
-  // validated shape explicit for the packument route (`@` stays literal, the
-  // scope separator becomes `%2F`).
-  return `${registry}/${name.replaceAll('/', encodeURIComponent('/'))}`;
+  // Rebuild, do not transport: every character of the path is emitted from a
+  // hardcoded allowlist check, so no substring of the lockfile-sourced name
+  // reaches the URL as-is. A character the npm grammar does not allow makes
+  // the function throw — the caller has already validated the name, so this
+  // is unreachable there and is the fail-closed shape for any future caller.
+  let path = '';
+  for (const ch of name) {
+    if (ch === '/') path += '%2F';
+    else if (ch === '@' || /[a-z0-9._-]/i.test(ch)) path += ch;
+    else
+      throw new Error(
+        `packument name has a character outside the npm grammar: ${JSON.stringify(ch)}`,
+      );
+  }
+  return `${registry}/${path}`;
 }
 
 export interface LockPackage {
