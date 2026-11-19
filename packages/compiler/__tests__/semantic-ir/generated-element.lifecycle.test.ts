@@ -455,7 +455,7 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
 
     // Nested component hooks are admitted MODULE-WIDE by the frontend now; the
     // generator owns the placement verdict (authored-span refusal), so the
-    // frontend reports no diagnostic here. `A9b` pins the placement gate.
+    // frontend reports no diagnostic here. `A13` pins the placement gate.
     expect(
       frontendCodes(
         importLine +
