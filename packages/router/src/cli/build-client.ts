@@ -52,7 +52,7 @@ import {
   packageIslandChunkName,
   readViteClientManifest,
 } from '../vite/client-asset-manifest.ts';
-import { createClassCandidateRegistry } from '@openelement/compiler';
+import { createClassCandidateRegistry, stableModuleId } from '@openelement/compiler';
 import { stylePlanForApp } from '../vite/internal/style-plan.ts';
 import { createStyleBuildIntegration } from '../vite/internal/style-provider.ts';
 import {
@@ -64,8 +64,12 @@ import {
   resolveElementRuntimeIdentity,
 } from '../vite/internal/element-runtime-chunk.ts';
 import { requireViteHelperChunk, viteHelperChunkName } from '../vite/internal/vite-helper-chunk.ts';
+import { realpathSync } from 'node:fs';
 import { islandStyleDeclarations } from '../vite/internal/island-style-declarations.ts';
-import { setClientIslandStyleAssets } from '../vite/internal/island-style-build-assets.ts';
+import {
+  setClientIslandStyleAssets,
+  setClientIslandUtilityTags,
+} from '../vite/internal/island-style-build-assets.ts';
 import {
   buildPageClassificationContext,
   resolvePageComponentIsland,
@@ -1351,6 +1355,48 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       }
     }
     setClientIslandStyleAssets(ctx, islandStyleAssets);
+
+    // P-1b (2026-11-21): a generated shadow island's class tokens compile into
+    // the build's ONE shared component stylesheet, and its DSD template must link
+    // that sheet in addition to its authored `styles` assets — the class lane does
+    // the same by construction, and without this a migrated shadow component
+    // paints unstyled. The registry is the authority for "this module's tokens
+    // reached the component sheet".
+    // The registry is keyed by the bundler's absolute module id while the island
+    // declaration records the SCAN's spelling of the same file; both are the same
+    // module, so the lookup tries the declaration's spelling AND its real path
+    // (the same fallback `islandStyleDeclarationFor` documents) instead of
+    // assuming one root spelling.
+    const moduleHasCandidates = (declaration: { moduleId: string }): boolean => {
+      // The discovery pass registers with the compiler's STABLE module id; the
+      // declaration records the scan's absolute path (and a symlinked root can
+      // spell it differently). Normalizing the declaration through the same
+      // function is what makes the two spellings one key.
+      if (shadowCandidateRegistry.forModule(declaration.moduleId).length > 0) return true;
+      try {
+        return (
+          shadowCandidateRegistry.forModule(
+            stableModuleId(
+              realpathSync(declaration.moduleId),
+              root,
+              findBuildWorkspaceRootOrUndefined(root),
+            ),
+          ).length > 0
+        );
+      } catch {
+        return false;
+      }
+    };
+    setClientIslandUtilityTags(
+      ctx,
+      new Set(
+        islandStyleDeclarations()
+          .filter(
+            (declaration) => declaration.root === 'shadow' && moduleHasCandidates(declaration),
+          )
+          .map((declaration) => declaration.tagName),
+      ),
+    );
 
     // The component stylesheet (alpha15 S lane): a discovered shadow-candidate
     // set whose entry emitted no CSS would ship unstyled shadow components —

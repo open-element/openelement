@@ -29,7 +29,10 @@ import type { EntryDescriptor, IslandDecl, StaticComponentDecl } from '@openelem
 import type { OpenElementBuildContext } from '../vite/build-context.ts';
 import { elementStyleLinksPlugin } from '../vite/internal/element-style-links.ts';
 import { findBuildWorkspaceRootOrUndefined } from '../vite/workspace-alias.ts';
-import { clientIslandStyleAssets } from '../vite/internal/island-style-build-assets.ts';
+import {
+  clientIslandStyleAssets,
+  clientIslandUtilityTags,
+} from '../vite/internal/island-style-build-assets.ts';
 import { islandStyleDeclarations } from '../vite/internal/island-style-declarations.ts';
 import {
   buildRouteDocumentStyleLinks,
@@ -411,11 +414,16 @@ async function buildSSG(
   // lane's `__oeUtilityClasses` fact, so the manifest declaration is the
   // build-time authority for "this component's shadow tree needs the app's
   // shared utility sheet".
-  const utilityRequiredTags = new Set(
-    admittedTailwindDeclarations(ctx.phase1.packageManifests, ctx.phase1.packageIslandDecls)
+  const utilityRequiredTags = new Set([
+    ...admittedTailwindDeclarations(ctx.phase1.packageManifests, ctx.phase1.packageIslandDecls)
       .filter((fact) => fact.required)
       .map((fact) => fact.tagName),
-  );
+    // P-1b (2026-11-21): a generated shadow island whose class tokens reached the
+    // shared component stylesheet needs that sheet appended to its DSD link list.
+    // The build recorded the exact tag set in Phase 2, where the candidate
+    // registry and the island declarations are both in scope.
+    ...clientIslandUtilityTags(ctx),
+  ]);
   if (componentStyleSheetUrls.length > 0) {
     log.info(`Component stylesheet linked into DSD: ${componentStyleSheetUrls.join(', ')}`);
   }

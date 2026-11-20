@@ -28,11 +28,13 @@ import { createRequire } from 'node:module';
 import {
   type ClassCandidateRegistry,
   compileElementModule,
+  compileGeneratedElementIfAdmitted,
   compileServerComponentIfAdmitted,
   compiledArtifactClassCandidates,
 } from '@openelement/compiler';
 import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
 import { join, resolve } from 'pathe';
+import { islandStyleDeclarationFor } from './island-style-declarations.ts';
 import { createServerComponentSourceResolver } from './server-component-host.ts';
 
 /** One module the collection pass should compile. */
@@ -162,6 +164,29 @@ export async function collectShadowClassCandidates(
         const tokens = serverCompiled.classCandidates ?? [];
         options.candidates.register(file, tokens, { shadow: false });
         if (tokens.length > 0) contributed += 1;
+        continue;
+      }
+      // The generated-element lane (P-1, 2026-11-21): a module carrying the
+      // function component + island policy sidecar contributes its static class
+      // tokens. The DEV channel re-registers one changed file through this
+      // function, so without this branch an edited generated island's sheet goes
+      // stale — the same defect C the class lane's registration closes.
+      const declaration = islandStyleDeclarationFor(file);
+      let generatedCompiled: ReturnType<typeof compileGeneratedElementIfAdmitted> = null;
+      if (declaration !== undefined) {
+        try {
+          generatedCompiled = compileGeneratedElementIfAdmitted(source, file, {
+            site: { tag: declaration.tagName },
+          });
+        } catch {
+          continue;
+        }
+      }
+      if (generatedCompiled !== null && generatedCompiled.classCandidates.length > 0) {
+        options.candidates.register(file, generatedCompiled.classCandidates, {
+          shadow: declaration!.root === 'shadow',
+        });
+        contributed += 1;
         continue;
       }
       if (registerArtifactCandidates(source, file, options.candidates)) contributed += 1;

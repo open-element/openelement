@@ -794,22 +794,33 @@ async function discoverServerRenderedModules(
     // light page) because the declaration is the authoritative site fact.
     const generatedSite = generatedSites.get(file);
     if (generatedSite !== undefined) {
-      let generated: ReturnType<typeof compileGeneratedElementIfAdmitted>;
+      let generated: ReturnType<typeof compileGeneratedElementIfAdmitted> = null;
       try {
-        generated = compileGeneratedElementIfAdmitted(
-          source,
-          stableModuleId(file, effectiveRoot, workspaceRoot),
-          { site: { tag: generatedSite.tagName } },
-        );
+        generated = compileGeneratedElementIfAdmitted(source, file, {
+          site: { tag: generatedSite.tagName },
+        });
       } catch {
         // The authoritative transform reports the authored diagnostic.
         continue;
       }
-      candidates.register(file, generated?.classCandidates ?? [], {
-        shadow: generatedSite.root === 'shadow',
-      });
-      if (generated !== null) elementFiles.push(file);
-      continue;
+      if (generated !== null) {
+        // KEY = the compiler's stable module id, exactly like the class lane's
+        // registration below. The P-1b lookup normalizes the island
+        // declaration's absolute path through the SAME function, so the two
+        // spellings converge on one key; registering the raw absolute path
+        // registered a fact no lookup could find (measured: 15 tokens in the
+        // registry, 0 for the declaration's module).
+        candidates.register(
+          stableModuleId(file, effectiveRoot, workspaceRoot),
+          generated.classCandidates,
+          { shadow: generatedSite.root === 'shadow' },
+        );
+        elementFiles.push(file);
+        continue;
+      }
+      // A class module can also carry a style declaration. Falling through —
+      // never `continue` — keeps this branch from stealing a class module's
+      // candidates: the class compile below is its authoritative producer.
     }
     // The server function component lane (alpha15): a route module carrying
     // an exported JSX-returning function compiles into `__h`/`__t`/`__ssr`
