@@ -72,7 +72,7 @@ const STABLE_VERSION = /^\d+\.\d+\.\d+$/u;
  * the next baseline: the state machine is code, so a new train enters by a
  * reviewed change here, never by quietly editing release-state.json.
  */
-const ADMITTED_ACTIVE_TARGET = 'v1.0.0-alpha.15';
+const ADMITTED_ACTIVE_TARGET = 'v1.0.0-alpha.16';
 
 /** Offline structural + Site-copy validation. Not registry proof. */
 export function validateReleaseState(

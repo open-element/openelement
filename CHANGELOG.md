@@ -9,6 +9,63 @@ lives in:
 - [`docs/release/release-state.json`](./docs/release/release-state.json)
 - [`docs/release/public-interface-snapshot.json`](./docs/release/public-interface-snapshot.json)
 
+## 1.0.0-alpha.16
+
+**The alpha.16 line: the class lane leaves the product, and the generated lane
+becomes the only way to author.** Every application in this repository —
+`www`, `apps/saas`, the `@openelement/create` starter — now ships function
+components and generated elements; a search for `@element`/`extends OpenElement`
+across all four shipped source roots returns nothing. The class lane's compiler,
+Part Program and runtime are still present for third-party class modules and are
+the next retirement target, and the M10 record states that split per surface
+rather than claiming a retirement that has not happened.
+
+- **Authoring — `computed` is a generated-lane intrinsic (ADR-0183, option B).**
+  `const x = computed(() => expr)` is a compiler-erased, instance-retained derived
+  node over the one reactive engine; the generated-element and function-component
+  lanes share it, so a derived value no longer forces a class. `www/app/layout.tsx`
+  alone carries 30 of them.
+- **Authoring — `useHost`, `ref` and the lifecycle/context/error intrinsics on the
+  generated lane.** `useHost()` returns the host element; `ref(cb?)` rides the
+  existing `ref` JSX channel (no second attachment mechanism); `provideContext` /
+  `useContext` work over the generated owner tree including hostless owners,
+  nested shadowing and server rendering; `onConnect` / `onDispose` /
+  `onPropertyChange` / `onError` replace the four class callbacks.
+- **Authoring — a nested generated host expands to DSD.** The generated SSR
+  producer is a string builder, so a custom-element tag inside its markup used to
+  stay an unexpanded tag. One runtime call per dash tag now asks the render to
+  expand it, and the helper returns the caller's own literal bytes whenever no
+  expander applies — an admission regression can only ever show up as "no DSD",
+  never as wrong markup.
+- **Authoring — `16b-EB` gains its SSR fallback contract.** A descendant producer
+  that throws is owned by the enclosing error boundary: the render emits the
+  boundary's fallback bytes in its place and the failure is carried out to that
+  boundary instead of failing the whole render. With no boundary the original
+  error still propagates, so this is not a silent swallow.
+- **CSS — a LIGHT-root generated island's declared sheets reach the document.**
+  The build emitted the asset and recorded its URL, but no render path declared
+  it, so a styled light island shipped unstyled and nothing failed. The light-root
+  render now reports the island's sheets to the render's document sink — the same
+  rule the class lane's light root already followed — and the
+  "declared but no carrier" state stays a loud failure.
+- **CSS — a shadow-root generated island declares its sheets inside its DSD
+  template.** The compiler emits the typed `styleLinks` channel and the serializer
+  writes the canonical marked `<link>` prefix. `defineIslandConfig` had been
+  REFUSING that combination as "not wired yet" while the build admitted it: two
+  faces reading one fact differently. The stale refusal is gone.
+- **Templates — the starter no longer teaches the retired lane.** The three page
+  templates are server function components declared in their own route modules,
+  the layout is a generated element, the counter island uses `signal`, and six
+  `app/components/page-*` files are deleted.
+- **Retirement evidence, per surface (M10).** The class lane is provably absent
+  from every built browser bundle; it is still present in the server entry
+  (`validatePartProgram`), and that negative is recorded rather than papered over.
+- **Re-adjudicated, not deferred (plan §19.3).** CEM covers generated elements
+  completely for the shipped package, and form participation is closed: the
+  framework mirrors `required → valueMissing` and hands the author the complete
+  `ElementInternals` seam, because a shell-side mirror of type/email/pattern would
+  be a second validation model.
+
 ## 1.0.0-alpha.15
 
 **The alpha.15 line: vocabulary finalization, defect closure, and the release

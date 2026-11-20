@@ -1,7 +1,7 @@
 {
   "name": "@openelement/tools-repo",
   "private": true,
-  "version": "1.0.0-alpha.15",
+  "version": "1.0.0-alpha.16",
   "type": "module",
   "scripts": {
     "browser-graph:check": "node ../../tools/repo/run-in.ts --root ../.. -- node tools/repo/check-browser-entry-graph.ts",
