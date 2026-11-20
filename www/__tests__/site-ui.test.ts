@@ -32,7 +32,6 @@ function descriptorRows(code: string): Array<{
 }
 
 const siteModules = [
-  ['open-standards-visual', '../app/site-ui/open-standards-visual.tsx'],
   ['open-reading-shell', '../app/site-ui/open-reading-shell.tsx'],
   ['open-article-view', '../app/site-ui/open-article-view.tsx'],
 ] as const;
@@ -102,6 +101,27 @@ test('open-section-frame is a page-local generated component with its slots pres
   ]) {
     expect(result!.code).toContain(anchor);
   }
+});
+
+test('open-standards-visual is a generated component and its computed stays a derived node', async () => {
+  const url = new URL('../app/site-ui/open-standards-visual.tsx', import.meta.url);
+  const source = await readFile(url, 'utf8');
+  // Migrated on the generated lane (ADR-0183 D-4): the class lanes four rows
+  // are the sidecar table, `showPackages` is the lane's `computed` intrinsic
+  // rather than a padded numeric property, and the root stays LIGHT because the
+  // class rendered in the document tree (`data-oe-light` in the built pages).
+  expect(source).toContain("root: 'light'");
+  expect(source).toContain("tag: 'open-standards-visual'");
+  expect(source).not.toContain('extends OpenElement');
+  expect(source).toContain('const showPackages = computed(');
+  const compiled = compileGeneratedElementIfAdmitted(source, url.pathname, {
+    site: { tag: 'open-standards-visual' },
+  });
+  expect(compiled).not.toBeNull();
+  // The derived node is created by the retained setup factory and returned in
+  // the record the shell keeps as bindings — not a declared property row.
+  expect(compiled!.code).toContain('const showPackages = computed(');
+  expect(compiled!.code).not.toContain('name: "showPackages"');
 });
 
 test('open-page-rail keeps its view compiler-owned on the generated lane', async () => {
