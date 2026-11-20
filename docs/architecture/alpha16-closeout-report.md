@@ -24,8 +24,9 @@ carries none.
 | --- | --- |
 | branch | `feat/alpha16-retirement` |
 | source version | `1.0.0-alpha.16` (bumped this line through the one-knob tool) |
-| closeout commit | `b12d040301910a751b0bb40e75db635e472a9432` (the source/measurement commit; the evidence table below is taken there) |
-| record anchor | the docs-only record commit(s) that follow that commit (this report's own updates); they change no source, so every measured row stands |
+| measured commit | `6fc34e713ac25dab6d9a10015eb142eaf70fe54e` (the evidence table below is taken there, clean tree) |
+| delivery commits on this line | `b12d040301910a751b0bb40e75db635e472a9432` (client-only style adoption) and `1b05f57c0ec056aa8b9b9f9333c187369a7ed21a` (depth ≥ 2 retained instances) |
+| record anchor | the docs-only record commit(s) that follow the measured commit (this report's own updates); they change no source, so every measured row stands |
 | `git status --porcelain` | empty |
 
 Provenance for every record below: **`LOCAL`
@@ -75,23 +76,27 @@ worth remembering (see §5).
 ## 3. Evidence record
 
 All rows: provenance **`LOCAL .agents/worktrees/alpha16-retirement`**, commit
-`b12d040301910a751b0bb40e75db635e472a9432`, status clean (`git status --porcelain`
+`6fc34e713ac25dab6d9a10015eb142eaf70fe54e`, status clean (`git status --porcelain`
 empty), every commit pushed to the fork's `feat/alpha16-retirement`.
 
 | # | command | result |
 | --- | --- | --- |
-| 1 | `vp run --no-cache --fail-if-no-match --filter @openelement/element test` | **1058 passed (1058)**, 136 files |
-| 2 | `vp run --no-cache --fail-if-no-match --filter @openelement/compiler test` | **1418 passed (1418)**, 102 files |
+| 1 | `vp run --no-cache --fail-if-no-match --filter @openelement/element test` | **1063 passed (1063)**, 136 files |
+| 2 | `vp run --no-cache --fail-if-no-match --filter @openelement/compiler test` | **1421 passed (1421)**, 102 files |
 | 3 | `vp run --no-cache --fail-if-no-match --filter @openelement/router test` | **1882 passed (1882)**, 167 files |
 | 4 | `vp run --no-cache --fail-if-no-match --filter @openelement/www test` | **304 passed (304)**, 34 files |
 | 5 | `vp run --no-cache --fail-if-no-match --filter @openelement/saas test` | **150 passed (150)**, 20 files |
 | 6 | `vp run --no-cache --fail-if-no-match --filter @openelement/create test` | **68 passed (68)**, 3 files |
 | 7 | `vp run --no-cache --fail-if-no-match --filter @openelement/ui test` | **80 passed (80)**, 12 files |
 | 8 | `vitest run --project element-browser` after `pnpm --dir packages/element run browser:compile` | **40 passed (40)**, 8 files (chromium; includes the 7 client-only style rows) |
+| 8b | `vitest run --project compiler packages/compiler/__tests__/semantic-ir/generated-element.root-instance.browser.test.ts` | **11 passed (11)** Chromium — includes the depth ≥ 2 rows R8/R10/R11 |
+| 8c | `vitest run --project element packages/element/__tests__/compiled-runtime/instance-ledger.test.ts` | **40 passed (40)** — five are the cross-ledger transaction rows |
 | 9 | `vp run --no-cache --fail-if-no-match check` | **`gate ok: 5 step(s)`** |
 | 10 | `vp run --no-cache --fail-if-no-match site:build` | **`gate ok: 6 step(s)`** |
 | 11 | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot` | `Public interface snapshot matches (6 packages).` |
 | 12 | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo docs-index:check` | `current view is generated, links resolve (46 active document(s), 9 historical record(s), 15 archive/removal entr(ies))` |
+| 12b | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo adr-index:check` | `43 record(s), 43/43 entr(ies) resolved, 15 annotated` |
+| 12c | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo shims:check` | `27 shim(s) / 6 retired — every location tracked, every row owned with a retirement condition` |
 | 13 | `pnpm --dir tests/fixtures/site-light-probe run build` + `run e2e` | **25 passed**, on the CLASS version of the fixture (the generated port is reverted and its gap named in §5.1) |
 | 14 | `pnpm --dir tests/e2e/starter-smoke run setup` + `run test` | packed starter build **exit 0**; Playwright **27 passed / 6 failed** — the six are the pre-hydration replay rows, recorded RED in §5.6; the client-only computed-style row passed on chromium, firefox and webkit |
 

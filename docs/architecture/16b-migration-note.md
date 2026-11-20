@@ -1744,7 +1744,7 @@ host.instance, __oe_txn);`. The token travels in the compiler-private child host
 literal (`txn:`), emitted only for targets that retain children, so a depth-1
 module keeps exactly its pre-change bytes and graph.
 
-**What is proven (LOCAL Chromium + Node).** Chromium `R8`: retained grandchild
+**What is proven (LOCAL Chromium + Node; measured commit `6fc34e713`).** Chromium `R8`: retained grandchild
 across a reconnect (both setups stay 1, the retained snapshot renders instead of
 the live prop). `R10`: a failed reconnect claim aborts the attempt, commits no
 child pass, surfaces exactly one `OEIR_LEAF_CLAIM_MISMATCH` and converges with

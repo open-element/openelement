@@ -90,7 +90,7 @@ count stays 1) and every retained hostless child retains its own, at any depth.
 >   body that itself retains children), so depth-1 modules keep their exact
 >   pre-change bytes: no token capture, no join, no `txn` host field.
 >
-> Evidence: compiler 1421 tests (102 files), element 1063 (136 files), the
+> Evidence at `6fc34e713` (LOCAL, clean tree): compiler 1421 tests (102 files), element 1063 (136 files), the
 > Chromium depth ≥ 2 rows R8/R10/R11 (retained grandchild across reconnect; an
 > aborted attempt that commits no child pass and converges; owner teardown
 > releasing the whole subtree once) and the ledger's five transaction rows. The
