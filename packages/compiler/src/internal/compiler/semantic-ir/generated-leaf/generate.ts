@@ -8388,9 +8388,8 @@ function emitComponent(
       state,
       'OEIR_LEAF_INVALID_ARTIFACT',
       'a context intrinsic needs an owner scope: context is carried only by the generated element ' +
-        'ROOT setup or a depth-1 retained hostless child setup (a direct root-body reference that ' +
-        'is not inside a reusable JSX/list body); depth>=2, recipe/list bodies and non-retained ' +
-        'targets fail closed',
+        'ROOT setup or a RETAINED hostless body setup (any depth, direct hostless references ' +
+        'only); recipe/list bodies and a component no retained body references fail closed',
       toIrSpan({ id: 'context', mode: 'setup', span }),
     );
   }
@@ -8411,9 +8410,8 @@ function emitComponent(
         state,
         'OEIR_LEAF_INVALID_ARTIFACT',
         `the '${hook.kind}' lifecycle hook has no lifecycle owner: nested hooks are carried ` +
-          'only by a depth-1 retained hostless child setup (a direct root-body reference that ' +
-          'is not inside a reusable JSX/list body); depth>=2, recipe/list bodies and ' +
-          'non-retained targets fail closed',
+          'only by a RETAINED hostless body setup (any depth, direct hostless references only); ' +
+          'recipe/list bodies and a component no retained body references fail closed',
         hook.span,
       );
       continue;

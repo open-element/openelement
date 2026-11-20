@@ -1064,6 +1064,19 @@ capability inventory. The final form is recorded by a dated ADR-0180 amendment
 plus the slice's consumer-form evidence; until that record lands, the older
 status text stays as written and is read against this section.
 
+> **Correction (2026-11-21, measured).** The sentence above is too broad as
+> written. What actually landed is the FIRST item — depth ≥ 2 retention — via
+> ADR-0181's cross-ledger transaction (Chromium R8/R10/R11 and the ledger's
+> transaction rows). The other four are NOT delivered and are not "implemented":
+> placement inside a reusable-JSX/list body and a non-retained target still have
+> no lifecycle owner and stay refused (`OEIR_LEAF_INVALID_ARTIFACT`), the
+> connection-scope helper parameters were already delivered before this section
+> was written, and pre-DOM timing is a documented semantic (a connect handler runs
+> before the generated region exists), not work. A future slice that wants
+> retention inside reusable bodies needs its own carrier — a reusable body can be
+> inserted N times, so "retain one record per site key" does not answer which
+> insertion owns it.
+
 **`16b-REF` — `useHost` and component `ref` are implemented in Alpha16b.** The
 owner decision is to implement both inside Alpha16b. That supersedes ADR-0182's
 2026-11-20 "`useHost` is FUTURE/OWED" amendment (ADR-0182:1044-1056) and its
