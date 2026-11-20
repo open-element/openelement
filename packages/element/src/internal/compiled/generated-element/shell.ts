@@ -184,9 +184,9 @@ import { isTrustedHtmlValue, trustedHtml } from '../../core/security.ts';
 import { LifetimeScope } from '../lifetime-scope.ts';
 import { abortInstancePass, releaseRetainedChildren } from '../runtime/instance-ledger.ts';
 import { claimRecipe, insertRecipe, type Projection, type Recipe } from '../runtime/recipe.ts';
+import { createTrackedProps, type TrackedProps } from '../runtime/props.ts';
 import { CompiledProgramValidationError, removeNodes } from '../runtime/values.ts';
 import { CompiledContextService, contextChannelFor } from '../runtime/context.ts';
-import { signal } from '../../signal/framework.ts';
 import type { WritableSignal } from '../../signal/types.ts';
 import {
   assertGeneratedRootOptions,
@@ -894,8 +894,18 @@ interface FormRuntime {
 
 interface ElementState {
   readonly descriptor: NormalizedDescriptor;
-  readonly values: Map<string, unknown>;
+  /**
+   * The ONE props record (ADR-0183 D-5): the M04 tracked-props primitive. Its
+   * getters read one version signal, so a read inside an effect tracks; the
+   * shell keeps only its element-specific write paths and no second record.
+   */
+  readonly tracked: TrackedProps<Record<string, unknown>>;
   readonly props: Readonly<Record<string, unknown>>;
+  /**
+   * The props primitive's ONE invalidation channel, exposed under the emitted
+   * ABI's existing name so generated modules need no byte change. The
+   * hand-written counter that used to back this name is deleted (not aliased).
+   */
   readonly propsChanged: WritableSignal<number>;
   /**
    * The element/island-lifetime setup scope (LC-0). Created on the first
@@ -1449,22 +1459,16 @@ export function resolveGeneratedElementProps<P extends object = Record<string, u
 }
 
 function createState(descriptor: NormalizedDescriptor): ElementState {
-  const values = new Map<string, unknown>();
-  const props: Record<string, unknown> = Object.create(null);
+  const initial: Record<string, unknown> = Object.create(null);
   for (const property of descriptor.properties) {
-    values.set(property.name, materialiseDefault(property));
-    Object.defineProperty(props, property.name, {
-      enumerable: true,
-      configurable: false,
-      get: () => values.get(property.name),
-    });
+    initial[property.name] = materialiseDefault(property);
   }
-  Object.freeze(props);
+  const tracked = createTrackedProps(initial);
   return {
     descriptor,
-    values,
-    props,
-    propsChanged: signal(0),
+    tracked,
+    props: tracked.props,
+    propsChanged: tracked.version,
     instance: null,
     connection: null,
     projection: null,
@@ -1501,15 +1505,9 @@ function stateOf(element: HTMLElement): ElementState {
   return state;
 }
 
-function bumpProps(state: ElementState): void {
-  state.propsChanged.value += 1;
-}
-
-/** Write one value into the props record's backing map, without reflection. */
+/** Write one value through the ONE props primitive, without reflection. */
 function writeValue(state: ElementState, property: NormalizedProperty, value: unknown): boolean {
-  if (Object.is(state.values.get(property.name), value)) return false;
-  state.values.set(property.name, value);
-  return true;
+  return state.tracked.set(property.name, value);
 }
 
 function reflectProperty(
@@ -1538,7 +1536,6 @@ function setProperty(
 ): void {
   if (!writeValue(state, property, next)) return;
   if (reflect) reflectProperty(element, state, property, next);
-  bumpProps(state);
   syncFormProperty(state, property);
   notifyPropertyChange(element, state, property.name);
   // `16b-CTX`: a declared-row commit is this runtime's ONE provider-change
@@ -1567,7 +1564,7 @@ function notifyPropertyChange(element: HTMLElement, state: ElementState, name: s
     host: element,
     signal,
     name,
-    value: state.values.get(name),
+    value: state.tracked.read(name),
     get states(): CustomStateSet {
       return ensureFormInternals(element, state).states;
     },
@@ -1762,7 +1759,7 @@ function restoreReflectedDefault(
   property: NormalizedProperty,
 ): void {
   if (!property.reflect || property.attribute === null || property.conversion === undefined) return;
-  const serialized = convertToAttribute(property.conversion, state.values.get(property.name));
+  const serialized = convertToAttribute(property.conversion, state.tracked.read(property.name));
   if (serialized === null) return;
   if (element.getAttribute(property.attribute) === serialized) return;
   state.reflecting = true;
@@ -2299,18 +2296,18 @@ function attachForm(element: HTMLElement, state: ElementState): void {
 function formValueOf(state: ElementState): string {
   const form = state.form;
   if (form === null || form.mapping.value === null) return '';
-  const value = state.values.get(form.mapping.value.name);
+  const value = state.tracked.read(form.mapping.value.name);
   return typeof value === 'string' ? value : '';
 }
 
 function formRequiredOf(state: ElementState): boolean {
   const required = state.form?.mapping.required;
-  return required === undefined ? false : state.values.get(required.name) === true;
+  return required === undefined ? false : state.tracked.read(required.name) === true;
 }
 
 function formAuthorDisabledOf(state: ElementState): boolean {
   const disabled = state.form?.mapping.disabled;
-  return disabled === undefined ? false : state.values.get(disabled.name) === true;
+  return disabled === undefined ? false : state.tracked.read(disabled.name) === true;
 }
 
 function syncFormValue(state: ElementState): void {
@@ -2827,7 +2824,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       configurable: true,
       enumerable: false,
       get(this: HTMLElement): unknown {
-        return stateOf(this).values.get(property.name);
+        return stateOf(this).tracked.read(property.name);
       },
       set(this: HTMLElement, value: unknown): void {
         const state = stateOf(this);

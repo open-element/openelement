@@ -125,3 +125,47 @@ RETIRE the createTrackedProps wrapper WHEN the platform signal is the props
 - It does not decide `propDeps` removal (D-6 is measurement-gated) and does not authorise a compatibility shim.
 - It does not claim any milestone, gate, exit or release.
 - It does not re-argue the 2026-11-18 ruling's *intent*; it records that the ruling's premise (untrackable props) is the defect being removed.
+
+## Implementation record (2026-11-20): D-5 landed
+
+The first slice of the order above is implemented in this tree.
+
+- `packages/element/src/internal/compiled/runtime/props.ts`: `TrackedProps` gains
+  **one** version channel (`version: WritableSignal<number>`), a **per-key**
+  write (`set`, the write shape the element shell needs) and an **untracked**
+  internal read (`read`, for the owner's own bookkeeping). `replace` keeps the
+  whole-record semantics of the leaf/recipe path. All three share the one
+  channel: an equal write reports no change and notifies nobody; a getter read
+  registers the channel even for an `undefined` value.
+- `packages/element/src/internal/compiled/generated-element/shell.ts`: the
+  private `Map` backing store, the plain getters and the hand-written
+  `propsChanged` counter with `bumpProps` are **deleted**. `createState` builds
+  the declaration record once and hands it to the primitive; the shell keeps
+  only its element-specific write paths (defaults, attribute
+  conversion/reflection, pre-upgrade reconciliation, JSON seed apply) and reads
+  internally through the untracked accessor.
+- The emitted ABI **name** `propsChanged` stays, now naming the primitive's
+  version signal rather than a counter this module bumps. That is deliberate:
+  it keeps the emitted code and every byte pin unchanged, and the counter that
+  used to back the name does not exist. `shell-props-single-owner.test.ts`
+  fails on either a private record or a private counter.
+- The three generated-element module-graph guards moved
+  `/internal/compiled/runtime/props.ts` out of their "old Part Program backend"
+  list. Those lists are about keeping the **executor** out of the generated
+  bundle, and their own doc comment already allowed "neutral recipe/value
+  primitives"; `props.ts` imports only the signal framework. The reclassification
+  is part of the fix, not a relaxation: the shell may consult the one props
+  record, and nothing in these lists now lets the executor in.
+- Tracked-interface delta: `docs/release/public-interface-snapshot.json`
+  regenerated — `TrackedProps` and `createTrackedProps` now publish `version`,
+  `set` and `read` (internal subpath, no public API change beyond the tracked
+  record).
+
+Evidence (LOCAL, worktree at `8ce1010e1` + this tree): element 133 files /
+1043 tests passed; compiler 95 files / 1386 tests passed; `vp run check` 5/5
+PASS; `seams:check` 82 rows / 15 `ONE owner:` with the ratchet enforced;
+`interface:snapshot` regenerated and matching. No behaviour claim is made for a
+consumer of the generated lane beyond the suites above.
+
+Still open from the order: D-4 (`computed` lowering), the D-6 `propDeps`
+measurement, and the migrations that wait on both.
