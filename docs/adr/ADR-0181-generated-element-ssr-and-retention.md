@@ -86,6 +86,33 @@ manifest. A shadow-root declaration fails the build closed with
 Application of the emitted stylesheet (document link / shadow adoption) is
 carried by GH #1800.
 
+> **Superseded in part (2026-11-20, alpha16 retirement closeout).** Three facts in
+> the paragraph above are now **history**, and a reader must not take them as
+> current:
+>
+> 1. **A shadow-root declaration no longer fails closed.** The DSD style-link
+>    carrier exists: the compiler emits the typed `styleLinks` channel on the host
+>    producer and `serializeGeneratedElementHtml` writes the canonical marked
+>    `<link>` prefix INSIDE the template. The build scan admits a `producer`
+>    identity with root `shadow`; the authoring face (`defineIslandConfig`), which
+>    had kept refusing the same combination as "not wired yet", was corrected to
+>    agree. Only `missing-producer` still fails closed, which is the honest case
+>    (no template to declare the sheet in).
+> 2. **Light-root APPLICATION is delivered.** #1800's document-level application
+>    landed: a light-root render reports the island's declared sheets to the
+>    render's document sink (the same rule the class lane's light root already
+>    followed), and "declared but carrier unavailable" stays a loud failure rather
+>    than an unstyled render.
+> 3. **What is still OWED is narrower than the paragraph implies**: the
+>    client-side SHADOW adoption slice (`ssr: false` islands, whose root the shell
+>    creates client-side and which adopt no stylesheet), and the generated lane's
+>    hoisting of a nested light root's sheet into an enclosing shadow template —
+>    the latter measured this session by porting `site-light-probe` and reverting
+>    it.
+>
+> Evidence for each is in `alpha16-class-migration-matrix.md` and the capability
+> inventory; this note exists so the ADR does not contradict them.
+
 ## Enumerated interface deltas (diff this against the snapshot)
 
 | Package | Delta | Kind |

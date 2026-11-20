@@ -452,13 +452,20 @@ native 选择缝是主产物，不再作为垫片登记。）
 - 退役条件：P1 判 MET 且该证据并入 release 门禁之后，一次性检查器删除；工件始终是 Git-ignored 构建输出，不进入发布面。
 - 处置：条件到即删（工具本身不是产品面）。
 
-### 24. `OE_ISLAND_STYLE_SHADOW_UNWIRED` 拒绝——条件到即删
+### 24. `OE_ISLAND_STYLE_SHADOW_UNWIRED` 拒绝——**已退役**（2026-11-20）
 
-- 所有者：router island 扫描（静态准入的唯一权威）。
-- 方向：`defineIslandConfig({ styles })` + `root: 'shadow'` → 构建期 coded 拒绝，消息点名 M09-2e 与 GH #1800。
-- 存在原因：生成宿主的 DSD 模板尚无 stylesheet-link 通道，若接受声明就会静默丢样式；按 P5 宁可 fail closed。
-- 退役条件：GH #1800 落地 shadow 样式 link/adoption 载体，且一个带 `styles` 的 shadow-root 生成岛在三引擎上构建并渲染通过（`gate:release` 在同一 SHA 绿）。
-- 处置：条件到即删。
+- **退役动作**：`docs/architecture/alpha16-class-migration-matrix.md` 的
+  "the shadow style carrier exists; the authoring face said otherwise" 一节。
+- **退役时的事实**：DSD 样式 link 载波已落地 —— 编译器在宿主 producer 上发出类型化
+  `styleLinks` 通道，`serializeGeneratedElementHtml` 在模版内写出规范 marked
+  `<link>` 前缀；构建扫描对 `producer` 身份 + root `shadow` **准入**（原先是拒绝）。
+  作者面（`defineIslandConfig`）此前仍以"载波未接"为由拒绝同一组合，已一并改正 ——
+  这正是该 shim 记录要防的两面读同一事实却答案相反。
+- **保留的部分**：`missing-producer` 情形仍 fail closed。那是**诚实的**情形 ——
+  没有模版可以声明样式表，接受声明才是静默丢失。它与原 shim 的方向不同：原 shim
+  拒绝的是"shadow root 一律拒绝"，现在拒绝的是"没有模版的 shadow root"。
+- 证据：`island-styles.test.ts` 的准入行（原拒绝行已改写并写明原因）、
+  `generated-light-styles.test.ts`、`@openelement/create` 3 files / 68 tests。
 
 ### 25. legacy allocation-only 绑定工厂（descriptor `createBindings`）——条件到即删
 

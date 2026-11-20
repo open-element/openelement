@@ -151,11 +151,16 @@ There is no second style pipeline, hash or emitter. The seam is registered in
 
 Owed, and the reason this is PARTIAL, not delivered:
 
-- document-level application of the emitted sheet on a light root (the class
-  lane's head `<link>` is not wired to the generated-element render path);
-- shadow-root adoption: no DSD style-link carrier until M09-2e, so a shadow-root
-  declaration is refused at build with the coded
-  `OE_ISLAND_STYLE_SHADOW_UNWIRED` diagnostic instead of being silently lost;
+- ~~document-level application of the emitted sheet on a light root~~ —
+  **DELIVERED (2026-11-20)**: a light-root render reports the island's declared
+  sheets to the render's document sink;
+- ~~shadow-root adoption: no DSD style-link carrier until M09-2e~~ — **the carrier
+  exists and the declaration is ADMITTED**: the compiler emits the typed
+  `styleLinks` channel and the serializer writes the canonical marked `<link>`
+  inside the template. The `OE_ISLAND_STYLE_SHADOW_UNWIRED` refusal now fires only
+  for the honest case (a shadow island whose leaf emitted no producer, so there is
+  no template to declare the sheet in). What remains owed is the CLIENT-side
+  shadow adoption slice, not the carrier;
 - a non-generated/class-lane module declaring `styles` is refused with
   `OE_ISLAND_STYLE_LANE_UNSUPPORTED`; its sheets belong to `static styles`.
 
