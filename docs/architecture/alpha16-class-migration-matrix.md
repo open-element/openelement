@@ -1087,3 +1087,21 @@ batch did NOT establish — whether a setup-scope snapshot of a module import
 (`const chrome = readingChromeStrings(props.locale)`) is admitted after the
 classifier change, since a direct `props.locale` read inside each derived node is
 the pre-classifier shape. That is the next measurable step, not a design gap.
+
+**2026-11-20 — both blockers of the `open-reading-shell` port are now closed.**
+
+The previous entry named one open question (is a setup-scope snapshot of a module
+import admitted?) and this round answered it, twice:
+
+- the resolver answered `unknown` for a snapshot call whose callee was
+  module-bound but not a host factory — fixed: when the host classifies that
+  callee as an ordinary value, the call's result is an ordinary value
+  (`scope-resolution.ts`, `classifyInitializer`);
+- the retained factory emitted all `signal`/`computed` resources before all setup
+  locals, so the probe emitted the derived node ABOVE the local it captured (a
+  TDZ no diagnostic catches) — fixed: both lists merge on the lane's authored
+  line/column and emit in ONE order (`generate-leaf/generate.ts`).
+
+Pinned by `generated-element.declaration-order.test.ts`. The shell port is
+therefore mechanically unblocked; it is not in this batch, and the next one runs
+it with these fixes in place.
