@@ -218,7 +218,14 @@ import { articlePageHead, projectArticleView } from '../../site-ui/article-page-
 
 export function ${route.className}(props: {
   articleHidden: boolean;
-  metadata: { breadcrumb: string; breadcrumbHref?: string; title: string; lede: string; updated?: string; version?: string };
+  metadata: {
+    breadcrumb: string;
+    breadcrumbHref?: string;
+    title: string;
+    lede: string;
+    updated?: string;
+    version?: string;
+  };
   navigation: {
     previous?: { href: string; label: string };
     next?: { href: string; label: string };
