@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
-import { compileElementProgram, compileGeneratedElementIfAdmitted } from '@openelement/compiler';
-import { readFile } from 'node:fs/promises';
+import { compileGeneratedElementIfAdmitted } from '@openelement/compiler';
+import { readdir, readFile } from 'node:fs/promises';
 
 /**
  * The emitted descriptor's `properties` rows, read off the generated module.
@@ -30,20 +30,30 @@ function descriptorRows(code: string): Array<{
   return rows;
 }
 
-// The class-lane roster shrinks as rows migrate (2026-11-20): a migrated module
-// compiles through the generated lane instead, and its own test below asserts
-// the function-component shape. `open-reading-shell` and
-// `open-standards-visual` left this list; `open-article-view` still blocks on
-// the D-M5 body decision.
-const siteModules = [['open-article-view', '../app/site-ui/open-article-view.tsx']] as const;
-
-for (const [tagName, path] of siteModules) {
-  test(`site UI owns compiled ${tagName}`, async () => {
-    const url = new URL(path, import.meta.url);
-    const result = compileElementProgram(await readFile(url, 'utf8'), url.pathname);
-    expect(result.program.tag).toEqual(tagName);
+// The class-lane roster is EMPTY (2026-11-20): every www site-ui module compiles
+// through the generated lane or is a plain TypeScript module. `open-article-view`
+// was the last row — it retired when the article routes inlined the reading shell
+// D-M5 resolved: a function page's nested styled host never runs the class
+// serializer's style walk, so the shell is authored in the generated page and its
+// presentation comes from the linked document sheet. The assert below pins the
+// rostre's emptiness so a new class-lane module cannot return unnoticed.
+test('no www site-ui module remains on the class lane', async () => {
+  const entries = await readdir(new URL('../app/site-ui/', import.meta.url), {
+    withFileTypes: true,
   });
-}
+  const classLane: string[] = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.tsx')) continue;
+    const source = await readFile(new URL(`../app/site-ui/${entry.name}`, import.meta.url), 'utf8');
+    if (source.includes('extends OpenElement') || source.includes('@element(')) {
+      classLane.push(entry.name);
+    }
+  }
+  expect(
+    classLane,
+    'site-ui migrated wholesale; a class-lane module would re-open the retired path',
+  ).toEqual([]);
+});
 
 test('app/layout.tsx is the generated site shell with all 30 derived nodes', async () => {
   const url = new URL('../app/layout.tsx', import.meta.url);

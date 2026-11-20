@@ -163,16 +163,20 @@ test('article routes: the emitted modules name their content source', () => {
   const [route] = routeSetFor('architecture', [entry('dsd', 30)]);
   const routeModule = renderRouteModule(route);
   expect(routeModule).toContain('www/content/docs/architecture/dsd.md');
-  expect(routeModule).toContain(`projectArticlePage('architecture', 'dsd', locale)`);
+  expect(routeModule).toContain(`projectArticleView('architecture', 'dsd', locale)`);
   expect(routeModule).toContain(`articlePageHead('architecture', 'dsd', locale)`);
   expect(routeModule).toContain('export default definePage(DsdPage, {');
   // The page component is an EXPORTED server function declared in the module
   // (the page lane only records `pageComponentName` for that shape) and renders
   // the shared article shell from its projected model.
   expect(routeModule).toContain('export function DsdPage(props: {');
-  expect(routeModule).toContain(
-    '<open-article-view model={props.model} locale={props.locale}></open-article-view>',
-  );
+  // The reading shell is INLINED: the `open-article-view` host retired with the
+  // class lane, because a function page's nested styled host never runs the class
+  // serializer's style walk. The page's presentation comes from the linked
+  // document sheet.
+  expect(routeModule).toContain('<open-reading-shell');
+  expect(routeModule).toContain('innerHTML={props.articleHtml}');
+  expect(routeModule).not.toContain('open-article-view');
   expect(routeModule).not.toContain('@element(');
   expect(routeModule).not.toContain('extends OpenElement');
 });

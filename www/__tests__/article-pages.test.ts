@@ -54,20 +54,26 @@ for (const route of articleRoutes) {
       'utf8',
     );
     expect(routeSource).toContain('export default definePage(');
-    expect(routeSource).toContain(`projectArticlePage('${collection}', '${slug}', locale)`);
+    // The projector is the FLAT view projection now: the page's props are an
+    // inline literal, so the derivation (visibility token, not-found list, the
+    // trusted-HTML brand) happens in the model module rather than in reactive rows.
+    expect(routeSource).toContain(`projectArticleView('${collection}', '${slug}', locale)`);
     expect(
       !routeSource.includes('export const meta'),
       `${collection}/${slug} must not duplicate nav metadata; declare it in the frontmatter`,
     ).toBeTruthy();
     // The page component is an EXPORTED server function declared here (the page
-    // lane records `pageComponentName` only for that shape), and it renders the
-    // shared article shell with the projected model.
+    // lane records `pageComponentName` only for that shape) and it renders the
+    // reading shell ITSELF. The `open-article-view` host this used to delegate to
+    // retired on 2026-11-20: a nested styled host never runs the class
+    // serializer's style walk from a function page, so the shell is inlined and
+    // its presentation comes from the linked document sheet.
     expect(routeSource).toContain(`export function ${className}(props: {`);
-    expect(routeSource).toContain(
-      '<open-article-view model={props.model} locale={props.locale}></open-article-view>',
-    );
+    expect(routeSource).toContain('<open-reading-shell');
+    expect(routeSource).toContain('innerHTML={props.articleHtml}');
     expect(routeSource).not.toContain('@element(');
     expect(routeSource).not.toContain('extends OpenElement');
+    expect(routeSource).not.toContain('open-article-view');
     // The generated header is what proves ownership to the generator (its
     // "--check" and its stale cleanup both key off it), and it names the
     // content file each artifact is derived from.

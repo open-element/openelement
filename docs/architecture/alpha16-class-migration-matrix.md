@@ -1634,3 +1634,54 @@ prose, 3 `<h2>`s and 2 highlighted fences.
 `www/app/site-ui/open-article-view.tsx` (the shared article shell itself, still a
 class host with no `static styles` any more) and
 `benchmarks/micro/oe-table.tsx` (benchmark disposition, not app code).
+
+**2026-11-20 — the last application class component retired: `open-article-view` is gone.**
+
+`www/app/site-ui/open-article-view.tsx` was the final class-lane module in any app.
+It retired the same way the starter's page boxes did, and for the reason measured
+last round: a server FUNCTION page's nested styled host is emitted by `__h(tag, …)`,
+which never runs the class serializer's nested walk, so the composer had to be
+either a class or inline. It is inline now.
+
+**The composition moved into the generated page.** The generator emits the reading
+shell itself — `<open-reading-shell rail footer …>` with the rail slot and the
+`innerHTML={props.articleHtml}` sink — instead of delegating to a host component.
+That is the SAME shape `www/app/routes/blog/[slug].tsx` has carried since it
+migrated, so the two article surfaces are now one shape rather than two.
+
+**The derivation moved from reactive rows into plain TypeScript.**
+`open-article-view` used `computed` rows for `articleHidden`, `metadata`,
+`navigation`, `railItems` and `articleHtml`, and a `computed` zero-or-one
+`notFoundRows` list. A server function page's props are a FLAT inline type literal
+(the lane refuses a nested model object; the probe failed with
+"the props parameter must be annotated inline as an object type literal"), so the
+derivation moved to `projectArticleView()` in `article-page-model.ts`:
+
+| old row | new owner |
+| --- | --- |
+| `articleHidden = computed(…)` | `projectArticleView` reads the same `articleClass` token |
+| `metadata` / `navigation` / `railItems` | passed straight through |
+| `articleHtml = computed(() => trustedHtml(model.articleHtml))` | branded once in `projectArticleView` — still in-process, so the crossing exclusion is not engaged |
+| `notFoundRows = computed(…)` | the same zero-or-one list, built in plain TS |
+
+Both derivations keep their documented reasons: visibility stays the native
+`hidden` attribute, and the fallback stays a 0/1 LIST rather than a branch (a
+branch element cannot interpolate text, and an empty list emits no markup, which
+is the WEB-002 fix).
+
+**Guards.** `site-ui.test.ts`'s class-lane roster had exactly one row left; it is
+replaced by a guard that asserts the roster is EMPTY by scanning every `.tsx` in
+`app/site-ui/` for `extends OpenElement` / `@element(`, so a class-lane module
+cannot quietly return. `article-pages.test.ts` and the generator test now assert
+the inlined shell and that `open-article-view` is mentioned nowhere.
+
+Evidence (LOCAL): `site:build` exit 0 (6 steps); www 34 files / 304 tests; router
+167 / 1880; `vp run check` 5/5 PASS. Built `www/dist/guide/api/index.html` carries
+no `<open-article-view>` tag and renders the reading shell with 2651 chars of real
+prose, 3 `<h2>`s and 2 highlighted fences.
+
+**Application-wide class-lane surface is now EMPTY.** What remains anywhere is
+`benchmarks/micro/oe-table.tsx` (a benchmark fixture, disposition pending) and the
+generated-data modules' embedded string samples, neither of which is application
+code. The class FRONTEND itself (compiler lane, Part Program, runtime
+`__partProgram` reads — C07–C11) is the next retirement target.
