@@ -1328,7 +1328,17 @@ list is the ready-made inventory); the public exports are `OpenElement`,
    aliases `data` (the spelling the generated text Parts write);
 2. fixture rewrites: `site-light-probe`'s e2e asserts the nesting RULE (ADR-0181
    2026-11-20), the other six migrate or retire; the two foreign-WC fixtures are
-   re-based on the public WC surface;
+   re-based on the public WC surface. **One fixture is DONE (2026-11-21)**:
+   `router-static-only`'s two class pages became in-module server function pages
+   and their component files are deleted (build + both router suites green).
+   **A hard blocker is now decided**: `renderIntent.stream` (deferred-field
+   streamed pages) is a Class-page-only channel today — the authoring surface
+   refuses it on a function page and the build refuses it on a generated element
+   page (D-M11). Owner direction 2026-11-21: **remove streamed-page authoring
+   with the class lane; the replacement streaming carrier is Alpha18's**. The two
+   streamed fixture routes (`router-base-path/app/routes/live.tsx`,
+   `router-native-framework/app/routes/stream-lit-proof.tsx`) and their
+   components/tests therefore retire with the lane instead of migrating;
 3. delete the 75 class contract test files TOGETHER with the lane they pin;
 4. delete the compiler class entry, Part Program artifact/validator, ABI record
    and the admission of class modules (router + compiler + element together);

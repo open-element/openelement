@@ -358,14 +358,19 @@ retention carrier landed 2026-11-21 (ADR-0181's dated amendment). What remains:
    `generated-leaf/generate.ts` and the retention model it needs is ADR-0181's,
    which is explicitly not wired past depth 1;
 5. the M12/M13 qualification runs and the P5 sign-off;
-6. ~~the generated lane's pre-hydration click replay~~ — **DELIVERED 2026-11-21**
+6. **streamed-page authoring**: owner direction 2026-11-21 removes it WITH the
+   class lane — `renderIntent.stream` has no function-lane carrier today (D-M11),
+   and Alpha18 owns the replacement streaming carrier. The two streamed fixture
+   routes and their components/tests retire with the lane; this is a recorded
+   breaking removal, not a silent drop;
+7. ~~the generated lane's pre-hydration click replay~~ — **DELIVERED 2026-11-21**
    (§5.6): a neutral replay hook outside the shell's forbidden old-backend set,
    wired at the shell's claim/mount and released at its activation decision; the
    packed starter's `#942` and third-party rows pass on all three engines;
-7. **`16b-EB`'s fallback identity** (§5.2): the four §19.2 conditions are
+8. **`16b-EB`'s fallback identity** (§5.2): the four §19.2 conditions are
    delivered; giving the fallback bytes their own identity is the one thing the
    row would need to flip, and it stays a deliberate non-goal rather than debt;
-8. **`16b-LC`'s remaining refusal boundary**: depth ≥ 2 landed on 2026-11-21, so
+9. **`16b-LC`'s remaining refusal boundary**: depth ≥ 2 landed on 2026-11-21, so
    what is left is PLACEMENT (recipe/list bodies, non-referenced components) and
    the documented pre-DOM timing. That is a design boundary of a compiled setup,
    not missing work.
