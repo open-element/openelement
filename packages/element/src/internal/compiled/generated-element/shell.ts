@@ -189,6 +189,15 @@ import { NESTED_HOST_PROPERTY } from '../runtime/nested-host.ts';
 import { LifetimeScope } from '../lifetime-scope.ts';
 import { abortInstancePass, releaseRetainedChildren } from '../runtime/instance-ledger.ts';
 import { claimRecipe, insertRecipe, type Projection, type Recipe } from '../runtime/recipe.ts';
+// The pre-upgrade replay HOOK (2026-11-21 closeout): the generated lane captured a
+// pre-hydration click through `document-services` but never replayed it — the replay
+// pair lived in `pre-upgrade-events.ts`, which this shell's P1 closure forbids. The
+// hook module reaches nothing; the capture module publishes its implementation when
+// the entry installs the capture, so both halves stay one registry and one capture.
+import {
+  releasePreUpgradeCapturesFor,
+  replayPreUpgradeCaptures,
+} from '../runtime/pre-upgrade-replay-hook.ts';
 import { createTrackedProps, type TrackedProps } from '../runtime/props.ts';
 import { CompiledProgramValidationError, removeNodes } from '../runtime/values.ts';
 import { CompiledContextService, contextChannelFor } from '../runtime/context.ts';
@@ -2706,6 +2715,15 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         state.projection = projection;
         state.ownedNodes = projection.nodes;
         state.regionState = 'present';
+        // Pre-hydration replay at the SAME point the class facade does it: after
+        // the region exists and its handlers are installed. A click that landed
+        // before an idle generated island hydrated was captured by the
+        // document-level capture the generated entry installs; replaying here is
+        // what makes it reach the live tree exactly once (the registry's
+        // first-activation cutoff keeps a reconnect from re-handling it). The
+        // chained hook IS the registry's own function object, so this is one
+        // implementation, not a second one.
+        replayPreUpgradeCaptures(this);
       } catch (error) {
         state.connection = null;
         state.projection = null;
@@ -2777,6 +2795,10 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         throw error;
       } finally {
         state.connecting = false;
+        // Activation decision — success OR failure, the class facade's rule: this
+        // element's captured records never outlive its decision. Records owned by
+        // still-pending islands stay in the shared pool for their own upgrade.
+        releasePreUpgradeCapturesFor(this);
       }
     }
 

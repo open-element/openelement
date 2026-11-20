@@ -1759,3 +1759,40 @@ them the transaction). Suites: compiler 102 files / 1421 tests, element 136 /
 retention (still refused), no keep-alive, no scope-identity promise, no
 M12/M13/M14 or P5 evidence. The milestone-level exit claims stay where the
 closeout puts them.
+
+## 2026-11-21 amendment — the generated lane replays pre-hydration interactions (facts only)
+
+The generated lane captured a pre-hydration click (the entry installs
+`ensurePreHydrationClickCapture` through `document-services`) but never replayed
+it: the replay pair lived in `pre-upgrade-events.ts`, which the generated shell's
+P1 closure test lists among the old-backend modules the emitted bundle must not
+reach. Measured on the packed starter: `#942 click before idle hydration is
+replayed` and `third-party pressure does not block idle replay` were RED on
+chromium, firefox and webkit.
+
+**Delivery.** A new import-free module,
+`internal/compiled/runtime/pre-upgrade-replay-hook.ts`, holds one function slot.
+The capture module publishes its own `replay`/`release` pair into that slot when
+`ensurePreHydrationClickCapture` installs (the call the generated entry already
+makes), and the shell calls `replayPreUpgradeCaptures(this)` after a successful
+claim/mount and `releasePreUpgradeCapturesFor(this)` in the connect `finally` —
+the same two points the class facade uses. The hook's functions ARE the
+registry's, so there is one bucket map, one capture and one implementation; a
+page that never installs the capture keeps a null hook and both shell calls are
+honest no-ops.
+
+**Rejected shapes (measured).** (1) Importing the capture module from the shell
+fails the P1 closure row immediately. (2) Splitting the bucket registry into a
+separate module the shell imports was implemented and REVERTED: the capture
+module's `CompileHydrationOptions` type import becomes a value edge under a real
+bundler, so the split dragged the old backend in and the same row went red.
+
+**Evidence (LOCAL).** Packed starter `pnpm --dir tests/e2e/starter-smoke run
+test`: **33 passed (33)** across chromium, firefox and webkit, including both
+previously-red rows and the client-only computed-style row. Unit:
+`pre-upgrade-retention.test.ts` (4 rows, one for the hook). The shell's P1 closure
+row (26 tests) still passes.
+
+**Not claimed.** No M12/M13/M14 or P5 evidence; the hook is not a second capture
+or a second registry, and no new public symbol exists (the module is
+internal-only and reaches nothing).

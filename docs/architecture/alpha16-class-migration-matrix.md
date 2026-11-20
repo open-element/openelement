@@ -2166,9 +2166,19 @@ Measured on the packed starter, three engines:
 
 27 passed / 6 failed. The six red rows are a PRE-EXISTING generated-lane gap
 (the class-lane facade is the only replayer), newly measurable because the build
-now completes; they are not caused by the style slice and are not claimed as
-green. Alpha17 needs the neutral replay leaf + shell wiring before the starter's
-replay contract can be called delivered.
+now completes; they were not caused by the style slice and were not claimed as
+green.
+
+**DELIVERED 2026-11-21.** The neutral replay hook
+(`internal/compiled/runtime/pre-upgrade-replay-hook.ts`, import-free) is
+published by the capture install inside `ensurePreHydrationClickCapture` and
+wired at the shell's claim/mount (replay) and activation decision (release), the
+same two points the class facade uses. Packed starter: **33 passed (33)** on
+chromium, firefox and webkit, both previously-red rows included. The alternative
+— splitting the bucket registry into a module the shell imports — was measured
+and REVERTED: the capture module's `CompiledHydrationOptions` type import becomes
+a value edge under a real bundler, dragging the old backend back into the shell's
+closure (the P1 row went red for the same reason as importing it directly).
 
 ### 2026-11-20 — the nesting rule is written; the class-lane deletion re-evaluated as ONE change set
 

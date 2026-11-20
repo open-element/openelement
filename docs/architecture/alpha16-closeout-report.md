@@ -57,6 +57,7 @@ What replaced it, and the tests that pin each:
 | capability | carrier | guard |
 | --- | --- | --- |
 | retained instances (incl. depth ≥ 2) | cross-ledger transaction (ADR-0181 2026-11-21 amendment) | Chromium `R8`/`R10`/`R11`; ledger 40 rows; artifact depth-2 site counts |
+| pre-hydration replay | neutral replay hook published by the capture install | packed starter `#942` + third-party rows (3 engines); `pre-upgrade-retention.test.ts` hook row |
 | derived state | `computed()` intrinsic (ADR-0183 D-4, option B) | `app/layout.tsx` carries 30; `generated-element.*` suites |
 | host access | `useHost()` | `generated-element.use-host.test.ts` (6 rows) |
 | refs | `ref(cb?)` over the existing `ref` channel | ADR-0182 amendment |
@@ -98,7 +99,7 @@ empty), every commit pushed to the fork's `feat/alpha16-retirement`.
 | 12b | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo adr-index:check` | `43 record(s), 43/43 entr(ies) resolved, 15 annotated` |
 | 12c | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo shims:check` | `27 shim(s) / 6 retired — every location tracked, every row owned with a retirement condition` |
 | 13 | `pnpm --dir tests/fixtures/site-light-probe run build` + `run e2e` | **25 passed**, on the CLASS version of the fixture (the generated port is reverted and its gap named in §5.1) |
-| 14 | `pnpm --dir tests/e2e/starter-smoke run setup` + `run test` | packed starter build **exit 0**; Playwright **27 passed / 6 failed** — the six are the pre-hydration replay rows, recorded RED in §5.6; the client-only computed-style row passed on chromium, firefox and webkit |
+| 14 | `pnpm --dir tests/e2e/starter-smoke run setup` + `run test` | packed starter build **exit 0**; Playwright **33 passed (33)** on chromium, firefox and webkit — includes the client-only computed-style row and the `#942`/third-party replay rows that were previously red (§5.6) |
 
 `@openelement/protocol` has no `test` task (it declares no scripts); it is covered
 by the compiler/router suites that consume it.
@@ -250,27 +251,42 @@ which is the honest boundary. Reporters updated with it: `authoring.ts`,
 `island-style-specifiers.ts`, `island-style-declarations.ts`, `style-assets.ts`,
 the shim entry, ADR-0181 and the `16b-MN`.
 
-### 5.6 Pre-hydration click replay does not cover generated islands (measured 2026-11-20)
+### 5.6 Pre-hydration click replay — DELIVERED 2026-11-21 (was RED on all three engines)
 
-The packed-starter smoke run for this record found a PRE-EXISTING gap in the
-generated lane, newly measurable because the starter build completes again:
-`replayPreUpgradeCaptures` has exactly one caller, the CLASS facade's claim path
-(`open-element-implementation.ts`). A generated island claims through the shell,
-which never calls it, so a click that lands before an idle island hydrates is
-captured but never replayed. On the packed starter, `#942 click before idle
-hydration is replayed` and `third-party pressure does not block idle replay` are
-RED on chromium, firefox and webkit (count stays `0`): **27 passed / 6 failed**
-for the whole harness, with every other row green (including the new
-client-only computed-style row).
+The packed-starter smoke run originally found a PRE-EXISTING gap in the generated
+lane: `replayPreUpgradeCaptures` had exactly one caller, the CLASS facade's claim
+path (`open-element-implementation.ts`). A generated island claimed through the
+shell, which never called it, so a click that landed before an idle island
+hydrated was captured but never replayed — `#942` and the third-party-pressure
+row were RED on chromium, firefox and webkit.
 
-This is not a style-slice regression: the class facade is the only replayer, and
-the generated shell deliberately imports no module from the old backend — the
-replay primitive currently lives in
-`internal/compiled/runtime/pre-upgrade-events.ts`, which the shell's P1
-boundary forbids. Delivering it needs a neutral replay leaf plus shell wiring and
-owner-scoped release. Recorded, not claimed; see the migration matrix's
-2026-11-20 starter-smoke section for the exact rows and the layout fix that made
-the build green.
+**Delivered by a neutral replay hook, not by an import.** The registry lives in
+`internal/compiled/runtime/pre-upgrade-events.ts`, which the shell's P1 closure
+test forbids (it is class-facade capture bookkeeping). Three shapes were
+considered and the third shipped:
+
+1. *Import the capture module from the shell* — REJECTED: the P1 closure test
+   fails immediately, and the whole capture surface would enter every generated
+   page's bundle.
+2. *Split the bucket registry into a new module the shell imports* — measured and
+   REVERTED: the capture module's `hydrate.ts` type import becomes a value edge
+   under a real bundler, so the split dragged the old backend back in and the P1
+   closure row went red for the same reason as (1).
+3. *A hook module with no imports* (`pre-upgrade-replay-hook.ts`) — SHIPPED. The
+   capture module publishes its own replay/release pair at `install` time (inside
+   `ensurePreHydrationClickCapture`, which the generated entry already calls), and
+   the shell asks the hook on a successful claim/mount and releases at its
+   activation decision. One registry, one capture, one implementation: the hook's
+   functions ARE the registry's.
+
+**Evidence (LOCAL, `3b0f9e2`-line).** Packed starter, full harness: **33 passed
+(33)** on chromium, firefox and webkit — including `#942 click before idle
+hydration is replayed after hydration` and `third-party pressure does not block
+idle replay (declared-island scoping)`, both of which were the six red rows. Unit
+form: `pre-upgrade-retention.test.ts` gains a row proving the hook is published by
+the capture install, is a no-op before any install, adopts the root's share and
+releases it. The shell's P1 closure row (26 tests) still passes: the hook module
+reaches nothing.
 
 ### 5.7 P5 personal sign-off
 
@@ -337,10 +353,10 @@ retention carrier landed 2026-11-21 (ADR-0181's dated amendment). What remains:
    `generated-leaf/generate.ts` and the retention model it needs is ADR-0181's,
    which is explicitly not wired past depth 1;
 5. the M12/M13 qualification runs and the P5 sign-off;
-6. the generated lane's pre-hydration click replay (§5.6): a neutral replay leaf
-   outside the shell's forbidden old-backend set, the shell's claim-path call and
-   its owner-scoped release, with the starter's `#942`/third-party rows as the
-   acceptance form;
+6. ~~the generated lane's pre-hydration click replay~~ — **DELIVERED 2026-11-21**
+   (§5.6): a neutral replay hook outside the shell's forbidden old-backend set,
+   wired at the shell's claim/mount and released at its activation decision; the
+   packed starter's `#942` and third-party rows pass on all three engines;
 7. **`16b-EB`'s fallback identity** (§5.2): the four §19.2 conditions are
    delivered; giving the fallback bytes their own identity is the one thing the
    row would need to flip, and it stays a deliberate non-goal rather than debt;
