@@ -146,22 +146,25 @@ IS the class compiler, so it retires with the lane instead of migrating (measure
 green, `pnpm run bench` 1 file / 2 tests). Until that happens, the server-runtime
 and ABI rows of §4 stay open.
 
-### 5.2 `16b-EB` — conditions 2, 3, 4 of plan §19.2
+### 5.2 `16b-EB` — all four §19.2 conditions DELIVERED; the row stays PARTIAL by design
 
-Condition 1 (the `__ssr` fallback contract: boundary bytes, observability, no
-whole-render failure) is delivered and guarded. Open:
+The report's first edition listed conditions 2–4 as open. They landed after it was
+written, so this section is corrected rather than left to age:
 
-- **condition 2** — client claim adoption of the fallback bytes under the unchanged
-  claim and identity rules;
-- **condition 3** — the one-SHA consumer-form evidence bundle (fallback bytes for a
-  failing producer, claim parity over them, the no-silent-swallow row, and the two
-  Alpha16 capture points unchanged);
-- **condition 4** — the row-for-row status move in the `16b-MN` record, the
-  capability inventory and ADR-0182's EB amendment.
+| condition | state |
+| --- | --- |
+| 1 — the `__ssr` fallback contract | **delivered** (`9e494db63`) — boundary bytes, observability, no whole-render failure |
+| 2 — the render path emits those bytes | **delivered** (`77b367233`) — consumer form over a real `renderToString` pass |
+| 3 — the one-SHA bundle | **delivered** (`3801ec997`) — including claim parity made STRUCTURAL: the fallback bytes are byte-identical to no-expansion bytes, so the claim cannot tell them apart |
+| 4 — the row-for-row move | **delivered** (`69e58b2b9`) — `16b-MN`, the capability inventory and ADR-0182 carry the same truth |
 
-**Condition:** condition 2 needs a client-side claim fixture for a boundary-owned
-producer failure; 3 and 4 follow it in one record. `16b-EB` is **not** claimed
-delivered.
+**Why the row is nevertheless still PARTIAL, stated so no one reads it as an
+oversight:** a new IDENTITY for the fallback bytes is explicitly outside this
+delivery. Parity holds precisely *because* the bytes are indistinguishable from
+no-expansion bytes; giving them their own identity is a different decision with its
+own record, and §19.2 condition 2 says "under the unchanged claim and identity
+rules". **All four conditions hold and the row does not flip** — those two facts
+are consistent, and the records name the reason in one sentence each.
 
 ### 5.3 `16b-LC` depth ≥ 2, recipe/list placement, non-retained targets, pre-DOM timing
 
@@ -221,12 +224,22 @@ without an allowance).
 Alpha17 owns, per plan §19.6 and this record:
 
 1. the lane deletion of §5.1 (compiler entry, artifact, ABI record, render path,
-   82 test files, 8 fixtures);
-2. the client-side shadow style adoption slice (the `my-counter` template's
-   `live-timer` sibling still needs it — `ssr: false` has no DSD template to carry
-   a sheet);
-3. the `16b-EB` conditions 2–4 and the `16b-LC` depth ≥ 2 design carrier;
-4. the M12/M13 qualification runs and the P5 sign-off.
+   82 test files, 8 fixtures, and the benchmark input whose SUBJECT is the class
+   compiler);
+2. the client-side shadow style adoption slice — `live-timer` needs it because
+   `ssr: false` has no DSD template to carry a sheet, and a generated light root
+   nested inside a shadow template needs a sibling slice, named this line: the
+   generated lane does **not** hoist a nested light root's sheet into the enclosing
+   shadow template, so that nesting is impossible today and `site-light-probe`
+   stays the only proof of the restriction (see the migration matrix's
+   attempted-and-reverted record);
+3. a new IDENTITY for the `16b-EB` fallback bytes, if one is ever wanted — all four
+   §19.2 conditions are delivered, and the row stays PARTIAL solely because this
+   decision is out of scope;
+4. the `16b-LC` depth ≥ 2 design carrier — the refusal site is
+   `generated-leaf/generate.ts` and the retention model it needs is ADR-0181's,
+   which is explicitly not wired past depth 1;
+5. the M12/M13 qualification runs and the P5 sign-off.
 
 None of these is a patch Alpha16 could have absorbed: each needs either a design
 carrier that does not exist yet, or a release-train/owner action outside a
