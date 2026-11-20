@@ -1994,3 +1994,31 @@ than force the port.
 
 Disposition unchanged: `site-light-probe` MIGRATES LATER, now with the exact
 blocker named instead of a category.
+
+**2026-11-20 — `benchmarks/micro/oe-table.tsx`: RETAINED, and it is not app code.**
+
+The matrix's last open item outside the fixtures. Measured, not assumed:
+
+| question | answer |
+| --- | --- |
+| Is it built or shipped? | **No** — it lives only in `benchmarks/` and is read as SOURCE TEXT by `benchmarks/micro/micro.ts` |
+| Is it gated? | **Yes** — `pnpm run bench` → `vitest run --project benchmarks`, 1 file / **2 tests**, green |
+| What does it measure? | `compileElementProgram(tableSource)` cost — the CLASS-lane compiler's
+ compile time on a realistic keyed-table component, plus the Part Program the
+ suite then drives for DOM-op counts |
+| Is it an app? | **No** — no route, no build, no consumer |
+
+**Decision: RETAIN, with the reason stated.** It is a **measurement input**, not a
+migration target: the thing it measures IS the class lane's compiler, so migrating
+the fixture would silently change what the benchmark reports while claiming to have
+"migrated a consumer". When the class lane is deleted (closeout §5.1), this fixture
+goes with it — its subject disappears — and the generated lane needs its OWN
+compile-cost baseline rather than a converted one, because the two compilers'
+work is not comparable.
+
+That is what makes this row different from the fixture rows: those prove product
+BEHAVIOUR and must move to the lane that ships; this one measures a COMPONENT that
+is being retired, and a benchmark of a retired path has no successor by conversion.
+
+**Application-wide class-lane surface, final:** the 82 contract test files, the 8
+migratable fixtures, and this benchmark input. Nothing else.

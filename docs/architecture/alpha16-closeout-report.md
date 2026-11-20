@@ -93,9 +93,12 @@ All rows: provenance **`LOCAL .agents/worktrees/alpha16-retirement`**, commit
 by the compiler/router suites that consume it.
 
 Rendered-output evidence (not a test count, because the claim is about bytes):
-`www/dist/guide/api/index.html` carries the reading shell with **2166** characters
+`www/dist/guide/api/index.html` carries the reading shell with **2673** characters
 of real article prose, 3 `<h2>` elements and 2 highlighted code fences, and **no**
-`<open-article-view>` tag.
+`<open-article-view>` tag. The retired sheet's rule is delivered by the linked
+document sheet (`client-*.css` carries
+`open-article-view,open-reading-shell{display:block}`), which is the §6 deviation
+stated as such.
 
 ## 4. What was retired, per area (M10)
 
@@ -137,8 +140,11 @@ two things still consume them:
 
 **Condition:** lane deletion is one change set covering the compiler entry, the
 Part Program artifact and its ABI record, the class render path in
-`public-runtime.ts`, those 82 test files, and the eight fixtures. Until that
-happens, the server-runtime and ABI rows of §4 stay open.
+`public-runtime.ts`, those 82 test files, the eight fixtures, and
+`benchmarks/micro/oe-table.tsx` — that last one is a benchmark INPUT whose subject
+IS the class compiler, so it retires with the lane instead of migrating (measured:
+green, `pnpm run bench` 1 file / 2 tests). Until that happens, the server-runtime
+and ABI rows of §4 stay open.
 
 ### 5.2 `16b-EB` — conditions 2, 3, 4 of plan §19.2
 
