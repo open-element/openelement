@@ -336,8 +336,11 @@ retention carrier landed 2026-11-21 (ADR-0181's dated amendment). What remains:
    完整变更集")** — all three breaking decisions (public API, third-party/ABI
    admission, benchmark successor) are approved, and the ordered execution plan
    with its measured inventory is plan §19.11. Not yet executed: the plan's six
-   steps are gates inside one change set, and the benchmark baseline must exist
-   before the old input is deleted;
+   steps are gates inside one change set. **Step 1 is DONE** (`f88a1d7d1`) — the
+   generated lane has its own keyed-table baseline
+   (`benchmarks/micro/generated-table.ts` + its deterministic self-check), so the
+   old input's successor exists; the old input still ships until the deletion
+   change set removes it with the suite that owns it;
 2. the generated lane's hoisting of a nested light root's sheet into the
    enclosing shadow template: the generated lane does **not** hoist it, so that
    nesting is impossible today and `site-light-probe` stays the only proof of the
