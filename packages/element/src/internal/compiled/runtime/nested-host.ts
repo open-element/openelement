@@ -43,7 +43,37 @@ export interface NestedHostRequest {
  * `undefined` is the explicit "this tag is not admitted here" answer; a string
  * is the expanded markup and replaces the caller's literal bytes.
  */
-export type NestedHostExpander = (request: NestedHostRequest) => string | undefined;
+export type NestedHostExpander = (
+  request: NestedHostRequest,
+) => string | undefined | NestedHostFallback;
+
+/**
+ * A boundary-owned failure, handed back instead of a string.
+ *
+ * `16b-EB` (execution plan §19.2): a descendant producer that throws is owned by
+ * the enclosing error boundary, so the throw must not fail the whole render. The
+ * expander catches it and returns this record — the boundary's fallback BYTES
+ * plus the error that caused them — and the caller decides what to render. That
+ * is the same shape as the class lane's boundary reset (an error boundary renders
+ * the reset output for the subtree it owns, the render continues), and the error
+ * stays OBSERVABLE because it is carried out, not swallowed: the caller hands it
+ * to the boundary's own `onError` handler, and with no handler registered the
+ * original failure propagates (the unchanged pre-`16b-EB` behaviour).
+ */
+export interface NestedHostFallback {
+  readonly kind: 'fallback';
+  /** The boundary's fallback bytes for the failing descendant. */
+  readonly html: string;
+  /** The error the descendant producer threw. Never swallowed. */
+  readonly error: unknown;
+}
+
+/** True for the boundary-fallback answer (a string is a normal expansion). */
+export function isNestedHostFallback(value: unknown): value is NestedHostFallback {
+  if (value === null || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  return record.kind === 'fallback' && typeof record.html === 'string';
+}
 
 /** The compiler-private host field carrying the expander. */
 export const NESTED_HOST_PROPERTY = '__oe_nestedHost';
@@ -61,5 +91,31 @@ export function nestedHost(host: unknown, request: NestedHostRequest): string {
   const expander = (host as Record<string, unknown>)[NESTED_HOST_PROPERTY];
   if (typeof expander !== 'function') return request.fallback;
   const expanded = (expander as NestedHostExpander)(request);
+  // The boundary-fallback answer renders the boundary's bytes here and re-raises
+  // through the host's reporter: `nestedHost` never decides to swallow, it only
+  // decides what BYTES the failing descendant contributes.
+  if (isNestedHostFallback(expanded)) {
+    reportNestedHostFallback(host, expanded.error);
+    return expanded.html;
+  }
   return typeof expanded === 'string' ? expanded : request.fallback;
+}
+
+/** The compiler-private host field carrying the boundary's failure reporter. */
+export const NESTED_HOST_REPORTER_PROPERTY = '__oe_reportNestedFailure';
+
+/**
+ * Hand one boundary-owned descendant failure to the enclosing host.
+ *
+ * With no reporter the failure PROPAGATES — the unchanged pre-`16b-EB` behaviour,
+ * and the reason this is not a silent swallow: an error boundary that wants the
+ * fallback also has to own reporting it, which it does by supplying the reporter.
+ */
+function reportNestedHostFallback(host: object, error: unknown): void {
+  const reporter = (host as Record<string, unknown>)[NESTED_HOST_REPORTER_PROPERTY];
+  if (typeof reporter === 'function') {
+    (reporter as (error: unknown) => void)(error);
+    return;
+  }
+  throw error;
 }

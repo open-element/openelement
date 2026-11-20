@@ -15,7 +15,9 @@
 import { expect, test } from 'vitest';
 import {
   NESTED_HOST_PROPERTY,
+  NESTED_HOST_REPORTER_PROPERTY,
   nestedHost,
+  type NestedHostRequest,
 } from '../../src/internal/compiled/runtime/nested-host.ts';
 
 const REQUEST = {
@@ -67,4 +69,79 @@ test('the expander receives the caller attributes and children verbatim', () => 
   };
   nestedHost(host, REQUEST);
   expect(seen).toEqual(REQUEST);
+});
+
+/* ------------------------------------------------------------------------- *
+ * `16b-EB` SSR fallback (execution plan §19.2) — a descendant producer throw
+ * belongs to the enclosing error boundary, not to the whole render.
+ *
+ * The four rows below are §19.2's conditions 1 and 3 in consumer form: the
+ * fallback BYTES for a failing producer, the failure staying OBSERVABLE, and the
+ * no-silent-swallow guarantee. They call `nestedHost` the way an emitted producer
+ * does, so they exercise the shipped helper rather than a double.
+ * ------------------------------------------------------------------------- */
+
+test('16b-EB: a boundary-owned descendant failure renders the fallback bytes', () => {
+  // A reporter is what makes the failure observable instead of propagated; the
+  // no-reporter row below pins the propagation.
+  const host = {
+    [NESTED_HOST_PROPERTY]: () => ({ kind: 'fallback', html: 'FALLBACK', error: new Error('x') }),
+    [NESTED_HOST_REPORTER_PROPERTY]: () => {},
+  };
+  const request = {
+    tag: 'x-child',
+    attributes: [],
+    open: '<x-child>',
+    children: '',
+    fallback: 'RAW',
+  };
+  expect(nestedHost(host, request as NestedHostRequest)).toBe('FALLBACK');
+});
+
+test('16b-EB: with no reporter the failure PROPAGATES (no silent swallow)', () => {
+  const error = new Error('producer exploded');
+  const host = { [NESTED_HOST_PROPERTY]: () => ({ kind: 'fallback', html: 'F', error }) };
+  const request = {
+    tag: 'x-child',
+    attributes: [],
+    open: '<x-child>',
+    children: '',
+    fallback: 'RAW',
+  };
+  expect(() => nestedHost(host, request as NestedHostRequest)).toThrow(error);
+});
+
+test('16b-EB: a reporter receives the error, and the render still continues', () => {
+  const error = new Error('producer exploded');
+  const seen: unknown[] = [];
+  const host = {
+    [NESTED_HOST_PROPERTY]: () => ({ kind: 'fallback', html: 'FALLBACK', error }),
+    [NESTED_HOST_REPORTER_PROPERTY]: (value: unknown) => seen.push(value),
+  };
+  const request = {
+    tag: 'x-child',
+    attributes: [],
+    open: '<x-child>',
+    children: '',
+    fallback: 'RAW',
+  };
+  expect(nestedHost(host, request as NestedHostRequest)).toBe('FALLBACK');
+  expect(seen).toEqual([error]);
+});
+
+test('16b-EB: a normal expansion and the literal fallback are unchanged', () => {
+  const request = {
+    tag: 'x-child',
+    attributes: [],
+    open: '<x-child>',
+    children: '',
+    fallback: 'RAW',
+  };
+  expect(
+    nestedHost({ [NESTED_HOST_PROPERTY]: () => 'EXPANDED' }, request as NestedHostRequest),
+  ).toBe('EXPANDED');
+  expect(
+    nestedHost({ [NESTED_HOST_PROPERTY]: () => undefined }, request as NestedHostRequest),
+  ).toBe('RAW');
+  expect(nestedHost(undefined, request as NestedHostRequest)).toBe('RAW');
 });

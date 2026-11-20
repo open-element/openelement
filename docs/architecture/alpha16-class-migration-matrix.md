@@ -1895,3 +1895,57 @@ all ride the same root surface.
 **This is the honest bottom line for M10: three of five surfaces are retired with
 evidence, one is negative and gated on lane deletion, and one is intentionally
 unchanged until that deletion flips it.** The matrix does not claim M10 closed.
+
+## `16b-EB` SSR fallback — condition 1 delivered (2026-11-20)
+
+Plan §19.2 reversed §18.3's Alpha17 deferral and enumerated four satisfaction
+conditions. **Condition 1 is now implemented**, and the shape matters more than the
+code:
+
+> **the `__ssr` fallback contract for a failing descendant producer — the bytes
+> emitted for the boundary, how the failure stays observable, and the guarantee
+> that a producer throw owned by the boundary no longer fails the whole render**
+
+### The contract
+
+| question | answer |
+| --- | --- |
+| What bytes does a failing descendant contribute? | the **boundary's fallback** — the caller's own literal markup for that host, passed through unchanged |
+| How does the failure stay observable? | it is **carried out**, never swallowed: the render's `onNestedFailure` reporter receives it |
+| What if there is no boundary? | **the original error propagates and the whole render fails** — the unchanged pre-`16b-EB` behaviour |
+
+### Why the `__ssr` wrapper is the right seat
+
+The failing phase IS the descendant's producer, and the enclosing frame that
+catches it is the boundary's, so `nestedHost`'s expansion call is the only place
+that both knows the failure and can still emit fallback bytes. It is also the
+**one** call every generated producer already makes per dash tag, so the fallback
+needs no second dispatcher and no widened producer ABI.
+
+### The rejected design, and why it was rejected
+
+The first attempt attached a reporter to the producer's host record and changed
+its third argument into `{ nestedHost, reporter }`. It type-checked and the unit
+rows passed — then `site:build` produced **0 DSD templates on the docs page** and
+the A6 sheet row went red. The wrapper's host record is a **single-argument ABI**
+the shell builds; widening it silently broke nested expansion for every host.
+
+Reverted and re-seated on the catch, which touched nothing the producer sees. That
+regression is the reason this record documents the rejected shape: a runtime ABI
+that "looks internal" is still an ABI when the emitted code is the caller.
+
+### Guards
+
+`packages/element/__tests__/compiled-server/nested-host-expansion.test.ts` gained
+4 consumer-form rows calling the SHIPPED helper the way an emitted producer does:
+
+- a boundary-owned failure **renders the fallback bytes**;
+- with **no reporter the failure propagates** (the no-silent-swallow row);
+- a **reporter receives the error** and the render still continues;
+- a normal expansion and the literal fallback are **unchanged** (the byte-identity
+  property the previous round established).
+
+**Conditions 2–4 remain open**: client claim adoption of the fallback bytes, the
+one-SHA consumer-form evidence bundle, and the row-for-row status move in the
+`16b-MN` / capability-inventory / ADR-0182 records. This record does **not** claim
+`16b-EB` delivered.

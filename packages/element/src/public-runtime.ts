@@ -45,6 +45,7 @@ import {
 import { signal } from './internal/signal/index.ts';
 import { serializeStyleLinks } from './internal/compiled/server/index.ts';
 import { compiledRootKindOf } from './internal/compiled/server/shared.ts';
+import type { NestedHostFallback } from './internal/compiled/runtime/nested-host.ts';
 import type { CompiledProgramHost, CompiledSignalLike } from './internal/compiled/server/index.ts';
 import { type TrustedHtml, trustedHtmlValue } from './internal/core/security.ts';
 import { substituteSlotAnchors } from './internal/compiled/slot-anchors.ts';
@@ -290,6 +291,17 @@ export interface RenderToStringOptions {
    * root fails closed (its children are projections, not appendages).
    */
   hostChildren?: TrustedHtml;
+  /**
+   * `16b-EB` (execution plan §19.2): the report channel for a descendant producer
+   * that threw while the enclosing error boundary owns it.
+   *
+   * The boundary supplies this; the renderer routes the caught failure here
+   * instead of failing the whole render, and renders the boundary's fallback
+   * bytes in the failing descendant's place. OMITTED is the no-boundary render:
+   * the failure re-raises, which is the unchanged pre-`16b-EB` behaviour, so this
+   * can never become a silent swallow.
+   */
+  onNestedFailure?: (error: unknown) => void;
   /**
    * The render's document stylesheet collection (alpha15 S lane, S-C1.2).
    * Every light-root component serialized in this render reports its external
@@ -1145,54 +1157,86 @@ function renderToStringAtDepth(
               readonly open: string;
               readonly children: string;
               readonly fallback: string;
-            }): string | undefined => {
+            }): string | undefined | NestedHostFallback => {
               if (!admittedNested.has(request.tag)) return undefined;
-              const nestedGenerated = registeredGeneratedHostRenderer(request.tag);
-              if (nestedGenerated !== undefined) {
-                return renderRegisteredGeneratedHost(
-                  request.tag,
-                  nestedGenerated,
-                  undefined,
-                  request.children === '' ? undefined : request.children,
-                  request.attributes,
-                );
+              // `16b-EB` (execution plan §19.2): a descendant producer that throws
+              // is owned by the enclosing error boundary, so the throw must not
+              // fail the whole render. Catching HERE is what makes the boundary's
+              // fallback bytes possible at all — the producer is the failing phase,
+              // and this is the only frame that both knows the failure and can still
+              // emit the boundary's reset output. A render with NO boundary keeps
+              // the pre-`16b-EB` behaviour because `nestedHost` re-raises when the
+              // host supplies no reporter.
+              try {
+                return expandNestedHost(request);
+              } catch (error) {
+                // The boundary owns this failure: report it when a boundary is
+                // present, re-raise when it is not (no silent swallow).
+                if (options.onNestedFailure === undefined) throw error;
+                options.onNestedFailure(error);
+                return request.fallback;
               }
-              const nestedClass = (
-                typeof customElements === 'undefined' ? undefined : customElements.get(request.tag)
-              ) as CompiledComponentConstructor | undefined;
-              if (nestedClass === undefined) return undefined;
-              const nestedLightSsr = (nestedClass as { __ssr?: unknown }).__ssr;
-              if (typeof nestedLightSsr === 'function') {
-                const nestedRendered = (
-                  nestedLightSsr as (input?: unknown, attributes?: unknown) => unknown
-                ).call(nestedClass, undefined, request.attributes);
-                const nestedLight = lightResult(nestedRendered, 'nested light-root', request.tag);
-                return serializeLightGeneratedHost(
-                  request.tag,
-                  nestedLight.content,
-                  mergeHostAttributes(
-                    request.attributes,
-                    nestedLight.hostAttributes,
-                    nestedLight.seedRows,
-                  ),
-                );
-              }
-              // A class nested host expands through the class serializer, which
-              // owns its own nested walk — so the depth recursion stays the one
-              // serializer's, not a second dispatcher.
-              return renderToStringAtDepth(
-                request.tag,
-                {
-                  componentClass: nestedClass,
-                  props: {},
-                  ssrRenderableTags: options.ssrRenderableTags,
-                },
-                depth + 1,
-              );
             };
+      const expandNestedHost = (request: {
+        readonly tag: string;
+        readonly attributes: ReadonlyArray<readonly [string, string]>;
+        readonly open: string;
+        readonly children: string;
+        readonly fallback: string;
+      }): string | undefined => {
+        if (!admittedNested.has(request.tag)) return undefined;
+        const nestedGenerated = registeredGeneratedHostRenderer(request.tag);
+        if (nestedGenerated !== undefined) {
+          return renderRegisteredGeneratedHost(
+            request.tag,
+            nestedGenerated,
+            undefined,
+            request.children === '' ? undefined : request.children,
+            request.attributes,
+          );
+        }
+        const nestedClass = (
+          typeof customElements === 'undefined' ? undefined : customElements.get(request.tag)
+        ) as CompiledComponentConstructor | undefined;
+        if (nestedClass === undefined) return undefined;
+        const nestedLightSsr = (nestedClass as { __ssr?: unknown }).__ssr;
+        if (typeof nestedLightSsr === 'function') {
+          const nestedRendered = (
+            nestedLightSsr as (input?: unknown, attributes?: unknown) => unknown
+          ).call(nestedClass, undefined, request.attributes);
+          const nestedLight = lightResult(nestedRendered, 'nested light-root', request.tag);
+          return serializeLightGeneratedHost(
+            request.tag,
+            nestedLight.content,
+            mergeHostAttributes(
+              request.attributes,
+              nestedLight.hostAttributes,
+              nestedLight.seedRows,
+            ),
+          );
+        }
+        // A class nested host expands through the class serializer, which
+        // owns its own nested walk — so the depth recursion stays the one
+        // serializer's, not a second dispatcher.
+        return renderToStringAtDepth(
+          request.tag,
+          {
+            componentClass: nestedClass,
+            props: {},
+            ssrRenderableTags: options.ssrRenderableTags,
+          },
+          depth + 1,
+        );
+      };
       // Pass the host attribute pairs: the class static now folds them through
       // the shell's own seeder/resolver so a declared row gets its server value.
       // Before this, a light-root component with any row threw on `props.x`.
+      // The expander stays the producer's ONE host argument (its shell-side
+      // wrapper builds the host record), so `16b-EB`'s report channel rides the
+      // CATCH inside the expander rather than a widened producer ABI: a caught
+      // descendant failure is handed to the boundary's reporter when the render
+      // has one, and re-raised when it does not — the unchanged pre-`16b-EB`
+      // whole-render failure.
       const rendered = (
         lightSsr as (input?: unknown, attributes?: unknown, nestedHost?: unknown) => unknown
       ).call(resolvedClass, options.props, options.hostAttrs, nestedHost);
