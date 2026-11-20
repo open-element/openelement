@@ -18,7 +18,7 @@ export const openElement = defineIslandConfig({
   },
 });
 
-function ResetPasswordPage(props: { errorText: string }) {
+export function ResetPasswordPage(props: { errorText: string }) {
   return (
     <main>
       <h1>Reset password</h1>

@@ -24,7 +24,7 @@ export const openElement = defineIslandConfig({
   },
 });
 
-function SignupPage(props: { errorText: string; email: string; sent: number }) {
+export function SignupPage(props: { errorText: string; email: string; sent: number }) {
   return (
     <main>
       <h1>Sign up</h1>

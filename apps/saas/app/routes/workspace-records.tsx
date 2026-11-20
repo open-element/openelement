@@ -22,6 +22,7 @@ export const openElement = defineIslandConfig({
   tag: 'workspace-records-page',
   root: 'shadow',
   properties: {
+    recordRows: { attribute: false, default: [] },
     invalid: { default: 0 },
     errorText: { default: '' },
     nextCursor: { default: '' },
@@ -31,13 +32,14 @@ export const openElement = defineIslandConfig({
   },
 });
 
-function WorkspaceRecordsPage(props: {
+export function WorkspaceRecordsPage(props: {
   invalid: number;
   errorText: string;
   nextCursor: string;
   filterWorkspaceId: string;
   filterStatus: string;
   filterTitlePrefix: string;
+  recordRows: Array<{ id: string; line: string }>;
 }) {
   return (
     <main>

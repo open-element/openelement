@@ -23,6 +23,8 @@ export const openElement = defineIslandConfig({
   tag: 'admin-page',
   root: 'shadow',
   properties: {
+    paymentRows: { attribute: false, default: [] },
+    attachmentRows: { attribute: false, default: [] },
     whoText: { default: '' },
     errorText: { default: '' },
     actionErrorText: { default: '' },
@@ -30,11 +32,13 @@ export const openElement = defineIslandConfig({
   },
 });
 
-function AdminPage(props: {
+export function AdminPage(props: {
   whoText: string;
   errorText: string;
   actionErrorText: string;
   noteCountText: string;
+  attachmentRows: Array<{ id: string; line: string }>;
+  paymentRows: Array<{ id: string; line: string }>;
 }) {
   return (
     <main>

@@ -28,7 +28,7 @@ export const openElement = defineIslandConfig({
   },
 });
 
-function MagicLinkPage(props: { errorText: string; email: string; sent: number }) {
+export function MagicLinkPage(props: { errorText: string; email: string; sent: number }) {
   return (
     <main>
       <h1>Magic Link</h1>

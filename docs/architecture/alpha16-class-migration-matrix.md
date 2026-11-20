@@ -1395,3 +1395,46 @@ count the class-lane layout produced (the earlier empty-DSD failure is gone);
 `generated-leaf.nested-host.test.ts` (4 rows — routing, the static-dash case,
 intrinsic byte-identity, conditional import) and
 `nested-host-expansion.test.ts` (5 rows — the full fallback matrix).
+
+**2026-11-20 — `page-notes` migrated, and the round-7 batch's latent defect found and fixed.**
+
+`apps/saas/app/components/page-notes.tsx` moved into its route module
+(`app/routes/notes.tsx`) as a function page, and the class module is deleted.
+
+**The important part of this round is a defect the batch had hidden.** The nine
+page migrations from `34b4c3daf` compiled and built, but had two faults that no
+build-time check could see, because request-time (`renderIntent: { mode: 'dynamic' }`)
+routes are never rendered during a build:
+
+1. **The page component was not exported.** The server-component lane records
+   `pageComponentName` only for an EXPORTED function component declared in the
+   route module, so every one of the nine classified as a legacy `class-page`
+   instead of a `function-page` — and a class-page route renders through
+   `__ssr(tag, …)` over a registered element class that does not exist. The
+   route would have 500'd on every request.
+2. **Props with a type annotation were dropped from the migration.** The batch
+   script only carried `name = default;` rows, so
+   `attachmentRows: Array<{ id: string; line: string }> = []` (admin),
+   `paymentRows` (admin), `orderRows` (checkout), `fileRows` (upload) and
+   `recordRows` (workspace-records) vanished from the function's props type
+   while the JSX still read them — `OEC9013: list Blocks must map over
+   this.<property>` at the first `.map()`.
+
+Fixed: all ten page components are exported, and the five annotated rows are
+restored in both the props type and the sidecar `properties` table. The saas
+build is green again and `notes` renders through the server-component lane.
+
+Evidence: `@openelement/saas` build exit 0 (11 request-time routes, 9 action
+routes) and 20 files / 150 tests; `notes.test.ts` now compiles the page FUNCTION
+through a new `compileFunctionPage` helper — the same compiler entry the build
+runs — instead of a `renderToString` over a class that no longer exists;
+`vp run check` 5/5 PASS.
+
+Lesson recorded for the remaining rows: a request-time page has NO build-time
+render, so "the build is green" is not evidence that the page works. The
+disposition of every migrated page row must cite a render, not a build.
+
+Remaining class-lane surface after this round: `www/app/site-ui/open-article-view.tsx`
+(D-M5), the 27 generator-owned `www/app/components/article-routes/*` (D-M5 + one
+generator edit), `benchmarks/micro/oe-table.tsx` (benchmark disposition), the
+class-lane templates in `packages/create/templates`, and the fixtures.

@@ -22,6 +22,7 @@ export const openElement = defineIslandConfig({
   tag: 'checkout-page',
   root: 'shadow',
   properties: {
+    orderRows: { attribute: false, default: [] },
     actionErrorText: { default: '' },
     attemptId: { default: '' },
     resultSuccess: { default: 0 },
@@ -29,11 +30,12 @@ export const openElement = defineIslandConfig({
   },
 });
 
-function CheckoutPage(props: {
+export function CheckoutPage(props: {
   actionErrorText: string;
   attemptId: string;
   resultSuccess: number;
   resultCancelled: number;
+  orderRows: Array<{ id: string; line: string }>;
 }) {
   return (
     <main>

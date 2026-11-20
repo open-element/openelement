@@ -24,7 +24,7 @@ export const openElement = defineIslandConfig({
   },
 });
 
-function RecoverPage(props: { errorText: string; sent: number }) {
+export function RecoverPage(props: { errorText: string; sent: number }) {
   return (
     <main>
       <h1>Recover password</h1>

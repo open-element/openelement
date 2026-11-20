@@ -11,7 +11,11 @@ import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { compileElementProgram, compileGeneratedElementIfAdmitted } from '@openelement/compiler';
+import {
+  compileElementProgram,
+  compileGeneratedElementIfAdmitted,
+  compileServerComponentIfAdmitted,
+} from '@openelement/compiler';
 
 // Resolved through the workspace (daily dev) or the installed packed
 // tarballs (release qualification) — never a relative path into a package.
@@ -127,4 +131,44 @@ export async function compileGeneratedIsland(
     element: element as CustomElementConstructor,
     ...(ssrHost === undefined ? {} : { ssrHost }),
   };
+}
+
+/**
+ * Compile + import a SERVER FUNCTION PAGE component declared in a route module.
+ *
+ * The page-authorship rule (execution-plan §19.9) puts the component function in
+ * the route module itself, and the server-component lane lowers it into a
+ * plain function that RETURNS the serialized markup for its projected props —
+ * there is no element class and no `renderToString` call. This helper is that
+ * lane's test seam: it runs the same compiler entry the build runs, imports the
+ * emitted module, and hands back the named component function.
+ */
+export async function compileFunctionPage(
+  sourceUrl: string,
+  componentName: string,
+): Promise<(props: Record<string, unknown>) => Promise<string>> {
+  const absoluteSource = new URL(sourceUrl, import.meta.url);
+  const source = await readFile(absoluteSource, 'utf8');
+  const compiled = compileServerComponentIfAdmitted(source, sourceUrl);
+  if (compiled === null) {
+    throw new Error(`${sourceUrl} is not admitted by the server-component lane`);
+  }
+  const rewritten = compiled.code
+    .replaceAll("from '@openelement/element'", `from '${ELEMENT_URL}'`)
+    .replaceAll("from '@openelement/router'", `from '${APP_URL}'`)
+    .replaceAll(
+      /from (['"])(\.[^'"]*)\1/g,
+      (_match, quote: string, specifier: string) =>
+        `from ${quote}${new URL(specifier, absoluteSource).href}${quote}`,
+    );
+  const tempDir = await mkdtemp(join(tmpdir(), 'oe-saas-function-page-'));
+  const tempModule = join(tempDir, 'compiled-function-page.ts');
+  await writeFile(tempModule, rewritten, 'utf8');
+  const mod = (await import(pathToFileURL(tempModule).href)) as Record<string, unknown>;
+  await rm(tempDir, { recursive: true, force: true });
+  const component = mod[componentName];
+  if (typeof component !== 'function') {
+    throw new Error(`${sourceUrl} emitted no function component named ${componentName}`);
+  }
+  return async (props) => String(await (component as (p: unknown) => unknown)(props));
 }

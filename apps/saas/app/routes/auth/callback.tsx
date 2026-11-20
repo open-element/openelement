@@ -18,7 +18,7 @@ export const openElement = defineIslandConfig({
   },
 });
 
-function AuthCallbackPage(props: { errorText: string }) {
+export function AuthCallbackPage(props: { errorText: string }) {
   return (
     <main>
       <h1>Authentication</h1>

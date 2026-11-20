@@ -24,13 +24,19 @@ export const openElement = defineIslandConfig({
   tag: 'upload-page',
   root: 'shadow',
   properties: {
+    fileRows: { attribute: false, default: [] },
     whoText: { default: '' },
     errorText: { default: '' },
     actionErrorText: { default: '' },
   },
 });
 
-function UploadPage(props: { whoText: string; errorText: string; actionErrorText: string }) {
+export function UploadPage(props: {
+  whoText: string;
+  errorText: string;
+  actionErrorText: string;
+  fileRows: Array<{ id: string; line: string }>;
+}) {
   return (
     <main>
       <h1>Upload</h1>
