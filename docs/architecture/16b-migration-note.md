@@ -1600,3 +1600,29 @@ of the same date).
   lane and never the root three-argument host form inside a compiled setup.
 - **`useHost` is FUTURE/OWED.** It is listed in ADR-0182 D-18b-4 and execution
   plan §17.1 but not implemented; `env.host` is the only delivered host access.
+
+## 2026-11-20 amendment note — one props record, and where `computed` stands
+
+Two facts replace the 2026-11-18 ruling's premise; the ruling's text stays above
+as history (amend-never-rewrite).
+
+1. **One props record.** The generated-element shell no longer carries a second
+   props record. `createTrackedProps` (`internal/compiled/runtime/props.ts`) is
+   the one owner; its getters read one version signal, so a read inside an
+   effect tracks; the shell's `Map` + plain getters + hand-written
+   `propsChanged` counter are deleted (the emitted ABI name `propsChanged` now
+   names the primitive's version signal). Guard:
+   `packages/element/__tests__/compiled-server/shell-props-single-owner.test.ts`
+   plus the seam row in `seams.md`. Record: ADR-0183 D-5.
+2. **`computed` is admitted and lowered; it is blocked on the binding source,
+   not on reactivity.** `OEIR_GENERATED_ELEMENT_UNBOUND_BINDING` still refuses a
+   module whose root requires host bindings (`signal`/`computed`), because no
+   production bindings source exists on the generated root yet. Pinned by
+   `packages/compiler/__tests__/semantic-ir/generated-element.computed-boundary.test.ts`.
+   Migrating a component with `computed` therefore stays blocked until that
+   source lands (ADR-0183 D-4 slice), and inlining to work around it is still
+   refused as a migration shape.
+
+The migration rule for authors is unchanged in the meantime: a component that
+needs derived state waits for D-4; a component that only reads its rows migrates
+now.
