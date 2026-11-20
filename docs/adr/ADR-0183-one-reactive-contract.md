@@ -190,3 +190,56 @@ let the shell consume it.
 `packages/compiler/__tests__/semantic-ir/generated-element.computed-boundary.test.ts`
 pins the exact current refusal, so the slice starts from a measured fact and its
 flip from "refused with this identity" to "emitted and tracked" is the evidence.
+
+### D-4 slice plan (located against this tree, 2026-11-20)
+
+The remaining work is seven edits, not a new mechanism. Insertion points, all in
+`packages/compiler/src/internal/compiler/semantic-ir/generated-leaf/generate.ts`
+unless stated:
+
+1. **Create in the retained root factory.** In the `if (rootSetup)` block
+   (`:8105`-`:8325`), emit one declaration per root `signal`/`computed` resource
+   (`const x = signal(<initializer>);` / `const x = computed(() => <derivation>);`)
+   and add the names to `recordFields` (`:8301`-`:8311`) so the factory's return
+   record IS the bindings record. Both resources already carry their
+   `IrResource.expression` (`semantic-ir/types.ts:79-85`); `signal` takes the
+   initializer, `computed` the derivation body
+   (`function-frontend.ts:1243-1245`).
+2. **Enable the factory when bindings exist.** `rootSetup` (`:8063`) currently
+   requires `localLines`/hooks/providers; add "the root declares signal/computed
+   resources" to that disjunction. `setupReadsHostBinding` (`:8047`) counts reads
+   of host bindings and must NOT count the resources the factory itself creates.
+3. **The emitted bodies already read from the record.** `emitComponent`'s
+   prologue binds each required name through
+   `__oe_requireBinding = (name) => host.bindings[name]` (`:6586`-`:6592`), so
+   mount/claim need no change: once the factory returns the record, the
+   `host.bindings` lookup resolves. `requiredBindings` therefore stays populated
+   (it is the read list, not a demand for an external source).
+4. **SSR creates its own per-render copy.** The SSR path classifies the same
+   resources as host bindings (`:7611-7612`); for the root it must instead emit
+   the two declarations inline (the `resource.kind === 'local'` branch at
+   `:7604-7611` is the template) and mark them local, because the SSR host record
+   has no bindings channel and must not acquire one (per-render, no graph).
+5. **Relax the gate, conditionally.** `gateGeneratedElementBindings`
+   (`generated-element/site.ts:2156-2172`) refuses on any `requiredBindings`;
+   it must refuse only when `leaf.rootInstanceFactory === null` — i.e. only when
+   there is genuinely no production bindings source. A module with the factory
+   has one.
+6. **Runtime imports stay narrow.** Add `signal`/`computed` to
+   `OPTIONAL_RUNTIME_IMPORTS` (`:323`-`:330`) with the existing body predicates,
+   and re-export both from the closed `leaf-runtime` entry
+   (`packages/element/src/internal/compiled/leaf-runtime.ts`, whose header already
+   admits `signal/*`). Emitted modules must never import them from the package
+   root: that entry carries the side effects P1 keeps out of an island chunk.
+7. **Evidence.** Flip
+   `packages/compiler/__tests__/semantic-ir/generated-element.computed-boundary.test.ts`
+   from "refused with `UNBOUND_BINDING`" to "emitted, and the factory returns the
+   record"; add a Chromium row that reads a props-derived `computed` through
+   mount, claim and reconnect (the shell path already carries props + one
+   invalidation channel); and re-run the byte pins, because every module that
+   declares a computed gains the declaration lines and the import.
+
+Risk that keeps this a slice rather than a patch: the change touches three
+emission sites (mount, claim, SSR) plus the shared runtime-import table, so its
+evidence must cover all three in one commit. A client-only version would ship a
+component that works after hydration and fails during SSR — refused here.
