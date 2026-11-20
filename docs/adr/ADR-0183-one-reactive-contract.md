@@ -73,6 +73,44 @@ Recorded here because the fix must include the gate, not only the code:
 
 **D-6. `propDeps` is re-evaluated for deletion.** It is the compensation for untrackable props. After D-5, the compiler may emit direct dependency wiring; whether `propDeps` is removed from the emitted ABI is decided by the D-5 evidence, not by preference, and its removal is a separate, byte-pinned slice.
 
+**D-6 measured (2026-11-20) — the channel STAYS, and here is the evidence.**
+
+The D-5 slice made props one signal-backed record, so D-6's question ("is
+`propDeps` now removable?") became answerable. Measurement, not preference:
+
+| measurement | value |
+| --- | --- |
+| `propDeps` references in the compiler | 22 (was 31 before D-5) |
+| host-literal producers | 8 |
+| consumer subscription loops | 1 (`for (… of host.propDeps) bindSignalWrites(…)`) |
+| built `www` producer values | 5 × `[propsChanged]`, 3 × `[]` |
+| built `www` `.propDeps` subscription loops | 55 (the loop is per slot) |
+
+The two producer families are DIFFERENT facts and only the first became
+redundant:
+
+1. **The root instance**: `propDeps: [__oe_propsChanged]` — exactly one signal,
+   the props version channel, which after D-5 *is* the tracked record's version.
+   This half is what D-5 shrank; it was previously a list of individual prop
+   signals.
+2. **A component-reference child**: `propDeps: [label]` (the parent's
+   **defining-scope** signals behind the passed prop expressions) or
+   `[...host.propDeps]` when a passed expression reads a parent PROP. That fact
+   is not expressible through any props version signal: a child's props object is
+   a plain getter record (`get text() { return (label); }`), and its refresh
+   closures are driven by explicit `bindSignalWrites` subscriptions rather than by
+   an auto-tracking effect. Giving the child a single "props version" signal would
+   create a **second invalidation channel**, which D-2 forbids and which would
+   also have to be bumped by the parent — i.e. the parent would own the child's
+   dirty bit, the exact coupling D-2 exists to prevent.
+
+Verdict: `propDeps` is NOT removed. It is now a two-fact channel with a measured
+surface, pinned by `generated-leaf.prop-deps.test.ts` (four rows: root version
+signal, child defining-scope signal, parent-prop forwarding, empty list for a
+child with no parent-scope reads). The ADR's "31 references become removable"
+line is superseded by this measurement: the reducible half was reduced, the
+irreducible half is named.
+
 **D-7. The gate that failed is extended.** Three guards are added by the implementation:
 
 1. a seam row for the reactive props channel naming `runtime/props.ts` as the single owner, with the shell as a consumer;
