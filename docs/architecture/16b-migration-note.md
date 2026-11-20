@@ -56,11 +56,17 @@ all three now do, and each is recorded in its own amendment below:
 - `16b-LC` (lifecycle) remains **PARTIAL**: the generated-element ROOT author
   lifecycle hooks are delivered, while nested/hostless hooks and the
   connection-scope helper channel are still OWED.
-- `16b-EB` (error boundary) — delivered (`ee0434c9f`): `onError` with the
-  shell's capture points (the 2026-11-20 later reading in the EB amendment below
-  corrects the count to **two** — the connect/claim pass, plus update/refresh and
-  event dispatch through one `guardUpdate` sink; no SSR fallback exists, deferred
-  to Alpha17 by plan §18.3).
+- `16b-EB` (error boundary) — **PARTIAL** (`ee0434c9f` + `9e494db63`): `onError`
+  with the shell's **two** capture points (the connect/claim pass, plus
+  update/refresh and event dispatch through one `guardUpdate` sink), AND — since
+  2026-11-20 — the **SSR fallback's condition 1** of execution plan §19.2: a
+  failing descendant producer renders the enclosing boundary's fallback bytes, the
+  failure is carried out to `onNestedFailure` instead of failing the whole render,
+  and with no boundary the original error still propagates. **The "no SSR fallback
+  exists, deferred to Alpha17 by plan §18.3" wording that stood here is CLOSED** —
+  the owner reversed that deferral in §19.2. Conditions 2–4 of §19.2 remain open
+  (client claim adoption of the fallback bytes, the one-SHA consumer-form bundle,
+  and the remainder of the row-by-row move), so this row is not MIGRATED.
 - `16b-REF` (refs) — delivered (`d135576d0`): `ref(cb?)` is a compiler-erased
   declaration intrinsic riding the EXISTING `ref` JSX channel, so no second
   attachment mechanism exists; lifetime is proven across mount, claim,

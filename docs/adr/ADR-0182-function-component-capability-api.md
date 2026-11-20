@@ -1276,3 +1276,64 @@ table permanently.
 **P5 note.** A permanent exclusion adds no capability to inventory and retires
 nothing; it must still be listed in the closeout's exclusion section so a reader
 does not mistake absence for an unfinished item.
+
+## Amendment (2026-11-20, later): the `16b-EB` SSR fallback is NOT an Alpha17 carry — condition 1 delivered
+
+Append-only fact record. Owner-approved 2026-11-20 (delegated in-session
+remediation authorization; plan §18.7). **It supersedes the "Not delivered: an SSR
+fallback … defers the SSR fallback to Alpha17" half of the amendment above**, by the
+owner's reversal recorded in execution plan §19.2:
+
+> the owner reversed that deferral on 2026-11-20: the SSR fallback is implemented
+> **inside Alpha16b**. The deferred status and the §13.2-preamble supersession are
+> history.
+
+The earlier amendment stays as written — it is an append-only record of the
+2026-11-20 state of knowledge — but a reader must not take its Alpha17 carry as
+current. This is exactly the two-faces-one-fact drift the design constitution
+forbids, corrected at its source rather than left for a reader to reconcile.
+
+### Condition 1 of §19.2 — DELIVERED
+
+The contract, as implemented:
+
+| question | answer |
+| --- | --- |
+| Bytes a failing descendant contributes | the **enclosing boundary's fallback** — the caller's own literal markup for that host, passed through unchanged |
+| How the failure stays observable | it is **carried out** to the render's `onNestedFailure` report channel — never swallowed |
+| No boundary on the render | the **original error propagates** and the whole render fails — byte-identical to pre-`16b-EB` |
+
+Seat: `nestedHost`'s expansion call (`packages/element/src/internal/compiled/runtime/nested-host.ts`).
+The failing phase IS the descendant's producer and the enclosing frame that catches
+it is the boundary's, so it is the only place that both knows the failure and can
+still emit fallback bytes; it is also already the ONE call every generated producer
+makes per dash tag, so the fallback needed no second dispatcher.
+
+**The rejected shape, recorded because it is instructive.** The first attempt put a
+reporter on the producer's host record and widened its third argument to
+`{ nestedHost, reporter }`. It type-checked and its unit rows passed — then
+`site:build` produced **0 DSD templates** on the docs page and the A6
+unreferenced-sheet row went red: the wrapper's host record is a single-argument
+ABI the shell builds, and widening it silently broke nested expansion for every
+host. Reverted and re-seated on the catch, which touches nothing the producer sees.
+A runtime ABI that "looks internal" is still an ABI when the emitted code is the
+caller.
+
+The one public-surface consequence: `RenderToStringOptions` gained
+`onNestedFailure?: (error: unknown) => void`, the **only** addition this release
+line made to the public API, and it is recorded in
+`docs/release/public-interface-snapshot.json`.
+
+### Conditions 2–4 remain OPEN
+
+- **2** — client claim adoption of the fallback bytes under the unchanged claim and
+  identity rules;
+- **3** — the one-SHA consumer-form evidence bundle (fallback bytes for a failing
+  producer, claim parity over them, the no-silent-swallow row, and the two Alpha16
+  capture points unchanged);
+- **4** — the row-for-row status move in the `16b-MN` record, the capability
+  inventory and this ADR. This amendment performs the ADR half; the inventory and
+  `16b-MN` rows move with it and both name condition 1 as delivered and 2–4 as open.
+
+**`16b-EB` is therefore still NOT a delivered capability.** The capture points
+(unchanged) plus condition 1 are delivered; the row cannot flip until all four hold.
