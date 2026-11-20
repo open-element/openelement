@@ -243,3 +243,33 @@ Risk that keeps this a slice rather than a patch: the change touches three
 emission sites (mount, claim, SSR) plus the shared runtime-import table, so its
 evidence must cover all three in one commit. A client-only version would ship a
 component that works after hydration and fails during SSR — refused here.
+
+### D-4 first attempt (2026-11-20): the emission works; the SSR scoping is the one open edit
+
+A first implementation pass was written, measured and then **reverted** so the
+tree stays green; the patch is kept at
+`.artifacts/alpha16-execution/wip/d4-slice-wip.patch` (244 lines, four files).
+
+What it proved (measured on a probe module, then discarded):
+
+- the retained root factory emits `const total = signal((1));` and
+  `const doubled = computed(() => props.count * 2 + total.value);`, returns both
+  in the record, and the mount/claim prologues resolve them through their
+  existing `host.bindings[name]` lookup with **no change to those bodies**;
+- the SSR producer emits the same two declarations per render and evaluates the
+  derived value once, so the server path needs no reactive graph;
+- the emitted header gains `signal`/`computed` from the **narrow `leaf-runtime`
+  entry** through the optional-import predicates — the P1-safe import.
+
+What went wrong, and the one edit that remains: the SSR inline rule was applied
+to every component, which changed hostless **leaf** modules too (their consumer
+supplies the bindings record, so 63 leaf/claim/list/SSR byte and behavior tests
+went red). The rule must be scoped to the element root: `emitDynamicSsrFunction`
+needs to learn "this component is the element root" — the clean form is a
+`elementRootBinding: boolean` field on the shared `EmitState`, set by
+`emitSsrFunction` (which already receives the root marker) before it delegates,
+rather than a new function parameter threaded through both producers.
+
+With that scoping plus the call-site `rootInstance ?? null`, the compiler suite
+should return to green with the new capability. The measurement above is why the
+next attempt should start from the saved patch instead of from zero.
