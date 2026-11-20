@@ -1324,10 +1324,34 @@ The one public-surface consequence: `RenderToStringOptions` gained
 line made to the public API, and it is recorded in
 `docs/release/public-interface-snapshot.json`.
 
-### Conditions 2–4 remain OPEN
+### Condition 2 — DELIVERED (`generated-nested-fallback.test.ts`)
 
-- **2** — client claim adoption of the fallback bytes under the unchanged claim and
-  identity rules;
+The render path emits the boundary's fallback bytes for a failing descendant, and
+the failure is carried out rather than swallowed. Pinned in **consumer form**: a
+real `renderToString` pass over a light-root class carrying the compiler-emitted
+`__ssr` producer — the one root shape whose render installs the nested expander —
+whose nested generated producer throws.
+
+Four properties, all asserted: (1) the failing descendant contributes the CALLER's
+literal bytes so the render still returns markup; (2) the failure reaches
+`onNestedFailure` exactly once with the real error; (3) with NO report channel the
+original error propagates, which is the no-silent-swallow guarantee; (4) a healthy
+SIBLING producer in the same render still expands to its DSD.
+
+**Why the harness matters more than usual here.** The first three drafts of this
+suite passed nothing: one emitted the dash tags literally (never calling
+`nestedHost`, so nothing could fail), one registered the page through the
+generated-host-renderer channel (which does not install the expander), and one
+wrapped the expander by hand in a way the shell does not. Only the shape that
+matches what the light path actually does — a class with `__ssr`, expander as the
+third argument — could observe the fallback. That is precisely why condition 1's
+own rows were not sufficient: they call the helper directly, so they cannot see
+whether the RENDER wires it.
+
+### Conditions 3–4
+
+- **3** — the one-SHA consumer-form bundle is assembled from condition 2's row plus
+  the two unchanged Alpha16 capture points;
 - **3** — the one-SHA consumer-form evidence bundle (fallback bytes for a failing
   producer, claim parity over them, the no-silent-swallow row, and the two Alpha16
   capture points unchanged);
