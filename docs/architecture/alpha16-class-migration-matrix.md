@@ -1143,3 +1143,26 @@ Also measured this round (kept): the rescan of the class-lane blocker itself is
 unaffected — `open-reading-shell` still declares `rail`/`footer`/`meta` as bare
 `reflect` booleans defaulting to `false`, so whichever lane it migrates to, the
 presence-`true` wire must be admitted there.
+
+**2026-11-20 — the third blocker is diagnosed and fixed (bare boolean attributes).**
+
+The previous entry recorded the error and the reproduction but not the shape.
+This round isolated it by probe, before touching code:
+
+| supplied | result |
+| --- | --- |
+| `{ rail: '' }` (the real caller: `<open-reading-shell meta rail footer …>`) | **threw** `OEIR_LEAF_UNSEEDABLE_PROPERTY` |
+| `{ rail: true }` | fine |
+| attribute pair only (`['rail','']`) | fine |
+
+So the defect was exactly the BARE-ATTRIBUTE JSX encoding, not the attribute
+wire: the seeder's supplied-value path returned `''` verbatim, the row resolved
+falsy while the projected canonical pair was presence-true, and the fold refused
+the divergence. The class lane already spells this rule once
+(`public-runtime.ts` `coerceServerProp`: an empty string on a boolean converter
+means `true`); the generated lane's fold now applies the same rule. Guard: a row
+in `generated-host-props-seeding.test.ts` pins all three encodings.
+
+With the three defects now fixed (module-helper snapshot classification, authored
+declaration order, bare-boolean seed), the `open-reading-shell` port has no known
+blocker left. It is the first task of the next batch.
