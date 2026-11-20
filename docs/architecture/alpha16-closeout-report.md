@@ -24,7 +24,7 @@ carries none.
 | --- | --- |
 | branch | `feat/alpha16-retirement` |
 | source version | `1.0.0-alpha.16` (bumped this line through the one-knob tool) |
-| closeout commit | `5cc0930e7` (the evidence table below is taken there) |
+| closeout commit | `12fc5b8fe` (the evidence table below is taken there) |
 | `git status --porcelain` | empty |
 
 Provenance for every record below: **`LOCAL`
@@ -72,7 +72,7 @@ worth remembering (see §5).
 ## 3. Evidence record
 
 All rows: provenance **`LOCAL .agents/worktrees/alpha16-retirement`**, commit
-`5cc0930e7`, status clean (`git status --porcelain` empty).
+`12fc5b8fe`, status clean (`git status --porcelain` empty).
 
 | # | command | result |
 | --- | --- | --- |
@@ -192,7 +192,30 @@ not have a design carrier for depth ≥ 2 yet.
 this line has no CI run. **A LOCAL record cannot stand in for them**, so this
 report does not claim them.
 
-### 5.5 P5 personal sign-off
+### 5.5 Shim retirements — two written conditions were MET by this line
+
+`shim-inventory.md` records every load-bearing workaround with the condition under
+which it must be deleted (`处置：条件到即删`). Two of those conditions were
+satisfied by this line's work, so both are **retired with their action recorded**
+rather than silently deleted:
+
+| shim | written condition | how this line met it |
+| --- | --- | --- |
+| **#24** `OE_ISLAND_STYLE_SHADOW_UNWIRED` | "GH #1800 lands the shadow style link/adoption carrier, and a shadow-root generated island with `styles` builds and renders green" | the DSD style-link carrier landed: the compiler emits the typed `styleLinks` channel and the serializer writes the canonical marked `<link>` inside the template, so the scan ADMITS a `producer` island with root `shadow` |
+| **#28** `registerOpenUi` published-API no-op | "delete with the next breaking alpha (experience-edition surface, no compat adapter needed)" | alpha.16 **is** that alpha; measured dead first (`extends OpenElement` in `packages/ui/src` = 0, empty body, four mentions total), then deleted with the interface snapshot and the smoke test updated |
+
+Retiring #24 also corrected **three architecture records that still denied the
+carrier** (ADR-0181 part C, the `16b-MN` style section, and the shim entry
+itself). A shim inventory that is right while three records contradict it is the
+same drift the constitution forbids, so the fix belonged with the retirement.
+
+What deliberately did **not** retire: `OE_ISLAND_STYLE_SHADOW_UNWIRED` still fires
+for a shadow island whose leaf emitted **no producer** — that case has no template
+to declare the sheet in, so accepting the declaration WOULD be the silent loss the
+shim existed to prevent. The refusal narrowed from "every shadow root" to "a shadow
+root with no template", which is the honest boundary.
+
+### 5.6 P5 personal sign-off
 
 The §13.5 P5 sign-off requires the owner's own signed line on a final-SHA matrix.
 The §18.7 delegation explicitly does **not** satisfy it ("a record that requires
