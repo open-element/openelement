@@ -1087,6 +1087,32 @@ function renderToStringAtDepth(
     // wrapper: the host's children ARE the region, exactly as on the client.
     const lightSsr = (resolvedClass as { __ssr?: unknown }).__ssr;
     if (typeof lightSsr === 'function') {
+      // #1800 (alpha16 closeout): a LIGHT-root generated element's declared
+      // sheets are a DOCUMENT resource — the asset is emitted and its URL
+      // recorded by the client build (`island-style-declarations.ts`), but until
+      // now nothing declared it, so the sheet reached no document and the island
+      // rendered unstyled. A light root's content IS the document's content, so
+      // the document head is the only owner that can deliver its CSS (the same
+      // rule the class lane's light root follows through
+      // `documentStyleResourcesOf`). `null` keeps the shadow primitive's explicit
+      // "declared but carrier unavailable" refusal: a dev render with no emitted
+      // assets must fail loudly rather than emit an unstyled island.
+      const declaredLightSheets =
+        typeof input === 'string' ? requestTimeIslandStyleLinks(input) : undefined;
+      if (declaredLightSheets === null) {
+        throw new OpenElementError(
+          `[openElement] admitted generated light host <${
+            typeof input === 'string' ? input : '<unknown>'
+          }> declares IslandConfig.styles, but this render has no emitted asset ` +
+            'carrier for it (the dev server emits no style assets). Run a production ' +
+            'build, or remove the declaration; rendering it unstyled would silently ' +
+            'drop the authored sheets.',
+          { code: ErrorCode.SSR_RENDER_ERROR, phase: 'ssr' },
+        );
+      }
+      if (declaredLightSheets !== undefined && declaredLightSheets.length > 0) {
+        options.documentStyles?.add(declaredLightSheets);
+      }
       // alpha16 nested-expansion: a generated light-root host's `__ssr` is a
       // string builder, so a custom-element tag inside its markup would stay an
       // unexpanded tag (a second descriptor-less element, not DSD). The class

@@ -162,3 +162,16 @@ body {
     --color-ok: var(--color-zinc-100);
   }
 }
+
+/* ── LIGHT-root page boxes ────────────────────────────────────────────────
+   A custom element is inline by default and the host tag is not authored
+   markup, so no utility can carry its own box. The page components are server
+   functions on the generated-element lane, which own no element sheet — a LIGHT
+   root's CSS is a DOCUMENT resource, so this token sheet is its single owner.
+   These three selectors are the exact replacements for the retired per-page
+   `:host { display: block }` sheets. */
+index-page,
+about-page,
+el-404 {
+  display: block;
+}

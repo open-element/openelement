@@ -1480,3 +1480,37 @@ class `static styles`.
 Evidence: `@openelement/create` 3 files / 68 tests; router 167 / 1880 (the
 `island-styles` refusal row is replaced by an admission row that names why);
 compiler 101 / 1404; `vp run check` 5/5 PASS.
+
+**2026-11-20 — the starter leaves the class lane: four templates migrated, three files retired.**
+
+`packages/create/templates` was the last place a NEW app could be born on the
+retired lane, and its block had two different causes. Both are now closed for
+every file except the one named below.
+
+**#1800's LIGHT-root document application is implemented** (it was the first
+cause). The chain was one link short: the client build emitted the `.css` asset
+and recorded its URL per delivered tag, but the generated render path never
+declared it, so a styled LIGHT island rendered unstyled and nothing failed. The
+light-root render now reports the island's declared sheets to the render's
+document sink — the SAME rule the class lane's light root already followed through
+`documentStyleResourcesOf` — and `null` (declared, carrier unavailable) stays a
+loud failure rather than an unstyled render. Guard:
+`generated-light-styles.test.ts`.
+
+**Per-file disposition now that the carrier exists:**
+
+| template | disposition |
+| --- | --- |
+| `app/routes/index.tsx` | MIGRATED — `HomePage` is an exported server function component declaring the page itself (§19.9) |
+| `app/routes/about.tsx` | MIGRATED — same shape, `AboutPage` |
+| `app/routes/404.tsx` | MIGRATED — same shape, `NotFoundPage` |
+| `app/layout.tsx` | MIGRATED — function component + sidecar `root: "shadow"`, sheet on the sidecar `styles` channel |
+| `app/components/page-{home,about,404}.{tsx.tmpl,css}` | **RETIRED** (six files) — the component moved into its route module and the three `:host{display:block}` box rules moved to `app/styles/theme.css`, which is the one owner a LIGHT root's CSS can have |
+| `app/islands/my-counter.tsx` | MIGRATED (previous round) — sidecar `styles` carrier |
+| `app/islands/live-timer.tsx` | **BLOCKED, named** — `ssr: false`, so there is no DSD template for its sheet, and the client-created shadow root does not adopt stylesheets. Needs the client-side shadow style-adoption slice. |
+
+Evidence: `@openelement/create` 3 files / 68 tests — including the pack-safe
+payload gate, the scratch-tree `oxfmt --check` + `oxlint` gate a fresh scaffold
+must pass, and the packed-CLI payload row that now asserts the page surface is the
+route tree and that no `app/components/page-*.tsx` ships; element 135 / 1051;
+router 167 / 1880; `vp run check` 5/5 PASS.

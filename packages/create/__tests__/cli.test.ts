@@ -367,12 +367,6 @@ test('the showcase template is the one scaffold, Tailwind-ON (#1530 + owner sing
     '.node-version',
     'AGENTS.md',
     'README.md',
-    'app/components/page-404.css',
-    'app/components/page-404.tsx',
-    'app/components/page-about.css',
-    'app/components/page-about.tsx',
-    'app/components/page-home.css',
-    'app/components/page-home.tsx',
     'app/components/site-chrome.css',
     'app/head.tsx',
     'app/layout.tsx',
@@ -409,7 +403,7 @@ test('the showcase template is the one scaffold, Tailwind-ON (#1530 + owner sing
   expect('pnpm-workspace.yaml' in templates).toBeFalsy();
   // The landing page is the showcase: framework name, tagline, both islands,
   // the static architecture section, and JS-cost badges naming each section.
-  const home = templates['app/components/page-home.tsx'];
+  const home = templates['app/routes/index.tsx'];
   expect(home).toContain('openElement');
   expect(home).toContain('Rendered before JavaScript arrives');
   expect(home).toContain('<my-counter></my-counter>');
@@ -428,10 +422,10 @@ test('the showcase template is the one scaffold, Tailwind-ON (#1530 + owner sing
   }
   expect(home.includes('site-head'), 'the page must not carry chrome markup').toBeFalsy();
   expect(home.includes('site-foot'), 'the page must not carry chrome markup').toBeFalsy();
-  expect(templates['app/components/page-about.tsx']).not.toContain('site-head');
-  expect(templates['app/components/page-404.tsx']).not.toContain('site-foot');
+  expect(templates['app/routes/about.tsx']).not.toContain('site-head');
+  expect(templates['app/routes/404.tsx']).not.toContain('site-foot');
   // The About page is fully static: no island hosts, and it says so.
-  const about = templates['app/components/page-about.tsx'];
+  const about = templates['app/routes/about.tsx'];
   expect(about.includes('<my-counter'), 'about page must not host islands').toBeFalsy();
   expect(about.includes('<live-timer'), 'about page must not host islands').toBeFalsy();
   expect(about).toContain('no islands on this page');
@@ -440,44 +434,29 @@ test('the showcase template is the one scaffold, Tailwind-ON (#1530 + owner sing
   expect(templates['app/routes/api/ping.ts']).toContain('route: "/api/ping"');
 });
 
-test('starter pages are compiled elements with light roots and shared chrome', () => {
-  for (const path of [
-    'app/components/page-home.tsx',
-    'app/components/page-about.tsx',
-    'app/components/page-404.tsx',
-    'app/layout.tsx',
-    'app/islands/live-timer.tsx',
-  ]) {
+test('starter pages are server function components in their own route modules', () => {
+  // The page lane records `pageComponentName` only for an EXPORTED function
+  // component that the route module declares itself, so this is the shape the
+  // build actually reads — an imported class component silently classifies as a
+  // legacy class page and renders nothing (the defect the saas batch hit).
+  for (const [path, name] of [
+    ['app/routes/index.tsx', 'HomePage'],
+    ['app/routes/about.tsx', 'AboutPage'],
+    ['app/routes/404.tsx', 'NotFoundPage'],
+  ] as const) {
     const source = readTemplate(path);
-    // Compiled modules: @element decorator on an OpenElement subclass, bound
-    // by a canonical named import of the compile-time-only intrinsic from
-    // '@openelement/element' (the compiler strips it from generated output).
-    expect(source.includes('@element("'), path).toBeTruthy();
-    expect(
-      /import \{[^}]*\belement\b[^}]*\bOpenElement\b[^}]*\} from (["'])@openelement\/element\1/.test(
-        source,
-      ),
-      path,
-    ).toBeTruthy();
-    expect(source.includes('declare function element('), path).toBeFalsy();
-    expect(source.includes('@openelement/core'), path).toBeFalsy();
+    expect(source.includes(`export function ${name}()`), path).toBeTruthy();
+    expect(source.includes('definePage('), path).toBeTruthy();
+    expect(source.includes('@element('), path).toBeFalsy();
+    expect(source.includes('import ' + name), path).toBeFalsy();
     // Legacy authoring APIs were removed in v0.44 (ADR-0143).
     expect(source.includes('defineElement'), path).toBeFalsy();
-    expect(source.includes('defineCustomElement'), path).toBeFalsy();
-    expect(source.includes('customElements.define'), path).toBeFalsy();
     expect(source.includes('registerSignal'), path).toBeFalsy();
   }
-  // `my-counter` left this list on 2026-11-20: it is a generated-lane FUNCTION
-  // island, so it carries no `@element` class at all. Its own shape (the
-  // sidecar policy, the `signal` state, the sidecar `styles` carrier) is pinned
-  // by the island test above; here it only has to stay free of the retired
-  // authoring APIs.
-  const counterSource = readTemplate('app/islands/my-counter.tsx');
-  expect(counterSource.includes('@element(')).toBeFalsy();
-  expect(counterSource.includes('extends OpenElement')).toBeFalsy();
-  expect(counterSource.includes('defineElement')).toBeFalsy();
-  expect(counterSource.includes('registerSignal')).toBeFalsy();
-
+  // The one remaining compiled class in the starter is the client-only timer,
+  // whose shadow root is created client-side and needs the host box rule.
+  const timer = readTemplate('app/islands/live-timer.tsx');
+  expect(timer.includes('@element("live-timer"')).toBeTruthy();
   expect(readTemplate('gitignore.tmpl').includes('dist/')).toBeTruthy();
 });
 
@@ -544,19 +523,24 @@ test('the layout owns the site chrome every page renders inside (T2)', () => {
   // class under the layout tag and projects each page into the default
   // slot. The tag name must match the derived convention tag exactly — the
   // generated entry fails closed on a mismatch.
-  expect(shell).toContain('@element("app-layout"');
+  // Generated-element lane (2026-11-20): the shell is a function component plus
+  // its `defineIslandConfig` sidecar, and the entry registers it through the
+  // generated host PAIR channel. The sidecar's tag is the convention constant.
+  expect(shell).toContain('tag: "app-layout"');
+  expect(shell.includes('extends OpenElement')).toBeFalsy();
   // The projection requires a shadow root: slotted page content stays in the
   // page element's light DOM while the chrome renders in the shell's shadow
-  // tree, styled by the shared chrome sheet.
-  expect(shell).toContain('root: "shadow-open"');
+  // tree, styled by the shared chrome sheet through the sidecar's `styles`
+  // channel (the DSD style-link carrier).
+  expect(shell).toContain('root: "shadow"');
   expect(shell).toContain('<slot></slot>');
-  expect(shell.includes('site-chrome.css'), 'the shell arrays the chrome sheet').toBeTruthy();
+  expect(shell.includes('site-chrome.css'), 'the shell carries the chrome sheet').toBeTruthy();
   expect(shell.includes('site-head'), shell).toBeTruthy();
   expect(shell.includes('site-foot'), shell).toBeTruthy();
   // Exactly one header and one footer across the whole scaffold's pages: the
   // chrome markup exists once, in the shell.
-  const pageSources = ['page-home.tsx', 'page-about.tsx', 'page-404.tsx'].map((p) =>
-    readTemplate(`app/components/${p}`),
+  const pageSources = ['app/routes/index.tsx', 'app/routes/about.tsx', 'app/routes/404.tsx'].map(
+    (p) => readTemplate(p),
   );
   for (const source of pageSources) {
     expect(source.includes('<header'), 'pages must not carry the header').toBeFalsy();
@@ -582,7 +566,7 @@ test('the layout owns the site chrome every page renders inside (T2)', () => {
 });
 
 test('starter pages ship exactly one H1 each (duplicate-H1 regression class)', () => {
-  for (const path of ['app/components/page-home.tsx', 'app/components/page-about.tsx']) {
+  for (const path of ['app/routes/index.tsx', 'app/routes/about.tsx']) {
     const page = readTemplate(path);
     expect((page.match(/<h1[\s>]/g) ?? []).length, path).toEqual(1);
   }
@@ -617,11 +601,11 @@ test('starter styling is utility-first: the palette in @theme, markup for the ru
   }
   // The dark palette rides the platform media query (P1), not a runtime.
   expect(tokens.includes('@media (prefers-color-scheme: dark)'), tokens).toBeTruthy();
+  // The three LIGHT-root page boxes live HERE on purpose: the page components are
+  // server functions (no element sheet), and a light root's CSS is a document
+  // resource, so the token sheet is its single owner.
   for (const tag of ['index-page', 'about-page', 'el-404']) {
-    expect(
-      tokens.includes(`${tag}{`) || tokens.includes(`${tag} `),
-      `the tokens file must not scope rules under ${tag}`,
-    ).toBeFalsy();
+    expect(tokens.includes(tag), `the tokens file must carry the ${tag} box rule`).toBeTruthy();
   }
   expect(
     readTemplate('vite.config.ts').includes('headFragments'),
@@ -634,9 +618,6 @@ test('starter styling is utility-first: the palette in @theme, markup for the ru
   // in the markup — a re-introduced presentation rule fails right here.
   const sheets = [
     'app/components/site-chrome.css',
-    'app/components/page-home.css',
-    'app/components/page-about.css',
-    'app/components/page-404.css',
     'app/islands/my-counter.css',
     'app/islands/live-timer.css',
   ];
@@ -649,9 +630,9 @@ test('starter styling is utility-first: the palette in @theme, markup for the ru
   // …and the markup actually carries the presentation, on the palette names.
   const markup = [
     'app/layout.tsx',
-    'app/components/page-home.tsx',
-    'app/components/page-about.tsx',
-    'app/components/page-404.tsx',
+    'app/routes/index.tsx',
+    'app/routes/about.tsx',
+    'app/routes/404.tsx',
     'app/islands/my-counter.tsx',
     'app/islands/live-timer.tsx',
   ]
@@ -668,53 +649,36 @@ test('starter styling is utility-first: the palette in @theme, markup for the ru
   ]) {
     expect(markup.includes(utility), `markup must author ${utility}`).toBeTruthy();
   }
-  // No page module carries CSS strings — the sheets are files.
-  for (const page of ['page-home.tsx', 'page-about.tsx', 'page-404.tsx']) {
-    const source = readTemplate(`app/components/${page}`);
+  // No page module carries CSS strings: a light root's rules are the document
+  // token sheet's, authored as tag selectors (see the row below).
+  for (const page of ['app/routes/index.tsx', 'app/routes/about.tsx', 'app/routes/404.tsx']) {
+    const source = readTemplate(page);
     expect(source.includes('compiledStyle'), page).toBeFalsy();
+    expect(/from ["'][^"']*\.css["']/.test(source), page).toBeFalsy();
   }
 });
 
-test('starter pages import their sheets from .css files', () => {
-  const pages: Array<[string, string]> = [
-    ['app/components/page-home.tsx', 'from "./page-home.css"'],
-    ['app/components/page-about.tsx', 'from "./page-about.css"'],
-    ['app/components/page-404.tsx', 'from "./page-404.css"'],
-  ];
-  for (const [path, specifier] of pages) {
+test('starter pages own no element sheet: the token sheet carries their box rules', () => {
+  // A server function page has no element class, so it cannot array a
+  // `static styles` list. The three light-root box rules moved to the document
+  // token sheet, which is the one owner a light root's CSS can have.
+  for (const path of ['app/routes/index.tsx', 'app/routes/about.tsx', 'app/routes/404.tsx']) {
     const source = readTemplate(path);
-    expect(
-      source.includes('static override styles = ['),
-      `${path} must array its sheets in static override styles`,
-    ).toBeTruthy();
-    expect(
-      source.includes(specifier),
-      `${path} must import its sheet from the .css file`,
-    ).toBeTruthy();
-    // The chrome sheet moved to the layout with the chrome markup (T2):
-    // a page arrays only the sheets its own content consumes.
-    expect(
-      source.includes('site-chrome.css'),
-      `${path} must not array the chrome sheet — the layout owns it`,
-    ).toBeFalsy();
+    expect(source.includes('static override styles'), path).toBeFalsy();
+    expect(source.includes('.css"'), path).toBeFalsy();
   }
-  // The shell arrays the shared chrome sheet: the header/footer/main rules
-  // style the shell's own shadow tree.
-  const shell = readTemplate('app/layout.tsx');
-  expect(
-    shell.includes('from "./components/site-chrome.css"'),
-    'the shell imports the chrome sheet',
-  ).toBeTruthy();
-  expect(
-    shell.includes('static override styles = [siteChromeStyles]'),
-    'the shell arrays the chrome sheet',
-  ).toBeTruthy();
+  const tokens = readTemplate('app/styles/theme.css');
+  expect(tokens).toContain('index-page,');
+  expect(tokens).toContain('about-page,');
+  expect(tokens).toContain('el-404 {');
 });
 
 test('the About route is a static page route; the landing route stays static', () => {
   const about = readTemplate('app/routes/about.tsx');
   expect(about.includes('definePage'), about).toBeTruthy();
-  expect(about.includes('page-about.tsx'), about).toBeTruthy();
+  // The component is declared IN the route module (the page lane records
+  // `pageComponentName` only for an exported function the module declares).
+  expect(about.includes('export function AboutPage'), about).toBeTruthy();
   // No renderIntent override in the descriptor: the default static mode is
   // the point of the page (fully prerendered SSG output).
   expect(about.includes('renderIntent:'), about).toBeFalsy();
@@ -762,8 +726,9 @@ test('TypeScript starter sources are pack-safe template payloads', () => {
     'app/layout.tsx',
     'app/islands/my-counter.tsx',
     'app/islands/live-timer.tsx',
-    'app/components/page-home.tsx',
-    'app/components/page-about.tsx',
+    'app/routes/index.tsx',
+    'app/routes/about.tsx',
+    'app/routes/404.tsx',
     'app/routes/api/ping.ts',
   ]) {
     const logicalPath = join(packageDir, 'templates', path);
@@ -2004,9 +1969,13 @@ test.skipIf(!pnpmAvailable)(
         existsSync(join(tmpRoot, 'sample-app', 'app', 'routes', 'api', 'ping.ts')),
       ).toBeTruthy();
       expect(existsSync(join(tmpRoot, 'sample-app', 'README.md'))).toBeTruthy();
+      // The page components live in their route modules (server function pages),
+      // so the packed payload's page surface is the route tree.
+      expect(existsSync(join(tmpRoot, 'sample-app', 'app', 'routes', 'index.tsx'))).toBeTruthy();
+      expect(existsSync(join(tmpRoot, 'sample-app', 'app', 'routes', '404.tsx'))).toBeTruthy();
       expect(
         existsSync(join(tmpRoot, 'sample-app', 'app', 'components', 'page-home.tsx')),
-      ).toBeTruthy();
+      ).toBeFalsy();
       // The manager-neutral scaffold survives the pack too: the layout ships,
       // and no pnpm-only workspace file does. (The scaffold is generated with
       // --no-install above, so this reads the shipped template surface; an
