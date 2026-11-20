@@ -192,10 +192,15 @@ export function renderEntry(desc: EntryDescriptor): string {
   // module namespace and registers the default-exported compiled class under
   // the configured layout tag. renderToString fails closed on a tag mismatch.
   // Deduped by importPath — one module maps to one compiled class and tag.
-  const layoutModules = new Map<string, string>();
+  const layoutModules = new Map<string, { tagName: string; hostExport?: string }>();
   const collectLayoutModule = (shell: typeof desc.layout.default) => {
     if (shell && !layoutModules.has(shell.importPath)) {
-      layoutModules.set(shell.importPath, shell.tagName);
+      layoutModules.set(shell.importPath, {
+        tagName: shell.tagName,
+        ...(shell.generatedHostExport === undefined
+          ? {}
+          : { hostExport: shell.generatedHostExport }),
+      });
     }
   };
   collectLayoutModule(desc.layout.default);
@@ -229,9 +234,10 @@ export function renderEntry(desc: EntryDescriptor): string {
   lines.push('');
 
   // Element owns document and compiled-render semantics; this entry wires them.
-  const layoutModuleList = [...layoutModules].map(([importPath, tagName], index) => ({
+  const layoutModuleList = [...layoutModules].map(([importPath, facts], index) => ({
     importPath,
-    tagName,
+    tagName: facts.tagName,
+    hostExport: facts.hostExport,
     varName: `__layout_${index}`,
   }));
   for (const layoutModule of layoutModuleList) {
@@ -240,6 +246,16 @@ export function renderEntry(desc: EntryDescriptor): string {
         layoutModule.importPath,
       )};`,
     );
+    if (layoutModule.hostExport !== undefined) {
+      // A GENERATED layout: its render artifact is the compiler-emitted host
+      // producer, so the entry must pair it like an island. A lost export is a
+      // bundler BUILD error, never a silent runtime miss.
+      lines.push(
+        `import { ${layoutModule.hostExport} as __layouthost_${layoutModule.tagName.replace(/-/g, '_')} } from ${quoteGeneratedJavaScriptValue(
+          layoutModule.importPath,
+        )};`,
+      );
+    }
   }
   const staticComponentModules = desc.staticComponents.map((component, index) => ({
     ...component,
@@ -456,10 +472,16 @@ export function renderEntry(desc: EntryDescriptor): string {
       );
     }
     for (const layoutModule of layoutModuleList) {
+      // A generated layout registers through the SAME pair channel an island
+      // uses: `__registerSsrComponent` alone would register a class with no
+      // Part Program, and every render of it would fail PROGRAM_MISSING. The
+      // class path stays byte-identical for a class layout.
+      const register =
+        layoutModule.hostExport === undefined
+          ? `__registerSsrComponent(${quoteGeneratedJavaScriptValue(layoutModule.tagName)}, ${layoutModule.varName}.default)`
+          : `__registerSsrIsland(${quoteGeneratedJavaScriptValue(layoutModule.tagName)}, ${layoutModule.varName}.default, __layouthost_${layoutModule.tagName.replace(/-/g, '_')})`;
       lines.push(
-        `try { __registerSsrComponent(${quoteGeneratedJavaScriptValue(
-          layoutModule.tagName,
-        )}, ${layoutModule.varName}.default); } catch (err) { console.error('[ssg] Failed to register layout custom element ${quoteGeneratedJavaScriptValue(
+        `try { ${register}; } catch (err) { console.error('[ssg] Failed to register layout custom element ${quoteGeneratedJavaScriptValue(
           layoutModule.tagName,
         )}:', err); throw err; }`,
       );

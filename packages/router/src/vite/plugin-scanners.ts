@@ -85,6 +85,8 @@ function buildDescriptor(
     upgradeStrategy: state.resolvedOptions.island?.upgradeStrategy || 'idle',
     layout: state.resolvedOptions.layout,
     layouts: state.resolvedOptions.layouts,
+    declaredElementTags: state.ctx.phase1.declaredElementTags,
+    declaredElementHostExports: state.ctx.phase1.declaredElementHostExports,
     // #1411: the default-CORS production advisory belongs to a production
     // build. Repeating it on every dev first run trained users to ignore it,
     // so the dev server (command 'serve') generates the same entry without
@@ -379,6 +381,7 @@ async function scanDeclaredTagsInto(
     // empty, which is the pre-slice behavior: the resolver falls through to
     // the path convention exactly as before.
     state.ctx.phase1.declaredElementTags = new Map();
+    state.ctx.phase1.declaredElementHostExports = new Map();
     return;
   }
   const scanned = await scanDeclaredElementTags({
@@ -399,6 +402,7 @@ async function scanDeclaredTagsInto(
     log.warn(formatDiagnosticLine(envelope));
   }
   state.ctx.phase1.declaredElementTags = scanned.tags;
+  state.ctx.phase1.declaredElementHostExports = scanned.hostExports;
   if (scanned.tags.size > 0) {
     log.info(`Declared element tags: ${[...scanned.tags.values()].sort().join(', ')}`);
   }

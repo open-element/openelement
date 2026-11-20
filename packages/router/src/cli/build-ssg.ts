@@ -345,6 +345,8 @@ export function buildSsgEntryDescriptor(
     upgradeStrategy: inputs.upgradeStrategy,
     layout: inputs.layout,
     layouts: inputs.layouts,
+    declaredElementTags: ctx.phase1.declaredElementTags,
+    declaredElementHostExports: ctx.phase1.declaredElementHostExports,
     renderer: inputs.renderer,
     i18n: inputs.i18n,
     routeDocumentStyleLinks: inputs.routeDocumentStyleLinks,

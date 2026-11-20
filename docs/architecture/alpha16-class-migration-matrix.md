@@ -358,7 +358,7 @@ production batch and the second half of the §14 clean batch.
 | `apps/saas/app/components/page-signup.tsx` | 1/0/3/0/0/1/no | — | Function page component; route logic unchanged (`definePage(Page, { head, props, renderIntent })`) | ready |
 | `apps/saas/app/components/page-upload.tsx` | 1/0/4/0/0/1/no | — | Function page component; route logic unchanged (`definePage(Page, { head, props, renderIntent })`) | ready |
 | `apps/saas/app/components/page-workspace-records.tsx` | 1/0/7/0/0/1/no | — | Function page component; route logic unchanged (`definePage(Page, { head, props, renderIntent })`) | ready |
-| `apps/saas/app/layout.tsx` | 1/0/0/0/0/1/no | D-M1 | Function layout shell under `CONVENTION_LAYOUT_TAG` | ready |
+| `apps/saas/app/layout.tsx` | 1/0/0/0/0/1/no | **MIGRATED 2026-11-20** (layout-pair slice) — sidecar `tag: 'app-layout'`, `root: 'shadow'`; the entry now registers a generated layout through the host PAIR channel | Function layout shell under `CONVENTION_LAYOUT_TAG` | `migrated` — evidence: `@openelement/saas` build exit 0, built `/` carries `<app-layout><template shadowrootmode="open">…<slot></slot>…</template>` plus the page projected after it; saas 20 files / 150 tests |
 
 **Correction to a stale record.** `alpha16-remaining-consumers.md`
 (measured 2026-11-18 at `@87d83d095`) states under `## saas`: "No class islands
@@ -1313,3 +1313,43 @@ rewriting it) with the P5 retirement condition.
 
 Verification: compiler 100 files / 1400 tests; element 133 / 1044; interface
 snapshot matches (6 packages); `vp run check` 5/5 PASS.
+
+**2026-11-20 — a generated LAYOUT can be registered: the layout-pair slice.**
+
+Porting `apps/saas/app/layout.tsx` surfaced a gap that is not about nesting at
+all: a convention layout had NO way to be a generated element. Layouts are
+registered class-only (`__registerSsrComponent`), and a generated element carries
+no Part Program, so every render of the layout failed `PROGRAM_MISSING` — i.e.
+every page of the site. The measured failure was
+`<app-layout> (GeneratedElementShell) has no compiled Part Program`.
+
+The slice (four seams, one fact):
+
+1. **the declared-tag scan carries the compiler's host export.**
+   `scanDeclaredElementTags` already reads every candidate module's source and
+   its sidecar tag; it now also resolves `resolveGeneratedElementHost` on that
+   same source and returns `hostExports` (moduleId → `<Name>__ssrHost`). The name
+   is the compiler's return value, never a convention (ADR-0182 forbids
+   re-deriving it). A LIGHT root emits no host producer and so has no entry —
+   absence is the law, not an error.
+2. **the build context carries the map** (`declaredElementHostExports`), next to
+   the tag map it belongs with.
+3. **the descriptor attaches it to the layout plan** — `buildLayoutPlan` matches
+   by the module's DECLARED TAG (never a path guess) and sets
+   `LayoutDecl.generatedHostExport`. One optional protocol field; the regenerated
+   public-interface snapshot's only delta is that field plus two derived hashes.
+4. **the entry registers the PAIR** — a generated layout gets a static named
+   import of its host export and `__registerSsrIsland(tag, default, hostExport)`;
+   a class layout keeps `__registerSsrComponent` byte-identically.
+
+One more fact the slice had to settle: a generated SHADOW-root layout distributes
+the page through the PLATFORM (`<slot>` inside the DSD template plus light DOM
+after it), while the class lane substituted the page INTO the template's slot. So
+the layout runtime passes host children (branded) for a generated layout and the
+projections map for a class/light one. Getting that wrong drops the page
+silently: the first attempt rendered an empty `<app-layout>`.
+
+Evidence: saas build exit 0 with the layout DSD AND the page projected;
+`entry-descriptor-layout-generated-host.test.ts` (four rows: carrier, pair
+registration, class byte-identity, light-root absence); router 167 files / 1880
+tests; saas 20 / 150; `vp run check` 5/5.

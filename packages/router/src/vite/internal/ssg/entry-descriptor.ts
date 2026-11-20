@@ -74,6 +74,14 @@ function normalizeLayout(config: LayoutConfig | undefined): ResolvedLayout {
 function buildLayoutPlan(options: {
   layout?: FrameworkOptions['layout'];
   layouts?: FrameworkOptions['layouts'];
+  /**
+   * The declared-tag scan's compiler fact, keyed by stable module id. A
+   * convention layout that is a GENERATED element is identified by its module's
+   * declared tag; this is where its `ssrHostExport` comes from, so the entry can
+   * register the generated host PAIR instead of a bare class.
+   */
+  declaredTags?: ReadonlyMap<string, string>;
+  declaredHostExports?: ReadonlyMap<string, string>;
 }): LayoutPlan {
   const defaultLayout = normalizeLayout(options.layouts?.default ?? options.layout);
   const layouts: Record<string, ResolvedLayout> = {};
@@ -81,7 +89,23 @@ function buildLayoutPlan(options: {
     if (name === 'default' || config === undefined) continue;
     layouts[name] = normalizeLayout(config);
   }
-  return { default: defaultLayout, layouts };
+  // Attach the compiler fact to every layout that is a generated element. The
+  // lookup is by DECLARED TAG (the module's own sidecar identity), never by a
+  // path guess: a layout whose module declares no tag keeps the class path.
+  const byTag = new Map<string, string>();
+  for (const [moduleId, tag] of options.declaredTags ?? []) {
+    const hostExport = options.declaredHostExports?.get(moduleId);
+    if (hostExport !== undefined) byTag.set(tag, hostExport);
+  }
+  const withHost = (layout: ResolvedLayout): ResolvedLayout => {
+    if (layout === false) return layout;
+    const generatedHostExport = byTag.get(layout.tagName);
+    return generatedHostExport === undefined ? layout : { ...layout, generatedHostExport };
+  };
+  const defaultResolved = withHost(defaultLayout);
+  const resolvedLayouts: Record<string, ResolvedLayout> = {};
+  for (const [name, layout] of Object.entries(layouts)) resolvedLayouts[name] = withHost(layout);
+  return { default: defaultResolved, layouts: resolvedLayouts };
 }
 
 export function buildEntryDescriptor(
@@ -120,6 +144,14 @@ export function buildEntryDescriptor(
     upgradeStrategy?: HydrationStrategy;
     layout?: FrameworkOptions['layout'];
     layouts?: FrameworkOptions['layouts'];
+    /**
+     * The declared-tag scan's compiler facts (alpha16 layout-pair slice): the
+     * module -> tag map and the module -> compiler-emitted host export map. A
+     * convention layout that is a generated element needs them to be registered
+     * through the host PAIR channel; absent maps keep every class layout's bytes.
+     */
+    declaredElementTags?: ReadonlyMap<string, string>;
+    declaredElementHostExports?: ReadonlyMap<string, string>;
     /**
      * #1411: emit the default-CORS production advisory into the generated
      * entry. The dev server passes false so a first dev run is warning-free;
@@ -686,6 +718,8 @@ export function buildEntryDescriptor(
   const layout = buildLayoutPlan({
     layout: options.layout,
     layouts: options.layouts,
+    declaredTags: options.declaredElementTags,
+    declaredHostExports: options.declaredElementHostExports,
   });
   // Streaming boundary, project-level by construction: the generated streamed
   // document is flushed in parts and never passes through __renderLayout

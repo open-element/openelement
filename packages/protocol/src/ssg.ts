@@ -267,6 +267,17 @@ export interface LayoutDecl {
   tagName: string;
   importPath: string;
   props: Record<string, unknown>;
+  /**
+   * The compiler-emitted SSR host producer export (`<Name>__ssrHost`) when the
+   * layout module is a GENERATED element, or absent when it is a class.
+   *
+   * A generated layout cannot be registered class-only: a generated element
+   * carries no Part Program, so `renderToString` fails with PROGRAM_MISSING on
+   * every render. The entry therefore registers the generated host PAIR — the
+   * same channel an island uses. The name is the compiler's return value, never
+   * a `${X}__ssrHost` convention (ADR-0182 forbids re-deriving it).
+   */
+  generatedHostExport?: string;
 }
 
 /** The resolved layout for one plan slot: disabled (false) or a full declaration. */

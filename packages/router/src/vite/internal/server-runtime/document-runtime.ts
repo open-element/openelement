@@ -159,6 +159,13 @@ export function createLayoutRuntime(deps: LayoutRuntimeDeps): LayoutRuntime {
       routeMeta,
       ...(layout.props || {}),
     };
+    // A GENERATED shadow-root layout distributes the page through the PLATFORM
+    // (`<slot>` inside its DSD template plus light DOM after it), so the page is
+    // passed as host children. A class layout (and any light-root layout)
+    // consumes the projections map instead, exactly as before — the two
+    // channels are the two lanes' own distribution mechanisms, not a choice
+    // this runtime invents.
+    const generated = layout.generatedHostExport !== undefined;
     return ssr(
       layout.tagName,
       layoutProps,
@@ -166,7 +173,10 @@ export function createLayoutRuntime(deps: LayoutRuntimeDeps): LayoutRuntime {
       // page render reports into (S-C1.2): one document, one declaration owner.
       { route: routePath, documentStyles: options.documentStyles },
       0,
-      new Map([['', trustedHtml(content)]]),
+      generated ? undefined : new Map([['', trustedHtml(content)]]),
+      // The shadow-side channel is an EXPLICIT trust boundary, exactly like the
+      // projections map above: only compiler-produced markup crosses it.
+      generated ? trustedHtml(content) : undefined,
     );
   }
 

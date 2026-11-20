@@ -43,6 +43,7 @@ import {
   type ModuleWalkResolver,
 } from '../module-graph-walk.ts';
 import { readIslandConfig } from './island-scanner.ts';
+import { resolveGeneratedElementHost } from './generated-element-host-metadata.ts';
 
 /** Stable code for a note this pass owns (a malformed sidecar it skipped). */
 export const DeclaredElementTagScanCode = {
@@ -74,6 +75,17 @@ export interface ScanDeclaredElementTagsInput {
 export interface ScanDeclaredElementTagsResult {
   /** The declared tags, keyed by the same stable id the transform derives. */
   readonly tags: ReadonlyMap<string, string>;
+  /**
+   * The compiler-emitted SSR host producer export name, for the declared
+   * modules the generated lane actually emits one for (`<Name>__ssrHost`), keyed
+   * by the same stable module id.
+   *
+   * A module that declares a tag but emits no host producer (a LIGHT root: no
+   * DSD wrapper by design) has no entry here — absence is the law, not an
+   * error. The name is the compiler's return value, never a `${X}__ssrHost`
+   * convention: re-deriving it is the drift ADR-0182 forbids.
+   */
+  readonly hostExports: ReadonlyMap<string, string>;
   /**
    * What the walk or the sidecar read could not do, in walk order. Every entry
    * is reported through the build-diagnostics envelope by the caller.
@@ -114,6 +126,7 @@ export async function scanDeclaredElementTags(
   }
   notes.push(...walk.diagnostics);
   const tags = new Map<string, string>();
+  const hostExports = new Map<string, string>();
   for (const file of walk.files) {
     // The generated lane is a TSX lane (`compileGeneratedElementIfAdmitted`
     // refuses a non-TSX id), and a package module's identity is its manifest.
@@ -158,7 +171,20 @@ export async function scanDeclaredElementTags(
       continue;
     }
     if (declared === undefined) continue;
-    tags.set(stableModuleId(file, root, input.workspaceRoot), declared);
+    const moduleId = stableModuleId(file, root, input.workspaceRoot);
+    tags.set(moduleId, declared);
+    // The generated-host identity is resolved from the SAME source this loop
+    // already read, through the SAME compiler entry the island scan uses. A
+    // refusal or a lane decline is not this pass's diagnostic to report (the
+    // transform owns the authored refusal); it simply contributes no host.
+    const identity = resolveGeneratedElementHost({
+      source,
+      moduleId,
+      filePath: file,
+      root: readIslandConfig(source)?.root ?? undefined,
+      site: { tag: declared },
+    });
+    if (identity.kind === 'producer') hostExports.set(moduleId, identity.ssrHostExport);
   }
-  return { tags, notes };
+  return { tags, hostExports, notes };
 }

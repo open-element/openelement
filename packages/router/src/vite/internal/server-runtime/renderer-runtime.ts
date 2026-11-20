@@ -62,6 +62,15 @@ export type PageSsrRenderer = (
   sourceInfo?: PageSsrSourceInfo,
   depth?: number,
   projectedChildren?: ProjectedChildren,
+  /**
+   * The SHADOW-side sibling of `projectedChildren`: light children appended
+   * after a DSD template. A generated SHADOW-root host distributes its children
+   * through the platform (`<slot>` in the template plus light DOM after it), so
+   * a page projected into a generated shadow LAYOUT rides this channel — the
+   * class lane used in-template slot substitution, which a generated template
+   * does not perform.
+   */
+  hostChildren?: TrustedHtmlValue,
 ) => string;
 
 /** The subset of the Element serializer the native renderer needs. */
@@ -76,6 +85,7 @@ export interface NativePageRendererDeps {
       ssrRenderableTags?: readonly string[];
       projectedChildren?: ProjectedChildren;
       documentStyles?: DocumentStyleSink;
+      hostChildren?: TrustedHtmlValue;
     },
   ) => string;
   /** The SSR registry (the runtime's `customElements` global). */
@@ -93,7 +103,14 @@ export interface NativePageRendererDeps {
  */
 export function createNativePageRenderer(deps: NativePageRendererDeps): PageSsrRenderer {
   const { renderToString, customElements, ssrRenderableTags } = deps;
-  return (tag, props = {}, sourceInfo = {}, __depth = 0, projectedChildren): string => {
+  return (
+    tag,
+    props = {},
+    sourceInfo = {},
+    __depth = 0,
+    projectedChildren,
+    hostChildren,
+  ): string => {
     // Validate tag name - must be a valid Custom Element (contains hyphen)
     if (!tag || !tag.includes('-')) {
       throw serveError(
@@ -129,6 +146,7 @@ export function createNativePageRenderer(deps: NativePageRendererDeps): PageSsrR
       documentStyles,
       ssrRenderableTags,
       projectedChildren,
+      ...(hostChildren === undefined ? {} : { hostChildren }),
     });
   };
 }
