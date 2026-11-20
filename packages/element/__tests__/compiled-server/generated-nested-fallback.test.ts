@@ -158,3 +158,77 @@ describe('16b-EB — a failing descendant producer renders the boundary fallback
     expect((caught as Error).message).toBe('descendant producer exploded');
   });
 });
+
+describe('16b-EB — claim parity is structural: the fallback bytes are the no-expansion bytes', () => {
+  test('the same producer emits byte-identical markup with and without a failing expander', () => {
+    // §19.2 condition 3 asks for CLAIM PARITY over the fallback bytes. The claim
+    // path is byte-driven — it parses the serialized host and adopts what it
+    // finds — so parity holds exactly when the fallback bytes are
+    // INDISTINGUISHABLE from the bytes of a render that never expanded the host.
+    // This row measures that equality rather than asserting it in prose: the same
+    // producer, once with an expander that throws for the tag and once with no
+    // expander at all, must agree byte for byte.
+    const withFailingExpander = renderPage({ [FAILING]: 'boom' });
+    const withNoExpander = renderPage({});
+    // The healthy sibling always expands; the FAILING tag's bytes are what must
+    // agree, so compare with the reported failure already stripped out of the
+    // render's own accounting (the only observable difference is the report).
+    expect(withFailingExpander.html).toEqual(withNoExpander.html);
+    // And the failure still did not vanish into that equality: it was reported.
+    expect(withFailingExpander.reported).toHaveLength(1);
+    // The healthy sibling expanded in BOTH renders (it is admitted either way).
+    expect(withFailingExpander.html).toContain(`<${HEALTHY}><template shadowrootmode="open">`);
+  });
+});
+
+/** Render the page with a per-tag expander map: `{ [tag]: 'boom' }` throws. */
+function renderPage(throwing: Readonly<Record<string, string>>): {
+  html: string;
+  reported: unknown[];
+} {
+  const reported: unknown[] = [];
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'customElements');
+  const registry: Record<string, unknown> = {
+    get: (tag: string) =>
+      tag === PAGE
+        ? Object.assign(class {}, {
+            __ssr: (_props?: unknown, _attributes?: unknown, nestedExpander?: unknown) =>
+              `<${PAGE} data-oe-light>` +
+              nestedMarkup(nestedExpander, FAILING, FAILING_LITERAL) +
+              nestedMarkup(nestedExpander, HEALTHY, HEALTHY_LITERAL) +
+              `</${PAGE}>`,
+          })
+        : undefined,
+  };
+  // The failing tag's renderer: it throws when the row asks it to, and is NOT
+  // REGISTERED AT ALL otherwise — the "no expander" render must reach the tag
+  // through the no-renderer path, not through a renderer that succeeds (a
+  // succeeding renderer would expand it and the comparison would be meaningless,
+  // which is what the first draft of this row measured).
+  const failing: HostRenderer = () => {
+    throw new Error('boom');
+  };
+  const healthy: HostRenderer = () =>
+    `<${HEALTHY}><template shadowrootmode="open"><b>ok</b></template></${HEALTHY}>`;
+  registry[SSR_REGISTRY_GENERATED_HOSTS] = new Map<string, HostRenderer>(
+    throwing[FAILING] === undefined
+      ? [[HEALTHY, healthy]]
+      : [
+          [FAILING, failing],
+          [HEALTHY, healthy],
+        ],
+  );
+  Object.defineProperty(globalThis, 'customElements', { configurable: true, value: registry });
+  __setRequestTimeStyleSheetUrls([], null);
+  let html = '';
+  try {
+    html = renderToString(PAGE, {
+      ssrRenderableTags: [FAILING, HEALTHY],
+      onNestedFailure: (error) => reported.push(error),
+    });
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'customElements', original);
+    else delete (globalThis as Record<string, unknown>).customElements;
+  }
+  return { html, reported };
+}

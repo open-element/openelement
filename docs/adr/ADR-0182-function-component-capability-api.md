@@ -1348,10 +1348,36 @@ third argument — could observe the fallback. That is precisely why condition 1
 own rows were not sufficient: they call the helper directly, so they cannot see
 whether the RENDER wires it.
 
-### Conditions 3–4
+### Condition 3 — DELIVERED: the one-SHA consumer-form bundle
 
-- **3** — the one-SHA consumer-form bundle is assembled from condition 2's row plus
-  the two unchanged Alpha16 capture points;
+Four rows, all in `generated-nested-fallback.test.ts` +
+`error-boundary-capture.test.ts` at one commit:
+
+| row | what it proves |
+| --- | --- |
+| fallback bytes for a failing producer | the failing descendant contributes the caller's literal bytes and the render still returns markup |
+| **claim parity over them** | the fallback bytes are **byte-identical** to the bytes of a render that never expanded the host — so the claim path, which is byte-driven, adopts them under the unchanged claim and identity rules without a special case |
+| the no-silent-swallow row | with NO report channel the original error propagates |
+| the two Alpha16 capture points unchanged | `error-boundary-capture.test.ts` 10 rows, unmodified by this slice |
+
+**How the parity row is measured, and why it is the strong form.** It renders the
+SAME producer twice — once with an expander that throws for the tag, once with the
+tag not registered at all — and asserts the two HTML strings are `toEqual`. That
+makes claim parity STRUCTURAL rather than a second assertion about the claim code:
+if the fallback bytes are indistinguishable from no-expansion bytes, the claim
+cannot tell them apart, and there is nothing extra to prove.
+
+That row also paid for itself immediately: its first draft registered a
+SUCCEEDING debug renderer for the "no expander" side, so the comparison was
+meaningless. The row failed, the diff named the cause, and the helper now omits the
+registration entirely — which is what "no expander" actually means.
+
+### Condition 4 — performed alongside
+
+The `16b-MN` record, the capability inventory and this ADR each carry the same
+truth: capture points delivered; SSR fallback conditions 1, 2 and 3 delivered;
+`16b-EB` still not MIGRATED because the client claim adoption of the fallback
+bytes under a new IDENTITY is explicitly NOT part of this delivery.
 - **3** — the one-SHA consumer-form evidence bundle (fallback bytes for a failing
   producer, claim parity over them, the no-silent-swallow row, and the two Alpha16
   capture points unchanged);
