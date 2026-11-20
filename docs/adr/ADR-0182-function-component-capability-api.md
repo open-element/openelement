@@ -223,8 +223,8 @@ RETIRE onError / onPropertyChange / the env.states channel WHEN interface:snapsh
 RETIRE the ./lifecycle public subpath WHEN interface:snapshot no longer lists it AND
   every shipped intrinsic is reachable from the root subpaths alone ;
   VERIFY gate:source GREEN AT one SHA ; RECORD 16b-MN + snapshot ; OWNER single owner
-RETIRE the ./internal/compiled/leaf-runtime internal subpath WHEN the Alpha17
-  precompiled distribution replaces the closed leaf entry AND no emitted module
+RETIRE the ./internal/compiled/leaf-runtime internal subpath WHEN the precompiled
+  distribution (the former Alpha17 scope, now the Alpha16 closeout's) replaces the closed leaf entry AND no emitted module
   imports it ; VERIFY gate:source GREEN AT one SHA ; RECORD 16b-MN row ;
   OWNER single owner
 RETIRE the workspace-package island site admission WHEN the P1 browser-entry-graph
