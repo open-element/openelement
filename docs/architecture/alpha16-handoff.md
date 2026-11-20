@@ -11,7 +11,7 @@ summary: Self-contained handoff for a fresh session taking over the OpenElement 
 > handoff, and the starter's `live-timer` is migrated and proven in a real
 > browser. Two measured negatives are recorded, not claimed: the packed
 > starter's pre-hydration replay rows are RED (the class facade is the only
-> replay caller; Alpha17 owns the neutral leaf), and the starter layout had to
+> replay caller; it is closeout remainder), and the starter layout had to
 > become a LIGHT root because a shadow app-local tag has no `styleLinks` /
 > utility-sheet carrier. The final-state document is
 > [`alpha16-closeout-report.md`](./alpha16-closeout-report.md); this handoff is
@@ -232,7 +232,7 @@ row can be rewritten to test the rule, and the fixture can migrate.
 
 | document | what it owns |
 | --- | --- |
-| `alpha16-closeout-report.md` | the deliverable: delivered / not delivered / Alpha17 boundary |
+| `alpha16-closeout-report.md` | the deliverable: delivered / not delivered / the closeout remainder (no separate Alpha17 milestone) |
 | `alpha16-class-migration-matrix.md` | the per-file record and this session's measured negatives |
 | `alpha16-capability-inventory.md` | the authoritative capability rows |
 | `16b-migration-note.md` | the 16b slice records |

@@ -1255,3 +1255,16 @@ components: that would be a new capability, with its own record, not a migration
 step.
 
 This section records the decisions above under that form and nothing more.
+
+### 19.10 Owner direction 2026-11-21: the Alpha17 milestone number is retired; its scope is Alpha16's closeout
+
+Verbatim intent from the owner: "不保留阿尔法17的编号，阿尔法17全部整合到阿尔法16里面，作为阿尔法16的收口" — do not keep an Alpha17 milestone number; fold its whole scope into the Alpha16 closeout.
+
+What this section changes:
+
+- **§19.6 is superseded in its boundary wording.** The work it named (Full TSX productization, precompiled distribution, repository organisation, byte convergence, the frozen cross-module ABI) is not moved into a new milestone: it is the Alpha16 closeout's ongoing work list. Where an earlier section says "Alpha17 owns …", read "the Alpha16 closeout owns …".
+- **§5's Alpha16/Alpha17 packed-consumer split and §13.4's boundary keep their TECHNICAL content and lose their milestone label.** The rule they carry — a §13.2 obligation is never parked in a later batch as its first implementation — survives unchanged and is now simply the closeout's rule.
+- **No obligation is deferred BY this section.** Everything the former boundary listed is either delivered (the `ssr: false` style slice at `b12d0403`, `16b-LC` depth ≥ 2 on 2026-11-21) or enumerated as closeout remainder in the closeout report §7.
+- **The dated records stay as written (amend-never-rewrite).** `16b-MN`, the progress ledger, `README.md` and the shim rows that name "Alpha17" are historical wording; the capability inventory, this plan and the closeout report are the current view.
+
+This section creates no milestone exit, no release qualification, no public-API freeze and no P5 evidence. It records a scope decision.

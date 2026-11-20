@@ -71,11 +71,11 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 | 21 | 生成宿主注册对（M11 垂直切片，ADR-0181） | `packages/router/src/vite/internal/server-runtime/security.ts`（`registerIsland`）+ `packages/protocol/src/registry-markers.ts`（`SSR_REGISTRY_GENERATED_HOSTS`） | 条件到即删（P1 在 tracked 依赖图工件上对全部适用应用判 MET 后随 M11-3 入口切换删除） |
 | 22 | 私有实例保留账本（ADR-0181） | `packages/element/src/internal/compiled/runtime/instance-ledger.ts`（经 `runtime.ts` 对发射代码 re-export） | 条件到即删（Alpha17 预编译分发取代发射式保留计划、且无发射模块再 import 该账本） |
 | 23 | browser-entry-graph 观测工件与检查器（temporary-by-intent） | `packages/router/src/vite/internal/browser-entry-graph.ts`、`browser-entry-graph-artifact.ts`、`tools/repo/check-browser-entry-graph.ts` | 条件到即删（P1 判 MET 且该证据并入 release 门禁后移除一次性检查器；工件本身不进入发布面） |
-| 24 | `OE_ISLAND_STYLE_SHADOW_UNWIRED` 拒绝（ADR-0181） | `packages/router/src/vite/internal/ssg/island-scanner.ts` | 条件到即删（GH #1800 落地 shadow 样式 link 载体、且三引擎通过后移除该拒绝） |
+| 24 | `OE_ISLAND_STYLE_SHADOW_UNWIRED` 拒绝（ADR-0181） | `packages/router/src/vite/internal/ssg/island-scanner.ts` | 条件到即删（2026-11-20 已按书面条件退役一次：shadow 载体落地后范围收窄为 server-rendered 且无 producer 的诚实情形；client-only 半边随后也放开。剩余情形的删除条件：server-rendered 生成岛全部获得 producer） |
 | 25 | legacy allocation-only 绑定工厂（descriptor `createBindings`，M09-0 shell 测试遗留） | `packages/element/src/internal/compiled/generated-element/shell.ts`（descriptor `createBindings` 字段及其 allocation-only 契约注释，条目引用 `:448-470`） | 条件到即删（M09 shell 测试全部迁移到 `createInstance` 后删除） |
 | 26 | rolldown-vite `buildStart` 诊断面 workaround（#1616 报告先行契约） | `packages/router/src/vite/internal/build-diagnostics.ts`（"The interim contract, until the bundler is fixed"，条目引用 `:91`） | 条件到即删（rolldown-vite 修复对应缺陷后删除） |
 | 27 | #1558 前已发布产物的 permissive 样式边兼容读 | `packages/compiler/src/internal/compiler/compiled-artifact-style-requests.ts`（PERMISSIVE 读，条目引用 `:23-25`） | 条件到即删（#1558 前发布的产物退出受支持窗口后收紧为严格准入） |
-| 28 | `registerOpenUi` published-API 空操作垫片（`@openelement/ui`） | `packages/ui/src/register.ts` | 条件到即删（`@openelement/ui` 不再发布该 export / 全部消费方改用 generated entry，或下一个 breaking alpha 时删除） |
+| 28 | `registerOpenUi` published-API 空操作垫片（`@openelement/ui`） | ~~`packages/ui/src/register.ts`~~ | **已删（1.0.0-alpha.16；该 shim 写的 breaking-alpha 条件已满足）** |
 
 没有"现在删"项：扫描发现的文本级残余（脚本头部陈旧的 `deno run` 用法
 散文）已在 alpha8/alpha10 清理；其余命中要么已含书面退役条件，要么是
@@ -454,6 +454,11 @@ native 选择缝是主产物，不再作为垫片登记。）
 
 ### 24. `OE_ISLAND_STYLE_SHADOW_UNWIRED` 拒绝——**已退役**（2026-11-20）
 
+- 所有者：`packages/router/src/vite/internal/ssg/island-scanner.ts`
+  （`admitIslandStyles` 的 `missing-producer` 分支）。
+- 退役条件：GH #1800 落地 shadow 样式 link 载体、且 shadow-root 生成岛带
+  `styles` 能构建并渲染后移除该拒绝。**条件已满足**（载体 M09-2e 落地，随后
+  client-only 半边也落地）。
 - **退役动作**：`docs/architecture/alpha16-class-migration-matrix.md` 的
   "the shadow style carrier exists; the authoring face said otherwise" 一节。
 - **退役时的事实**：DSD 样式 link 载波已落地 —— 编译器在宿主 producer 上发出类型化
@@ -505,6 +510,11 @@ native 选择缝是主产物，不再作为垫片登记。）
 
 ### 28. `registerOpenUi` published-API 空操作垫片（`@openelement/ui`）——**已退役**（2026-11-20）
 
+- 所有者：`@openelement/ui` 的 published-API 面（`packages/ui/src/index.ts` 的
+  `registerOpenUi` 导出及其 `register.ts` 实现）。
+- 退役条件：`@openelement/ui` 不再发布该 export / 全部消费方改用 generated entry，
+  **或**随下一次 breaking alpha 删除（该 export 属 experience-edition 面，不需要
+  兼容适配器）。**条件已满足**：`1.0.0-alpha.16` 就是那次 breaking alpha。
 - **退役动作**：`1.0.0-alpha.16`（本条线）。`packages/ui/src/register.ts` 删除，根
   导出与模块文档示例同步移除，packaged-consumer harness 不再调用它。
 - **依据**：该 shim 自己写的第二个退役条件——"或随下一次 breaking alpha 删除（该

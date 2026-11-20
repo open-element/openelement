@@ -69,9 +69,33 @@ A private ledger (`instance-ledger.ts`) keyed by the owning `LifetimeScope`
 provides retain/release/pass-bracket primitives with explicit, mode-independent
 release: eviction is decided by the emitted act, never inferred from a disposal
 mode. The generated root retains its own setup record across reconnect (setup
-count stays 1) and, at **depth 1**, retains the setup record of a direct hostless
-child. Depth ≥ 2 keeps today's legacy text and semantics (OWED behind a
-cross-ledger transaction protocol). The ledger module is not wired to depth ≥ 2.
+count stays 1) and every retained hostless child retains its own, at any depth.
+
+> **Superseded in part (2026-11-21, depth ≥ 2 delivered).** The paragraph above
+> originally stopped at depth 1 and called depth ≥ 2 OWED "behind a cross-ledger
+> transaction protocol". That protocol is now implemented and wired, so the
+> depth-1 ceiling is history:
+>
+> - the ROOT retaining body opens the attempt and keeps its
+>   `InstanceTransaction` token; a retained body that retains its own children
+>   calls `joinInstancePass(ownScope, token)` and NEVER commits or aborts;
+> - the root's `endInstancePass` commits the root pass first (its sweep may evict
+>   a removed child, recursively releasing that child's ledger) and then every
+>   surviving member, skipping members whose ledger was released or whose pass
+>   number no longer matches; `abortInstancePass` aborts members deepest-first;
+> - evicting ANY entry first releases that scope's OWN ledger, so grandchild
+>   bookkeeping can never outlive its owner and an explicit owner teardown closes
+>   a live transaction's member passes before dropping the ledger;
+> - the compiler's eligibility fixpoint gained one more owner class (a retained
+>   body that itself retains children), so depth-1 modules keep their exact
+>   pre-change bytes: no token capture, no join, no `txn` host field.
+>
+> Evidence: compiler 1421 tests (102 files), element 1063 (136 files), the
+> Chromium depth ≥ 2 rows R8/R10/R11 (retained grandchild across reconnect; an
+> aborted attempt that commits no child pass and converges; owner teardown
+> releasing the whole subtree once) and the ledger's five transaction rows. The
+> `p1-applicability`/milestone records are unaffected: this is a capability
+> delivery, not an exit claim.
 
 ### C. Author style declaration for generated islands
 
@@ -292,6 +316,15 @@ type (`createGeneratedElementClass`, `defineGeneratedElement`,
 `resolveGeneratedElementProps` and the descriptor's own symbol). No
 `RenderToStringOptions` change is involved; `onNestedFailure` remains this line's
 one public addition.
+
+### Enumerated interface deltas (2026-11-21 depth >= 2 transaction)
+
+One additive symbol on the same internal subpaths, recorded by the
+`interface:snapshot` write.
+
+| Package / entry | Delta | Necessity and compatibility |
+| --- | --- | --- |
+| `@openelement/element` `./internal/compiled/runtime` and `./internal/compiled/leaf-runtime` | new export `joinInstancePass(owner, transaction)`; `beginInstancePass(owner)` now RETURNS its `InstanceTransaction` (a call whose result is ignored is unchanged, so the depth-1 emitted text keeps working byte-for-byte). | The emitted child body is the caller: it must join the root attempt's transaction instead of committing its own child pass. Emitted-artifact ABI on ADR-0177's internal subpaths — no stability promise, no public export, and a module with no retained child keeps exactly its previous bytes and graph. |
 
 ### Written rule (2026-11-20): a light root must not be nested inside a shadow template
 

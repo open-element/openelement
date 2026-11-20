@@ -450,6 +450,12 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
     symbol: 'endInstancePass',
     predicate: (body) => body.includes('endInstancePass('),
   },
+  {
+    // 16b-LC depth >= 2: a retained body that retains its own children joins the
+    // root attempt's transaction token and never commits.
+    symbol: 'joinInstancePass',
+    predicate: (body) => body.includes('joinInstancePass('),
+  },
   // `16b-CTX` SERVER side: the per-render owner scope a producer creates when it
   // is the module root of the render. Registered by the body predicate like the
   // other optional symbols, so a module that never renders a context consumer
@@ -461,6 +467,13 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
 ];
 
 const INTERNAL_PREFIX = '__oe_';
+/**
+ * 16b-LC depth >= 2 (2026-11-21): the transaction token local of a retaining
+ * body. The root body captures `beginInstancePass`'s return in it; a retained
+ * body reads the token from its compiler-private host literal and joins. The
+ * `__oe_` prefix is refused for authored identifiers, so it cannot collide.
+ */
+const TRANSACTION_VAR = `${INTERNAL_PREFIX}txn`;
 /** The namespace URI an `<svg>` subtree is created and claimed in. */
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
@@ -1167,6 +1180,8 @@ interface EmitState {
   retainBody: boolean;
   /** True while emitting a leaf instance body (aliases the retained record). */
   leafBody: boolean;
+  /** This body emits retain calls (root, or a retained body with retained children). */
+  retainsChildren: boolean;
   /**
    * Number of enclosing claim-time recipe bodies (M07a). It is separate from
    * `recipeDepth` because claim-time recipe closures are emitted inside the
@@ -2792,7 +2807,7 @@ function emitComponentRef(
   push(state, `const ${scopeVar} = ${state.scopeVar}.child();`, span);
   push(
     state,
-    `const ${hostVar} = { bindings: ${setupHostVar}.bindings, propDeps: ${setupHostVar}.propDeps, instance: ${instanceVar}.scope, setup: ${instanceVar}.record${childHostElementField(state, node)}${childErrorReportField(state, node)}${childContextField(state, node)} };`,
+    `const ${hostVar} = { bindings: ${setupHostVar}.bindings, propDeps: ${setupHostVar}.propDeps, instance: ${instanceVar}.scope, setup: ${instanceVar}.record${childHostElementField(state, node)}${childErrorReportField(state, node)}${childContextField(state, node)}${retainedTransactionField(state, node.name)} };`,
     span,
   );
   push(state, `let ${nodesVar};`);
@@ -2938,10 +2953,22 @@ interface RetentionPlan {
   readonly rootName: string;
   /** Reference sites that emit `retainChildInstance` (mount == claim identity). */
   readonly retainedRefs: ReadonlySet<FunctionModelComponentRef>;
-  /** Non-root components emitted as leaf instance bodies. */
+  /** Non-root components emitted as retained (leaf) instance bodies. */
   readonly leafBodies: ReadonlySet<string>;
   /** Leaf targets that also emit their module-scope `<Name>__setup` factory. */
   readonly setupBodies: ReadonlySet<string>;
+  /**
+   * Bodies that emit retain calls: the root plus every retained component that
+   * itself retains children (depth >= 2). A body NOT in this set emits no
+   * ledger text; a retained body in this set JOINS the root's transaction.
+   */
+  readonly retainingBodies: ReadonlySet<string>;
+  /**
+   * True when at least one retained child is itself a retaining body, so the
+   * root body must capture `beginInstancePass`'s token and thread it through
+   * the ref-site host literals. False keeps the depth-1 bytes exactly.
+   */
+  readonly transaction: boolean;
 }
 
 /** One emitted component-reference site and the emission context it sits in. */
@@ -3114,8 +3141,17 @@ function setupGatewayPasses(
 }
 
 /**
- * Compute the depth-1 plan, or `null` when this module emits today's bytes
- * exactly (no root marker, a root-target reference, or no eligible site).
+ * Compute the retention plan, or `null` when this module emits today's bytes
+ * exactly (no eligible site, or a root-target reference).
+ *
+ * Depth-1 vs depth >= 2 is the SAME fixpoint with one more owner class: a site
+ * is retention-eligible when its owner emits retain calls (the root, or a
+ * retained component that itself retains children). The plan starts at the
+ * greatest candidate set and demotes monotonically, so a component referenced
+ * from BOTH a retaining body and a legacy/recipe/list body ends up legacy
+ * everywhere (one body shape per component, no runtime probing), and the
+ * transaction flag is true only when a retained child is itself a retaining
+ * body. A depth-1 module therefore keeps its exact pre-change bytes.
  */
 function planRetention(
   module: FunctionModelModule,
@@ -3146,32 +3182,73 @@ function planRetention(
       candidates.add(component.name);
     }
   }
-  // Monotone fixpoint: demotion only removes candidates; the iteration is kept
-  // explicit so a future site class (one that depends on the target's body
-  // mode) slots in without changing the shape.
+  // Joint greatest fixpoint over two sets:
+  //   - retained: non-root components whose body is the retained (leaf) shape;
+  //   - retaining: bodies that emit retain calls (root + retained components
+  //     whose own body references a retained child).
+  // Both start maximal and only shrink, so the iteration terminates and the
+  // largest valid plan wins. A target is demoted when ANY of its refs sits in
+  // a recipe/list body, comes from an owner that is not root/retained, or comes
+  // from an owner that is not a retainer (its body emits no ledger text).
+  const retained = new Set(candidates);
+  const retaining = new Set<string>([rootName, ...retained]);
   let changed = true;
   while (changed) {
     changed = false;
-    for (const name of [...candidates]) {
+    for (const name of [...retained]) {
       const targetSites = byTarget.get(name) ?? [];
-      const eligible =
-        targetSites.length > 0 &&
-        targetSites.every((site) => site.owner === rootName && !site.inRecipe && !site.inList);
+      if (targetSites.length === 0) {
+        retained.delete(name);
+        retaining.delete(name);
+        changed = true;
+        continue;
+      }
+      const eligible = targetSites.every(
+        (site) =>
+          !site.inRecipe &&
+          !site.inList &&
+          retaining.has(site.owner) &&
+          (site.owner === rootName || retained.has(site.owner)),
+      );
       if (!eligible) {
-        candidates.delete(name);
+        retained.delete(name);
+        retaining.delete(name);
+        changed = true;
+      }
+    }
+    for (const name of [...retaining]) {
+      if (name === rootName) continue;
+      const ownsRetainedChild = sites.some(
+        (site) =>
+          site.owner === name && !site.inRecipe && !site.inList && retained.has(site.node.name),
+      );
+      if (!ownsRetainedChild) {
+        retaining.delete(name);
         changed = true;
       }
     }
   }
-  if (candidates.size === 0) return null;
   const retainedRefs = new Set<FunctionModelComponentRef>();
   for (const site of sites) {
-    if (site.owner !== rootName || site.inRecipe || site.inList) continue;
-    if (candidates.has(site.node.name)) retainedRefs.add(site.node);
+    if (site.inRecipe || site.inList) continue;
+    if (!retaining.has(site.owner)) continue;
+    if (site.owner !== rootName && !retained.has(site.owner)) continue;
+    if (retained.has(site.node.name)) retainedRefs.add(site.node);
   }
   if (retainedRefs.size === 0) return null;
+  // The retaining bodies that actually carry a retained ref site (the fixpoint
+  // above may leave a retained component in `retaining` only through a stale
+  // maximal start; recompute from the selected sites).
+  const retainingBodies = new Set<string>([rootName]);
+  for (const site of sites) {
+    if (!retainedRefs.has(site.node)) continue;
+    if (retained.has(site.owner)) retainingBodies.add(site.owner);
+  }
+  const transaction = sites.some(
+    (site) => retainedRefs.has(site.node) && retainingBodies.has(site.node.name),
+  );
   const setupBodies = new Set<string>();
-  for (const name of candidates) {
+  for (const name of retained) {
     const component = componentByName.get(name)!;
     // A hook-bearing retained child needs its `<Name>__setup` factory even when
     // it has no setup local: the factory is the only carrier of its retained
@@ -3189,7 +3266,14 @@ function planRetention(
       setupBodies.add(name);
     }
   }
-  return { rootName, retainedRefs, leafBodies: candidates, setupBodies };
+  return {
+    rootName,
+    retainedRefs,
+    leafBodies: retained,
+    setupBodies,
+    retainingBodies,
+    transaction,
+  };
 }
 
 /** One `childrenRecipeId` projection edge (M06b2a mount-graph input). */
@@ -5842,7 +5926,7 @@ function emitClaimComponentRef(
   push(state, `const ${scopeVar} = ${state.scopeVar}.child();`, span);
   push(
     state,
-    `const ${hostVar} = { bindings: ${setupHostVar}.bindings, propDeps: ${setupHostVar}.propDeps, instance: ${instanceVar}.scope, setup: ${instanceVar}.record${childHostElementField(state, node)}${childErrorReportField(state, node)}${childContextField(state, node)} };`,
+    `const ${hostVar} = { bindings: ${setupHostVar}.bindings, propDeps: ${setupHostVar}.propDeps, instance: ${instanceVar}.scope, setup: ${instanceVar}.record${childHostElementField(state, node)}${childErrorReportField(state, node)}${childContextField(state, node)}${retainedTransactionField(state, node.name)} };`,
     span,
   );
   push(state, `let ${nodesVar};`);
@@ -6361,6 +6445,34 @@ function emitLifecycleEnvReplay(hostRecordProperty: 'bindings' | 'setup'): strin
  * Emit `<Name>__claim` for a claimable component. Returns null when the shape
  * is outside the admitted claim slice; the caller then leaves the recipe mount-only.
  */
+/**
+ * The depth >= 2 transaction-token field a retained child body joins with, as a
+ * fragment of its compiler-private host literal. A target that retains no
+ * children gets no field, so every depth-1 host literal keeps its exact bytes.
+ * The root body threads its own captured token; a retained body forwards the
+ * one it received.
+ */
+function retainedTransactionField(state: EmitState, target: string): string {
+  if (state.retention?.retainingBodies.has(target) !== true) return '';
+  return `, txn: ${state.retainBody ? TRANSACTION_VAR : `${state.hostVar}.txn`}`;
+}
+
+/**
+ * 16b-LC depth >= 2 (2026-11-21): a retained body that retains its own children
+ * joins the root attempt's transaction before any retain call. The token arrives
+ * in the compiler-private host literal (`host.txn`); a hand-built fixture host
+ * without one emits nothing (such a body would then be legacy-shaped and has no
+ * retain calls to coordinate).
+ */
+function emitJoinTransaction(state: EmitState): void {
+  if (!state.leafBody || !state.retainsChildren) return;
+  push(state, `const ${TRANSACTION_VAR} = ${MOUNT_HOST}.txn;`);
+  push(
+    state,
+    `if (${TRANSACTION_VAR} !== undefined) joinInstancePass(${MOUNT_HOST}.instance, ${TRANSACTION_VAR});`,
+  );
+}
+
 function emitClaimFunction(
   file: string,
   component: FunctionModelComponent,
@@ -6431,6 +6543,7 @@ function emitClaimFunction(
     retention,
     retainBody: retention !== null && retention.rootName === component.name,
     leafBody: retention?.leafBodies.has(component.name) === true,
+    retainsChildren: retention?.retainingBodies.has(component.name) === true,
     claimTimeRecipeDepth: 0,
   };
   if (!assertTextBoundaryContext(state, component.roots)) {
@@ -6497,7 +6610,17 @@ function emitClaimFunction(
   // 16b-LC retained-child: the ROOT retaining body opens exactly one instance pass before
   // any claim work, so a failed claim is evicted by the shell's abort. Only the
   // root body has a ledger; every leaf/legacy/recipe body emits no ledger text.
-  if (state.retainBody) push(state, `beginInstancePass(${MOUNT_HOST}.instance);`);
+  if (state.retainBody) {
+    // 16b-LC depth >= 2: capture the token only when a retained child is
+    // itself a retaining body; a depth-1 module keeps the bare call bytes.
+    const beginCall = `beginInstancePass(${MOUNT_HOST}.instance)`;
+    push(
+      state,
+      state.retention?.transaction === true
+        ? `const ${TRANSACTION_VAR} = ${beginCall};`
+        : `${beginCall};`,
+    );
+  }
   const phase2: Array<() => void> = [];
   // M08-2 B2: only the shared-cursor claim queues activation. Its per-element
   // blocks are flushed before the enclosing cursor owner's final structure
@@ -6521,6 +6644,7 @@ function emitClaimFunction(
     } else {
       for (const line of localLines) emitSetupBinding(state, line);
     }
+    emitJoinTransaction(state);
     push(state, `const ${rootAdoptedVar} = [];`);
   }
   const rootDirectory = staticElementDirectory(component.roots);
@@ -6579,6 +6703,7 @@ function emitClaimFunction(
     } else {
       for (const line of localLines) emitSetupBinding(state, line);
     }
+    emitJoinTransaction(state);
     if (state.childrenRecipeVar !== null) {
       push(state, `const ${state.childrenRecipeVar} = ${MOUNT_PROPS}.children;`);
       push(
@@ -6923,6 +7048,7 @@ function ssrEmitState(
     retention: null,
     retainBody: false,
     leafBody: false,
+    retainsChildren: false,
     claimTimeRecipeDepth: 0,
   };
 }
@@ -8061,6 +8187,7 @@ function emitComponent(
     retention,
     retainBody: retention !== null && retention.rootName === component.name,
     leafBody: retention?.leafBodies.has(component.name) === true,
+    retainsChildren: retention?.retainingBodies.has(component.name) === true,
     claimTimeRecipeDepth: 0,
   };
   if (claimable && !assertTextBoundaryContext(state, component.roots)) {
@@ -8875,7 +9002,17 @@ function emitComponent(
 
   // 16b-LC retained-child: the ROOT retaining body opens exactly one instance pass before
   // any setup/DOM work; the shell aborts it when mount/claim throws.
-  if (state.retainBody) push(state, `beginInstancePass(${MOUNT_HOST}.instance);`);
+  if (state.retainBody) {
+    // 16b-LC depth >= 2: capture the token only when a retained child is
+    // itself a retaining body; a depth-1 module keeps the bare call bytes.
+    const beginCall = `beginInstancePass(${MOUNT_HOST}.instance)`;
+    push(
+      state,
+      state.retention?.transaction === true
+        ? `const ${TRANSACTION_VAR} = ${beginCall};`
+        : `${beginCall};`,
+    );
+  }
   push(state, `const ${INTERNAL_PREFIX}nodes = [];`);
   if (rootSetup && aliasesSetupRecord) {
     emitSetupAlias(state, localLines, ROOT_SETUP_HOST_PROPERTY);
@@ -8884,6 +9021,7 @@ function emitComponent(
   } else {
     for (const line of localLines) emitSetupBinding(state, line);
   }
+  emitJoinTransaction(state);
   // One read of the children recipe per mount (M06b2a): every projection site
   // inserts this same recipe value, and dynamic children content refreshes
   // through the recipe body's own subscriptions (never a props re-read here).

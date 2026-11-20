@@ -86,10 +86,13 @@ export { claimRecipe, createRecipe, insertRecipe } from './runtime/recipe.ts';
 // exactly today's markup.
 export { nestedHost } from './runtime/nested-host.ts';
 
-// The retained-child ledger the LC-2 depth-1 hooks use.
+// The retained-child ledger the LC-2 hooks use: the root pass bracket/commit,
+// the ref-site retain/release, and (depth >= 2) the token a retained body joins
+// when it retains its own children.
 export {
   beginInstancePass,
   endInstancePass,
+  joinInstancePass,
   releaseChildInstance,
   releaseUnderStructuralScope,
   retainChildInstance,

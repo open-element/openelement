@@ -1986,8 +1986,9 @@ template).
 
 **So this is a capability gap, not a migration defect**, and it is now named:
 *the generated lane's nested-light-root sheet hoisting into an enclosing shadow
-template.* It has no owner and no slice; it is a candidate for Alpha17 alongside
-the client-side shadow adoption item. Until it exists, a generated light root may
+template.* It has no owner and no slice; the client-side shadow adoption item it
+was paired with has since landed, and the remaining disposition is the WRITTEN
+RULE recorded in ADR-0181 (2026-11-20) rather than a capability to build. Until it exists, a generated light root may
 not be nested inside a shadow template, and this fixture is the only proof of that
 restriction — which is a good reason to keep it on the class lane for now rather
 than force the port.

@@ -1,7 +1,7 @@
 ---
 status: active
-topic: Alpha16 closeout report (delivered / not delivered / Alpha17 boundary)
-summary: What Alpha16 delivered with a four-part evidence record, what it did NOT deliver and the exact condition each open item waits on, the P1–P8 compliance table with its one deliberate deviation, and the Alpha17 boundary. Read the negative accounting before planning Alpha17.
+topic: Alpha16 closeout report (delivered, not delivered, and the closeout remainder)
+summary: What Alpha16 delivered with a four-part evidence record, what it did NOT deliver and the condition each open item waits on, the P1–P8 compliance table, and the closeout remainder (the Alpha17 milestone number was retired 2026-11-21). Read the negative accounting first.
 ---
 
 # Alpha16 closeout report
@@ -14,9 +14,9 @@ record defined in [`evidence-baseline.md`](./evidence-baseline.md) — commit,
 clean status, exact command, exact result, provenance — or says plainly that it
 carries none.
 
-> **Read the negative sections first if you are planning Alpha17.** The
-> retired-lane accounting is the part that decides what Alpha17 can start, and a
-> closeout report that only lists wins is a marketing document.
+> **Read the negative sections first.** The retired-lane accounting is the part
+> that decides what the closeout can still finish, and a closeout report that
+> only lists wins is a marketing document.
 
 ## 1. Where the tree is
 
@@ -55,6 +55,7 @@ What replaced it, and the tests that pin each:
 
 | capability | carrier | guard |
 | --- | --- | --- |
+| retained instances (incl. depth ≥ 2) | cross-ledger transaction (ADR-0181 2026-11-21 amendment) | Chromium `R8`/`R10`/`R11`; ledger 40 rows; artifact depth-2 site counts |
 | derived state | `computed()` intrinsic (ADR-0183 D-4, option B) | `app/layout.tsx` carries 30; `generated-element.*` suites |
 | host access | `useHost()` | `generated-element.use-host.test.ts` (6 rows) |
 | refs | `ref(cb?)` over the existing `ref` channel | ADR-0182 amendment |
@@ -127,7 +128,7 @@ so it does not change the "one public addition" statement.
 
 ## 5. What was NOT delivered, and the condition each waits on
 
-This is the section Alpha17 planning should read first.
+This is the section to read before starting any of the remaining work.
 
 ### 5.1 The class lane itself is still present
 
@@ -178,14 +179,25 @@ own record, and §19.2 condition 2 says "under the unchanged claim and identity
 rules". **All four conditions hold and the row does not flip** — those two facts
 are consistent, and the records name the reason in one sentence each.
 
-### 5.3 `16b-LC` depth ≥ 2, recipe/list placement, non-retained targets, pre-DOM timing
+### 5.3 `16b-LC` — DELIVERED 2026-11-21 (depth ≥ 2); only PLACEMENT stays refused
 
-Delivery today: root lifecycle, depth-1 nested/hostless hooks, and the
-connection-scope `env = { host, signal }` helper. Still refused: the remaining
-placements (`OEIR_LEAF_INVALID_ARTIFACT` / `OEC9041`).
+Delivery: root lifecycle, nested hostless hooks at ANY depth, and the
+connection-scope `env = { host, signal }` helper. Depth ≥ 2 landed through
+ADR-0181's cross-ledger transaction: the root attempt owns an
+`InstanceTransaction` token, a retained body that retains its own children JOINs
+it instead of committing its own pass, the root commits members shallow-first /
+aborts them deepest-first, and evicting an entry releases that scope's own ledger.
+Depth-1 modules keep their pre-change bytes.
 
-**Condition:** extending the retention model, which ADR-0181 owns; the slice does
-not have a design carrier for depth ≥ 2 yet.
+Still refused, by DESIGN rather than as debt: a hook or context intrinsic inside
+a reusable-JSX/list body, or in a component no retained body references, has no
+lifecycle owner (`OEIR_LEAF_INVALID_ARTIFACT` / `OEC9041`); and a connect handler
+runs before the generated region exists (documented timing, not a gap).
+
+Evidence (LOCAL): Chromium `R8` (retained grandchild across reconnect), `R10`
+(aborted attempt commits no child pass and converges), `R11` (owner teardown
+releases the subtree once); Node `nested-instance-wiring.artifact.test.ts` and the
+ledger's 40 unit rows.
 
 ### 5.4 M12 / M13 / M14 qualification
 
@@ -282,18 +294,27 @@ resolution the starter's three page boxes got — and the mechanism was measured
 before and after (the first attempt broke the A6 sheet row; the move fixed it
 without an allowance).
 
-## 7. Alpha17 boundary
+## 7. The closeout remainder (owner direction 2026-11-21: there is no Alpha17)
 
-Alpha17 owns, per plan §19.6 and this record:
+**Owner direction, 2026-11-21 (verbatim intent):** do not keep an Alpha17
+milestone number; fold its whole scope into the Alpha16 closeout. This section is
+therefore the closeout's remaining work list, not a hand-off to another
+milestone. Records that still say "Alpha17" are historical wording: read every
+one of them against this section (the `16b-MN`, the progress ledger's dated
+entries, `README.md`'s index line and the shim rows that name a future
+milestone as a retirement CONDITION).
 
-1. the lane deletion of §5.1 (compiler entry, artifact, ABI record, render path,
-   82 test files, 8 fixtures, and the benchmark input whose SUBJECT is the class
-   compiler). Re-evaluated 2026-11-20 (migration matrix, same date): **no
+The item that WAS the only capability blocker — the `ssr: false` client style
+gap — landed at `b12d0403` (§5.2 and the migration matrix), and the depth ≥ 2
+retention carrier landed 2026-11-21 (ADR-0181's dated amendment). What remains:
+
+1. **The lane deletion** of §5.1 (compiler entry, artifact, ABI record, render
+   path, 82 test files, 8 fixtures, and the benchmark input whose SUBJECT is the
+   class compiler). Re-evaluated 2026-11-20 (migration matrix, same date): **no
    capability blocker remains** — the mechanical moves are enumerated, but the
    public-API removal (`OpenElement`/`ErrorBoundary` + the class render path),
    the third-party admission/ABI decision and the benchmark successor are
-   owner/release decisions, so it can be PLANNED as one change set but not
-   landed on this branch;
+   owner/release decisions inside this closeout, not another milestone's;
 2. the generated lane's hoisting of a nested light root's sheet into the
    enclosing shadow template: the generated lane does **not** hoist it, so that
    nesting is impossible today and `site-light-probe` stays the only proof of the
@@ -314,8 +335,14 @@ Alpha17 owns, per plan §19.6 and this record:
 6. the generated lane's pre-hydration click replay (§5.6): a neutral replay leaf
    outside the shell's forbidden old-backend set, the shell's claim-path call and
    its owner-scoped release, with the starter's `#942`/third-party rows as the
-   acceptance form.
+   acceptance form;
+7. **`16b-EB`'s fallback identity** (§5.2): the four §19.2 conditions are
+   delivered; giving the fallback bytes their own identity is the one thing the
+   row would need to flip, and it stays a deliberate non-goal rather than debt;
+8. **`16b-LC`'s remaining refusal boundary**: depth ≥ 2 landed on 2026-11-21, so
+   what is left is PLACEMENT (recipe/list bodies, non-referenced components) and
+   the documented pre-DOM timing. That is a design boundary of a compiled setup,
+   not missing work.
 
-None of these is a patch Alpha16 could have absorbed: each needs either a design
-carrier that does not exist yet, or a release-train/owner action outside a
-retirement branch's authority.
+None of these is a patch this line could have absorbed without a carrier: each
+needs a design record, a release-train action or the owner's own line.

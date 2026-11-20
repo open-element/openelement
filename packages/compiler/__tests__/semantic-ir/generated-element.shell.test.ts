@@ -241,7 +241,7 @@ async function buildBundle(module: string, dir: string): Promise<BundleResult> {
       // 16b-LC retained-child owner-teardown row: the page-side descriptor fixture retains a
       // real child instance through the SAME private ledger the generated path
       // consumes, so the shell's release placement is observable.
-      `export { abortInstancePass, beginInstancePass, endInstancePass, releaseChildInstance, releaseRetainedChildren, releaseUnderStructuralScope, retainChildInstance } from ${JSON.stringify(join(runtime, 'instance-ledger.ts'))};`,
+      `export { abortInstancePass, beginInstancePass, endInstancePass, joinInstancePass, releaseChildInstance, releaseRetainedChildren, releaseUnderStructuralScope, retainChildInstance } from ${JSON.stringify(join(runtime, 'instance-ledger.ts'))};`,
       `export { escapeText } from ${JSON.stringify(join(element, 'compiled/escape-text.ts'))};`,
       `export { escapeAttrValue } from ${JSON.stringify(join(element, 'core/html-escape.ts'))};`,
       '',
@@ -256,7 +256,7 @@ async function buildBundle(module: string, dir: string): Promise<BundleResult> {
       // 16b-LC retained-child owner-teardown row: the same private runtime surface the
       // generated root body consumes, re-exported for the page-side fixture.
       `export { createRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
-      `export { abortInstancePass, beginInstancePass, endInstancePass, releaseChildInstance, releaseRetainedChildren, releaseUnderStructuralScope, retainChildInstance } from ${JSON.stringify(join(runtime, 'instance-ledger.ts'))};`,
+      `export { abortInstancePass, beginInstancePass, endInstancePass, joinInstancePass, releaseChildInstance, releaseRetainedChildren, releaseUnderStructuralScope, retainChildInstance } from ${JSON.stringify(join(runtime, 'instance-ledger.ts'))};`,
       '',
     ].join('\n'),
   );

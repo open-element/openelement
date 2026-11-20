@@ -104,6 +104,14 @@ clean-SHA evidence.
 
 ### 16b-LC — PARTIAL: root author lifecycle delivered, the rest OWED
 
+> **Superseded 2026-11-21: `16b-LC` is MIGRATED.** Depth >= 2 retention landed
+> (ADR-0181's cross-ledger transaction amendment): a retained body that retains
+> its own children joins the root attempt's transaction, keeps its record across
+> reconnect, and an aborted attempt never commits a child pass. What stays
+> refused is PLACEMENT (recipe/list bodies, components no retained body
+> references) — a boundary of a compiled setup, not missing depth. The text below
+> is the 2026-11-15 state and stays as history.
+
 The generated-element lane now admits author `onConnect` / `onDispose` as
 compiler-erased intrinsics in the generated element ROOT setup only (binding
 provenance: a named import of `@openelement/element`, aliases followed; direct
@@ -164,8 +172,10 @@ Owed, and the reason this is PARTIAL, not delivered:
 - a non-generated/class-lane module declaring `styles` is refused with
   `OE_ISLAND_STYLE_LANE_UNSUPPORTED`; its sheets belong to `static styles`.
 
-The adoption surface is carried by GH issue #1800 (Alpha17) and the shadow
-carrier by M09-2e; M11 still re-verifies the deferred client style declaration
+The adoption surface was carried by GH issue #1800 (originally scheduled as an
+Alpha17 item; that milestone number was retired on 2026-11-21 and its scope folded
+into the Alpha16 closeout — see the plan's §19.10) and the shadow carrier by
+M09-2e; M11 still re-verifies the deferred client style declaration
 obligation on a real build. The two lanes' test files are untracked in this
 working tree and their LOCAL results are dirty-tree development feedback, not
 clean-SHA evidence.
@@ -1701,3 +1711,51 @@ template needs this combination (a ticking `signal` written from `onConnect`).
 sign-off, no lane deletion. The nested-light-root-inside-a-shadow-template case
 stays a written rule, not a capability (see §"Two gaps that are NOT the same
 thing" in the handoff and the migration matrix).
+
+## 2026-11-21 amendment — `16b-LC` depth >= 2 lands: the cross-ledger transaction (facts only)
+
+This closes the "depth ≥ 2 OWED behind a cross-ledger transaction protocol" reading
+that the 2026-11-15/16 amendments recorded. It rewrites nothing above; the OWED
+text stays as history and this is the current state.
+
+**The protocol (runtime).** `beginInstancePass(owner)` now returns an
+`InstanceTransaction` token. A retained body that itself retains children calls
+`joinInstancePass(ownScope, token)`: it opens a NORMAL pass on its own ledger and
+registers as a member; it never commits or aborts. The root's `endInstancePass`
+commits the root pass first and then every surviving member (shallow-first, and a
+member whose ledger was released or whose pass number moved is skipped — the
+idempotent form of "its subtree is already gone"); `abortInstancePass` aborts
+members deepest-first and then the root pass, so an attempt that never happened
+leaves pre-existing entries intact with their previous structural index. Evicting
+ANY entry first releases that scope's own ledger, so grandchild bookkeeping can
+never outlive its owner, and an explicit owner teardown closes a live
+transaction's member passes before deleting the ledger. Failure identities grow by
+the same two internal codes the depth-1 slice already used (`STATE` for a
+mis-ordered bracket, `DISPOSED` for a joined owner that went away); a joined pass
+cannot be ended/aborted by its child body, and a closed token cannot be joined.
+
+**The emission (compiler).** The eligibility plan is the same monotone fixpoint
+with one more owner class: a site is retention-eligible when its owner EMITS
+retain calls (the root, or a retained component that itself retains children).
+`RetentionPlan` gains `retainingBodies` and `transaction`. A retaining body emits
+`const __oe_txn = beginInstancePass(host.instance)`; a retained retaining body
+emits `const __oe_txn = host.txn; if (__oe_txn !== undefined) joinInstancePass(
+host.instance, __oe_txn);`. The token travels in the compiler-private child host
+literal (`txn:`), emitted only for targets that retain children, so a depth-1
+module keeps exactly its pre-change bytes and graph.
+
+**What is proven (LOCAL Chromium + Node).** Chromium `R8`: retained grandchild
+across a reconnect (both setups stay 1, the retained snapshot renders instead of
+the live prop). `R10`: a failed reconnect claim aborts the attempt, commits no
+child pass, surfaces exactly one `OEIR_LEAF_CLAIM_MISMATCH` and converges with
+both records intact. `R11`: `dispose(true)` releases the whole subtree once and a
+later connect re-runs BOTH setups on a new instance. Node artifact rows:
+`nested-instance-wiring.artifact.test.ts` (depth-2 site counts, no child bracket,
+one join per retaining child body) and `instance-ledger.test.ts` (40 rows, five of
+them the transaction). Suites: compiler 102 files / 1421 tests, element 136 /
+1063.
+
+**What this does NOT claim.** No §4.1d subtree contract, no recipe/list placement
+retention (still refused), no keep-alive, no scope-identity promise, no
+M12/M13/M14 or P5 evidence. The milestone-level exit claims stay where the
+closeout puts them.

@@ -701,10 +701,12 @@ describe('16b-CTX context intrinsics — emitted artifact contract (Node)', () =
     }
   });
 
-  test('C13 a depth>=2 / recipe-body placement is refused at the authored span', () => {
-    // A depth-2 consumer: the consumer's own component is referenced from a
-    // depth-1 child, so it has no owner scope (depth >= 2 retention is OWED by
-    // ADR-0181 and is not implied here).
+  test('C13 a depth-2 provider/consumer pair is ADMITTED and gets its owner scopes', () => {
+    // Depth >= 2 (2026-11-21): the retained body that references its own
+    // hostless child now carries the child's setup factory, so the grandchild
+    // consumer resolves against the retained `Inner` owner scope. The refusal
+    // that still exists is the placement one (a consumer in a body that owns no
+    // scope) — see the recipe-body case below.
     const deep =
       SIDECAR +
       "import { provideContext, useContext } from '@openelement/element';\n" +
@@ -721,10 +723,42 @@ describe('16b-CTX context intrinsics — emitted artifact contract (Node)', () =
       '  return <div><Inner seed={props.seed} /></div>;\n' +
       '}\n' +
       'export default Root;\n';
-    const thrown = attempt(deep, 'ctx-deep');
+    const module = compileIsland('ctx-deep', deep);
+    // Both bodies own a retained setup factory, and the grandchild consumer's
+    // owner scope is the child's retained anchor.
+    expect(module).toContain('function Inner__setup(');
+    expect(module).toContain('function Leaf__setup(');
+    const innerSetup = functionText(module, 'Inner__setup');
+    expect(innerSetup).toContain('provider(');
+    expect(innerSetup).toContain('.owner()');
+    expect(functionText(module, 'Leaf__setup')).toContain('use(');
+    // The child body JOINS the root attempt instead of opening its own pass.
+    const innerMount = functionText(module, 'Inner__mount');
+    expect(occurrences(innerMount, 'joinInstancePass(')).toBe(1);
+    expect(occurrences(innerMount, 'beginInstancePass(')).toBe(0);
+  });
+
+  test('C13b a consumer in a RECIPE body is still refused at the authored span', () => {
+    const recipeBody =
+      SIDECAR +
+      "import { provideContext, useContext } from '@openelement/element';\n" +
+      "import { Theme } from '../tokens.ts';\n" +
+      'function Leaf(props: { seed: number }) {\n' +
+      '  const theme = useContext(Theme);\n' +
+      '  return <em>{theme.value}</em>;\n' +
+      '}\n' +
+      'function Root(props: { seed: number }) {\n' +
+      '  const card = <Leaf seed={props.seed} />;\n' +
+      '  return <div><InnerCard seed={props.seed}>{card}</InnerCard></div>;\n' +
+      '}\n' +
+      'function InnerCard(props: { seed: number; children?: unknown }) {\n' +
+      "  provideContext(Theme, () => 'inner');\n" +
+      '  return <div>{props.children as any}</div>;\n' +
+      '}\n' +
+      'export default Root;\n';
+    const thrown = attempt(recipeBody, 'ctx-recipe');
     expect(codes(thrown)).toEqual(['OEIR_LEAF_INVALID_ARTIFACT']);
     expect(messages(thrown).join('\n')).toContain('owner scope');
-    expect(messages(thrown).join('\n')).toContain('depth-1');
   });
 
   test('C14 the standalone public import fails closed outside the compiler (no new error code)', () => {

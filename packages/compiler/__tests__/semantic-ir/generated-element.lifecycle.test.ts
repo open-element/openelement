@@ -786,13 +786,17 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     expect(functionText(plain, 'Child__setup')).not.toContain('__oe_owner.add');
   });
 
-  test('A13 nested hook placement outside depth-1 fails closed at the AUTHORED span', () => {
+  test('A13 nested hook placement outside any retaining body fails closed at the AUTHORED span', () => {
     const importLine = "import { onConnect } from '@openelement/element';\n";
     const hookLine = '  onConnect(() => { globalThis.__oeNested = 1; });';
     const authoredLine = (source: string): number =>
       source.split('\n').findIndex((line) => line.includes('onConnect(')) + 1;
     const cases: Array<{ name: string; source: string; expected: RegExp }> = [
       {
+        // Depth >= 2 (2026-11-21): a retained body that retains its own child
+        // CARRIES its hooks now, so the refused case is a body that retains
+        // nothing — here `Deep` is referenced only from a body the plan cannot
+        // retain, so it has no lifecycle owner.
         name: 'depth2',
         expected: /depth>=2|no lifecycle owner/,
         source:
@@ -802,7 +806,7 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
           hookLine +
           '\n  return <em>{props.seed}</em>;\n}\n' +
           'function Mid(props: { seed: number }) {\n' +
-          '  return <div><Child seed={props.seed} /></div>;\n}\n' +
+          '  return <div>{[props.seed].map((item) => <Child seed={item} />)}</div>;\n}\n' +
           'function Host(props: { seed: number }) {\n' +
           '  return <span><Mid seed={props.seed} /></span>;\n}\n' +
           'export default Host;\n',
