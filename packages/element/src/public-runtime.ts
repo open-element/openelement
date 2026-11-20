@@ -44,6 +44,7 @@ import {
 } from '@openelement/protocol/policy';
 import { signal } from './internal/signal/index.ts';
 import { serializeStyleLinks } from './internal/compiled/server/index.ts';
+import { compiledRootKindOf } from './internal/compiled/server/shared.ts';
 import type { CompiledProgramHost, CompiledSignalLike } from './internal/compiled/server/index.ts';
 import { type TrustedHtml, trustedHtmlValue } from './internal/core/security.ts';
 import { substituteSlotAnchors } from './internal/compiled/slot-anchors.ts';
@@ -138,6 +139,11 @@ interface CompiledComponentConstructor extends CustomElementConstructor {
   __partProgram?: PartProgram;
   __compiledProperties?: CompiledPropertyMetadata[];
   __elementMetadata?: CompiledElementMetadata;
+  /**
+   * The build-time ROOT MODE (`light` | `shadow`). Its own static rather than a
+   * read of `__partProgram.root.kind`, so dispatch never depends on the
+   * execution artifact (C07–C11).
+   */
   __computedFields?: Record<string, (signals: CompiledSignalRecord) => CompiledSignalLike<unknown>>;
   /**
    * The emitted property table (`static props`), whose `default` holds the
@@ -246,7 +252,10 @@ function collectStaticStyleCss(ctor: CompiledComponentConstructor): string | und
 
 /** The compiled tag a diagnostic names, or `<unknown>` for a foreign class. */
 function tagNameOf(ctor: CompiledComponentConstructor): string {
-  const tag = (ctor as { __partProgram?: { tag?: unknown } }).__partProgram?.tag;
+  // C07–C11: the tag is a build-time fact on the metadata static, not a read of
+  // the execution artifact. A runtime reader that needed the whole Part Program
+  // to name a diagnostic was the coupling this slice removes.
+  const tag = (ctor as { __elementMetadata?: { tag?: unknown } }).__elementMetadata?.tag;
   return typeof tag === 'string' && tag !== '' ? `<${tag}>` : '<unknown>';
 }
 
@@ -661,9 +670,10 @@ function seedCompiledProperties(
   signals: CompiledSignalRecord;
   hostAttrs: Array<readonly [string, unknown]>;
 } {
-  const properties = Array.isArray(ctor.__compiledProperties)
-    ? ctor.__compiledProperties
-    : ctor.__partProgram!.metadata.properties;
+  // C07–C11: `__compiledProperties` is the ONE owner of the property rows. The
+  // Part Program fallback this replaces could only fire for an artifact the
+  // compiler does not emit, so it was a second source of truth with no reader.
+  const properties = ctor.__compiledProperties ?? [];
   // Null prototype (the client facade's `createFacadePropertyState` contract):
   // a compiled property named `__proto__` is a host signal entry, never the
   // record's prototype, so the server seed and the client claim read the same
@@ -696,7 +706,7 @@ function seedCompiledProperties(
     if (!factory) {
       throw new OpenElementError(
         `[openElement] <${
-          ctor.__partProgram!.tag
+          ctor.__elementMetadata!.tag
         }> computed property "${record.name}" has no generated factory. ` +
           'Rebuild the component through the OpenElement compiler.',
         { code: FacadeErrorCode.COMPUTED_FACTORY_MISSING, phase: 'ssr' },
@@ -1338,15 +1348,14 @@ function renderToStringAtDepth(
                   nested.projectedChildren,
                 );
               }
-              if (!nestedClass?.__partProgram) {
+              if (!nestedClass?.__compiledProperties) {
                 throw new OpenElementError(
-                  `[openElement] admitted nested component <${nested.tag}> is not registered with a compiled Part Program.`,
+                  `[openElement] admitted nested component <${nested.tag}> is not a compiled class ` +
+                    '(it carries no property table); rebuild it through the OpenElement compiler.',
                   { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
                 );
               }
-              const nestedProperties = Array.isArray(nestedClass.__compiledProperties)
-                ? nestedClass.__compiledProperties
-                : nestedClass.__partProgram.metadata.properties;
+              const nestedProperties = nestedClass.__compiledProperties;
               const nestedProps: Record<string, unknown> = { ...nested.properties };
               const propertyAttributes = new Set<string>();
               for (const record of nestedProperties) {
@@ -1367,7 +1376,9 @@ function renderToStringAtDepth(
               const passthrough = nested.attributes.filter(
                 ([name]) => !propertyAttributes.has(name),
               );
-              const nestedMode = nestedClass.__partProgram.root.kind;
+              // C07–C11: ONE reader for the build-time root mode, so no call
+              // site reaches into the execution artifact for it.
+              const nestedMode = compiledRootKindOf(nestedClass);
               const rendered = renderToStringAtDepth(
                 nested.tag,
                 {

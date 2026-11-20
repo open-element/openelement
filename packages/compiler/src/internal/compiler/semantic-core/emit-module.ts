@@ -311,6 +311,18 @@ export function emitCompiledModule(input: EmitModuleInput): EmitModuleResult {
   push('');
   pushDerivedBlock(`const __elementMetadata = ${metadataJson};`, classNode.name!);
   push('');
+  // C07–C11 (alpha16 retirement): the ROOT MODE is a build-time fact the runtime
+  // needs for dispatch (a light host's content is the document's, a shadow host's
+  // is its template's). It used to be reachable only through
+  // `__partProgram.root.kind`, which made a runtime reader depend on the whole
+  // execution artifact. Emitting it as its own static is what lets the runtime's
+  // fact reads stop touching the Part Program at all — the prerequisite for
+  // deleting the artifact.
+  pushDerivedBlock(
+    `const __oeRootKind: 'light' | 'shadow-open' | 'shadow-closed' = ${JSON.stringify(analyzed.rootKind)};`,
+    classNode.name!,
+  );
+  push('');
   // Explicit string[]: an empty attribute list would otherwise infer an
   // evolving any[] that strict noImplicitAny rejects at staged-pack check.
   pushDerivedBlock(`const __observedAttributes: string[] = ${observedJson};`, classNode.name!);
@@ -354,6 +366,7 @@ export function emitCompiledModule(input: EmitModuleInput): EmitModuleResult {
       '  static __partProgram: typeof __partProgram = __partProgram;',
       '  static __compiledProperties: typeof __compiledProperties = __compiledProperties;',
       '  static __elementMetadata: typeof __elementMetadata = __elementMetadata;',
+      '  static __oeRootKind: typeof __oeRootKind = __oeRootKind;',
       '  static props: typeof __compiledProps = __compiledProps;',
       '  static observedAttributes: typeof __observedAttributes = __observedAttributes;',
     ].join('\n'),

@@ -124,6 +124,14 @@ function legacyArtifactPage(options: {
       'static __elementMetadata =',
     )
     .replaceAll('static props: typeof __compiledProps =', 'static props =')
+    // C07–C11 (alpha16 retirement): the emitted root-kind fact carries a TS type
+    // annotation, and this fixture is a plain-JS N-2 artifact, so the annotation
+    // is stripped with the others.
+    .replaceAll(
+      "const __oeRootKind: 'light' | 'shadow-open' | 'shadow-closed' =",
+      'const __oeRootKind =',
+    )
+    .replaceAll('static __oeRootKind: typeof __oeRootKind =', 'static __oeRootKind =')
     .replaceAll(
       'static observedAttributes: typeof __observedAttributes =',
       'static observedAttributes =',

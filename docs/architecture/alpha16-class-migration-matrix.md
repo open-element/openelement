@@ -1685,3 +1685,44 @@ prose, 3 `<h2>`s and 2 highlighted fences.
 generated-data modules' embedded string samples, neither of which is application
 code. The class FRONTEND itself (compiler lane, Part Program, runtime
 `__partProgram` reads — C07–C11) is the next retirement target.
+
+**2026-11-20 — C07–C11 first slice: the runtime's FACT reads stop touching the Part Program.**
+
+The runtime used to reach into `__partProgram` for three facts it needed to
+dispatch — the tag (diagnostics, page resolution), the property rows (server
+seeding, nested composition), and the root mode. Those reads were what made the
+execution artifact a dependency of ordinary rendering, so they had to go before
+the artifact can be deleted. Measured, before → after:
+
+| fact | before | after |
+| --- | --- | --- |
+| tag | `ctor.__partProgram?.tag` (2 sites) | `ctor.__elementMetadata.tag` — the metadata static the compiler already emits |
+| property rows | `__partProgram.metadata.properties` with a `__compiledProperties` first choice (3 sites) | `__compiledProperties` alone — the fallback could only fire for an artifact the compiler never emits, i.e. a second source of truth with no reader |
+| root mode | `__partProgram.root.kind` (2 sites) | **new** `static __oeRootKind` emitted next to the metadata and property tables, read through ONE shared helper |
+
+`packages/element/src/internal/compiled/server/shared.ts` gained
+`compiledRootKindOf()` — the single reader both dispatch sites use (the `__ssr`
+composition serializer and the nested-host walk). Its Part Program arm is retained
+**only** for in-repo test doubles that fabricate an artifact instead of running the
+emitter, carries its written retirement condition (P5) in the doc comment, and is
+deleted together with the artifact. Centralizing it is the point: retirement is one
+edit, and there is exactly one reader.
+
+Residual `__partProgram` reads in `packages/element/src`, and why each survives:
+
+| site | why it is not a fact read |
+| --- | --- |
+| `public-runtime.ts` ×2 | the two ENGINE calls that actually execute the program (`program.render(…)`) |
+| `open-element-implementation.ts` ×1 | the class base's own connect path |
+| `shared.ts` ×1 | the centralized compat read above, with its retirement condition |
+
+Evidence (LOCAL): element 135 files / 1051 tests; compiler 101 / 1404; router
+167 / 1880; www 34 / 304; saas 20 / 150; create 3 / 68; `site:build` exit 0 (6
+steps); `vp run check` 5/5 PASS.
+
+Two fixture adaptations were needed and are honest, not allowances: the N-2
+legacy-artifact fixture in `ssr-css-defects.test.ts` strips TS annotations to make
+a plain-JS artifact, so it now strips the new fact's annotation too; and the
+emitted root-kind union is the ARTIFACT vocabulary (`light` | `shadow-open` |
+`shadow-closed`), not the two-value runtime vocabulary — the loop test that
+consumes `shadow-open` caught that in one round.
