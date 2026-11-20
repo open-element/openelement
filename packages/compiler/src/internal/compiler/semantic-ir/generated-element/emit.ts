@@ -12,6 +12,12 @@
  *
  * - imports the internal M09-0/M09-shadow shell by its compiler-private
  *   specifier;
+ * - for a CLIENT-ONLY island (`ssr: false` / `hydrate: 'only'`), imports each
+ *   declared `.css` specifier as a REAL module edge and carries the bindings on
+ *   the descriptor's `styles` row (2026-11-20): no server render exists to
+ *   deliver the sheet, so the shell adopts these objects into the root it
+ *   creates. A client-only declaration with no static specifier refuses at build
+ *   time instead of rendering unstyled;
  * - builds a descriptor with `tag`, the resolved `properties` rows (or `[]`),
  *   the leaf's exported `create<Name>Recipe` factory, `createInstance` only
  *   when the leaf generator reported a root setup factory (T3 / 16b-LC-1 —
@@ -139,6 +145,24 @@ export interface GenerateElementModuleOptions {
    * walk; omitted keeps the pre-slice bytes exactly.
    */
   readonly styleLinkPrefix?: boolean;
+  /**
+   * The sidecar's client-only fact (2026-11-20 client style-adoption slice):
+   * the build's effective phase — explicit `ssr: false`, or `hydrate: 'only'`,
+   * exactly as the lane admission read it. A client-only island has no server
+   * render, so its declared sheets are emitted as REAL module-graph imports and
+   * carried on the descriptor for the shell to adopt into the root it creates.
+   * `ssr: true`/absent (the SSR case) changes no byte.
+   */
+  readonly clientOnly?: boolean;
+  /**
+   * The sidecar's declared `.css` specifiers, in authored order, when it
+   * declares `styles` at all. Present with an empty list is a FAIL-CLOSED
+   * state for a client-only island: the declaration promised a sheet but no
+   * static specifier reached the emitter, which would render unstyled. The
+   * router scan owns the author-facing shape refusals; this option is the
+   * emitter's own closure over the same fact.
+   */
+  readonly styles?: readonly string[];
 }
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -378,6 +402,14 @@ export function generateElementModule(
   // never from a host fact. An unstyled module passes nothing, so its bytes
   // stay exactly the pre-slice output.
   const styleLinkPrefix = options.styleLinkPrefix === true;
+  // 2026-11-20 client style adoption: only the client-only fact (`ssr: false`
+  // or `hydrate: 'only'`), read by the SAME lane admission that supplies the
+  // declared list. The imports are emitted for a client-only island only — an
+  // SSR island's sheet is already delivered by the marked `<link>` inside its
+  // DSD template, and adding a module-graph copy would change bytes for a
+  // second delivery that the link-delivery guard then has to undo.
+  const clientOnly = options.clientOnly === true;
+  const clientStyles = clientOnly ? (options.styles ?? []) : [];
   const leaf = generateLeafModule(module, {
     ...(options.authoredSource === undefined ? {} : { authoredSource: options.authoredSource }),
     ...(rootInstanceName === undefined ? {} : { rootInstance: rootInstanceName }),
@@ -423,6 +455,24 @@ export function generateElementModule(
       ),
     ]);
   }
+  // Fail closed BEFORE a descriptor exists: a client-only island that declares
+  // `styles` but reaches this stage with no static specifier would ship a
+  // root the browser creates with nothing to adopt — an unstyled render with no
+  // error. The router scan owns the author-facing list-shape refusals; this is
+  // the lane's own closure over the SAME sidecar fact (shim #24's failure
+  // behaviour, kept by the client style slice).
+  if (clientOnly && options.styles !== undefined && clientStyles.length === 0) {
+    return emptyResult(leaf, [
+      moduleDiagnostic(
+        module.file,
+        GENERATED_ELEMENT_DIAGNOSTIC.CLIENT_STYLES_UNWIRED,
+        'this island declares openElement.styles and is client-only (ssr: false), but no static ' +
+          '.css specifier reached the emitter. A client-only island has no DSD template to carry ' +
+          'the stylesheet link, so the sheet can only arrive through a module-graph import: ' +
+          'refusing instead of rendering the element unstyled',
+      ),
+    ]);
+  }
   if (!module.components.some((component) => component.name === rootName)) {
     return emptyResult(leaf, [
       moduleDiagnostic(
@@ -452,6 +502,10 @@ export function generateElementModule(
     ssrHost: `${rootName}__ssrHost`,
     // The light-root SSR producer name (the leaf's parameterless `<Name>__ssr`).
     ssrProducer: `${rootName}__ssr`,
+    // 2026-11-20 client style adoption: one module-scope import binding per
+    // declared sheet. The name is compiler-owned and collision-checked against
+    // the leaf text like every other tail identifier.
+    styleImport: (index: number): string => `__oeStyle${index}`,
   };
   const root = options.root;
   const templateRoot = hostTemplateRoot(root);
@@ -482,6 +536,7 @@ export function generateElementModule(
     names.alias,
     names.tag,
     names.shellImport,
+    ...clientStyles.map((_, index) => names.styleImport(index)),
     ...propertyEmission.identifiers,
     ...(propertyEmission.usesPropsResolver && hostWrapper !== null ? [names.propsResolver] : []),
     ...(hostWrapper === null
@@ -522,6 +577,15 @@ export function generateElementModule(
       ...(propertyEmission.usesPropsResolver && hostWrapper !== null ? [names.propsResolver] : []),
       ...(hostWrapper === null ? [] : [names.ssrHostImport, names.hostPropsSeed]),
     ].join(', ')} } from ${JSON.stringify(GENERATED_ELEMENT_SHELL_SPECIFIER)};`,
+    // 2026-11-20 client style adoption: a client-only island's declared sheets
+    // ride REAL module-graph edges. The router build's style-asset intercept
+    // answers each specifier with the sheet adapter (a `CSSStyleSheet` carrying
+    // the emitted asset URL), so the descriptor below receives objects, not
+    // strings, and the sheet is the SAME emitted asset the build-time
+    // declaration already produces (the emitter dedups by content-hash file).
+    ...clientStyles.map(
+      (specifier, index) => `import ${names.styleImport(index)} from ${JSON.stringify(specifier)};`,
+    ),
     '',
     ...propertyEmission.factoryLines,
     ...(propertyEmission.factoryLines.length === 0 ? [] : ['']),
@@ -533,6 +597,12 @@ export function generateElementModule(
     ...(delegatesFocus ? ['  delegatesFocus: true,'] : []),
     ...(formAssociated ? ['  formAssociated: true,'] : []),
     ...propertyEmission.rowLines,
+    // A client-only island's sheets are carried to the shell as imported sheet
+    // objects; every other lane keeps its pre-slice descriptor bytes (the SSR
+    // lane's sheet is the marked `<link>` inside the DSD template).
+    ...(clientStyles.length === 0
+      ? []
+      : [`  styles: [${clientStyles.map((_, index) => names.styleImport(index)).join(', ')}],`]),
     `  createRecipe: create${rootName}Recipe,`,
     // T3 / 16b-LC-1: the root setup factory is the descriptor's call-once
     // retained setup site (compiler-private member the shell already owns from

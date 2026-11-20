@@ -61,7 +61,7 @@ my-app/
   app/
     routes/          一个文件对应一个 URL——index.tsx（/）、about.tsx（/about）、
                      404.tsx、api/ping.ts（/api/ping）
-    components/      编译后的页面元素，以及它们数组引用的 .css 表
+    （components/     需要时放页面作用域组件）
     islands/         选择进入客户端投递的模块（my-counter、live-timer）
     layout.tsx       自动注册、包在每个页面外的站点外框
     head.tsx         结构性 <head> 条目——这里是 color-scheme meta

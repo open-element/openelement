@@ -395,6 +395,41 @@ export default Field;
   );
 });
 
+test('scan: a CLIENT-ONLY shadow island without a producer is admitted (the browser adopts the import)', async () => {
+  // 2026-11-20 client style adoption: the `missing-producer` refusal exists
+  // because a server-rendered shadow island needs the producer's template to
+  // declare the sheet in. A client-only island has no server render at all:
+  // the browser creates the root, the compiler emits the `.css` import for the
+  // same declaration, and the shell adopts the sheet object. Refusing here
+  // would reject a delivery that now works.
+  const missingProducerClientOnly = `import { defineIslandConfig } from '@openelement/router';
+export const openElement = defineIslandConfig({
+  root: 'shadow',
+  ssr: false,
+  dsd: false,
+  hydrate: 'only',
+  styles: ['./profile-card.css'],
+  properties: { value: { default: '' } },
+});
+function Field(props: { value: string }) {
+  return <input value={props.value} />;
+}
+export default Field;
+`;
+  const { root, scan } = await scanProject({
+    'app/islands/profile-card.tsx': missingProducerClientOnly,
+  });
+  const meta = await scan();
+  expect(meta['profile-card']!.styles).toEqual(['./profile-card.css']);
+  const declarations = islandStyleDeclarations();
+  expect(declarations).toHaveLength(1);
+  // Authored bytes, no `@scope`: a shadow edge is isolated by its boundary.
+  expect(declarations[0]!.root).toBe('shadow');
+  expect(declarations[0]!.specifiers).toEqual(['./profile-card.css']);
+  const absoluteModuleId = normalizeSeparators(join(root, 'app', 'islands', 'profile-card.tsx'));
+  expect(islandStyleDeclarationFor(absoluteModuleId)).toBe(declarations[0]);
+});
+
 test('scan: a class island with styles fails closed — static styles is its channel', async () => {
   await expectScanRefusal(
     { 'app/islands/light-class.tsx': LIGHT_CLASS },

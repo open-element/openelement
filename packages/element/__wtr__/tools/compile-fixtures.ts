@@ -87,6 +87,17 @@ const fixtures: FixtureSpec[] = [
     out: 'open-button.ts',
     generatedSite: 'open-button',
   },
+  {
+    // The client-only style-adoption fixture (2026-11-20): `ssr: false` + a
+    // shadow root + one declared sheet. The compiler emits a REAL `.css`
+    // import for the sidecar declaration, so this fixture is the browser row's
+    // proof that the import reaches the shell as a sheet object. Its sheet is
+    // copied beside the output below (the same rule as the ui sheets).
+    source: join(suite, 'fixtures/wtr-live-timer.tsx'),
+    id: 'wtr-live-timer.tsx',
+    out: 'wtr-live-timer.ts',
+    generatedSite: 'wtr-live-timer',
+  },
 ];
 
 const outDir = join(suite, 'generated');
@@ -104,6 +115,20 @@ for (const sheet of ['overlay-recipe.css', 'open-dialog.css', 'open-dropdown.css
   );
   await import('node:fs/promises').then((fs) => fs.writeFile(join(outDir, sheet), bytes));
   console.log(`copied ui sheet ${sheet} -> generated/${sheet}`);
+}
+
+// The client-only style fixture's sheet (2026-11-20) is not authored under
+// packages/ui: its generated module imports `./wtr-live-timer.css`, and the
+// element-browser sheet plugin resolves that against generated/. One copy, no
+// second source of truth.
+{
+  const bytes = await import('node:fs/promises').then((fs) =>
+    fs.readFile(join(suite, 'fixtures/wtr-live-timer.css'), 'utf8'),
+  );
+  await import('node:fs/promises').then((fs) =>
+    fs.writeFile(join(outDir, 'wtr-live-timer.css'), bytes),
+  );
+  console.log('copied fixture sheet wtr-live-timer.css -> generated/wtr-live-timer.css');
 }
 
 for (const fixture of fixtures) {

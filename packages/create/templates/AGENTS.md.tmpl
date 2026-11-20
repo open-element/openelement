@@ -26,7 +26,8 @@ npm run fmt        # oxfmt
 
 - `app/routes/` — pages (default export) and form actions.
 - `app/islands/` — interactive islands; each one hydrates with its declared strategy.
-- `app/components/` — presentational components and their root CSS.
+- `app/components/` — where page-scope components live when you add one
+  (the shipped pages are server functions in `app/routes/`).
 - `app/layout.tsx` — the shared document chrome every page renders inside.
 - `app/head.tsx` — document head entries a config URL list cannot express.
 - `openelement.config.ts` — framework options (head, i18n, middleware, ...).

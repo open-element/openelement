@@ -1,64 +1,60 @@
 /**
  * live-timer — client-only live stats island (compiled).
  *
- * hydrate: 'only' with ssr: false renders nothing on the server; the client
- * entry builds the DOM from the compiled Part Program and starts the clock in
- * connectedCallback, measured from the document's time origin.
- * disconnectedCallback stops the interval when the host leaves the tree.
+ * Generated-element lane (2026-11-20): the class this template used to declare
+ * is a function component with a sidecar. `hydrate: 'only'` with `ssr: false`
+ * renders nothing on the server; the client entry builds the shadow root from
+ * the compiled Part Program and starts the clock in `onConnect`, measured from
+ * the document's time origin. The cleanup `onConnect` returns stops the
+ * interval when the host leaves the tree, so a reconnect arms exactly one clock.
+ *
+ * Styling has ONE owner: the sidecar's `styles` declaration. This island is
+ * client-only, so no DSD template exists to carry a `<link>`: the compiler
+ * turns the declaration into a real `import` of the same sheet and the shell
+ * adopts it into the root it creates. The `:host` box rule in
+ * `app/islands/live-timer.css` therefore reaches the host, and the single
+ * declaration still feeds the build-time asset and the DSD link for the
+ * islands that do render on the server.
  */
 import { defineIslandConfig } from "@openelement/router";
-import { element, OpenElement, property } from "@openelement/element";
-import timerStyles from "./live-timer.css";
+import { signal } from "@openelement/element";
+import { onConnect } from "@openelement/element/lifecycle";
 
-export const openElement = defineIslandConfig({ hydrate: "only", ssr: false, dsd: false });
+export const openElement = defineIslandConfig({
+  hydrate: "only",
+  ssr: false,
+  dsd: false,
+  root: "shadow",
+  styles: ["./live-timer.css"],
+});
 
-// The interval handle rides compiled per-instance property state (module-level
-// runtime statements are outside the compiled grammar, OEC9008).
-@element("live-timer", { root: "shadow-open" })
-export default class LiveTimer extends OpenElement {
-  static override styles = [timerStyles];
+function LiveTimer() {
+  /** Elapsed seconds, preformatted: a compiled text Part binds a plain signal
+   * value, never a method call (OEC9013). */
+  const elapsed = signal("0.0");
 
-  /** Elapsed seconds, preformatted: a compiled text Part binds a plain
-   * property, never a method call (OEC9013). */
-  @property({ reflect: false, attribute: false })
-  elapsed = "0.0";
-
-  /**
-   * The ticking interval's handle; 0 when the host is not connected.
-   *
-   * `window.setInterval`, not the bare global: the generated tsconfig loads
-   * both DOM and node types (@types/node), so the bare `setInterval` name
-   * resolves to Node's overload and the handle becomes a `NodeJS.Timeout`
-   * (TS2322 on the assignment). The browser entry runs in the DOM, where the
-   * call returns a `number` — the honest type for this field.
-   */
-  @property({ reflect: false, attribute: false })
-  interval = 0;
-
-  override connectedCallback(): void {
-    super.connectedCallback();
-    this.interval = window.setInterval(() => {
-      this.elapsed = (Math.round(performance.now()) / 1000).toFixed(1);
+  onConnect(() => {
+    // `globalThis.setInterval`, not the bare global: the generated tsconfig
+    // loads both DOM and node types, so the bare name resolves to Node's
+    // overload. No handle is stored on the element; the returned cleanup owns
+    // it for the connection's lifetime (the emitted factory keeps the closure).
+    const interval = globalThis.setInterval(() => {
+      elapsed.value = (Math.round(globalThis.performance.now()) / 1000).toFixed(1);
     }, 100);
-  }
+    return () => globalThis.clearInterval(interval);
+  });
 
-  override disconnectedCallback(): void {
-    window.clearInterval(this.interval);
-    this.interval = 0;
-    super.disconnectedCallback();
-  }
-
-  render() {
-    return (
-      <div class="inline-flex items-baseline gap-[0.6rem]">
-        <span
-          id="elapsed"
-          class="min-w-[6ch] text-right text-[1.4rem] font-semibold text-brand tabular-nums"
-        >
-          {this.elapsed}
-        </span>
-        <span class="text-[0.85rem] text-ink-soft">seconds on this page</span>
-      </div>
-    );
-  }
+  return (
+    <div class="inline-flex items-baseline gap-[0.6rem]">
+      <span
+        id="elapsed"
+        class="min-w-[6ch] text-right text-[1.4rem] font-semibold text-brand tabular-nums"
+      >
+        {elapsed.value}
+      </span>
+      <span class="text-[0.85rem] text-ink-soft">seconds on this page</span>
+    </div>
+  );
 }
+
+export default LiveTimer;

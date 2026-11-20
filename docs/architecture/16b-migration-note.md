@@ -1637,3 +1637,67 @@ as history (amend-never-rewrite).
 The migration rule for authors is unchanged in the meantime: a component that
 needs derived state waits for D-4; a component that only reads its rows migrates
 now.
+
+## 2026-11-20 amendment — client-only shadow styles land; a silent hook drop is fixed (facts only)
+
+This closes the last row the 2026-11-15/2026-11-16 style amendments left OWED.
+It rewrites nothing above; the OWED text stays as history.
+
+**The measured gap.** The generated lane replaced the class lane's
+`import sheet from './x.css'` + `static styles = [sheet]` with the sidecar STRING
+list `styles: ['./x.css']`. That list is build metadata: the scan turns it into
+an emitted asset plus (for SSR) a DSD `<link>`, and it produces no module-graph
+edge. An `ssr: false` shadow island has no DSD template and its root is created
+by the browser, so nothing delivered the sheet and the island rendered completely
+unstyled. Measured on an emitted island module: `has css import: false`,
+`styleLinks` present (server-only), no descriptor `styles` key.
+
+**The delivery (three parts, one fact).**
+
+1. The sidecar reader exposes the client-only phase as `clientOnly`: explicit
+   `ssr: false` or `hydrate: 'only'` (the same `resolveIslandSsrDsd` coercion the
+   router scanner applies). `ssr: true`/absent stay the SSR case. A dynamic or
+   duplicate `ssr` refuses with `OEIR_GENERATED_ELEMENT_SSR_INVALID`.
+2. For a client-only island with declared styles, the emitter writes one real
+   `import sheetN from '<specifier>';` per specifier and a descriptor
+   `styles: [sheetN, …]` row. The identifiers join the tail collision list. An
+   SSR island changes no byte. If a client-only island declares styles but no
+   static specifier reaches the emitter, the build fails closed with
+   `OEIR_GENERATED_ELEMENT_CLIENT_STYLES_UNWIRED` — an unstyled render is never
+   silent.
+3. The generated-element shell carries the row, validates every entry is a real
+   sheet object (`replaceSync` callable; no `cssRules` read, so the Firefox
+   still-loading race stays closed), and adopts through the class lane's SAME
+   `CompiledStyleScope` into the root it created. It releases on disconnect and
+   re-adopts on reconnect; an adopted DSD root (a marked link already in its
+   template) is never a target, and a light root adopts into its containing tree.
+
+**Scan admission follows the same fact.** A `missing-producer` shadow island used
+to be refused because there was no template and no client adoption channel. It
+stays refused for a server-rendered island; it is now ADMITTED when the island is
+client-only, because the emitted import plus the shell adoption is a complete
+delivery. `OE_ISLAND_STYLE_SHADOW_UNWIRED` therefore names exactly the
+server-rendered no-producer case.
+
+**The path is proven three ways locally.** A Node row set compiles the emitted
+bytes (`generated-element.client-styles.test.ts`, 12 rows). The real Router CLI
+build in `island-style-build.test.ts` shows the client-only island's chunk
+carrying the ONE content-addressed asset URL the manifest records (the test that
+used to pin "zero JS bytes" now pins the intended import instead — the old
+premise was only true while the island rendered unstyled). The element-browser
+suite compiles a `ssr: false` fixture through the lane and asserts the host's
+COMPUTED `display` is `inline-block` from `:host{display:inline-block}`.
+
+**Prerequisite defect fixed on the way (same slice, measured).** An
+`onConnect`/`onDispose` callback that read a root `signal`/`computed` was
+classified as a host-binding read and dropped SILENTLY: no diagnostic, no emitted
+hook, a green build and dead author code. ADR-0183 D-4 makes those resources the
+retained factory's own declarations, so the hook reads them as sibling closure
+captures. `generated-element.imports.test.ts` and the A11 row now assert the
+emitted callback, not just the signal declaration. The target `live-timer`
+template needs this combination (a ticking `signal` written from `onConnect`).
+
+**Not claimed.** No CI evidence (this line has none), no M12/M13/M14, no P5
+sign-off, no lane deletion. The nested-light-root-inside-a-shadow-template case
+stays a written rule, not a capability (see §"Two gaps that are NOT the same
+thing" in the handoff and the migration matrix).

@@ -163,13 +163,19 @@ body {
   }
 }
 
-/* ── LIGHT-root page boxes ────────────────────────────────────────────────
+/* ── LIGHT-root host boxes ────────────────────────────────────────────────
    A custom element is inline by default and the host tag is not authored
-   markup, so no utility can carry its own box. The page components are server
-   functions on the generated-element lane, which own no element sheet — a LIGHT
-   root's CSS is a DOCUMENT resource, so this token sheet is its single owner.
-   These three selectors are the exact replacements for the retired per-page
-   `:host { display: block }` sheets. */
+   markup, so no utility can carry its own box. The layout and the page
+   components are function components on the generated-element lane and render
+   LIGHT roots, whose CSS is a DOCUMENT resource — this token sheet is its
+   single owner. These selectors are the exact replacements for the retired
+   per-component `:host { display: block }` sheets.
+
+   The layout is a LIGHT root on purpose: its chrome is styled with Tailwind
+   utilities, and a shadow root's utilities would need a component-sheet link
+   channel the generated lane has no app-local declaration for. Slotted page
+   content still projects through its `<slot>`. */
+app-layout,
 index-page,
 about-page,
 el-404 {

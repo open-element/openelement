@@ -107,7 +107,14 @@ describe('generated-element static imports', () => {
     // The resource is a factory-created binding now: declared in the retained
     // setup factory and returned in the record the shell keeps as `bindings`.
     expect(compiled!.code).toContain('const theme = signal((');
-    expect(compiled!.code).toContain('return { theme };');
+    expect(compiled!.code).toContain('return { theme, __oe_connect };');
+    // 2026-11-20: the hook that READS the factory-created signal is carried,
+    // not silently dropped. Before this fix the read was classified as a host
+    // binding (the resource loop registers every signal name there), the hook
+    // gate skipped the callback without a diagnostic, and the build stayed
+    // green while the callback never ran.
+    expect(compiled!.code).toContain('__oe_connect.push');
+    expect(compiled!.code).toContain('theme . value');
     // The P1 boundary holds: the factories come from the narrow runtime entry.
     expect(compiled!.code).toContain('from "@openelement/element/internal/compiled/leaf-runtime"');
   });

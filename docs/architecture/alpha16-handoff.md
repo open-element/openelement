@@ -6,6 +6,16 @@ summary: Self-contained handoff for a fresh session taking over the OpenElement 
 
 # Alpha16 handoff
 
+> **2026-11-20 status update (read before §1).** §5's task — the `ssr: false`
+> client style gap — **landed** in the session that took over this handoff, and
+> the starter's `live-timer` is migrated. The final-state document is
+> [`alpha16-closeout-report.md`](./alpha16-closeout-report.md); this handoff is
+> kept as the design record for §5/§6 and as the historical snapshot of §1–§5.
+> §5's three steps and its failure closure are implemented as written (with one
+> measured addition: `hydrate: 'only'` is the other client-only spelling, and the
+> scan's `missing-producer` admission is now client-only-aware). The prerequisite
+> lifecycle silent-drop fix is recorded in the migration matrix and `16b-MN`.
+
 Written at the end of a long session on `feat/alpha16-retirement` so a fresh
 session can continue **without re-deriving anything**. Everything below is either
 measured or explicitly marked as not measured.

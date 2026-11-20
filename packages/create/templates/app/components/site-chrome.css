@@ -1,5 +1,0 @@
-/* The chrome shadow host's box; the bars, brand and nav links are authored
-   as Tailwind utilities in layout.tsx. */
-:host {
-  display: block;
-}

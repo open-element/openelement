@@ -39,13 +39,13 @@
  * a light edge is wrapped in its island tag's native `@scope`, a shadow edge
  * ships the authored bytes verbatim. One registry, no second pipeline.
  *
- * WHAT THIS SLICE DOES NOT DO (recorded gap, GH issue #1800, Alpha17):
- *
- * - a LIGHT-root generated island's declared sheets are admitted and emitted,
- *   but the generated-element render path does not declare them in the document
- *   yet (the class lane's light-root `<link>` channel is not wired to it). The
- *   asset and the client asset manifest record are this slice's delivery; the
- *   document application is the Alpha17 adoption slice.
+ * THE CLIENT-ONLY CASE (2026-11-20). An `ssr: false` / `hydrate: 'only'` island
+ * has no server render and no DSD template: the browser creates the root. Its
+ * declaration is still admitted (root `shadow`, or `light` for a light root) and
+ * the compiler emits a real `.css` module-graph import for the SAME specifiers;
+ * the generated shell adopts the resulting sheet object. That is why a
+ * `missing-producer` shadow island is admitted when it is client-only — the
+ * producer only matters to a server-rendered template.
  */
 
 import { realpathSync } from 'node:fs';

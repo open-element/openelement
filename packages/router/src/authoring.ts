@@ -793,17 +793,21 @@ export interface IslandConfig {
    * imports arrayed in its `static styles`, and the build refuses `styles` on a
    * lane that owns that other channel instead of silently dropping it.
    *
-   * Deliberately NOT a second adoption mechanism (GH issue #1800, the Alpha17
-   * generated-island style slice): this slice admits the declaration, resolves
-   * it and emits the sheet as a real build asset. It does not attach the sheet
-   * to a rendered island yet:
+   * One declaration, one delivery per root/delivery shape (GH issue #1800):
    *
-   * - a shadow root has no style carrier until the DSD style-link slice
-   *   (M09-2e), so `styles` with `root: 'shadow'` is refused outright;
-   * - a light root's document-level application (the head `<link>` a light-root
-   *   class component's sheet gets) is not wired to the generated-element render
-   *   path yet.
+   * - an SSR/DSD shadow island declares the sheet as the canonical marked
+   *   `<link>` INSIDE its shadow template (M09-2e / #1803);
+   * - a light-root island's sheet is delivered to the document (the head
+   *   `<link>` / the render's document sink), exactly as a light-root class
+   *   component's sheet is;
+   * - a CLIENT-ONLY island (`ssr: false`) has no template and no server render,
+   *   so the compiler emits a real module-graph `import` of the same sheet and
+   *   the generated shell adopts the resulting sheet object into the root it
+   *   creates (2026-11-20). The declaration remains the ONE source: the build
+   *   asset, the manifest entry and that import are resolved from it.
    *
+   * None of these is a second style pipeline: the sheet rides the existing
+   * style-edge registry, Vite CSS pipeline and content-addressed emitted asset.
    * Keep the list small (bounded): every entry is one emitted asset edge.
    */
   styles?: readonly string[];

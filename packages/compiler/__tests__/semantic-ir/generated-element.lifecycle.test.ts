@@ -620,12 +620,17 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
       'export default SignalHook;\n';
     const fact = site('lifecycle-signal');
     // ADR-0183 D-4: a ROOT `signal` resource is created by the retained factory
-    // and returned in its record, so a hook reading it is admitted.
+    // and returned in its record, so a hook reading it is admitted — and it is
+    // CARRIED: before 2026-11-20 the read was classified as a host binding and
+    // the hook was skipped without any diagnostic, so this row must assert the
+    // emitted callback, not just the signal declaration.
     const signalCompiled = compileGeneratedElementIfAdmitted(signalHook, fact.file, {
       site: fact.site,
     });
     expect(signalCompiled).not.toBeNull();
     expect(signalCompiled!.code).toContain('const count = signal((');
+    expect(signalCompiled!.code).toContain('__oe_connect.push');
+    expect(signalCompiled!.code).toContain('count . value');
     // A root setup local that reads a host binding cannot host the factory: the
     // emitter keeps its existing fail-closed binding identity instead of
     // silently dropping the admitted hooks.

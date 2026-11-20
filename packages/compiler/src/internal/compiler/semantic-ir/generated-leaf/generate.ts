@@ -1959,8 +1959,21 @@ function recordFor(
 }
 
 /** Declare the host bindings an expression reads (prologue) and validate names. */
-function declareReads(state: EmitState, record: LoweredExpressionRecord): boolean {
+function declareReads(
+  state: EmitState,
+  record: LoweredExpressionRecord,
+  /**
+   * Names the ENCLOSING retained setup factory declares as sibling locals
+   * (ADR-0183 D-4: the ROOT's `signal`/`computed` resources). A read of one is a
+   * closure capture there, not a host-binding demand: the factory creates the
+   * value before the hook closures are recorded, and mount/claim demand the same
+   * name through the bindings record in their own `declareReads` calls. An empty
+   * set (every non-root component) changes no behaviour.
+   */
+  localCaptures?: ReadonlySet<string>,
+): boolean {
   for (const read of record.reads) {
+    if (localCaptures?.has(read.name) || localCaptures?.has(read.binding.name)) continue;
     // The enclosing list-entry mapper shadows every same-named outer binding,
     // including `props`. Check the entry binding before the component-props
     // branch: a legal `items.map((props) => …)` read is entry-local, never a
@@ -8186,6 +8199,31 @@ function emitComponent(
   // Depth>=2, a reusable JSX/list body and a non-retained target have no
   // connection/disposal owner; they fail closed at the AUTHORED span instead of
   // silently dropping the author's work.
+  // ADR-0183 D-4: the ROOT's `signal`/`computed` resources are CREATED by the
+  // retained setup factory (`__oe_rootInstance`) and returned in its record, so
+  // they are that factory's sibling locals rather than a demand on the shell.
+  // A lifecycle hook carried by the SAME factory therefore reads them as
+  // closure captures.
+  //
+  // This set is load-bearing, not an optimisation: the resource loop above has
+  // already put every signal name in `state.hostBindings` (mount/claim resolve
+  // them through the retained bindings record, which is correct for those
+  // bodies), so without it `hookReadsHostBinding` classified the hook's read as
+  // a host binding and the gate below skipped the callback SILENTLY — no
+  // diagnostic, no emitted hook. A hook that read a root signal was therefore
+  // dead code with a green build. The mount/claim bodies keep their own
+  // `declareReads` calls and still declare the binding, so the two phases stay
+  // one fact with two legitimate carriers.
+  const rootBindingResources =
+    rootInstance === component.name
+      ? component.resources.filter(
+          (resource) =>
+            (resource.kind === 'signal' || resource.kind === 'computed') &&
+            resource.expression !== null,
+        )
+      : [];
+  const rootBindingNames = new Set(rootBindingResources.map((resource) => resource.name));
+  const rootSetupCaptures = rootBindingNames;
   // The SAME fact `declareReads` just recorded: a read it turned into a host
   // binding cannot be satisfied by the retained setup factory (no bindings
   // channel there), so the hook is NOT admitted here and the module gate keeps
@@ -8195,10 +8233,12 @@ function emitComponent(
   const hookReadsHostBinding = (record: LoweredExpressionRecord): boolean =>
     record.reads.some(
       (read) =>
-        state.hostBindings.has(read.name) ||
-        state.hostBindings.has(read.binding.name) ||
-        state.requiredBindings.has(read.name) ||
-        state.requiredBindings.has(read.binding.name),
+        !rootSetupCaptures.has(read.name) &&
+        !rootSetupCaptures.has(read.binding.name) &&
+        (state.hostBindings.has(read.name) ||
+          state.hostBindings.has(read.binding.name) ||
+          state.requiredBindings.has(read.name) ||
+          state.requiredBindings.has(read.binding.name)),
     );
   // `16b-CTX`: a context intrinsic needs an OWNER SCOPE, and this lane's owner
   // scopes exist at exactly two places — the generated element ROOT setup and a
@@ -8231,7 +8271,10 @@ function emitComponent(
   const admittedHooks: AdmittedLifecycleHook[] = [];
   for (const hook of component.lifecycle) {
     const record = recordFor(state, hook.callback, records);
-    if (record === null || !declareReads(state, record)) continue;
+    // The root setup factory's own signal/computed locals are sibling closure
+    // captures for a hook it carries; they are NOT host bindings there. The
+    // mount/claim bodies keep demanding them through the bindings record.
+    if (record === null || !declareReads(state, record, rootSetupCaptures)) continue;
     if (hookReadsHostBinding(record)) continue;
     const carriedByRoot = rootInstance === component.name;
     const carriedByLeaf =
@@ -8279,19 +8322,8 @@ function emitComponent(
   // `UNBOUND_BINDING` gate refuses such a module; keeping `rootSetup` false
   // here preserves the pre-change emitted text instead of writing a factory
   // that references a name it never declares.
-  // ADR-0183 D-4: the ROOT's `signal`/`computed` resources are CREATED by the
-  // retained setup factory and returned in its record, so they are the module's
-  // production bindings source rather than a demand on the shell. A read of one
-  // is therefore satisfiable by the factory (it is a sibling declaration).
-  const rootBindingResources =
-    rootInstance === component.name
-      ? component.resources.filter(
-          (resource) =>
-            (resource.kind === 'signal' || resource.kind === 'computed') &&
-            resource.expression !== null,
-        )
-      : [];
-  const rootBindingNames = new Set(rootBindingResources.map((resource) => resource.name));
+  // ADR-0183 D-4: `rootBindingResources`/`rootBindingNames` were computed above
+  // (the hook gate consumes them too); the setup-local check below reuses them.
   const setupReadsHostBinding = localLines.some((line) =>
     (line.record?.reads ?? []).some(
       (read) =>

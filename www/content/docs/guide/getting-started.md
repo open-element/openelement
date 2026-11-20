@@ -63,7 +63,7 @@ my-app/
   app/
     routes/          one file per URL — index.tsx (/), about.tsx (/about),
                      404.tsx, api/ping.ts (/api/ping)
-    components/      the compiled page elements and the .css sheets they array
+    (components/     page-scope components, when you add one)
     islands/         modules that opt into client delivery (my-counter, live-timer)
     layout.tsx       the auto-registered site chrome wrapped around every page
     head.tsx         structural <head> entries — here the color-scheme meta

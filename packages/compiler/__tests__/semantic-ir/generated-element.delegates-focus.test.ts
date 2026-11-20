@@ -94,6 +94,7 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
       kind: 'read',
       facts: {
         root: 'shadow-open',
+        clientOnly: false,
         delegatesFocus: true,
         formAssociated: false,
         declaresStyles: false,
@@ -109,6 +110,7 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
       kind: 'read',
       facts: {
         root: undefined,
+        clientOnly: false,
         delegatesFocus: false,
         formAssociated: false,
         declaresStyles: false,
@@ -121,6 +123,7 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
       kind: 'read',
       facts: {
         root: 'light',
+        clientOnly: false,
         delegatesFocus: false,
         formAssociated: false,
         declaresStyles: false,
@@ -136,6 +139,7 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
       kind: 'read',
       facts: {
         root: 'shadow-open',
+        clientOnly: false,
         delegatesFocus: false,
         formAssociated: false,
         declaresStyles: false,
@@ -148,6 +152,7 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
       kind: 'read',
       facts: {
         root: undefined,
+        clientOnly: false,
         delegatesFocus: false,
         formAssociated: false,
         declaresStyles: false,
@@ -163,6 +168,7 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
       kind: 'read',
       facts: {
         root: 'shadow-open',
+        clientOnly: false,
         delegatesFocus: true,
         formAssociated: false,
         declaresStyles: false,

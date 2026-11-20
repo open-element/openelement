@@ -37,6 +37,12 @@
  *   `properties: []` exactly as M09-1a did. Array/object/`trustedHtml`
  *   conversion and custom converters are NOT representable here (the shell's
  *   `PROPERTY_TYPES` admits the three primitives only).
+ * - `styles` (optional array) — a CLIENT-ONLY island's declared stylesheets, as
+ *   the bucket of sheet objects its emitted `.css` imports resolve to
+ *   (2026-11-20 client style-adoption slice). Emitted only when the sidecar's
+ *   client-only phase (`ssr: false` / `hydrate: 'only'`) and a declared
+ *   `styles` list meet; the shell adopts them into the root it created. An SSR
+ *   island never carries the row — its marked DSD `<link>` is the delivery.
  * - `createRecipe` (required function) — the leaf's exported
  *   `create<Name>Recipe` factory. The claim stays reachable only through the
  *   returned `recipe.claim`; no leaf symbol is renamed.
@@ -239,6 +245,22 @@ export const GENERATED_ELEMENT_DIAGNOSTIC = {
    * or a reflected `disabled` row (the fieldset state must stay reversible).
    */
   FORM_VALUE_UNSUPPORTED: 'OEIR_GENERATED_ELEMENT_FORM_VALUE_UNSUPPORTED',
+  /**
+   * The sidecar's `ssr` cannot be read as one boolean literal (a dynamic value
+   * or a duplicate key). Only the EXPLICIT literal `false` is the client-only
+   * fact; `true` and an absent key are the same case, so a value this reader
+   * cannot prove must refuse instead of guessing the delivery phase.
+   */
+  SSR_INVALID: 'OEIR_GENERATED_ELEMENT_SSR_INVALID',
+  /**
+   * A client-only island declares `styles`, but no static `.css` specifier
+   * reached the emitter. A client-only island has no DSD template to carry the
+   * marked `<link>`, so the sheet can only arrive through a real module-graph
+   * import; emitting the descriptor without one would render unstyled. This is
+   * the build-time half of the shim #24 failure closure, kept by the client
+   * style slice.
+   */
+  CLIENT_STYLES_UNWIRED: 'OEIR_GENERATED_ELEMENT_CLIENT_STYLES_UNWIRED',
   /** The appended tail did not parse (an emitter invariant, not author input). */
   INVALID_ARTIFACT: 'OEIR_GENERATED_ELEMENT_INVALID_ARTIFACT',
 } as const;

@@ -181,6 +181,15 @@ export function compileGeneratedElementIfAdmitted(
     ...(admission.declaresStyles && admission.root === 'shadow-open'
       ? { styleLinkPrefix: true }
       : {}),
+    // 2026-11-20 client style adoption: the SAME sidecar read supplies the
+    // client-only fact and the declared specifiers. A client-only island has no
+    // DSD template to carry the marked link, so the emitter writes real
+    // module-graph imports for these specifiers and the shell adopts the
+    // resulting sheet objects into the root it creates. Both facts come from
+    // one read, so the scan-time and transform-time compiles cannot disagree.
+    ...(admission.declaresStyles
+      ? { clientOnly: admission.clientOnly, styles: admission.styles }
+      : {}),
     ...(options.authoredSource === undefined ? {} : { authoredSource: options.authoredSource }),
   });
   if (emitted.diagnostics.length > 0) {

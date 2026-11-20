@@ -67,10 +67,12 @@ export const IslandErrorCode = {
   /** `exportNames` is malformed or names a tag outside the delivery set. */
   EXPORT_NAMES: 'OE_ISLAND_EXPORT_NAMES',
   /**
-   * `styles` was declared on a SHADOW-root generated island. The generated
-   * element's DSD template has no stylesheet-link channel yet (M09-2e owed), so
-   * the declaration is refused at build instead of being silently dropped.
-   * Carrier: GH #1800 (Alpha17 shadow style adoption).
+   * `styles` was declared on a SHADOW-root generated island that has no compiled
+   * DSD host producer AND is not client-only. A server-rendered shadow island
+   * needs the producer's template to declare the sheet in; a client-only island
+   * (`ssr: false` / `hydrate: 'only'`) is admitted instead, because the compiler
+   * emits the module-graph import the shell adopts (2026-11-20). The code name
+   * is historical: the DSD link carrier itself landed in M09-2e.
    */
   STYLE_SHADOW_UNWIRED: 'OE_ISLAND_STYLE_SHADOW_UNWIRED',
   /**

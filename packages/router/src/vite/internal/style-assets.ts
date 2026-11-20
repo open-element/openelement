@@ -579,10 +579,10 @@ export interface ServerRenderedSeeds {
  * declared sheet has no authored `.css` import to discover, and a client-only
  * island is not a server-rendered root at all. The emission half then serves
  * those edges exactly like a walked one: one emission state, one content hash,
- * one client asset manifest record. What this pass does NOT do is declare the
- * sheet in rendered markup: a shadow root's DSD style-link carrier is M09-2e
- * owed (the scan refuses a shadow declaration before it reaches here), and the
- * light root's document-level application is the Alpha17 adoption slice.
+ * one client asset manifest record. The sheet's delivery is one per shape: a
+ * shadow root's DSD marked link (M09-2e), the light root's document sink, or —
+ * for a client-only island — the compiler's module-graph import that this same
+ * registry answers with the sheet adapter (2026-11-20).
  */
 export function serverRenderedStyleEdgesPlugin(
   seeds: ServerRenderedSeeds,

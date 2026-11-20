@@ -2,12 +2,6 @@
  * app/layout.tsx — the auto-registered layout: header, main slot and footer
  * exist here exactly once, so a page module carries only its own content.
  *
- * `root: 'shadow-open'` is what makes the projection work — the chrome renders
- * in this element's shadow tree while the slotted page content stays in the
- * page's light DOM. The markup below is styled with Tailwind utilities; the
- * sheet in `static styles` holds only the host box, which has no markup to
- * carry it.
- *
  * A convention, not a requirement: delete the file and pages render their own
  * chrome again, or opt out with `layout: false` in openelement.config.ts.
  */
@@ -21,16 +15,18 @@ import { defineIslandConfig } from "@openelement/router";
  * registers the host through the generated host PAIR channel, so the layout
  * renders as a generated element instead of a class.
  *
- * `root: "shadow"` keeps the class's DSD default: the chrome renders in this
- * element's shadow tree while the slotted page content stays in the page's light
- * DOM. The sidecar's `styles` channel is the DSD style-link carrier: the sheet is
- * declared as a marked `<link>` INSIDE the shadow template, which is why the
- * class's `static styles` array is gone rather than replaced.
+ * LIGHT root on purpose. The chrome is styled with Tailwind utilities, and a
+ * LIGHT root's CSS is a DOCUMENT resource: the utilities ride the compiled
+ * document sheet, and the host's box rule lives in `app/styles/theme.css`
+ * (`app-layout { display: block }`). Page content still projects through the
+ * `<slot>` — the generated light-root producer substitutes it at the slot.
+ * A shadow root would need the utilities inside its shadow tree, which requires
+ * a component-sheet link channel the generated lane has no app-local
+ * declaration for (package components declare it in their manifest; an app's
+ * own layout does not).
  */
 export const openElement = defineIslandConfig({
   tag: "app-layout",
-  root: "shadow",
-  styles: ["./components/site-chrome.css"],
 });
 
 function Layout() {

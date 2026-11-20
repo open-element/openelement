@@ -466,6 +466,13 @@ native 选择缝是主产物，不再作为垫片登记。）
   拒绝的是"shadow root 一律拒绝"，现在拒绝的是"没有模版的 shadow root"。
 - 证据：`island-styles.test.ts` 的准入行（原拒绝行已改写并写明原因）、
   `generated-light-styles.test.ts`、`@openelement/create` 3 files / 68 tests。
+- **2026-11-20 追加：`missing-producer` 的范围再收窄一次。** client-only
+  （`ssr: false` / `hydrate: 'only'`）的 shadow island 不再需要 host producer：
+  浏览器自建 root，编译器为同一 `styles` 声明发出真实模块图 import，shell 用
+  `CompiledStyleScope` 采用 sheet。因此扫描对 client-only 的 `missing-producer`
+  **准入**，该拒绝只剩 server-rendered 无 producer 一种诚实情形。
+  证据：`island-styles.test.ts` 的新增准入行、`generated-element.client-styles.test.ts`、
+  element-browser `client-only-styles.test.js`（真实浏览器 computed `:host`）。
 
 ### 25. legacy allocation-only 绑定工厂（descriptor `createBindings`）——条件到即删
 

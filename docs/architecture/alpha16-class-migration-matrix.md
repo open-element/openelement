@@ -1504,10 +1504,10 @@ loud failure rather than an unstyled render. Guard:
 | `app/routes/index.tsx` | MIGRATED — `HomePage` is an exported server function component declaring the page itself (§19.9) |
 | `app/routes/about.tsx` | MIGRATED — same shape, `AboutPage` |
 | `app/routes/404.tsx` | MIGRATED — same shape, `NotFoundPage` |
-| `app/layout.tsx` | MIGRATED — function component + sidecar `root: "shadow"`, sheet on the sidecar `styles` channel |
+| `app/layout.tsx` | MIGRATED — function component + sidecar `tag: "app-layout"`, **LIGHT root**. A shadow root was tried first and the starter build disproved it (2026-11-20, starter smoke): the chrome is styled with Tailwind utilities, a shadow tree cannot see the document sheet, and an app-local tag has no manifest declaration to add the component-sheet link — so the shadow chrome would ship unstyled. Its box rule joins the LIGHT-root host boxes in `app/styles/theme.css`; `<slot>` still projects page content through the light-root producer. `app/components/site-chrome.css` is RETIRED. |
 | `app/components/page-{home,about,404}.{tsx.tmpl,css}` | **RETIRED** (six files) — the component moved into its route module and the three `:host{display:block}` box rules moved to `app/styles/theme.css`, which is the one owner a LIGHT root's CSS can have |
 | `app/islands/my-counter.tsx` | MIGRATED (previous round) — sidecar `styles` carrier |
-| `app/islands/live-timer.tsx` | **BLOCKED, named** — `ssr: false`, so there is no DSD template for its sheet, and the client-created shadow root does not adopt stylesheets. Needs the client-side shadow style-adoption slice. |
+| `app/islands/live-timer.tsx` | **MIGRATED (2026-11-20)** — function component + sidecar `defineIslandConfig({ hydrate: 'only', ssr: false, dsd: false, root: 'shadow', styles: ['./live-timer.css'] })`; the clock is a `signal` written from `onConnect` (whose returned cleanup owns the interval), and the sheet reaches the client-created root through the compiler's emitted import + the shell's adoption. The BLOCKED row this replaces is history: the client-side shadow style-adoption slice landed. |
 
 Evidence: `@openelement/create` 3 files / 68 tests — including the pack-safe
 payload gate, the scratch-tree `oxfmt --check` + `oxlint` gate a fresh scaffold
@@ -2069,3 +2069,102 @@ A `?url`-import alternative was also measured and REJECTED: it builds in all thr
 phases but emits a **second** asset (649 vs 650 bytes, identical rules), which is
 exactly the "one resource, two deliveries" outcome the style pipeline exists to
 prevent.
+
+### LANDED (2026-11-20, same day): the client adoption slice, and a silent-drop defect found on the way
+
+The "designed but NOT landed" section above is history. What landed:
+
+1. **The sidecar fact.** `site.ts` exposes `clientOnly`: explicit `ssr: false`
+   OR `hydrate: 'only'` — the same `resolveIslandSsrDsd` coercion the router
+   scanner applies, so the scan's admission and the compiler's emission cannot
+   disagree. A dynamic or duplicate `ssr` refuses with
+   `OEIR_GENERATED_ELEMENT_SSR_INVALID`.
+2. **The module-graph edge.** For a client-only island with declared styles,
+   `emit.ts` writes one `import __oeStyleN from '<specifier>';` per specifier
+   plus the descriptor row `styles: [__oeStyleN, …]`; the identifiers join the
+   tail collision list. SSR islands change no byte. A client-only declaration
+   that reaches the emitter without a static specifier fails the build with
+   `OEIR_GENERATED_ELEMENT_CLIENT_STYLES_UNWIRED`.
+3. **The adoption.** The shell carries the row, refuses a non-sheet entry with a
+   coded build-phase descriptor error, and adopts through the class lane's SAME
+   `CompiledStyleScope` into the root it created (or the containing tree for a
+   light root); disconnect releases and reconnect re-adopts exactly one copy.
+   An adopted DSD root is never a target — its marked `<link>` is the delivery.
+4. **The scan follows the same fact.** A `missing-producer` shadow island is now
+   ADMITTED when it is client-only (the browser creates the root; the import +
+   adoption is a complete delivery) and stays refused for a server-rendered
+   island. `OE_ISLAND_STYLE_SHADOW_UNWIRED` therefore names exactly the honest
+   server-rendered no-producer case.
+
+**The prerequisite defect (measured while migrating the target).** An
+`onConnect`/`onDispose` callback reading a root `signal`/`computed` was
+classified as a host-binding read and **silently dropped**: `declareReads`
+turned the read into a host binding (the resource loop had already registered
+every signal name), and the hook gate's `continue` skipped the callback with no
+diagnostic. The A11 unit row asserted only that the signal declaration was
+emitted, so the drop stayed green; `generated-element.imports.test.ts` asserted
+`return { theme };` for a module whose hook was dead. ADR-0183 D-4 makes those
+resources the retained factory's own declarations, so a hook the same factory
+carries reads them as sibling closure captures. Both tests now assert the emitted
+callback. This is the same failure class as the two-faces rows above: the
+artifact and the record disagreed, and only an end-to-end render found it.
+
+**Target + evidence.** `live-timer` is migrated (function island; `signal` clock
+written from `onConnect`; sidecar `styles`). The proof is a real browser
+computed-style assertion on the built starter (`display: inline-block` from
+`:host{display:inline-block}`) plus the element-browser row
+(`client-only-styles.test.js`: computed style, adopted-sheet identity, disconnect
+removal, reconnect re-adoption) and a real Router CLI build row showing the
+client chunk carrying the ONE content-addressed asset URL the manifest records
+(`island-style-build.test.ts`, whose "zero JS bytes" premise was true only while
+the island rendered unstyled and is now rewritten to the intended import).
+
+### 2026-11-20 — the starter build runs again; the pre-hydration replay is measured RED on the generated lane
+
+The packed-starter smoke (`tests/e2e/starter-smoke`) was run for the first time
+since the template migrations. Two measured facts, both recorded rather than
+claimed:
+
+**1. The build was broken, and the layout was the cause.** The migration's
+starter layout was a SHADOW root carrying a `styles: ['./components/site-chrome.css']`
+sidecar. Two independent reasons make that shape impossible on the generated
+lane:
+
+- the host wrapper's `styleLinks` channel has no carrier for a module that is
+  not an island (the island scan is the declaration carrier's only writer, and
+  `app/layout.tsx` is outside `islandsDir`), so the wrapper threw
+  `OEIR_LEAF_MISSING_VALUE: styleLinks` at every page render;
+- even with a carrier, the chrome is Tailwind utilities INSIDE a shadow tree,
+  and the shared utility sheet is appended only to tags a package manifest
+  declares (`utilityRequiredTags`). An app-local tag has no such declaration, so
+  the shadow chrome would ship unstyled.
+
+Fixed by the same resolution the site's own layout already uses: the starter
+layout is a **LIGHT root**. Its box rule joins the LIGHT-root host boxes in
+`app/styles/theme.css`, `<slot>` still projects page content through the
+light-root producer, and `app/components/site-chrome.css` is retired. The
+packed create → install → build cycle now exits 0.
+
+**2. The pre-hydration click replay does not cover generated islands.**
+`replayPreUpgradeCaptures` is called from exactly one place,
+`open-element-implementation.ts` (the CLASS facade's claim path). The generated
+shell's claim path has no replay, and wiring one is not a drop-in: the replay
+primitive lives in `internal/compiled/runtime/pre-upgrade-events.ts`, which the
+shell's P1 boundary explicitly forbids it to import (the shell evidence lists
+that module as old backend), so this needs a neutral replay leaf and a boundary
+decision.
+
+Measured on the packed starter, three engines:
+
+| row | result |
+| --- | --- |
+| `starter-smoke.spec.ts` (6 rows × 3 engines) | **all pass** |
+| `interaction-matrix.spec.ts` tick + client-only computed style + scroll restore | **all pass** (the new computed-style row is the #1800 proof) |
+| `#942 click before idle hydration is replayed` | **RED on chromium, firefox and webkit** — count stays `0` |
+| `third-party pressure does not block idle replay` | **RED on all three** — same cause |
+
+27 passed / 6 failed. The six red rows are a PRE-EXISTING generated-lane gap
+(the class-lane facade is the only replayer), newly measurable because the build
+now completes; they are not caused by the style slice and are not claimed as
+green. Alpha17 needs the neutral replay leaf + shell wiring before the starter's
+replay contract can be called delivered.

@@ -63,6 +63,7 @@ What replaced it, and the tests that pin each:
 | nested hosts | expansion to DSD through one runtime call per dash tag | `generated-leaf.nested-host.test.ts`, `nested-host-expansion.test.ts` |
 | light-root CSS | declared sheets reach the render's document sink (#1800) | `generated-light-styles.test.ts` |
 | shadow-root CSS | declared inside the DSD template via the typed `styleLinks` channel | `island-styles.test.ts` (admission row) |
+| client-only shadow CSS | declared sheets emitted as real module-graph imports + adopted by the shell through the class lane's `CompiledStyleScope` (2026-11-20, the last open style capability) | `generated-element.client-styles.test.ts` (12 Node rows), `client-only-styles.test.js` (real-browser computed `:host` style + adoption lifecycle), starter e2e computed-style row |
 
 Page authorship follows execution-plan §19.9 throughout: the page component is an
 **exported server function component declared in its own route module**. That rule
@@ -112,7 +113,14 @@ other two are recorded as negatives.
 | Server runtime | **NOT retired** | `validatePartProgram` ships **3** times in `apps/saas/dist/server/entry.js` because `public-runtime.ts` still holds the class render path beside the generated one |
 | Build/SSG | **RETIRED** | the `@element` counts in §2 are zero, so the lane is dispatched and never selected in a product build; `site:build` completes without it |
 | ABI/module contract | **STILL PROMISED** | `COMPILED_MODULE_ABI_VERSION = 2` still documents `__partProgram`; deliberate while third-party class modules are still accepted |
-| Public API | **UNCHANGED** | `OpenElement` / `ErrorBoundary` are still exported; `onNestedFailure` is the line's one addition |
+| Public API | **UNCHANGED** | `OpenElement` / `ErrorBoundary` are still exported; `onNestedFailure` is the line's one public addition |
+
+The `interface:snapshot` write also carries ONE additive **internal-subpath**
+shape from the 2026-11-20 client style slice: the generated-element shell's
+`GeneratedElementDescriptor` gains optional `styles?: readonly StyleSheetLike[]`
+(ADR-0181's 2026-11-20 delta). It is emitted-artifact ABI on ADR-0177's internal
+subpath — no stability promise, no new export, omitted keeps the pre-slice shape —
+so it does not change the "one public addition" statement.
 
 ## 5. What was NOT delivered, and the condition each waits on
 
@@ -211,12 +219,40 @@ itself). A shim inventory that is right while three records contradict it is the
 same drift the constitution forbids, so the fix belonged with the retirement.
 
 What deliberately did **not** retire: `OE_ISLAND_STYLE_SHADOW_UNWIRED` still fires
-for a shadow island whose leaf emitted **no producer** — that case has no template
-to declare the sheet in, so accepting the declaration WOULD be the silent loss the
-shim existed to prevent. The refusal narrowed from "every shadow root" to "a shadow
-root with no template", which is the honest boundary.
+for a server-rendered shadow island whose leaf emitted **no producer** — that case
+has no template to declare the sheet in, so accepting the declaration WOULD be the
+silent loss the shim existed to prevent. The 2026-11-20 client style-adoption slice
+narrowed it once more: a **client-only** island (`ssr: false` / `hydrate: 'only'`)
+with no producer is now admitted, because the browser creates the root and the
+compiler's emitted import plus the shell's adoption is a complete delivery. The
+refusal therefore names exactly "server-rendered shadow root with no template",
+which is the honest boundary. Reporters updated with it: `authoring.ts`,
+`island-style-specifiers.ts`, `island-style-declarations.ts`, `style-assets.ts`,
+the shim entry, ADR-0181 and the `16b-MN`.
 
-### 5.6 P5 personal sign-off
+### 5.6 Pre-hydration click replay does not cover generated islands (measured 2026-11-20)
+
+The packed-starter smoke run for this record found a PRE-EXISTING gap in the
+generated lane, newly measurable because the starter build completes again:
+`replayPreUpgradeCaptures` has exactly one caller, the CLASS facade's claim path
+(`open-element-implementation.ts`). A generated island claims through the shell,
+which never calls it, so a click that lands before an idle island hydrates is
+captured but never replayed. On the packed starter, `#942 click before idle
+hydration is replayed` and `third-party pressure does not block idle replay` are
+RED on chromium, firefox and webkit (count stays `0`): **27 passed / 6 failed**
+for the whole harness, with every other row green (including the new
+client-only computed-style row).
+
+This is not a style-slice regression: the class facade is the only replayer, and
+the generated shell deliberately imports no module from the old backend — the
+replay primitive currently lives in
+`internal/compiled/runtime/pre-upgrade-events.ts`, which the shell's P1
+boundary forbids. Delivering it needs a neutral replay leaf plus shell wiring and
+owner-scoped release. Recorded, not claimed; see the migration matrix's
+2026-11-20 starter-smoke section for the exact rows and the layout fix that made
+the build green.
+
+### 5.7 P5 personal sign-off
 
 The §13.5 P5 sign-off requires the owner's own signed line on a final-SHA matrix.
 The §18.7 delegation explicitly does **not** satisfy it ("a record that requires
@@ -229,7 +265,7 @@ the owner's own line is not satisfied by it"). **Condition:** the owner signs.
 | **P1** executor closure | the generated-lane runtime helpers are imported only from `@openelement/element/internal/compiled/leaf-runtime`, never the package root |
 | **P2** runtime surface needs an ADR | `computed` (ADR-0183), `useHost`/`ref`/lifecycle/context (ADR-0182 amendments), the nested-host expansion and the EB fallback all ride existing seams; no new public surface was added except `onNestedFailure`, which is recorded in the interface snapshot and the plan |
 | **P5** written retirement conditions | `compiledRootKindOf`'s Part Program arm carries its condition in the doc comment; this report carries §5's conditions |
-| **P6** single source of truth | three duplicate-fact defects were found and *fixed* rather than tolerated: the shadow-style refusal that contradicted the build, `useHost` recorded as FUTURE/OWED while implemented, and form participation recorded as PARTIAL while closed |
+| **P6** single source of truth | duplicate-fact defects were found and *fixed* rather than tolerated: the shadow-style refusal that contradicted the build, `useHost` recorded as FUTURE/OWED while implemented, and form participation recorded as PARTIAL while closed; the 2026-11-20 client-style slice added four more — the stale `authorship`/declaration/style-assets prose that still described the pre-M09-2e/OWED channel, the `computed` inventory row left at PARTIAL after D-4 landed, a lifecycle hook that read a root signal and was dropped SILENTLY (the artifact and the record disagreed), and the starter layout record whose shadow shape the packed build disproved |
 | **P7** evidence before claim | §3 is a record table, §4–§5 are explicit negatives; nothing in this document says "tests pass" |
 | **P8** single-owner seams + consumer-form tests | every new guard calls the shipped helper the way emitted code does (`nested-host-expansion.test.ts` calls `nestedHost`; `generated-light-styles.test.ts` drives the real channel) |
 
@@ -250,20 +286,24 @@ Alpha17 owns, per plan §19.6 and this record:
 1. the lane deletion of §5.1 (compiler entry, artifact, ABI record, render path,
    82 test files, 8 fixtures, and the benchmark input whose SUBJECT is the class
    compiler);
-2. the client-side shadow style adoption slice — `live-timer` needs it because
-   `ssr: false` has no DSD template to carry a sheet, and a generated light root
-   nested inside a shadow template needs a sibling slice, named this line: the
-   generated lane does **not** hoist a nested light root's sheet into the enclosing
-   shadow template, so that nesting is impossible today and `site-light-probe`
-   stays the only proof of the restriction (see the migration matrix's
-   attempted-and-reverted record);
+2. the generated lane's hoisting of a nested light root's sheet into the
+   enclosing shadow template: the generated lane does **not** hoist it, so that
+   nesting is impossible today and `site-light-probe` stays the only proof of the
+   restriction (see the migration matrix's attempted-and-reverted record). The
+   OTHER half this item used to name — the client-side shadow style adoption for
+   `ssr: false` islands — **landed 2026-11-20** and is no longer an Alpha17
+   carry;
 3. a new IDENTITY for the `16b-EB` fallback bytes, if one is ever wanted — all four
    §19.2 conditions are delivered, and the row stays PARTIAL solely because this
    decision is out of scope;
 4. the `16b-LC` depth ≥ 2 design carrier — the refusal site is
    `generated-leaf/generate.ts` and the retention model it needs is ADR-0181's,
    which is explicitly not wired past depth 1;
-5. the M12/M13 qualification runs and the P5 sign-off.
+5. the M12/M13 qualification runs and the P5 sign-off;
+6. the generated lane's pre-hydration click replay (§5.6): a neutral replay leaf
+   outside the shell's forbidden old-backend set, the shell's claim-path call and
+   its owner-scoped release, with the starter's `#942`/third-party rows as the
+   acceptance form.
 
 None of these is a patch Alpha16 could have absorbed: each needs either a design
 carrier that does not exist yet, or a release-train/owner action outside a

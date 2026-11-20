@@ -3,21 +3,22 @@
  * `styles` declaration (`IslandConfig.styles`, GH issue #1800).
  *
  * `styles` names the authored `.css` files a generated-element (function) island
- * needs. This slice wires an accepted list into the EXISTING router style plan:
- * the island scan records the declaration, and the client build's style-edge
- * discovery registers it in the same compiler registry the class lane's
- * `static styles` imports ride, so the sheet is emitted as the same
- * content-addressed client asset and recorded in the client asset manifest
- * (`styles`). What this slice deliberately does NOT do is ADOPT the sheet:
+ * needs. This module is the ONE accepted-shape rule; the delivery is one per
+ * root/delivery shape and all of it rides the EXISTING style plan:
  *
- * - a shadow root has no style carrier yet — the DSD style-link channel is the
- *   later M09-2e slice — so a shadow-root island declaring `styles` fails the
- *   build closed instead of silently losing the sheets;
- * - a light root's document-level application (the head `<link>` the class
- *   lane's light-root sheets get) is not wired to the generated-element render
- *   path yet. Ownership of the adoption surface is the Alpha17 generated-island
- *   style slice, tracked as GH issue #1800; this module admits and validates the
- *   declaration only.
+ * - the island scan records the declaration, and the client build's style-edge
+ *   discovery registers it in the same compiler registry the class lane's
+ *   `static styles` imports ride, so the sheet is emitted as the same
+ *   content-addressed client asset and recorded in the client asset manifest
+ *   (`styles`);
+ * - an SSR/DSD shadow island declares the sheet as the canonical marked
+ *   `<link>` inside its template (M09-2e / #1803);
+ * - a light-root island's sheet is delivered to the document (the render's
+ *   document sink / the head `<link>`);
+ * - a CLIENT-ONLY island (`ssr: false` or `hydrate: 'only'`) has no template
+ *   and no server render, so the compiler emits a real module-graph import of
+ *   the same sheet and the generated shell adopts the resulting sheet object
+ *   into the root it creates (2026-11-20).
  *
  * Two real ingestion paths validate the same value and stay separate by design
  * (the authoring-time `defineIslandConfig()` with `IslandErrorCode` in

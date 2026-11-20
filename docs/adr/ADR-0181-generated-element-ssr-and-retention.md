@@ -250,3 +250,45 @@ P1–P5/M10/M11 status follows the 2026-11-20 re-record in the head
 as recorded at the time of writing. This later reading is append-only: it
 rewrites no decision above, creates no milestone evidence, P5 evidence or
 release claim, and adds no owner sign-off.
+
+## Later reading (2026-11-20): the last style adoption slice landed
+
+Append-only; this rewrites no decision above and creates no milestone, P5 or
+release claim.
+
+The 2026-11-16 amendment's "still open" list named client/shadow style adoption.
+It is now delivered, with one environmental limit unchanged:
+
+- An `ssr: false` (or `hydrate: 'only'`) island's declared `styles` are delivered
+  by the compiler emitting real `.css` module-graph imports and the
+  generated-element shell adopting the resulting sheet objects through the class
+  lane's SAME `CompiledStyleScope` into the root it created. Section C's
+  "application is carried by GH #1800" is therefore closed for adoption.
+- Section C's "admitted only on a light-root generated island" remains the rule
+  only for the SERVER-rendered shape's producer requirement: a shadow-root
+  declaration is admitted when the island is client-only (the browser creates the
+  root) or when the leaf emitted the compiled DSD host producer (the marked
+  `<link>` carrier). `OE_ISLAND_STYLE_SHADOW_UNWIRED` now refuses exactly the
+  server-rendered, producer-less case.
+- The failure closure §C promised is implemented at BOTH ends: the compiler
+  refuses a client-only declaration that reaches it without a static specifier
+  (`OEIR_GENERATED_ELEMENT_CLIENT_STYLES_UNWIRED`), and the shell refuses a
+  non-sheet descriptor value with a coded build-phase error rather than adopting
+  it.
+- The dev-server no-emitted-asset limitation and the nested-light-root hoisting
+  boundary are unchanged: the latter stays a written rule, not a capability.
+
+### Enumerated interface deltas (2026-11-20 client style adoption)
+
+One additive shape change, recorded by the `interface:snapshot` write; no symbol
+is added or removed.
+
+| Package / entry | Delta | Necessity and compatibility |
+| --- | --- | --- |
+| `@openelement/element` `./internal/compiled/generated-element/shell` (ADR-0177 internal subpath) | `GeneratedElementDescriptor` gains optional `styles?: readonly StyleSheetLike[]`. | This is the emitted-artifact ABI through which a client-only island's declared sheets reach the shell that adopts them. Omitted keeps every pre-slice descriptor byte-shape and behavior; the compiler emits it only for an `ssr: false` / `hydrate: 'only'` island with declared styles. It is not author API (the subpath carries no stability promise) and adds no public package export. |
+
+The snapshot also updates the four signature strings that embed the descriptor
+type (`createGeneratedElementClass`, `defineGeneratedElement`,
+`resolveGeneratedElementProps` and the descriptor's own symbol). No
+`RenderToStringOptions` change is involved; `onNestedFailure` remains this line's
+one public addition.

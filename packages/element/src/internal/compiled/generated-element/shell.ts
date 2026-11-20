@@ -163,12 +163,16 @@ import {
   type ErrorPhase,
 } from '@openelement/protocol/errors';
 import type { RootMode } from '@openelement/protocol/part-program';
+import type { StyleSheetLike } from '@openelement/protocol/style-sheet';
 import { OpenElementBase } from '../../../open-element-base.ts';
 // The class lane's theme broadcaster: it mirrors the document's `data-theme`
 // onto every connected host (and keeps it in sync), which is what makes the
 // shared token sheet's `:host([data-theme])` overrides apply inside a shadow
 // root. A generated host links the same sheet, so it joins the same manager.
-import { themeManager } from '../../../open-element-styles.ts';
+// `CompiledStyleScope` is the SAME adoption owner the class lane's kernel uses
+// (S-C1.2): the generated shell installs a client-only island's declared sheets
+// through it instead of inventing a second style sink.
+import { CompiledStyleScope, themeManager } from '../../../open-element-styles.ts';
 // The runtime-only host attribute fact (the JSON seed name included) lives in
 // ONE DOM-free leaf so the hydration executor can derive its exemption from the
 // same source without importing this shell module. See that leaf for the why.
@@ -774,6 +778,27 @@ export interface GeneratedElementDescriptor<P extends object = Record<string, un
   readonly formAssociated?: boolean;
   readonly properties?: readonly GeneratedElementProperty[];
   /**
+   * A CLIENT-ONLY island's declared stylesheets, as the sheet OBJECTS its
+   * emitted `.css` imports resolve to (2026-11-20 client style-adoption slice).
+   *
+   * The compiler emits this row only for a CLIENT-ONLY island (`ssr: false`, or
+   * the `hydrate: 'only'` coercion): such an island has no server render, so no
+   * marked `<link>` can deliver its sheet and the browser creates the root. The
+   * shell adopts these sheets into the root it created (`rootCreatedByShell`) —
+   * or, for a light root, into the tree the element is in — through the class
+   * lane's ONE `CompiledStyleScope`, and removes them again on disconnect so a
+   * reconnect re-arms exactly one adoption.
+   *
+   * An SSR/DSD island never carries this row: its sheet IS the `<link>` inside
+   * its template, and `sheetDeliveredByLink()` keeps that single delivery.
+   *
+   * Every entry must be a real sheet object (`replaceSync` callable). A string
+   * — what a build that failed to intercept the import would hand over — fails
+   * descriptor normalization with a coded build-phase error instead of
+   * rendering the element silently unstyled.
+   */
+  readonly styles?: readonly StyleSheetLike[];
+  /**
    * The light-root SSR producer the compiler emits as `<Name>__ssr()`: a
    * parameterless function returning the content HTML the mount would build.
    *
@@ -901,6 +926,12 @@ interface NormalizedDescriptor {
   readonly form: FormMapping | null;
   readonly properties: readonly NormalizedProperty[];
   readonly byAttribute: ReadonlyMap<string, NormalizedProperty>;
+  /**
+   * The client-only island's adopted sheets (see
+   * {@link GeneratedElementDescriptor.styles}). Always an array; empty for every
+   * SSR/DSD descriptor.
+   */
+  readonly styles: readonly StyleSheetLike[];
   readonly createRecipe: (
     owner: LifetimeScope,
     host: GeneratedElementHost<Record<string, unknown>>,
@@ -975,6 +1006,15 @@ interface ElementState {
    * server-rendered content and is claimed on the first connect.
    */
   rootCreatedByShell: boolean;
+  /**
+   * The ONE element-lifetime style owner for a client-only island's declared
+   * sheets (2026-11-20). It is the class lane's `CompiledStyleScope`: adoption,
+   * readiness reporting and the shadow-root disconnect removal all live there,
+   * so the generated lane has no second style sink. A descriptor with no
+   * `styles` never connects it, so the pre-slice elements allocate it and do
+   * nothing else.
+   */
+  readonly styleScope: CompiledStyleScope;
   /**
    * The ONE element-lifetime ElementInternals record: closed-root discovery and
    * form association share it. Null-safe until a lazy attach needs it.
@@ -1337,6 +1377,34 @@ function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Normalized
   if (descriptor.formAssociated !== undefined && typeof descriptor.formAssociated !== 'boolean') {
     descriptorError('formAssociated must be a boolean when present');
   }
+  // A client-only island's sheets arrive as EMITTED MODULE IMPORTS (2026-11-20).
+  // Validate the OBJECT here, before any DOM work: a build that failed to
+  // intercept the `.css` import hands over a string (or nothing), and adopting
+  // that would render the element silently unstyled. One coded descriptor error
+  // is the fail-closed half of that contract; the compiler's
+  // CLIENT_STYLES_UNWIRED refusal is the build-time half.
+  //
+  // Never read `cssRules`: a sheet whose `replace()` is still in flight throws
+  // on that read in Firefox (the class lane's KR-2/Q1-B race), and adoption
+  // needs no rule read at all.
+  const declaredStyles = descriptor.styles;
+  if (declaredStyles !== undefined && !Array.isArray(declaredStyles)) {
+    descriptorError('styles must be an array of stylesheet objects when present');
+  }
+  const styles: readonly StyleSheetLike[] = declaredStyles ?? [];
+  for (const [index, sheet] of styles.entries()) {
+    if (
+      typeof sheet !== 'object' ||
+      sheet === null ||
+      typeof (sheet as { replaceSync?: unknown }).replaceSync !== 'function'
+    ) {
+      descriptorError(
+        `styles[${index}] is not a stylesheet object: a client-only island's declared sheet must ` +
+          'arrive as the module-graph import the build intercepts, never as a string or a missing ' +
+          'binding (refusing instead of rendering the element unstyled)',
+      );
+    }
+  }
   const formAssociated = descriptor.formAssociated === true;
 
   const properties = (descriptor.properties ?? []).map(normalizeProperty);
@@ -1409,6 +1477,7 @@ function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Normalized
     form,
     properties,
     byAttribute,
+    styles,
     createRecipe: descriptor.createRecipe as NormalizedDescriptor['createRecipe'],
     ...(descriptor.ssrProducer === undefined ? {} : { ssrProducer: descriptor.ssrProducer }),
     ...(descriptor.createInstance === undefined
@@ -1505,6 +1574,7 @@ function createState(descriptor: NormalizedDescriptor): ElementState {
     root: null,
     rootKind: null,
     rootCreatedByShell: false,
+    styleScope: new CompiledStyleScope(),
     internalsRecord: { internals: null },
     form:
       descriptor.form === null
@@ -2497,6 +2567,29 @@ function rootFor(element: HTMLElement, state: ElementState): HTMLElement | Shado
 }
 
 /**
+ * Adopt a CLIENT-ONLY island's declared sheets into the root this element owns
+ * (2026-11-20 client style-adoption slice).
+ *
+ * Only a shell-created shadow root or a light root is a target here. An adopted
+ * DSD root already carries the compiler's canonical marked `<link>` INSIDE its
+ * template — that template is the sheet's delivery, and `sheetDeliveredByLink`
+ * exists to keep a second constructable copy off it. The compiler never emits a
+ * descriptor `styles` row for an SSR/DSD island, so this gate is the shell's own
+ * statement of the same one-delivery rule, not a second policy.
+ *
+ * The scope is the class lane's `CompiledStyleScope`; `connect` is idempotent
+ * (a sheet the root already adopted is not added twice), so a reconnect re-arms
+ * the same root without a bookkeeping copy. Disconnect removes a shadow root's
+ * adopted sheets only — a document's are shared per component type and stay.
+ */
+function adoptClientStyles(state: ElementState, root: HTMLElement | ShadowRoot): void {
+  const styles = state.descriptor.styles;
+  if (styles.length === 0) return;
+  if (state.rootKind !== 'light' && !state.rootCreatedByShell) return;
+  state.styleScope.connect(root, [...styles]);
+}
+
+/**
  * Build the element class for one descriptor without registering it. Exposed so
  * the M09-1 emitter can decide its registration point; consumers normally use
  * {@linkcode defineGeneratedElement}.
@@ -2568,6 +2661,12 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       let connection: LifetimeScope | null = null;
       try {
         const parent = rootFor(this, state);
+        // 2026-11-20 client style adoption: a client-only island's shadow root
+        // comes into existence only now, so this is the first moment its
+        // declared sheets have a target. The scope is element-lifetime and
+        // idempotent; the catch below releases it on a failed connect and
+        // `disconnectedCallback` removes a shadow root's adoption.
+        adoptClientStyles(state, parent);
         // Publish the reconciled initial value/validity/state once the root (and
         // the shared internals record used by closed discovery) is resolved.
         syncFormAll(state);
@@ -2636,6 +2735,10 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         // failed re-claim borrowed no new DOM and must not adopt the host's
         // children. The recipe/projection rolled back its own child scope.
         const release: Array<() => void> = [
+          // A failed attempt must not leave a client-only island's sheets
+          // adopted on a root whose connect never completed: the retry
+          // re-adopts through the same element-lifetime scope.
+          () => state.styleScope.disconnect(),
           // `16b-CTX`: a failed attempt leaves no published provider and no
           // consumer bridge behind. Disconnect (not dispose) keeps the scope and
           // its intents, so a retry republishes them on the next connect.
@@ -2696,6 +2799,11 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       // disconnected element neither answers nor observes. The scope and its
       // intents survive for the reconnect.
       captureCleanupFailures([
+        // 2026-11-20: a disconnected generated host keeps its DOM (LC-0), and a
+        // client-only island's shadow root keeps its sheets the same way — the
+        // scope removes them here and the reconnect adopts them again, so no
+        // second copy accumulates.
+        () => state.styleScope.disconnect(),
         () => state.context?.disconnect(),
         () => projection?.dispose(false),
         () => connection?.dispose(false),
@@ -2774,6 +2882,10 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         // the FIRST error, so a projection/connection teardown error still wins,
         // while a release error wins only over a later `instance.dispose` error.
         captureCleanupFailures([
+          // The client-only island's style owner dies with the element: a later
+          // connect after `dispose` re-runs setup and re-arms adoption from the
+          // descriptor's sheets.
+          () => state.styleScope.disconnect(),
           () => projection?.dispose(false),
           () => connection?.dispose(false),
           () => {
@@ -2795,6 +2907,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       // content is still there and the next connect must still claim it.
       if (hadOwnedRegion) state.regionState = 'absent';
       captureCleanupFailures([
+        () => state.styleScope.disconnect(),
         () => projection?.dispose(true),
         () => state.context?.dispose(),
         // The projection's range cleanup normally removes the region; remove

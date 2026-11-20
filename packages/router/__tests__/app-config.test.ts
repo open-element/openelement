@@ -767,7 +767,9 @@ test('starter template: openelement.config.ts validates against the accepted sch
     ),
   ).toBeTruthy();
   expect(
-    readTemplate('app/islands/live-timer.tsx.tmpl').includes('@element("live-timer"'),
+    readTemplate('app/islands/live-timer.tsx.tmpl').includes(
+      'export const openElement = defineIslandConfig(',
+    ),
   ).toBeTruthy();
 });
 

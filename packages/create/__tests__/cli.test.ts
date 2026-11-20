@@ -367,7 +367,6 @@ test('the showcase template is the one scaffold, Tailwind-ON (#1530 + owner sing
     '.node-version',
     'AGENTS.md',
     'README.md',
-    'app/components/site-chrome.css',
     'app/head.tsx',
     'app/layout.tsx',
     'app/islands/live-timer.css',
@@ -453,14 +452,17 @@ test('starter pages are server function components in their own route modules', 
     expect(source.includes('defineElement'), path).toBeFalsy();
     expect(source.includes('registerSignal'), path).toBeFalsy();
   }
-  // The one remaining compiled class in the starter is the client-only timer,
-  // whose shadow root is created client-side and needs the host box rule.
+  // Every starter island, the client-only timer included, is a generated
+  // function component plus its statically scanned sidecar (2026-11-20).
   const timer = readTemplate('app/islands/live-timer.tsx');
-  expect(timer.includes('@element("live-timer"')).toBeTruthy();
+  expect(timer.includes('defineIslandConfig({')).toBeTruthy();
+  expect(timer.includes('function LiveTimer()')).toBeTruthy();
+  expect(timer.includes('@element(')).toBeFalsy();
+  expect(timer.includes('extends OpenElement')).toBeFalsy();
   expect(readTemplate('gitignore.tmpl').includes('dist/')).toBeTruthy();
 });
 
-test('starter islands are single-module compiled classes with declared strategies', () => {
+test('starter islands are generated function components with declared strategies', () => {
   const counter = readTemplate('app/islands/my-counter.tsx');
   // The delivery policy stays in the statically scanned defineIslandConfig
   // export; the component is a FUNCTION on the generated lane, so state is the
@@ -481,25 +483,30 @@ test('starter islands are single-module compiled classes with declared strategie
 
   const timer = readTemplate('app/islands/live-timer.tsx');
   // Client-only live stats: nothing prerenders, the clock starts client-side,
-  // and the interval dies with the host (connected/disconnected overrides).
+  // and the interval dies with the connection (onConnect's returned cleanup).
   expect(timer.includes('hydrate: "only"'), timer).toBeTruthy();
   expect(timer.includes('ssr: false'), timer).toBeTruthy();
-  expect(timer.includes('connectedCallback'), timer).toBeTruthy();
-  expect(timer.includes('disconnectedCallback'), timer).toBeTruthy();
+  expect(timer.includes('onConnect('), timer).toBeTruthy();
+  expect(timer.includes('connectedCallback'), timer).toBeFalsy();
+  expect(timer.includes('disconnectedCallback'), timer).toBeFalsy();
   expect(timer.includes('setInterval'), timer).toBeTruthy();
   expect(timer.includes('clearInterval'), timer).toBeTruthy();
-  // TPL-01: the interval rides the DOM owner and is typed as the number the
-  // DOM call returns. With both DOM and node types loaded, the bare
-  // `setInterval` resolves to Node's overload (a NodeJS.Timeout handle) and
-  // fails TS2322 — and `ReturnType<typeof window.setInterval>` does NOT fix
-  // it, because the merged window type's ReturnType is also Node's Timeout
-  // (verified against the generated tsconfig). Disconnect clears the same
-  // handle it set.
-  expect(timer.includes('window.setInterval'), timer).toBeTruthy();
-  expect(timer.includes('window.clearInterval'), timer).toBeTruthy();
-  expect(timer.includes('interval = 0'), timer).toBeTruthy();
+  // TPL-01 form, generated lane: the handle is a `const` returned to
+  // `onConnect` as its cleanup, never stored on a typed class field, so the
+  // DOM/node overload merge cannot produce a TS2322. `globalThis` is the
+  // spelling the generated lane admits (bare `window` is an unresolved
+  // identifier there; a bare `setInterval` resolves to Node's overload).
+  expect(timer.includes('globalThis.setInterval'), timer).toBeTruthy();
+  expect(timer.includes('globalThis.clearInterval'), timer).toBeTruthy();
+  expect(timer.includes('interval = 0'), timer).toBeFalsy();
   expect(timer.includes('ReturnType<typeof'), timer).toBeFalsy();
-  expect(timer.includes('elapsed = '), timer).toBeTruthy();
+  expect(timer.includes('const elapsed = signal('), timer).toBeTruthy();
+  // `ssr: false` + a shadow root: the sidecar's styles declaration is what the
+  // compiler turns into BOTH the emitted sheet and the module-graph import the
+  // shell adopts (2026-11-20 client style-adoption slice).
+  expect(timer.includes('root: "shadow"'), timer).toBeTruthy();
+  expect(timer.includes('styles: ["./live-timer.css"]'), timer).toBeTruthy();
+  expect(timer.includes('static override styles'), timer).toBeFalsy();
   expect(timer.includes('data-signal'), timer).toBeFalsy();
 
   // #1582: the clock's styling and the element it renders are one fact. The
@@ -528,13 +535,15 @@ test('the layout owns the site chrome every page renders inside (T2)', () => {
   // generated host PAIR channel. The sidecar's tag is the convention constant.
   expect(shell).toContain('tag: "app-layout"');
   expect(shell.includes('extends OpenElement')).toBeFalsy();
-  // The projection requires a shadow root: slotted page content stays in the
-  // page element's light DOM while the chrome renders in the shell's shadow
-  // tree, styled by the shared chrome sheet through the sidecar's `styles`
-  // channel (the DSD style-link carrier).
-  expect(shell).toContain('root: "shadow"');
+  // LIGHT root on purpose (2026-11-20): the chrome is styled with Tailwind
+  // utilities, and a light root's utilities are the DOCUMENT sheet's; a shadow
+  // root would need a component-sheet link the generated lane has no app-local
+  // declaration for. Page content projects through the light-root `<slot>`, and
+  // the host box lives in `app/styles/theme.css` — not in an element sheet.
+  expect(shell.includes('root:'), 'the layout pins no shadow root').toBeFalsy();
+  expect(shell.includes('styles:'), 'the layout declares no element sheet').toBeFalsy();
   expect(shell).toContain('<slot></slot>');
-  expect(shell.includes('site-chrome.css'), 'the shell carries the chrome sheet').toBeTruthy();
+  expect(readTemplate('app/styles/theme.css')).toContain('app-layout,');
   expect(shell.includes('site-head'), shell).toBeTruthy();
   expect(shell.includes('site-foot'), shell).toBeTruthy();
   // Exactly one header and one footer across the whole scaffold's pages: the
@@ -601,10 +610,10 @@ test('starter styling is utility-first: the palette in @theme, markup for the ru
   }
   // The dark palette rides the platform media query (P1), not a runtime.
   expect(tokens.includes('@media (prefers-color-scheme: dark)'), tokens).toBeTruthy();
-  // The three LIGHT-root page boxes live HERE on purpose: the page components are
-  // server functions (no element sheet), and a light root's CSS is a document
-  // resource, so the token sheet is its single owner.
-  for (const tag of ['index-page', 'about-page', 'el-404']) {
+  // The LIGHT-root host boxes live HERE on purpose: the layout and the page
+  // components are function components (no element sheet), and a light root's
+  // CSS is a document resource, so the token sheet is its single owner.
+  for (const tag of ['app-layout', 'index-page', 'about-page', 'el-404']) {
     expect(tokens.includes(tag), `the tokens file must carry the ${tag} box rule`).toBeTruthy();
   }
   expect(
@@ -612,15 +621,12 @@ test('starter styling is utility-first: the palette in @theme, markup for the ru
     'vite.config.ts must not carry style/CSS strings (#1411)',
   ).toBeFalsy();
 
-  // The residue is one rule per component: the root box. A custom element is
-  // display:inline by default and the host tag is not authored markup, so no
-  // utility can carry it. Everything else the scaffold renders is a utility
-  // in the markup — a re-introduced presentation rule fails right here.
-  const sheets = [
-    'app/components/site-chrome.css',
-    'app/islands/my-counter.css',
-    'app/islands/live-timer.css',
-  ];
+  // The residue is one rule per SHADOW island: the root box. A custom element
+  // is display:inline by default and the host tag is not authored markup, so no
+  // utility can carry it. Everything else the scaffold renders is a utility in
+  // the markup — a re-introduced presentation rule fails right here. (The
+  // layout is a LIGHT root: its box rule is in the token sheet above.)
+  const sheets = ['app/islands/my-counter.css', 'app/islands/live-timer.css'];
   for (const sheet of sheets) {
     const css = readTemplate(sheet)
       .replace(/\/\*[\s\S]*?\*\//g, '')
