@@ -24,8 +24,8 @@ carries none.
 | --- | --- |
 | branch | `feat/alpha16-retirement` |
 | source version | `1.0.0-alpha.16` (bumped this line through the one-knob tool) |
-| measured commit | `6fc34e713ac25dab6d9a10015eb142eaf70fe54e` (the evidence table below is taken there, clean tree) |
-| delivery commits on this line | `b12d040301910a751b0bb40e75db635e472a9432` (client-only style adoption) and `1b05f57c0ec056aa8b9b9f9333c187369a7ed21a` (depth ≥ 2 retained instances) |
+| measured commit | `823f29f896868aff96d6bb30e09e531e5fe84ea5` (the evidence table below is taken there, clean tree) |
+| delivery commits on this line | `b12d040301910a751b0bb40e75db635e472a9432` (client-only style adoption), `1b05f57c0ec056aa8b9b9f9333c187369a7ed21a` (depth ≥ 2 retained instances) and `823f29f896868aff96d6bb30e09e531e5fe84ea5` (pre-hydration replay) |
 | record anchor | the docs-only record commit(s) that follow the measured commit (this report's own updates); they change no source, so every measured row stands |
 | `git status --porcelain` | empty |
 
@@ -77,12 +77,12 @@ worth remembering (see §5).
 ## 3. Evidence record
 
 All rows: provenance **`LOCAL .agents/worktrees/alpha16-retirement`**, commit
-`6fc34e713ac25dab6d9a10015eb142eaf70fe54e`, status clean (`git status --porcelain`
+`823f29f896868aff96d6bb30e09e531e5fe84ea5`, status clean (`git status --porcelain`
 empty), every commit pushed to the fork's `feat/alpha16-retirement`.
 
 | # | command | result |
 | --- | --- | --- |
-| 1 | `vp run --no-cache --fail-if-no-match --filter @openelement/element test` | **1063 passed (1063)**, 136 files |
+| 1 | `vp run --no-cache --fail-if-no-match --filter @openelement/element test` | **1064 passed (1064)**, 136 files |
 | 2 | `vp run --no-cache --fail-if-no-match --filter @openelement/compiler test` | **1421 passed (1421)**, 102 files |
 | 3 | `vp run --no-cache --fail-if-no-match --filter @openelement/router test` | **1882 passed (1882)**, 167 files |
 | 4 | `vp run --no-cache --fail-if-no-match --filter @openelement/www test` | **304 passed (304)**, 34 files |
@@ -92,6 +92,7 @@ empty), every commit pushed to the fork's `feat/alpha16-retirement`.
 | 8 | `vitest run --project element-browser` after `pnpm --dir packages/element run browser:compile` | **40 passed (40)**, 8 files (chromium; includes the 7 client-only style rows) |
 | 8b | `vitest run --project compiler packages/compiler/__tests__/semantic-ir/generated-element.root-instance.browser.test.ts` | **11 passed (11)** Chromium — includes the depth ≥ 2 rows R8/R10/R11 |
 | 8c | `vitest run --project element packages/element/__tests__/compiled-runtime/instance-ledger.test.ts` | **40 passed (40)** — five are the cross-ledger transaction rows |
+| 8d | `vitest run --project element packages/element/__tests__/compiled-runtime/pre-upgrade-retention.test.ts` | **4 passed (4)** — one is the replay-hook row |
 | 9 | `vp run --no-cache --fail-if-no-match check` | **`gate ok: 5 step(s)`** |
 | 10 | `vp run --no-cache --fail-if-no-match site:build` | **`gate ok: 6 step(s)`** |
 | 11 | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot` | `Public interface snapshot matches (6 packages).` |
