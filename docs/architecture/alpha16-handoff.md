@@ -7,8 +7,13 @@ summary: Self-contained handoff for a fresh session taking over the OpenElement 
 # Alpha16 handoff
 
 > **2026-11-20 status update (read before §1).** §5's task — the `ssr: false`
-> client style gap — **landed** in the session that took over this handoff, and
-> the starter's `live-timer` is migrated. The final-state document is
+> client style gap — **landed at `b12d0403`** in the session that took over this
+> handoff, and the starter's `live-timer` is migrated and proven in a real
+> browser. Two measured negatives are recorded, not claimed: the packed
+> starter's pre-hydration replay rows are RED (the class facade is the only
+> replay caller; Alpha17 owns the neutral leaf), and the starter layout had to
+> become a LIGHT root because a shadow app-local tag has no `styleLinks` /
+> utility-sheet carrier. The final-state document is
 > [`alpha16-closeout-report.md`](./alpha16-closeout-report.md); this handoff is
 > kept as the design record for §5/§6 and as the historical snapshot of §1–§5.
 > §5's three steps and its failure closure are implemented as written (with one
