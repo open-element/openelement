@@ -292,3 +292,28 @@ type (`createGeneratedElementClass`, `defineGeneratedElement`,
 `resolveGeneratedElementProps` and the descriptor's own symbol). No
 `RenderToStringOptions` change is involved; `onNestedFailure` remains this line's
 one public addition.
+
+### Written rule (2026-11-20): a light root must not be nested inside a shadow template
+
+This is a RULE, not a capability. No code was built for it, and the generated
+lane will not hoist a nested light-root sheet into an enclosing shadow template.
+
+- **Rule.** A light-root component must not be rendered inside another
+  component's shadow template. Use a `<slot>` (slotted content stays in the light
+  DOM and is styled by the document) or make the child a shadow root.
+- **Why it is a rule and not a gap.** Document stylesheets never cross a shadow
+  boundary. A light root's CSS is a document resource (`@scope`d document sheet /
+  the render's document sink); when the element is placed in a shadow tree, the
+  document cannot reach it. Hoisting the child's link into the parent's DSD
+  template — what the class lane did — is a workaround for a composition that the
+  platform itself does not support; it is not a contract, and the generated lane
+  does not reproduce it.
+- **Evidence.** `tests/fixtures/site-light-probe`'s generated port was built and
+  run; it measured the missing delivery and was reverted (the class version's e2e
+  is green, 25/25). Product code has **0** instances of the nesting
+  (`grep` over `www/app`, `apps/saas/app`, `packages/ui/src`,
+  `packages/create/templates`).
+- **Fixture consequence.** `site-light-probe`'s e2e row is to be rewritten to
+  assert the RULE (the composition is authored as `<slot>` or a shadow child),
+  and only then can that fixture migrate. That rewrite belongs to the lane
+  deletion's change set, not to a capability slice.

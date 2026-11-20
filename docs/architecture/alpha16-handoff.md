@@ -20,6 +20,9 @@ summary: Self-contained handoff for a fresh session taking over the OpenElement 
 > measured addition: `hydrate: 'only'` is the other client-only spelling, and the
 > scan's `missing-producer` admission is now client-only-aware). The prerequisite
 > lifecycle silent-drop fix is recorded in the migration matrix and `16b-MN`.
+> §6's nesting disposition is now a WRITTEN RULE (ADR-0181, 2026-11-20) and §7's
+> lane deletion is re-evaluated there and in the matrix: no capability blocker
+> remains, but the public-API/ABI/benchmark decisions are owner/release items.
 
 Written at the end of a long session on `feat/alpha16-retirement` so a fresh
 session can continue **without re-deriving anything**. Everything below is either

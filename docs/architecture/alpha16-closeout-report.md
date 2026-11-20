@@ -25,7 +25,7 @@ carries none.
 | branch | `feat/alpha16-retirement` |
 | source version | `1.0.0-alpha.16` (bumped this line through the one-knob tool) |
 | closeout commit | `b12d040301910a751b0bb40e75db635e472a9432` (the source/measurement commit; the evidence table below is taken there) |
-| record anchor | the docs-only child of that commit (this report's own update); it changes no source, so every measured row stands |
+| record anchor | the docs-only record commit(s) that follow that commit (this report's own updates); they change no source, so every measured row stands |
 | `git status --porcelain` | empty |
 
 Provenance for every record below: **`LOCAL`
@@ -288,14 +288,22 @@ Alpha17 owns, per plan §19.6 and this record:
 
 1. the lane deletion of §5.1 (compiler entry, artifact, ABI record, render path,
    82 test files, 8 fixtures, and the benchmark input whose SUBJECT is the class
-   compiler);
+   compiler). Re-evaluated 2026-11-20 (migration matrix, same date): **no
+   capability blocker remains** — the mechanical moves are enumerated, but the
+   public-API removal (`OpenElement`/`ErrorBoundary` + the class render path),
+   the third-party admission/ABI decision and the benchmark successor are
+   owner/release decisions, so it can be PLANNED as one change set but not
+   landed on this branch;
 2. the generated lane's hoisting of a nested light root's sheet into the
    enclosing shadow template: the generated lane does **not** hoist it, so that
    nesting is impossible today and `site-light-probe` stays the only proof of the
    restriction (see the migration matrix's attempted-and-reverted record). The
    OTHER half this item used to name — the client-side shadow style adoption for
    `ssr: false` islands — **landed 2026-11-20** and is no longer an Alpha17
-   carry;
+   carry. The disposition is a WRITTEN RULE (ADR-0181, 2026-11-20): a light root
+   must not be nested inside a shadow template; `site-light-probe`'s e2e row is
+   rewritten to assert it inside the lane-deletion change set. No capability is
+   built or claimed;
 3. a new IDENTITY for the `16b-EB` fallback bytes, if one is ever wanted — all four
    §19.2 conditions are delivered, and the row stays PARTIAL solely because this
    decision is out of scope;

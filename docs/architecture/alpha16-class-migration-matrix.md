@@ -2168,3 +2168,45 @@ Measured on the packed starter, three engines:
 now completes; they are not caused by the style slice and are not claimed as
 green. Alpha17 needs the neutral replay leaf + shell wiring before the starter's
 replay contract can be called delivered.
+
+### 2026-11-20 — the nesting rule is written; the class-lane deletion re-evaluated as ONE change set
+
+Per the handoff's §6/§7: the `site-light-probe` disposition is a RULE, not a
+capability, and the lane deletion is re-evaluated now that the style slice landed.
+
+**The rule (written, not built).** A light-root component must not be rendered
+inside another component's shadow template: document stylesheets never cross a
+shadow boundary, so its CSS cannot reach it. Use a `<slot>` (slotted content
+stays in the light DOM) or make the child a shadow root. The class lane's
+"hoist the child's link into the parent's DSD template" was a workaround for a
+composition the platform does not support, not a contract; the generated lane
+does not reproduce it. Authority: ADR-0181's 2026-11-20 rule section; the
+capability inventory carries it as **NOT A CAPABILITY**; product code has 0
+instances. `site-light-probe`'s e2e row is rewritten to assert the rule (author
+the composition with `<slot>` or a shadow child) and the fixture migrates only
+inside the deletion change set.
+
+**What changed for the deletion since §7.1 was written.** The capability blocker
+is GONE: the client-side shadow style adoption landed, `live-timer` migrated, and
+the packed starter now builds (its layout is a light root). There is no remaining
+PRODUCT capability that the class lane uniquely provides. What remains is the
+mechanical surface plus decisions:
+
+| constituent | measured state at `b12d0403` | can move mechanically? |
+| --- | --- | --- |
+| compiler entry + Part Program artifact + ABI record (`COMPILED_MODULE_ABI_VERSION`, `__partProgram`) | present; the generated lane no longer produces it, but third-party class modules are still accepted | **NO** — removing it changes the accepted third-party module contract; owner/ADR decision |
+| class render path in `public-runtime.ts` (the closeout's M10 "Server runtime NOT retired") | present beside the generated path | **NO** — it is also the public class-component entry (`OpenElement`/`ErrorBoundary`); deleting it is a public-API decision and an interface-snapshot change |
+| 82 class-lane contract test files | author `@element` classes; they are the only pins on the behavior being removed | **YES** — but only in the SAME commit as the removal |
+| 8 migratable fixture apps | `site-light-probe`'s row is now the rule rewrite; the others are ordinary migrations | **YES** — one at a time or in the set; two fixtures are RETAINED deliberately (a foreign class is their subject) |
+| `benchmarks/micro/oe-table.tsx` | its SUBJECT is the class compiler | **NO** — it retires with the lane, and the generated lane needs its own baseline first; deleting the subject without a successor silently changes what the benchmark reports |
+| `www/content` compiled-grammar/styling pages | still teach `static styles` / the class grammar (the class lane is still supported) | **NO** — the docs train moves with the lane, not before it |
+
+**Verdict.** The deletion is now fully enumerable and has **no capability
+blocker left**, so it can be planned as one change set — but it cannot LAND on
+this branch as one: three of its six constituents are owner/release decisions
+(the public API, the third-party admission/ABI, the benchmark successor) rather
+than code moves, and the branch's closeout forbids claiming them. It stays
+Alpha17's item, with the mechanical path written down here instead of
+re-derived. Splitting it to land the mechanical pieces first is still refused:
+the 82 tests and the artifact/ABI removal are one deletion, and splitting them
+removes the only thing pinning the behavior being removed.
