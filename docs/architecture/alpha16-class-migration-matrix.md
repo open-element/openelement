@@ -1012,3 +1012,27 @@ This is why §2 names the scan export as `$SCAN` rather than the recorded run's
 absolute path: `/private/tmp` is one of the gate's forbidden markers. The
 document is tracked by the PR that carries this revision; it creates no gate,
 exit or release claim on its own.
+
+### Progress log (append-only)
+
+**2026-11-20 — 10 saas pages migrated in one batch** (`b38c1147b` and the
+follow-up commit): `page-recover`, `page-signup`, `page-magic-link`,
+`page-reset-password`, `page-workspace-records`, `page-checkout`, `page-upload`,
+`page-admin`, `page-auth-callback` moved into their route modules as the
+function-page/local generated shape (§19.9 + §19.4), and their class modules are
+deleted. Evidence: `@openelement/saas` build exit 0 with 12 pages / 11
+request-time routes / 9 action routes, and 20 files / 150 tests green.
+
+Two facts this batch established, both worth carrying into the remaining rows:
+
+1. **The sidecar's root vocabulary is `light` | `shadow`**, not the class lane's
+   `shadow-open`. `defineIslandConfig({ root: 'shadow-open' })` fails closed with
+   `OE_ISLAND_DESCRIPTOR_SHAPE` at build time; the migrated rows therefore spell
+   `root: 'shadow'` and keep the class's DSD default.
+2. **A page class carries no island config of its own** (no `defineIslandConfig`
+   in any `page-*.tsx`): the tag came from the class decorator. The migrated row
+   must therefore add the sidecar `tag`/`root`/`properties` block, and only then
+   does the module enter the generated lane.
+
+Still class-lane in `apps/saas`: `page-notes` (needs the D-M5-style decision for
+its form rows) and `app/layout.tsx` (D-M1 tag source). Both are tracked rows.
