@@ -1726,3 +1726,97 @@ a plain-JS artifact, so it now strips the new fact's annotation too; and the
 emitted root-kind union is the ARTIFACT vocabulary (`light` | `shadow-open` |
 `shadow-closed`), not the two-value runtime vocabulary — the loop test that
 consumes `shadow-open` caught that in one round.
+
+## Plan §19.3 re-adjudications, decided (2026-11-20)
+
+The owner's D-series pulled two rows that the Alpha17 carry had parked —
+**CEM for generated elements** and **form-validity parity** — inside Alpha16, on the
+condition that they be re-DECIDED rather than re-deferred. Both are decided here
+from measurement, not preference. Neither needs new machinery; that is the finding.
+
+### CEM for generated elements — DELIVERED for the shipped package, one named non-claim
+
+Measured on `packages/ui/custom-elements.json` (6 modules, 1 declaration each):
+
+| fact | value |
+| --- | --- |
+| declaration `kind` | `class`, `customElement: true`, `tagName` present |
+| `attributes` | 6 for `open-button` — a complete attribute surface |
+| `members` | **`[]`** |
+| non-attribute properties in `@openelement/ui`'s sidecars | **none** (`attribute: false` appears in no ui island) |
+
+**Decision: the row is MIGRATED, not partial.** CEM's audience reads attributes,
+tags and descriptions; `@openelement/ui`'s entire public API IS its attributes, so
+the manifest is complete for the package it ships. `members: []` is the honest
+consequence of there being no public JS-property members, not a projection gap —
+the ui manifest (`packages/ui/src/generated-manifest.json`) carries no `properties`
+field for the same reason, so there is nothing to project and no second table to
+keep in sync.
+
+**Named non-claim, with its condition to revisit:** a generated element that
+declares an `attribute: false` property is invisible in CEM. Revisit when — and
+only when — a *shipped* package exports such a property; the projection point is
+`buildClassDeclaration` in `packages/ui/tools/generate-cem.ts`, where `members` is
+built, and the fact would have to reach it through the ui manifest first.
+
+### Form validity — DELIVERED with a named non-claim, and the seam is why
+
+Measured in `packages/element/src`:
+
+| fact | where |
+| --- | --- |
+| `required` → `valueMissing` mirror | `shell.ts:2357` / `:2359` (`internals.setValidity({ valueMissing: true }, 'Please fill out this field.')`) |
+| author-callable constraint seam | `open-element-form.ts:71` `setValidity(flags, message, anchor)`, plus `setFormValue`, `internals`, `onReset`, `onRestore` |
+
+**Decision: DELIVERED (the row flips off PARTIAL), and full constraint mirroring is
+NOT a framework obligation.** The framework mirrors the one constraint derivable
+from a declared property without inventing a validation model — `required` →
+`valueMissing`. Every other constraint (`type=email`, `type=url`, `minlength`,
+`pattern`) is authored POLICY, and the author already has the complete seam: the
+form control hands out its `ElementInternals` and a `setValidity` wrapper, so a
+component that wants email/pattern parity writes those flags itself.
+
+Adding `type`/`minlength` mirroring to the shell would be the framework's SECOND
+validation model — a copy of the platform's constraint algorithms that would drift
+from it (P6's one-source rule, and the same argument that refused a second
+stylesheet pipeline). The row's old "deferred sub-obligation" wording implied a
+framework debt that does not exist.
+
+**Named non-claim:** a `required`-only component gets `valueMissing` for free; a
+component that needs more writes it. Revisit condition: a *shipped* component
+needing language-tag or pattern parity — then author it in that component, not in
+the shell.
+
+## Fixtures and examples — three-way disposition (measured 2026-11-20)
+
+`examples/` is empty; `apps/site`→`www` and `apps/saas` are migrated, so the
+remaining class-lane authoring lives in `tests/fixtures`. **12 fixture apps**, of
+which 9 author classes:
+
+| fixture | class files | disposition |
+| --- | --- | --- |
+| `router-request-time` | 31 | **MIGRATE LATER, named** — the largest surface; its own e2e/build harness is the target, and it exists to prove request-time routing, a product behavior that must survive the class lane |
+| `router-native-framework` | 14 | **MIGRATE LATER, named** — same reason (Native Custom Element tail + manifest) |
+| `router-ui-dogfood` | 10 | **MIGRATE LATER, named** — the router↔ui integration surface |
+| `third-party-web-components` | 10 | **RETAIN** — the fixture's subject IS a third-party class built outside this repo; it must keep authoring a class because that is the thing under test |
+| `site-light-probe` | 6 | **MIGRATE LATER, named, highest value** — it proves light-root CSS delivery, the behavior #1800 just changed; migrating it moves that proof from the class lane to the generated lane, in real browsers |
+| `router-base-path` | 4 | MIGRATE with the batch above |
+| `router-static-only` | 2 | MIGRATE with the batch above |
+| `router-unocss-probe` | 2 | MIGRATE with the batch above |
+| `web-component-interop` | 2 | **RETAIN** — interop with foreign classes is the subject |
+| `router-nitro` / `url-pattern-list-audit` | 0 | already class-free |
+
+**Why none are migrated in this record:** each is a full app (routes, islands,
+components, a build+e2e harness), and a partial migration would leave a fixture
+that neither proves the old contract nor the new one. The retirement order is
+therefore **product code → fixtures → compiler lane**, which is the reverse of the
+dependency order and the only order that keeps every step verifiable. Migrating
+`site-light-probe` first is the recommendation, because #1800's light-root document
+application is the one capability whose proof currently still sits on the retired
+lane.
+
+**Retire-with-the-lane** (not migrated, not deleted now): the 66 unit-test files
+under `packages/*/__tests__` that author `@element` classes test the class lane
+ITSELF. They are the lane's contract tests, so they retire in the same commit that
+deletes the lane — deleting them first would remove the only thing pinning the
+behavior being removed.

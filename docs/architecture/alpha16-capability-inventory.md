@@ -46,9 +46,14 @@ OWED-ALPHA17**: the capture points are delivered (connect/claim, plus
 update/refresh and event dispatch sharing the existing `guardUpdate` sink) and
 the SSR fallback is deferred to Alpha17 by the owner-approved plan amendment
 (`alpha16-18-execution-plan.md` §18.3), so the row is not a full replacement.
-Form participation is PARTIAL: the bounded mechanism is delivered and its
-non-claims are recorded. `useHost` is FUTURE/OWED. Everything listed under
-"Still owed" is genuinely unfinished, not deferred paperwork. The final-SHA
+Form participation is **MIGRATED** (re-adjudicated 2026-11-20 / plan §19.3: the
+framework mirrors the one constraint derivable from a declared property and hands
+the author the complete `ElementInternals` seam for the rest, so constraint parity
+is authored policy rather than framework debt). `useHost` is **DELIVERED**
+(`useHost()` in `compile-lifecycle.ts`, exported from `lifecycle.ts` /
+`public-surface.ts` / `public-runtime.ts`; ADR-0182 carries its implementation
+amendment). Everything listed under "Still owed" is genuinely unfinished, not
+deferred paperwork. The final-SHA
 matrix and the verdict rows are re-recorded in the 2026-11-20 remediation (see
 the `p1-applicability-record` re-record); this file asserts no new numbers.
 
@@ -81,7 +86,7 @@ reader holding the plan should not have to infer the correspondence.
 | Error boundary | static `isErrorBoundary` + `catchError()` | `onError(env)` with the shell's capture points (connect/claim; update/refresh and event dispatch share the existing `guardUpdate` sink); **no SSR fallback** — deferred to Alpha17 (execution plan §18.3) | **PARTIAL / OWED-ALPHA17** — the capture points are delivered, but the SSR fallback is a named Alpha17 carry, so the row is not MIGRATED; no handler registered keeps the pre-existing rollback-then-rethrow byte-identically (corrected 2026-11-20) |
 | Context provider / consumer | `provideContext(host, token, value)` + subscription | `provideContext(token, () => value)` / `useContext(token)` over the generated owner tree, hostless owners included | **MIGRATED** (`e8ea72b95`) — nested providers shadow, sibling subtrees are isolated, a declared-property commit re-reads the thunk, reconnect republishes from retained intents, and a consumer-reading component IS server-renderable (the scope rides the producer argument list, so per-render isolation is structural) |
 | Node refs | `@query`/manual `querySelector` in `connectedCallback` | `ref(cb?)` declaration intrinsic handed to the existing `ref` JSX channel; `current` survives mount/claim/reconnect | **MIGRATED** (`d135576d0`) — no second attachment mechanism; `current` is deliberately not reactive (a tracked-slot read is refused with `OEC9042`) |
-| Form participation | `static formAssociated` + `ElementInternals` access | sidecar `formAssociated` + the shell's form controller; value/required/disabled with `required → valueMissing` | **PARTIAL** (`fa6e5232d`) — the slice declares a "host access gap" non-claim and does not reach full `open-input` parity; full constraint mirroring (type/email, minlength) is a deferred sub-obligation, not an exception |
+| Form participation | `static formAssociated` + `ElementInternals` access | sidecar `formAssociated` + the shell's form controller; value/required/disabled with `required → valueMissing`; the author-callable constraint seam (`setValidity`, `setFormValue`, `internals`, `onReset`, `onRestore`) | **MIGRATED** (`fa6e5232d`, re-adjudicated 2026-11-20 / plan §19.3) — the framework mirrors the one constraint derivable from a declared property and hands the author the complete `ElementInternals` seam for every other one, so type/email/pattern parity is authored policy, not framework debt (a shell-side mirror would be a SECOND validation model); non-claim: a `required`-only component gets `valueMissing` free, anything more it writes itself |
 | Slots / light DOM | `static styles`, `<slot>` in the template | compiler-emitted slot anchors (`oe:s:<ordinal>:<hex>`) plus the light-root producer; `projectedChildren` substitution walks comment tokens only | **MIGRATED** |
 | Styles | `static styles = css\`…\`` | file-based `.oe-style.css` imports (the string-template tag retired with #1558) | **MIGRATED** — one delivery shape; the generated root joins the same `themeManager` broadcaster |
 | Registration / packaging | `customElements.define` at module scope | compiler-emitted Native Custom Element tail + `generated-manifest.json` / `custom-elements.json` | **MIGRATED** |
@@ -103,9 +108,9 @@ not ports and have no retiring counterpart.
 | --- | --- |
 | `16b-LC` depth ≥ 2 nested hooks, recipe/list placement and pre-DOM timing | Root lifecycle, depth-1 nested/hostless hooks and the connection-scope `env` helper are delivered (migration note 2026-11-16 amendments); the remaining placements are still refused (`OEIR_LEAF_INVALID_ARTIFACT` / `OEC9041`), so the slice stays PARTIAL. |
 | `16b-EB` SSR fallback | Deferred to Alpha17 as a named carry by the owner-approved plan amendment (`alpha16-18-execution-plan.md` §18.3) — not a §13.3 exception and not delivered by the capture points. |
-| `useHost` host-element accessor (D-17b) | **FUTURE/OWED** — listed in ADR-0182 D-18b-4 and execution plan §17.1, not implemented; the migration note's 16b-REF record says "No `useHost`-style host accessor (a separate D-17b item)". It is not part of the experience edition's delivered surface, and the 2026-11-20 remediation records the status without implementing it; `env.host` remains the only delivered host access. |
+| ~~`useHost` host-element accessor (D-17b)~~ | **CLOSED 2026-11-20 — this row was STALE.** `useHost()` is implemented (the compiler-erased intrinsic in `compile-lifecycle.ts`, exported from `lifecycle.ts` / `public-surface.ts` / `public-runtime.ts`, with the 6-row `generated-element.use-host.test.ts` guard) and ADR-0182 carries its implementation amendment. The row still said FUTURE/OWED, which is exactly the two-faces-one-fact drift the design constitution forbids; it was corrected here rather than left for a reader to reconcile. |
 | Depth ≥ 2 generated owner tree | Refused with `OEIR_LEAF_INVALID_ARTIFACT`; ADR-0181 owns depth-1 retention and has not extended it. |
-| Form constraint mirroring | The bounded mechanism covers `required → valueMissing`; type/email/minlength and the full input parity are a named deferred sub-obligation. |
+| ~~Form constraint mirroring~~ | **CLOSED 2026-11-20 — re-adjudicated, not deferred** (plan §19.3). The framework mirrors `required → valueMissing` and exposes the complete `ElementInternals` seam (`setValidity` / `setFormValue` / `internals` / `onReset` / `onRestore`) on the form control, so type/email/pattern parity is authored POLICY. A shell-side mirror would be a SECOND validation model that drifts from the platform's constraint algorithms — refused for the same reason a second stylesheet pipeline was. Named non-claim: a `required`-only component gets `valueMissing` free; anything more it writes itself. |
 | Reactive refs and component refs | `ref.current` is not reactive by design (a tracked read is refused), and component (non-element) refs stay out of scope per ADR-0182 D-18b-5. |
 | Server-side context reactivity | A consumer value resolves once per producer call. There is nothing to react to before bytes leave, so this is a property of SSR rather than a gap — recorded so a future reader does not read it as one. |
 
