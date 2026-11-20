@@ -1514,3 +1514,123 @@ payload gate, the scratch-tree `oxfmt --check` + `oxlint` gate a fresh scaffold
 must pass, and the packed-CLI payload row that now asserts the page surface is the
 route tree and that no `app/components/page-*.tsx` ships; element 135 / 1051;
 router 167 / 1880; `vp run check` 5/5 PASS.
+
+**2026-11-20 — D-M5's premise re-measured: the trusted-HTML sink the decision was written against belongs to a DIFFERENT lane.**
+
+D-M5 says "the article body stops being a runtime string: the generator emits the
+article content as a non-runtime structure the generated lane can consume,
+removing both the `trustedHtml` row and its `innerHTML` sink". Before designing
+that, this round measured what actually refuses today. The answer is not what the
+row assumes:
+
+| lane | `innerHTML={expr} trustedHtml` |
+| --- | --- |
+| generated-ELEMENT lane (the one `open-article-view` uses) | **refused** — `innerHTML sinks are not admitted by the M03 function-component model` |
+| SERVER-COMPONENT lane (the page lane every migrated page uses) | **ADMITTED**, provided the prop is annotated `TrustedHtml`: the emitter splices `innerHTML: props.articleHtml` into the constructor record |
+
+Probe: a route module whose component takes `props: { articleHtml: TrustedHtml }`
+and returns `<div innerHTML={props.articleHtml} trustedHtml></div>` compiles
+through `compileServerComponentIfAdmitted` (545-byte module, no diagnostic),
+while the same source with a `string` annotation fails closed with
+`OEC9026: innerHTML sinks require an Object-typed TrustedHtml property`.
+
+**What that changes.** D-M5 was written when the article chain had to cross a
+`void`-root element row into the generated lane, where `trustedHtml` is excluded
+from every server→client channel (ADR-0182's permanent exclusion, recorded this
+session). But the body is **in-process** on the server: `prepareArticle` produces
+it during the same request that renders it, so no brand has to be reconstructed
+from bytes and the exclusion is not engaged at all. The server-component lane is
+where the page is rendered, it admits the sink, and the brand survives because it
+never leaves the process.
+
+**Attempted and reverted — a third measured constraint.** The obvious move (make the
+generator emit the page function itself in the route module, deleting the 27
+per-article binding files) was implemented, built and measured. It works for the
+article BODY — `www/dist/guide/api/index.html` renders 13 KB of the article region
+with real prose, `<h2>`s and highlighted fences — but it breaks the sheet
+accounting: the emitted `open-article-view.css` becomes an unreferenced asset
+(`9f4a57beeb7f.css`) and `site-package-sheet-admission`'s A6 row fails closed.
+
+The mechanism is precise and worth keeping: a function page emits
+`__h("open-article-view", …)` through `@openelement/element/server`, which is a
+plain element constructor — it never runs the class serializer's nested walk, so
+the nested LIGHT-root host's sheet is never reported to the render's document
+sink (`documentStyleResourcesOf`). A class page reaches it because its Part
+Program serializer expands the child. So the function-page lane and the
+class-lane nested walk are NOT interchangeable for a nested STYLED host, and a
+migration that swaps one for the other silently drops CSS.
+
+**So D-M5's remaining question is narrower than the row claims**, and this record
+does not decide it — it replaces the assumption with the measurement. The open
+question is whether the article chain should keep `innerHTML` (now lawful on the
+server lane) or still move to a build-time structure for a different reason (the
+client-side cost of carrying the row, the `open-article-view` shared component, or
+the 27 generator-owned bindings). Any answer must start from:
+`prepareArticle` is server-only, the sink is admitted there, and the exclusion
+governs the CROSSING, not the sink.
+
+**What the reverted attempt establishes for the next one.** The article routes CAN
+move to the function-page lane — the body renders — but the nested styled host
+must keep a document-sheet declaration path. Two shapes are therefore open, and
+the choice is a design decision, not an implementation detail:
+
+1. keep `open-article-view` as a CLASS host and keep the class page (status quo:
+   the sheet accounting works, the route binding stays generated), or
+2. move the article routes to the function lane and give `open-article-view`'s one
+   rule (`:host{display:block}`) a DOCUMENT owner — the same resolution the
+   starter's three page boxes got this session (`app/styles/theme.css`), which
+   needs no capability at all.
+
+Path 2 is what the next attempt should measure first: it is 20 lines of CSS
+movement and no new machinery, and the reverted diff is preserved in this branch's
+stash for it to start from.
+
+**2026-11-20 — D-M5 RESOLVED and landed: the 27 article routes are off the class lane.**
+
+Path 2 from the addendum above is what landed, and it needed no new machinery.
+
+**The decision, measured.** D-M5's premise was wrong in one half and right in the
+other. Right: the article chain must not keep a per-route `@element` binding class.
+Wrong: the body does NOT have to stop being trusted HTML — the SERVER-component
+lane admits `innerHTML={props.x} trustedHtml` when the prop is annotated
+`TrustedHtml`, and `prepareArticle` produces the value during the same request, so
+ADR-0182's crossing exclusion is never engaged. So the article body keeps its sink
+and the CLASS goes.
+
+**What changed**
+
+- `www/tools/generate-site-article-routes.ts` emits ONE artifact per article
+  instead of two: the route module now declares
+  `export function <Name>Page(props: { model; locale })` itself and renders the
+  shared shell. `renderComponent` and the whole
+  `app/components/article-routes/` output directory are deleted — **27 class
+  components retired**, and `planFiles` drops from `2n+1` files to `n+1`.
+- `www/app/site-ui/open-article-view.css` is RETIRED (its sheet import and
+  `static styles` array with it). Its single `:host { display: block }` rule moved
+  into `www/site-chrome.css` as the `open-article-view` tag selector — the same
+  resolution the starter's three page boxes got, and the reason is the mechanism
+  the reverted attempt measured: a server FUNCTION page emits `__h(tag, …)`, which
+  never runs the class serializer's nested style walk, so a nested light-root
+  host's sheet is not reported to the render's document sink. The linked document
+  sheet is the one owner both render paths reach.
+- Measured in the built output: `www/dist/client/assets/client-*.css` now carries
+  `open-article-view,open-reading-shell{display:block}`, and the A6
+  unreferenced-sheet row is green again with no allowance added.
+
+**Guards updated to the one-artifact shape**: `article-pages.test.ts` (the page is
+an exported function in its route module, no `@element`, and the retired binding
+directory must stay empty), `generate-site-article-routes.test.ts` (one artifact
+per article, no `renderComponent`), and
+`check-site-theme-tokens.test.ts` — whose last live `.css` under `www/app` this
+retires, so its admission rule is now pinned against a SCRATCH root instead of a
+live file, which is a stronger guard than the file it replaced.
+
+Evidence (LOCAL): `site:build` exit 0 (6 steps); www 34 files / **304 tests**;
+router 167 / 1880; compiler 101 / 1404; `vp run check` 5/5 PASS;
+`www/dist/guide/api/index.html` renders the article region with 2166 chars of real
+prose, 3 `<h2>`s and 2 highlighted fences.
+
+**Remaining class-lane surface — two files, both named:**
+`www/app/site-ui/open-article-view.tsx` (the shared article shell itself, still a
+class host with no `static styles` any more) and
+`benchmarks/micro/oe-table.tsx` (benchmark disposition, not app code).

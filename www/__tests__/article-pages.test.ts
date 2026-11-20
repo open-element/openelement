@@ -9,6 +9,7 @@ import { projectArticlePage } from '../app/site-ui/article-page-model.ts';
 // tests below double as its staleness gate: the table is compared against the
 // content files and against the managed route directories on disk.
 import { articleRoutes } from '../app/data/_generated-article-routes.ts';
+import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 
 type ArticleCollection = keyof typeof articleCollections;
@@ -43,14 +44,13 @@ const tableGenerator = 'www/tools/generate-site-article-routes.ts';
 // ADR-0136). Adding an article means adding content and running `generate:all`;
 // no hand-written route module, binding or table row remains.
 for (const route of articleRoutes) {
-  const { collection, slug, className, componentFile, elementTag, routeFile } = route;
+  const { collection, slug, className, routeFile } = route;
   test(`${collection}/${slug} is a thin article shell`, async () => {
+    // One generator artifact per article (2026-11-20): the page component is
+    // declared IN the route module, so there is no separate binding file. The
+    // per-route component directory retired with the class lane.
     const routeSource = await readFile(
       new URL(`../app/routes/${collection}/${routeFile}`, import.meta.url),
-      'utf8',
-    );
-    const adapterSource = await readFile(
-      new URL(`../app/components/article-routes/${componentFile}`, import.meta.url),
       'utf8',
     );
     expect(routeSource).toContain('export default definePage(');
@@ -59,9 +59,15 @@ for (const route of articleRoutes) {
       !routeSource.includes('export const meta'),
       `${collection}/${slug} must not duplicate nav metadata; declare it in the frontmatter`,
     ).toBeTruthy();
-    expect(adapterSource).toContain(`@element('${elementTag}')`);
-    expect(adapterSource).toContain(`class ${className} extends OpenElement`);
-    expect(adapterSource).toContain('<open-article-view model={this.model} locale={this.locale}>');
+    // The page component is an EXPORTED server function declared here (the page
+    // lane records `pageComponentName` only for that shape), and it renders the
+    // shared article shell with the projected model.
+    expect(routeSource).toContain(`export function ${className}(props: {`);
+    expect(routeSource).toContain(
+      '<open-article-view model={props.model} locale={props.locale}></open-article-view>',
+    );
+    expect(routeSource).not.toContain('@element(');
+    expect(routeSource).not.toContain('extends OpenElement');
     // The generated header is what proves ownership to the generator (its
     // "--check" and its stale cleanup both key off it), and it names the
     // content file each artifact is derived from.
@@ -70,10 +76,6 @@ for (const route of articleRoutes) {
     expect(
       routeSource.startsWith(header) && routeSource.split('\n')[0].includes(sourcePath),
       `${collection}/${slug}: ${routeFile} must be generator output naming ${sourcePath}`,
-    ).toBeTruthy();
-    expect(
-      adapterSource.startsWith(header) && adapterSource.split('\n')[0].includes(sourcePath),
-      `${collection}/${slug}: ${componentFile} must be generator output naming ${sourcePath}`,
     ).toBeTruthy();
 
     const model = projectArticlePage(collection, slug, 'en');
@@ -108,24 +110,23 @@ test('managed article directories hold exactly the generated routes', async () =
       onDisk.sort(),
       `app/routes/${collection}/ must hold exactly the routes the content emits`,
     ).toEqual(listed);
-    const bindings: string[] = [];
-    for (const entry of await readdir(
-      new URL('../app/components/article-routes/', import.meta.url),
-      {
-        withFileTypes: true,
-      },
-    )) {
-      if (entry.isFile() && entry.name.startsWith(`${collection}-`)) bindings.push(entry.name);
+    // The per-route binding directory RETIRED with the class lane (2026-11-20):
+    // the page component is declared in its route module, so a leftover
+    // `app/components/article-routes/<collection>-*.tsx` would be one of the two
+    // artifacts this generator used to pair up. The directory is still managed by
+    // the generator (so a stale generation is cleaned) and must stay empty.
+    const leftoverDir = new URL('../app/components/article-routes/', import.meta.url);
+    const leftovers: string[] = [];
+    if (existsSync(leftoverDir)) {
+      for (const entry of await readdir(leftoverDir, { withFileTypes: true })) {
+        if (entry.isFile() && entry.name.startsWith(`${collection}-`)) leftovers.push(entry.name);
+      }
     }
     expect(
-      bindings.sort(),
-      'app/components/article-routes/ must hold exactly the generated bindings',
-    ).toEqual(
-      articleRoutes
-        .filter((route) => route.collection === collection)
-        .map((route) => route.componentFile)
-        .sort(),
-    );
+      leftovers.sort(),
+      'app/components/article-routes/ retired with the class lane: the page component ' +
+        'is declared in its route module, so nothing may regenerate a per-route binding',
+    ).toEqual([]);
   }
 });
 

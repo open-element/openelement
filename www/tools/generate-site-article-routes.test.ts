@@ -17,7 +17,6 @@ import {
   managedDirectories,
   pascalCase,
   planFiles,
-  renderComponent,
   renderRouteModule,
   routeSetFor,
 } from './generate-site-article-routes.ts';
@@ -125,40 +124,19 @@ test('article routes: two content files claiming one generated file fail closed'
   expect(error.message).toContain('content/docs/architecture/architecture.md');
   expect(error.message).toContain('content/docs/architecture/index.md');
 
-  // The same rule covers the binding directory: a colliding binding file is
-  // caught by the same mechanism, not by a second code path.
-  assertThrowsIncludes(
-    () =>
-      planFiles([
-        {
-          collection: 'guide',
-          slug: 'a-2',
-          routeFile: 'a-2.tsx',
-          componentFile: 'guide-a-2.tsx',
-          elementTag: 'guide-a-2',
-          className: 'GuideA2Page',
-          order: 1,
-        },
-        {
-          collection: 'guide',
-          slug: 'a-2-alias',
-          routeFile: 'a-2-alias.tsx',
-          // A duplicated binding name: two elements, one file.
-          componentFile: 'guide-a-2.tsx',
-          elementTag: 'guide-a-2-alias',
-          className: 'GuideA2AliasPage',
-          order: 2,
-        },
-      ]),
-    Error,
-    'app/components/article-routes/guide-a-2.tsx',
-  );
+  // The binding directory retired with the class lane (2026-11-20), so the
+  // collision rule now covers exactly ONE artifact per article. A second
+  // claimed path cannot exist, which is the same fail-closed rule with one
+  // fewer place to apply it — not a second code path.
 });
 
 test('article routes: the plan covers only managed article paths', () => {
   const routes: ArticleRoute[] = routeSetFor('guide', [entry('styling', 5)]);
   const files = planFiles(routes);
-  expect(files.length, 'one route module + one binding per route').toEqual(routes.length * 2 + 1);
+  // One artifact per article plus the route table (2026-11-20): the page
+  // component is declared in its route module, so the per-route binding file
+  // retired with the class lane.
+  expect(files.length, 'one route module per route plus the table').toEqual(routes.length + 1);
   for (const file of files) {
     expect(
       file.rel.startsWith('app/routes/guide/') ||
@@ -188,13 +166,15 @@ test('article routes: the emitted modules name their content source', () => {
   expect(routeModule).toContain(`projectArticlePage('architecture', 'dsd', locale)`);
   expect(routeModule).toContain(`articlePageHead('architecture', 'dsd', locale)`);
   expect(routeModule).toContain('export default definePage(DsdPage, {');
-  // The binding's locale redeclaration is load-bearing (its @ts-expect-error is
-  // fingerprinted by site-ui conventions); the generator must keep emitting it.
-  const binding = renderComponent(route);
-  expect(binding).toContain(`@element('architecture-dsd')`);
-  expect(binding).toContain('export default class DsdPage extends OpenElement');
-  expect(binding).toContain('// @ts-expect-error compiled @property shadows');
-  expect(binding).toContain('<open-article-view model={this.model} locale={this.locale}>');
+  // The page component is an EXPORTED server function declared in the module
+  // (the page lane only records `pageComponentName` for that shape) and renders
+  // the shared article shell from its projected model.
+  expect(routeModule).toContain('export function DsdPage(props: {');
+  expect(routeModule).toContain(
+    '<open-article-view model={props.model} locale={props.locale}></open-article-view>',
+  );
+  expect(routeModule).not.toContain('@element(');
+  expect(routeModule).not.toContain('extends OpenElement');
 });
 
 test('article routes: every route on disk is generated from the collection', async () => {
@@ -206,12 +186,7 @@ test('article routes: every route on disk is generated from the collection', asy
     const path = join(siteRoot, 'app/routes', route.collection, route.routeFile);
     const source = await readFile(path, 'utf8');
     expect(source).toContain(route.className);
-    expect(source).toContain(route.componentFile);
-    const binding = await readFile(
-      join(siteRoot, 'app/components/article-routes', route.componentFile),
-      'utf8',
-    );
-    expect(binding).toContain(`@element('${route.elementTag}')`);
+    expect(source).toContain(`export function ${route.className}(props: {`);
     // The content file the header names must exist — the route is not orphaned.
     const contentPath = join(siteRoot, 'content/docs', route.collection, `${route.slug}.md`);
     const stats = await stat(contentPath);

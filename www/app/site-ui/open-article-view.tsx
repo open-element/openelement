@@ -3,7 +3,6 @@ import '../islands/open-page-rail.tsx';
 import './open-reading-shell.tsx';
 import '#site-ui/open-artifact-panel.tsx';
 import type { ArticlePageModel } from './article-page-model.ts';
-import openArticleViewStyles from './open-article-view.css';
 
 /** Compiled computed fields expose their derived value through the class facade. */
 type CompiledComputed<T> = ReturnType<typeof computed<T>> & T;
@@ -16,8 +15,6 @@ interface NotFoundFallbackRow {
 
 @element('open-article-view')
 export default class OpenArticleView extends OpenElement {
-  static override styles = [openArticleViewStyles];
-
   @property({ reflect: false, attribute: false })
   model: ArticlePageModel = {
     notFoundClass: 'container',

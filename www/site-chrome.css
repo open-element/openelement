@@ -576,6 +576,17 @@ open-search .overlay {
 }
 
 
+/* open-article-view (compiled light host): its ONE authored rule is the host
+ * box. It lives here for the same reason open-reading-shell's does — but also
+ * because the article chain's renderers are server FUNCTION pages, whose
+ * `__h` host constructor never runs the class serializer's nested walk, so a
+ * nested light-root host's sheet is not reported to the render's document sink.
+ * A document sheet is the one owner both paths reach. Selector reach moves from
+ * the build @scope to the explicit tag prefix, exactly as above. */
+open-article-view {
+  display: block;
+}
+
 /* open-reading-shell (compiled light shell, mounted from template pages and
  * article pages alike): its authored rules joined the linked document
  * stylesheet (#1569) — a template render owns no document-style sink, so the

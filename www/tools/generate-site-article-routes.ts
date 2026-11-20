@@ -199,52 +199,45 @@ async function collectRoutes(): Promise<ArticleRoute[]> {
 
 export function renderRouteModule(route: ArticleRoute): string {
   const source = `www/content/docs/${route.collection}/${route.slug}.md`;
+  // The page COMPONENT is declared in this module (execution-plan §19.9): the
+  // server function page lane records `pageComponentName` only for an exported
+  // component function the route module declares itself, and an imported class
+  // binding would silently classify as a legacy class page. The article body is
+  // the server-component lane's `trustedHtml` sink — it is produced by
+  // `prepareArticle` during THIS request, so the brand never crosses a process
+  // boundary and ADR-0182's crossing exclusion is not engaged.
+  // The emitted module must be format-clean on its own (the generated tree is
+  // checked by the repo formatter), so the signature honours the same
+  // printWidth the formatter uses: one line while it fits, the wrapped form
+  // otherwise. A generator that emits only one of the two shapes produces a
+  // file that the next `fmt` rewrites.
+  const signatureOneLine = `export function ${route.className}(props: { model: ArticlePageModel; locale: string }) {`;
+  const signature =
+    signatureOneLine.length <= 100
+      ? signatureOneLine
+      : `export function ${route.className}(props: {
+  model: ArticlePageModel;
+  locale: string;
+}) {`;
   return `${generatedHeader} from ${source} - do not edit.
 import { definePage } from '@openelement/router';
-import ${route.className} from '../../components/article-routes/${route.componentFile}';
-import { articlePageHead, projectArticlePage } from '../../site-ui/article-page-model.ts';
+import '../../site-ui/open-article-view.tsx';
+import {
+  articlePageHead,
+  projectArticlePage,
+  type ArticlePageModel,
+} from '../../site-ui/article-page-model.ts';
+
+${signature}
+  return <open-article-view model={props.model} locale={props.locale}></open-article-view>;
+}
 
 export default definePage(${route.className}, {
   head: ({ locale }) => articlePageHead('${route.collection}', '${route.slug}', locale),
   props({ locale }) {
-    return { model: projectArticlePage('${route.collection}', '${route.slug}', locale) };
+    return { model: projectArticlePage('${route.collection}', '${route.slug}', locale), locale };
   },
 });
-`;
-}
-
-export function renderComponent(route: ArticleRoute): string {
-  const source = `www/content/docs/${route.collection}/${route.slug}.md`;
-  return `${generatedHeader} for ${source} - do not edit.
-import { element, OpenElement, property } from '@openelement/element';
-import '../../site-ui/open-article-view.tsx';
-import type { ArticlePageModel } from '../../site-ui/article-page-model.ts';
-
-@element('${route.elementTag}')
-export default class ${route.className} extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  model: ArticlePageModel = {
-    notFoundClass: 'container',
-    articleClass: 'is-hidden',
-    slug: '',
-    notFoundMessage: '',
-    metadata: { breadcrumb: '', title: '', lede: '' },
-    navigation: {},
-    railItems: [],
-    articleHtml: '',
-  };
-
-  // Same base-field redeclaration as the layout shell: the compiled @property
-  // shadows OpenElementConfiguration.locale (SSR injection or the \`locale\`
-  // attribute); tsc's \`override\` demand is rejected by the compiled grammar.
-  @property({ reflect: false })
-  // @ts-expect-error compiled @property shadows the optional base field
-  locale = 'en';
-
-  render() {
-    return <open-article-view model={this.model} locale={this.locale}></open-article-view>;
-  }
-}
 `;
 }
 
@@ -311,7 +304,6 @@ export function planFiles(routes: ArticleRoute[]): PlannedFile[] {
   for (const route of routes) {
     const source = `content/docs/${route.collection}/${route.slug}.md`;
     claim(`${routesDir}/${route.collection}/${route.routeFile}`, renderRouteModule(route), source);
-    claim(`${componentsDir}/${route.componentFile}`, renderComponent(route), source);
   }
   claim(tablePath, renderTable(routes), 'the generated route table');
   return files;
@@ -323,6 +315,9 @@ export function managedDirectories(): Map<string, number> {
   // A collection's route directory is managed even when its content is empty:
   // that is exactly when its last generated route module must be cleaned up.
   for (const collection of collectionNames) dirs.set(`${routesDir}/${collection}`, Infinity);
+  // The per-route component directory RETIRED with the class lane: the page
+  // component lives in its route module now. The directory is still managed so
+  // a leftover from a previous generation is cleaned up.
   dirs.set(componentsDir, 1);
   return dirs;
 }
