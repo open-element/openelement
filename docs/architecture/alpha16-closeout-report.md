@@ -1,0 +1,220 @@
+---
+status: active
+topic: Alpha16 closeout report (delivered / not delivered / Alpha17 boundary)
+summary: What Alpha16 delivered with a four-part evidence record, what it did NOT deliver and the exact condition each open item waits on, the P1–P8 compliance table with its one deliberate deviation, and the Alpha17 boundary. Read the negative accounting before planning Alpha17.
+---
+
+# Alpha16 closeout report
+
+This report is the Alpha16 closeout deliverable required by the owner's
+2026-11-20 direction. It states what the line **delivered**, what it **did not**,
+and the condition each undelivered item waits on. It is written to be read by
+someone who was not in the session: every claim carries the four-part evidence
+record defined in [`evidence-baseline.md`](./evidence-baseline.md) — commit,
+clean status, exact command, exact result, provenance — or says plainly that it
+carries none.
+
+> **Read the negative sections first if you are planning Alpha17.** The
+> retired-lane accounting is the part that decides what Alpha17 can start, and a
+> closeout report that only lists wins is a marketing document.
+
+## 1. Where the tree is
+
+| field | value |
+| --- | --- |
+| branch | `feat/alpha16-retirement` |
+| source version | `1.0.0-alpha.16` (bumped this line through the one-knob tool) |
+| closeout commit | `e3a6bcc02` and later on the same branch |
+| `git status --porcelain` | empty |
+
+Provenance for every record below: **`LOCAL`
+`.agents/worktrees/alpha16-retirement`** at the cited commit. **No `CI` record
+exists for this line** — no workflow run was dispatched for
+`feat/alpha16-retirement`, so every green number in this document is a LOCAL
+record and is labelled as one. That is a real limitation of the evidence, not a
+formality: an independent runner has not reproduced these results.
+
+## 2. The headline: the class lane left the product
+
+The Alpha16 objective's core was to retire the class/Part Program authoring lane
+in favour of the generated lane. That is true of **every product source root**:
+
+| source root | authored `@element` classes |
+| --- | --- |
+| `www/app` | **0** |
+| `apps/saas/app` | **0** |
+| `packages/ui/src` | **0** |
+| `packages/create/templates` | **0** |
+
+Command (exact):
+`grep -rn "^export default class .* extends OpenElement\|^class .* extends OpenElement\|^export class .* extends OpenElement" www/app apps/saas/app packages/ui/src packages/create/templates --include="*.ts" --include="*.tsx"`
+→ **no output**. The same command with `^@element(` → **no output**.
+
+What replaced it, and the tests that pin each:
+
+| capability | carrier | guard |
+| --- | --- | --- |
+| derived state | `computed()` intrinsic (ADR-0183 D-4, option B) | `app/layout.tsx` carries 30; `generated-element.*` suites |
+| host access | `useHost()` | `generated-element.use-host.test.ts` (6 rows) |
+| refs | `ref(cb?)` over the existing `ref` channel | ADR-0182 amendment |
+| lifecycle | `onConnect` / `onDispose` / `onPropertyChange` | generated-element suites |
+| error boundary | `onError` (2 capture points) + newly the SSR fallback | `nested-host-expansion.test.ts` (+4 rows) |
+| context | `provideContext` / `useContext` over the generated owner tree | `16b-CTX` slice |
+| nested hosts | expansion to DSD through one runtime call per dash tag | `generated-leaf.nested-host.test.ts`, `nested-host-expansion.test.ts` |
+| light-root CSS | declared sheets reach the render's document sink (#1800) | `generated-light-styles.test.ts` |
+| shadow-root CSS | declared inside the DSD template via the typed `styleLinks` channel | `island-styles.test.ts` (admission row) |
+
+Page authorship follows execution-plan §19.9 throughout: the page component is an
+**exported server function component declared in its own route module**. That rule
+was not cosmetic — the saas batch originally failed it, and the failure mode is
+worth remembering (see §5).
+
+## 3. Evidence record
+
+All rows: provenance **`LOCAL .agents/worktrees/alpha16-retirement`**, commit
+`a69b52705` unless stated, status clean.
+
+| # | command | result |
+| --- | --- | --- |
+| 1 | `vp run --no-cache --fail-if-no-match --filter @openelement/element test` | **1055 passed (1055)**, 135 files |
+| 2 | `vp run --no-cache --fail-if-no-match --filter @openelement/compiler test` | **1404 passed (1404)**, 101 files |
+| 3 | `vp run --no-cache --fail-if-no-match --filter @openelement/router test` | **1880 passed (1880)**, 167 files |
+| 4 | `vp run --no-cache --fail-if-no-match --filter @openelement/www test` | **304 passed (304)**, 34 files |
+| 5 | `vp run --no-cache --fail-if-no-match --filter @openelement/saas test` | **150 passed (150)**, 20 files |
+| 6 | `vp run --no-cache --fail-if-no-match --filter @openelement/create test` | **68 passed (68)**, 3 files |
+| 7 | `vp run --no-cache --fail-if-no-match --filter @openelement/ui test` | **80 passed (80)** |
+| 8 | `vp run --no-cache --fail-if-no-match check` | **`gate ok: 5 step(s)`** |
+| 9 | `vp run --no-cache --fail-if-no-match site:build` | **`gate ok: 6 step(s)`** |
+| 10 | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot` | `Public interface snapshot matches (6 packages)` |
+
+`@openelement/protocol` has no `test` task (it declares no scripts); it is covered
+by the compiler/router suites that consume it.
+
+Rendered-output evidence (not a test count, because the claim is about bytes):
+`www/dist/guide/api/index.html` carries the reading shell with **2166** characters
+of real article prose, 3 `<h2>` elements and 2 highlighted code fences, and **no**
+`<open-article-view>` tag.
+
+## 4. What was retired, per area (M10)
+
+M10 asks for retirement evidence **per surface**. Three of five are retired; the
+other two are recorded as negatives.
+
+| surface | state | evidence |
+| --- | --- | --- |
+| Browser runtime | **RETIRED** | symbol probes over both shipped client bundles for `installAccessors`, `createFacadePropertyState`, `validatePartProgram`, `PART_PROGRAM_VERSION`, `createElementKernel` → **0** in saas and www |
+| Server runtime | **NOT retired** | `validatePartProgram` ships **3** times in `apps/saas/dist/server/entry.js` because `public-runtime.ts` still holds the class render path beside the generated one |
+| Build/SSG | **RETIRED** | the `@element` counts in §2 are zero, so the lane is dispatched and never selected in a product build; `site:build` completes without it |
+| ABI/module contract | **STILL PROMISED** | `COMPILED_MODULE_ABI_VERSION = 2` still documents `__partProgram`; deliberate while third-party class modules are still accepted |
+| Public API | **UNCHANGED** | `OpenElement` / `ErrorBoundary` are still exported; `onNestedFailure` is the line's one addition |
+
+## 5. What was NOT delivered, and the condition each waits on
+
+This is the section Alpha17 planning should read first.
+
+### 5.1 The class lane itself is still present
+
+The **authoring surface is gone from the product**, but the lane's compiler, Part
+Program artifact, validator and class render path are still in the tree because
+two things still consume them:
+
+1. `packages/*/__tests__` — **82 test files** author `@element` classes. They are
+   the lane's own contract tests, so they must be deleted in the same commit that
+   deletes the lane; deleting them first would remove the only thing pinning the
+   behavior being removed.
+2. `tests/fixtures` — **10 fixture apps** still author classes. Two are RETAINED
+   deliberately (`third-party-web-components`, `web-component-interop`: a foreign
+   class IS the subject under test). The other eight MIGRATE LATER, with
+   `site-light-probe` first because its subject (#1800 light-root CSS delivery)
+   just moved lane and its proof should move with it.
+
+**Condition:** lane deletion is one change set covering the compiler entry, the
+Part Program artifact and its ABI record, the class render path in
+`public-runtime.ts`, those 82 test files, and the eight fixtures. Until that
+happens, the server-runtime and ABI rows of §4 stay open.
+
+### 5.2 `16b-EB` — conditions 2, 3, 4 of plan §19.2
+
+Condition 1 (the `__ssr` fallback contract: boundary bytes, observability, no
+whole-render failure) is delivered and guarded. Open:
+
+- **condition 2** — client claim adoption of the fallback bytes under the unchanged
+  claim and identity rules;
+- **condition 3** — the one-SHA consumer-form evidence bundle (fallback bytes for a
+  failing producer, claim parity over them, the no-silent-swallow row, and the two
+  Alpha16 capture points unchanged);
+- **condition 4** — the row-for-row status move in the `16b-MN` record, the
+  capability inventory and ADR-0182's EB amendment.
+
+**Condition:** condition 2 needs a client-side claim fixture for a boundary-owned
+producer failure; 3 and 4 follow it in one record. `16b-EB` is **not** claimed
+delivered.
+
+### 5.3 `16b-LC` depth ≥ 2, recipe/list placement, non-retained targets, pre-DOM timing
+
+Delivery today: root lifecycle, depth-1 nested/hostless hooks, and the
+connection-scope `env = { host, signal }` helper. Still refused: the remaining
+placements (`OEIR_LEAF_INVALID_ARTIFACT` / `OEC9041`).
+
+**Condition:** extending the retention model, which ADR-0181 owns; the slice does
+not have a design carrier for depth ≥ 2 yet.
+
+### 5.4 M12 / M13 / M14 qualification
+
+- **M12** (final packed-consumer qualification, the stateful list) — the harness
+  exists (`tests/e2e/starter-smoke/setup.ts` + `quality.ts`, Playwright with
+  chromium/firefox/webkit present on this machine) but was **not run** for this
+  line. Running it packs the tarballs and installs a fresh consumer, which is a
+  release-train action, not a closeout one.
+- **M13** (browser + server qualification at an exact SHA) — same: needs the M12
+  artifact set.
+- **M14** (async server components, full-await) — the OEC9032 semantics work is in
+  and the compiler suite covers it; the milestone row is not flipped here.
+
+**Condition:** a dispatched release-train run. Every one of these is a `Q`-class
+(qualification) milestone whose evidence must be a `CI` record by definition, and
+this line has no CI run. **A LOCAL record cannot stand in for them**, so this
+report does not claim them.
+
+### 5.5 P5 personal sign-off
+
+The §13.5 P5 sign-off requires the owner's own signed line on a final-SHA matrix.
+The §18.7 delegation explicitly does **not** satisfy it ("a record that requires
+the owner's own line is not satisfied by it"). **Condition:** the owner signs.
+
+## 6. P1–P8 compliance and comply-or-explain
+
+| principle | how this line obeyed it |
+| --- | --- |
+| **P1** executor closure | the generated-lane runtime helpers are imported only from `@openelement/element/internal/compiled/leaf-runtime`, never the package root |
+| **P2** runtime surface needs an ADR | `computed` (ADR-0183), `useHost`/`ref`/lifecycle/context (ADR-0182 amendments), the nested-host expansion and the EB fallback all ride existing seams; no new public surface was added except `onNestedFailure`, which is recorded in the interface snapshot and the plan |
+| **P5** written retirement conditions | `compiledRootKindOf`'s Part Program arm carries its condition in the doc comment; this report carries §5's conditions |
+| **P6** single source of truth | three duplicate-fact defects were found and *fixed* rather than tolerated: the shadow-style refusal that contradicted the build, `useHost` recorded as FUTURE/OWED while implemented, and form participation recorded as PARTIAL while closed |
+| **P7** evidence before claim | §3 is a record table, §4–§5 are explicit negatives; nothing in this document says "tests pass" |
+| **P8** single-owner seams + consumer-form tests | every new guard calls the shipped helper the way emitted code does (`nested-host-expansion.test.ts` calls `nestedHost`; `generated-light-styles.test.ts` drives the real channel) |
+
+**The one deliberate deviation, with its reason.** `www/app/site-ui/
+open-article-view.css` was retired and its single `:host{display:block}` rule moved
+into the linked document sheet instead of staying an element sheet. A server
+function page's nested styled host is emitted by `__h(tag, …)`, which never runs
+the class serializer's nested style walk, so an element sheet would have been
+silently dropped. The move keeps ONE owner for a LIGHT root's CSS — the same
+resolution the starter's three page boxes got — and the mechanism was measured
+before and after (the first attempt broke the A6 sheet row; the move fixed it
+without an allowance).
+
+## 7. Alpha17 boundary
+
+Alpha17 owns, per plan §19.6 and this record:
+
+1. the lane deletion of §5.1 (compiler entry, artifact, ABI record, render path,
+   82 test files, 8 fixtures);
+2. the client-side shadow style adoption slice (the `my-counter` template's
+   `live-timer` sibling still needs it — `ssr: false` has no DSD template to carry
+   a sheet);
+3. the `16b-EB` conditions 2–4 and the `16b-LC` depth ≥ 2 design carrier;
+4. the M12/M13 qualification runs and the P5 sign-off.
+
+None of these is a patch Alpha16 could have absorbed: each needs either a design
+carrier that does not exist yet, or a release-train/owner action outside a
+retirement branch's authority.
