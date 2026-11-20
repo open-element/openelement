@@ -18,14 +18,14 @@
  * *
  * Usage:
  * ```ts
- * // Import all components
- * import { registerOpenUi } from '@openelement/ui';
- * registerOpenUi();
- *
- * // Or import specific components (authored source; the elements register
+ * // Import specific components (authored source; the elements register
  * // themselves through the build, not through a class export)
  * import { OpenButton } from '@openelement/ui/open-button';
  * ```
+ *
+ * There is no bulk registration call: every first-party element is emitted by
+ * the build and defined by the generated island entry, so `registerOpenUi` was
+ * retired in 1.0.0-alpha.16 (it had been an empty compatibility surface).
  *
  * @module @openelement/ui
  */
@@ -48,4 +48,3 @@ export { default as OpenDropdown } from './open-dropdown.tsx';
 // Package manifest (WC Package Protocol)
 // Consumers (the router build) read manifest.declarations to derive island metadata.
 export { manifest } from './manifest.ts';
-export { registerOpenUi } from './register.ts';

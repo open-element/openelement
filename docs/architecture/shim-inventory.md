@@ -496,10 +496,18 @@ native 选择缝是主产物，不再作为垫片登记。）
   [m01-consumer-migration-matrix.md](./m01-consumer-migration-matrix.md) 完成重编译迁移）之后，把这段 permissive 读收紧为对 ONE 样式创作语法（`semantic-core/style-imports.ts`）的严格准入；届时旧形状在打包消费证据上 fail closed，而不是静默走旧路径。
 - 处置：条件到即删。
 
-### 28. `registerOpenUi` published-API 空操作垫片（`@openelement/ui`）——条件到即删
+### 28. `registerOpenUi` published-API 空操作垫片（`@openelement/ui`）——**已退役**（2026-11-20）
 
-- 所有者：`@openelement/ui`（`packages/ui/src/register.ts` 是唯一声明点：`registerOpenUi(registry?)` 的签名、空注册表语义与其文档注释都由该模块拥有；2026-11-20 owner-approved delegated remediation 决定保留该 published API 并登记，不删除）。
-- 方向：published API 调用方（`registerOpenUi(registry?)`）→ 空注册表（无副作用）；该调用今天不注册任何元素，返回值 `void`。
-- 存在原因：`registerOpenUi` 是已发布的公开 API，外部消费者可能仍在 import 或调用它，删除属于 P5 退役决定而不是一次迁移的副作用。函数体为空的唯一原因是六个 first-party UI 组件（`open-input`、`open-button` 等）已全部迁移到 generated lane，类组件注册表已空；它因此成为纯兼容面而不是功能面。
-- 退役条件：当 `@openelement/ui` 不再发布该 export，或全部消费方改用 generated entry 时删除 `registerOpenUi`（连同 `packages/ui/src/register.ts` 的导出与其 snapshot 行）；或随下一次 breaking alpha 删除（该 export 属 experience-edition 面，不需要兼容适配器）。删除时同步更新 `docs/release/public-interface-snapshot.json` 与 ADR-0182 的实现记录。
-- 处置：条件到即删（2026-11-20 登记：保留 published API，条件到即执行删除，不等下一次评审）。
+- **退役动作**：`1.0.0-alpha.16`（本条线）。`packages/ui/src/register.ts` 删除，根
+  导出与模块文档示例同步移除，packaged-consumer harness 不再调用它。
+- **依据**：该 shim 自己写的第二个退役条件——"或随下一次 breaking alpha 删除（该
+  export 属 experience-edition 面，不需要兼容适配器）"。alpha.16 是那次 breaking
+  alpha，所以不等"全部消费方改用 generated entry"这条更慢的条件。
+- **退役时的状态**（删除前的实测）：`packages/ui/src` 中 `extends OpenElement` 计数
+  **0**，函数体为空，`registerOpenUi` 只出现在自身声明、根导出、文档示例与
+  packaged-consumer harness 四处——即一个**纯兼容面**。
+- **同步更新**：`docs/release/public-interface-snapshot.json`（diff 恰为删掉
+  `registerOpenUi` 一个符号 + shape hash）、`packages/ui/__tests__/smoke.test.ts`
+  （原"空注册表且幂等"行改写为"该面已退役而非仅空"，并仍断言每个元素由构建注册）。
+- **不是缺口**：六个 first-party 元素依旧各自导出并通过构建自行注册；删除的是一次
+  空调用，不是任何元素。

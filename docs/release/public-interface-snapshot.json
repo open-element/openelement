@@ -1694,7 +1694,7 @@
       },
       "declarations": {
         ".": {
-          "publicShapeSha256": "8b82424d5a310494da99dfa1b1b05191eb10c38ca5be7eabc4d64a59fa221c29",
+          "publicShapeSha256": "522a5f23777207fb4d1383278fad151a1b454e805c769830997361dd01183feb",
           "publicSymbols": [
             "OpenButton=value:{call:(props:{disabled:union(false|true);href:string;size:string;target:string;type:string;variant:string})=>any}",
             "OpenCodeBlock=value:{call:(props:{copyLabel:string})=>any}",
@@ -1704,7 +1704,6 @@
             "OpenThemeToggle=value:{call:(props:{theme:string})=>any}",
             "manifest=value:OpenElementPackageManifest",
             "readInstanceState=value:{call:<T>(host:object,key:string,init:{call:()=>T})=>T}",
-            "registerOpenUi=value:{call:(registry:union(CustomElementRegistry|undefined))=>void}",
             "writeInstanceState=value:{call:(host:object,key:string,value:unknown)=>void}"
           ]
         },
