@@ -181,6 +181,7 @@ import {
   type PropertyConversionRecord,
 } from '../../core/property-conversion.ts';
 import { isTrustedHtmlValue, trustedHtml } from '../../core/security.ts';
+import { NESTED_HOST_PROPERTY } from '../runtime/nested-host.ts';
 import { LifetimeScope } from '../lifetime-scope.ts';
 import { abortInstancePass, releaseRetainedChildren } from '../runtime/instance-ledger.ts';
 import { claimRecipe, insertRecipe, type Projection, type Recipe } from '../runtime/recipe.ts';
@@ -598,8 +599,23 @@ export function seedGeneratedElementHostProperties<P extends object = Record<str
 function lightSsrProducer(
   descriptor: NormalizedDescriptor,
   producer: () => unknown,
-): (input?: unknown, attributes?: readonly (readonly [string, string])[]) => unknown {
-  return (input?: unknown, attributes?: readonly (readonly [string, string])[]) => {
+): (
+  input?: unknown,
+  attributes?: readonly (readonly [string, string])[],
+  /**
+   * alpha16 nested-expansion: the render's nested-host expander. It is
+   * forwarded to the emitted producer on the host record it already receives,
+   * so a dash-tag element inside this host's markup can be expanded. Absent
+   * means the producer's own literal bytes are the answer — the additive
+   * contract.
+   */
+  nestedHost?: unknown,
+) => unknown {
+  return (
+    input?: unknown,
+    attributes?: readonly (readonly [string, string])[],
+    nestedHost?: unknown,
+  ) => {
     const supplied =
       input !== null && typeof input === 'object' ? (input as Record<string, unknown>) : undefined;
     // The seeder is typed against the PUBLIC property row (`default`) while the
@@ -644,10 +660,13 @@ function lightSsrProducer(
     // itself, so the pairs must ride back to that caller. Exposed as a second
     // property on the result rather than a changed return type, so the content
     // string the shadow path and every existing caller expect is unchanged.
-    const content = (producer as (props: unknown, host: undefined) => unknown).call(
+    const content = (producer as (props: unknown, host: unknown) => unknown).call(
       undefined,
       resolved,
-      undefined,
+      // The producer's host record: today it carries only the nested-host
+      // expander (the light lane has no bindings channel). Absent expander →
+      // `nestedHost` returns the caller's literal bytes.
+      nestedHost === undefined ? undefined : { [NESTED_HOST_PROPERTY]: nestedHost },
     );
     const hostAttributes = (seeded as Record<string, unknown>)[GENERATED_HOST_ATTRIBUTES] as
       | readonly (readonly [string, string])[]

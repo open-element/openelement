@@ -1,6 +1,5 @@
 import { expect, test } from 'vitest';
 import { compileElementProgram, compileGeneratedElementIfAdmitted } from '@openelement/compiler';
-import { REPOSITORY_URL } from '../app/site-ui/open-layout-navigation.ts';
 import { readFile } from 'node:fs/promises';
 
 /**
@@ -46,24 +45,29 @@ for (const [tagName, path] of siteModules) {
   });
 }
 
-test('app/layout.tsx is the compiled shell convention (no island declaration)', async () => {
+test('app/layout.tsx is the generated site shell with all 30 derived nodes', async () => {
   const url = new URL('../app/layout.tsx', import.meta.url);
   const source = await readFile(url, 'utf8');
-  // The convention module carries no island admission — a compiled light-root
-  // component with no island declaration ships zero client JS. (The former
-  // open-layout island, hydrate: 'none', retired with this migration.)
-  expect(source).not.toContain('defineIslandConfig');
-  expect(source).toContain("@element('app-layout')");
-  expect(source).toContain('export default class Layout extends OpenElement');
-  const result = compileElementProgram(source, url.pathname);
-  expect(result.program.tag).toEqual('app-layout');
-  // Blocks: header nav (desktop + mobile panel), sidebar rows (desktop +
-  // mobile disclosure panel) and the four footer link columns.
-  expect(result.program.blocks.length).toEqual(8);
-  expect(
-    result.program.metadata.properties.find((property) => property.name === 'repositoryHref')
-      ?.default,
-  ).toEqual(REPOSITORY_URL);
+  // Generated lane (2026-11-20 migration): the class became a function component
+  // whose sidecar keeps the convention tag (the router constant, D-M1) and whose
+  // 30 `computed` fields became the lane's `computed` intrinsic — derived nodes
+  // the compiler creates in the retained setup factory (ADR-0183 D-4). The entry
+  // registers it through the generated host PAIR channel (layout-pair slice).
+  expect(source).not.toContain('extends OpenElement');
+  expect(source).toContain("tag: 'app-layout'");
+  expect(source.match(/const \w+ = computed\(/g)?.length).toEqual(30);
+  const compiled = compileGeneratedElementIfAdmitted(source, url.pathname, {
+    site: { tag: 'app-layout' },
+  });
+  expect(compiled).not.toBeNull();
+  // The two chrome micro-islands are DASH tags in its markup, so the SSR
+  // producer routes each through the render's nested-host expander rather than
+  // hard-coding their bytes (nested-expansion slice). Without that routing they
+  // would stay unexpanded — an inert tag instead of DSD.
+  expect(compiled!.code).toContain('nestedHost(');
+  // One light root, so no DSD wrapper of its own; the islands inside it still
+  // get theirs through the expander.
+  expect(compiled!.code).not.toContain('serializeGeneratedElementHtml');
 });
 
 test('open-section-frame is a page-local generated component with its slots preserved', async () => {

@@ -78,6 +78,13 @@ export {
 
 // Recipes and their projection ownership.
 export { claimRecipe, createRecipe, insertRecipe } from './runtime/recipe.ts';
+// `nestedHost` (alpha16 nested-expansion slice): the emitted SSR producer
+// routes every custom-element (dash) tag through this ONE call, which asks the
+// render's host for the nested expansion and falls back to the literal bytes the
+// producer would otherwise have pushed. The fallback path is what makes the
+// slice additive: an un-admitted tag, or a render with no expander, emits
+// exactly today's markup.
+export { nestedHost } from './runtime/nested-host.ts';
 
 // The retained-child ledger the LC-2 depth-1 hooks use.
 export {

@@ -1087,14 +1087,79 @@ function renderToStringAtDepth(
     // wrapper: the host's children ARE the region, exactly as on the client.
     const lightSsr = (resolvedClass as { __ssr?: unknown }).__ssr;
     if (typeof lightSsr === 'function') {
+      // alpha16 nested-expansion: a generated light-root host's `__ssr` is a
+      // string builder, so a custom-element tag inside its markup would stay an
+      // unexpanded tag (a second descriptor-less element, not DSD). The class
+      // lane expands because its serializer walks `renderNestedElement`; this is
+      // the same walk for the generated lane, supplied as ONE expander the
+      // producer calls per dash tag.
+      //
+      // The expander reuses the SAME nested dispatch the class lane uses — the
+      // registry pair channel, then a light-root class static, then the compiled
+      // class — so a nested host expands identically from either parent lane.
+      // The admission set is the render's own `ssrRenderableTags`; a tag outside
+      // it answers `undefined` and the producer keeps its literal bytes.
+      const admittedNested = new Set(options.ssrRenderableTags ?? []);
+      const nestedHost =
+        admittedNested.size === 0
+          ? undefined
+          : (request: {
+              readonly tag: string;
+              readonly attributes: ReadonlyArray<readonly [string, string]>;
+              readonly open: string;
+              readonly children: string;
+              readonly fallback: string;
+            }): string | undefined => {
+              if (!admittedNested.has(request.tag)) return undefined;
+              const nestedGenerated = registeredGeneratedHostRenderer(request.tag);
+              if (nestedGenerated !== undefined) {
+                return renderRegisteredGeneratedHost(
+                  request.tag,
+                  nestedGenerated,
+                  undefined,
+                  request.children === '' ? undefined : request.children,
+                  request.attributes,
+                );
+              }
+              const nestedClass = (
+                typeof customElements === 'undefined' ? undefined : customElements.get(request.tag)
+              ) as CompiledComponentConstructor | undefined;
+              if (nestedClass === undefined) return undefined;
+              const nestedLightSsr = (nestedClass as { __ssr?: unknown }).__ssr;
+              if (typeof nestedLightSsr === 'function') {
+                const nestedRendered = (
+                  nestedLightSsr as (input?: unknown, attributes?: unknown) => unknown
+                ).call(nestedClass, undefined, request.attributes);
+                const nestedLight = lightResult(nestedRendered, 'nested light-root', request.tag);
+                return serializeLightGeneratedHost(
+                  request.tag,
+                  nestedLight.content,
+                  mergeHostAttributes(
+                    request.attributes,
+                    nestedLight.hostAttributes,
+                    nestedLight.seedRows,
+                  ),
+                );
+              }
+              // A class nested host expands through the class serializer, which
+              // owns its own nested walk — so the depth recursion stays the one
+              // serializer's, not a second dispatcher.
+              return renderToStringAtDepth(
+                request.tag,
+                {
+                  componentClass: nestedClass,
+                  props: {},
+                  ssrRenderableTags: options.ssrRenderableTags,
+                },
+                depth + 1,
+              );
+            };
       // Pass the host attribute pairs: the class static now folds them through
       // the shell's own seeder/resolver so a declared row gets its server value.
       // Before this, a light-root component with any row threw on `props.x`.
-      const rendered = (lightSsr as (input?: unknown, attributes?: unknown) => unknown).call(
-        resolvedClass,
-        options.props,
-        options.hostAttrs,
-      );
+      const rendered = (
+        lightSsr as (input?: unknown, attributes?: unknown, nestedHost?: unknown) => unknown
+      ).call(resolvedClass, options.props, options.hostAttrs, nestedHost);
       const light = lightResult(
         rendered,
         'light-root',

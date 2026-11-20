@@ -327,6 +327,9 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
   { symbol: 'claimRecipe', predicate: (_body, usesClaimRecipe) => usesClaimRecipe },
   { symbol: 'leafClaimMismatch', predicate: (body) => body.includes('leafClaimMismatch(') },
   { symbol: 'leafRuntimeError', predicate: (body) => body.includes('leafRuntimeError(') },
+  // alpha16 nested-expansion: the emitted producer routes every custom-element
+  // tag through this ONE helper, which asks the render's host to expand it.
+  { symbol: 'nestedHost', predicate: (body) => body.includes('nestedHost(') },
   // ADR-0183 D-4: a root-owned binding declared in the retained setup factory
   // (a `signal`/`computed` resource) and the SSR producer's per-render copy are
   // the only emitters of these calls.
@@ -6748,6 +6751,14 @@ function staticSsrNode(
   if (node.kind === 'fragment') return staticSsrExpression(node.children, markers, slots);
   if (node.kind !== 'element') return null;
   if (!TAG_PATTERN.test(node.tag)) return null;
+  // alpha16 nested-expansion: a DASH tag is a nested custom-element host, and a
+  // host's markup is only correct once the render has had the chance to expand
+  // it. The static form is a compile-time string with no such call, so a static
+  // host would silently stay unexpanded — the exact defect this slice exists to
+  // fix. Returning null here routes the whole component to the dynamic producer,
+  // whose dash-tag branch routes through `nestedHost` and falls back to these
+  // same literal bytes when nothing admits the tag.
+  if (node.tag.includes('-')) return null;
   const isVoid = VOID_TAGS.has(node.tag);
   // A void element has no content model. The frontend refuses authored
   // children with `OEC9013`; this null is the generator's fail-closed guard for
@@ -6922,6 +6933,13 @@ function emitSsrDynamicAttribute(
   attribute: Extract<FunctionModelAttribute, { readonly kind: 'dynamic' }>,
   outVar: string,
   records: ReadonlyMap<string, LoweredExpressionRecord>,
+  /**
+   * When present, the same evaluated value is ALSO recorded as an `[name, value]`
+   * pair. A nested custom-element host hands those pairs to the render's
+   * expander, so the value is evaluated ONCE and both the serialized bytes and
+   * the expander's props read that one evaluation — no second getter read.
+   */
+  pairsVar?: string,
 ): boolean {
   if (CLIENT_ONLY_ATTRIBUTE_CHANNELS.has(attribute.channel)) return false;
   if (!ADMITTED_ATTRIBUTE_CHANNELS.has(attribute.channel)) return false;
@@ -6929,6 +6947,18 @@ function emitSsrDynamicAttribute(
   if (record === null || !declareReads(state, record)) return false;
   const literal = JSON.stringify(attribute.name);
   if (attribute.channel === 'boolean') {
+    if (pairsVar !== undefined) {
+      pushParts(
+        state,
+        [
+          `if (Boolean((`,
+          { record },
+          `))) { ${outVar}.push(${JSON.stringify(` ${attribute.name}=""`)}); ${pairsVar}.push([${literal}, ${JSON.stringify('')}]); }`,
+        ],
+        attribute.span,
+      );
+      return true;
+    }
     pushParts(
       state,
       [
@@ -6950,6 +6980,8 @@ function emitSsrDynamicAttribute(
     `  ${outVar}.push(${JSON.stringify(` ${attribute.name}="`)}, escapeAttrValue(${valueVar}), ${JSON.stringify('"')});`,
     attribute.span,
   );
+  if (pairsVar !== undefined)
+    push(state, `  ${pairsVar}.push([${literal}, ${valueVar}]);`, attribute.span);
   push(state, `}`, attribute.span);
   return true;
 }
@@ -7399,7 +7431,21 @@ function emitDynamicSsrNodes(
     // projection into it fails closed at the serializer because no anchor names
     // it.
     const slotName = slotOrdinal === undefined ? null : slotNameOf(node);
-    push(state, `${outVar}.push(${literalText(`<${node.tag}`)});`, node.span);
+    // alpha16 nested-expansion: a dash tag is a NESTED CUSTOM-ELEMENT HOST. Its
+    // bytes are built into their own buffers and then routed through the ONE
+    // `nestedHost` helper, which asks the render to expand it and falls back to
+    // these same literal bytes when nothing admits the tag. An intrinsic tag
+    // keeps direct pushes (byte-identical).
+    const isNestedHost = node.tag.includes('-');
+    const bytesVar = isNestedHost ? nextName(state, 'nestedOpen') : outVar;
+    const pairsVar = isNestedHost ? nextName(state, 'nestedAttrs') : undefined;
+    const kidsVar = isNestedHost ? nextName(state, 'nestedKids') : undefined;
+    if (isNestedHost) {
+      push(state, `const ${bytesVar} = [];`, node.span);
+      push(state, `const ${pairsVar} = [];`, node.span);
+      push(state, `const ${kidsVar} = [];`, node.span);
+    }
+    push(state, `${bytesVar}.push(${literalText(`<${node.tag}`)});`, node.span);
     for (const attribute of node.attributes) {
       if (
         attribute.kind === 'dynamic' &&
@@ -7420,51 +7466,105 @@ function emitDynamicSsrNodes(
           : attribute.value;
         push(
           state,
-          `${outVar}.push(${JSON.stringify(` ${attribute.name}="`)}, escapeAttrValue(${literalText(ssrValue)}), ${JSON.stringify('"')});`,
+          `${bytesVar}.push(${JSON.stringify(` ${attribute.name}="`)}, escapeAttrValue(${literalText(ssrValue)}), ${JSON.stringify('"')});`,
           attribute.span,
         );
+        if (pairsVar !== undefined) {
+          push(
+            state,
+            `${pairsVar}.push([${JSON.stringify(attribute.name)}, ${literalText(ssrValue)}]);`,
+            attribute.span,
+          );
+        }
         continue;
       }
-      if (!emitSsrDynamicAttribute(state, attribute, outVar, records)) return false;
+      if (!emitSsrDynamicAttribute(state, attribute, bytesVar, records, pairsVar)) return false;
     }
-    push(state, `${outVar}.push(">");`, node.span);
-    if (isVoid) continue;
+    push(state, `${bytesVar}.push(">");`, node.span);
+    if (isVoid) {
+      if (isNestedHost) pushNestedHostExpansion(state, outVar, bytesVar, pairsVar!, kidsVar!, node);
+      continue;
+    }
+    const childVar = kidsVar ?? outVar;
     if (slotOrdinal !== null && slotName !== null) {
       push(
         state,
-        `${outVar}.push("<!--", markerText(slotAnchorMarker(${slotOrdinal}, ${literalText(slotName)})), "-->");`,
+        `${childVar}.push("<!--", markerText(slotAnchorMarker(${slotOrdinal}, ${literalText(slotName)})), "-->");`,
         node.span,
       );
     }
+    // A nested custom-element host never uses the sibling-directory shape: its
+    // content is not a directory over a keyed list, and the expander owns the
+    // interior. Emitting the plain walk into the children buffer is the
+    // additive behaviour (the same bytes, one array over).
     const directory =
-      markers && directoryParentAllowed(node.tag) ? staticElementDirectory(node.children) : null;
+      !isNestedHost && markers && directoryParentAllowed(node.tag)
+        ? staticElementDirectory(node.children)
+        : null;
     if (directory !== null) {
       for (const [ordinal, range] of directory.entries()) {
         push(
           state,
-          `${outVar}.push("<!--", markerText(rangeMarker(${ordinal})), "-->");`,
+          `${childVar}.push("<!--", markerText(rangeMarker(${ordinal})), "-->");`,
           range.span,
         );
-        if (!emitDynamicSsrNodes(state, [range], outVar, false, records, slots)) return false;
+        if (!emitDynamicSsrNodes(state, [range], childVar, false, records, slots)) return false;
         push(
           state,
-          `${outVar}.push("<!--", markerText(rangeMarker(${ordinal}, true)), "-->");`,
+          `${childVar}.push("<!--", markerText(rangeMarker(${ordinal}, true)), "-->");`,
           range.span,
         );
       }
-    } else if (!emitDynamicSsrNodes(state, node.children, outVar, markers, records, slots)) {
+    } else if (!emitDynamicSsrNodes(state, node.children, childVar, markers, records, slots)) {
       return false;
     }
     if (slotOrdinal !== null && slotName !== null) {
       push(
         state,
-        `${outVar}.push("<!--", markerText(slotAnchorMarker(${slotOrdinal}, ${literalText(slotName)}, true)), "-->");`,
+        `${childVar}.push("<!--", markerText(slotAnchorMarker(${slotOrdinal}, ${literalText(slotName)}, true)), "-->");`,
         node.span,
       );
+    }
+    if (isNestedHost) {
+      pushNestedHostExpansion(state, outVar, bytesVar, pairsVar!, kidsVar!, node);
+      continue;
     }
     push(state, `${outVar}.push(${literalText(`</${node.tag}>`)});`, node.span);
   }
   return true;
+}
+
+/**
+ * alpha16 nested-expansion: close one nested custom-element host.
+ *
+ * The element's bytes are in two buffers (`open`: the start tag plus attributes
+ * and `>`; `kids`: its children), and the attribute pairs were recorded as they
+ * were serialized. The emitted call hands all three to `nestedHost`, which asks
+ * the render's host to expand the tag and falls back to the caller's own literal
+ * bytes when nothing admits it — so an un-admitted tag produces exactly the
+ * markup the direct pushes would have produced.
+ *
+ * Stated as a request record (never positional arguments) because the expander
+ * is host-supplied code: a named shape is what makes the contract readable at
+ * both ends.
+ */
+function pushNestedHostExpansion(
+  state: EmitState,
+  outVar: string,
+  openVar: string,
+  pairsVar: string,
+  kidsVar: string,
+  node: { readonly tag: string; readonly span: SpanLike },
+): void {
+  const htmlVar = nextName(state, 'nestedHtml');
+  const kidsHtmlVar = nextName(state, 'nestedKids');
+  push(state, `const ${htmlVar} = ${openVar}.join("");`, node.span);
+  push(state, `const ${kidsHtmlVar} = ${kidsVar}.join("");`, node.span);
+  push(
+    state,
+    `${outVar}.push(nestedHost(${state.hostVar}, { tag: ${JSON.stringify(node.tag)}, attributes: ${pairsVar}, open: ${htmlVar}, children: ${kidsHtmlVar}, fallback: ${htmlVar} + ${kidsHtmlVar} + ${JSON.stringify(`</${node.tag}>`)} }));`,
+    node.span,
+  );
 }
 
 /**

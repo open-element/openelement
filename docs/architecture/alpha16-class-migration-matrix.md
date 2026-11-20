@@ -184,7 +184,7 @@ its prose); the measurements that do not hold are corrected here.
 | `www/app` — "32 class modules the site ships" | 34 files in the scan: 32 class modules (27 bindings + 4 `site-ui` + `layout.tsx`) plus the 2 already-function-lane islands | §5 |
 | `www/app/components/article-routes` — 40 generated modules (from the 2026-11-18 doc) | **27** at this SHA | §5.2 |
 | "classes" column is a class count | prefix match; 9 files / 11 declarations, seven of them not class-lane | §2.3, rows marked `†` |
-| `www/app/layout.tsx` 448 lines, `apps/saas/app/layout.tsx` 23 lines | confirmed by `wc -l` (448, 23) | unchanged |
+| `www/app/layout.tsx` 448 lines, `apps/saas/app/layout.tsx` 23 lines | **both MIGRATED 2026-11-20** (layout-pair + nested-expansion slices) | `migrated` |
 
 ## 4. Decision register — every `D-Mx` this matrix references
 
@@ -1353,3 +1353,45 @@ Evidence: saas build exit 0 with the layout DSD AND the page projected;
 `entry-descriptor-layout-generated-host.test.ts` (four rows: carrier, pair
 registration, class byte-identity, light-root absence); router 167 files / 1880
 tests; saas 20 / 150; `vp run check` 5/5.
+
+**2026-11-20 — nested expansion lands; `www/app/layout.tsx` MIGRATED (the site shell).**
+
+The slice the previous entry scoped is implemented, in the seam order it recorded.
+
+1. **the seam reaches the producer.** `lightSsrProducer` takes a third argument —
+   the render's nested-host expander — and forwards it on the host record the
+   emitted `__ssr` already receives. Until now that record was a literal
+   `undefined`, which is the whole server-side reason no expansion could happen.
+2. **one call per dash tag.** In the emitter's dynamic element branch a dash tag's
+   bytes are built into two buffers (open tag + attributes; children) and pushed
+   through `nestedHost(host, { tag, attributes, open, children, fallback })`. The
+   attribute pairs are recorded as they are serialized, so the expander's props
+   and the serialized bytes are the SAME evaluation — no second getter read.
+3. **the static path declines dash tags**, which is what makes a fully static
+   nested host expand at all: the M08-1a producer is a compile-time string with no
+   call site, so a static `<open-theme-toggle></open-theme-toggle>` would have
+   stayed inert. Returning `null` there routes the component to the dynamic
+   producer, whose fallback emits the identical bytes.
+4. **the fallback is byte-identical.** `nestedHost` returns the caller's literal
+   bytes for: no host record, a non-object host, a non-function expander, a
+   declining expander, and a non-string answer. An admission regression can
+   therefore only ever show up as "no DSD", never as wrong markup.
+
+The expander itself lives in `public-runtime.ts` and reuses the **existing** nested
+dispatch the class lane uses — registry pair → light-root class static → compiled
+class — so a nested host expands identically from either parent lane. Its
+admission set is the render's own `ssrRenderableTags`.
+
+`www/app/layout.tsx` (448 lines, 30 `computed`) is now a function component: the
+30 derivations are the lane's intrinsic, the shared chrome copy is resolved once
+in setup scope and captured, and the two chrome micro-islands inside its markup are
+dash tags that expand through the new channel.
+
+Evidence: `site:build` exit 0 (6 steps); the built `index.html` carries **3** DSD
+subtrees and `open-theme-toggle` keeps its `<template shadowrootmode>` — the same
+count the class-lane layout produced (the earlier empty-DSD failure is gone);
+`www` 34 files / 304 tests, `element` 134 / 1049, `compiler` 101 / 1404, `router`
+167 / 1880; `vp run check` 5/5 PASS. New guards:
+`generated-leaf.nested-host.test.ts` (4 rows — routing, the static-dash case,
+intrinsic byte-identity, conditional import) and
+`nested-host-expansion.test.ts` (5 rows — the full fallback matrix).
