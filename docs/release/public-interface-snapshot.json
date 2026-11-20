@@ -602,7 +602,7 @@
       },
       "declarations": {
         ".": {
-          "publicShapeSha256": "d4407313f0f128b9fc0e729a071a3b1534dc4ca9c6fc76f9b79c4cd08bbb0927",
+          "publicShapeSha256": "221863d7c468195a6b9c51005811afd46a9c62c8fc065d3465445b1c57a3afab",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -645,7 +645,7 @@
             "ProblemDetails=type:ProblemDetails",
             "ReadonlySignal=type:ReadonlySignal<T>",
             "RenderError=type:{readonly componentPath:string;readonly tagName:string}|value:{construct:(componentPath:string,message:string,code:string,tagName:string,cause:union(Error|undefined))=>{readonly componentPath:string;readonly tagName:string}}",
-            "RenderToStringOptions=type:{componentClass?:union(CustomElementConstructor|undefined);documentStyles?:union(undefined|{add:{call:(urls:array(string))=>void}});hostChildren?:union(undefined|{readonly html:string});projectedChildren?:union(ReadonlyMap<string, TrustedHtml>|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)}",
+            "RenderToStringOptions=type:{componentClass?:union(CustomElementConstructor|undefined);documentStyles?:union(undefined|{add:{call:(urls:array(string))=>void}});hostChildren?:union(undefined|{readonly html:string});onNestedFailure?:union(undefined|{call:(error:unknown)=>void});projectedChildren?:union(ReadonlyMap<string, TrustedHtml>|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)}",
             "RouteEntry=type:RouteEntry",
             "STREAM_FRAME_FORBIDDEN_TAGS=value:tuple(\"script\",\"style\",\"template\",\"iframe\",\"object\",\"embed\",\"base\",\"meta\",\"link\")",
             "STREAM_FRAME_UNSAFE_URL=value:RegExp",
@@ -696,7 +696,7 @@
             "provideContext=value:{call:<T>(host:HTMLElement,context:{readonly defaultValue:T;readonly key:symbol},value:T)=>Unsubscribe}",
             "ref=value:{call:<T extends Element =Element>(callback:union(undefined|{call:(element:union(T|null))=>union(void|{call:()=>void})}))=>{call:(element:union(Element|null))=>void;readonly current:union(T|null)}}",
             "releaseConsumedContext=value:{call:(signalValue:SignalLike<unknown>)=>void}",
-            "renderToString=value:{call:(input:union(CustomElementConstructor|string),options:{componentClass?:union(CustomElementConstructor|undefined);documentStyles?:union(undefined|{add:{call:(urls:array(string))=>void}});hostChildren?:union(undefined|{readonly html:string});projectedChildren?:union(ReadonlyMap<string, TrustedHtml>|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)})=>string}",
+            "renderToString=value:{call:(input:union(CustomElementConstructor|string),options:{componentClass?:union(CustomElementConstructor|undefined);documentStyles?:union(undefined|{add:{call:(urls:array(string))=>void}});hostChildren?:union(undefined|{readonly html:string});onNestedFailure?:union(undefined|{call:(error:unknown)=>void});projectedChildren?:union(ReadonlyMap<string, TrustedHtml>|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)})=>string}",
             "reportError=value:{call:(error:OpenElementError)=>void}",
             "setErrorTelemetryHook=value:{call:(hook:ErrorTelemetryHook)=>void}",
             "signal=value:{call:<T>(initialValue:T)=>WritableSignal<T>}",
@@ -735,7 +735,7 @@
           ]
         },
         "./base": {
-          "publicShapeSha256": "d4407313f0f128b9fc0e729a071a3b1534dc4ca9c6fc76f9b79c4cd08bbb0927",
+          "publicShapeSha256": "221863d7c468195a6b9c51005811afd46a9c62c8fc065d3465445b1c57a3afab",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -778,7 +778,7 @@
             "ProblemDetails=type:ProblemDetails",
             "ReadonlySignal=type:ReadonlySignal<T>",
             "RenderError=type:{readonly componentPath:string;readonly tagName:string}|value:{construct:(componentPath:string,message:string,code:string,tagName:string,cause:union(Error|undefined))=>{readonly componentPath:string;readonly tagName:string}}",
-            "RenderToStringOptions=type:{componentClass?:union(CustomElementConstructor|undefined);documentStyles?:union(undefined|{add:{call:(urls:array(string))=>void}});hostChildren?:union(undefined|{readonly html:string});projectedChildren?:union(ReadonlyMap<string, TrustedHtml>|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)}",
+            "RenderToStringOptions=type:{componentClass?:union(CustomElementConstructor|undefined);documentStyles?:union(undefined|{add:{call:(urls:array(string))=>void}});hostChildren?:union(undefined|{readonly html:string});onNestedFailure?:union(undefined|{call:(error:unknown)=>void});projectedChildren?:union(ReadonlyMap<string, TrustedHtml>|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)}",
             "RouteEntry=type:RouteEntry",
             "STREAM_FRAME_FORBIDDEN_TAGS=value:tuple(\"script\",\"style\",\"template\",\"iframe\",\"object\",\"embed\",\"base\",\"meta\",\"link\")",
             "STREAM_FRAME_UNSAFE_URL=value:RegExp",
@@ -829,7 +829,7 @@
             "provideContext=value:{call:<T>(host:HTMLElement,context:{readonly defaultValue:T;readonly key:symbol},value:T)=>Unsubscribe}",
             "ref=value:{call:<T extends Element =Element>(callback:union(undefined|{call:(element:union(T|null))=>union(void|{call:()=>void})}))=>{call:(element:union(Element|null))=>void;readonly current:union(T|null)}}",
             "releaseConsumedContext=value:{call:(signalValue:SignalLike<unknown>)=>void}",
-            "renderToString=value:{call:(input:union(CustomElementConstructor|string),options:{componentClass?:union(CustomElementConstructor|undefined);documentStyles?:union(undefined|{add:{call:(urls:array(string))=>void}});hostChildren?:union(undefined|{readonly html:string});projectedChildren?:union(ReadonlyMap<string, TrustedHtml>|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)})=>string}",
+            "renderToString=value:{call:(input:union(CustomElementConstructor|string),options:{componentClass?:union(CustomElementConstructor|undefined);documentStyles?:union(undefined|{add:{call:(urls:array(string))=>void}});hostChildren?:union(undefined|{readonly html:string});onNestedFailure?:union(undefined|{call:(error:unknown)=>void});projectedChildren?:union(ReadonlyMap<string, TrustedHtml>|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)})=>string}",
             "reportError=value:{call:(error:OpenElementError)=>void}",
             "setErrorTelemetryHook=value:{call:(hook:ErrorTelemetryHook)=>void}",
             "signal=value:{call:<T>(initialValue:T)=>WritableSignal<T>}",
@@ -856,7 +856,7 @@
           ]
         },
         "./client-only": {
-          "publicShapeSha256": "d4407313f0f128b9fc0e729a071a3b1534dc4ca9c6fc76f9b79c4cd08bbb0927",
+          "publicShapeSha256": "221863d7c468195a6b9c51005811afd46a9c62c8fc065d3465445b1c57a3afab",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -899,7 +899,7 @@
             "ProblemDetails=type:ProblemDetails",
             "ReadonlySignal=type:ReadonlySignal<T>",
             "RenderError=type:{readonly componentPath:string;readonly tagName:string}|value:{construct:(componentPath:string,message:string,code:string,tagName:string,cause:union(Error|undefined))=>{readonly componentPath:string;readonly tagName:string}}",
-            "RenderToStringOptions=type:{componentClass?:union(CustomElementConstructor|undefined);documentStyles?:union(undefined|{add:{call:(urls:array(string))=>void}});hostChildren?:union(undefined|{readonly html:string});projectedChildren?:union(ReadonlyMap<string, TrustedHtml>|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)}",
+            "RenderToStringOptions=type:{componentClass?:union(CustomElementConstructor|undefined);documentStyles?:union(undefined|{add:{call:(urls:array(string))=>void}});hostChildren?:union(undefined|{readonly html:string});onNestedFailure?:union(undefined|{call:(error:unknown)=>void});projectedChildren?:union(ReadonlyMap<string, TrustedHtml>|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)}",
             "RouteEntry=type:RouteEntry",
             "STREAM_FRAME_FORBIDDEN_TAGS=value:tuple(\"script\",\"style\",\"template\",\"iframe\",\"object\",\"embed\",\"base\",\"meta\",\"link\")",
             "STREAM_FRAME_UNSAFE_URL=value:RegExp",
@@ -950,7 +950,7 @@
             "provideContext=value:{call:<T>(host:HTMLElement,context:{readonly defaultValue:T;readonly key:symbol},value:T)=>Unsubscribe}",
             "ref=value:{call:<T extends Element =Element>(callback:union(undefined|{call:(element:union(T|null))=>union(void|{call:()=>void})}))=>{call:(element:union(Element|null))=>void;readonly current:union(T|null)}}",
             "releaseConsumedContext=value:{call:(signalValue:SignalLike<unknown>)=>void}",
-            "renderToString=value:{call:(input:union(CustomElementConstructor|string),options:{componentClass?:union(CustomElementConstructor|undefined);documentStyles?:union(undefined|{add:{call:(urls:array(string))=>void}});hostChildren?:union(undefined|{readonly html:string});projectedChildren?:union(ReadonlyMap<string, TrustedHtml>|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)})=>string}",
+            "renderToString=value:{call:(input:union(CustomElementConstructor|string),options:{componentClass?:union(CustomElementConstructor|undefined);documentStyles?:union(undefined|{add:{call:(urls:array(string))=>void}});hostChildren?:union(undefined|{readonly html:string});onNestedFailure?:union(undefined|{call:(error:unknown)=>void});projectedChildren?:union(ReadonlyMap<string, TrustedHtml>|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)})=>string}",
             "reportError=value:{call:(error:OpenElementError)=>void}",
             "setErrorTelemetryHook=value:{call:(hook:ErrorTelemetryHook)=>void}",
             "signal=value:{call:<T>(initialValue:T)=>WritableSignal<T>}",
@@ -1004,7 +1004,7 @@
           ]
         },
         "./internal/compiled/leaf-runtime": {
-          "publicShapeSha256": "b4eb1261137f619ac04d5922a4622b08ec1a2fccc19fe67890949d8a94484d09",
+          "publicShapeSha256": "ab2505875fd7d81f86ac32dbe8845a28b3e8e79f6c0c1898f955afb12c5281cc",
           "publicSymbols": [
             "MARKERS=value:{each:{readonly [MARKER_BRAND]:true;readonly text:string};eachEnd:{readonly [MARKER_BRAND]:true;readonly text:string};when:{readonly [MARKER_BRAND]:true;readonly text:string};whenEnd:{readonly [MARKER_BRAND]:true;readonly text:string}}",
             "assertEachAnchor=value:{call:(node:union(Node|null|undefined),where:string,origin:union(undefined|{readonly column:number;readonly file:string;readonly line:number}))=>void}",
@@ -1038,6 +1038,7 @@
             "leafClaimMismatch=value:{call:(detail:string,origin:union(undefined|{readonly column:number;readonly file:string;readonly line:number}))=>OpenElementError}",
             "leafRuntimeError=value:{call:(code:string,detail:string,origin:union(undefined|{readonly column:number;readonly file:string;readonly line:number}))=>OpenElementError}",
             "markerText=value:{call:(marker:{readonly [MARKER_BRAND]:true;readonly text:string})=>string}",
+            "nestedHost=value:{call:(host:unknown,request:{readonly attributes:array(tuple(string,string));readonly children:string;readonly fallback:string;readonly open:string;readonly tag:string})=>string}",
             "openStaticSiblingDirectory=value:{call:(parent:Node,declaration:array(array({readonly attributes?:union(array({readonly name:string;readonly value:string})|undefined);readonly children?:union(recursive(readonly DeclaredStaticNode[])|undefined);readonly kind:union(\"element\"|\"text\");readonly localName?:union(string|undefined);readonly nodeValue?:union(null|string|undefined)})),source:string)=>{readonly declaration:array(array({readonly attributes?:union(array({readonly name:string;readonly value:string})|undefined);readonly children?:union(recursive(readonly DeclaredStaticNode[])|undefined);readonly kind:union(\"element\"|\"text\");readonly localName?:union(string|undefined);readonly nodeValue?:union(null|string|undefined)}));readonly parent:union(Element|ShadowRoot);readonly source:string}}",
             "parseEntryKeyMarker=value:{call:(value:union(null|string))=>union(null|{readonly token:string})}",
             "rangeMarker=value:{call:(ordinal:number,end:union(false|true))=>{readonly [MARKER_BRAND]:true;readonly text:string}}",
@@ -1188,7 +1189,7 @@
           ]
         },
         "./no-blocks": {
-          "publicShapeSha256": "d4407313f0f128b9fc0e729a071a3b1534dc4ca9c6fc76f9b79c4cd08bbb0927",
+          "publicShapeSha256": "221863d7c468195a6b9c51005811afd46a9c62c8fc065d3465445b1c57a3afab",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -1231,7 +1232,7 @@
             "ProblemDetails=type:ProblemDetails",
             "ReadonlySignal=type:ReadonlySignal<T>",
             "RenderError=type:{readonly componentPath:string;readonly tagName:string}|value:{construct:(componentPath:string,message:string,code:string,tagName:string,cause:union(Error|undefined))=>{readonly componentPath:string;readonly tagName:string}}",
-            "RenderToStringOptions=type:{componentClass?:union(CustomElementConstructor|undefined);documentStyles?:union(undefined|{add:{call:(urls:array(string))=>void}});hostChildren?:union(undefined|{readonly html:string});projectedChildren?:union(ReadonlyMap<string, TrustedHtml>|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)}",
+            "RenderToStringOptions=type:{componentClass?:union(CustomElementConstructor|undefined);documentStyles?:union(undefined|{add:{call:(urls:array(string))=>void}});hostChildren?:union(undefined|{readonly html:string});onNestedFailure?:union(undefined|{call:(error:unknown)=>void});projectedChildren?:union(ReadonlyMap<string, TrustedHtml>|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)}",
             "RouteEntry=type:RouteEntry",
             "STREAM_FRAME_FORBIDDEN_TAGS=value:tuple(\"script\",\"style\",\"template\",\"iframe\",\"object\",\"embed\",\"base\",\"meta\",\"link\")",
             "STREAM_FRAME_UNSAFE_URL=value:RegExp",
@@ -1282,7 +1283,7 @@
             "provideContext=value:{call:<T>(host:HTMLElement,context:{readonly defaultValue:T;readonly key:symbol},value:T)=>Unsubscribe}",
             "ref=value:{call:<T extends Element =Element>(callback:union(undefined|{call:(element:union(T|null))=>union(void|{call:()=>void})}))=>{call:(element:union(Element|null))=>void;readonly current:union(T|null)}}",
             "releaseConsumedContext=value:{call:(signalValue:SignalLike<unknown>)=>void}",
-            "renderToString=value:{call:(input:union(CustomElementConstructor|string),options:{componentClass?:union(CustomElementConstructor|undefined);documentStyles?:union(undefined|{add:{call:(urls:array(string))=>void}});hostChildren?:union(undefined|{readonly html:string});projectedChildren?:union(ReadonlyMap<string, TrustedHtml>|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)})=>string}",
+            "renderToString=value:{call:(input:union(CustomElementConstructor|string),options:{componentClass?:union(CustomElementConstructor|undefined);documentStyles?:union(undefined|{add:{call:(urls:array(string))=>void}});hostChildren?:union(undefined|{readonly html:string});onNestedFailure?:union(undefined|{call:(error:unknown)=>void});projectedChildren?:union(ReadonlyMap<string, TrustedHtml>|undefined);props?:union(Record<string, unknown>|undefined);sourceInfo?:union(undefined|{route?:union(string|undefined);source?:union(string|undefined)});ssrRenderableTags?:union(array(string)|undefined)})=>string}",
             "reportError=value:{call:(error:OpenElementError)=>void}",
             "setErrorTelemetryHook=value:{call:(hook:ErrorTelemetryHook)=>void}",
             "signal=value:{call:<T>(initialValue:T)=>WritableSignal<T>}",
