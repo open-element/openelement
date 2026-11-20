@@ -4,11 +4,11 @@ import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import {
   buildManifest,
-  hydrateFromClass,
-  layerFromClass,
+  componentPolicy,
   parseCssParts,
   parseEvents,
   parseSlots,
+  publishedGeneratedElementSites,
 } from './generate-ui-manifest.ts';
 
 test('UI event manifest parses nested detail objects with TypeScript AST', () => {
@@ -89,21 +89,35 @@ test('parseCssParts prefers @csspart doc descriptions over JSX literals', () => 
   ]);
 });
 
-test('layer/hydrate policies fail loud on unknown component classes', () => {
+test('the policy registry fails loud on unknown component tags', () => {
   assertThrowsIncludes(
-    () => layerFromClass('OpenUnknown'),
+    () => componentPolicy('open-unknown'),
     Error,
-    'No layer/hydrate/status policy',
+    'No layer/hydrate/status/ssr/dsd policy',
   );
-  assertThrowsIncludes(
-    () => hydrateFromClass('OpenUnknown'),
-    Error,
-    'No layer/hydrate/status policy',
-  );
-  expect(layerFromClass('OpenButton')).toEqual('dsd-interactive');
-  expect(layerFromClass('OpenDialog')).toEqual('dsd-interactive');
-  expect(hydrateFromClass('OpenDialog')).toEqual('idle');
-  expect(hydrateFromClass('OpenInput')).toEqual('load');
+  expect(componentPolicy('open-button').layer).toEqual('dsd-interactive');
+  expect(componentPolicy('open-dialog').layer).toEqual('dsd-interactive');
+  expect(componentPolicy('open-dialog').hydrate).toEqual('idle');
+  expect(componentPolicy('open-input').hydrate).toEqual('load');
+  // SSR/DSD are part of the same published row, not a second table.
+  expect(componentPolicy('open-code-block')).toMatchObject({
+    layer: 'dsd-static',
+    hydrate: 'idle',
+    status: 'stable',
+    ssr: true,
+    dsd: true,
+  });
+});
+
+test('the live tag source is the published exports map, not a path rule', () => {
+  const sites = publishedGeneratedElementSites();
+  // `./open-<name>` -> `./src/open-<name>.tsx` is the only admitted shape.
+  expect(sites.get('open-theme-toggle.tsx')).toEqual('open-theme-toggle');
+  expect(sites.get('open-button.tsx')).toEqual('open-button');
+  // Non-component exports and non-matching targets carry no tag.
+  expect(sites.get('theme-contract.ts')).toBeUndefined();
+  expect(sites.get('instance-state.ts')).toBeUndefined();
+  expect(sites.get('open-not-exported.tsx')).toBeUndefined();
 });
 
 /**
@@ -134,11 +148,16 @@ function tagsDeclaredInSource(): string[] {
   return readdirSync(sourceRoot, { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile() && /^open-.*\.tsx$/.test(entry.name))
     .map((entry) => {
-      const declaration = /@element\(\s*'([^']+)'/.exec(
-        readFileSync(`${entry.parentPath}/${entry.name}`, 'utf8'),
-      );
-      if (declaration === null) throw new Error(`${entry.name}: no @element('<tag>') declaration`);
-      return declaration[1]!;
+      const source = readFileSync(`${entry.parentPath}/${entry.name}`, 'utf8');
+      const decorator = /@element\(\s*'([^']+)'/.exec(source);
+      if (decorator !== null) return decorator[1]!;
+      // A generated (function) component declares its platform facts through
+      // the sidecar and takes its tag from the published `exports` subpath,
+      // which the site rule pins to the file stem.
+      if (source.includes('export const openElement')) {
+        return entry.name.replace(/\.tsx$/, '');
+      }
+      throw new Error(`${entry.name}: no @element('<tag>') or openElement sidecar declaration`);
     })
     .sort();
 }

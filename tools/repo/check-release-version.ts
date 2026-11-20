@@ -18,6 +18,7 @@
 import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import process from 'node:process';
+import { emitSummary } from './checker-io.ts';
 import { parseLineVersion } from '../lib/version.ts';
 import { PACKAGE_CONFIGS, readConfigVersion, resolvePackageSubset } from './version-bump.ts';
 
@@ -86,6 +87,6 @@ if (failures.length > 0) {
   for (const failure of failures) console.error(`  ${failure}`);
   process.exit(1);
 }
-console.log(
+emitSummary(
   `release version check: all ${configs.length} checked package manifests carry ${expected}`,
 );

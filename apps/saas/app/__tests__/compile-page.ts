@@ -11,12 +11,19 @@ import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { compileElementProgram } from '@openelement/compiler';
+import { compileElementProgram, compileGeneratedElementIfAdmitted } from '@openelement/compiler';
 
 // Resolved through the workspace (daily dev) or the installed packed
 // tarballs (release qualification) — never a relative path into a package.
 const ELEMENT_URL = import.meta.resolve('@openelement/element');
 const APP_URL = import.meta.resolve('@openelement/router');
+// The generated leaf imports its primitives from a SUBPATH (M11-3), so the
+// rewrite table needs that entry too — a bare-specifier-only rewrite leaves the
+// temp module unable to resolve it.
+const LEAF_RUNTIME_URL = import.meta.resolve('@openelement/element/internal/compiled/leaf-runtime');
+const SHELL_URL = import.meta
+  .resolve('@openelement/element/internal/compiled/generated-element/shell');
+const COMPILED_RUNTIME_URL = import.meta.resolve('@openelement/element/internal/compiled/runtime');
 
 /** Compile + import the default-exported compiled class of one component module. */
 export async function compileComponentClass(sourceUrl: string): Promise<CustomElementConstructor> {
@@ -58,4 +65,66 @@ export async function compileComponentClass(sourceUrl: string): Promise<CustomEl
   const mod = await import(pathToFileURL(tempModule).href);
   await rm(tempDir, { recursive: true, force: true });
   return mod.default as CustomElementConstructor;
+}
+
+/**
+ * Compile + import a GENERATED-lane island component (function component plus
+ * its `defineIslandConfig` sidecar).
+ *
+ * A generated module has no class to compile: the lane emits the element class
+ * from the sidecar, so the import surface is `{ default: ComponentFunction,
+ * <Tag>Element }`. The island's tag comes from the scan in a real build; here it
+ * is supplied directly, exactly as the site's island scanner would.
+ */
+export async function compileGeneratedIsland(
+  sourceUrl: string,
+  tag: string,
+): Promise<{
+  readonly element: CustomElementConstructor;
+  /** The compiler-emitted `<Name>__ssrHost` DSD producer, when the lane made one. */
+  readonly ssrHost?: (props?: unknown, lightChildren?: string) => string;
+}> {
+  const absoluteSource = new URL(sourceUrl, import.meta.url);
+  const source = await readFile(absoluteSource, 'utf8');
+  const compiled = compileGeneratedElementIfAdmitted(source, sourceUrl, {
+    site: { tag },
+  });
+  if (compiled === null) {
+    throw new Error(`${sourceUrl} is not admitted by the generated-element lane`);
+  }
+  const rewritten = compiled.code
+    // The emitted JSON quotes subpath specifiers with DOUBLE quotes while the
+    // authored body uses single quotes, so these replacements are literal
+    // substring swaps (quote-agnostic). EVERY element subpath the emitted module
+    // can name is listed: a missed one surfaces as an unresolvable import.
+    .replaceAll('@openelement/element/internal/compiled/leaf-runtime', LEAF_RUNTIME_URL)
+    .replaceAll('@openelement/element/internal/compiled/generated-element/shell', SHELL_URL)
+    .replaceAll('@openelement/element/internal/compiled/runtime', COMPILED_RUNTIME_URL)
+    .replaceAll("from '@openelement/element'", `from '${ELEMENT_URL}'`)
+    .replaceAll("from '@openelement/router'", `from '${APP_URL}'`)
+    // Relative imports arrive with EITHER quote style (the emitted tail is
+    // JSON-quoted, the authored body is not), so both are rebased.
+    .replaceAll(
+      /from (['"])(\.[^'"]*)\1/g,
+      (_match, quote: string, specifier: string) =>
+        `from ${quote}${new URL(specifier, absoluteSource).href}${quote}`,
+    );
+  const tempDir = await mkdtemp(join(tmpdir(), 'oe-saas-generated-page-'));
+  const tempModule = join(tempDir, 'compiled-island.ts');
+  await writeFile(tempModule, rewritten, 'utf8');
+  const mod = (await import(pathToFileURL(tempModule).href)) as Record<string, unknown>;
+  await rm(tempDir, { recursive: true, force: true });
+  const element = Object.entries(mod).find(
+    ([name, value]) => name.endsWith('Element') && typeof value === 'function',
+  )?.[1];
+  if (typeof element !== 'function') {
+    throw new Error(`${sourceUrl} emitted no element class`);
+  }
+  const ssrHost = Object.entries(mod).find(
+    ([name, value]) => name.endsWith('__ssrHost') && typeof value === 'function',
+  )?.[1] as ((props?: unknown, lightChildren?: string) => string) | undefined;
+  return {
+    element: element as CustomElementConstructor,
+    ...(ssrHost === undefined ? {} : { ssrHost }),
+  };
 }

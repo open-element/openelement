@@ -58,12 +58,25 @@ export const ModuleWalkDiagnosticCode = {
    * cause instead of dropping the edges into an empty specifier list.
    */
   ANALYSIS_FAILED: 'OE_MODULE_WALK_ANALYSIS_FAILED',
+  /**
+   * A source the walk had already admitted could not be read. Its outgoing
+   * edges are unknown, so a graph-derived consumer must treat the walk as
+   * incomplete — never as "this module imports nothing".
+   */
+  SOURCE_UNREADABLE: 'OE_MODULE_WALK_SOURCE_UNREADABLE',
 } as const;
 
-/** One reported walk failure: a code, the module it happened on, its cause. */
+/**
+ * One reported walk failure: a code, the module it happened on, its cause.
+ * The transport shape carries `code` as a string so a pass-scoped boundary
+ * constant (each consumer names its own, as the scanners do) rides on the
+ * same record; the walk's own emissions always set `file`, and the one
+ * graph-level boundary a caller may add (a bound stop) legitimately has no
+ * single file.
+ */
 export interface ModuleWalkDiagnostic {
-  readonly code: (typeof ModuleWalkDiagnosticCode)[keyof typeof ModuleWalkDiagnosticCode];
-  readonly file: string;
+  readonly code: string;
+  readonly file?: string;
   readonly message: string;
 }
 
@@ -79,6 +92,23 @@ export interface ModuleWalkResolver {
 export interface ModuleWalkResult {
   /** Resolved module ids, in deterministic (breadth-first, seed-order) order. */
   readonly files: string[];
+  /**
+   * Per-module static edges and compiler-proven custom-element references,
+   * recorded only when the caller opts in (`recordGraph`). Recorded from the
+   * SAME source read and the SAME `analyzeModuleSemantics` call the walk
+   * already makes — the walk is not repeated and no second scanner exists.
+   *
+   * `edges` maps a resolved module id to the resolved ids it statically
+   * imports (deduplicated, resolution order). A module whose analysis threw
+   * contributes no edges (its `diagnostics` entry says so). `referencedTags`
+   * maps a resolved module id to `referencedCustomElementTags` — the JSX tags
+   * the module consumes, which is what a route-closure consumer intersects
+   * with its own tag set; it is the compiler's fact, never a regex re-scan.
+   *
+   * Absent when `recordGraph` is not set: the default result shape and every
+   * existing consumer's bytes are unchanged.
+   */
+  readonly graph?: ModuleGraphFacts;
   /** Resolution outcomes that were deliberately not followed. */
   readonly skipped: {
     readonly external: number;
@@ -109,6 +139,23 @@ export interface ModuleWalkResult {
   readonly truncated: boolean;
 }
 
+/** The opt-in per-module graph facts {@link ModuleWalkResult.graph} carries. */
+export interface ModuleGraphFacts {
+  readonly edges: ReadonlyMap<string, readonly string[]>;
+  readonly referencedTags: ReadonlyMap<string, readonly string[]>;
+  /**
+   * Static specifiers the walk could not resolve, with the importing module
+   * (resolution throw or a `null` answer). A `null` is NOT proof of an external
+   * dependency: an external module is the resolver's explicit `external` verdict
+   * and stays out of this list. A graph-derived consumer must treat an entry
+   * here as an unknown edge — the module behind it may carry references.
+   */
+  readonly unresolvedEdges: ReadonlyArray<{
+    readonly importer: string;
+    readonly specifier: string;
+  }>;
+}
+
 const SOURCE_FILE_RE = /\.(ts|tsx|js|jsx|mts|mjs|cts|cjs)$/;
 const DEFAULT_MAX_MODULES = 4000;
 
@@ -119,12 +166,28 @@ const DEFAULT_MAX_MODULES = 4000;
 export async function walkModuleGraph(
   resolver: ModuleWalkResolver,
   seeds: Iterable<string>,
-  options: { maxModules?: number; collectDynamicImports?: boolean } = {},
+  options: {
+    maxModules?: number;
+    collectDynamicImports?: boolean;
+    /**
+     * Record {@link ModuleGraphFacts} from the walk's own per-module source
+     * read and semantic analysis. Off by default: the extra maps are only
+     * built when a caller needs route/module closure facts, and the default
+     * result shape stays byte-for-byte the pre-extension one.
+     */
+    recordGraph?: boolean;
+  } = {},
 ): Promise<ModuleWalkResult> {
   const maxModules = options.maxModules ?? DEFAULT_MAX_MODULES;
   const files: string[] = [];
   const visited = new Set<string>();
   const queue: string[] = [];
+  const edges = options.recordGraph === true ? new Map<string, string[]>() : undefined;
+  const referencedTags = options.recordGraph === true ? new Map<string, string[]>() : undefined;
+  const unresolvedEdges =
+    options.recordGraph === true
+      ? ([] as Array<{ importer: string; specifier: string }>)
+      : undefined;
   const skipped = {
     external: 0,
     virtual: 0,
@@ -155,7 +218,16 @@ export async function walkModuleGraph(
     let source: string;
     try {
       source = await readFile(file, 'utf8');
-    } catch {
+    } catch (error) {
+      // A source the resolver admitted but this walk could not read leaves its
+      // edges unknown. Reported (never a silent hole): a graph-derived consumer
+      // that treats the walk as complete would under-approximate its closure.
+      const message = error instanceof Error ? error.message : String(error);
+      diagnostics.push({ code: ModuleWalkDiagnosticCode.SOURCE_UNREADABLE, file, message });
+      log.warn(
+        `[${ModuleWalkDiagnosticCode.SOURCE_UNREADABLE}] ${file}: the module could not be read ` +
+          `(${message}); its static edges are not part of the walk. Reported, never silent.`,
+      );
       continue;
     }
     if (options.collectDynamicImports === true) {
@@ -176,16 +248,22 @@ export async function walkModuleGraph(
           'passes must not read as "no edges".',
       );
     }
+    if (referencedTags !== undefined) {
+      referencedTags.set(file, [...analysis.referencedTags]);
+    }
+    const edgeTargets: string[] | undefined = edges === undefined ? undefined : [];
     for (const specifier of analysis.specifiers) {
       let resolved: { id: string; external?: boolean | 'absolute' | 'relative' } | null;
       try {
         resolved = await resolver.resolve(specifier, file);
       } catch {
         skipped.unresolved += 1;
+        unresolvedEdges?.push({ importer: file, specifier });
         continue;
       }
       if (resolved === null) {
         skipped.unresolved += 1;
+        unresolvedEdges?.push({ importer: file, specifier });
         continue;
       }
       if (resolved.external === true) {
@@ -203,11 +281,31 @@ export async function walkModuleGraph(
         skipped.nonSource += 1;
         continue;
       }
+      edgeTargets?.push(id);
       enqueue(id);
+    }
+    if (edges !== undefined && edgeTargets !== undefined) {
+      // Deduplicate the edge list without changing resolution order.
+      edges.set(file, [...new Set(edgeTargets)]);
     }
   }
 
-  return { files, skipped, dynamicImports, truncated, diagnostics };
+  return {
+    files,
+    ...(options.recordGraph === true
+      ? {
+          graph: {
+            edges: edges!,
+            referencedTags: referencedTags!,
+            unresolvedEdges: unresolvedEdges!,
+          },
+        }
+      : {}),
+    skipped,
+    dynamicImports,
+    truncated,
+    diagnostics,
+  };
 }
 
 /**
@@ -223,14 +321,18 @@ export async function walkModuleGraph(
 function staticSpecifiersOf(
   source: string,
   file: string,
-): { specifiers: readonly string[]; failure?: unknown } {
+): { specifiers: readonly string[]; referencedTags: readonly string[]; failure?: unknown } {
   try {
+    const facts = analyzeModuleSemantics(source, file, { collectSpecifiers: true });
     return {
-      specifiers:
-        analyzeModuleSemantics(source, file, { collectSpecifiers: true }).moduleSpecifiers ?? [],
+      specifiers: facts.moduleSpecifiers ?? [],
+      // The SAME analysis call supplies both facts (no second parse): the tags
+      // a module's JSX consumes, which a route-closure consumer intersects
+      // with its own island tag set.
+      referencedTags: facts.referencedCustomElementTags,
     };
   } catch (failure) {
-    return { specifiers: [], failure };
+    return { specifiers: [], referencedTags: [], failure };
   }
 }
 

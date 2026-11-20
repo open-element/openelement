@@ -14,17 +14,18 @@
  * written.
  */
 
-import { readdir, rm } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 import process from 'node:process';
 import { join } from 'pathe';
 import type { ComponentLayer, HydrationStrategy } from '../../framework.ts';
 import type { ClientAssetManifest } from '@openelement/protocol/client-assets';
 import type { IslandDecl } from '@openelement/protocol/ssg';
-import { createLogger } from '@openelement/element';
+import { createLogger, formatError } from '@openelement/element';
 import {
   buildError,
   ClientAssetErrorCode,
   ClientBuildErrorCode,
+  SsgHygieneErrorCode,
 } from '../../../internal/error-codes.ts';
 import type { PageIslandManifest } from './island-manifest.ts';
 import {
@@ -41,6 +42,7 @@ import {
 import { DEFAULT_OUT_DIR } from './../paths.ts';
 import { findElementRuntimeChunkFile } from '../element-runtime-chunk.ts';
 import { injectElementRuntimePreload } from './postprocess.ts';
+import { safeReadDir } from './route-scanner-fs.ts';
 
 export { buildIslandPrefetchLinks } from './speculation-rules.ts';
 
@@ -231,7 +233,21 @@ export async function cleanSsrArtifacts(ctx: BuildContextView): Promise<void> {
 
   try {
     const assetsDir = join(root, outDir, 'assets');
-    const entries = await readdir(assetsDir).catch(() => [] as string[]);
+    // ENOENT is the legal "no assets dir" shape (some configs emit none);
+    // a real I/O failure is a coded warn — the stale artifacts stay and the
+    // operator hears why, instead of an empty-list swallow.
+    let entries: string[];
+    try {
+      const listed = await safeReadDir(assetsDir);
+      if (listed === undefined) return;
+      entries = listed;
+    } catch (e) {
+      log.warn(
+        `[${SsgHygieneErrorCode.ASSETS_LIST_FAILED}] could not list ${assetsDir}, so stale ` +
+          `SSR artifacts, if any, stay in place: ${formatError(e)}`,
+      );
+      return;
+    }
     const toDelete = entries.filter(
       (f) =>
         f.startsWith('_virtual_open-hono-entry') ||
@@ -240,13 +256,26 @@ export async function cleanSsrArtifacts(ctx: BuildContextView): Promise<void> {
     );
     for (const f of toDelete) {
       const p = join(assetsDir, f);
-      await rm(p).catch(() => {});
+      try {
+        await rm(p);
+      } catch (e) {
+        // The hygiene pass stays non-fatal; the failure is not silent.
+        log.warn(
+          `[${SsgHygieneErrorCode.ARTIFACT_REMOVE_FAILED}] could not remove the stale ` +
+            `artifact ${p}: ${formatError(e)}`,
+        );
+        continue;
+      }
       log.info(`Cleaned SSR artifact: ${f}`);
     }
     if (toDelete.length > 0) {
       log.info(`Removed ${toDelete.length} unreferenced SSR artifact(s) from dist/assets/`);
     }
-  } catch {
-    // Non-critical - assets dir may not exist in some configs
+  } catch (e) {
+    // Defensive: the hygiene pass must never fail the build it cleans up
+    // after — but a failure here is reported, not swallowed.
+    log.warn(
+      `[${SsgHygieneErrorCode.PASS_FAILED}] the SSR artifact hygiene pass failed: ${formatError(e)}`,
+    );
   }
 }

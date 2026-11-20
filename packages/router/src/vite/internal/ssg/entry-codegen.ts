@@ -13,7 +13,7 @@
  */
 
 import type { PageRouteDecl, RendererDecl } from '@openelement/protocol/ssg';
-import { isFunctionPage } from './page-classification.ts';
+import { isFunctionPage, pageKindOf } from './page-classification.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import {
   documentWrapOptionsLines,
@@ -22,6 +22,7 @@ import {
   rendererScopeMatches,
   requestTimePageContextLines,
   routeMetaExpr,
+  type RouteDocumentStyleLinks,
 } from './entry-route-helpers.ts';
 import { renderActionProtocol } from './entry-action-runtime.ts';
 
@@ -66,6 +67,8 @@ interface RenderRouteHandlerOptions {
   renderers: RendererDecl[];
   docConfig: RouteHandlerDocConfig;
   isSSG: boolean;
+  /** Build-only route → document stylesheet facts (task12); empty keeps bytes. */
+  routeDocumentStyleLinks?: RouteDocumentStyleLinks;
 }
 
 /** Shared codegen state threaded through the route-handler emit helpers (#847). */
@@ -80,6 +83,8 @@ export interface RouteHandlerEmitContext {
   routeMeta: string;
   routeContext: string;
   headExtrasExpr: string;
+  /** True when this route has a build-only document stylesheet seed (task12). */
+  routeStyleLinksSeed: boolean;
 }
 
 /**
@@ -226,6 +231,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
       dataExpr: '__frontData',
       actionDataExpr: 'undefined',
       indent: '    ',
+      ...(ctx.routeStyleLinksSeed ? { routePathExpr: pathLiteral } : {}),
     });
     // Per-property og dedup: the streamed document serializes the route's
     // __doc.meta, so the baked site string drops the og tags it owns.
@@ -263,6 +269,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
       dataExpr: '__data',
       actionDataExpr: isAction ? '__actionData' : 'undefined',
       indent: '    ',
+      ...(ctx.routeStyleLinksSeed ? { routePathExpr: pathLiteral } : {}),
     });
     // Per-property og dedup: this wrap serializes the route's __doc.meta, so
     // the baked site string drops the og tags the route declares.
@@ -344,6 +351,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
       dataExpr: 'undefined',
       actionDataExpr: 'undefined',
       indent: '        ',
+      ...(ctx.routeStyleLinksSeed ? { routePathExpr: pathLiteral } : {}),
     });
     // Per-property og dedup on the boundary re-render too: the fresh __doc
     // above re-resolves the route's meta, and the wrap below serializes it.
@@ -407,7 +415,14 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
 /** Generate a WinterCG route handler for a page route (GET) or its action (POST). */
 export function renderRouteHandler(
   lines: string[],
-  { method, route, renderers, docConfig, isSSG }: RenderRouteHandlerOptions,
+  {
+    method,
+    route,
+    renderers,
+    docConfig,
+    isSSG,
+    routeDocumentStyleLinks,
+  }: RenderRouteHandlerOptions,
 ): void {
   const ctx: RouteHandlerEmitContext = {
     isAction: method === 'post',
@@ -415,7 +430,11 @@ export function renderRouteHandler(
     matchingRenderers: renderers.filter((r) => rendererScopeMatches(route.path, r.scope)),
     docConfig,
     pathLiteral: quoteGeneratedJavaScriptValue(route.path),
-    tagNameExpr: pageRouteTagExpr(route.varName, route.tagName),
+    // M11-2: a generated element page's tag is the compiler-owned build fact
+    // (island tag); the class lane keeps the runtime program-tag resolver.
+    tagNameExpr: pageRouteTagExpr(route.varName, route.tagName, pageKindOf(route)),
+    routeStyleLinksSeed:
+      routeDocumentStyleLinks !== undefined && routeDocumentStyleLinks[route.path] !== undefined,
     pageDefExpr: pageDefinitionExpr(route.varName),
     routeMeta: routeMetaExpr(route.varName),
     routeContext: `{ path: ${quoteGeneratedJavaScriptValue(route.path)}, filePath: ${quoteGeneratedJavaScriptValue(
@@ -438,8 +457,16 @@ export function renderPageRoute(
   renderers: RendererDecl[],
   docConfig: RouteHandlerDocConfig,
   isSSG: boolean,
+  routeDocumentStyleLinks?: RouteDocumentStyleLinks,
 ): void {
-  renderRouteHandler(lines, { method: 'get', route, renderers, docConfig, isSSG });
+  renderRouteHandler(lines, {
+    method: 'get',
+    route,
+    renderers,
+    docConfig,
+    isSSG,
+    ...(routeDocumentStyleLinks === undefined ? {} : { routeDocumentStyleLinks }),
+  });
 }
 
 export function renderActionRoute(
@@ -448,6 +475,14 @@ export function renderActionRoute(
   renderers: RendererDecl[],
   docConfig: RouteHandlerDocConfig,
   isSSG: boolean,
+  routeDocumentStyleLinks?: RouteDocumentStyleLinks,
 ): void {
-  renderRouteHandler(lines, { method: 'post', route, renderers, docConfig, isSSG });
+  renderRouteHandler(lines, {
+    method: 'post',
+    route,
+    renderers,
+    docConfig,
+    isSSG,
+    ...(routeDocumentStyleLinks === undefined ? {} : { routeDocumentStyleLinks }),
+  });
 }

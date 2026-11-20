@@ -43,12 +43,15 @@ import {
   PageErrorCode,
   RendererErrorCode,
   RouteScanErrorCode,
+  ScanSurfaceErrorCode,
   serveError,
   ServeErrorCode,
   SsgDynamicErrorCode,
+  SsgHygieneErrorCode,
   SsgRenderErrorCode,
   StreamErrorCode,
   UNPRINTABLE_ERROR,
+  WorkspaceAnchorErrorCode,
 } from '../src/internal/error-codes.ts';
 import { validateIslandMediaQuery } from '../src/vite/internal/ssg/delivery.ts';
 import { validateIslandModuleSpecifier } from '../src/vite/internal/ssg/entry-generators.ts';
@@ -90,7 +93,10 @@ const TABLES = {
   MdxErrorCode,
   PackageIslandErrorCode,
   RouteScanErrorCode,
+  ScanSurfaceErrorCode,
   SsgDynamicErrorCode,
+  SsgHygieneErrorCode,
+  WorkspaceAnchorErrorCode,
 };
 
 test('error codes: every table value is a stable, unique, namespaced string', () => {
@@ -371,8 +377,8 @@ test('error codes: the client island build reports build-phase codes', () => {
           },
           {
             fileName: 'islands/element-runtime-Bh4sh.js',
-            facadeModuleId: '/site/packages/element/src/index.ts',
-            modules: { '/site/packages/element/src/index.ts': {} },
+            facadeModuleId: '/site/packages/element/src/jsx-runtime.ts',
+            modules: { '/site/packages/element/src/jsx-runtime.ts': {} },
             imports: [],
           },
         ],

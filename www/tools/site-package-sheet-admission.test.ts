@@ -57,9 +57,16 @@
  *
  * RE-DECIDE, do not inherit: if admission narrows to a per-tag list, a
  * declaration is removed, or the router's seed rule starts filtering on page
- * references, the four assets stop being contract output and become the
- * defect the R3 ledger called "orphan-style-asset prevention" — these tests
- * fail to say so.
+ * references, the four assets stop being contract output and become the defect
+ * the R3 ledger called "orphan-style-asset prevention" — these tests fail to
+ * say so.
+ *
+ * 2026-11-17 lane migration (ADR-0182): open-dialog and open-dropdown are now
+ * generated-lane function components — their sheets are declared in the
+ * sidecar (no authored imports) and ride the declared-style channel to the
+ * same emission state. The `authoredSheets` derivation reads the sidecar list
+ * for such modules; the emitted-and-unreferenced facts below are unchanged
+ * and still pass.
  */
 import { expect, test } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
@@ -135,9 +142,17 @@ function importedUiSubpaths(): Set<string> {
   return subpaths;
 }
 
-/** The `./x.css` edges a declaration module declares. */
+/** The `./x.css` sheets one declaration delivers. A generated-lane function
+ * component authors no `.css` imports — its sidecar `styles` list IS the
+ * demand fact (the declared-style channel); the class lane keeps its authored
+ * imports. open-dialog migrated lanes 2026-11-17 (ADR-0182); its delivery
+ * channel changed, its emitted-and-unreferenced disposition did not. */
 function authoredSheets(declaration: string): string[] {
   const text = readFileSync(join(UI_SRC, `${declaration}.tsx`), 'utf8');
+  const sidecar = /styles:\s*\[([^\]]*)\]/.exec(text);
+  if (sidecar !== null) {
+    return [...sidecar[1]!.matchAll(/'\.\/([a-z0-9-]+\.css)'/g)].map((match) => match[1]!);
+  }
   return [...text.matchAll(/from '\.\/([a-z0-9-]+\.css)'/g)].map((match) => match[1]!);
 }
 

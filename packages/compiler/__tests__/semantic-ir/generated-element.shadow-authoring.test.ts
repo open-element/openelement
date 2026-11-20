@@ -69,6 +69,11 @@ const M09_1A_LIGHT_TAIL = [
   '  root: "light",',
   '  properties: [],',
   '  createRecipe: createProfileRecipe,',
+  // A light root's SSR entry point is the leaf's parameterless producer; the
+  // shell attaches it as the class's static `__ssr` (B4). The shadow lane's
+  // `<Name>__ssrHost` wrapper has no light DOM to produce, so the row is absent
+  // there.
+  '  ssrProducer: Profile__ssr,',
   '};',
   '',
   'const __oeProfileElement = createGeneratedElementClass(__oeElementDescriptor);',
@@ -115,6 +120,9 @@ describe('M09-2a generated shadow host producer', () => {
     expect(result.module).toBe(result.leaf! + M09_1A_LIGHT_TAIL);
     expect(result.tail).not.toContain('__ssrHost');
     expect(result.tail).not.toContain('serializeGeneratedElementHtml');
+    // The light lane's SSR producer is the leaf's own parameterless `__ssr`;
+    // no DSD wrapper and no host producer is involved.
+    expect(result.tail).toContain('ssrProducer: Profile__ssr,');
   });
 
   test('an absent root keeps the same light tail so the shell owns the default', () => {
@@ -178,6 +186,85 @@ describe('M09-2a generated shadow host producer', () => {
   test('the emitted module with the host wrapper parses as JavaScript', () => {
     expect(parseDiagnostics(emitted(SHADOW, 'shadow-open').module!)).toEqual([]);
     expect(parseDiagnostics(emitted(LIGHT, 'light').module!)).toEqual([]);
+  });
+
+  test('a styles sidecar grows the typed styleLinks channel and the claim prefix', () => {
+    // The fact is read from the SAME authored sidecar the lane already reads for
+    // root/focus/props, so no host boolean and no scan-order dependence exists.
+    const styledSource = SHADOW.replace(
+      "export const openElement = defineIslandConfig({ root: 'shadow' });",
+      "export const openElement = defineIslandConfig({ root: 'shadow', styles: ['./profile-card.css'] });",
+    );
+    const styled = compileGeneratedElementIfAdmitted(styledSource, FILE, { site: SITE })!;
+    expect(styled.code).toContain(
+      'export function Profile__ssrHost(props, lightChildren, attributes, styleLinks) {',
+    );
+    expect(styled.code).toContain('    ...(styleLinks === undefined ? {} : { styleLinks }),');
+    // Mixed generated-element/entry artifacts: an old 3-arg caller (or a missing
+    // carrier) must fail closed instead of rendering the styled host unstyled.
+    const guard =
+      'if (!Array.isArray(styleLinks) || styleLinks.length === 0) throw new Error("OEIR_LEAF_MISSING_VALUE: styleLinks';
+    expect(styled.code).toContain(guard);
+    const producerStart = styled.code.indexOf(
+      'export function Profile__ssrHost(props, lightChildren, attributes, styleLinks) {',
+    );
+    expect(producerStart).toBeGreaterThan(-1);
+    const guardStart = styled.code.indexOf('OEIR_LEAF_MISSING_VALUE: styleLinks');
+    expect(guardStart).toBeGreaterThan(producerStart);
+    // The guard runs before the seed/serialization call, so no partial markup.
+    expect(guardStart).toBeLessThan(
+      styled.code.indexOf(
+        'const __oeHostProps = seedGeneratedElementHostProperties',
+        producerStart,
+      ),
+    );
+    // The claim skips exactly the canonical marked link prefix.
+    expect(styled.code).toContain('data-oe-static-styles');
+    expect(styled.code).toContain('nodeName === "LINK"');
+    // The unstyled module keeps the 3-arg producer, no prefix walk, no guard.
+    const unstyled = compileGeneratedElementIfAdmitted(SHADOW, FILE, { site: SITE })!;
+    expect(unstyled.code).toContain(
+      'export function Profile__ssrHost(props, lightChildren, attributes) {',
+    );
+    expect(unstyled.code).not.toContain('data-oe-static-styles');
+    expect(unstyled.code).not.toContain('OEIR_LEAF_MISSING_VALUE: styleLinks');
+  });
+
+  test('a light root keeps its bytes even when the sidecar declares styles', () => {
+    const styledLight = LIGHT.replace(
+      "export const openElement = defineIslandConfig({ root: 'light' });",
+      "export const openElement = defineIslandConfig({ root: 'light', styles: ['./profile-card.css'] });",
+    );
+    const light = compileGeneratedElementIfAdmitted(styledLight, FILE, { site: SITE })!;
+    // Light roots have no DSD template: the declared sheet keeps the document
+    // channel, so no host wrapper / styleLinks channel / claim prefix is added.
+    expect(light.code).not.toContain('__ssrHost');
+    expect(light.code).not.toContain('styleLinks');
+    expect(light.code).not.toContain('data-oe-static-styles');
+  });
+
+  test('attribute rows project canonical host attrs from the seeded record (M11-2)', () => {
+    const propsSidecar =
+      "import { defineIslandConfig } from '@openelement/router';\n" +
+      "export const openElement = defineIslandConfig({ root: 'shadow', " +
+      "properties: { title: { attribute: 'data-title', default: '' }, count: { default: 0 } } });\n";
+    const propsBody = `
+function Profile(props: { title: string; count: number }) {
+  return <p>{props.title}{props.count}</p>;
+}
+export default Profile;
+`;
+    const styled = compileGeneratedElementIfAdmitted(`${propsSidecar}${propsBody}`, FILE, {
+      site: SITE,
+    })!;
+    expect(styled.code).toContain('const __oeHostAttrs = __oeHostProps.__oeHostAttributes;');
+    expect(styled.code).toContain(
+      'attributes: __oeHostAttrs === undefined ? attributes : __oeHostAttrs',
+    );
+    // A module with no attribute-backed row keeps the pre-slice wrapper bytes.
+    const plain = compileGeneratedElementIfAdmitted(SHADOW, FILE, { site: SITE })!;
+    expect(plain.code).not.toContain('__oeHostAttrs');
+    expect(plain.code).toContain('...(attributes === undefined ? {} : { attributes }),');
   });
 
   test('the lane reads the authored sidecar and emits the wrapper only for shadow', () => {

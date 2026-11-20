@@ -47,7 +47,11 @@ import type { RouteEntry, SpecialFileType } from '../../framework.ts';
 import { createLogger } from '@openelement/element';
 import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
 import { dirname, join, resolve } from 'pathe';
-import { buildError, RouteScanErrorCode } from '../../../internal/error-codes.ts';
+import {
+  buildError,
+  RouteScanErrorCode,
+  ScanSurfaceErrorCode,
+} from '../../../internal/error-codes.ts';
 import { safeReadDir, safeReadFile, safeStat } from './route-scanner-fs.ts';
 import { analyzeModuleSemantics } from '@openelement/compiler';
 import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
@@ -64,6 +68,50 @@ export type ScannedRouteEntry = RouteEntry & {
 } & PageModuleCarrier;
 
 const IMPORT_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js'];
+
+/**
+ * One Tier-2 degradation note the route scan collected: a structured,
+ * non-fatal record (code + location + reason) the build pass surfaces
+ * through the build-diagnostics envelope channel (#1612). Never a crash,
+ * never a silent drop.
+ */
+export interface RouteScanDiagnostic {
+  code: string;
+  severity: 'warning' | 'info';
+  file: string;
+  message: string;
+}
+
+/**
+ * The scan's collected degradation notes, drained by the build pass
+ * (plugin-scanners) after `scanRoutes` returns. `scanRoutes` is invoked by
+ * several build phases with different routesDir spellings (relative vs
+ * absolute) and by hosts that never drain (one-shot scripts), so the notes
+ * are keyed: each code+path pair reports at most once per process, the same
+ * multi-pass rationale the missing-tagName notes always had. The key set
+ * survives a drain — a rescan does not re-report what it already named.
+ */
+const routeScanDiagnostics: RouteScanDiagnostic[] = [];
+const notedScanDiagnostic = new Set<string>();
+
+function noteScanDiagnostic(
+  severity: RouteScanDiagnostic['severity'],
+  code: string,
+  fullPath: string,
+  message: string,
+): void {
+  const key = `${code}\u0000${resolve(fullPath)}`;
+  if (notedScanDiagnostic.has(key)) return;
+  notedScanDiagnostic.add(key);
+  routeScanDiagnostics.push({ code, severity, file: resolve(fullPath), message });
+}
+
+/** Drain the collected route-scan diagnostics: the build pass reads them once. */
+export function takeRouteScanDiagnostics(): RouteScanDiagnostic[] {
+  const drained = [...routeScanDiagnostics];
+  routeScanDiagnostics.length = 0;
+  return drained;
+}
 
 /**
  * #577: a page's enhanced form may live in an imported component — scanning
@@ -100,16 +148,9 @@ async function sourceTreeHasEnhancedForms(
 const log = createLogger('scanner');
 
 /**
- * Missing-tagName notes fire at most once per file per process. scanRoutes()
- * is invoked by several build phases with different routesDir spellings
- * (relative vs absolute); keying on the resolved path keeps each file to a
- * single note.
- */
-const notedMissingTagName = new Set<string>();
-
-/**
  * #960: the ignored-tagName migration note also fires at most once per file
- * per process (same multi-pass routesDir spellings as above).
+ * per process (same multi-pass routesDir spellings as the scan diagnostics
+ * above).
  */
 const notedIgnoredTagName = new Set<string>();
 
@@ -221,7 +262,16 @@ export async function scanRoutes(
   const files = await safeReadDir(routesDir);
 
   if (files === undefined) {
-    log.debug(`Routes directory "${routesDir}" not found`);
+    // Tier-2, per the options contract: a site with no routes directory is a
+    // legal configuration (an API-only or island-less site), so the absence
+    // is reported as a diagnostic — the classic silent-empty-site trap (a
+    // typo'd routesDir) gets a coded, deduped note instead of a debug line.
+    noteScanDiagnostic(
+      'warning',
+      ScanSurfaceErrorCode.ROUTES_DIR_MISSING,
+      routesDir,
+      `The routes directory "${routesDir}" does not exist; the site scans as having no routes.`,
+    );
     return entries;
   }
 
@@ -232,7 +282,14 @@ export async function scanRoutes(
     const relativePath = baseDir ? join(baseDir, file) : file;
     const fileStat = await safeStat(fullPath);
     if (!fileStat) {
-      log.debug(`File vanished before stat: ${fullPath}`);
+      // Race-tolerant (the file vanished between listing and stat), but the
+      // skip is reported, never silent.
+      noteScanDiagnostic(
+        'warning',
+        ScanSurfaceErrorCode.ROUTE_FILE_VANISHED,
+        fullPath,
+        `File vanished before stat; it is not part of this scan's route tree.`,
+      );
       continue;
     }
 
@@ -285,7 +342,13 @@ export async function scanRoutes(
           // The compiler semantic core reads route meaning without executing the module.
           source = await safeReadFile(fullPath);
           if (source === undefined) {
-            log.debug(`Unable to read route module: ${fullPath}`);
+            // ENOENT between listing and read: race-tolerant, but reported.
+            noteScanDiagnostic(
+              'warning',
+              ScanSurfaceErrorCode.ROUTE_MODULE_UNREADABLE,
+              fullPath,
+              `Unable to read route module; the route is not part of this scan's route tree.`,
+            );
           } else {
             const semantics = analyzeModuleSemantics(source, fullPath, {
               vocabulary: ROUTER_MODULE_VOCABULARY,
@@ -314,14 +377,16 @@ export async function scanRoutes(
             // .mdx routes never carry a tagName export either — the entry
             // wraps their function component itself (#954), like definePage.
             if (tagName === undefined && !isDefinePage && !fullPath.endsWith('.mdx')) {
-              // tagName not found is normal — not all page routes define one.
-              // Dedupe by resolved path: multiple scan passes spell the same
-              // routesDir differently (relative vs absolute).
-              const resolvedPath = resolve(fullPath);
-              if (!notedMissingTagName.has(resolvedPath)) {
-                notedMissingTagName.add(resolvedPath);
-                log.debug(`No tagName export found in route module: ${resolvedPath}`);
-              }
+              // tagName not found is normal — not all page routes define one
+              // (an advisory, severity 'info'; the human channel keeps it at
+              // debug). Dedupe by resolved path: multiple scan passes spell
+              // the same routesDir differently (relative vs absolute).
+              noteScanDiagnostic(
+                'info',
+                ScanSurfaceErrorCode.ROUTE_TAG_NAME_MISSING,
+                fullPath,
+                `No tagName export found in route module.`,
+              );
             }
             // #960: migration-period signal. On a definePage route the
             // tagName export no longer drives SSR registration (the page's
@@ -488,7 +553,9 @@ export {
   scanPackageManifests,
 } from './island-scanner.ts';
 export {
+  type CemDetectionResult,
   type CemScanResult,
   detectAndClassifyCemPackages,
   scanCemManifests,
+  type SkippedCemManifest,
 } from './cem-scanner.ts';

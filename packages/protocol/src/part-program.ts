@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the Part Program v2 schema, its validation and its error contract are one protocol surface, and the file stays import-free by construction (VOID_TAGS, forbidden sinks, the error contract) so the artifact keeps its host/runtime independence; the boundary is the generated JSON seam itself — compiler, server serializer, DOM creation and hydration import this one module instead of keeping mirrored copies.
 /**
  * @openelement/element — serializable Part Program v2 protocol.
  *

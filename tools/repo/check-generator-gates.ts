@@ -33,12 +33,15 @@
  * before its paired --check steps compares bytes the generator just wrote:
  * for a Git-TRACKED output the ordering cannot detect a stale committed file,
  * while for a Git-ignored output the same order is harmless because
- * regeneration is its only valid content. Whether an output is tracked is not
- * derivable here — docs/agent-contract.md's generated-file map owns that fact
- * — so the scan reports every affected ordering instead of silently repairing
- * it. The gate lists are owned by the release lane; the root `release:check`
- * aggregator is scanned for the same ordering alongside gate:source and
- * gate:release, because it runs its own generate:all before delegating.
+ * regeneration is its only valid content. Whether an output is tracked IS
+ * derivable from git, and the consumer-form test
+ * tools/repo/agent-contract-generated-map.test.ts pins
+ * docs/agent-contract.md's generated-file map to that git reality — this
+ * scan still reports every affected ordering instead of silently repairing
+ * it. The gate lists are owned by the release lane; the root
+ * `release:check` aggregator is scanned for the same ordering alongside
+ * gate:source and gate:release, because it runs its own generate:all before
+ * delegating.
  *
  * Orphan detection: every generate- or emit- script physically present in a
  * workspace's script locations must be referenced by some task; an
@@ -46,8 +49,9 @@
  */
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, stat, writeFile } from 'node:fs/promises';
 import process from 'node:process';
+import { emitSummary, reportPathArg } from './checker-io.ts';
 import {
   discoverScriptFiles,
   emitterEntries,
@@ -302,8 +306,18 @@ async function main(): Promise<void> {
   const report = evaluateGeneratorGates(workspaces, layers);
   report.failures.push(...(await orphanedScripts(workspaces)));
 
-  console.log(`class | workspace | script | check task | gate (${GATE_LAYERS.join(' / ')})`);
-  for (const row of report.rows.sort()) console.log(row);
+  // The classification table and the gate-ordering notes are the detailed
+  // report, not stdout content: a passing check prints one summary line, and
+  // `--report <path>` moves the full picture into a file artifact.
+  const reportLines = [
+    `class | workspace | script | check task | gate (${GATE_LAYERS.join(' / ')})`,
+    ...report.rows.sort(),
+    ...gateOrderingNotes(report, orderingLayers).map((note) => `generator-gates: note: ${note}`),
+  ];
+  const reportPath = reportPathArg(process.argv.slice(2));
+  if (reportPath !== undefined) {
+    await writeFile(reportPath, `${reportLines.join('\n')}\n`, 'utf8');
+  }
 
   if (report.generatorCount === 0 || report.emitterCount === 0) {
     console.error(
@@ -317,10 +331,7 @@ async function main(): Promise<void> {
     for (const failure of report.failures) console.error(`  ${failure}`);
     process.exit(1);
   }
-  for (const note of gateOrderingNotes(report, orderingLayers)) {
-    console.log(`generator-gates: note: ${note}`);
-  }
-  console.log(
+  emitSummary(
     `generator-gates: ${report.generatorCount} generator(s) with a wired --check task, ` +
       `${report.emitterCount} artifact emitter(s) clean.`,
   );

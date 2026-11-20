@@ -18,8 +18,10 @@
  *   safe-attribute predicate refuses an unsafe name, duplicates are refused
  *   case-insensitively, a non-string value is refused instead of guessed, and
  *   the value is escaped by the shared `escapeAttrValue` (one escape table);
- * - no `<style>`, no `<link>`, no raw-markup prefix, and no second DSD spelling
- *   in the emitted bytes;
+ * - no inline `<style>`, no raw-markup prefix, and no second DSD spelling in the
+ *   emitted bytes; the typed `styleLinks` channel (M09-2e / #1803) declares the
+ *   canonical marked links inside a shadow template and is refused on a light
+ *   root or with an invalid href;
  * - the producer never imports the server serializer: the source imports only
  *   the browser-safe leaf set.
  *
@@ -66,8 +68,12 @@ test('a closed shadow root uses the same template spelling and the same host sha
 });
 
 test('a light root emits no template and refuses light children', () => {
+  // The light-root OWNERSHIP marker is part of the contract, not decoration:
+  // the class lane's serializer always writes it, and the claim path plus the
+  // light-root CSS scope both key off it. Authored attributes stay first and the
+  // marker last, so the spelling matches the class lane's byte-for-byte.
   expect(serializeGeneratedElementHtml({ tag: 'x-card', root: 'light', content: CONTENT })).toBe(
-    '<x-card><p id="panel">hello</p></x-card>',
+    '<x-card data-oe-light><p id="panel">hello</p></x-card>',
   );
   const error = refusal(() =>
     serializeGeneratedElementHtml({
@@ -219,6 +225,62 @@ test('the emitted bytes carry no style, link or raw prefix channel', () => {
   expect(html.indexOf('</template>')).toBeLessThan(html.indexOf('<span>slot content</span>'));
 });
 
+test('a shadow root declares the typed styleLinks inside the canonical template', () => {
+  const html = serializeGeneratedElementHtml({
+    tag: 'x-card',
+    root: 'open',
+    content: CONTENT,
+    styleLinks: ['/client/assets/abc123.css', 'https://cdn.example/x.css'],
+  });
+  const template = `<template shadowrootmode="open">`;
+  expect(html).toContain(template);
+  expect(html).toContain(
+    '<link rel="stylesheet" href="/client/assets/abc123.css" data-oe-static-styles />',
+  );
+  expect(html).toContain(
+    '<link rel="stylesheet" href="https://cdn.example/x.css" data-oe-static-styles />',
+  );
+  // Links are a prefix of the one content channel, before the authored bytes.
+  expect(html.indexOf('<link')).toBeGreaterThan(html.indexOf(template));
+  expect(html.indexOf('data-oe-static-styles />')).toBeLessThan(html.indexOf(CONTENT));
+  expect(html.indexOf('</template>')).toBeLessThan(html.indexOf(CONTENT) + CONTENT.length + 1);
+  // No style text is inlined by this producer.
+  expect(html).not.toContain('<style');
+});
+
+test('styleLinks on a light root or with an invalid href is refused', () => {
+  expect(
+    refusal(() =>
+      serializeGeneratedElementHtml({
+        tag: 'x-card',
+        root: 'light',
+        content: CONTENT,
+        styleLinks: ['/client/assets/abc123.css'],
+      }),
+    ).path,
+  ).toBe('styleLinks');
+  expect(
+    refusal(() =>
+      serializeGeneratedElementHtml({
+        tag: 'x-card',
+        root: 'open',
+        content: CONTENT,
+        styleLinks: ['javascript:alert(1)'],
+      }),
+    ).path,
+  ).toBe('styleLinks');
+  expect(
+    refusal(() =>
+      serializeGeneratedElementHtml({
+        tag: 'x-card',
+        root: 'open',
+        content: CONTENT,
+        styleLinks: '/client/assets/abc123.css' as unknown as readonly string[],
+      }),
+    ).path,
+  ).toBe('styleLinks');
+});
+
 test('the producer leaf imports only the browser-safe set', () => {
   const source = readFileSync(
     new URL('../src/internal/compiled/generated-element/dsd-ssr.ts', import.meta.url),
@@ -232,5 +294,6 @@ test('the producer leaf imports only the browser-safe set', () => {
     '../../core/security.ts',
     '../dsd.ts',
     '../runtime/values.ts',
+    '../style-link-tags.ts',
   ]);
 });

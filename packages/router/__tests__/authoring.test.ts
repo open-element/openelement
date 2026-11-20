@@ -461,6 +461,27 @@ test('defineIslandConfig() carries the declared delegatesFocus fact', () => {
   }
 });
 
+test('defineIslandConfig() carries the explicit tag and refuses an invalid one', () => {
+  // The alpha16 tag-source slice: an explicit authored identity for a module no
+  // naming convention owns (a page-local component under app/site-ui/). One
+  // platform predicate for the runtime face, the static scan and the compiler
+  // lane, so all three accept the same spelling.
+  expect(defineIslandConfig({ tag: 'open-artifact-panel' }).tag).toEqual('open-artifact-panel');
+  expect(defineIslandConfig({ hydrate: 'idle' }).tag).toBeUndefined();
+  expect(defineIslandConfig({ tag: 'open-artifact-panel', root: 'light' }).tag).toEqual(
+    'open-artifact-panel',
+  );
+  for (const tag of ['openartifactpanel', 'Open-Panel', 'open_panel', '']) {
+    assertThrowsIncludes(
+      () => {
+        defineIslandConfig({ tag } as never);
+      },
+      Error,
+      'is not a valid custom-element name',
+    );
+  }
+});
+
 test('defineIslandConfig() carries the declared primitive property table', () => {
   // D-props (2026-11-14): names/types come from the typed props parameter; the
   // table only carries the platform facts a type cannot express.

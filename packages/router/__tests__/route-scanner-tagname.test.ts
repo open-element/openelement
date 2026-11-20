@@ -3,31 +3,18 @@
  *
  * - definePage-style routes never export tagName; the scanner must stay
  *   silent for them (pristine starter builds must be warning-free).
- * - Plain page routes without tagName get one debug note per file per
+ * - Plain page routes without tagName get one advisory note per file per
  *   process, even when scanRoutes() runs again with a different routesDir
- *   spelling (relative vs absolute).
+ *   spelling (relative vs absolute). The note is the route scan's Tier-2
+ *   collector record (severity 'info'), surfaced by the build pass through
+ *   the build-diagnostics envelope channel — not a bare debug line.
  */
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import process from 'node:process';
 import { expect, test } from 'vitest';
 import { join, relative } from 'node:path';
-import { scanRoutes } from '../src/vite/internal/ssg/index.ts';
-
-/** Run fn with console.debug captured; returns the captured messages. */
-async function captureDebug(fn: () => Promise<void>): Promise<string[]> {
-  const messages: string[] = [];
-  const original = console.debug;
-  console.debug = (msg?: unknown, ...args: unknown[]) => {
-    messages.push([msg, ...args].map(String).join(' '));
-  };
-  try {
-    await fn();
-  } finally {
-    console.debug = original;
-  }
-  return messages;
-}
+import { scanRoutes, takeRouteScanDiagnostics } from '../src/vite/internal/ssg/index.ts';
 
 /** Run fn with console.info captured; returns the captured messages. */
 async function captureInfo(fn: () => Promise<void>): Promise<string[]> {
@@ -91,13 +78,11 @@ export default definePage({
 `,
     );
 
-    const messages = await captureDebug(async () => {
-      const entries = await scanRoutes(routesDir);
-      expect(entries.length).toEqual(1);
-      expect(entries[0].tagName).toEqual(undefined);
-    });
-    const notes = messages.filter((m) => m.includes('No tagName export'));
-    expect(notes, 'definePage routes must not trigger the note').toEqual([]);
+    await scanRoutes(routesDir);
+    const entries = takeRouteScanDiagnostics().filter(
+      (diagnostic) => diagnostic.code === 'OE_SCAN_ROUTE_TAG_NAME_MISSING',
+    );
+    expect(entries, 'definePage routes must not trigger the note').toEqual([]);
   } finally {
     await rm(dir, { recursive: true }).catch(() => {});
   }
@@ -112,12 +97,10 @@ test('scanRoutes stays silent for .mdx routes without tagName', async () => {
     // itself, so a missing tagName is by design — no note.
     await writeFile(join(routesDir, 'post.mdx'), '# Hello\n');
 
-    const messages = await captureDebug(async () => {
-      const entries = await scanRoutes(routesDir);
-      expect(entries.length).toEqual(1);
-      expect(entries[0].tagName).toEqual(undefined);
-    });
-    const notes = messages.filter((m) => m.includes('No tagName export'));
+    await scanRoutes(routesDir);
+    const notes = takeRouteScanDiagnostics().filter(
+      (diagnostic) => diagnostic.code === 'OE_SCAN_ROUTE_TAG_NAME_MISSING',
+    );
     expect(notes, '.mdx routes must not trigger the note').toEqual([]);
   } finally {
     await rm(dir, { recursive: true }).catch(() => {});
@@ -139,12 +122,13 @@ test('scanRoutes notes a plain route without tagName once across path spellings'
     );
 
     const relRoutesDir = relative(process.cwd(), routesDir);
-    const messages = await captureDebug(async () => {
-      await scanRoutes(routesDir); // absolute spelling
-      await scanRoutes(relRoutesDir); // relative spelling — same files
-    });
-    const notes = messages.filter((m) => m.includes('No tagName export'));
+    await scanRoutes(routesDir); // absolute spelling
+    await scanRoutes(relRoutesDir); // relative spelling — same files
+    const notes = takeRouteScanDiagnostics().filter(
+      (diagnostic) => diagnostic.code === 'OE_SCAN_ROUTE_TAG_NAME_MISSING',
+    );
     expect(notes.length, 'same file must be noted exactly once').toEqual(1);
+    expect(notes[0].severity, 'the advisory is info-classed, never a warning').toEqual('info');
   } finally {
     await rm(dir, { recursive: true }).catch(() => {});
   }

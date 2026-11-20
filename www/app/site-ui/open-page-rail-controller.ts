@@ -113,5 +113,12 @@ export function uninstallRailScrollspy(host: RailHost): void {
   const state = states.get(host);
   if (!state) return;
   state.observer?.disconnect();
+  // Every `aria-current` mark this install wrote goes with it. A disconnect
+  // keeps the generated DOM (LC-0), so a surviving runtime-written mark would
+  // meet the next claim's static-seed check as an attribute the template never
+  // declared — the claim then fails closed and the rail goes inert for the rest
+  // of the page's life. Teardown restores the declared seed: no mark at all.
+  // The removed mark is exactly what `markCurrent` writes ('location').
+  for (const link of state.links) link.removeAttribute('aria-current');
   states.delete(host);
 }

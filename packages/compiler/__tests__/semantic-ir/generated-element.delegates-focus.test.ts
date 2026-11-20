@@ -96,7 +96,10 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
         root: 'shadow-open',
         delegatesFocus: true,
         formAssociated: false,
+        declaresStyles: false,
+        styles: [],
         properties: undefined,
+        tag: undefined,
       },
     });
   });
@@ -108,12 +111,23 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
         root: undefined,
         delegatesFocus: false,
         formAssociated: false,
+        declaresStyles: false,
+        styles: [],
         properties: undefined,
+        tag: undefined,
       },
     });
     expect(readIslandMetadata(parse(island("root: 'light', delegatesFocus: false")))).toEqual({
       kind: 'read',
-      facts: { root: 'light', delegatesFocus: false, formAssociated: false, properties: undefined },
+      facts: {
+        root: 'light',
+        delegatesFocus: false,
+        formAssociated: false,
+        declaresStyles: false,
+        styles: [],
+        properties: undefined,
+        tag: undefined,
+      },
     });
   });
 
@@ -124,7 +138,10 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
         root: 'shadow-open',
         delegatesFocus: false,
         formAssociated: false,
+        declaresStyles: false,
+        styles: [],
         properties: undefined,
+        tag: undefined,
       },
     });
     expect(readIslandMetadata(parse(island("hydrate: 'idle'")))).toEqual({
@@ -133,7 +150,10 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
         root: undefined,
         delegatesFocus: false,
         formAssociated: false,
+        declaresStyles: false,
+        styles: [],
         properties: undefined,
+        tag: undefined,
       },
     });
   });
@@ -145,7 +165,10 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
         root: 'shadow-open',
         delegatesFocus: true,
         formAssociated: false,
+        declaresStyles: false,
+        styles: [],
         properties: undefined,
+        tag: undefined,
       },
     });
   });

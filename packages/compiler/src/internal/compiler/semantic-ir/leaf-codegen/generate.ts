@@ -893,8 +893,13 @@ export function generateLeafRecipe(component: IrComponent): LeafCodegenResult {
   const lines = [
     ARTIFACT_HELPERS,
     '',
+    // The required-binding name list is a compile-time fact of this recipe, so
+    // it is emitted once at module scope instead of being re-allocated inside
+    // every mount call; mount and update share the one array (pay at compile
+    // time, not at runtime).
+    `const __oe_required = ${JSON.stringify(requiredValues)};`,
+    '',
     'function mount(__oe_host, __oe_values) {',
-    `  const __oe_required = ${JSON.stringify(requiredValues)};`,
     '  __oe_requireValues(__oe_values, __oe_required);',
     '  let __oe_current = __oe_values;',
     '  let __oe_disposed = false;',

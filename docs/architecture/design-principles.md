@@ -188,10 +188,9 @@ hardcoded file list let new files escape typechecking; an unbound sidecar made
 E2E evidence forgeable.
 
 In this repository: one protocol-level forbidden-sink predicate serves the
-compiler, the client validator, and the server validator, with a drift guard
-on the serialized `DANGEROUS_KEYS` copy; the starter typechecks its `app/`
-directory natively; E2E evidence recomputes from the raw Playwright report
-bound by SHA-256 and candidate SHA.
+compiler, the client validator, and the server validator; the starter
+typechecks its `app/` directory natively; E2E evidence recomputes from the raw
+Playwright report bound by SHA-256 and candidate SHA.
 
 Litmus: _Is this a second source of truth?_
 

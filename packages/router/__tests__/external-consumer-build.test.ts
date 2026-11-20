@@ -388,6 +388,15 @@ test('external consumer: both islands attribute to exactly one emitted chunk eac
 test('external consumer: the client chunk bundles the browser condition and the alias target', async () => {
   const distDir = join(fixture.appDir, 'dist');
   const clientIslands = await readdir(join(distDir, 'client', 'islands'));
+  // Single-chunk read, as before the executor-split experiment (withdrawn in
+  // 07963b738 — this assertion was not rolled back with it). The pre-split
+  // layout is back: the local island's own chunk IS the whole static closure of
+  // the modules it reaches, so the condition/alias resolution must be IN that
+  // chunk — the assertions judge the client graph's CONTENT, and reading one
+  // chunk is the honest unit for a one-importer static edge. The fixture has
+  // TWO islands (the first test in this file proves both own a chunk); only
+  // oe-proof-counter's closure reaches these marker modules, so reading its
+  // chunk is exactly the closure under test, not a sample of it.
   const counterChunk = clientIslands.find((file) => file.startsWith('island-oe-proof-counter'))!;
   const code = await readFile(join(distDir, 'client', 'islands', counterChunk), 'utf8');
   // The browser-condition target of @acme/conditions was bundled (not the

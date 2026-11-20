@@ -154,3 +154,66 @@ divergent one fails closed as above.
 
 Registered in [`seams.md`](./seams.md) as "Property-only non-primitive retention
 on the generated element (M09-2d, plan §14)".
+
+## 2026-11-18 amendment — the JSON seed channel is SHIPPED (D-18c / M11-3)
+
+The "Refusals" line above ("No server→client props seed/JSON wire; M11 owns a
+future transport") is now stale. This records what shipped and its exact
+boundaries.
+
+### The wire
+
+One shell-owned host attribute, `data-oe-prop-seed`, carrying
+`{"<rowName>": <json value>, …}`. Written by
+`seedGeneratedElementHostProperties` from the supplied data properties, read and
+consumed once by the shell during claim
+(`applyGeneratedPropSeed`) BEFORE the recipe runs, so setup reads the values the
+server rendered with.
+
+One attribute, not one per row: the failing mode this channel removes is a
+visitor seeing server-rendered content that the upgraded instance no longer
+matches, and a per-row attribute would have invented an attribute dialect the
+client's `observedAttributes` does not observe.
+
+### Boundaries kept
+
+- **JSON-encodable rows only** (`array`, `object`). `trustedHtml` is EXCLUDED —
+  a brand cannot be reconstructed from JSON, and promoting a plain string back
+  into one would be a raw-markup channel. That transport remains a separate,
+  undecided question.
+- **Getters are never executed to build the seed.** The producer reads only
+  DATA properties (`Object.getOwnPropertyDescriptor`); a caller passing a getter
+  for a non-primitive row gets no seed for it — their value still renders, and
+  the claim keeps the declared default, which is the pre-D-18c behaviour rather
+  than a silent double read. This is what
+  `generated-element.nonprimitive-properties.browser.test.ts` "reads supplied
+  getters per read" pins.
+- **The attribute read is conditional.** A descriptor with no JSON-seedable row
+  never even asks for the attribute, so the constructor/connect path stays
+  attribute-read-free for every existing component (the M09-0 shell test enforces
+  this by stubbing `Element.prototype.getAttribute`).
+- **Fail closed on a seed the descriptor cannot explain**: unparseable JSON, a
+  non-object payload, or a row name the descriptor does not declare as
+  JSON-seedable throws `OEIR_SHELL_PROP_SEED_MISMATCH` (its own identity: the
+  cause is a wire fact, not a DOM-structure fact).
+- **Consumed once**: the shell removes the attribute after applying it, so a
+  re-claim cannot replay a stale value over a user's write.
+- **Byte identity for everyone else**: a module with only primitive rows (all
+  four previously migrated ui components) emits identical bytes; the wrapper's
+  attribute-seed branch now keys on `emitsHostAttributeSeed` (attribute rows OR
+  JSON-seedable rows), which is the same true value for them.
+
+### Evidence
+
+Node: `generated-element.nonprimitive-properties.test.ts` (4 new rows — the
+one-attribute shape, the `trustedHtml` exclusion, no-supply-no-seed, and the
+non-round-trippable refusal). Chromium:
+`generated-element.nonprimitive-properties.browser.test.ts` (12 rows, including
+"the SSR prop seed restores supplied non-primitive rows on claim" and "a prop
+seed the descriptor cannot explain fails closed", plus the UPDATED
+"folds supplied props … and seeds the non-primitive rows" row, which previously
+asserted the gap: its client instance used to keep `seed` and now correctly
+starts at `server`).
+
+Not claimed: any `trustedHtml` transport, packed-consumer re-verification of
+this channel, or M12/M13 qualification.

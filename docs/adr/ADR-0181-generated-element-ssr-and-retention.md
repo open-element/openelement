@@ -170,3 +170,56 @@ cadence.
 - **Inferring "retain vs release" from a disposal mode**: refuted by review —
   the same mode is used for both logical kills and rollbacks, so eviction is
   driven by explicit emitted release sites and pass epochs.
+
+## Amendment (2026-11-16): minimal DSD stylesheet-link carrier (M09-2e / #1803)
+
+This is a later reading in the amend-never-rewrite form; it rewrites no
+decision above and creates no milestone evidence.
+
+- A shadow-root generated host now delivers its declared `styles` sheets as the
+  canonical marked `<link>` nodes INSIDE the DSD template. The compiler reads
+  the `styles` presence from the SAME authored sidecar metadata it already reads
+  for root/focus/props, so a scan-time and a transform-time compile of one
+  module cannot disagree. The client build joins every admitted shadow
+  declaration to its emitted asset (a declared sheet with no asset fails the
+  build closed), the emitted `<Name>__ssrHost` carries the typed styleLinks
+  channel only for that styled site, and the generated claim skips exactly that
+  marked prefix (an unmarked node is never swallowed).
+- A shadow-root style edge ships the authored bytes verbatim (no `@scope`); the
+  registry already had that edge shape for class shadow roots, so no second
+  style pipeline, hash or registry is introduced.
+- `OE_ISLAND_STYLE_SHADOW_UNWIRED` now covers only a shadow island with no
+  compiled host producer (no template to declare the link in).
+
+### Enumerated interface deltas (diff this against the snapshot)
+
+Two additive signature/shape changes, with no symbol added or removed: these
+are observable interface changes, not a claim of an unchanged API. Both are necessary
+because a shadow root's sheets must be declared inside its DSD template, and
+the existing delivery seams have no per-island half; a second setter or a
+second registry would be a second mechanism for one fact.
+
+| Package / entry | Delta | Necessity and compatibility |
+| --- | --- | --- |
+| `@openelement/element` `.`, `./base`, `./client-only`, `./no-blocks` | `__setRequestTimeStyleSheetUrls(urls, islandEntries?)` gains one optional parameter (`islandEntries` = per-tag URL lists; `null` = declared but carrier unavailable). | Reuses the existing internal-by-convention setter seam and the one generated-entry import; a one-argument call remains valid and behaves exactly as before, so no old caller or byte path changes. A second setter would have expanded the public surface with a duplicate mechanism. |
+| `@openelement/element` `./internal/compiled/generated-element/shell` (ADR-0177 internal subpath) | `GeneratedElementSsrInput` gains optional `styleLinks?: readonly string[]`; `serializeGeneratedElementHtml` reflects it. | The emitted host producer needs the typed channel to place the canonical marked links inside the template. This is emitted-artifact ABI on an internal subpath, not author API; omitted keeps the pre-slice shape and bytes. |
+
+The source interface snapshot records these implemented shapes after code
+review; updating it is not release approval or a public API freeze. Owner
+release sign-off and mixed-artifact qualification remain separate obligations.
+This amendment records no owner sign-off, milestone exit or release claim.
+
+- Still open and not claimed: light-root document application and client/shadow
+  adoption (GH #1800); the dev server has no emitted-asset carrier, records the
+  explicit unavailable state and fails closed; no M09/M11 status, P5 evidence,
+  version, tag or publication is created.
+
+## Later reading (2026-11-20)
+
+P1–P5/M10/M11 status follows the 2026-11-20 re-record in the head
+[progress ledger](../architecture/alpha16-18-progress.md) and the
+[P1 applicability record](../architecture/p1-applicability-record.md); the
+`P1 stays NOT MET` sentence under "Consequences and limits" above is the state
+as recorded at the time of writing. This later reading is append-only: it
+rewrites no decision above, creates no milestone evidence, P5 evidence or
+release claim, and adds no owner sign-off.

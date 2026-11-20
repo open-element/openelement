@@ -120,6 +120,43 @@ export type GeneratedElementHostIdentity =
       readonly diagnostics: readonly GeneratedElementHostRefusalDiagnostic[];
     };
 
+/**
+ * The ONE generated-lane verdict (M11-3, P6): the identity kinds the generated
+ * Native Custom Element lane OWNS. `producer` is the compiled-host identity;
+ * `missing-producer` / `light-no-producer` are the lane's admitted no-host
+ * shapes. The two refusal kinds are deliberately excluded: `lane-declined` is
+ * the class-lane path and stays distinguishable, `lane-refused` must never be
+ * read as a pass.
+ *
+ * Both consumers read THIS list through {@linkcode ownsGeneratedLaneKind} and
+ * never a private copy: the client island entry's lane fact
+ * (`client-island-entries.ts`, deciding whether an activation factory waits for
+ * the executor runtime) and the page classifier's owning-lane membership test
+ * (`page-classification.ts`, deciding whether a page is the
+ * generated-element-page shape). The set is a `ReadonlySet`, so a consumer
+ * cannot mutate the verdict either.
+ */
+export const GENERATED_LANE_OWNED_KINDS: ReadonlySet<GeneratedElementHostIdentity['kind']> =
+  new Set<GeneratedElementHostIdentity['kind']>([
+    'producer',
+    'missing-producer',
+    'light-no-producer',
+  ]);
+
+/**
+ * Does the generated lane own this identity kind? The ONE predicate behind every
+ * generated-lane verdict (M11-3): pass the kind of a
+ * {@linkcode GeneratedElementHostIdentity}, or `undefined` when no carrier was
+ * recorded. An absent kind is never owned — absence means the class/executor
+ * lane keeps the delivery, so this predicate can never turn a missing fact into
+ * a generated-lane claim.
+ */
+export function ownsGeneratedLaneKind(
+  kind: GeneratedElementHostIdentity['kind'] | undefined,
+): boolean {
+  return kind !== undefined && GENERATED_LANE_OWNED_KINDS.has(kind);
+}
+
 /** The carrier field the scan adds to one island metadata record. */
 export interface GeneratedElementHostCarrier {
   /**

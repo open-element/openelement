@@ -183,6 +183,7 @@ export {
   assertEachAnchor,
   assertEachEndMarker,
   assertElementInHtmlNamespace,
+  assertElementInNamespace,
   assertStaticAttributeSeed,
   assertTextSlotMarker,
   assertWhenAnchor,
@@ -206,8 +207,10 @@ export {
   parseEachMarker,
   parseEntryKeyMarker,
   parseRangeMarker,
+  parseSlotAnchorMarker,
   parseTextSlotMarker,
   rangeMarker,
+  slotAnchorMarker,
   textSlotMarker,
   type Marker,
 } from './runtime/markers.ts';

@@ -11,40 +11,44 @@
   "declarations": [
     {
       "tagName": "open-button",
-      "className": "OpenButton",
-      "superclassName": "OpenElement",
-      "description": "Button or link control: an `href` property switches the compiled anchor branch (no-JS navigation survives SSR), `variant`/`size` pick the styled surface, and the disabled state follows the reflected host attribute.",
+      "className": "OpenButtonElement",
+      "description": "Button or link control with variant/size surfaces and form participation.",
       "attributes": [
         {
           "name": "variant",
           "type": "string",
-          "description": "variant attribute"
+          "default": "default",
+          "reflects": true
         },
         {
           "name": "size",
           "type": "string",
-          "description": "size attribute"
+          "default": "md",
+          "reflects": true
         },
         {
           "name": "disabled",
           "type": "boolean",
-          "description": "disabled attribute",
-          "default": "false"
+          "default": "false",
+          "reflects": true
         },
         {
           "name": "href",
           "type": "string",
-          "description": "href attribute"
+          "default": "",
+          "reflects": true
         },
         {
           "name": "target",
           "type": "string",
-          "description": "target attribute"
+          "default": "",
+          "reflects": true
         },
         {
           "name": "type",
           "type": "string",
-          "description": "type attribute"
+          "default": "button",
+          "reflects": true
         }
       ],
       "events": [
@@ -56,14 +60,12 @@
       ],
       "slots": [
         {
-          "name": "",
-          "description": "Default slot"
+          "name": ""
         }
       ],
       "cssParts": [
         {
-          "name": "control",
-          "description": "The visible button or anchor element"
+          "name": "control"
         }
       ],
       "openElement": {
@@ -73,62 +75,64 @@
         "hydrate": "load",
         "status": "stable",
         "module": "@openelement/ui/open-button",
-        "export": "OpenButton",
+        "export": "OpenButtonElement",
         "tailwind": {
           "required": true,
           "sources": [
             "./src/theme.css"
           ]
-        }
+        },
+        "root": "shadow",
+        "styles": [
+          "./open-button.css"
+        ],
+        "ssrHostExport": "OpenButton__ssrHost"
       }
     },
     {
       "tagName": "open-input",
-      "className": "OpenInput",
-      "superclassName": "OpenElement",
-      "description": "Form-associated text input with a label, an inline error slot, and native constraint validation (required → valueMissing via setValidity).",
+      "className": "OpenInputElement",
+      "description": "Form-associated text input with a label, an error slot and native validity.",
       "attributes": [
         {
           "name": "type",
           "type": "string",
-          "description": "type attribute"
+          "default": "text"
         },
         {
           "name": "placeholder",
           "type": "string",
-          "description": "placeholder attribute"
+          "default": ""
         },
         {
           "name": "label",
           "type": "string",
-          "description": "label attribute"
+          "default": ""
         },
         {
           "name": "name",
           "type": "string",
-          "description": "name attribute"
+          "default": ""
         },
         {
           "name": "value",
           "type": "string",
-          "description": "value attribute"
+          "default": ""
         },
         {
           "name": "disabled",
           "type": "boolean",
-          "description": "disabled attribute",
           "default": "false"
         },
         {
           "name": "required",
           "type": "boolean",
-          "description": "required attribute",
           "default": "false"
         },
         {
           "name": "error",
           "type": "string",
-          "description": "error attribute"
+          "default": ""
         }
       ],
       "events": [
@@ -155,20 +159,16 @@
       ],
       "cssParts": [
         {
-          "name": "wrapper",
-          "description": "The outer input-wrapper div"
+          "name": "wrapper"
         },
         {
-          "name": "label",
-          "description": "The label element"
+          "name": "label"
         },
         {
-          "name": "control",
-          "description": "The input element"
+          "name": "control"
         },
         {
-          "name": "error",
-          "description": "The error message small element"
+          "name": "error"
         }
       ],
       "openElement": {
@@ -178,25 +178,29 @@
         "hydrate": "load",
         "status": "experimental",
         "module": "@openelement/ui/open-input",
-        "export": "OpenInput",
+        "export": "OpenInputElement",
         "tailwind": {
           "required": true,
           "sources": [
             "./src/theme.css"
           ]
-        }
+        },
+        "root": "shadow",
+        "styles": [
+          "./open-input.css"
+        ],
+        "ssrHostExport": "OpenInput__ssrHost"
       }
     },
     {
       "tagName": "open-theme-toggle",
-      "className": "OpenThemeToggle",
-      "superclassName": "OpenElement",
+      "className": "OpenThemeToggleElement",
       "description": "Theme toggle button for dark/light mode: reads and flips the document's `data-theme` (with an initialization priority chain) and persists the choice; icon visibility follows the current theme attribute.",
       "attributes": [
         {
           "name": "theme",
           "type": "string",
-          "description": "theme attribute"
+          "default": "dark"
         }
       ],
       "events": [
@@ -208,16 +212,13 @@
       ],
       "cssParts": [
         {
-          "name": "toggle",
-          "description": "The button element"
+          "name": "toggle"
         },
         {
-          "name": "icon-sun",
-          "description": "The sun SVG icon"
+          "name": "icon-sun"
         },
         {
-          "name": "icon-moon",
-          "description": "The moon SVG icon"
+          "name": "icon-moon"
         }
       ],
       "openElement": {
@@ -227,30 +228,32 @@
         "hydrate": "load",
         "status": "stable",
         "module": "@openelement/ui/open-theme-toggle",
-        "export": "OpenThemeToggle",
+        "export": "OpenThemeToggleElement",
         "tailwind": {
           "required": true,
           "sources": [
             "./src/theme.css"
           ]
-        }
+        },
+        "root": "shadow",
+        "styles": [
+          "./open-theme-toggle.css"
+        ],
+        "ssrHostExport": "OpenThemeToggle__ssrHost"
       }
     },
     {
       "tagName": "open-code-block",
-      "className": "OpenCodeBlock",
-      "superclassName": "OpenElement",
+      "className": "OpenCodeBlockElement",
       "description": "Code block with a copy button.",
       "slots": [
         {
-          "name": "",
-          "description": "Default slot"
+          "name": ""
         }
       ],
       "cssParts": [
         {
-          "name": "copy",
-          "description": "The copy button"
+          "name": "copy"
         }
       ],
       "openElement": {
@@ -260,31 +263,35 @@
         "hydrate": "idle",
         "status": "stable",
         "module": "@openelement/ui/open-code-block",
-        "export": "OpenCodeBlock",
+        "export": "OpenCodeBlockElement",
         "tailwind": {
           "required": true,
           "sources": [
             "./src/theme.css"
           ]
-        }
+        },
+        "root": "shadow",
+        "styles": [
+          "./open-code-block.css"
+        ],
+        "ssrHostExport": "OpenCodeBlock__ssrHost"
       }
     },
     {
       "tagName": "open-dialog",
-      "className": "OpenDialog",
-      "superclassName": "OpenElement",
+      "className": "OpenDialogElement",
       "description": "Dialog component using native <dialog> element + popover API.",
       "attributes": [
         {
           "name": "open",
           "type": "boolean",
-          "description": "open attribute",
-          "default": "false"
+          "default": "false",
+          "reflects": true
         },
         {
           "name": "label",
           "type": "string",
-          "description": "label attribute"
+          "default": ""
         }
       ],
       "events": [
@@ -296,38 +303,30 @@
       ],
       "slots": [
         {
-          "name": "",
-          "description": "Default slot"
+          "name": ""
         },
         {
-          "name": "trigger",
-          "description": "The 'trigger' slot"
+          "name": "trigger"
         },
         {
-          "name": "footer",
-          "description": "The 'footer' slot"
+          "name": "footer"
         }
       ],
       "cssParts": [
         {
-          "name": "overlay",
-          "description": "The dialog backdrop/element"
+          "name": "overlay"
         },
         {
-          "name": "header",
-          "description": "The header bar"
+          "name": "header"
         },
         {
-          "name": "close",
-          "description": "The close button"
+          "name": "close"
         },
         {
-          "name": "body",
-          "description": "The content area (<slot>)"
+          "name": "body"
         },
         {
-          "name": "footer",
-          "description": "The optional footer slot"
+          "name": "footer"
         }
       ],
       "openElement": {
@@ -337,38 +336,39 @@
         "hydrate": "idle",
         "status": "experimental",
         "module": "@openelement/ui/open-dialog",
-        "export": "OpenDialog",
+        "export": "OpenDialogElement",
         "tailwind": {
           "required": true,
           "sources": [
             "./src/theme.css"
           ]
-        }
+        },
+        "root": "shadow",
+        "styles": [
+          "./overlay-recipe.css",
+          "./open-dialog.css"
+        ],
+        "ssrHostExport": "OpenDialog__ssrHost"
       }
     },
     {
       "tagName": "open-dropdown",
-      "className": "OpenDropdown",
-      "superclassName": "OpenElement",
+      "className": "OpenDropdownElement",
       "description": "Popover-API dropdown with CSS Anchor Positioning placement.",
       "slots": [
         {
-          "name": "trigger",
-          "description": "Control used to toggle the dropdown"
+          "name": ""
         },
         {
-          "name": "",
-          "description": "Dropdown content"
+          "name": "trigger"
         }
       ],
       "cssParts": [
         {
-          "name": "trigger",
-          "description": "Trigger wrapper"
+          "name": "trigger"
         },
         {
-          "name": "content",
-          "description": "Popover content"
+          "name": "content"
         }
       ],
       "openElement": {
@@ -378,13 +378,19 @@
         "hydrate": "load",
         "status": "experimental",
         "module": "@openelement/ui/open-dropdown",
-        "export": "OpenDropdown",
+        "export": "OpenDropdownElement",
         "tailwind": {
           "required": true,
           "sources": [
             "./src/theme.css"
           ]
-        }
+        },
+        "root": "shadow",
+        "styles": [
+          "./overlay-recipe.css",
+          "./open-dropdown.css"
+        ],
+        "ssrHostExport": "OpenDropdown__ssrHost"
       }
     }
   ]

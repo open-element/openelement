@@ -125,6 +125,42 @@ test('does not invent events from handlers or CustomEvent text', () => {
   expect('events' in declaration).toEqual(false);
 });
 
+test('publishes the compiled host root and the declared stylesheet specifiers', () => {
+  const STYLED = join(FIXTURES, 'styled');
+  const read = readGeneratedElementFacts({
+    file: 'open-fn-styled.tsx',
+    source: readFileSync(join(STYLED, 'open-fn-styled.tsx'), 'utf8'),
+    tag: 'open-fn-styled',
+  });
+  if (read.kind !== 'admitted') {
+    throw new Error(`expected admission, got '${read.kind}'`);
+  }
+  // The facts carry what a consuming build needs to register the island's
+  // declaration without re-reading or re-compiling the package source.
+  expect(read.facts.root).toEqual('shadow');
+  expect(read.facts.styles).toEqual(['./open-fn-styled.css']);
+
+  const declaration = buildGeneratedElementDeclaration(read.facts);
+  expect(declaration.openElement?.root).toEqual('shadow');
+  expect(declaration.openElement?.styles).toEqual(['./open-fn-styled.css']);
+});
+
+test('refuses a styles declaration with no static string specifier', () => {
+  const source =
+    "import { defineIslandConfig } from '@openelement/router';\n" +
+    'export const openElement = defineIslandConfig({ styles: [suffix] });\n' +
+    'function FnBad() {\n' +
+    '  return <span>static</span>;\n' +
+    '}\n' +
+    'export default FnBad;\n';
+  const read = readGeneratedElementFacts({ file: 'open-fn-bad.tsx', source, tag: 'open-fn-bad' });
+  expect(read.kind).toEqual('refused');
+  if (read.kind !== 'refused') return;
+  expect(read.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
+    'UI_MANIFEST_STYLES_INVALID',
+  );
+});
+
 test('refuses a module without the island sidecar (compiler diagnostic propagates)', () => {
   const read = readGeneratedElementFacts({
     file: 'open-fn-no-sidecar.tsx',

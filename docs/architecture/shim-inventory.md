@@ -67,11 +67,15 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 | 17 | 渲染器适配缝（native / lit；lit 分支已删） | ~~`packages/router/src/lit.ts`~~、~~`packages/router/src/lit-ssr.ts`~~（native 选择缝保留于 `packages/router/src/vite/internal/ssg/renderer-adapter.ts`） | **已删（ADR-0152 2026-11-08 零兼容退役；native 为唯一渲染器）** |
 | 18 | legacy 虚拟入口 id（`virtual:open-hono-entry`，ADR-0152） | `packages/router/src/vite/plugin-virtual-modules.ts` | 条件到即删（随下一次产物命名不兼容变更一起改名） |
 | 19 | Part Program 执行器（旧执行后端） | `packages/element/src/internal/compiled/facade-host.ts`（Part Program → live element 行为的唯一入口；`packages/element/src/internal/compiled/runtime-program.ts` 与之同属该后端，`packages/element/src/internal/compiled/runtime/` 下的 hydrate/resume 的 Part 路径由它驱动） | 条件到即删（M08 的 SSR→claim 与 per-phase 等价在固定 SHA 签收后，下一个 release 周期随生成叶路径接入产品入口一起删除） |
-| 20 | Class authoring API（旧作者面） | `packages/element/src/open-element-implementation.ts`（`OpenElement` 基类；`base.ts`、`open-element-configuration.ts`、`error-boundary.ts` 的类形状同属该面） | 条件到即删（ADR-0173 第四轮已批准零兼容退役；Alpha16b 的 C-1/C-3 能力清单覆盖证据落地、starter/文档迁移完成后删除） |
+| 20 | Class authoring API（旧作者面） | `packages/element/src/open-element-implementation.ts`（`OpenElement` 基类；`base.ts`、`open-element-configuration.ts`、`error-boundary.ts` 的类形状同属该面）；router 侧连带文件（退役执行时一并清理）：`packages/router/src/authoring.ts:456`（`isElementPageClass` 类形状判别）、`packages/router/src/vite/internal/server-runtime/renderer-runtime.ts:146`（`resolveCompiledPageTag` 读编译产物 `__partProgram.tag`）、`packages/router/src/vite/internal/ssg/entry-descriptor.ts:467`（页面路由 `defaultTagName` 载体） | 条件到即删（ADR-0173 第四轮已批准零兼容退役；Alpha16b 的 C-1/C-3 能力清单覆盖证据落地、starter/文档迁移完成后删除） |
 | 21 | 生成宿主注册对（M11 垂直切片，ADR-0181） | `packages/router/src/vite/internal/server-runtime/security.ts`（`registerIsland`）+ `packages/protocol/src/registry-markers.ts`（`SSR_REGISTRY_GENERATED_HOSTS`） | 条件到即删（P1 在 tracked 依赖图工件上对全部适用应用判 MET 后随 M11-3 入口切换删除） |
 | 22 | 私有实例保留账本（ADR-0181） | `packages/element/src/internal/compiled/runtime/instance-ledger.ts`（经 `runtime.ts` 对发射代码 re-export） | 条件到即删（Alpha17 预编译分发取代发射式保留计划、且无发射模块再 import 该账本） |
 | 23 | browser-entry-graph 观测工件与检查器（temporary-by-intent） | `packages/router/src/vite/internal/browser-entry-graph.ts`、`browser-entry-graph-artifact.ts`、`tools/repo/check-browser-entry-graph.ts` | 条件到即删（P1 判 MET 且该证据并入 release 门禁后移除一次性检查器；工件本身不进入发布面） |
 | 24 | `OE_ISLAND_STYLE_SHADOW_UNWIRED` 拒绝（ADR-0181） | `packages/router/src/vite/internal/ssg/island-scanner.ts` | 条件到即删（GH #1800 落地 shadow 样式 link 载体、且三引擎通过后移除该拒绝） |
+| 25 | legacy allocation-only 绑定工厂（descriptor `createBindings`，M09-0 shell 测试遗留） | `packages/element/src/internal/compiled/generated-element/shell.ts`（descriptor `createBindings` 字段及其 allocation-only 契约注释，条目引用 `:448-470`） | 条件到即删（M09 shell 测试全部迁移到 `createInstance` 后删除） |
+| 26 | rolldown-vite `buildStart` 诊断面 workaround（#1616 报告先行契约） | `packages/router/src/vite/internal/build-diagnostics.ts`（"The interim contract, until the bundler is fixed"，条目引用 `:91`） | 条件到即删（rolldown-vite 修复对应缺陷后删除） |
+| 27 | #1558 前已发布产物的 permissive 样式边兼容读 | `packages/compiler/src/internal/compiler/compiled-artifact-style-requests.ts`（PERMISSIVE 读，条目引用 `:23-25`） | 条件到即删（#1558 前发布的产物退出受支持窗口后收紧为严格准入） |
+| 28 | `registerOpenUi` published-API 空操作垫片（`@openelement/ui`） | `packages/ui/src/register.ts` | 条件到即删（`@openelement/ui` 不再发布该 export / 全部消费方改用 generated entry，或下一个 breaking alpha 时删除） |
 
 没有"现在删"项：扫描发现的文本级残余（脚本头部陈旧的 `deno run` 用法
 散文）已在 alpha8/alpha10 清理；其余命中要么已含书面退役条件，要么是
@@ -455,3 +459,40 @@ native 选择缝是主产物，不再作为垫片登记。）
 - 存在原因：生成宿主的 DSD 模板尚无 stylesheet-link 通道，若接受声明就会静默丢样式；按 P5 宁可 fail closed。
 - 退役条件：GH #1800 落地 shadow 样式 link/adoption 载体，且一个带 `styles` 的 shadow-root 生成岛在三引擎上构建并渲染通过（`gate:release` 在同一 SHA 绿）。
 - 处置：条件到即删。
+
+### 25. legacy allocation-only 绑定工厂（descriptor `createBindings`）——条件到即删
+
+- 所有者：element 生成元素 shell（`packages/element/src/internal/compiled/generated-element/shell.ts:448-470` 的 descriptor 字段、allocation-only 契约注释与 `createBindings?.() ?? {}` 回退；语义记载于
+  `docs/architecture/m09-generated-element-shell.md`——"the legacy allocation-only factory for hosts/tests"）。
+- 方向：descriptor（hosts/tests 手写 fixture，或尚未发射 `createInstance` 的旧路径）→ shell 每元素首次连接调用一次 → 返回记录保留整个元素生命周期（重连不重跑）。
+- 存在原因：M09-0 shell 测试先于 T3 的 `createInstance(owner, host)` 落地；该工厂拿不到 cleanup owner，契约因此被迫收窄为 allocation-only（不得申请任何需要清理的资源，只能分配 signals/computeds 与纯数据）。生成路径如今只对 ROOT 发射 `createInstance`，shell 仅为无 setup 快照的根保留 `createBindings?.() ?? {}` 回退。
+- 退役条件：M09 shell 测试全部迁移到 `createInstance`（带 owner 的 retained setup 工厂，descriptor-fixture 证据随之改写）之后，从 descriptor 契约中删除 `createBindings` 字段及其校验；与 `createInstance` 的互斥 fail-closed 判定随本字段一并退役（只剩一个 call-once/retain 位点，互斥规则自然消失）。
+- 处置：条件到即删。
+
+### 26. rolldown-vite `buildStart` 诊断面 workaround——条件到即删
+
+- 所有者：router 构建诊断（`reportScanFatal`——scan-phase fatal 的唯一"报告先行"缝，`packages/router/src/vite/internal/build-diagnostics.ts:84-103`）。
+- 方向：scan-phase fatal → 诊断信封双通道（人读 `[CODE] …` 行进构建日志 + 信封记录供机器可读 exit 重放）→ 返回错误、由 raise 点保留自己的 `throw`。
+- 存在原因：rolldown-vite 8 的 `buildStart` 错误面不把抛出的消息带给 CLI（alpha15 基线上即已存在的上游缺陷）：只 throw 的 scan-phase fatal 是开发者永远看不见的诊断——构建带着半空的 scan 继续走，随后以误导性的下游错误失败。
+- 退役条件：rolldown-vite 修复该缺陷——`buildStart` 抛出的错误消息能原样到达 CLI——且修复版本进入受支持矩阵后，删除"报告先行"的中间契约，raise 点恢复直接 throw。上游修复是平台事件，条件到即删。
+- 处置：条件到即删。
+
+### 27. #1558 前已发布产物的 permissive 样式边兼容读——条件到即删
+
+- 所有者：element 编译器（`packages/compiler/src/internal/compiler/compiled-artifact-style-requests.ts:23-25` 的 PERMISSIVE 读——只认相对 `.css` 默认 import 数组，对 `static styles` 数组的其余成员一概不碰）。
+- 方向：#1558 前发布的已编译产物模块 → 从 `static styles` 数组词法恢复样式边（构建期）→ 走与 authored 边相同的 style-edge registry / Vite CSS 管线。
+- 存在原因：#1558 把样式创作形态收敛为 `.css` 文件 + import 之前发布的产物（引用 plain module `StyleSheet` 的 legacy 内联 sheet）继续走旧路径不变——这里的严格准入会让每一个先前发布的包平白破产，换不来任何协议收益。
+- 交叉登记：接缝事实（单写者、守卫测试与 Missing/unreadable 行为）登记在
+  [seams.md](./seams.md) 的 "Compiled-artifact style-edge adoption (alpha.13 I1, KR-10b)" 行；迁移矩阵对应
+  [m01-consumer-migration-matrix.md](./m01-consumer-migration-matrix.md) C13（词法读、build only、"facts emitted, not re-parsed"）。
+- 退役条件：#1558 前发布的产物版本退出受支持窗口（消费方按
+  [m01-consumer-migration-matrix.md](./m01-consumer-migration-matrix.md) 完成重编译迁移）之后，把这段 permissive 读收紧为对 ONE 样式创作语法（`semantic-core/style-imports.ts`）的严格准入；届时旧形状在打包消费证据上 fail closed，而不是静默走旧路径。
+- 处置：条件到即删。
+
+### 28. `registerOpenUi` published-API 空操作垫片（`@openelement/ui`）——条件到即删
+
+- 所有者：`@openelement/ui`（`packages/ui/src/register.ts` 是唯一声明点：`registerOpenUi(registry?)` 的签名、空注册表语义与其文档注释都由该模块拥有；2026-11-20 owner-approved delegated remediation 决定保留该 published API 并登记，不删除）。
+- 方向：published API 调用方（`registerOpenUi(registry?)`）→ 空注册表（无副作用）；该调用今天不注册任何元素，返回值 `void`。
+- 存在原因：`registerOpenUi` 是已发布的公开 API，外部消费者可能仍在 import 或调用它，删除属于 P5 退役决定而不是一次迁移的副作用。函数体为空的唯一原因是六个 first-party UI 组件（`open-input`、`open-button` 等）已全部迁移到 generated lane，类组件注册表已空；它因此成为纯兼容面而不是功能面。
+- 退役条件：当 `@openelement/ui` 不再发布该 export，或全部消费方改用 generated entry 时删除 `registerOpenUi`（连同 `packages/ui/src/register.ts` 的导出与其 snapshot 行）；或随下一次 breaking alpha 删除（该 export 属 experience-edition 面，不需要兼容适配器）。删除时同步更新 `docs/release/public-interface-snapshot.json` 与 ADR-0182 的实现记录。
+- 处置：条件到即删（2026-11-20 登记：保留 published API，条件到即执行删除，不等下一次评审）。

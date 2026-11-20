@@ -3,9 +3,25 @@
  *
  * Supported: an async function or async arrow whose body is still one JSX
  * return, with `await load()`, `await load(<literal or props.field>)`, or
- * `await props.field` in a text child or a nested server-component prop.
- * An async parent awaits an imported async child. Synchronous components keep
- * their previous emission. Everything else in this file is a located OEC9032.
+ * `await props.field` in a text child (D1) or a nested server-component prop
+ * (D2 — `<Child value={await load()} />`, where `Child` is another server
+ * function component composed by direct call; the definition's two positions
+ * are `docs/architecture/m14-full-await-definition.md` §2). An async parent
+ * awaits an imported async child. Synchronous components keep their previous
+ * emission. Everything else in this file is a located OEC9032.
+ *
+ * D2 note: `Child` must be IMPORTED. A same-module sibling function is not an
+ * admitted nested component (`<Child> is not a server function component —
+ * import it from the module that exports it`), so a D2 fixture defines the
+ * child in a separate module and resolves it through `resolveModule` — the
+ * same shape R7's composition row uses.
+ *
+ * The matrix's `T+`/`T−` (type-level) cells have NO fixture in this suite: it
+ * is a compile/emit suite only, with no TypeScript-program or type-check row.
+ * `packages/compiler/__tests__/semantic-ir/m03-frontend-matrix.test.ts` covers
+ * the TSX-* T cells it names, and it has no TSX-17 row either, so the
+ * "type-checks with the authored types" / "a type error is reported for the
+ * stated misuse" cells for the server async boundary are unclaimed here.
  *
  * Executing the awaited HTML is the router function-page chain, which calls
  * the published renderFunctionPageAwaited seam. Emission rows use the direct
@@ -23,6 +39,9 @@
  * untyped props is pinned in the element suite (`server-html.test.ts`).
  */
 import { describe, expect, test } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { compiledElementPlugin } from '../src/compiler.ts';
 import {
   compileServerComponentIfAdmitted,
@@ -36,6 +55,11 @@ import {
 import type { ServerComponentCompileOptions } from '../src/internal/compiler/semantic-core/server-component.ts';
 
 const FILE = '/proj/app/server/page.tsx';
+
+/** The repository root — the scratch modules below live inside it so the
+ * emitted `@openelement/element/server` specifier resolves through the
+ * workspace's own package exports (no machine-path rewriting). */
+const REPO_ROOT = join(import.meta.dirname!, '..', '..', '..');
 
 function compile(
   source: string,
@@ -209,6 +233,103 @@ describe('full-await emission stays inside the admitted grammar', () => {
     expect(textAt).toBeGreaterThan(0);
     expect(childAt).toBeGreaterThan(textAt);
     expect(body).toContain('"n": "b"');
+  });
+
+  test('D2: a nested server-component prop awaits its value as the whole prop value', () => {
+    // The definition's D2 row (`docs/architecture/m14-full-await-definition.md`
+    // §2): `<Child value={await load()} />` — ONE leading await as the WHOLE
+    // prop value, `Child` another server function component composed by direct
+    // call. This is not the attribute row: `Child` is a server component, so
+    // the value crosses as the child's ARGUMENT (D2), never as a host
+    // attribute (which is refused by `serverAwaitRefusal('attribute')`).
+    const result = compile(
+      `
+        import { Child } from './child.tsx';
+        export async function Page() {
+          return <article><Child value={await load()} /></article>;
+        }
+      `,
+      {
+        resolveModule: (specifier) =>
+          specifier === './child.tsx'
+            ? 'export function Child(props: { value: string }) { return <span>{props.value}</span>; }'
+            : undefined,
+      },
+    );
+    const body = result!.code;
+    // The recorded call shape the definition names: the child is invoked with
+    // an object literal whose prop value IS the awaited expression. A sync
+    // child is composed by a plain direct call (the parent alone is async).
+    expect(body).toContain('Child({ "value": await load() })');
+    expect(body).toContain('export async function Page()');
+    // The await is the WHOLE prop value: it did not degrade into a text sink,
+    // nor into a host tag's attribute.
+    expect(body).not.toContain('__t(await load())');
+    expect(body).not.toContain('"value": "');
+  });
+
+  test('D2: an async child is composed by an awaited direct call carrying the awaited prop', () => {
+    // The composition half (R7) meets D2: the parent's direct call is itself
+    // awaited, and the child's prop value is the parent's await. Both awaits
+    // are generated — the author wrote exactly one, in D2 position.
+    const result = compile(
+      `
+        import { Child } from './child.tsx';
+        export async function Page() {
+          return <article><Child value={await load()} /></article>;
+        }
+      `,
+      {
+        resolveModule: (specifier) =>
+          specifier === './child.tsx'
+            ? `export async function Child(props: { value: string }) {
+                 return <span>{props.value}</span>;
+               }`
+            : undefined,
+      },
+    );
+    expect(result!.code).toContain('await Child({ "value": await load() })');
+  });
+
+  test('D2: the settled output carries the awaited value, composed through the child', async () => {
+    // Execution proof for the D2 row (the neighbouring D1 rows assert emitted
+    // text; this one closes the loop): the parent's await settles BEFORE the
+    // child is invoked, and the child's own body renders the value. The
+    // modules are emitted into a scratch directory inside the repository so
+    // the emitted `@openelement/element/server` specifier resolves through the
+    // workspace's own exports — the real server helpers, not a stub.
+    const childSource =
+      'export function Child(props: { value: string }) { return <span>{props.value}</span>; }';
+    const pageSource = `
+      import { Child } from './child.tsx';
+      export async function Page() {
+        return <article><Child value={await load()} /></article>;
+      }
+    `;
+    const dir = mkdtempSync(join(REPO_ROOT, '.tmp-m14-d2-'));
+    try {
+      const child = compileServerComponentModule(childSource, join(dir, 'child.tsx'), {});
+      writeFileSync(join(dir, 'child.ts'), child!.code);
+      const page = compileServerComponentModule(pageSource, join(dir, 'page.tsx'), {
+        resolveModule: (specifier) => (specifier === './child.tsx' ? childSource : undefined),
+      });
+      // The emitted page imports `./child.tsx`; the scratch pair is two plain
+      // modules, so point the import at the emitted child file.
+      writeFileSync(
+        join(dir, 'page.ts'),
+        "async function load() { return 'settled-value'; }\n" +
+          page!.code.replace("from './child.tsx'", "from './child.ts'"),
+      );
+      const mod = (await import(pathToFileURL(join(dir, 'page.ts')).href)) as {
+        Page: () => Promise<string>;
+      };
+      const html = await mod.Page();
+      expect(html).toContain('settled-value');
+      expect(html).not.toContain('[object Promise]');
+      expect(html).toBe('<article><span>settled-value</span></article>');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test('the artifact still imports only the server helper entry', () => {
@@ -420,6 +541,49 @@ describe('previously untested refused shapes keep a located OEC9032', () => {
       `,
       'api.get(props.id)',
       'the refused shape is the awaited operand or a larger expression',
+    );
+  });
+
+  test('an authored await of a reserved generated helper is refused as a reserved callee', () => {
+    expectLocatedAwaitRefusal(
+      `
+        export async function Page() {
+          return <p>{await __t("x")}</p>;
+        }
+      `,
+      '__t("x")',
+      'the refused shape is a reserved callee; that callee belongs to the generated constructor module — await the authored function instead',
+    );
+  });
+
+  test('an await of eval is refused as a reserved callee', () => {
+    expectLocatedAwaitRefusal(
+      `
+        export async function Page() {
+          return <p>{await eval("x")}</p>;
+        }
+      `,
+      'eval("x")',
+      'the refused shape is a reserved callee; that callee belongs to the generated constructor module — await the authored function instead',
+    );
+  });
+
+  test('an authored await of an imported server component is refused — composition auto-awaits', () => {
+    expectLocatedAwaitRefusal(
+      `
+        import { Child } from './child.tsx';
+        export async function Page() {
+          return <p>{await Child("a")}</p>;
+        }
+      `,
+      'Child("a")',
+      'the refused shape is a reserved callee; that callee belongs to the generated constructor module — await the authored function instead',
+      {
+        resolveModule: (specifier) =>
+          specifier === './child.tsx'
+            ? 'export async function Child(props: { n: string }) { return <span>{props.n}</span>; }'
+            : undefined,
+      },
     );
   });
 });

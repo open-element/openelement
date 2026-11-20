@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the frozen executor-load predicate, the artifact schema and its evaluator are deliberately one module so writer and checker cannot drift — the file owns exactly those three facts and nothing else; the boundary is the deterministic .vite/oe-browser-entry-graph.json artifact written by browser-entry-graph.ts in the router client build and re-evaluated by the checker from raw chunk/module facts, with anything missing, malformed or untrustworthy UNPROVEN (exit 2), never silently MET.
 /**
  * browser-entry-graph-artifact.ts — the M10-P1 browser-entry module-graph
  * artifact contract and its ONE evaluator.
@@ -593,6 +594,23 @@ function decodeStrictBase64Url(payload: string): string | null {
  * construction (e.g. `packages//element/src/…` would never equal the gate id);
  * the checker rejects the artifact instead of judging a different string.
  */
+/**
+ * The app-root spelling: a workspace-relative directory, OR `.` when the app IS
+ * the workspace root.
+ *
+ * `.` is the honest value for that case — a published consumer installs the app
+ * with no workspace file above it, so `relative(workspaceRoot, root)` is empty
+ * and there is no directory name to report. The general path predicate rejects
+ * `.` because a MODULE or CHUNK id must name a file; an app root is the one field
+ * where "here" is a real location. Without this the capture fails closed as
+ * `app-root-outside-workspace` for every installed app, which made P1 undecidable
+ * exactly where it matters most.
+ */
+export function isBrowserEntryGraphAppRoot(value: unknown): value is string {
+  if (value === '.') return true;
+  return isNormalizedBrowserEntryGraphRelativePath(value);
+}
+
 export function isNormalizedBrowserEntryGraphRelativePath(value: unknown): value is string {
   if (typeof value !== 'string' || value === '') return false;
   // Control characters (including NUL), backslashes and query suffixes never
@@ -966,7 +984,7 @@ function parseArtifact(
   const app = value.app;
   if (
     !isRecord(app) ||
-    !isNormalizedBrowserEntryGraphRelativePath(app.root) ||
+    !isBrowserEntryGraphAppRoot(app.root) ||
     !isNormalizedBrowserEntryGraphRelativePath(app.outDir) ||
     typeof app.base !== 'string'
   ) {

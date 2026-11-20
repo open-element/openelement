@@ -8,20 +8,29 @@
  *
  * The vocabulary is private to the compiled-authoring chain. It is not a
  * public ABI, no product entry depends on it, and nothing outside a generated
- * module may read these comments. There are two ordinal-bearing families with
- * deliberately distinct prefixes — static sibling ranges (`oe:r:` / `oe:/r:`)
- * and dynamic text slots (`oe:t:` / `oe:/t:`) — plus the fixed `when`/`each`
- * anchors, their closing markers, and the per-entry list key marker (`oe:k:`).
+ * module may read these comments. There are three ordinal-bearing families
+ * with deliberately distinct prefixes — static sibling ranges (`oe:r:` /
+ * `oe:/r:`), dynamic text slots (`oe:t:` / `oe:/t:`) and light-root slot
+ * anchors (`oe:s:` / `oe:/s:`) — plus the fixed `when`/`each` anchors, their
+ * closing markers, and the per-entry list key marker (`oe:k:`).
  * The `when` family has a closing marker (`oe:/when`) so an empty branch is
  * decidable; it deliberately has no branch id. The `each` family has a
  * list-level closing marker (`oe:/each`) and exactly one `oe:k:` marker per
  * entry; there is no per-entry end marker. Neither parser accepts the other
  * family's spelling.
  *
+ * The slot-anchor family is the only one whose payload is not just an ordinal:
+ * it carries the slot NAME as well, because a light-root producer's `<slot>`
+ * elements are a finished string and the serializer that substitutes caller
+ * children into them has no second lookup to run. The name rides as UTF-8
+ * lowercase hex (`./utf8-hex.ts`, the same alphabet the list-key token uses),
+ * so a name containing `-->` cannot terminate the comment early.
+ *
  * @module ./markers.ts
  */
 
 import { isCanonicalListKeyToken, LIST_KEY_UNSUPPORTED } from './list-key.ts';
+import { decodeUtf8Hex, encodeUtf8Hex } from './utf8-hex.ts';
 
 /**
  * A marker is a branded value, not a string. A generated module can only
@@ -141,6 +150,40 @@ export function textSlotMarker(ordinal: number, end = false): Marker {
   return makeMarker((end ? TEXT_CLOSE : TEXT_OPEN) + ordinal);
 }
 
+const SLOT_OPEN = 'oe:s:';
+const SLOT_CLOSE = 'oe:/s:';
+/**
+ * Slot-name payload separator. `oe:s:<ordinal>:<hex>` — the ordinal first
+ * because every other ordinal-bearing family leads with it, then the name.
+ * The separator cannot collide with a name payload: the payload is hex only.
+ */
+const SLOT_NAME_SEPARATOR = ':';
+
+/**
+ * One light-root slot anchor. The pair surrounds a `<slot>` ELEMENT in a
+ * generated light-root producer's bytes so the serializer can substitute the
+ * caller's children into exactly that element without pattern-matching markup.
+ *
+ * Three things make this family distinct from `rangeMarker`, and the
+ * distinction is the reason it exists:
+ *
+ * - a range marker names a SIBLING RANGE inside a claim parent and is consumed
+ *   by `claimStaticSiblingRange` for the 0-mutation claim verification; an
+ *   anchor names a single `<slot>` region and is consumed by the SSR
+ *   serializer, never by a claim;
+ * - an anchor carries the slot NAME (UTF-8 hex) because the serializer reading
+ *   a finished string has no structure to look the name up in;
+ * - the empty name (`''`, the default slot) is a legal payload and encodes to
+ *   the empty hex string, so `oe:s:0:` is the default slot's start and
+ *   `oe:/s:0:` its end. A name is NOT normalized here: the producer bakes the
+ *   name exactly as the element lane's `slotNameOf` reads it.
+ */
+export function slotAnchorMarker(ordinal: number, name: string, end = false): Marker {
+  return makeMarker(
+    (end ? SLOT_CLOSE : SLOT_OPEN) + ordinal + SLOT_NAME_SEPARATOR + encodeUtf8Hex(name),
+  );
+}
+
 /** Read a marker's text. The only sanctioned way to get the string out. */
 export function markerText(marker: Marker): string {
   return marker.text;
@@ -185,6 +228,34 @@ export function parseTextSlotMarker(
     if (!value.startsWith(prefix)) continue;
     const ordinal = canonicalOrdinal(value.slice(prefix.length));
     return ordinal === null ? null : { end, ordinal };
+  }
+  return null;
+}
+
+/**
+ * Read a light-root slot anchor. The value is `oe:s:<ordinal>:<hex>` or
+ * `oe:/s:<ordinal>:<hex>`; both the ordinal and the name must be canonical, so
+ * a malformed/trailing/foreign comment reads as `null` instead of a guess.
+ * The returned name is the decoded UTF-8 string, and `''` is the default slot.
+ *
+ * A payload whose bytes are not well-formed UTF-8 is also `null`: this parser
+ * never substitutes a replacement character, because a repaired name could
+ * match a projection the producer never wrote.
+ */
+export function parseSlotAnchorMarker(
+  value: string | null,
+): { end: boolean; ordinal: number; name: string } | null {
+  if (value === null) return null;
+  for (const end of [false, true]) {
+    const prefix = end ? SLOT_CLOSE : SLOT_OPEN;
+    if (!value.startsWith(prefix)) continue;
+    const rest = value.slice(prefix.length);
+    const separator = rest.indexOf(SLOT_NAME_SEPARATOR);
+    if (separator < 0) return null;
+    const ordinal = canonicalOrdinal(rest.slice(0, separator));
+    if (ordinal === null) return null;
+    const name = decodeUtf8Hex(rest.slice(separator + 1));
+    return name === null ? null : { end, ordinal, name };
   }
   return null;
 }

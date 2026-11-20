@@ -34,8 +34,8 @@ npm install @openelement/ui
 | ----------------- | ------------------- | ---------------------------------------------------------------- |
 | `OpenButton`      | `open-button`       | Button component.                                                |
 | `OpenInput`       | `open-input`        | Input component.                                                 |
-| `OpenCodeBlock`   | `open-code-block`   | Code block with copy behavior; highlighting is the host's build-time step. |
-| `OpenThemeToggle` | `open-theme-toggle` | Theme switch island.                                             |
+| `OpenCodeBlock`   | `open-code-block`   | Code block with copy behavior; highlighting is the host's build-time step (authored function component; the element class is build-emitted, not exported). |
+| `OpenThemeToggle` | `open-theme-toggle` | Theme switch island (authored function component; the element class is build-emitted, not exported). |
 | `OpenDialog`      | `open-dialog`       | Modal/non-modal dialog.                                          |
 | `OpenDropdown`    | `open-dropdown`     | Popover-first dropdown.                                          |
 

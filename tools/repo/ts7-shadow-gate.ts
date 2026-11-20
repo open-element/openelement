@@ -1,8 +1,16 @@
 /**
  * TypeScript 7 shadow gate (1.0 Alpha convergence — "TypeScript 7: split
- * decision"). An INDEPENDENT SHADOW GATE, not a required gate: it is wired
- * into CI as a non-blocking job and is deliberately absent from
- * verify:core/release:check. It graduates to required only after a complete
+ * decision").
+ *
+ * Form: independent shadow gate (manual, deliberately unwired) — NOT an
+ * emergency drift guard, so it carries no RETIRE condition and no temporary
+ * intent: it is a diagnostic lane someone runs on purpose.
+ *
+ * An INDEPENDENT SHADOW GATE, not a required gate: nothing wires
+ * it into CI or any gate layer — there is no job for it in .github/workflows
+ * and no step in gate.ts, gate:source, gate:release, verify:core or
+ * release:check. Its only caller is the manual tools/repo task
+ * `gate:ts7:shadow`. It graduates to required only after a complete
  * matching matrix against the current checker.
  *
  * The layered TypeScript strategy this gate enforces/observes:
@@ -40,7 +48,7 @@
  * the matrix is reproducible locally and in CI.
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -155,6 +163,107 @@ const ROUTER_ROUTE_MODE_ENTRIES = [
   '@openelement/router/document',
 ];
 
+// ─── Secondary-copy guard: entry lists ⊆ package exports maps ───────────────
+
+/**
+ * The hand-maintained entry lists above are secondary copies of each
+ * package's exports map. When a subpath export disappears from a manifest,
+ * the temp consumer's import fails deep inside a matrix cell with a bare
+ * module-resolution error that says nothing about the drift. This guard
+ * derives the allowed specifier set from the manifests themselves and fails
+ * closed BEFORE any cell runs, naming the stale entries.
+ */
+const ENTRY_LIST_SOURCES = [
+  {
+    list: ELEMENT_ENTRIES,
+    packageName: '@openelement/element',
+    manifestPath: 'packages/element/package.json',
+  },
+  {
+    list: COMPILER_PACKAGE_ENTRIES,
+    packageName: '@openelement/compiler',
+    manifestPath: 'packages/compiler/package.json',
+  },
+  {
+    list: ROUTER_ROUTE_MODE_ENTRIES,
+    packageName: '@openelement/router',
+    manifestPath: 'packages/router/package.json',
+  },
+] as const;
+
+/** exports keys → public specifiers: '.' is the bare name, './x' the subpath. */
+function exportsSpecifierSet(
+  packageName: string,
+  exportsMap: Record<string, unknown>,
+): Set<string> {
+  const specifiers = new Set<string>();
+  for (const key of Object.keys(exportsMap)) {
+    if (key === '.') specifiers.add(packageName);
+    else if (key.startsWith('./')) specifiers.add(`${packageName}/${key.slice(2)}`);
+  }
+  return specifiers;
+}
+
+/**
+ * The drift findings: every hand-listed specifier must exist in its
+ * package's exports map, and every map must be readable and non-empty (an
+ * unreadable manifest fails closed too — the guard cannot vouch for a list
+ * it cannot check).
+ */
+function staleEntryFindings(
+  manifests: ReadonlyMap<string, Record<string, unknown> | undefined>,
+): string[] {
+  const findings: string[] = [];
+  for (const source of ENTRY_LIST_SOURCES) {
+    const exportsMap = manifests.get(source.manifestPath);
+    if (exportsMap === undefined || typeof exportsMap !== 'object') {
+      findings.push(
+        `${source.manifestPath} has no readable exports map — refusing to let the ` +
+          `hand-maintained ${source.packageName} entry list pass uncovered.`,
+      );
+      continue;
+    }
+    const allowed = exportsSpecifierSet(source.packageName, exportsMap);
+    if (allowed.size === 0) {
+      findings.push(
+        `${source.manifestPath} declares an empty exports map — refusing to let the ` +
+          `hand-maintained ${source.packageName} entry list pass uncovered.`,
+      );
+      continue;
+    }
+    const stale = source.list.filter((entry) => !allowed.has(entry));
+    if (stale.length > 0) {
+      findings.push(
+        `${source.manifestPath}: exports map no longer contains ${stale.join(', ')} — ` +
+          `remove the stale entries from this gate's hand-maintained ${source.packageName} list.`,
+      );
+    }
+  }
+  return findings;
+}
+
+function runSecondaryCopyGuard(): void {
+  const manifests = new Map<string, Record<string, unknown> | undefined>();
+  for (const source of ENTRY_LIST_SOURCES) {
+    try {
+      const parsed = JSON.parse(readFileSync(join(repoRoot, source.manifestPath), 'utf8')) as {
+        exports?: Record<string, unknown>;
+      };
+      manifests.set(source.manifestPath, parsed.exports);
+    } catch {
+      manifests.set(source.manifestPath, undefined);
+    }
+  }
+  const findings = staleEntryFindings(manifests);
+  if (findings.length > 0) {
+    console.error(
+      'ts7-shadow-gate: hand-maintained entry list drift — failing closed before the matrix:',
+    );
+    for (const finding of findings) console.error(`  ${finding}`);
+    process.exit(1);
+  }
+}
+
 function consumerProgram(): string {
   const lines: string[] = [];
   const all = [...ELEMENT_ENTRIES, ...COMPILER_PACKAGE_ENTRIES, ...ROUTER_ROUTE_MODE_ENTRIES];
@@ -185,6 +294,8 @@ const TSCONFIG_BASE = {
 };
 
 // ─── Gate ───────────────────────────────────────────────────────────────────
+
+runSecondaryCopyGuard();
 
 const packages = await readPackages();
 const tarballs = new Map(packages.map((pkg) => [pkg.name, join(repoRoot, tarballPath(pkg))]));

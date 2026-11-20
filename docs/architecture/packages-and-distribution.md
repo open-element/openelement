@@ -20,17 +20,14 @@ The repository publishes six public packages for two core products:
   command, it is `start --mode=preview` (static-only serve, which refuses a build carrying
   a request-time server). `dev` is deliberately bin-only: no application imports a dev
   server, so it has no subpath.
-  A Route Mode **install** is the published manifest, not the workspace one. The tarball's
-  `dependencies` are `@openelement/protocol`, `@openelement/compiler`,
-  `@openelement/url-pattern-list`, `mime`, `pathe`, `postcss`, `postcss-value-parser` and
-  the pinned `typescript`; the host tooling — `vite`, `@openelement/element`, `hono`,
-  `@hono/vite-dev-server`, `marked`, `@tailwindcss/vite` and `unocss` — is declared as
-  **optional peers**, which npm never auto-installs, so a Route Mode install pulls no
-  Vite, Element, or Nitro host tooling. The pack step is what performs that split: it
-  moves `@openelement/element` out of `dependencies` into the optional-peer set and strips
-  every optional peer from `dependencies`
-  (`tools/release/publish-npm.ts`), which is why the workspace manifest still lists
-  Element and Vite as dependencies while the published artifact does not.
+  A Route Mode **install** is the published manifest, not the workspace one. The
+  authoritative source for what a tarball installs is the pack split in
+  `tools/release/publish-npm.ts` together with each package's own `package.json`;
+  this document deliberately does not enumerate `dependencies` or the optional-peer
+  set — a hand-copied manifest with no generator and no drift guard rots the moment
+  the pack split moves. The conclusion that matters here: host tooling rides as
+  optional peers that npm never auto-installs, so a Route Mode install pulls no
+  Vite, Element, or Nitro host toolchain.
   `nitro` is deliberately not declared even as an optional peer: applications that deploy
   through `./nitro-mount` install `nitro` themselves (pinned line:
   `tools/release/nitro-compatibility.ts`, Vite 8 compatible).

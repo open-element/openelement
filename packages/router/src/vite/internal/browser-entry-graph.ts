@@ -48,6 +48,7 @@ import {
   deriveBrowserEntryGraphSummary,
   browserEntryGraphGateListDigest,
   executorEntryModuleIds,
+  isBrowserEntryGraphAppRoot,
   isNormalizedBrowserEntryGraphRelativePath,
   normalizeBrowserEntryGraphModuleId,
   serializeBrowserEntryGraphArtifact,
@@ -74,7 +75,7 @@ export interface BrowserEntryGraphPluginOptions {
   outDir: string;
   /** The app's public base (`ctx.phase3.base || '/'`). */
   base: string;
-  /** The machine-independent identity anchor (`findBuildWorkspaceRoot(root) ?? root`). */
+  /** The machine-independent identity anchor (`findBuildWorkspaceRootOrUndefined(root) ?? root`). */
   workspaceRoot: string;
   /** The resolved virtual client entry id (`\0virtual:open-client-entry`). */
   clientEntryModuleId: string;
@@ -392,12 +393,15 @@ function captureBrowserEntryGraph(
 
   // App facts: workspace-relative root, outDir relative to that root. No
   // absolute path may reach the artifact.
-  const rootRelative = relative(options.workspaceRoot, options.root).replace(/\\/gu, '/');
+  const rawRootRelative = relative(options.workspaceRoot, options.root).replace(/\\/gu, '/');
+  // An app that IS the workspace root (a published consumer: the project has no
+  // workspace file above it) has no directory name to report; `.` is that fact,
+  // and it is a valid app root even though it is not a valid MODULE path.
+  const rootRelative = rawRootRelative === '' ? '.' : rawRootRelative;
   if (
-    rootRelative === '' ||
     rootRelative.startsWith('../') ||
     rootRelative === '..' ||
-    !isNormalizedBrowserEntryGraphRelativePath(rootRelative)
+    !isBrowserEntryGraphAppRoot(rootRelative)
   ) {
     throw new CaptureIncomplete('app-root-outside-workspace', ['app-root']);
   }

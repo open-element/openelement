@@ -27,6 +27,7 @@ import { DEFAULT_ISLANDS_DIR, DEFAULT_ROUTES_DIR } from '../paths.ts';
 import { fileToTagName } from './route-scanner.ts';
 import type { ScannedRouteEntry } from './route-scanner.ts';
 import {
+  attachPackageIslandHostIdentities,
   buildPackageIslandDecls,
   expandIslandDeliveryDecl,
   resolveIslandHydrate,
@@ -45,11 +46,14 @@ import {
 } from './generated-element-host-metadata.ts';
 import { selectRendererAdapter } from './renderer-adapter.ts';
 import {
+  buildPageClassificationContext,
+  classifyPageRoute,
+  PageClassificationCode,
   pageKindOf,
-  resolvePageKind,
-  type LocalPageIsland,
+  type GeneratedElementPageFact,
   type PageKindCarrier,
 } from './page-classification.ts';
+import type { RouteDocumentStyleLinks } from './entry-route-helpers.ts';
 import { buildError, DescriptorErrorCode } from '../../../internal/error-codes.ts';
 
 function normalizeLayoutImport(importPath: string): string {
@@ -124,6 +128,12 @@ export function buildEntryDescriptor(
     warnOnDefaultCors?: boolean;
     /** Declared project locales; absent keeps the single-locale descriptor shape. */
     i18n?: { locales: string[]; defaultLocale: string };
+    /**
+     * Build-only route → document stylesheet facts (task12), obtained by the
+     * build from the router's internal carrier getter. Rides the descriptor as
+     * a build-only side channel (never the public protocol shape / PageRouteDecl).
+     */
+    routeDocumentStyleLinks?: RouteDocumentStyleLinks;
   } = {},
 ): EntryDescriptor {
   const routesDir = options.routesDir || DEFAULT_ROUTES_DIR;
@@ -422,19 +432,15 @@ export function buildEntryDescriptor(
   // never from a runtime module-shape read. The verdict rides each page
   // declaration as build-only metadata (`PageKindCarrier`); the public
   // `PageRouteDecl` protocol type is unchanged.
-  const pageClassificationContext = {
+  // ONE page-classification context builder (shared with the client build's
+  // generated-page island reachability seed; P6: no second islands mapping).
+  const pageClassificationContext = buildPageClassificationContext({
     routesDir,
     islandsDir,
-    islands: islandTagNames.map((tagName, index): LocalPageIsland => {
-      const meta = islandMeta[tagName];
-      const host = readGeneratedElementHost(meta);
-      return {
-        filePath: islandFiles[index] ?? `${tagName}.tsx`,
-        tagName,
-        generatedLaneKind: host === undefined ? undefined : host.kind,
-      };
-    }),
-  };
+    islandTagNames,
+    islandFiles,
+    islandMeta,
+  });
 
   // --- Routes ---
   const apiRoutes: ApiRouteDecl[] = routes
@@ -459,12 +465,20 @@ export function buildEntryDescriptor(
         ? (r.params ?? [...r.path.matchAll(/:([^/{]+)(?:\{[^}]*\})?/g)].map((m) => m[1]))
         : [];
       const fallbackTagName = fileToTagName(r.filePath);
+      // M11-2: the ONE build-time verdict (kind + generated-page host fact).
+      // A generated page's tag IS the island scan's tag — the tag the compiler
+      // emitted the class and host producer under — so every downstream
+      // expression uses this build fact and never reads `__partProgram`.
+      const classification = classifyPageRoute(r, pageClassificationContext);
+      const generatedPage: GeneratedElementPageFact | undefined =
+        classification.generatedElementPage;
+      const pageTag = generatedPage === undefined ? undefined : generatedPage.tagName;
       const pageDecl: PageRouteDecl & PageKindCarrier = {
         kind: 'page' as const,
         path: r.path,
         varName: `$${r.varName}`,
         filePath: r.filePath,
-        defaultTagName: fallbackTagName,
+        defaultTagName: pageTag ?? fallbackTagName,
         // #960 (registration decoupling, Option 2) + #1276 (B1.3-F1): a
         // definePage route's tagName export only names a content element and
         // never drives registration. For every page route the generated entry
@@ -472,7 +486,8 @@ export function buildEntryDescriptor(
         // at evaluation time (__resolvePageTag); the tag here is the
         // resolver's path-derived fallback, used only when the class carries
         // no compiled program.
-        tagName: r.definePage === true ? fallbackTagName : r.tagName || fallbackTagName,
+        tagName:
+          pageTag ?? (r.definePage === true ? fallbackTagName : r.tagName || fallbackTagName),
         importPath: `/${routesDir}/${r.filePath}`,
         isDynamic,
         paramNames,
@@ -481,10 +496,12 @@ export function buildEntryDescriptor(
         // entry registers nothing for the route.
         ...(r.functionPage === undefined ? {} : { functionPage: r.functionPage }),
         ...(r.streamManifest ? { streamManifest: r.streamManifest } : {}),
-        // Build-only page-kind fact (M11-1): route/page generation branches on
-        // this instead of a runtime module-shape check. The carrier is cast-free
-        // metadata on the protocol declaration object.
-        pageKind: resolvePageKind(r, pageClassificationContext),
+        // Build-only page-kind fact (M11-1/M11-2): route/page generation
+        // branches on this instead of a runtime module-shape check. The carrier
+        // is cast-free metadata on the protocol declaration object; the public
+        // protocol type stays unchanged.
+        pageKind: classification.pageKind,
+        ...(generatedPage === undefined ? {} : { generatedElementPage: generatedPage }),
       };
       return pageDecl;
     });
@@ -589,9 +606,9 @@ export function buildEntryDescriptor(
     },
   );
 
-  const packageIslandDecls: IslandDecl[] = buildPackageIslandDecls(
+  const packageIslandDecls: IslandDecl[] = attachPackageIslandHostIdentities(
+    buildPackageIslandDecls(packageManifests, options.upgradeStrategy),
     packageManifests,
-    options.upgradeStrategy,
   );
 
   const compilerBehaviorIslands = compilerBehaviorDeclarations(
@@ -610,6 +627,54 @@ export function buildEntryDescriptor(
     cemClassifications,
     options.foreignTags || [],
   );
+
+  // M11-2 bounded admission (temporary boundary): ONE generated island per page
+  // route. `definePage` attaches the page descriptor to the component class
+  // object, so two routes importing the same generated island would overwrite
+  // each other's page metadata (head/props/error/renderIntent) at module
+  // evaluation. Reject at build with the existing coded refusal instead of
+  // silently shipping whichever route evaluated last.
+  {
+    const generatedPageRoutes = new Map<string, string[]>();
+    for (const route of pageRoutes) {
+      const generated = (route as PageRouteDecl & PageKindCarrier).generatedElementPage;
+      if (generated === undefined) continue;
+      const paths = generatedPageRoutes.get(generated.tagName);
+      if (paths === undefined) generatedPageRoutes.set(generated.tagName, [route.path]);
+      else paths.push(route.path);
+    }
+    for (const [tag, paths] of generatedPageRoutes) {
+      if (paths.length < 2) continue;
+      throw buildError(
+        PageClassificationCode.GENERATED_ELEMENT_PAGE_UNSUPPORTED,
+        `[openElement] generated element <${tag}> is the page component of multiple routes ` +
+          `(${paths.join(', ')}). A generated page's descriptor is attached to its class by ` +
+          'definePage, so sharing one generated component across routes would make their page ' +
+          'metadata overwrite each other. Temporary boundary: one route one generated component — ' +
+          'give each page route its own generated island (each route imports its own generated ' +
+          'function component).',
+      );
+    }
+  }
+
+  // M11-2 bounded admission: a generated page root renders through the
+  // compiler-emitted host producer paired by the entry's island registration,
+  // so the island must be SSR-admitted (producer identity was already proven by
+  // the classifier) — a `ssr: false` / rejected island cannot serve a page root
+  // and is refused explicitly instead of being silently downgraded.
+  for (const route of pageRoutes) {
+    const generated = (route as PageRouteDecl & PageKindCarrier).generatedElementPage;
+    if (generated === undefined) continue;
+    if (!ssrAdmissionPlan.renderableTags.includes(generated.tagName)) {
+      throw buildError(
+        DescriptorErrorCode.MODULE_IMPORT,
+        `[openElement] generated page route ${route.path} (${route.filePath}) renders generated ` +
+          `element <${generated.tagName}>, but that island is not SSR-admitted in this build ` +
+          '(set openElement.ssr: true on the island). A page root needs the compiler-emitted ' +
+          'host producer; disabling SSR would leave the page without its server render.',
+      );
+    }
+  }
 
   // --- Document ---
   const document: DocumentConfig = {
@@ -658,7 +723,7 @@ export function buildEntryDescriptor(
     (component) => !reservedTags.has(component.tagName),
   );
 
-  return {
+  const descriptor: EntryDescriptor = {
     isSSG,
     imports,
     middleware,
@@ -683,6 +748,18 @@ export function buildEntryDescriptor(
     // entry stays byte-identical to pre-i18n output.
     ...(options.i18n ? { i18n: options.i18n } : {}),
   };
+  // Build-only side channel (task12): never part of the public protocol shape.
+  const routeDocumentLinks = options.routeDocumentStyleLinks;
+  if (routeDocumentLinks !== undefined && Object.keys(routeDocumentLinks).length > 0) {
+    const sorted: Record<string, readonly string[]> = {};
+    for (const route of Object.keys(routeDocumentLinks).sort()) {
+      sorted[route] = Object.freeze([...(routeDocumentLinks[route] ?? [])]);
+    }
+    (
+      descriptor as EntryDescriptor & { routeDocumentStyleLinks?: RouteDocumentStyleLinks }
+    ).routeDocumentStyleLinks = Object.freeze(sorted);
+  }
+  return descriptor;
 }
 
 export function buildSsrAdmissionPlan(

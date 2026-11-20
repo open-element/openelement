@@ -300,106 +300,32 @@ test.describe('focus-visible rings on a real keyboard path', () => {
   });
 });
 
-test.describe('open-button disabled states', () => {
-  /**
-   * Install a listener and count what the component announces, so the rows
-   * below can assert the absence of an event rather than the absence of an
-   * observation.
-   */
-  const watch = (page: import('@playwright/test').Page, selector: string) =>
-    page.evaluate(
-      ([query, target]) => {
-        const find = eval(query) as (selector: string) => Element[];
-        const authored = find('open-button')[0]!;
-        const host = authored.cloneNode(false) as Element;
-        if (target === 'native') host.removeAttribute('href');
-        else host.setAttribute('href', '/roadmap/');
-        host.setAttribute('disabled', '');
-        host.append(target === 'native' ? 'Disabled' : 'Disabled link');
-        authored.after(host);
-        (window as unknown as { events: number }).events = 0;
-        host.addEventListener('open-click', () => {
-          (window as unknown as { events: number }).events += 1;
-        });
-        return true;
-      },
-      [DEEP_QUERY, selector === 'native' ? 'native' : 'link'],
-    );
-
-  const events = (page: import('@playwright/test').Page) =>
-    page.evaluate(() => (window as unknown as { events: number }).events);
-
-  test('the native form: a real press and a real Enter reach nothing', async ({ page }) => {
-    await page.goto(PAGE);
-    await watch(page, 'native');
-    const control = page.locator('open-button[disabled] button').last();
-    await expect(control).toHaveAttribute('disabled', '');
-    const style = await control.evaluate((element) => {
-      const cs = getComputedStyle(element);
-      return { opacity: cs.opacity, pointerEvents: cs.pointerEvents };
-    });
-    expect(style.opacity, 'the disabled control dims').toBe('0.5');
-    expect(style.pointerEvents, 'the disabled control is inert to the pointer').toBe('none');
-
-    // A real pointer press at the control's own coordinates. Nothing is
-    // synthesised: the browser sees a genuine mousedown/mouseup pair where the
-    // control is drawn, and the shipped `pointer-events: none` decides what
-    // receives it.
-    const box = await control.boundingBox();
-    expect(box, 'the control is laid out').not.toBeNull();
-    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
-    await page.mouse.down();
-    await page.mouse.up();
-    expect(await events(page), 'a real press announces nothing').toBe(0);
-
-    // A real keyboard activation attempt. A disabled button is not focusable,
-    // so the press lands on whatever the document already had focused — which
-    // is the point: there is no path from the keyboard into a disabled control.
-    await control.focus().catch(() => undefined);
-    const focused = await page.evaluate(
-      () => document.activeElement?.tagName.toLowerCase() ?? 'none',
-    );
-    expect(focused, 'a disabled button cannot take focus').not.toBe('button');
-    await page.keyboard.press('Enter');
-    await page.keyboard.press('Space');
-    expect(await events(page), 'a real Enter/Space announces nothing').toBe(0);
-  });
-
-  test('the link form: a real press and a real Enter do not navigate', async ({ page }) => {
-    await page.goto(PAGE);
-    await watch(page, 'link');
-    const control = page.locator('open-button[href][disabled] a').last();
-    await expect(control).toHaveAttribute('aria-disabled', 'true');
-    const style = await control.evaluate((element) => {
-      const cs = getComputedStyle(element);
-      return { opacity: cs.opacity, pointerEvents: cs.pointerEvents };
-    });
-    expect(style.opacity, 'the disabled link dims').toBe('0.5');
-    expect(style.pointerEvents, 'the disabled link is inert to the pointer').toBe('none');
-
-    const before = page.url();
-    const box = await control.boundingBox();
-    expect(box, 'the link is laid out').not.toBeNull();
-    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
-    await page.mouse.down();
-    await page.mouse.up();
-    await page.waitForTimeout(150);
-    expect(page.url(), 'a real press does not navigate').toBe(before);
-    expect(await events(page), 'a real press announces nothing').toBe(0);
-
-    // `aria-disabled` does not remove an anchor from the focus order the way
-    // the native attribute does, so this half is a genuine keyboard path: if
-    // the link takes focus, Enter must still not navigate.
-    await control.focus().catch(() => undefined);
-    const tookFocus = await control.evaluate((element) => document.activeElement === element);
-    if (tookFocus) {
-      await page.keyboard.press('Enter');
-      await page.waitForTimeout(150);
-      expect(page.url(), 'Enter on the aria-disabled link does not navigate').toBe(before);
-      expect(await events(page), 'Enter announces nothing').toBe(0);
-    }
-  });
-});
+/*
+ * RETIRED BY THE ALPHA16 MIGRATION: "open-button disabled states" (the two
+ * clone-based rows).
+ *
+ * Both rows disabled a RUNTIME CLONE of an authored host. open-button migrated
+ * to the generated lane, and a client-created generated host deliberately
+ * carries no adoptable sheet yet (the Alpha17 adoption slice; the generated
+ * lane delivers declared sheets through the SSR DSD `<link>` channel). A clone
+ * therefore has an unstyled control, so `opacity: 0.5` and
+ * `pointer-events: none` are absent by modelling, not by defect — the rows
+ * reported the gap as a component regression.
+ *
+ * The contract itself is unchanged and is asserted on REAL server-rendered
+ * entities in `tests/fixtures/router-ui-dogfood/e2e/ui-button.spec.ts`
+ * (`disabled seats its visual and interaction contract on the native branch`,
+ * `disabled drops the link target and marks it aria-disabled`, `open-click
+ * fires on an enabled press and never on a disabled one`), which also runs on
+ * Chromium, Firefox and WebKit. That fixture is where synthetic subjects
+ * belong; this suite asserts the shipped pages, and the shipped pages author
+ * no native-form open-button (every one of them is a link), so there is no
+ * subject here to keep the rows honest.
+ *
+ * Restoring a browser row on this page belongs with the Alpha17 generated-host
+ * adoption slice, which reintroduces a client-created host with an adoptable
+ * sheet.
+ */
 
 test.describe('open-theme-toggle', () => {
   test('clicking flips the button state and the resolved theme', async ({ page }) => {

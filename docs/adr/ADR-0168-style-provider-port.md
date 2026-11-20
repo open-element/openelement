@@ -170,3 +170,40 @@ rejected by the inline `<style>` channel anyway.
   matrix, unchanged and still green.
 - `tests/fixtures/router-unocss-probe` — the packed acceptance: build artifacts
   asserted in the unit tests, computed styles in three engines in `e2e/`.
+
+## Prior art (P7.4)
+
+Added 2026-11-15 to complete the P7 four-question record; no decision text changes.
+
+1. **UnoCSS's own preset model** (`presetWind4`, and its earlier `presetUno`)
+   is the ecosystem's nearest precedent for one engine speaking another
+   engine's dialect — UnoCSS grew precisely by emulating Tailwind's utility
+   language. The deliberate difference: this port never emulates. Each
+   provider is reached through its engine's own public API (`@tailwindcss/vite`
+   and `@tailwindcss/node` for Tailwind; `createGenerator`, `@unocss/config`
+   and the official `presetWind4` for UnoCSS), the framework writes no utility
+   grammar, and the compatibility axis is declared (`dialect`, default
+   `tailwind4`) and checked BEFORE any compile —
+   `OE_PRESET_STYLE_DIALECT_UNSUPPORTED` names package, tag, dialect and
+   provider instead of producing a half-styled component.
+2. **PostCSS-style processor pipelines and bundler plugin registries** are the
+   nearest structural precedent for swappable backends behind one integration
+   seam. The deliberate difference is refusing that shape: no registry, no
+   lookup, no capability negotiation, no global singleton — a closed
+   two-value union switched in `createStyleBuildIntegration`, where an
+   unselected engine is never imported and therefore cannot reach a build or a
+   browser bundle. Adding a third engine is a product decision with a real
+   adapter and a real consumer, not a registry entry.
+3. **Application-selected integration systems** (Astro integrations, Nuxt
+   modules) are the nearest precedent for "one engine per application, chosen
+   in config". The deliberate difference: selection is checked against what
+   packages demand, not trusted on key order — declaring both engines is a
+   coded conflict (`OE_PRESET_STYLE_PROVIDER_CONFLICT`), the default engine is
+   byte-for-byte the pre-2B behavior, and the reset policy is stated per
+   engine (entry text for Tailwind, `presetWind4({ preflights: { reset } })`
+   for the framework preset, the project's own `uno.config.ts` used verbatim
+   when the application ships one) rather than inherited from whichever
+   integration loads last. The port also deliberately does NOT claim
+   cross-engine identical bytes or per-engine parity of every Tailwind-only
+   configuration surface — the boundary is the framework's, not the engines
+   becoming each other.

@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the generated element's lifecycle — class construction, mount-vs-claim selection, attribute conversion, property reflection, the props record, dispose and reconnect — mutates one shared connection/instance state, so it is one shell; the boundary is INTERNAL COMPILER CONTRACT: a narrow descriptor plus the generated factory in, a Custom Element class out, with imports of neither facade-host.ts, runtime-program.ts, the kernel, nor the Part Program executor.
 /**
  * M09-0 — the runtime shell that turns one generated leaf module into a
  * Custom Element.
@@ -99,9 +100,38 @@
  * structural index are a strong hold while reachable, not a GC cleanup
  * contract. Depth >= 2 retention (a retained child retaining its own children)
  * and cross-ledger transactions remain OWED and are NOT claimed by this seam;
- * a child body emits today's legacy text for its own references. The shell has
- * no author `onConnect`/`onDispose` callbacks and makes no claim about
- * focus/selection or other platform state across the disconnect window.
+ * a child body emits today's legacy text for its own references. The shell runs
+ * no author `onConnect`/`onDispose` callback ITSELF: the generated mount/claim
+ * prologue replays the retained callbacks on the per-connection scope the shell
+ * hands it, and the shell owns only the scope those callbacks register on. It
+ * makes no claim about focus/selection or other platform state across the
+ * disconnect window.
+ *
+ * ERROR BOUNDARY (`16b-EB`): the shell is the ONE owner of the author-facing
+ * `onError` handler list and of the two capture points it can honestly attribute
+ * to one element. The compiled setup registers a handler through the
+ * compiler-private `__oe_onError` host-record property (non-enumerable, like the
+ * change channel). At a capture point the shell builds
+ * `{ host, signal, states, error }` and runs every handler:
+ *
+ * 1. the `connectedCallback` catch that already existed — the same rollback runs
+ *    (unchanged), then the handler runs instead of the error escaping, leaving
+ *    the element in its defined post-failure state (no projection, no listeners,
+ *    region fact intact, a later reconnect retries);
+ * 2. the update phase, through the `__oe_reportError` sink the generated
+ *    `guardUpdate(fn, sink)` call passes for refresh subscriptions and DOM
+ *    listeners — the executor's existing helper, so the subscription and the
+ *    listener stay live for the next write/dispatch.
+ *
+ * An async REJECTION is deliberately NOT a capture point: there is no scheduler
+ * and no global `unhandledrejection` listener, so a rejection is not
+ * attributable to one element. With NO registered handler every capture point
+ * keeps its pre-`16b-EB` behaviour exactly (rethrow and roll back at connect,
+ * propagate out of the signal writer or the platform dispatch otherwise). The
+ * handler list is cleared wherever the change list is cleared, so no handler
+ * runs after its owner is gone. No exported symbol or type is added: both
+ * channels are runtime properties on the host records the compiler already
+ * builds.
  *
  * Explicit teardown is `dispose(true)` on the element; it removes only the node
  * range the shell mounted or claimed and destroys the retained instance in the
@@ -134,6 +164,15 @@ import {
 } from '@openelement/protocol/errors';
 import type { RootMode } from '@openelement/protocol/part-program';
 import { OpenElementBase } from '../../../open-element-base.ts';
+// The class lane's theme broadcaster: it mirrors the document's `data-theme`
+// onto every connected host (and keeps it in sync), which is what makes the
+// shared token sheet's `:host([data-theme])` overrides apply inside a shadow
+// root. A generated host links the same sheet, so it joins the same manager.
+import { themeManager } from '../../../open-element-styles.ts';
+// The runtime-only host attribute fact (the JSON seed name included) lives in
+// ONE DOM-free leaf so the hydration executor can derive its exemption from the
+// same source without importing this shell module. See that leaf for the why.
+import { GENERATED_PROP_SEED } from './runtime-only-host-attributes.ts';
 import { ElementFormController } from '../../../open-element-form.ts';
 import {
   coercePropertyValue,
@@ -145,7 +184,8 @@ import { isTrustedHtmlValue, trustedHtml } from '../../core/security.ts';
 import { LifetimeScope } from '../lifetime-scope.ts';
 import { abortInstancePass, releaseRetainedChildren } from '../runtime/instance-ledger.ts';
 import { claimRecipe, insertRecipe, type Projection, type Recipe } from '../runtime/recipe.ts';
-import { removeNodes } from '../runtime/values.ts';
+import { CompiledProgramValidationError, removeNodes } from '../runtime/values.ts';
+import { CompiledContextService, contextChannelFor } from '../runtime/context.ts';
 import { signal } from '../../signal/framework.ts';
 import type { WritableSignal } from '../../signal/types.ts';
 import {
@@ -220,6 +260,61 @@ function hostPropertyAttribute(property: GeneratedElementProperty): string | nul
 }
 
 /**
+ * Compiler-private record key carrying the merged host-attribute pairs from the
+ * generated host producer's seed. The emitted `__ssrHost` wrapper and the shell
+ * share this ONE literal (like the other compiler-owned `__oe_` names); authored
+ * identifiers cannot carry the prefix, so it cannot collide. Non-enumerable: the
+ * content record the leaf reads keeps exactly its declared keys.
+ */
+const GENERATED_HOST_ATTRIBUTES = '__oeHostAttributes';
+
+/**
+ * Compiler-private record key carrying the names of the declared rows whose ONLY
+ * host wire is the JSON prop seed. Non-enumerable, beside the pairs, and written
+ * by the same seeder that decided the payload — never re-derived by a consumer,
+ * because the derivation would also claim rows the seed does not actually carry
+ * (a supplied getter is deliberately not read, so it gets no seed) and that
+ * difference is exactly the one that would turn a filtered pair into a lost
+ * value.
+ */
+const GENERATED_PROP_SEED_ROWS = '__oePropSeedRows';
+
+// The JSON seed host attribute ({@link GENERATED_PROP_SEED}) is the shell's own
+// wire: this seeder writes it, the claim reads and removes it. Its name and the
+// runtime-only attribute set it belongs to are single-sourced in the DOM-free
+// `runtime-only-host-attributes.ts` leaf (imported above), which the compiled
+// hydration executor also reads — so the writer and the claim exemption cannot
+// drift again (C-1).
+
+/** The declared row types a JSON seed may carry (D-18c). */
+const JSON_SEEDABLE_PROPERTY_TYPES: ReadonlySet<string> = new Set(['array', 'object']);
+
+/**
+ * The claim rejected the non-primitive prop seed. It shares the claim-mismatch
+ * FAMILY (the markup and the declared rows disagree) but carries its own
+ * identity because the cause is a wire fact, not a DOM-structure fact: a
+ * consumer seeing this code should look at the seed payload, not at the tree.
+ */
+const PROP_SEED_MISMATCH = 'OEIR_SHELL_PROP_SEED_MISMATCH';
+
+/**
+ * Internal identity for a supplied primitive value that has NO SSR→claim
+ * attribute channel: a `boolean false` against a presence-default `true`.
+ * Rendering it would silently diverge (the server content carries `false` while
+ * the claim can only re-read the presence default). The property-only
+ * (`attribute: false`) primitive case stays the recorded ADR-0181 A5 boundary.
+ * Fail closed with an internal `OEIR_LEAF_*` identity (no public catalogue row).
+ */
+const UNSEEDABLE_PROPERTY = 'OEIR_LEAF_UNSEEDABLE_PROPERTY';
+
+/** The canonical primitive fallback for a declared row (same rule as the client). */
+function primitiveRowFallback(property: GeneratedElementProperty): unknown {
+  return (
+    property.default ?? (property.type === 'boolean' ? false : property.type === 'number' ? 0 : '')
+  );
+}
+
+/**
  * Seed the generated host producer's content props from the host's canonical
  * attribute pairs (M11 complete vertical).
  *
@@ -234,11 +329,24 @@ function hostPropertyAttribute(property: GeneratedElementProperty): string | nul
  * Precedence mirrors the shell's initial state: a supplied property value (the
  * parent's in-process channel, which also travelled as a host attribute) wins
  * over the attribute wire; a primitive row supplied by neither falls back to
- * its declared default. Non-primitive rows (`array`/`object`/`trustedHtml`)
- * have no attribute channel and their generated factory default materialises
- * per CLIENT instance; this host path deliberately does not fabricate one (no
- * server->client value wire), so an unsupplied non-primitive row stays absent
- * rather than pretending a seed exists.
+ * its declared default.
+ *
+ * The non-primitive family is TWO different facts and is documented separately:
+ *
+ * - an UNSUPPLIED `array`/`object` row is not fabricated here: its generated
+ *   factory default materialises per CLIENT instance, so this fold leaves the
+ *   row absent rather than pretending a server value exists (the shell
+ *   resolver still supplies the declared default lazily until a claim writes
+ *   it);
+ * - a SUPPLIED, JSON-encodable `array`/`object` row DOES travel to the claim:
+ *   it is serialized into one {@link GENERATED_PROP_SEED} host attribute
+ *   (ADR-0182 D-18c / M11-3), and the shell restores it BEFORE setup so the
+ *   server bytes and the upgraded state are the same fact. The value is read
+ *   once here; a supplied getter is deliberately deferred to the content leaf
+ *   and therefore gets no seed. `trustedHtml` stays excluded on purpose — a
+ *   brand cannot be reconstructed from JSON, and promoting a plain string back
+ *   to it would be a raw-markup channel (D-18c records that as a separate
+ *   decision).
  *
  * Pure: the input records are never mutated.
  */
@@ -332,7 +440,224 @@ export function seedGeneratedElementHostProperties<P extends object = Record<str
       get: () => supplied[name],
     });
   }
+
+  // M11-2 parity: project the SAME seeded record into the canonical host
+  // attribute pairs the client claim re-reads. The conversion is the canonical
+  // `convertToAttribute` over the descriptor row's declared type/default — never
+  // a field-name guess. One read per attribute-backed declared row (a supplied
+  // getter therefore runs exactly once here; leaf reads still read it again),
+  // and the pair is emitted only when the serialized value differs from the
+  // serialized declared default (the class lane's own host-attribute rule).
+  const computed: Array<readonly [string, string]> = [];
+  const computedByName = new Set<string>();
+  for (const property of properties ?? []) {
+    if (!PRIMITIVE_PROPERTY_TYPES.has(property.type)) continue;
+    const attribute = hostPropertyAttribute(property);
+    const record = { converter: property.type, type: property.type, default: property.default };
+    const fallback = primitiveRowFallback(property);
+    if (attribute === null) {
+      // Property-only primitive: no attribute carries the value to the claim.
+      // Supplied differing values stay a RECORDED boundary (ADR-0181 A5 does not
+      // claim attribute:false seed parity); only the boolean presence case below
+      // is provably divergent against a presence-true default and fails closed.
+      continue;
+    }
+    const seededValue = seeded[property.name];
+    const serialized = convertToAttribute(record as never, seededValue);
+    const serializedFallback = convertToAttribute(record as never, fallback);
+    if (serialized === null) {
+      // `boolean false` has no presence form. If the declared default is the
+      // presence-true boolean, the claim would restore `true`: fail closed.
+      if (!Object.is(seededValue, fallback)) {
+        throw new CompiledProgramValidationError(
+          'hostAttributes',
+          `${UNSEEDABLE_PROPERTY}: ${property.name} is a boolean whose false value cannot be ` +
+            'expressed as an attribute while its declared default renders as presence-true; the ' +
+            'claim would re-read the default.',
+        );
+      }
+      continue;
+    }
+    if (serialized === serializedFallback) continue;
+    const key = attribute.toLowerCase();
+    computedByName.add(key);
+    computed.push([attribute, serialized] as const);
+  }
+  const merged: Array<readonly [string, string]> = [];
+  for (const [name, value] of pairs) {
+    if (typeof name !== 'string' || typeof value !== 'string') continue;
+    const key = name.toLowerCase();
+    const replacement = computed.find((pair) => pair[0].toLowerCase() === key);
+    if (replacement !== undefined) {
+      merged.push(replacement);
+      computedByName.delete(key);
+      continue;
+    }
+    merged.push([name, value] as const);
+  }
+  for (const pair of computed) {
+    if (!computedByName.has(pair[0].toLowerCase())) continue;
+    merged.push(pair);
+  }
+
+  // D-18c / M11-3: the NON-PRIMITIVE half of the same seed. A JSON-seedable row
+  // that the caller supplied is serialized onto one host attribute so the claim
+  // can restore it; without this the server rendered the declared default while
+  // the client value existed only in memory. The row is read ONCE here, which
+  // matches the attribute rows above — the supplied-getter "read per read"
+  // contract is about the fold not running it eagerly and each leaf read
+  // reading again, both still true.
+  const propSeed: Record<string, unknown> = {};
+  for (const property of properties ?? []) {
+    if (!JSON_SEEDABLE_PROPERTY_TYPES.has(property.type)) continue;
+    if (!Object.prototype.hasOwnProperty.call(supplied, property.name)) continue;
+    // NEVER execute an accessor here. The supplied-getter contract is "read per
+    // read, and only when a reader asks": a data property is safe to read once
+    // for the seed, but a getter must be deferred to the content leaf, exactly
+    // as the fold below does. A caller passing a getter for a non-primitive row
+    // therefore gets no seed — the content still renders their value, and the
+    // claim keeps the declared default, which is the pre-D-18c behaviour rather
+    // than a silent double-read.
+    const own = Object.getOwnPropertyDescriptor(supplied, property.name);
+    if (own === undefined || !('value' in own)) continue;
+    const value = own.value;
+    if (value === undefined) continue;
+    // JSON is the wire: a value that cannot round-trip would arrive as a
+    // different fact, so refuse rather than silently degrade to the default.
+    let encoded: string;
+    try {
+      encoded = JSON.stringify(value);
+    } catch {
+      throw new CompiledProgramValidationError(
+        'props',
+        `${UNSEEDABLE_PROPERTY}: ${property.name} is declared property-only but its supplied ` +
+          'value is not JSON-encodable, so the JSON seed cannot carry it faithfully.',
+      );
+    }
+    if (encoded === undefined) {
+      throw new CompiledProgramValidationError(
+        'props',
+        `${UNSEEDABLE_PROPERTY}: ${property.name} is declared property-only but its supplied ` +
+          `value serializes to ${String(encoded)} under JSON; the seed would not round-trip.`,
+      );
+    }
+    propSeed[property.name] = value;
+  }
+  if (Object.keys(propSeed).length > 0) {
+    // One host attribute, one JSON document. The attribute name is
+    // compiler-owned (`data-oe-` prefix, reserved), which is also what lets the
+    // claim treat it as a shell-owned slot instead of a static-seed entry.
+    merged.push([GENERATED_PROP_SEED, JSON.stringify(propSeed)] as const);
+  }
+
+  // A supplied prop wins over the attribute wire for CONTENT; the same precedence
+  // applies to the host tag so the SSR markup and the claim seed cannot disagree.
+  // No computed pair and no caller attributes keeps the historical shape (the
+  // emitted wrapper then falls back to the caller attributes verbatim).
+  Object.defineProperty(seeded, GENERATED_HOST_ATTRIBUTES, {
+    value: merged.length === 0 ? undefined : merged,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  // The rows this seed actually carries, beside the pairs. A row with no
+  // attribute channel has exactly ONE host wire — this seed — so a caller pair
+  // naming it must not become text on the host tag. Only the seeder can name
+  // that set honestly (it is the code that decided what the payload holds), and
+  // a consumer re-deriving it from the descriptor would be a second, looser
+  // rule that also dropped a row supplied through no channel at all.
+  Object.defineProperty(seeded, GENERATED_PROP_SEED_ROWS, {
+    value: Object.keys(propSeed),
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
   return seeded;
+}
+
+/**
+ * Wrap a light-root producer so it receives the same seeded, resolved props a
+ * shadow root's `__ssrHost` gives its template.
+ *
+ * `input` is what an SSR caller can supply — the host attribute pairs the
+ * serializer already carries, or a plain props record. Both are folded through
+ * the SAME two helpers the shadow lane uses (`seedGeneratedElementHostProperties`
+ * for the attribute wire, `resolveGeneratedElementProps` for the declared
+ * defaults), so a light and a shadow root cannot disagree about what a row's
+ * server value is.
+ */
+function lightSsrProducer(
+  descriptor: NormalizedDescriptor,
+  producer: () => unknown,
+): (input?: unknown, attributes?: readonly (readonly [string, string])[]) => unknown {
+  return (input?: unknown, attributes?: readonly (readonly [string, string])[]) => {
+    const supplied =
+      input !== null && typeof input === 'object' ? (input as Record<string, unknown>) : undefined;
+    // The seeder is typed against the PUBLIC property row (`default`) while the
+    // shell holds the NORMALIZED one (`defaultValue`); projecting between them is
+    // this wrapper's job. Passing normalized rows straight through made the
+    // seeder see `default: undefined` and take its boolean-presence branch for a
+    // STRING row.
+    const rows = descriptor.properties.map((property) => ({
+      name: property.name,
+      attribute: property.attribute,
+      type: property.type,
+      reflect: property.reflect,
+      ...(property.defaultValue === undefined ? {} : { default: property.defaultValue }),
+    }));
+    const seeded = seedGeneratedElementHostProperties(rows, supplied, attributes);
+    // Resolve to the complete server props record from the ALREADY-NORMALIZED
+    // rows: `resolveGeneratedElementProps` would re-normalize a descriptor this
+    // shell has already built, and its `createRecipe`/`tag` requirements are the
+    // emitter's contract, not something a server render should have to restate.
+    // The semantics are the resolver's: a supplied row wins (each read re-reads
+    // the caller's record), an omitted one uses the declared default.
+    const resolved: Record<string, unknown> = Object.create(null);
+    for (const property of descriptor.properties) {
+      // Read through the SEEDED record, not the caller's input: the seeder is
+      // what resolves an attribute-pair source and applies the declared default,
+      // and it is getter-backed so each read re-reads the caller's value (the
+      // per-read contract). Reading `supplied` directly would bypass the
+      // attribute channel entirely.
+      const hasSeeded = Object.prototype.hasOwnProperty.call(seeded, property.name);
+      Object.defineProperty(resolved, property.name, {
+        enumerable: true,
+        configurable: false,
+        get: hasSeeded
+          ? () => (seeded as Record<string, unknown>)[property.name]
+          : () => materialiseDefault(property),
+      });
+    }
+    // The seeded record's non-enumerable `__oeHostAttributes` is the canonical
+    // attribute channel: the declared-attribute rows AND the JSON seed for
+    // `attribute: false` rows. A light root has no `<Name>__ssrHost` wrapper to
+    // return it, and its serializer (unlike the DSD producer) writes the host tag
+    // itself, so the pairs must ride back to that caller. Exposed as a second
+    // property on the result rather than a changed return type, so the content
+    // string the shadow path and every existing caller expect is unchanged.
+    const content = (producer as (props: unknown, host: undefined) => unknown).call(
+      undefined,
+      resolved,
+      undefined,
+    );
+    const hostAttributes = (seeded as Record<string, unknown>)[GENERATED_HOST_ATTRIBUTES] as
+      | readonly (readonly [string, string])[]
+      | undefined;
+    // The declared rows whose ONLY host wire is the JSON seed — the seeder's own
+    // verdict, read off the record beside the pairs rather than re-derived. A row
+    // with no attribute channel has exactly ONE host wire (that seed); the
+    // descriptor refuses an attribute for it and `observedAttributes` never
+    // observes one, so a caller pair naming it is not a second spelling of the
+    // row: it is a raw value the light writer's normalizer would `String()`,
+    // turning an array into `[object Object],…`. The light host writer drops such
+    // a pair on both sides (the seeded list still carries the caller's verbatim
+    // pair for these rows); the value reaches the claim on `data-oe-prop-seed`
+    // alone. A row the seed does NOT carry stays listed nowhere and keeps its
+    // bytes, so this cannot silently discard a value.
+    const seedRows = ((seeded as Record<string, unknown>)[GENERATED_PROP_SEED_ROWS] ??
+      []) as readonly string[];
+    return { content, hostAttributes, seedRows };
+  };
 }
 
 /** The host record the generated recipe factory consumes. */
@@ -402,14 +727,36 @@ export interface GeneratedElementDescriptor<P extends object = Record<string, un
   /**
    * Associate the host with its surrounding native form through the shell's
    * ONE element-lifetime `ElementInternals` record (shared with closed-root
-   * discovery). The form value is the declared string `value` property; an
-   * optional declared boolean `required` enables the valueMissing mirror and an
-   * optional declared boolean non-reflecting `disabled` enables the
-   * fieldset-enabled state. The shell owns all platform callbacks; there is no
-   * author internals API and no separate `formValue` field.
+   * discovery). Two shapes, derived from the declared rows (no shape field):
+   *
+   * - value shape — a declared string `value` property is the form value
+   *   source; an optional declared boolean `required` enables the valueMissing
+   *   mirror and an optional declared boolean non-reflecting `disabled`
+   *   enables the fieldset-enabled state.
+   * - button shape — no declared `value` row: the element stays form-associated
+   *   (`form.elements` membership, external `form=<id>` association) but
+   *   publishes no form value, makes no validity claim and maps no reset or
+   *   restore state; its optional declared boolean `disabled` row may reflect
+   *   (the class open-button contract). A `required` row without `value` is
+   *   refused (nothing to mirror).
+   *
+   * The shell owns all platform callbacks; there is no author internals API
+   * and no separate `formValue` field.
    */
   readonly formAssociated?: boolean;
   readonly properties?: readonly GeneratedElementProperty[];
+  /**
+   * The light-root SSR producer the compiler emits as `<Name>__ssr()`: a
+   * parameterless function returning the content HTML the mount would build.
+   *
+   * Present only for a LIGHT (or absent) descriptor root — a shadow root has no
+   * light DOM of its own to serialize, so its SSR path is the `<Name>__ssrHost`
+   * wrapper declared next to the DSD template instead. The shell attaches this
+   * as the class's static `__ssr` so the canonical serializer can reach it from
+   * the registered constructor without a second registry (the class IS the
+   * registration).
+   */
+  readonly ssrProducer?: () => string;
   readonly createRecipe: (owner: LifetimeScope, host: GeneratedElementHost<P>) => Recipe<P>;
   /**
    * The LC-0 descriptor-fixture retention factory (internal descriptor ABI
@@ -501,8 +848,20 @@ interface NormalizedProperty {
   readonly defaultHtml?: string;
 }
 
+/**
+ * The bounded M09-2d form mapping, in one of two shapes derived from the
+ * declared rows (no shape field is invented):
+ *
+ * - **value shape** — `value` is the declared string row; it is the form value
+ *   source and carries the required→valueMissing mirror, reset and restore.
+ * - **button shape** — `value` is null (the sidecar declared no `value` row):
+ *   the element stays form-associated (`form.elements` membership and the
+ *   external `form=<id>` association resolve through the one internals record)
+ *   but publishes no form value, makes no validity claim and never maps a
+ *   reset/restore state. A declared boolean `disabled` row may reflect.
+ */
 interface FormMapping {
-  readonly value: NormalizedProperty;
+  readonly value: NormalizedProperty | null;
   readonly required?: NormalizedProperty;
   readonly disabled?: NormalizedProperty;
 }
@@ -523,6 +882,7 @@ interface NormalizedDescriptor {
     host: GeneratedElementInstanceHost<Record<string, unknown>>,
   ) => Readonly<Record<string, unknown>>;
   readonly createBindings?: () => Readonly<Record<string, unknown>>;
+  readonly ssrProducer?: () => string;
 }
 
 interface FormRuntime {
@@ -599,6 +959,43 @@ interface ElementState {
   reflecting: boolean;
   /** The first connect reconciled pre-upgrade own data properties. */
   ownPropertiesReconciled: boolean;
+  /**
+   * Element-lifetime `onPropertyChange` registrations. The compiled setup
+   * registers through the internal `__oe_onPropertyChange` runtime property on
+   * the instance host record; the list is cleared with the instance at teardown
+   * so a listener never runs after its owner is gone.
+   */
+  readonly propertyChangeCallbacks: PropertyChangeListener[];
+  /**
+   * Element-lifetime `onError` handlers (`16b-EB`). The compiled setup
+   * registers through the internal `__oe_onError` runtime property on the
+   * instance host record; the list is cleared with the instance at teardown so
+   * a handler never runs after its owner is gone.
+   *
+   * An EMPTY list is the pre-`16b-EB` behaviour: every capture point rethrows
+   * exactly as it did before this channel existed. The shell does not install a
+   * global `window` listener, a scheduler or a retry loop — the capture points
+   * are the two places that already had a `try`/`catch` or a dispatch seam
+   * (connect/claim, and the `guardUpdate` wrapper around update-phase work).
+   */
+  readonly errorHandlers: ErrorHandler[];
+  /**
+   * The one update-phase reporter closure this element hands to generated
+   * `guardUpdate` calls, created lazily on first read. It re-reads
+   * {@linkcode errorHandlers} at dispatch time, so caching it cannot go stale:
+   * a handler registered after a subscription is still honored, and a list
+   * cleared by teardown makes the reporter rethrow (the unchanged behaviour).
+   */
+  errorReporter: ((error: unknown) => void) | null;
+  /**
+   * The ONE `16b-CTX` context scope of this generated element (`null` until a
+   * module that uses the intrinsics asks for it). It is created by the compiled
+   * setup through the compiler-private `__oe_context` channel and retained for
+   * the element lifetime: the owner-scope tree, the provider intents and the
+   * consumer bridges all live there, and the shell drives its connection
+   * lifecycle beside the instance/connection scopes.
+   */
+  context: CompiledContextService | null;
 }
 
 const states = new WeakMap<HTMLElement, ElementState>();
@@ -840,7 +1237,32 @@ function coercePropertyWrite(property: NormalizedProperty, value: unknown): unkn
   return coercePropertyValue(property.conversion!, value);
 }
 
+/**
+ * Descriptor normalization is memoized by descriptor object identity — the
+ * same contract as `runtime-program.ts`'s `normalizedByProgram`: a generated
+ * module evaluates its `__oeElementDescriptor` literal once (the compiler
+ * emits it as a module-level `const`; "the descriptor rows emitted above ARE
+ * the input"), so every SSR render of that element — the emitted
+ * `<Name>__ssrHost` resolves props per render — and the one class-definition
+ * pass reuse the same normalized descriptor instead of re-running the
+ * authoring-shape validation family and rebuilding the camelCase→kebab
+ * attribute derivation and the per-name/attribute maps per render.
+ *
+ * The key is the descriptor object; there is no invalidation: the normalized
+ * result is a pure function of the descriptor rows, and a descriptor mutated
+ * after its first successful normalization is not re-normalized (descriptors
+ * are compiler-built module literals, never mutable request inputs). The
+ * normalized descriptor is read-only by contract — consumers read rows and
+ * maps, never mutate them, and per-render/per-instance state (lazy defaults,
+ * signal values) is allocated fresh downstream. Failures are not memoized: an
+ * invalid descriptor re-validates and re-throws on every call, so rejection
+ * behavior is unchanged.
+ */
+const normalizedByDescriptor = new WeakMap<GeneratedElementDescriptor, NormalizedDescriptor>();
+
 function normalizeDescriptor(descriptor: GeneratedElementDescriptor): NormalizedDescriptor {
+  const cached = normalizedByDescriptor.get(descriptor);
+  if (cached !== undefined) return cached;
   if (typeof descriptor.tag !== 'string' || !descriptor.tag.includes('-')) {
     descriptorError(
       'tag must be a hyphenated custom-element name',
@@ -899,38 +1321,50 @@ function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Normalized
   let form: FormMapping | null = null;
   if (formAssociated) {
     const value = byName.get('value');
-    if (value === undefined) {
-      descriptorError('formAssociated requires a declared property named "value"');
-    }
-    if (value.type !== 'string') {
-      descriptorError(`the form value property "value" must be a string, got ${value.type}`);
-    }
     const required = byName.get('required');
+    const disabled = byName.get('disabled');
     if (required !== undefined && required.type !== 'boolean') {
       descriptorError(
         `the optional form property "required" must be boolean, got ${required.type}`,
       );
     }
-    const disabled = byName.get('disabled');
     if (disabled !== undefined && disabled.type !== 'boolean') {
       descriptorError(
         `the optional form property "disabled" must be boolean, got ${disabled.type}`,
       );
     }
-    if (disabled?.reflect === true) {
-      descriptorError(
-        'the form property "disabled" must not reflect: the fieldset/authored disabled state ' +
-          'must stay reversible',
-      );
+    if (value === undefined) {
+      // The button shape: no declared value row publishes no form value. The
+      // element stays form-associated (form.elements membership and the
+      // external `form=<id>` association resolve through the one internals
+      // record); `required` mirrors valueMissing on the form value and is
+      // refused here; a reflecting `disabled` row is the class open-button
+      // contract and is admitted.
+      if (required !== undefined) {
+        descriptorError(
+          'the optional form property "required" mirrors valueMissing on the declared form value; ' +
+            'a form-associated descriptor without a "value" property publishes no form value',
+        );
+      }
+    } else {
+      if (value.type !== 'string') {
+        descriptorError(`the form value property "value" must be a string, got ${value.type}`);
+      }
+      if (disabled?.reflect === true) {
+        descriptorError(
+          'the form property "disabled" must not reflect: the fieldset/authored disabled state ' +
+            'must stay reversible',
+        );
+      }
     }
     form = {
-      value,
+      value: value ?? null,
       ...(required === undefined ? {} : { required }),
       ...(disabled === undefined ? {} : { disabled }),
     };
   }
 
-  return {
+  const normalized: NormalizedDescriptor = {
     rootMode,
     delegatesFocus,
     formAssociated,
@@ -938,6 +1372,7 @@ function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Normalized
     properties,
     byAttribute,
     createRecipe: descriptor.createRecipe as NormalizedDescriptor['createRecipe'],
+    ...(descriptor.ssrProducer === undefined ? {} : { ssrProducer: descriptor.ssrProducer }),
     ...(descriptor.createInstance === undefined
       ? {}
       : { createInstance: descriptor.createInstance as NormalizedDescriptor['createInstance'] }),
@@ -945,6 +1380,8 @@ function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Normalized
       ? {}
       : { createBindings: descriptor.createBindings }),
   };
+  normalizedByDescriptor.set(descriptor, normalized);
+  return normalized;
 }
 
 /**
@@ -980,8 +1417,10 @@ function lazyDefaultFor(property: NormalizedProperty): () => unknown {
  *   `__proto__`-sensitive assignment.
  *
  * The generated `<Name>__ssrHost` calls this helper with the descriptor +
- * caller props; M11 owns producing that in-process record (no server→client
- * seed / JSON wire exists here).
+ * caller props; M11 owns producing that in-process record. The non-primitive
+ * JSON seed is the SEEDER's channel (`data-oe-prop-seed`, produced by
+ * `seedGeneratedElementHostProperties` and restored by the claim), never a
+ * second value wire invented here.
  */
 export function resolveGeneratedElementProps<P extends object = Record<string, unknown>>(
   descriptor: GeneratedElementDescriptor<P>,
@@ -1047,6 +1486,10 @@ function createState(descriptor: NormalizedDescriptor): ElementState {
     connecting: false,
     reflecting: false,
     ownPropertiesReconciled: false,
+    propertyChangeCallbacks: [],
+    errorHandlers: [],
+    errorReporter: null,
+    context: null,
   };
 }
 
@@ -1097,6 +1540,51 @@ function setProperty(
   if (reflect) reflectProperty(element, state, property, next);
   bumpProps(state);
   syncFormProperty(state, property);
+  notifyPropertyChange(element, state, property.name);
+  // `16b-CTX`: a declared-row commit is this runtime's ONE provider-change
+  // event. The providers re-read their value thunks and republish only what
+  // actually changed, so a subscribed consumer observes the new value exactly
+  // once and an unchanged write notifies nobody. No author `computed` and no
+  // extra subscription channel is introduced.
+  state.context?.refreshProviders();
+}
+
+/**
+ * Run the element-lifetime change listeners for one DECLARED property after its
+ * value (and its reflection) is committed. The env is built here, exactly like
+ * the lifecycle env: the owning element, the instance-lifetime signal and the
+ * changed row. Every listener runs; the first error surfaces after the last one
+ * (the existing first-error rule), and the value write itself is never rolled
+ * back by a listener.
+ */
+function notifyPropertyChange(element: HTMLElement, state: ElementState, name: string): void {
+  const listeners = state.propertyChangeCallbacks;
+  if (listeners.length === 0) return;
+  const signal = state.instance?.signal ?? new AbortController().signal;
+  // `states` is a getter so the one-shot ElementInternals record is attached
+  // only for a component that actually reads it.
+  const event = {
+    host: element,
+    signal,
+    name,
+    value: state.values.get(name),
+    get states(): CustomStateSet {
+      return ensureFormInternals(element, state).states;
+    },
+  };
+  let firstError: unknown;
+  let failed = false;
+  for (const listener of [...listeners]) {
+    try {
+      listener(event);
+    } catch (error) {
+      if (!failed) {
+        firstError = error;
+        failed = true;
+      }
+    }
+  }
+  if (failed) throw firstError;
 }
 
 /**
@@ -1197,6 +1685,71 @@ function reconcilePreUpgradeProperties(element: HTMLElement, state: ElementState
 }
 
 /**
+ * Restore the non-primitive declared rows the SSR producer serialized into
+ * {@link GENERATED_PROP_SEED} (ADR-0182 D-18c / M11-3).
+ *
+ * The attribute is the SHELL's slot, not an author attribute: it is written by
+ * the emitted `__ssrHost` and removed here, so the same markup re-claims
+ * identically (the claim's static-seed check excludes it, and an absent seed
+ * leaves every row at its declared default exactly as before).
+ *
+ * Fail closed on anything the descriptor cannot explain: an unparseable
+ * payload, a non-object, an unknown row name, or a row the descriptor does not
+ * declare as JSON-seedable. Silently keeping the default would render a page
+ * whose visible content and upgraded state disagree — the defect this channel
+ * exists to remove — so it throws the shell's own seed-mismatch identity
+ * ({@link PROP_SEED_MISMATCH}) instead of keeping the default.
+ */
+function applyGeneratedPropSeed(element: HTMLElement, state: ElementState): void {
+  // A descriptor with no JSON-seedable row can never carry this attribute, so
+  // the shell must not even ASK for it: the constructor/connect path is
+  // contractually attribute-read-free unless a declared row needs one.
+  if (
+    !state.descriptor.properties.some((property) => JSON_SEEDABLE_PROPERTY_TYPES.has(property.type))
+  ) {
+    return;
+  }
+  const raw = element.getAttribute(GENERATED_PROP_SEED);
+  if (raw === null) return;
+  const where = `[${GENERATED_PROP_SEED}]`;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw frameworkError(
+      PROP_SEED_MISMATCH,
+      `[generated-element] ${where} the prop seed is not valid JSON`,
+      {
+        phase: 'csr',
+      },
+    );
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw frameworkError(
+      PROP_SEED_MISMATCH,
+      `[generated-element] ${where} the prop seed must be a JSON object`,
+      { phase: 'csr' },
+    );
+  }
+  const byName = new Map(state.descriptor.properties.map((property) => [property.name, property]));
+  for (const [name, value] of Object.entries(parsed as Record<string, unknown>)) {
+    const property = byName.get(name);
+    if (property === undefined || !JSON_SEEDABLE_PROPERTY_TYPES.has(property.type)) {
+      throw frameworkError(
+        PROP_SEED_MISMATCH,
+        `[generated-element] ${where} the prop seed names "${name}", which is not a ` +
+          'JSON-seedable declared row',
+        { phase: 'csr' },
+      );
+    }
+    writeValue(state, property, coercePropertyWrite(property, value));
+  }
+  // The seed is consumed once: leaving it would make a later re-claim re-apply a
+  // stale value over a user's write.
+  element.removeAttribute(GENERATED_PROP_SEED);
+}
+
+/**
  * The reflect-removal contract: after an attribute is removed the property is
  * back at its declared default, but the attribute mirror is not. Restore it
  * from the CURRENT value (not from the removal's `setProperty` result, whose
@@ -1233,30 +1786,425 @@ function applyAttribute(
   if (raw === null) restoreReflectedDefault(element, state, property);
 }
 
-function hostFor(state: ElementState): GeneratedElementHost<Record<string, unknown>> {
-  return {
-    // `ensureInstance` publishes the retained setup record before this host is
-    // built; the empty fallback keeps the contract total for a hand-built
-    // descriptor that names neither factory.
-    bindings: state.bindings ?? {},
-    // The one logical instance (LC-2 nesting): the generated root body opens a
-    // pass on it and retains direct hostless children. Omitted while no
-    // instance exists (hand-built descriptor without createInstance); the
-    // retention path is only emitted for a generated root, whose instance is
-    // always established before this host is built.
-    instance: state.instance ?? undefined,
-    props: state.props,
-    propsChanged: state.propsChanged,
+/**
+ * The compiler-private runtime property that carries the element a connection
+ * belongs to. The generated code reads it when it builds the `env` argument of
+ * an `onConnect(env)` / `onDispose(env)` callback. It is attached as a
+ * NON-enumerable runtime property: the exported host types
+ * (`GeneratedElementHost`, `GeneratedElementInstanceHost`) are unchanged, no
+ * exported symbol is added, and no host-record key enumeration changes.
+ */
+const HOST_ELEMENT_PROPERTY = '__oe_hostElement';
+
+/**
+ * The compiler-private runtime property that registers an element-lifetime
+ * `onPropertyChange` listener. Like `__oe_hostElement` it rides the instance
+ * host record as a NON-enumerable property: no exported type or symbol changes.
+ */
+const PROPERTY_CHANGE_PROPERTY = '__oe_onPropertyChange';
+
+/**
+ * The compiler-private runtime property that registers the element-lifetime
+ * `onError` handler(s) (`16b-EB`). Same posture as
+ * `__oe_onPropertyChange`: a NON-enumerable property on the host records the
+ * compiler-owned setup factory receives, so no exported type or symbol changes
+ * and a depth-1 retained child's generated setup host can forward the channel
+ * as a plain property.
+ */
+const ERROR_HANDLER_PROPERTY = '__oe_onError';
+
+/**
+ * The compiler-private runtime property that hands generated code its
+ * update-phase error sink (`16b-EB`).
+ *
+ * It is a GETTER, deliberately: registration order must not matter. A depth-1
+ * retained child registers its handler from `<Name>__setup`, which runs AFTER
+ * the retaining reference site already built the host literals, and a module
+ * whose root has no `onError` but whose child does must still guard the child's
+ * refreshes.
+ *
+ * The getter always returns the ONE cached reporter closure for this element;
+ * the closure re-reads the live handler list at DISPATCH time and rethrows the
+ * original error when the list is empty. That keeps the "no handler ⇒ unchanged
+ * propagation" rule true even for a refresh subscribed before its handler was
+ * registered, and it is why an empty list cannot leave a stale swallowing
+ * closure behind. A module with no `onError` intrinsic never reads this
+ * property: its generated subscriptions stay the bare two-name
+ * `bindSignalWrites` call.
+ */
+const ERROR_REPORT_PROPERTY = '__oe_reportError';
+
+/**
+ * The compiler-private runtime property that exposes the element's
+ * `CustomStateSet` (`ElementInternals.states`) to a generated component's env.
+ * A getter: the one-shot internals record is attached on first read, so an
+ * element that never touches custom states pays nothing.
+ */
+const INTERNALS_STATES_PROPERTY = '__oe_states';
+
+/** One registered change listener (the env is built by the shell). */
+type PropertyChangeListener = (event: {
+  readonly host: HTMLElement;
+  readonly signal: AbortSignal;
+  readonly states: CustomStateSet;
+  readonly name: string;
+  readonly value: unknown;
+}) => void;
+
+/**
+ * One registered `16b-EB` error handler. Registered by the compiled setup
+ * through {@linkcode ERROR_HANDLER_PROPERTY}; the shell builds the env at the
+ * capture point, because only the shell knows which signal owns the failing
+ * phase.
+ */
+type ErrorHandler = (env: {
+  readonly host: HTMLElement;
+  readonly signal: AbortSignal;
+  readonly states: CustomStateSet;
+  readonly error: unknown;
+}) => void;
+
+/**
+ * The compiler-private runtime property that hands generated code its `16b-CTX`
+ * context scope.
+ *
+ * A GETTER on the host records, deliberately: registration order must not
+ * matter, and a depth-1 retained child's setup host forwards the same channel.
+ * The getter returns the SAME adapter object for a given element, so repeated
+ * reads cannot build a second owner chain.
+ *
+ * The emitted text names three calls, not the service:
+ *
+ * - `use(token)` — one persistent consumer-local signal.
+ * - `provider(token, read)` — one owner-scope provider with a value thunk.
+ * - `owner()` — a CHILD owner scope of this one. A hostless generated component
+ *   (one that creates no element) calls this once in its retained setup and
+ *   registers there, so it is a child of the element anchor rather than the
+ *   anchor itself. Two sibling hostless children therefore cannot see each
+ *   other's providers, while both still resolve the element's ancestors.
+ *
+ * The ROOT uses the anchor directly (no `owner()`), which is what makes a root
+ * provider visible to every depth-1 child.
+ */
+const CONTEXT_SCOPE_PROPERTY = '__oe_context';
+
+/**
+ * One memoised adapter per `CompiledContextService`, so identity is stable.
+ *
+ * The adapter itself lives in the context engine (`contextChannelFor`), because
+ * the SAME three-call shape backs the CLIENT anchor and the SERVER render scope:
+ * one spelling in emitted code, one adapter type, and the phase decides which
+ * scope is behind it. The shell only memoises nothing here — it reads the engine
+ * function directly — so there cannot be two adapter definitions to drift.
+ */
+
+/**
+ * Attach the `16b-CTX` context-scope channel to a host record.
+ *
+ * Both host records carry it (the instance record the setup factory receives and
+ * the connection record the recipe receives), exactly like the change and error
+ * channels, so a depth-1 retained child's generated setup host forwards the SAME
+ * channel as a plain property and its `owner()` lands on the element's anchor.
+ */
+function withContextChannel<T extends object>(
+  record: T,
+  element: HTMLElement,
+  state: ElementState,
+): T {
+  Object.defineProperty(record, CONTEXT_SCOPE_PROPERTY, {
+    get: () => contextChannelFor(contextScopeFor(element, state)),
+    enumerable: false,
+    configurable: false,
+  });
+  return record;
+}
+
+/**
+ * The ONE context scope of this element, created on first use.
+ *
+ * Its parent resolver walks the generated ANCESTOR element chain, so a nested
+ * generated element's consumers resolve through its ancestors' scopes as well as
+ * its own. The resolver is consulted on every connect, so a reconnect after a
+ * DOM move joins the right tree and a reconnect in place re-joins the same one.
+ */
+function contextScopeFor(element: HTMLElement, state: ElementState): CompiledContextService {
+  if (state.context !== null) return state.context;
+  const scope = new CompiledContextService(element, () => nearestGeneratedContextScope(element));
+  state.context = scope;
+  return scope;
+}
+
+/**
+ * The nearest generated ANCESTOR element's context scope, or null.
+ *
+ * Crosses shadow roots through `host` (a shadow root's host is a legitimately
+ * generated element ancestor), skips the element itself, and stops at the
+ * outermost generated element — a class-lane or foreign ancestor contributes
+ * nothing, exactly like the protocol path where a non-providing ancestor is
+ * silent.
+ */
+function nearestGeneratedContextScope(element: HTMLElement): CompiledContextService | null {
+  let node: Node | null = element.parentNode;
+  while (node !== null) {
+    if (node instanceof HTMLElement) {
+      const candidate = states.get(node);
+      if (candidate?.context != null) return candidate.context;
+      node = node.parentNode;
+      continue;
+    }
+    node = node instanceof ShadowRoot ? node.host : node.parentNode;
+  }
+  return null;
+}
+
+/** Attach the owning element to a host record without changing its shape. */
+function withHostElement<T extends object>(record: T, element: HTMLElement): T {
+  Object.defineProperty(record, HOST_ELEMENT_PROPERTY, {
+    value: element,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  return record;
+}
+
+/**
+ * Attach the element's custom-state channel to a host record. The getter
+ * attaches `ElementInternals` on first read (the record is shared with the form
+ * and closed-root paths, so a second attach is impossible) and returns the
+ * live `CustomStateSet`.
+ */
+function withInternalsStates<T extends object>(
+  record: T,
+  element: HTMLElement,
+  state: ElementState,
+): T {
+  Object.defineProperty(record, INTERNALS_STATES_PROPERTY, {
+    get: () => ensureFormInternals(element, state).states,
+    enumerable: false,
+    configurable: false,
+  });
+  return record;
+}
+
+/**
+ * Attach the element-lifetime change-registration channel to a host record.
+ * Both host records carry it (the instance record the setup factory receives
+ * and the connection record the recipe receives), so a depth-1 retained child's
+ * generated setup host can forward the SAME channel as a plain property.
+ */
+function withPropertyChangeChannel<T extends object>(record: T, state: ElementState): T {
+  Object.defineProperty(record, PROPERTY_CHANGE_PROPERTY, {
+    value: (listener: PropertyChangeListener): void => {
+      state.propertyChangeCallbacks.push(listener);
+    },
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  return record;
+}
+
+/**
+ * Attach the element-lifetime `onError` registration channel to a host record
+ * (`16b-EB`). Both host records carry it, exactly like the change channel, so a
+ * depth-1 retained child's generated setup host can forward the SAME channel as
+ * a plain property. An element with no compiled `onError` never calls it and
+ * pays one non-enumerable define per host record.
+ */
+function withErrorHandlerChannel<T extends object>(record: T, state: ElementState): T {
+  Object.defineProperty(record, ERROR_HANDLER_PROPERTY, {
+    value: (handler: ErrorHandler): void => {
+      state.errorHandlers.push(handler);
+    },
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  return record;
+}
+
+/**
+ * Attach the update-phase error sink to a host record (`16b-EB`).
+ *
+ * A getter, so the reader observes whatever handlers are registered when a
+ * refresh is subscribed (a retained child registers from its `<Name>__setup`,
+ * which runs after the parent's host literals were built). The closure is
+ * cached on the state because it re-reads the handler list at dispatch time —
+ * caching it cannot make it stale.
+ */
+function withErrorReportChannel<T extends object>(
+  record: T,
+  element: HTMLElement,
+  state: ElementState,
+): T {
+  Object.defineProperty(record, ERROR_REPORT_PROPERTY, {
+    get: () => (state.errorReporter ??= errorReporterFor(element, state)),
+    enumerable: false,
+    configurable: false,
+  });
+  return record;
+}
+
+/**
+ * Run a captured `16b-EB` throw through one snapshot of registered handlers.
+ *
+ * `handlers` is passed explicitly because the CONNECT capture point must run the
+ * handlers of the instance that failed AFTER that instance's rollback has
+ * already cleared the live list. Every handler runs (a throwing handler must not
+ * hide the others), and the FIRST handler error is rethrown in place of the
+ * original: the boundary's own failure is what the page needs to see, while the
+ * original value stays reachable through `env.error`.
+ *
+ * An EMPTY snapshot means "no boundary": the caller keeps its unchanged
+ * rethrow/rollback path. This function never swallows silently.
+ *
+ * The env is built here: `host` is the element the failing work belongs to,
+ * `signal` is the signal of the phase that threw (the per-connection scope for a
+ * connect/claim failure — by dispatch time it is aborted, because rollback
+ * disposed that connection; the instance-lifetime signal otherwise), and
+ * `states` is a getter so the one-shot internals record is attached only for a
+ * handler that reads it.
+ */
+function runErrorHandlers(
+  element: HTMLElement,
+  state: ElementState,
+  signal: AbortSignal,
+  error: unknown,
+  handlers: readonly ErrorHandler[],
+): void {
+  const env = {
+    host: element,
+    signal,
+    error,
+    get states(): CustomStateSet {
+      return ensureFormInternals(element, state).states;
+    },
   };
+  // Snapshot: a handler that registers another handler must not run it for the
+  // error that was raised before its registration.
+  let firstError: unknown;
+  let failed = false;
+  for (const handler of [...handlers]) {
+    try {
+      handler(env);
+    } catch (handlerError) {
+      if (!failed) {
+        firstError = handlerError;
+        failed = true;
+      }
+    }
+  }
+  if (failed) throw firstError;
+}
+
+/**
+ * A shared already-aborted signal for the one case where a capture point has no
+ * live scope to name: a connect-phase failure that happened BEFORE any
+ * connection/instance scope existed. A handler that inspects `signal.aborted`
+ * then correctly learns "there is no live connection".
+ */
+const NO_LIVE_SCOPE_CONTROLLER = new AbortController();
+NO_LIVE_SCOPE_CONTROLLER.abort();
+const NO_LIVE_SCOPE_SIGNAL = NO_LIVE_SCOPE_CONTROLLER.signal;
+
+/**
+ * The update-phase error reporter a host record exposes to generated code
+ * (`16b-EB`). Generated code passes it as `guardUpdate`'s second argument.
+ *
+ * The reporter re-reads the LIVE handler list at DISPATCH time, not at
+ * subscribe time: a handler registered later in the same setup still owns a
+ * refresh subscribed earlier, and a list cleared by teardown cannot leave a
+ * stale closure that silently swallows. When the list is empty the original
+ * error is rethrown — that is the unchanged pre-`16b-EB` propagating behaviour.
+ *
+ * The signal is read at dispatch time too, so a reconnect (the instance is
+ * retained) and a teardown are both reported against the right lifetime.
+ */
+function errorReporterFor(element: HTMLElement, state: ElementState): (error: unknown) => void {
+  return (error: unknown): void => {
+    const handlers = state.errorHandlers;
+    if (handlers.length === 0) throw error;
+    runErrorHandlers(
+      element,
+      state,
+      state.instance?.signal ?? NO_LIVE_SCOPE_SIGNAL,
+      error,
+      handlers,
+    );
+  };
+}
+
+function hostFor(
+  state: ElementState,
+  element: HTMLElement,
+): GeneratedElementHost<Record<string, unknown>> {
+  return withContextChannel(
+    withInternalsStates(
+      withErrorReportChannel(
+        withErrorHandlerChannel(
+          withPropertyChangeChannel(
+            withHostElement(
+              {
+                // `ensureInstance` publishes the retained setup record before this host is
+                // built; the empty fallback keeps the contract total for a hand-built
+                // descriptor that names neither factory.
+                bindings: state.bindings ?? {},
+                // The one logical instance (LC-2 nesting): the generated root body opens a
+                // pass on it and retains direct hostless children. Omitted while no
+                // instance exists (hand-built descriptor without createInstance); the
+                // retention path is only emitted for a generated root, whose instance is
+                // always established before this host is built.
+                instance: state.instance ?? undefined,
+                props: state.props,
+                propsChanged: state.propsChanged,
+              },
+              element,
+            ),
+            state,
+          ),
+          state,
+        ),
+        element,
+        state,
+      ),
+      element,
+      state,
+    ),
+    element,
+    state,
+  );
 }
 
 function instanceHostFor(
   state: ElementState,
+  element: HTMLElement,
 ): GeneratedElementInstanceHost<Record<string, unknown>> {
-  return {
-    props: state.props,
-    propsChanged: state.propsChanged,
-  };
+  return withContextChannel(
+    withInternalsStates(
+      withErrorReportChannel(
+        withErrorHandlerChannel(
+          withPropertyChangeChannel(
+            withHostElement(
+              {
+                props: state.props,
+                propsChanged: state.propsChanged,
+              },
+              element,
+            ),
+            state,
+          ),
+          state,
+        ),
+        element,
+        state,
+      ),
+      element,
+      state,
+    ),
+    element,
+    state,
+  );
 }
 
 /**
@@ -1269,14 +2217,14 @@ function instanceHostFor(
  * attaches a region) and the ORIGINAL setup error rethrown; the fields are
  * cleared so the next connect retries setup on a fresh instance.
  */
-function ensureInstance(state: ElementState): LifetimeScope {
+function ensureInstance(state: ElementState, element: HTMLElement): LifetimeScope {
   const existing = state.instance;
   if (existing !== null) return existing;
   const instance = new LifetimeScope();
   try {
     const record =
       state.descriptor.createInstance !== undefined
-        ? state.descriptor.createInstance(instance, instanceHostFor(state))
+        ? state.descriptor.createInstance(instance, instanceHostFor(state, element))
         : (state.descriptor.createBindings?.() ?? {});
     state.instance = instance;
     state.bindings = record;
@@ -1350,7 +2298,7 @@ function attachForm(element: HTMLElement, state: ElementState): void {
 
 function formValueOf(state: ElementState): string {
   const form = state.form;
-  if (form === null) return '';
+  if (form === null || form.mapping.value === null) return '';
   const value = state.values.get(form.mapping.value.name);
   return typeof value === 'string' ? value : '';
 }
@@ -1367,13 +2315,17 @@ function formAuthorDisabledOf(state: ElementState): boolean {
 
 function syncFormValue(state: ElementState): void {
   const form = state.form;
-  if (form === null) return;
+  // The button shape publishes no form value: a form-associated element that
+  // never calls setFormValue contributes no FormData entry.
+  if (form === null || form.mapping.value === null) return;
   form.controller.setFormValue(formValueOf(state));
 }
 
 function syncFormValidity(state: ElementState): void {
   const form = state.form;
-  if (form === null) return;
+  // The button shape makes no validity claim; its form.checkValidity() is the
+  // platform default (valid).
+  if (form === null || form.mapping.value === null) return;
   const internals = form.controller.internals;
   if (internals === undefined) return;
   if (formRequiredOf(state) && formValueOf(state) === '') {
@@ -1388,7 +2340,8 @@ function syncFormStates(state: ElementState): void {
   if (form === null) return;
   const states = form.controller.internals?.states;
   if (states === undefined) return;
-  if (formRequiredOf(state) && formValueOf(state) === '') states.add('invalid');
+  if (form.mapping.value !== null && formRequiredOf(state) && formValueOf(state) === '')
+    states.add('invalid');
   else states.delete('invalid');
   if (formAuthorDisabledOf(state) || form.effectiveDisabled) {
     states.delete('enabled');
@@ -1410,7 +2363,8 @@ function syncFormAll(state: ElementState): void {
 function syncFormProperty(state: ElementState, property: NormalizedProperty): void {
   const form = state.form;
   if (form === null || form.controller.internals === undefined) return;
-  if (property.name === form.mapping.value.name) {
+  const value = form.mapping.value;
+  if (value !== null && property.name === value.name) {
     syncFormAll(state);
     return;
   }
@@ -1428,7 +2382,7 @@ function syncFormProperty(state: ElementState, property: NormalizedProperty): vo
 /** Write the form value through the declared property and keep its attribute seed. */
 function writeFormValue(element: HTMLElement, state: ElementState, next: string): void {
   const form = state.form;
-  if (form === null) return;
+  if (form === null || form.mapping.value === null) return;
   const property = form.mapping.value;
   setProperty(element, state, property, next, false);
   if (property.attribute !== null) {
@@ -1446,7 +2400,7 @@ function writeFormValue(element: HTMLElement, state: ElementState, next: string)
 /** `form.reset()` restores only the declared value source (never every property). */
 function resetFormValue(element: HTMLElement, state: ElementState): void {
   const form = state.form;
-  if (form === null) return;
+  if (form === null || form.mapping.value === null) return;
   writeFormValue(element, state, String(form.mapping.value.defaultValue));
   syncFormAll(state);
 }
@@ -1545,6 +2499,11 @@ export function createGeneratedElementClass<P extends object = Record<string, un
     connectedCallback(): void {
       const state = stateOf(this);
       if (state.projection !== null || state.connecting) return;
+      // Join the document-theme broadcast before any paint decision: the shared
+      // component sheet carries `:root, :host` light defaults, and its dark
+      // overrides key off `[data-theme]` on the host. Without the mirror a
+      // generated shadow root would pin the light tokens in either theme.
+      themeManager.connect(this);
       // The one-shot ElementInternals record must exist before closed-root
       // discovery; attach it before any property reconciliation so a form value
       // write during reconciliation can publish immediately. A coded failure
@@ -1552,6 +2511,28 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       if (state.form !== null) attachForm(this, state);
       // Must precede createRecipe: the recipe reads host.props on creation.
       reconcilePreUpgradeProperties(this, state);
+      // D-18c / M11-3: restore the non-primitive rows the server serialized.
+      // This runs BEFORE the recipe so setup reads the same values the server
+      // rendered with (a row supplied at SSR time would otherwise fall back to
+      // its declared default on the client).
+      //
+      // DELIBERATE PLACEMENT (C-10): this call sits OUTSIDE the `16b-EB` try
+      // below, so a malformed/unknown seed throws before the boundary and its
+      // rollback exist. That is the decision, not an oversight:
+      //   - nothing is mounted yet (no recipe, projection or connection scope;
+      //     the try's rollback can only release resources created inside it),
+      //     so there is no half-applied element to roll back;
+      //   - the boundary's handler list is the INSTANCE's, populated when the
+      //     compiled setup runs inside the try — a first connect has no author
+      //     `onError` to attribute this to, and a seed the descriptor cannot
+      //     explain is a defect in the delivered markup/program contract, not
+      //     element work a handler could repair or retry;
+      //   - the seed is consumed once, so a claim that got past this point does
+      //     not re-enter the decision on reconnect.
+      // The failure therefore stays fail-closed and loud (an uncaught error
+      // carrying `OEIR_SHELL_PROP_SEED_MISMATCH`), the same pre-try input-
+      // validation posture as pre-upgrade reconciliation above.
+      applyGeneratedPropSeed(this, state);
       state.connecting = true;
       // A retained instance is what makes reconnect a re-arm rather than a
       // re-setup. It is resolved inside the try so a root failure allocates no
@@ -1577,11 +2558,19 @@ export function createGeneratedElementClass<P extends object = Record<string, un
               : !state.rootCreatedByShell && parent.childNodes.length > 0;
           state.regionState = preexisting ? 'present' : 'absent';
         }
-        const instance = ensureInstance(state);
+        const instance = ensureInstance(state, this);
         // The connection scope is created per successful connect and disposed
         // plain on disconnect; the instance above is retained across it.
         connection = instance.child();
-        const recipe = normalized.createRecipe(connection, hostFor(state));
+        // `16b-CTX`: the context owner tree joins the connection before the
+        // recipe is created, so the mount/claim body's consumers resolve against
+        // an already-connected scope. The compiled setup has ALREADY run (above)
+        // and registered this element's providers and consumer declarations —
+        // `connect()` publishes those intents and bridges the consumers, which is
+        // exactly the engine's own "registration then connect" order. A
+        // descriptor that never touches the channel never created a scope.
+        state.context?.connect();
+        const recipe = normalized.createRecipe(connection, hostFor(state, this));
         // Reconnect and dispose(false) retain the region; dispose(true) marks it
         // absent and the next connect mounts even when foreign nodes remain in
         // the root. The decision is never re-derived from current childNodes.
@@ -1596,6 +2585,21 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       } catch (error) {
         state.connection = null;
         state.projection = null;
+        // `16b-EB` connect/claim capture point. The ROLLBACK below is the
+        // pre-existing one and runs identically whether or not a boundary is
+        // registered: the failed attempt's listeners, subscriptions and child
+        // scopes are released, the instance pass is aborted, and a failed FIRST
+        // connect destroys its instance. Only the LAST step changes — with a
+        // registered handler the error is reported instead of escaping.
+        //
+        // The handler list is SNAPSHOT here, before the rollback clears it (a
+        // failed first connect destroys its instance, and the list dies with
+        // it). The env's signal is the connection scope's own signal, captured
+        // before disposal: by the time the handler runs the connection is gone,
+        // so `signal.aborted === true` is the honest answer, and a reconnect
+        // gets a fresh scope and a fresh signal.
+        const capturedHandlers = [...state.errorHandlers];
+        const capturedSignal = connection?.signal ?? NO_LIVE_SCOPE_SIGNAL;
         // A failed mount/claim aborted the root instance pass (LC-2): evict
         // exactly the entries created in this attempt and keep every
         // pre-existing retained entry (with its previous structural index) for
@@ -1606,7 +2610,13 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         // Keep any ownership recorded by an earlier successful mount/claim: a
         // failed re-claim borrowed no new DOM and must not adopt the host's
         // children. The recipe/projection rolled back its own child scope.
-        const release: Array<() => void> = [() => connection?.dispose(false)];
+        const release: Array<() => void> = [
+          // `16b-CTX`: a failed attempt leaves no published provider and no
+          // consumer bridge behind. Disconnect (not dispose) keeps the scope and
+          // its intents, so a retry republishes them on the next connect.
+          () => state.context?.disconnect(),
+          () => connection?.dispose(false),
+        ];
         if (!hadInstance && state.instance !== null) {
           // Setup was created by THIS connect and never became the retained
           // instance: dispose it in detach mode (a failed setup attaches no
@@ -1616,6 +2626,8 @@ export function createGeneratedElementClass<P extends object = Record<string, un
           const instance = state.instance;
           state.instance = null;
           state.bindings = null;
+          state.propertyChangeCallbacks.length = 0;
+          state.errorHandlers.length = 0;
           // Failed-first-connect rollback (LC-2): release every retained child
           // bookkeeping entry and plain-dispose its retained scope BEFORE the
           // instance is destroyed. The ledger is not a GC contract, and the
@@ -1626,6 +2638,14 @@ export function createGeneratedElementClass<P extends object = Record<string, un
           release.push(() => instance.dispose(true));
         }
         releaseIgnoringErrors(release);
+        // No handler: the pre-`16b-EB` rethrow, unchanged. With a handler the
+        // boundary owns the error. A handler that itself throws REPLACES the
+        // original — its error is what escapes, and it is thrown from here after
+        // the rollback completed, so the element is still in its defined state.
+        if (capturedHandlers.length > 0) {
+          runErrorHandlers(this, state, capturedSignal, error, capturedHandlers);
+          return;
+        }
         throw error;
       } finally {
         state.connecting = false;
@@ -1634,6 +2654,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
 
     disconnectedCallback(): void {
       const state = stateOf(this);
+      themeManager.disconnect(this);
       const projection = state.projection;
       const connection = state.connection;
       state.projection = null;
@@ -1645,7 +2666,15 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       // current non-detach path). The connection scope owns no DOM; dispose it
       // after the projection so a reconnect re-arms on a fresh scope. Both run,
       // and the projection's error (the first one) is what surfaces.
-      captureCleanupFailures([() => projection?.dispose(false), () => connection?.dispose(false)]);
+      // `16b-CTX`: disconnect the context scope with the connection. Providers
+      // unpublish and consumer bridges unsubscribe exactly once, so a
+      // disconnected element neither answers nor observes. The scope and its
+      // intents survive for the reconnect.
+      captureCleanupFailures([
+        () => state.context?.disconnect(),
+        () => projection?.dispose(false),
+        () => connection?.dispose(false),
+      ]);
     }
 
     attributeChangedCallback(
@@ -1700,6 +2729,14 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       state.instance = null;
       state.bindings = null;
       state.ownedNodes = null;
+      // The instance is being destroyed: drop its change listeners before any
+      // teardown cleanup runs, so none can observe a dying owner.
+      state.propertyChangeCallbacks.length = 0;
+      // `16b-EB`: the boundary dies with its owner. A teardown cleanup that
+      // throws after this point is NOT routed to a handler whose element is
+      // being destroyed — it surfaces through the existing first-error rule,
+      // exactly as before this channel existed.
+      state.errorHandlers.length = 0;
 
       if (!detachOwnedNodes) {
         // Plain disposal releases the ownership record with the projection and
@@ -1718,6 +2755,11 @@ export function createGeneratedElementClass<P extends object = Record<string, un
             if (instance !== null) releaseRetainedChildren(instance);
           },
           () => instance?.dispose(false),
+          // `16b-CTX`: the context scope dies with the instance. Disposing it
+          // drops the owner tree, the provider records and the consumer
+          // bridges; a later connect creates a NEW scope, which is what
+          // "dispose is not disconnect" means for context too.
+          () => state.context?.dispose(),
         ]);
         return;
       }
@@ -1729,6 +2771,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       if (hadOwnedRegion) state.regionState = 'absent';
       captureCleanupFailures([
         () => projection?.dispose(true),
+        () => state.context?.dispose(),
         // The projection's range cleanup normally removes the region; remove
         // the recorded owned range explicitly as well so a throwing cleanup
         // cannot leave it behind. This is still only the owned range: never
@@ -1760,6 +2803,16 @@ export function createGeneratedElementClass<P extends object = Record<string, un
     value: observedAttributes,
   });
 
+  if (normalized.delegatesFocus) {
+    // The class lane's emitted static carries this platform fact; a generated
+    // class exposes the same static so consumers (and the accessibility suite)
+    // read the focus-delegation decision off the constructor.
+    Object.defineProperty(GeneratedElementShell, 'delegatesFocus', {
+      configurable: true,
+      value: true,
+    });
+  }
+
   if (normalized.formAssociated) {
     // The platform reads the constructor static, not the descriptor; set it
     // before the outer entry calls customElements.define.
@@ -1780,6 +2833,28 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         const state = stateOf(this);
         setProperty(this, state, property, coercePropertyWrite(property, value), true);
       },
+    });
+  }
+
+  if (normalized.ssrProducer !== undefined) {
+    // The light-root SSR producer rides the class the serializer already
+    // resolves (`customElements.get(tag)`), so `renderToString` needs no second
+    // lookup table and an unregistered light host still fails closed.
+    Object.defineProperty(GeneratedElementShell, '__ssr', {
+      configurable: true,
+      enumerable: false,
+      writable: false,
+      // The compiler-emitted producer takes `(props, host)` — a light root's
+      // content is a function of its declared rows, exactly like a shadow
+      // root's template. The SHADOW lane gets its props from the `<Name>__ssrHost`
+      // wrapper, which seeds them from the host attribute pairs. A light root has
+      // no wrapper (`ssrHostExport` is null by design), so the caller of the
+      // class static is the only place left to seed — and it used to call the
+      // producer with NO arguments, which meant EVERY light-root component with
+      // a declared row threw on `props.x` while a rowless one worked. Do the
+      // seeding HERE, inside the class static, so both light call sites (root and
+      // nested) get it without each having to know the mechanism.
+      value: lightSsrProducer(normalized, normalized.ssrProducer),
     });
   }
 

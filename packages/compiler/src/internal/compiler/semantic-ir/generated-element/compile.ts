@@ -131,12 +131,13 @@ export function compileGeneratedElementIfAdmitted(
 
   const frontend = compileFunctionModule(code, id, {
     importClassifier: GENERATED_ELEMENT_IMPORT_CLASSIFIER,
-    // `16b-LC` option 1a: the generated-element lane is the only host that
-    // admits the author lifecycle intrinsics, and only in the ROOT setup of a
-    // module it owns. Every other function-lane caller keeps today's statement
-    // grammar (the existing OEC9041 refusal), which is the recorded slice
-    // boundary for nested/hostless hooks.
-    lifecycleRoot: admission.componentName,
+    // `16b-LC`: the generated-element lane is the ONLY host that admits the
+    // author lifecycle intrinsics, and it admits them module-wide here. The
+    // generator owns the placement verdict: a hook is carried only by the root
+    // setup or a depth-1 retained hostless child setup; every other placement
+    // fails closed with the authored span. Every other function-lane caller
+    // keeps today's statement grammar (the existing OEC9041 refusal).
+    lifecycleAdmission: { admission: 'module' },
   });
   if (frontend.module === null) {
     // Authored diagnostics from the real frontend keep their OEC codes and
@@ -172,6 +173,14 @@ export function compileGeneratedElementIfAdmitted(
     // D-props (2026-11-14): the resolved rows of the cross-checked sidecar
     // table; empty keeps the M09-1a `properties: []` bytes.
     ...(admission.properties.length === 0 ? {} : { properties: admission.properties }),
+    // M09-2e / #1803: the `styles` presence comes from the SAME authored sidecar
+    // read above (root/focus/props), so the scan-time and transform-time
+    // compiles of one module cannot disagree and no host boolean exists. Only a
+    // shadow root has a DSD template to declare the link in; a light root's
+    // declared sheet keeps the document channel (no emitted byte changes).
+    ...(admission.declaresStyles && admission.root === 'shadow-open'
+      ? { styleLinkPrefix: true }
+      : {}),
     ...(options.authoredSource === undefined ? {} : { authoredSource: options.authoredSource }),
   });
   if (emitted.diagnostics.length > 0) {

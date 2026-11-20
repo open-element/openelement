@@ -16,9 +16,10 @@
  * `apps/saas#nitro:build-workers` (the root `saas:workers` task does).
  */
 
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 import ts from 'typescript';
+import { emitSummary, reportPathArg } from './checker-io.ts';
 import { extractStaticModuleSpecifiers, parseTypeScript } from '../lib/typescript-ast.ts';
 
 export interface WorkersManifest {
@@ -237,16 +238,26 @@ export function scanWorkersOutput(
   return violations;
 }
 
-function printShims(): void {
-  console.log(`Workers node builtin allowlist (${WORKERS_NODE_SHIMS.length} entries):`);
-  for (const shim of WORKERS_NODE_SHIMS) {
-    console.log(`  ALLOW ${shim.specifier} — ${shim.reason}`);
-  }
+/** The detailed allowlist report; `--report <path>` carries it instead of stdout. */
+function shimReportLines(): string[] {
+  return [
+    `Workers node builtin allowlist (${WORKERS_NODE_SHIMS.length} entries):`,
+    ...WORKERS_NODE_SHIMS.map((shim) => `  ALLOW ${shim.specifier} — ${shim.reason}`),
+  ];
 }
 
 if (import.meta.main) {
-  const outputRoot = process.argv[2] ?? 'apps/saas/.output-workers';
-  printShims();
+  // One positional (the output root) plus the shared --report flag; a flag
+  // value is never mistaken for the positional.
+  const argv = process.argv.slice(2);
+  const reportPath = reportPathArg(argv);
+  const positional = argv.filter(
+    (token, index) => !token.startsWith('--') && (index === 0 || argv[index - 1] !== '--report'),
+  );
+  const outputRoot = positional[0] ?? 'apps/saas/.output-workers';
+  if (reportPath !== undefined) {
+    await writeFile(reportPath, `${shimReportLines().join('\n')}\n`, 'utf8');
+  }
   let manifest: WorkersManifest;
   try {
     manifest = JSON.parse(await readFile(`${outputRoot}/nitro.json`, 'utf8')) as WorkersManifest;
@@ -273,5 +284,5 @@ if (import.meta.main) {
     for (const violation of violations) console.error(`  ${violation}`);
     process.exit(1);
   }
-  console.log(`Workers output boundary check passed (${modules.length} server modules).`);
+  emitSummary(`Workers output boundary check passed (${modules.length} server modules).`);
 }

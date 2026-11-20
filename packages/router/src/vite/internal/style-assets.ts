@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the authored-sheet channel is ONE artifact lifecycle — registry edge, `\0`-virtual graph id, one Vite-processed text, content hash, emitted `.css` name, client asset manifest entry, SSR-declared URL, dev-server resource and the adapters handed to the module graph must all name the same sheet — so the resolve/load/transform/emit/serve phases live together instead of forking that identity; the boundary is that this file owns only that channel (the compiler requests edges, the runtime adopts sheets) and never renders or executes component code, and every path fails closed on an edge it cannot attribute.
 /**
  * The style-edge intercept (#1558; the #1553 protocol after the file-based
  * authoring retirement). The router client build is the sole owner of the
@@ -61,6 +62,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type { Plugin, ViteDevServer } from 'vite';
 import {
+  analyzeModuleSemantics,
   type ClassCandidateRegistry,
   compileElementModule,
   compileServerComponentIfAdmitted,
@@ -75,13 +77,15 @@ import {
   styleRequestsForImporter,
 } from '@openelement/compiler';
 import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
+import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
 import { createServerComponentSourceResolver } from './server-component-host.ts';
+import type { IslandStyleDeclaration } from './island-style-declarations.ts';
 import { walkModuleGraph } from './module-graph-walk.ts';
 import {
   registerArtifactCandidates,
   registerCandidatesFromCompiled,
 } from './collect-shadow-candidates.ts';
-import { findBuildWorkspaceRoot } from '../workspace-alias.ts';
+import { findBuildWorkspaceRootOrUndefined } from '../workspace-alias.ts';
 import {
   STYLE_SHEET_LIVE,
   STYLE_SHEET_READY,
@@ -728,7 +732,7 @@ async function discoverServerRenderedModules(
     return declaredEdges;
   }
   const effectiveRoot = root ?? process.cwd();
-  const workspaceRoot = findBuildWorkspaceRoot(effectiveRoot) ?? undefined;
+  const workspaceRoot = findBuildWorkspaceRootOrUndefined(effectiveRoot);
   const serverComponentResolver = createServerComponentSourceResolver({
     root: effectiveRoot,
     workspaceRoot,
@@ -800,6 +804,14 @@ async function discoverServerRenderedModules(
       // and registering that absence keeps a deleted class from surviving an
       // edit (defect C).
       registerArtifactCandidates(source, file, candidates);
+      // A GENERATED element module is a component module too, but it reaches
+      // neither branch above: it declares no `@element` decorator (the class is
+      // compiler-emitted) and an uncompiled package ships the authored `.tsx`.
+      // Its admission identity is the island policy sidecar, and the manual-mode
+      // report below must count it — otherwise a generated package the app
+      // imports without admitting it is silently undelivered, which is exactly
+      // the failure that report exists to name.
+      if (moduleDeclaresGeneratedElement(source, file)) elementFiles.push(file);
       continue;
     }
     registerStyleEdges(file, artifact.requests, artifact.scopeTag);
@@ -841,16 +853,23 @@ async function discoverServerRenderedModules(
  *
  * Resolution is the class lane's: the specifier is joined against the island
  * module's directory by the compiler's ONE key derivation
- * (`styleRequestModuleId`), and the island's tag rides as the light-root scope
- * tag, so the emitted asset is the same native `@scope (<tag>)` projection a
- * light-root class component's authored sheet gets. The island scan already
+ * (`styleRequestModuleId`). A LIGHT-root island's tag rides as the scope tag, so
+ * the emitted asset is the same native `@scope (<tag>)` projection a light-root
+ * class component's authored sheet gets; a SHADOW-root island's edge carries NO
+ * scope tag (the shadow boundary is the isolation), which is the registry's
+ * existing shadow-root edge shape — the authored bytes ship verbatim and are
+ * declared inside the DSD template (M09-2e / #1803). The island scan already
  * validated the specifier shape, the lane and the root; this pass adds no second
  * validation and no second style pipeline.
  */
 function registerDeclaredIslandStyleEdges(): Map<string, RegisteredStyleRequest> {
   const edges = new Map<string, RegisteredStyleRequest>();
   for (const declaration of islandStyleDeclarations()) {
-    registerStyleEdges(declaration.moduleId, declaration.specifiers, declaration.tagName);
+    registerStyleEdges(
+      declaration.moduleId,
+      declaration.specifiers,
+      declaration.root === 'shadow' ? undefined : declaration.tagName,
+    );
     for (const request of styleRequestsForImporter(declaration.moduleId)) {
       edges.set(request.moduleId, request);
     }
@@ -876,6 +895,25 @@ function registerDeclaredIslandStyleEdges(): Map<string, RegisteredStyleRequest>
  * there), so the walk keeps its mouth shut — this report is the manual-mode
  * boundary.
  */
+/**
+ * Whether this module declares a GENERATED element: it carries the island
+ * policy sidecar the generated-element lane reads. The predicate is the
+ * compiler's own module-semantics fact, so every consumer (this walk, the auto
+ * admission derivation, the island scan) sees ONE definition of "component
+ * module" instead of re-deriving it from a decorator spelling.
+ */
+function moduleDeclaresGeneratedElement(source: string, file: string): boolean {
+  try {
+    return analyzeModuleSemantics(source, file, {
+      vocabulary: ROUTER_MODULE_VOCABULARY,
+    }).hasGeneratedElementSidecar;
+  } catch {
+    // An unparseable module is not evidence of a component; the compiler lane
+    // owns that refusal and reports it with its own code.
+    return false;
+  }
+}
+
 function reportUnadmittedComponentPackages(
   this: { warn(message: string): void; info(message: string): void },
   elementFiles: readonly string[],
@@ -1100,9 +1138,56 @@ export function serverStyleAssetPlugin(options?: {
  * surfaces through the element runtime's `OE_STYLES_SHEET_LOAD_FAILED` report.
  * There is no fallback that inlines the CSS.
  */
+/**
+ * Dev-only index: resource digest → the style edge's registry key.
+ *
+ * The endpoint needs the mapping the URL cannot carry. It is filled by the
+ * adapter module's own `load()` (class-lane edges) AND by the generated-island
+ * declarations (`devAuthoredIslandStyleUrls`), because a declared shadow sheet
+ * has no authored `.css` import whose adapter would register it — the DSD
+ * template declares the URL directly. Module-scoped on purpose: the server half
+ * and the entry's virtual module are different plugin instances of the same dev
+ * server.
+ */
+const devAuthoredResourceEdges = new Map<string, string>();
+
+/**
+ * The dev URLs of one generated island's declared sheets. Registers the edges in
+ * the SAME compiler registry the class lane rides and records the digest index
+ * the dev endpoint reads, so a shadow island's DSD `<link>` resolves in dev
+ * exactly as it does in a build.
+ */
+export function devAuthoredIslandStyleUrls(
+  base: string,
+  declaration: IslandStyleDeclaration,
+): readonly string[] {
+  registerStyleEdges(
+    declaration.moduleId,
+    declaration.specifiers,
+    declaration.root === 'shadow' ? undefined : declaration.tagName,
+  );
+  const urls: string[] = [];
+  for (const specifier of declaration.specifiers) {
+    // Join by the registry KEY the registration above used, not by importer
+    // attribution: a shadow sheet shared with a class island's authored import
+    // carries one registry entry (keyed by the sheet file) under whichever
+    // importer registered last, so the per-importer request list would drop
+    // the shared sheet from this island's declared dev links.
+    const key = styleRequestModuleId(
+      declaration.moduleId,
+      specifier,
+      declaration.root === 'shadow' ? undefined : declaration.tagName,
+    );
+    const url = devAuthoredStyleUrl(base, key);
+    devAuthoredResourceEdges.set(devStyleDigest(key), key);
+    urls.push(url);
+  }
+  return urls;
+}
+
 export function devStyleAssetPlugin(): Plugin {
   /** Resource digest → the edge's registry key (the middleware's index). */
-  const resourceEdges = new Map<string, string>();
+  const resourceEdges = devAuthoredResourceEdges;
   let base = '/';
   return {
     name: 'open:style-assets-dev',

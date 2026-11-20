@@ -626,3 +626,332 @@ plan's own record stands:
 - No milestone, gate, exit or release claim is created or moved. M09, M10, M11,
   M12, M13 and M14 keep their recorded statuses.
 - No version, tag, publication or public-API freeze is authorized.
+
+## 17. Dated amendment 2026-11-16 (owner direction register — draft; formal sign-off pending)
+
+This amendment records three directions the owner gave on 2026-11-16: **D1 = A**
+(generated islands of the workspace `@openelement/ui` package migrate inside
+Alpha16, targeting the Alpha16 release line), **D2 = the experience-edition
+capability API**, and **D3 = B** (a JSON seed channel for non-attribute
+properties). It is a **draft carrier of the direction only**: the formal owner
+sign-off line in §17.2 is intentionally blank, and this draft records no
+signature, approval, verdict, evidence or release authorization. The proposed
+decision text lives in
+[the ADR-0182 draft](../adr/ADR-0182-function-component-capability-api.md).
+
+It introduces **no new milestone and no new slice label** (§14.4:525-527 stays
+in force) and it changes no verdict.
+
+### 17.1 Decisions directed
+
+| # | Direction (owner, 2026-11-16) | Boundaries recorded by this draft |
+| --- | --- | --- |
+| D-17a | **D1 = A.** Generated-lane island admission extends to workspace package modules, and the three `@openelement/ui` islands the docs site consumes (`open-button`, `open-code-block`, `open-theme-toggle`) migrate to function/generated components **inside Alpha16**, targeting the Alpha16 release line subject to the release gates. | Not class retirement, not a package split or rename, and not a second admission mechanism. The workspace-source-versus-build-metadata route for the package-module site fact, and the scope of the CEM live input plus the ui package build/publish chain, are implementation decisions recorded by the implementation slices — not selected or waived here. |
+| D-17b | **D2 = experience-edition capability API:** lifecycle callbacks receive `env = { host, signal }`; an `onError` error-boundary intrinsic; `provideContext` / `useContext` as a scope tree over generated owners (hostless owners included); an intrinsic element `ref` plus `useHost` host-element access; a **component `ref` stays FUTURE** and is not part of this edition. | Compiler-erased intrinsics admitted by binding provenance (the ADR-0180 pattern): no runtime dispatcher, no hook-order slots, no second lifecycle engine, no class adapter. "Experience edition" is a deliberate **no-stability-promise** label; exact signatures, the boundary reset policy and the context representation/lifetime/reactivity remain implementation decisions (the candidate contract's TSX-12 ref-timing boundary and TSX-13/TSX-19 OPEN items are unchanged). Every public export or tracked-interface delta is enumerated in the implementation record and its regenerated snapshot change. |
+| D-17c | **D3 = B.** Declared non-attribute (`attribute: false` / non-primitive) property values cross to the client through a dedicated **JSON seed channel**; attribute encoding is not the chosen carrier. | Only declared property-only rows whose declared value type is JSON-encodable are in scope; values are JSON-safe and validated, and no raw-markup channel is added. The `trustedHtml` crossing and the exact transport are separate decisions — [`m09-2d-nonprimitive-properties.md`](./m09-2d-nonprimitive-properties.md):126 already assigns a future transport to M11 and records that no server-to-client seed exists today. Claim acceptance: an equal seed writes nothing and a structurally divergent seed fails closed through the existing claim-mismatch path. |
+
+### 17.2 Formal sign-off (pending — intentionally blank)
+
+| Field | Value |
+| --- | --- |
+| Owner direction recorded | 2026-11-16 (the three directions above) |
+| Owner sign-off | ____________________________ (pending; blank by design) |
+| Sign-off date | ____________________________ (pending) |
+
+This draft does not move §17 from draft to an approved amendment, and the blank
+line is not a signature. Only the owner's recorded sign-off can do that.
+
+Implementation slices may proceed under this recorded direction (the owner gave
+it on 2026-11-16); the blank sign-off blocks any claim that the direction is
+delivered, that a §17.3 evidence row is satisfied, or that any gate, exit or
+release condition is met.
+
+### 17.3 Acceptance evidence required before the direction is claimed delivered
+
+The evidence below is what the implementation slices must produce; **this
+amendment produces none of it**:
+
+- **D-17a:** a real `www` build with the migrated ui islands (the normal build,
+  the browser-entry graph's P1 result and the docs-site output), with every
+  non-migrated package component keeping its bytes and behavior.
+- **D-17b:** consumer-form tests for each capability — Node artifact rows and
+  Chromium rows for the `env` shape, the per-connection signal (abort on
+  disconnect, fresh signal on reconnect), cleanup order, zero-argument
+  compatibility, host usability, context isolation, error-boundary containment
+  and ref lifecycle — plus unchanged bytes for every non-participating module
+  and an enumerated public-interface delta (if any) with its snapshot change.
+- **D-17c:** SSR-to-claim parity for the declared JSON-encodable values
+  (byte/fixture/browser rows), an equal-seed zero-write claim, a divergent-seed
+  claim that fails closed, and the explicit absence of an attribute or
+  raw-markup carrier.
+
+No partial row, green CI run or draft record satisfies any of these.
+
+### 17.4 What this amendment does not change
+
+- §2 items 1–8, §12a's five separate proofs, §13.1, §13.2, §13.4, §13.5,
+  §13.6, §14, §15 and §16 are unchanged.
+- No milestone, gate, exit or release claim is created or moved. M09, M10, M11,
+  M12, M13 and M14 keep their recorded statuses; the ui migration is not an M09
+  exit and the capability API is not an M11 delivery.
+- No version, tag, publication or public-API freeze is authorized.
+- No implementation slice is approved by this direction; no owner sign-off is
+  recorded, and no P5 evidence or M13 qualification is claimed.
+
+## 18. Dated amendment 2026-11-20 (owner-approved remediation of PR #1804)
+
+This section is the **approved carrier** of the PR #1804 remediation decisions.
+It follows the amend-never-rewrite form of §13–§17: every earlier section stays
+as written, and this is the later reading. Where §16.3 and §17.4 state a
+superseded position, §18.1 and §18.2 name it explicitly; §17.2 is kept as
+written (its blank line is not a signature and this amendment does not fill it)
+and the approved carrier of the same direction is this section, which ADR-0182's
+2026-11-20 amendment records in the ADR layer.
+
+### Authorization record (delegated, in-session)
+
+Owner SisyphusZheng authorized a remediation team in the 2026-11-20 session —
+verbatim direction "全全交给你负责，启动团队把这些任务全部解决掉" — to carry
+out the PR #1804 remediation, including the decisions recorded below. This
+amendment is recorded by that authorized team under the delegation.
+
+It is **not a personal written signature**: every "owner-approved 2026-11-20"
+line in this section means owner-approved by the 2026-11-20 in-session
+delegation, and each downstream record must carry the same wording (§18.7).
+The delegation is dated to one session and one task; it authorizes no version,
+tag, publication, public-API freeze, release qualification or personal P5
+sign-off.
+
+This section introduces no new milestone and no new slice label (§14.4:525-527
+stays in force); it modifies one §13.2 minimum-obligation cell (§18.3), records
+status authority (§18.1, §18.2), ratifies two SLO raises (§18.4), authorizes the
+three subpaths already published by this PR (§18.5), and names what remains
+open (§18.6).
+
+### 18.1 Supersedes §16.3: M11-2 and M11-3 are delivered; the P1 verdict is MET at the final head
+
+§16.3:610-620 recorded, on 2026-11-15, that "M11-2 (request-time rendering of
+generated **pages**) is not done" and "M11-3 (client entry cutover) is not done,
+so P1 stays NOT MET". That was the recorded state **before** the integration
+slices landed; it is superseded here:
+
+- **M11-2 is delivered at this PR head**, as the bounded lane the code carries:
+  the build-time page classifier returns the `generated-element-page` kind with
+  the compiler-owned host-producer identity instead of refusing every generated
+  page, and the earlier universal refusal survives only for the shapes that
+  really are unsupported (a `renderIntent.stream` declaration on a generated
+  element page, a missing host-producer identity, and a page whose component
+  resolves to a generated island without the page half) with the unchanged
+  `OE_ROUTE_SCAN_GENERATED_ELEMENT_PAGE_UNSUPPORTED` identity. The lane is
+  synchronous-SSR only; streaming/deferred DSD stays outside it (ADR-0181 A6).
+- **M11-3 (client entry cutover) is delivered**: the compiler's emitted runtime
+  specifier resolves the narrow `./internal/compiled/leaf-runtime` entry
+  (§18.5), so a generated island chunk no longer pulls the generic executor in
+  through the runtime facade.
+- **The P1 verdict is re-measured MET at the final head** (the old generic
+  browser executor is unreachable from every applicable production browser
+  entry graph). The evidence carrier is the
+  [p1 applicability record](./p1-applicability-record.md) **2026-11-20
+  re-record** and the head re-recorded [progress ledger](./alpha16-18-progress.md);
+  this amendment records only the status and its authority, and asserts no
+  measurement number of its own.
+
+§16.3's third bullet — "`M10-0 preparation` is tracked but **unsigned**; the
+unsigned document is not §13.5 P5 evidence" — is unchanged and stays in force.
+
+### 18.2 Supersedes the applicability of §17.4: the head re-record moves the listed rows, and still declares no exit
+
+§17.4:690-699 said "No milestone, gate, exit or release claim is created or
+moved. M09, M10, M11, M12, M13 and M14 keep their recorded statuses; the ui
+migration is not an M09 exit and the capability API is not an M11 delivery."
+
+The **claim** rule stays in force: this PR creates no milestone exit, no gate
+record, no release claim and no release qualification, and §17.4's two
+"not an exit/delivery" statements stand. What no longer describes the ledger is
+the status sentence: the **final-head re-record is the authority for the status
+columns**, and it moves the rows below (all anchored to the same 2026-11-20
+head re-record, not to the unreachable SHAs the review lists; historical rows
+that cannot be re-anchored stay `advisory only`).
+
+| Row | Movement recorded by the head re-record | Still not claimed |
+| --- | --- | --- |
+| M09 | Sub-slice state: the named sub-slices are landed and consumed and the row carries no open sub-slice. The row is a sub-slice record. | An M09 exit. |
+| M10 | P1–P5 verdicts re-recorded at the final head; P1 is MET per §18.1 and the remaining verdicts are the re-record's to state. | An M10 exit, the final-SHA matrix and the owner sign-off (§18.6). |
+| M11 | Router integration for the generated path is landed and consumed in production; M11-2 (bounded) and M11-3 are delivered per §18.1. | An M11 qualification or M13 qualification. |
+| M12 | Final packed-consumer evidence is recorded (three engines, packed tarballs). | A **declared exit**: recorded evidence only. |
+| M13 | Site-side three-engine evidence is recorded. | A declared qualification: it needs the exact-SHA dispatch record and the server matrix (§18.6). |
+| M14 | Unchanged: the row keeps its dated gap-closure record and still names what the exit needs. | An M14 exit. |
+
+This section plus the status re-record is what closes the status conflict: the
+documents that still state the 2026-11-15 position are read against this section
+(their later-reading notes point here) rather than against the superseded
+position.
+
+### 18.3 Amends the §13.2 `16b-EB` minimum obligation: capture points delivered, SSR fallback deferred to Alpha17 (named carry, not a §13.3 exception)
+
+The §13.2:392 cell reads "Boundary API plus capture at connect/claim/update and
+an SSR fallback | capture points, retry/reset, SSR fallback, no silent swallow".
+That cell is replaced by this later reading; the slice itself stays a §13.2
+obligation and no new slice label is introduced.
+
+**Delivered minimum obligation.** The boundary API (the `onError` intrinsic) plus
+**two** capture points — not three:
+
+1. the connect/claim pass: the shell's `connectedCallback` catch already covered
+   mount, claim, setup and the `onConnect` replay as ONE instance pass, so the
+   plan's "connect" and "claim" site labels are one capture point, not two;
+2. the update phase: refresh subscriptions and DOM event dispatch through the
+   generated `guardUpdate(fn, sink)` channel.
+
+The shell's own contract records it — "the one owner of the author-facing
+`onError` handler list and of the two capture points it can honestly attribute to
+one element" (`packages/element/src/internal/compiled/generated-element/shell.ts`).
+An async rejection is deliberately **not** a capture point: there is no scheduler
+and no global listener, so a rejection cannot be attributed to one element. With
+no registered handler both capture points keep the pre-`16b-EB` rethrow/rollback
+behaviour, so "no silent swallow" holds. The boundary **reset policy** remains
+the implementation decision ADR-0182 D-18b records as OPEN; the "retry/reset"
+label in the evidence column is read as the shell's existing post-failure
+semantics (a connect-phase failure retries on a later reconnect; an update-phase
+failure keeps the subscription and listener live for the next write/dispatch),
+not as a new author-facing reset API.
+
+**Deferred: the SSR fallback.** No SSR fallback exists, and none is required in
+Alpha16. It is deferred to **Alpha17** as a named carry. For this capability
+only, the §13.2 preamble sentence (§13.2:386-387) "no Alpha17-first
+implementation is permitted for any of them" is superseded: the SSR fallback's
+first implementation is Alpha17's.
+
+This is **not a §13.3 scope exception**. An exception waives a capability that
+retires; nothing retires here and no §14.2 retained obligation is affected —
+this section changes the §13.2 obligation itself, which is why it cannot be and
+is not routed through §13.3/§14.1.
+
+The carry is satisfied only when all of the following hold, and until then the
+row stays an open carry (not a delivered capability):
+
+1. Alpha17 defines the server-time fallback contract for a failing descendant
+   producer during `__ssr` — what bytes are emitted for the boundary, how the
+   failure stays observable, and that a producer throw owned by the boundary no
+   longer fails the whole render;
+2. the client claim adopts those fallback bytes under the unchanged claim and
+   identity rules (a new identity needs its own record), and the ADR-0182
+   D-18b boundary reset policy is decided in the same record;
+3. consumer-form evidence at one SHA: the fallback bytes for a failing
+   producer, claim parity over them, the no-silent-swallow row, and the two
+   Alpha16 capture points unchanged;
+4. the `16b-MN` row updates row-for-row and the capability inventory's
+   `16b-EB` row moves from the deferred state to the delivered one.
+
+**Corrected records.** The capability inventory's `16b-EB` row is corrected by
+the 2026-11-20 remediation to the true delivery — `onError` with the two capture
+points, no SSR fallback, the Alpha17 carry — and the `16b-MN` `16b-EB` section
+carries the same dated note. This plan section is the authority for that text;
+no inventory row is evidence of its own (ADR-0182's 2026-11-20 EB amendment
+records the same truth in the ADR layer).
+
+### 18.4 Ratifies the two client-JS SLO raises (344 → 376 → 408 KiB)
+
+`www/site-budget.ts` is the single published SLO decision. It records two
+raises, both now **owner-approved**:
+
+- **2026-11-17: `totalJsKB` 344 → 376.** Measured at the first two migrated
+  generated islands (`open-dragon-live-gaze`, `open-cinematic-scroll`): 353.5
+  KiB total, i.e. +8.8 KiB for two islands, because a generated island carries
+  its own compiled recipe instead of sharing the class runtime's chunk; 376
+  kept ~6% headroom over that measurement. The file already carried the
+  "(owner decision)" label for this raise.
+- **2026-11-18: `totalJsKB` 376 → 408.** Measured on the `open-search`
+  migration (the fourth and largest www island): the search island moved
+  21.7 → 47.0 KiB (+25.3) and the shared runtime chunk 125.0 → 127.3 KiB
+  (+2.3), for a measured baseline 359.4 → 390.0 KiB (+30.6); 408 keeps ~4.4%
+  headroom over that measurement and leaves the 376-era headroom for
+  `open-page-rail`, which was still class-lane. This raise carried only a
+  measurement explanation; the 2026-11-20 delegated approval recorded here
+  ratifies it as an owner decision.
+
+The numbers above are quoted from the `www/site-budget.ts` comment as the
+measurement record of those decisions; this amendment does not re-measure and
+does not raise the SLO again. The next re-measure point is the **P1 end state**
+(the generic executor leaves the shared chunk once every island has migrated),
+where the value is re-decided rather than carried: 408 is not permanent slack,
+and lowering the value remains the only way to tighten the SLO.
+
+ADR-0182's 2026-11-17 amendment sentences "344 KB" and "migrations NOT landed"
+are history from before both raises; ADR-0182's 2026-11-20 SLO amendment records
+the correction and points here.
+
+### 18.5 Authorizes the three subpaths published by this PR
+
+- **`./lifecycle` and `./document-services`** (public subpaths of
+  `@openelement/element`) are authorized by **ADR-0182's 2026-11-20 amendment**:
+  decision, P7 four questions, P5 retirement condition and the enumerated
+  interface (6 and 3 `publicSymbols` in the regenerated snapshot).
+- **`./internal/compiled/leaf-runtime`** (third `/internal/*` export subpath) is
+  authorized by **ADR-0177's 2026-11-20 amendment**: purpose, why it is internal
+  rather than public, P7 short form and the retirement wording, with ADR-0177
+  staying the single record owner of the internal-subpath deviation.
+
+All three authorizations are same-day (2026-11-20). The delegated owner
+authorization recorded in this section **is** the release-owner review ADR-0182
+D-18b asks for: the review is the owner's own sign-off act, which the owner
+performed by delegating this remediation in-session and may supersede at any
+time. No other subpath is added,
+removed or renamed by this PR; the exports-map change is enumerated by the
+regenerated `docs/release/public-interface-snapshot.json`. Two derived pointers
+that name the older subpath counts — the `packages/element/package.json:5`
+annotation ("the two") and the `16b-MN` row ("the subpath set now numbers four")
+— are derived pointers, not additional owners; the authority remains ADR-0177
+(and, for the public subpaths, ADR-0182).
+
+### 18.6 Named follow-ups (not closed by this PR)
+
+The remediation does not pretend these are closed; each is a named follow-up,
+and none is a blocker this section waives:
+
+1. **Output-discipline scope.** The single-line success-path rule is enforced
+   for `tools/repo/check-*.ts` today; the same single-line discipline for the
+   checkers under `www/tools` and `tools/release` is **not** delivered by this
+   PR and is a named follow-up (its own change with its own byte-level
+   evidence).
+2. **Cohesion-header machine check.** The three TypeScript files that crossed
+   the 1200-line threshold in this PR carry their cohesion header; a **machine
+   check** for the threshold (rather than review) is a named follow-up.
+3. **M12/M13/P5 consolidation.** The M12 S2 list-matrix expansion, the M13
+   exact-SHA dispatch record (the `e2e-full` qualification) and the P5
+   final-SHA matrix with the owner's own sign-off belong to one independent
+   consolidation PR. Until it lands, M12/M13 stay "recorded evidence, not
+   declared exit" (§18.2) and §13.5 P5 evidence stays unsigned.
+4. **Pre-existing CodeQL alerts.** The five open code-scanning alerts on `main`
+   (4256, 4257, 4249, 4248, 4247) are not introduced by this PR. The disposition
+   this change set records for them is: the four test-code alerts are
+   dispositioned by construction fixes in the test code, and the medium
+   `tools/repo/check-dependency-age.ts` case by a written safety-review dismissal
+   reason or a by-construction fix. The per-alert record (thread + dismissal) is
+   the canonical one, not this plan. **Recorded disposition (2026-11-20):**
+   4257 and 4256 were already fixed on the PR by `397de4139` / `7767e6d9e`
+   (merge-ref alert states `fixed`); 4249 and 4248 are fixed in this remediation
+   by construction in the two router test files; 4247 is **dismissed** with a
+   written `won't fix` rationale (per-character allowlist rebuild + name grammar
+   + registry host allowlist; CodeQL char-level taint model cannot model the
+   rebuild; pre-existing on main, check-run green) — the dismissal, not this
+   plan, is the canonical record.
+5. **P1's checker is report-only.** `browser-graph:check`
+   (`tools/repo/check-browser-entry-graph.ts`) exists but is wired into no
+   required gate. Wiring it is a gate-policy change with no existing
+   authorization in this plan (the risk register leaves it unassigned) and is
+   recorded here as a named follow-up, not silently skipped.
+
+### 18.7 Record form (owner-approved 2026-11-20, delegated session)
+
+| Field | Value |
+| --- | --- |
+| Authorization | owner-approved 2026-11-20, delegated in-session remediation session |
+| Authority quoted | "全全交给你负责，启动团队把这些任务全部解决掉" (2026-11-20 session) |
+| Recorder | the authorized remediation team — recorded as "remediated by the agent team under owner delegation" |
+| Signature status | no personal written signature is recorded or implied; every "owner-approved 2026-11-20" in this plan means the delegation in this section |
+| Downstream records | must carry the same wording (delegated, dated 2026-11-20); a record that requires a personal signature (a §13.5 owner sign-off on a final-SHA matrix, a release authorization) needs the owner's own line and is **not** satisfied by this delegation |
+
+This section records the decisions above under that form and nothing more: it
+creates no version, tag, publication or public-API freeze, no release
+qualification and no milestone exit.

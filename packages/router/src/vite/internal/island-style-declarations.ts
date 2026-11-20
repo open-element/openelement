@@ -3,10 +3,17 @@
  * `styles` declaration (`IslandConfig.styles`, GH issue #1800).
  *
  * WHO WRITES IT: the island scan (`ssg/island-scanner.ts` `scanIslandMeta`) is
- * the ONE producer. It already reads every island source for its static sidecar
- * facts and resolves the generated-element lane identity in the same pass; an
- * accepted `styles` list is recorded here with the island's derived tag, the
- * islands directory and the module's absolute path.
+ * the ONE producer for LOCAL islands. It already reads every island source for
+ * its static sidecar facts and resolves the generated-element lane identity in
+ * the same pass; an accepted `styles` list is recorded here with the island's
+ * derived tag, the islands directory and the module's absolute path.
+ *
+ * `registerPackageIslandStyleDeclarations` (same module of the scanner) writes
+ * the ADMITTED PACKAGE half in the same shape: a package manifest publishes its
+ * generated component's `openElement.root` and `openElement.styles`, the host
+ * resolves the package module to the same stable module id, and the record
+ * travels the identical plan. One carrier, one reader, one emission state; the
+ * only difference is where the declaration was read from.
  *
  * WHO READS IT: the client build's style-edge discovery
  * (`style-assets.ts` `serverRenderedStyleEdgesPlugin`) is the ONE consumer. It
@@ -24,12 +31,16 @@
  * reset without a second sidecar read, exactly like the scanned island metadata
  * the build context already carries.
  *
+ * ROOT MODE. The record carries the root the compiler resolved for the island
+ * (the generated-element host identity): a LIGHT root's sheet is a document
+ * resource, while a SHADOW root's sheet is declared INSIDE its DSD template as
+ * the canonical marked `<link>` prefix (M09-2e / #1803). The client style-edge
+ * registry already distinguishes the two (`RegisteredStyleRequest.scopeTag`):
+ * a light edge is wrapped in its island tag's native `@scope`, a shadow edge
+ * ships the authored bytes verbatim. One registry, no second pipeline.
+ *
  * WHAT THIS SLICE DOES NOT DO (recorded gap, GH issue #1800, Alpha17):
  *
- * - a SHADOW-root generated island has no style carrier: the DSD style-link
- *   channel is the later M09-2e slice, so the island scan refuses a shadow-root
- *   declaration before it ever reaches this registry (fail closed, never a
- *   silently dropped sheet);
  * - a LIGHT-root generated island's declared sheets are admitted and emitted,
  *   but the generated-element render path does not declare them in the document
  *   yet (the class lane's light-root `<link>` channel is not wired to it). The
@@ -46,8 +57,14 @@ import { normalizeSeparators } from '@openelement/element/build-utils';
  * stay in authored order.
  */
 export interface IslandStyleDeclaration {
-  /** The island's derived delivery tag — the light-root `@scope` identity. */
+  /** The island's derived delivery tag — also the light-root `@scope` identity. */
   readonly tagName: string;
+  /**
+   * The compiler-resolved host root (M09-2e / #1803). A light root's sheet is a
+   * document resource; a shadow root's sheet is declared inside its DSD
+   * template by the canonical marked `<link>` prefix.
+   */
+  readonly root: 'light' | 'shadow';
   /**
    * The island module's absolute path as the bundler spells it (the importing
    * side of every style edge). Separator-normalized; queries stripped.

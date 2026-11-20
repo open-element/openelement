@@ -48,11 +48,16 @@ import { STYLE_LINKS_VIRTUAL_ID } from '../element-style-links.ts';
 import { validateIslandModuleSpecifier } from './entry-generators.ts';
 import { renderActionRoute, renderPageRoute } from './entry-codegen.ts';
 import { renderNotFoundRoute } from './entry-not-found-codegen.ts';
-import { pageRouteTagExpr, renderImport } from './entry-route-helpers.ts';
+import {
+  pageRouteTagExpr,
+  readRouteDocumentStyleLinks,
+  renderImport,
+  routeDocumentStyleLinksLiteralLines,
+} from './entry-route-helpers.ts';
 import { renderApiRoute, renderMiddleware } from './entry-server-codegen.ts';
 import { renderSsgSection } from './entry-render-ssg.ts';
 import { readGeneratedElementHost } from './generated-element-host-metadata.ts';
-import { isFunctionPage } from './page-classification.ts';
+import { isFunctionPage, pageKindOf } from './page-classification.ts';
 import { hasControlCharacter } from '../../../internal/control-characters.ts';
 import { buildError, DescriptorErrorCode } from '../../../internal/error-codes.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
@@ -440,8 +445,12 @@ export function renderEntry(desc: EntryDescriptor): string {
     // export is the compiled component function, and no element class exists
     // to register.
     for (const route of desc.pageRoutes) {
-      if (isFunctionPage(route)) continue;
-      const tagNameExpr = pageRouteTagExpr(route.varName, route.tagName);
+      // A server function page owns no element class; a generated element page
+      // is registered by the island registration below (the registry guard
+      // pairs the class and its compiler-emitted host producer atomically).
+      // Registering it here again would clear that pair (ADR-0181 A4).
+      if (isFunctionPage(route) || pageKindOf(route) === 'generated-element-page') continue;
+      const tagNameExpr = pageRouteTagExpr(route.varName, route.tagName, pageKindOf(route));
       lines.push(
         `try { __registerSsrComponent(${tagNameExpr}, ${route.varName}.default); } catch (err) { console.error('[ssg] Failed to register route custom element ${tagNameExpr}:', err); throw err; }`,
       );
@@ -515,6 +524,10 @@ export function renderEntry(desc: EntryDescriptor): string {
   // manifest/program fails the entry at load, not at request time.
   if (desc.pageRoutes.length > 0) {
     for (const route of desc.pageRoutes) {
+      // Generated element pages are synchronous-SSR only; the classifier
+      // refuses a stream declaration at build, so no guard is emitted for the
+      // bounded lane (defensive, keeps the runtime contract unchanged).
+      if (pageKindOf(route) === 'generated-element-page') continue;
       lines.push(
         `__assertStreamRoute(${route.varName}, ${quoteGeneratedJavaScriptValue(route.path)}, ${quoteGeneratedJavaScriptValue(
           route.filePath,
@@ -552,6 +565,11 @@ export function renderEntry(desc: EntryDescriptor): string {
     renderApiRoute(lines, route);
   }
 
+  // task12: build-only route → document stylesheet facts. Empty emits NO line,
+  // so a project without light-root generated styles keeps byte identity.
+  const routeDocumentStyleLinks = readRouteDocumentStyleLinks(desc);
+  lines.push(...routeDocumentStyleLinksLiteralLines(routeDocumentStyleLinks));
+
   // --- Page routes ---
   const docConfig = {
     title: desc.document.title,
@@ -560,12 +578,12 @@ export function renderEntry(desc: EntryDescriptor): string {
     allowHeadExtrasScripts: desc.document.allowHeadExtrasScripts,
   };
   for (const route of desc.pageRoutes) {
-    renderPageRoute(lines, route, desc.renderers, docConfig, desc.isSSG);
+    renderPageRoute(lines, route, desc.renderers, docConfig, desc.isSSG, routeDocumentStyleLinks);
   }
 
   // --- Action POST handlers ---
   for (const route of desc.pageRoutes) {
-    renderActionRoute(lines, route, desc.renderers, docConfig, desc.isSSG);
+    renderActionRoute(lines, route, desc.renderers, docConfig, desc.isSSG, routeDocumentStyleLinks);
   }
 
   // --- Shared dispatch: the WinterCG route middleware over the populated
@@ -596,7 +614,14 @@ export function renderEntry(desc: EntryDescriptor): string {
   // --- Styled 404 (#923): unmatched paths render the /404 page ---
   const notFoundPage = desc.pageRoutes.find((r) => r.path === '/404');
   if (notFoundPage) {
-    renderNotFoundRoute(lines, notFoundPage, desc.renderers, docConfig, desc.isSSG);
+    renderNotFoundRoute(
+      lines,
+      notFoundPage,
+      desc.renderers,
+      docConfig,
+      desc.isSSG,
+      routeDocumentStyleLinks,
+    );
   }
 
   // --- Exports: the consumer contract names are the factory results ---

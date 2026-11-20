@@ -7,14 +7,10 @@
       "declarations": [
         {
           "kind": "class",
-          "name": "OpenButton",
+          "name": "OpenButtonElement",
           "tagName": "open-button",
           "customElement": true,
-          "description": "Button or link control: an `href` property switches the compiled anchor branch (no-JS navigation survives SSR), `variant`/`size` pick the styled surface, and the disabled state follows the reflected host attribute.",
-          "superclass": {
-            "name": "OpenElement",
-            "package": "@openelement/element"
-          },
+          "description": "Button or link control with variant/size surfaces and form participation.",
           "members": [],
           "attributes": [
             {
@@ -22,43 +18,42 @@
               "type": {
                 "text": "string"
               },
-              "description": "variant attribute"
+              "default": "default"
             },
             {
               "name": "size",
               "type": {
                 "text": "string"
               },
-              "description": "size attribute"
+              "default": "md"
             },
             {
               "name": "disabled",
               "type": {
                 "text": "boolean"
               },
-              "default": "false",
-              "description": "disabled attribute"
+              "default": "false"
             },
             {
               "name": "href",
               "type": {
                 "text": "string"
               },
-              "description": "href attribute"
+              "default": ""
             },
             {
               "name": "target",
               "type": {
                 "text": "string"
               },
-              "description": "target attribute"
+              "default": ""
             },
             {
               "name": "type",
               "type": {
                 "text": "string"
               },
-              "description": "type attribute"
+              "default": "button"
             }
           ],
           "events": [
@@ -72,14 +67,12 @@
           ],
           "slots": [
             {
-              "name": "",
-              "description": "Default slot"
+              "name": ""
             }
           ],
           "cssParts": [
             {
-              "name": "control",
-              "description": "The visible button or anchor element"
+              "name": "control"
             }
           ]
         }
@@ -91,14 +84,10 @@
       "declarations": [
         {
           "kind": "class",
-          "name": "OpenInput",
+          "name": "OpenInputElement",
           "tagName": "open-input",
           "customElement": true,
-          "description": "Form-associated text input with a label, an inline error slot, and native constraint validation (required → valueMissing via setValidity).",
-          "superclass": {
-            "name": "OpenElement",
-            "package": "@openelement/element"
-          },
+          "description": "Form-associated text input with a label, an error slot and native validity.",
           "members": [],
           "attributes": [
             {
@@ -106,58 +95,56 @@
               "type": {
                 "text": "string"
               },
-              "description": "type attribute"
+              "default": "text"
             },
             {
               "name": "placeholder",
               "type": {
                 "text": "string"
               },
-              "description": "placeholder attribute"
+              "default": ""
             },
             {
               "name": "label",
               "type": {
                 "text": "string"
               },
-              "description": "label attribute"
+              "default": ""
             },
             {
               "name": "name",
               "type": {
                 "text": "string"
               },
-              "description": "name attribute"
+              "default": ""
             },
             {
               "name": "value",
               "type": {
                 "text": "string"
               },
-              "description": "value attribute"
+              "default": ""
             },
             {
               "name": "disabled",
               "type": {
                 "text": "boolean"
               },
-              "default": "false",
-              "description": "disabled attribute"
+              "default": "false"
             },
             {
               "name": "required",
               "type": {
                 "text": "boolean"
               },
-              "default": "false",
-              "description": "required attribute"
+              "default": "false"
             },
             {
               "name": "error",
               "type": {
                 "text": "string"
               },
-              "description": "error attribute"
+              "default": ""
             }
           ],
           "events": [
@@ -192,20 +179,16 @@
           ],
           "cssParts": [
             {
-              "name": "wrapper",
-              "description": "The outer input-wrapper div"
+              "name": "wrapper"
             },
             {
-              "name": "label",
-              "description": "The label element"
+              "name": "label"
             },
             {
-              "name": "control",
-              "description": "The input element"
+              "name": "control"
             },
             {
-              "name": "error",
-              "description": "The error message small element"
+              "name": "error"
             }
           ]
         }
@@ -217,14 +200,10 @@
       "declarations": [
         {
           "kind": "class",
-          "name": "OpenThemeToggle",
+          "name": "OpenThemeToggleElement",
           "tagName": "open-theme-toggle",
           "customElement": true,
           "description": "Theme toggle button for dark/light mode: reads and flips the document's `data-theme` (with an initialization priority chain) and persists the choice; icon visibility follows the current theme attribute.",
-          "superclass": {
-            "name": "OpenElement",
-            "package": "@openelement/element"
-          },
           "members": [],
           "attributes": [
             {
@@ -232,7 +211,7 @@
               "type": {
                 "text": "string"
               },
-              "description": "theme attribute"
+              "default": "dark"
             }
           ],
           "events": [
@@ -246,16 +225,13 @@
           ],
           "cssParts": [
             {
-              "name": "toggle",
-              "description": "The button element"
+              "name": "toggle"
             },
             {
-              "name": "icon-sun",
-              "description": "The sun SVG icon"
+              "name": "icon-sun"
             },
             {
-              "name": "icon-moon",
-              "description": "The moon SVG icon"
+              "name": "icon-moon"
             }
           ]
         }
@@ -267,25 +243,19 @@
       "declarations": [
         {
           "kind": "class",
-          "name": "OpenCodeBlock",
+          "name": "OpenCodeBlockElement",
           "tagName": "open-code-block",
           "customElement": true,
           "description": "Code block with a copy button.",
-          "superclass": {
-            "name": "OpenElement",
-            "package": "@openelement/element"
-          },
           "members": [],
           "slots": [
             {
-              "name": "",
-              "description": "Default slot"
+              "name": ""
             }
           ],
           "cssParts": [
             {
-              "name": "copy",
-              "description": "The copy button"
+              "name": "copy"
             }
           ]
         }
@@ -297,14 +267,10 @@
       "declarations": [
         {
           "kind": "class",
-          "name": "OpenDialog",
+          "name": "OpenDialogElement",
           "tagName": "open-dialog",
           "customElement": true,
           "description": "Dialog component using native <dialog> element + popover API.",
-          "superclass": {
-            "name": "OpenElement",
-            "package": "@openelement/element"
-          },
           "members": [],
           "attributes": [
             {
@@ -312,15 +278,14 @@
               "type": {
                 "text": "boolean"
               },
-              "default": "false",
-              "description": "open attribute"
+              "default": "false"
             },
             {
               "name": "label",
               "type": {
                 "text": "string"
               },
-              "description": "label attribute"
+              "default": ""
             }
           ],
           "events": [
@@ -334,38 +299,30 @@
           ],
           "slots": [
             {
-              "name": "",
-              "description": "Default slot"
+              "name": ""
             },
             {
-              "name": "trigger",
-              "description": "The 'trigger' slot"
+              "name": "trigger"
             },
             {
-              "name": "footer",
-              "description": "The 'footer' slot"
+              "name": "footer"
             }
           ],
           "cssParts": [
             {
-              "name": "overlay",
-              "description": "The dialog backdrop/element"
+              "name": "overlay"
             },
             {
-              "name": "header",
-              "description": "The header bar"
+              "name": "header"
             },
             {
-              "name": "close",
-              "description": "The close button"
+              "name": "close"
             },
             {
-              "name": "body",
-              "description": "The content area (<slot>)"
+              "name": "body"
             },
             {
-              "name": "footer",
-              "description": "The optional footer slot"
+              "name": "footer"
             }
           ]
         }
@@ -377,33 +334,25 @@
       "declarations": [
         {
           "kind": "class",
-          "name": "OpenDropdown",
+          "name": "OpenDropdownElement",
           "tagName": "open-dropdown",
           "customElement": true,
           "description": "Popover-API dropdown with CSS Anchor Positioning placement.",
-          "superclass": {
-            "name": "OpenElement",
-            "package": "@openelement/element"
-          },
           "members": [],
           "slots": [
             {
-              "name": "trigger",
-              "description": "Control used to toggle the dropdown"
+              "name": ""
             },
             {
-              "name": "",
-              "description": "Dropdown content"
+              "name": "trigger"
             }
           ],
           "cssParts": [
             {
-              "name": "trigger",
-              "description": "Trigger wrapper"
+              "name": "trigger"
             },
             {
-              "name": "content",
-              "description": "Popover content"
+              "name": "content"
             }
           ]
         }

@@ -65,3 +65,39 @@ the record, the view is generated:
   gate; a governing document without front matter fails a gate.
 - No product source, ABI, release state, version, tag or publication is affected
   by this ADR. Alpha16a creates no version, tag or publication claim.
+
+## Prior art (P7.4)
+
+Added 2026-11-15 to complete the P7 four-question record; no decision text changes.
+
+**D-1 — bounded retry on claim failure.** The nearest mature precedent is
+database transaction retry semantics: roll back to a savepoint, release the
+locks the attempt holds, and retry the unit — never leave the storage half
+mutated by a failed attempt. D-1 copies that shape exactly: a failed claim
+releases the reservation, rolls back committed range tombstones and the success
+cursor, and releases owners/cleanups, so the same parent can be claimed again.
+The second precedent is the idempotent-consumer pattern in stream processing
+(Kafka-style offset semantics): a consumer commits its checkpoint only after
+processing succeeds, so a failure leaves the offset in place and redelivery can
+re-process the same record — the same commit-only-on-success contract as the
+claim cursor, with the same at-least-once tolerance on the parent. The
+deliberate difference from both: the "storage" here is live server-rendered
+DOM, so the rollback has a hard floor the precedents do not — borrowed SSR
+nodes are never deleted, and whole-claim byte restoration stays out of scope.
+The nearest hydration-retry precedent, React's mismatch fallback, deliberately
+takes the opposite branch (discard the server DOM and re-render client-side);
+D-1 keeps first-paint DOM alive through recovery instead.
+
+**D-2 — suppress mount-only markers.** The nearest precedent is
+compilation-mode conditional emission in the SSR-capable frameworks: Angular's
+and React's streaming/hydration comment markers (`<!--$-->` boundaries, the
+hydration-annotated comment nodes) are emitted by the server build because the
+client reconciler consumes them, and Marko/Solid emit hydration bookkeeping
+only in the SSR compilation where hydration will read it. D-2 takes the same
+consumer-driven rule one step tighter than any of them: markers are emitted
+only when a claim function is emitted FOR THAT TREE, so a pure-mount tree
+carries no inert comment nodes at all — a no-JS page carries no protocol
+residue, not merely a harmless one. The deliberate boundary stated alongside:
+the marker/seed private contract stays OPEN until M08 introduces a real SSR
+producer, so no compatibility promise is being made to an ecosystem precedent
+yet.

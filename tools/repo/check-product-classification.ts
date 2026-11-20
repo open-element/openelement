@@ -18,6 +18,7 @@
  */
 import { readdir, readFile } from 'node:fs/promises';
 import process from 'node:process';
+import { emitSummary } from './checker-io.ts';
 
 /** Documents that must exist and carry the product contract. */
 export const REQUIRED_PRODUCT_DOCS: readonly string[] = [
@@ -239,5 +240,5 @@ if (import.meta.main) {
     for (const failure of failures) console.error(`- ${failure}`);
     process.exit(1);
   }
-  console.log('Product classification check passed: SaaS is not described as framework core.');
+  emitSummary('Product classification check passed: SaaS is not described as framework core.');
 }

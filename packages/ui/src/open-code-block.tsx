@@ -6,13 +6,14 @@
  * Contract (shrunk in #1552): the component owns the copy interaction only —
  * it does NOT bundle, load, or invoke a tokenizer. Syntax highlighting is the
  * host page's build-time concern: fences are compiled to token-span HTML by
- * the site's markdown pipeline (e.g. Shiki) and project through the slot
+ * the site's markdown pipeline (e.g., Shiki) and project through the slot
  * untouched. The projected content stays light DOM, so the host's stylesheet
  * owns the code surface and token inks; this component only paints its chip.
  *
- * Compiled authoring: the shell (slot + copy button) is the compiled
+ * Generated authoring: the shell (slot + copy button) is the compiled
  * template; the copy label is a compiled text sink driven by the `copyLabel`
- * property.
+ * property, and the copy feedback's custom state (`:state(copied)` /
+ * `:state(failed)`) is driven from the property-change channel.
  *
  * @csspart copy - The copy button
  *
@@ -23,67 +24,91 @@
  * </open-code-block>
  * ```
  */
-import { element, OpenElement, property, type StyleSheetLike } from '@openelement/element';
-import { CODE_BLOCK_CONSTANTS, log } from './component-recipes.ts';
-import openCodeBlockStyles from './open-code-block.css';
+import { onDispose, onPropertyChange } from '@openelement/element/lifecycle';
+import { defineComponentConfig } from './component-config.ts';
+import { cancelCopyReset, scheduleCopyReset } from './copy-feedback.ts';
+import { log } from './component-recipes.ts';
 
-@element('open-code-block', { root: 'shadow-open' })
-export class OpenCodeBlock extends OpenElement {
-  static override styles: StyleSheetLike[] = [openCodeBlockStyles];
+/**
+ * Platform facts for the generated element: shadow root, the authored
+ * component stylesheet, and the `copyLabel` property (property-only, no
+ * attribute form).
+ */
+export const openElement = defineComponentConfig({
+  root: 'shadow',
+  styles: ['./open-code-block.css'],
+  properties: { copyLabel: { default: 'Copy', attribute: false } },
+});
 
-  /** The copy button label — compiled text sink ('Copy'/'Copied!'/'Failed'). */
-  @property({ reflect: false, attribute: false })
-  copyLabel = 'Copy';
+/** The generated element's declared property the copy flow writes. */
+type CopyHost = HTMLElement & { copyLabel: string };
 
-  render(): unknown {
-    return (
-      <div style='display:contents'>
-        <slot></slot>
-        {/* The chip's presentation is Tailwind utilities (alpha15 S lane): the
-            compiler admits these static tokens and the build's component
-            stylesheet carries the generated rules into this shadow root.
-            `copy-btn` is the authored-state hook the sheet's :state() rules
-            target — no property has two owners. */}
-        <button
-          type='button'
-          class='copy-btn absolute top-2 right-2 z-10 cursor-pointer rounded-md border-[0.5px] border-transparent bg-primary/14 px-3 py-1 font-sans text-xs font-semibold tracking-wider text-foreground transition-all duration-150 ease-in-out hover:border-primary hover:bg-primary/23'
-          part='copy'
-          onClick={this.copy}
-        >
-          {this.copyLabel}
-        </button>
-      </div>
-    );
-  }
-
+/** Code block with a copy button. */
+function OpenCodeBlock(props: { copyLabel: string }) {
   /**
-   * Copy text reads the slotted light DOM: token spans (if the host
-   * highlighted at build time) concatenate to the exact source text.
+   * Copy the slotted light DOM: token spans (if the host highlighted at build
+   * time) concatenate to the exact source text. The clipboard promise chain
+   * writes the declared `copyLabel`; the change channel below owns state and
+   * timer bookkeeping, so the click path never touches internals.
    */
-  private getCodeText(): string {
-    return this.textContent || '';
-  }
-
-  private async copy(): Promise<void> {
+  const copy = (host: HTMLElement): void => {
+    const text = host.textContent || '';
     try {
-      const text = this.getCodeText();
-      await navigator.clipboard.writeText(text);
-      this.copyLabel = 'Copied!';
-      this._internals?.states.add('copied');
-      this._internals?.states.delete('failed');
-      this._setTimeout(() => {
-        this.copyLabel = 'Copy';
-        this._internals?.states.delete('copied');
-      }, CODE_BLOCK_CONSTANTS.copyFeedbackMs);
-    } catch (e) {
-      log.warn('Clipboard write failed:', e);
-      this.copyLabel = 'Failed';
-      this._internals?.states.add('failed');
-      this._internals?.states.delete('copied');
-      this._setTimeout(() => {
-        this.copyLabel = 'Copy';
-        this._internals?.states.delete('failed');
-      }, CODE_BLOCK_CONSTANTS.copyFeedbackMs);
+      globalThis.navigator.clipboard.writeText(text).then(
+        () => {
+          (host as CopyHost).copyLabel = 'Copied!';
+        },
+        (error: unknown) => {
+          log.warn('Clipboard write failed:', error);
+          (host as CopyHost).copyLabel = 'Failed';
+        },
+      );
+    } catch (error) {
+      log.warn('Clipboard write failed:', error);
+      (host as CopyHost).copyLabel = 'Failed';
     }
-  }
+  };
+
+  onPropertyChange((env) => {
+    if (env.name !== 'copyLabel') return;
+    if (env.value === 'Copied!') {
+      env.states.add('copied');
+      env.states.delete('failed');
+      scheduleCopyReset(env.host);
+      return;
+    }
+    if (env.value === 'Failed') {
+      env.states.add('failed');
+      env.states.delete('copied');
+      scheduleCopyReset(env.host);
+      return;
+    }
+    // Back to the idle label (the feedback reset, or a host write): clear both
+    // custom states and drop any pending reset.
+    env.states.delete('copied');
+    env.states.delete('failed');
+    cancelCopyReset(env.host);
+  });
+  onDispose((env) => {
+    cancelCopyReset(env.host);
+  });
+
+  return (
+    <div style='display:contents'>
+      <slot></slot>
+      <button
+        type='button'
+        class='copy-btn absolute top-2 right-2 z-10 cursor-pointer rounded-md border-[0.5px] border-transparent bg-primary/14 px-3 py-1 font-sans text-xs font-semibold tracking-wider text-foreground transition-all duration-150 ease-in-out hover:border-primary hover:bg-primary/23'
+        part='copy'
+        onClick={(event: Event) => {
+          const target = event.currentTarget as HTMLElement;
+          copy((target.getRootNode() as ShadowRoot).host as HTMLElement);
+        }}
+      >
+        {props.copyLabel}
+      </button>
+    </div>
+  );
 }
+
+export default OpenCodeBlock;

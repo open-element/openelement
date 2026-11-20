@@ -242,8 +242,61 @@ export default defineConfig({
         resolve: {
           alias: [
             // The __wtr__ conformance suite's working-tree contract: the bare
-            // runtime specifier and the two production ui source modules
-            // resolve to THIS tree, never to a published artifact.
+            // runtime specifier and the production ui source modules resolve
+            // to THIS tree, never to a published artifact.
+            {
+              // The generated-element lane's emitted module imports the
+              // internal shell and runtime subpaths; the bare alias below
+              // would rewrite them into `src/index.ts/internal/...`, so the
+              // specific entries come first.
+              find: '@openelement/element/internal/compiled/generated-element/shell',
+              replacement: `${rootDir}packages/element/src/internal/compiled/generated-element/shell.ts`,
+            },
+            {
+              find: '@openelement/element/internal/compiled/runtime',
+              replacement: `${rootDir}packages/element/src/internal/compiled/runtime.ts`,
+            },
+            {
+              // The generated leaf's closed entry (M11-3). Listed AFTER the
+              // facade because these are distinct exact specifiers, not
+              // prefixes of one another — the alias matcher is exact.
+              find: '@openelement/element/internal/compiled/leaf-runtime',
+              replacement: `${rootDir}packages/element/src/internal/compiled/leaf-runtime.ts`,
+            },
+            {
+              // The lifecycle-intrinsic subpath (A16-LANE-M, M10-P1/P4). The
+              // bare element alias below would rewrite this into
+              // `src/index.ts/lifecycle`, so the specific entry comes first —
+              // same rule as the generated-element entries above. Listed here
+              // rather than relying on the exports map because the browser
+              // conformance project resolves only through this table.
+              find: '@openelement/element/lifecycle',
+              replacement: `${rootDir}packages/element/src/lifecycle.ts`,
+            },
+            {
+              // The document-services subpath (generated-lane page floor). Same
+              // rule as the lifecycle entry above: the bare element alias below
+              // would rewrite this into `src/index.ts/document-services`, so the
+              // specific entry comes first. This subpath must resolve for the
+              // browser conformance project too, because it is the surface the
+              // generated client entry now imports statically and the suite
+              // pins its zero-executor closure.
+              find: '@openelement/element/document-services',
+              replacement: `${rootDir}packages/element/src/document-services.ts`,
+            },
+            {
+              // The shared component-logger subpath (#1804 B-1). Same rule as
+              // the lifecycle entry above: the bare element alias below would
+              // rewrite this into `src/index.ts/logger`, so the specific entry
+              // comes first. This table is a hand-maintained second source of
+              // truth (P6), so it is guarded by the consumer-form drift test
+              // `packages/element/__tests__/browser-alias-table-drift.test.ts`
+              // — a new `@openelement/element/<sub>` import in the browser
+              // consumer graph fails that test until an exact entry is added
+              // here.
+              find: '@openelement/element/logger',
+              replacement: `${rootDir}packages/element/src/logger.ts`,
+            },
             {
               find: '@openelement/element',
               replacement: `${rootDir}packages/element/src/index.ts`,
@@ -255,6 +308,18 @@ export default defineConfig({
             {
               find: /^\.\/instance-state\.ts$/,
               replacement: `${rootDir}packages/ui/src/instance-state.ts`,
+            },
+            {
+              find: /^\.\/dialog-machine\.ts$/,
+              replacement: `${rootDir}packages/ui/src/dialog-machine.ts`,
+            },
+            {
+              find: /^\.\/dropdown-machine\.ts$/,
+              replacement: `${rootDir}packages/ui/src/dropdown-machine.ts`,
+            },
+            {
+              find: /^\.\/input-machine\.ts$/,
+              replacement: `${rootDir}packages/ui/src/input-machine.ts`,
             },
           ],
         },

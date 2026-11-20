@@ -506,3 +506,39 @@ test('SSR Admission: plan includes CEM classifications in result', () => {
   expect(plan.cemClassifications?.length).toEqual(1);
   expect(plan.cemClassifications?.[0].tagName).toEqual('standalone-cem');
 });
+
+// Tier-2 (CEM) degradation, downstream of the admission plan: a package
+// island whose classification is missing from a half-empty scan. The two
+// cases pin the conditional fallback in entry-descriptor.ts so a change to
+// either branch (fail-closed for `ssr !== true`, fail-open for `ssr === true`)
+// is visible here rather than in an emitted-bytes surprise.
+test('SSR admission: missing CEM classification + package island (ssr unset) is client-only', () => {
+  const islands: IslandDecl[] = [
+    { tagName: 'x-widget-no-ssr', modulePath: '/node_modules/x/button.ts', source: 'package' },
+  ];
+  const plan = buildSsrAdmissionPlan(islands, [], []);
+
+  expect(plan.clientOnlyTags.includes('x-widget-no-ssr')).toEqual(true);
+  expect(plan.renderableTags.includes('x-widget-no-ssr')).toEqual(false);
+  const decision = plan.decisions.find((entry) => entry.tagName === 'x-widget-no-ssr');
+  expect(decision).toEqual(expect.anything());
+  expect(decision.renderPath).toEqual('client-only');
+});
+
+test('SSR admission: missing CEM classification + package island declaring ssr=true is ssr+client', () => {
+  const islands: IslandDecl[] = [
+    {
+      tagName: 'x-widget-ssr',
+      modulePath: '/node_modules/x/button.ts',
+      source: 'package',
+      ssr: true,
+    },
+  ];
+  const plan = buildSsrAdmissionPlan(islands, [], []);
+
+  expect(plan.renderableTags.includes('x-widget-ssr')).toEqual(true);
+  expect(plan.clientOnlyTags.includes('x-widget-ssr')).toEqual(false);
+  const decision = plan.decisions.find((entry) => entry.tagName === 'x-widget-ssr');
+  expect(decision).toEqual(expect.anything());
+  expect(decision.renderPath).toEqual('ssr+client');
+});

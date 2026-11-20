@@ -17,6 +17,7 @@ import { existsSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { readFile } from 'node:fs/promises';
 import process from 'node:process';
+import { emitSummary } from './checker-io.ts';
 import { spawnCommand } from './node-command.ts';
 import { RETIRED_API_TOKENS } from './retired-api-tokens.ts';
 
@@ -110,7 +111,11 @@ async function gitShow(ref: string): Promise<string | undefined> {
 }
 
 /** Names present at the newest tagged release snapshot but gone today. */
-async function deriveRetiredSymbols(): Promise<Set<string>> {
+async function deriveRetiredSymbols(): Promise<{
+  retired: Set<string>;
+  /** Non-null when the derivation fell back to the hand list; surfaced in the summary line. */
+  note: string | null;
+}> {
   const retired = new Set<string>(ADDITIONAL_RETIRED_SYMBOLS);
   const tags = await spawnCommand('git', {
     args: ['tag', '--list', 'v*', '--sort=-creatordate'],
@@ -118,7 +123,9 @@ async function deriveRetiredSymbols(): Promise<Set<string>> {
     stdout: 'piped',
     stderr: 'null',
   }).catch(() => undefined);
-  if (!tags || tags.code !== 0) return retired;
+  if (!tags || tags.code !== 0) {
+    return { retired, note: 'no tagged release snapshot reachable — hand list only' };
+  }
   let base: SnapshotLike | undefined;
   for (const tag of new TextDecoder()
     .decode(tags.stdout)
@@ -135,10 +142,7 @@ async function deriveRetiredSymbols(): Promise<Set<string>> {
     break;
   }
   if (!base) {
-    console.log(
-      'retired-symbol derivation: no tagged release snapshot reachable — hand list only.',
-    );
-    return retired;
+    return { retired, note: 'no tagged release snapshot reachable — hand list only' };
   }
   const current = JSON.parse(
     await readFile('docs/release/public-interface-snapshot.json', 'utf8'),
@@ -150,10 +154,10 @@ async function deriveRetiredSymbols(): Promise<Set<string>> {
     if (!/[A-Z]/.test(name)) continue;
     if (!currentNames.has(name)) retired.add(name);
   }
-  return retired;
+  return { retired, note: null };
 }
 
-const RETIRED_SYMBOLS = await deriveRetiredSymbols();
+const { retired: RETIRED_SYMBOLS, note: RETIRED_SYMBOL_NOTE } = await deriveRetiredSymbols();
 const NAMED_IMPORT =
   /import\s+(?:type\s+)?(?:[A-Za-z_$][\w$]*\s*,\s*)?\{([^}]*)\}\s*from\s*['"](@openelement\/[^'"]+)['"]/g;
 
@@ -211,4 +215,8 @@ if (failures > 0) {
   console.error(`current-doc retired-API scan failed: ${failures} file(s)`);
   process.exit(1);
 }
-console.log('current-doc retired-API scan passed.');
+emitSummary(
+  RETIRED_SYMBOL_NOTE === null
+    ? 'current-doc retired-API scan passed.'
+    : `current-doc retired-API scan passed (${RETIRED_SYMBOL_NOTE}).`,
+);

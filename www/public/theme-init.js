@@ -1,32 +1,64 @@
-// openElement Theme Initialization - L2 (browser API)
-// Runs before page render to prevent FOUC (Flash of Unstyled Content).
-// Reads saved theme from localStorage, falling back to prefers-color-scheme.
-// The public site is a violet, cinematic Web Standards Lab; light remains a
-// fully supported reading mode and the system preference wins when nothing
-// is saved.
+// GENERATED FILE — do not edit.
+// Source: packages/ui/src/theme-contract.ts
+// Generator: www/tools/generate-theme-init.ts (--check enforces byte equality).
 (function () {
+  'use strict';
   if (typeof document === 'undefined') return;
 
-  let saved;
+  const exports = {};
+  const module = { exports: exports };
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.THEME_STORAGE_KEY = void 0;
+exports.isSiteTheme = isSiteTheme;
+exports.resolveSiteTheme = resolveSiteTheme;
+exports.applyDocumentTheme = applyDocumentTheme;
+exports.THEME_STORAGE_KEY = 'open-theme';
+function isSiteTheme(value) {
+    return value === 'light' || value === 'dark';
+}
+function resolveSiteTheme(saved, prefersLight) {
+    if (isSiteTheme(saved))
+        return saved;
+    return prefersLight ? 'light' : 'dark';
+}
+function applyDocumentTheme(root, theme) {
+    let changed = false;
+    if (root.getAttribute('data-theme') !== theme) {
+        root.setAttribute('data-theme', theme);
+        changed = true;
+    }
+    if (root.style && root.style.colorScheme !== theme) {
+        root.style.colorScheme = theme;
+        changed = true;
+    }
+    return changed;
+}
+  const contract = module.exports;
+
+  let saved = null;
   try {
-    saved = localStorage.getItem('open-theme');
+    saved = localStorage.getItem(contract.THEME_STORAGE_KEY);
   } catch {
-    // localStorage may be blocked in private browsing or restricted contexts
+    // localStorage may be blocked in private browsing or restricted contexts.
   }
 
-  let prefersDark = false;
+  let prefersLight = false;
   try {
-    prefersDark = globalThis.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
+    const matchMedia = globalThis.matchMedia;
+    if (typeof matchMedia === 'function') {
+      prefersLight = matchMedia.call(globalThis, '(prefers-color-scheme: light)').matches === true;
+    }
   } catch {
-    // matchMedia may be unavailable in old WebViews
+    // matchMedia may be unavailable or throw in old/embedded WebViews.
   }
 
-  const theme = saved || (prefersDark ? 'dark' : 'light');
+  const theme = contract.resolveSiteTheme(saved, prefersLight);
+  contract.applyDocumentTheme(document.documentElement, theme);
+
   try {
-    document.documentElement.setAttribute('data-theme', theme);
     // Synchronous marker proving theme-init ran before first paint.
     document.documentElement.dataset.themeInit = '1';
   } catch {
-    // Ignore errors
+    // Ignore errors: the marker is diagnostic only.
   }
 })();

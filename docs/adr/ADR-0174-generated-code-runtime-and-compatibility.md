@@ -224,3 +224,143 @@ Web Components remain a client-only interoperability use case, with no automatic
 SSR and no openElement-managed Lit DSD hydration. The rest of this ADR — the
 generated-code runtime direction, the release gate and the Alpha16a/Alpha16b
 split — is unchanged.
+
+## Prior art (P7.4)
+
+Added 2026-11-15 to complete the P7 four-question record; no decision text changes.
+
+The nearest mature precedent for "the compiler emits the component's runtime
+code" is the compiled-framework generation this decision sits in. Four systems
+bracket the design space; each is stated with the difference this record takes
+deliberately.
+
+1. **Marko** compiles every template into a registered component plus
+   rendered-output code — the longest-running compiled-component precedent.
+   Its current-generation compiler moves further in this record's direction,
+   compiling to direct DOM instructions with no virtual DOM at runtime. The
+   deliberate difference: Marko ships compiled modules and its component
+   runtime as one coupled release surface, while this decision makes the
+   generated-module ABI an explicit compatibility contract — version,
+   capability and deployment build identity checked separately, incompatible
+   or mixed artifacts rejected early with package/component and
+   expected/actual diagnostics, and rollback that replaces server and client
+   together. None of that compatibility discipline is part of Marko's model.
+2. **Svelte** is the namesake precedent for P2's "the compiler pays": a
+   component compiles to plain JS plus small shared helpers, and updates are
+   generated assignments rather than a diff loop. The deliberate difference:
+   Svelte inlines the update logic into each component, while this record
+   keeps ONE shared runtime — one Signals engine, one owner per DOM region —
+   and measures generated code plus helpers together in the full reachable
+   page closure, so relocating bytes between generated output and helpers
+   cannot manufacture a size gain. Svelte's hydration also re-runs compiled
+   component code against server markup; it has no counterpart to claim
+   fidelity (form input, focus/selection, pre-activation events, styles,
+   refs) or to bounded recovery on claim failure.
+3. **Solid** compiles JSX to fine-grained DOM creation over reactive
+   computations, with components executing once and no virtual DOM — the same
+   generated-mount shape as this decision. The deliberate difference: Solid's
+   updates stay implicit inside a live reactive graph the runtime owns, while
+   this record generates explicit update and dispose code per structure,
+   refuses unsupported structures with source-located diagnostics instead of
+   falling back to another renderer, and pairs the client path with a
+   claim/stream wire contract the server render must satisfy.
+4. **Qwik** is the nearest precedent for treating the HTML wire as a
+   load-bearing serialization boundary: it serializes state and listener
+   references into the HTML so a page resumes without hydration replay. The
+   deliberate difference is the opposite serialization stance. Our wire
+   carries location markers, permitted seed data, resources and deployment
+   identity — never arbitrary closures, functions, DOM nodes or complete
+   Signals graphs — and interactivity is restored by generated claim code
+   re-binding to server-rendered DOM, not by deserializing a paused
+   application. Qwik accepts a serialization schema constraint on application
+   state; we accept an explicit claim protocol instead.
+
+What no one of the four carries — and what this record adds deliberately — is
+the three-contract split as separate, versioned surfaces: compiler-owned
+semantic IR, a generated-module ABI qualified against independent tarball
+consumers, and an HTML/claim/stream wire with its own admission rules. The
+single-artifact alternatives (a generic opcode interpreter, a serialized
+program the browser executes, a wire that ships the framework's closures) are
+exactly the shapes this decision rejects.
+
+## Amendment (2026-11-15): assertion memoization evidence and boundaries
+
+PR #1804 added memoization of the full server assertion pass
+(`packages/element/src/internal/compiled/server/shared.ts`: `assertedByProgram`
+WeakMap keyed by the raw program object) and of descriptor normalization
+(`packages/element/src/internal/compiled/generated-element/shell.ts`:
+`normalizedByDescriptor`). The dispatch is unchanged — this amendment records
+the evidence the change owes P2 and names the boundary it does not enforce.
+
+### Evidence: the property is behavioral, not a counter
+
+The original test seam exported `serverAssertionPassCount()` from the shipped
+server module (`shared.ts`) and asserted an exact pass count. That export is
+removed: a shipped module should not carry a diagnostics counter to prove a
+property of its own call graph. The property is now proven behaviorally in
+`packages/element/__tests__/compiled-server/compiled-server.test.ts`:
+
+- after a successful assertion, mutating the SAME raw program into the
+  duplicate-sink shape the validator rejects still returns the memoized IR
+  without throwing — the validation surface was not re-walked;
+- the same invalid shape under a NEW object identity throws (the control), so
+  the absence of a throw above can only be the cache hit;
+- a failing program re-validates and re-throws on every call (failures are not
+  memoized).
+
+The same shape is pinned for descriptors in
+`packages/compiler/__tests__/semantic-ir/generated-element.properties.test.ts`.
+
+### Boundary: mutated raw programs and descriptors are not detected
+
+The raw object is a compile-time literal each generated module evaluates once;
+no caller in this repository mutates it (the tree has no `program.x =` or
+`descriptor.x =` writes, and `validatePartProgram` is read-only). It is NOT
+frozen at runtime, and freezing is deliberately not added:
+
+- the test-shaped mutation is on a **descriptor** (`normalizedByDescriptor`,
+  `shell.ts`) while the assertion memo is on the **raw program**
+  (`assertedByProgram`, `shared.ts`) — different objects, different WeakMaps;
+- `Object.freeze` is shallow: `freeze(descriptor)` still permits
+  `descriptor.properties.push(...)`, and the deep-freeze helper is private to
+  `runtime-program.ts` and only applies to the JSON-round-tripped normalized
+  copy;
+- `__partProgram` is a generated-module export (`emit-module.ts`) read by
+  `public-runtime.ts`; 4 normalize and 3 assert call sites share the object, so
+  a freeze is a cross-server/client ABI change requiring consumer evidence —
+  the opposite of this change set's "no new runtime surface" direction.
+
+A mutated object therefore keeps its stale normalized result. That is a
+documented limitation, not a contract: a fresh identity always validates from
+scratch and fails closed.
+
+### Emitted bytes: "verdicts unchanged" is not "bytes unchanged"
+
+`entry-orchestrator.ts` serializes the admission plan into the generated entry
+(`export const ssrAdmissionPlan = …`), and the plan carries each island's
+`renderPath` and the `renderableTags` / `clientOnlyTags` sets. A half-empty
+Tier-2 (CEM) scan therefore changes the emitted module, not only a diagnostic:
+
+`packages/router/__tests__/tier2-emitted-bytes.test.ts` renders the same
+package-island fixture twice — once with the `ssr-capable` classification, once
+with an empty classification list — and prints the pair. At this head:
+
+| Input | Emitted entry | Render path for the package island |
+| --- | --- | --- |
+| CEM full (`ssr-capable`) | 18114 bytes | `ssr+client` |
+| CEM half-empty (`[]`) | 17424 bytes | `client-only` |
+
+The +690-byte delta is the plan block plus the island's registration. The
+"validation verdicts are unchanged" claim in the PR body is true only at the
+verdict layer and only for a clean scan; it is not a byte-level claim, and the
+Tier-2 skip is visible in the emitted artifact. Reproduce with:
+
+```
+./node_modules/.bin/vitest run --project router packages/router/__tests__/tier2-emitted-bytes.test.ts
+```
+
+This amendment does not change the admission contract: the classification is
+an input to the existing plan, and a missing classification still resolves
+through the documented fallback (`entry-descriptor.ts`: package islands with
+`openElement.ssr !== true` degrade to `client-only`, which is the conservative
+direction).

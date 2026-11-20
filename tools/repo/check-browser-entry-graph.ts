@@ -28,8 +28,15 @@
  * - otherwise → `MET`, exit 0 for that artifact.
  *
  * Report-only categories (executor support, server-private, authoring,
- * generated-leaf surface) and parsed-only executor residues are printed and
- * carried into `--json`, but they never change the verdict.
+ * generated-leaf surface) and parsed-only executor residues are carried into
+ * `--json` and the `--report <path>` artifact, but they never change the
+ * verdict.
+ *
+ * Output discipline: stdout is a data channel. A passing human-mode run prints
+ * exactly one summary line (through tools/repo/checker-io.ts, the single
+ * stdout writer the static gate holds every check-*.ts file to); failing
+ * artifacts name their path and expectation on stderr; `--json` emits its
+ * documented multi-line machine document.
  *
  * Exit codes: 0 = every supplied artifact MET; 1 = at least one VIOLATED;
  * 2 = no VIOLATED artifact but at least one UNPROVEN (including a missing or
@@ -52,12 +59,13 @@
  *   surfaced here as UNPROVEN, not as a build-policy change.
  *
  * Usage:
- *   node tools/repo/check-browser-entry-graph.ts <artifact.json...> [--json]
+ *   node tools/repo/check-browser-entry-graph.ts <artifact.json...> [--json] [--report <path>]
  */
 
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import process from 'node:process';
+import { emitMachinePayload, emitSummary, reportPathArg } from './checker-io.ts';
 import {
   type BrowserEntryGraphEvaluation,
   type BrowserEntryGraphVerdict,
@@ -93,15 +101,18 @@ export interface BrowserEntryGraphCheckReport {
 
 /** Output sink, injectable so the tools tests can assert exact text. */
 export interface BrowserEntryGraphCheckerIo {
-  stdout: (text: string) => void;
+  /** The single human summary line (the stdout data channel). */
+  summary: (line: string) => void;
+  /** The `--json` machine payload (a multi-line document by documented contract). */
+  machine: (text: string) => void;
   stderr: (text: string) => void;
   /** The process working directory (artifact paths resolve against it, like any CLI). */
   cwd: string;
 }
 
-/** The CLI usage line (there are no flags beyond `--json`). */
+/** The CLI usage line. */
 export const BROWSER_ENTRY_GRAPH_USAGE =
-  'usage: node tools/repo/check-browser-entry-graph.ts <artifact.json...> [--json]';
+  'usage: node tools/repo/check-browser-entry-graph.ts <artifact.json...> [--json] [--report <path>]';
 
 /**
  * Map per-artifact verdicts to the process exit code. Violations dominate (a
@@ -235,9 +246,24 @@ export async function runBrowserEntryGraphCheck(
   argv: readonly string[],
   io: BrowserEntryGraphCheckerIo,
 ): Promise<number> {
+  let reportPath: string | undefined;
+  try {
+    reportPath = reportPathArg(argv);
+  } catch (error) {
+    io.stderr(
+      `check-browser-entry-graph: ${(error as Error).message}\n${BROWSER_ENTRY_GRAPH_USAGE}\n`,
+    );
+    return 2;
+  }
   const artifactPaths: string[] = [];
   let json = false;
+  let skipNext = false;
   for (const argument of argv) {
+    if (skipNext) {
+      // The `--report <path>` value, already consumed by reportPathArg.
+      skipNext = false;
+      continue;
+    }
     if (argument === '--') {
       // `pnpm run browser-graph:check -- <args>` appends a literal `--`
       // separator; it is a CLI convention, not a flag this tool defines.
@@ -245,6 +271,13 @@ export async function runBrowserEntryGraphCheck(
     }
     if (argument === '--json') {
       json = true;
+      continue;
+    }
+    if (argument === '--report') {
+      skipNext = true;
+      continue;
+    }
+    if (argument.startsWith('--report=')) {
       continue;
     }
     if (argument.startsWith('-')) {
@@ -277,32 +310,52 @@ export async function runBrowserEntryGraphCheck(
         unproven: results.filter((result) => result.verdict === 'UNPROVEN').length,
       },
     };
-    io.stdout(`${JSON.stringify(report, null, 2)}\n`);
+    io.machine(`${JSON.stringify(report, null, 2)}\n`);
     return exitCode;
   }
 
-  const lines: string[] = [];
-  for (const result of results) lines.push(...formatHumanResult(result));
-  lines.push(
-    `browser-entry-graph: ${results.length} artifact(s) — ` +
-      `${results.filter((result) => result.verdict === 'MET').length} MET, ` +
-      `${results.filter((result) => result.verdict === 'VIOLATED').length} VIOLATED, ` +
-      `${results.filter((result) => result.verdict === 'UNPROVEN').length} UNPROVEN`,
-  );
-  lines.push(
+  const summary = summaryLine(results);
+  if (reportPath !== undefined) {
+    const lines: string[] = [];
+    for (const result of results) lines.push(...formatHumanResult(result));
+    lines.push(summary);
+    await writeFile(reportPath, `${lines.join('\n')}\n`, 'utf8');
+  }
+  if (exitCode === 0) {
+    // Output discipline: a passing check prints one summary line and no more.
+    io.summary(summary);
+    return exitCode;
+  }
+  // A failing check names the path and the expectation it did not meet; the
+  // diagnostics channel is stderr, stdout stays a data channel.
+  for (const result of results.filter((candidate) => candidate.verdict !== 'MET')) {
+    io.stderr(`${formatHumanResult(result).join('\n')}\n`);
+  }
+  io.stderr(`${summary}\n`);
+  return exitCode;
+}
+
+/** The one-line human summary: counts and verdict merged onto a single line. */
+function summaryLine(results: readonly BrowserEntryGraphCheckResult[]): string {
+  const exitCode = summarizeExitCode(results);
+  const verdict =
     exitCode === 0
       ? 'verdict: MET (the supplied artifacts load no generic executor entry — this is not an app-completeness claim)'
       : exitCode === 1
         ? 'verdict: VIOLATED (at least one artifact loads a generic executor entry)'
-        : 'verdict: UNPROVEN (evidence is missing or incomplete; do not claim MET)',
+        : 'verdict: UNPROVEN (evidence is missing or incomplete; do not claim MET)';
+  return (
+    `browser-entry-graph: ${results.length} artifact(s) — ` +
+    `${results.filter((result) => result.verdict === 'MET').length} MET, ` +
+    `${results.filter((result) => result.verdict === 'VIOLATED').length} VIOLATED, ` +
+    `${results.filter((result) => result.verdict === 'UNPROVEN').length} UNPROVEN; ${verdict}`
   );
-  io.stdout(`${lines.join('\n')}\n`);
-  return exitCode;
 }
 
-/** The real-process IO. */
+/** The real-process IO: every stdout byte flows through the checker-io writer. */
 const processIo: BrowserEntryGraphCheckerIo = {
-  stdout: (text) => process.stdout.write(text),
+  summary: (line) => emitSummary(line),
+  machine: (text) => emitMachinePayload(text),
   stderr: (text) => process.stderr.write(text),
   cwd: process.cwd(),
 };

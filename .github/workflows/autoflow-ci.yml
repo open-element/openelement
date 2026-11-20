@@ -1,9 +1,9 @@
 name: AutoFlow CI
 
 # Redesigned 2026-10-07 (#1566). Base layer: four qualification jobs (lint,
-# test, e2e, pack) plus the sha-guard. Main push layer: the five heavy jobs
-# below (e2e-full, bfcache, node-serve-smoke, packed-consumer-matrix,
-# fresh-install).
+# test, e2e, pack) plus the sha-guard. Full-qualification layer (dispatch-only
+# since W4b): the five heavy jobs below (e2e-full, bfcache, node-serve-smoke,
+# packed-consumer-matrix, fresh-install).
 # Full audit trail: PR #1567 review + issue #1566.
 #
 # Two-tier qualification (2026-11-12, W4b):
@@ -14,21 +14,19 @@ name: AutoFlow CI
 #              ONLY through `workflow_dispatch full_qualification=true` with an
 #              expected_sha. That dispatch IS the release evidence: the release
 #              workflow's `ci-evidence` job discovers it and verifies all
-#              thirteen instances before a publish.
+#              thirteen instances before a publish. A main push runs the base
+#              layer only, so a push run is Base CI, not qualification evidence.
 #
 #   Why the split: the heavy lane produced most of the main-push red (browser
 #   engine timeouts, packed-consumer installs) without gating a merge, so it
 #   ran on every commit while its evidence was only consumed at publish time.
 #   Publishing is now two steps — dispatch full qualification on the candidate
 #   SHA, wait for green, then dispatch publish.
-#   Full qualification — a main push still runs every qualification job
-#              (unchanged), and workflow_dispatch with
-#              full_qualification=true runs them on the dispatched ref's
-#              SHA, re-runnably. expected_sha is REQUIRED for a full
-#              dispatch: the sha-guard job refuses an unbound full
-#              qualification before any other job starts, and refuses a
-#              candidate SHA that does not match the SHA the jobs actually
-#              build, so a dispatch can never qualify a different commit.
+#
+#   expected_sha is REQUIRED for a full dispatch: the sha-guard job refuses an
+#   unbound full qualification before any other job starts, and refuses a
+#   candidate SHA that does not match the SHA the jobs actually build, so a
+#   dispatch can never qualify a different commit.
 #
 # Qualification contract: the run conclusion is not the evidence. The
 # contract is the individual conclusions of ten logical jobs — the sha-guard
@@ -211,6 +209,12 @@ jobs:
             git status --porcelain
             exit 1
           fi
+      - name: Theme-init artifact check (before generate:all)
+        # `www/public/theme-init.js` is a Git-tracked derived artifact. The
+        # byte check must run BEFORE generate:all: after it, the comparison
+        # sees bytes the generator just wrote and cannot detect a stale
+        # committed file (docs/agent-contract.md's generated-file map).
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/www check:theme-init
       - name: Generate all artifacts
         run: vp run generate:all
       - name: Tools typecheck (gate:source)
@@ -235,7 +239,9 @@ jobs:
         run: vp run --no-cache --fail-if-no-match --filter @openelement/www check:content-dates
       - name: Interface snapshot check
         run: vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot
-      - name: Governance checks (boundaries, provenance, state machine)
+      - name: Governance checks (boundaries, provenance, state machine, doc claims)
+        # Read-only fact check; running it after "Generate all artifacts" above
+        # keeps CI in the same generation order as gate:source and gate:release.
         run: |
           vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo esm:boundary-check
           vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo signals:check-protocol-boundary
@@ -244,7 +250,10 @@ jobs:
           vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo release:state-machine:check
           vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo workspace:links:check
           vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo docs-index:check
+          vp run --no-cache --fail-if-no-match --filter @openelement/www check:doc-claims
           vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo deps:vite-check
+          vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo output-discipline:check
+          vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo constitution-parity:check
       - name: vp selector flags (fail-closed task dispatch)
         # `vp run <pkg>#<task>` resolves the package part by exact package NAME
         # and exits 0 without running anything when nothing matches, so a
@@ -355,7 +364,7 @@ jobs:
         # the guards registered in seams.md (#1544 shared element-runtime
         # chunk, #1552 eager-script budget, #1555 pagefind filter).
         run: vp run --no-cache --fail-if-no-match --filter @openelement/www test
-      - name: Site E2E (chromium only — full 3-engine on main push)
+      - name: Site E2E (chromium only in the base layer; 3-engine runs in e2e-full)
         run: vp run --no-cache --fail-if-no-match --filter @openelement/www e2e:chromium
       - name: Light-probe E2E (build fixture first)
         run: |
@@ -421,11 +430,12 @@ jobs:
         run: vp run --no-cache --fail-if-no-match --filter @openelement/e2e-starter-smoke quality
 
   # ── Heavy qualification layer (5 jobs) ────────────────────────────────
-  # Runs on a main push (unchanged) and on a workflow_dispatch with
-  # full_qualification=true (the re-runnable Full qualification path on the
-  # dispatched SHA). A plain push that is not main skips all five by
-  # design: that push is Base CI. Every job needs sha-guard, so none of them
-  # can run — let alone report success — without the guard's success.
+  # Runs only on a workflow_dispatch with full_qualification=true (the
+  # re-runnable Full qualification path on the dispatched SHA). A push —
+  # including a main push — skips all five by design: a push is Base CI, and a
+  # Base-only run is never qualification evidence. Every job needs sha-guard,
+  # so none of them can run — let alone report success — without the guard's
+  # success.
   e2e-full:
     needs: [sha-guard]
     if: github.event_name == 'workflow_dispatch' && inputs.full_qualification == true

@@ -1,7 +1,7 @@
 ---
 status: active
 topic: M10-0 preparation (unsigned)
-summary: Unsigned M10-0 preparation: current-source capability inventory, replacement reachability gaps, an observer over the emitted browser entry graph and per-file migration methods; P1–P5 NOT MET, no sign-off.
+summary: Unsigned M10-0 preparation: current-source capability inventory, replacement reachability gaps, an observer over the emitted browser entry graph and per-file migration methods; the P1–P5 NOT MET statements are the 2026-11-15 reading (2026-11-20 later reading points at the re-record), no sign-off.
 ---
 
 # M10-0 preparation — unsigned capability inventory and migration method
@@ -64,7 +64,7 @@ obligation. Every row is NOT production-equivalent; none is closed.
 | # | Capability | C (source anchor) | R (source anchor) | G |
 | --- | --- | --- | --- | --- |
 | LC | Lifecycle | `connectedCallback`/`disconnectedCallback`, hooks `onDsdHydrated`/`onCsrRendered`/`clientActivate`, auto-cancelled `_setTimeout`/`_requestAnimationFrame` (`packages/element/src/open-element-implementation.ts:286-306,424-445`) | shell owns connect/disconnect, **no author callbacks**; `createBindings` is allocation-only (`generated-element/shell.ts:60-78,218-248`) | no author setup/cleanup API or effect ownership. `16b-LC` OPEN |
-| EB | Error boundary | `ErrorBoundary` + kernel service; lifecycle bodies wrapped `try/catch → _captureError` (`emit-module.ts:475-510`); SSR boundary retry (`public-runtime.ts:960-975`) | none; generated shell/leaf catch only to dispose then rethrow | boundary API, capture points and SSR fallback absent. `16b-EB` OPEN |
+| EB | Error boundary | `ErrorBoundary` + kernel service; lifecycle bodies wrapped `try/catch → _captureError` (`emit-module.ts:475-510`); SSR boundary retry (`public-runtime.ts:960-975`) | none; generated shell/leaf catch only to dispose then rethrow | boundary API, capture points and SSR fallback absent. `16b-EB` OPEN (superseded 2026-11-18: the `onError` three-capture-point boundary landed at `ee0434c9f`; see the 16b-migration-note 2026-11-18 amendment) |
 | CTX | Context | `create/provide/consume/releaseConsumedContext` (`public-surface.ts:62-70`); runtime service `runtime/context.ts` | none in function frontend or generated lane | authoring + generated wiring absent. `16b-CTX` OPEN (TSX-13) |
 | REF | Refs | class ref grammar (`semantic-core/lower-program.ts:785-808`) but public facade passes `refs: {}` (`open-element-implementation.ts:147`) → `HOST_REF_MISSING` (`runtime/hydrate.ts:795-805`, `runtime/parts.ts:359-363`) | intrinsic ref only, client-only; element → cleanup → null (`generated-leaf/generate.ts:459-487,1705-1755`) | host/component refs, lifetime and class-ref disposition undecided. `16b-REF` OPEN |
 | STYLE | Component styles | `static styles` from `.css` (`semantic-core/style-imports.ts:110-170`); style-edge registry, light `@scope(tag)`, shadow `adoptedStyleSheets`, SSR links | none: descriptor/shell/emit carry no style field; an island `.css` import has no registered edge | generated-island style declaration + shadow delivery; §13.3/§14 **deferred obligation** (replacement path exists); M11 re-verifies |
@@ -673,3 +673,12 @@ necessarily the minimal range. The Git-ignored `www/dist` and `apps/saas/dist`
 in this checkout are build output, not evidence: the §5 addendum records the
 2026-11-15 commands, the per-app artifacts and their `sha256` values, but no
 exact-SHA/clean-tree record backs them.
+
+## Later reading (2026-11-20)
+
+**P1–P5/M10/M11 status follows the 2026-11-20 re-record in the head
+[progress ledger](./alpha16-18-progress.md) and the
+[P1 applicability record](./p1-applicability-record.md); the `NOT MET`
+statements in this file are the state as recorded at the time of writing.** This
+is an append-only later reading: it rewrites none of the 2026-11-15 record, is
+not an M10-0 inventory sign-off, and neither claims nor closes any P5 evidence.

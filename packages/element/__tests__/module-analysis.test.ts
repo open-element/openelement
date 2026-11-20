@@ -43,6 +43,7 @@ function emptyFacts(): ModuleSemanticFacts {
     definedCustomElementTags: [],
     referencedCustomElementTags: [],
     compilerInteractionEvents: [],
+    hasGeneratedElementSidecar: false,
   };
 }
 

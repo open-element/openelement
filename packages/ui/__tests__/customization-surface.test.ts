@@ -122,7 +122,10 @@ const PINNED_VARS: Record<string, string[]> = {
   // The trigger's display and the content's min-width/padding/font moved to
   // utilities (alpha15 S lane); the sheet keeps the anchor-positioning block,
   // whose margin consumes --spacing.
-  'open-dropdown': ['--spacing'],
+  // `--oe-dropdown-anchor` is the component's own runtime anchor identity
+  // (host custom property → the authored `position-anchor: var(...)`), not a
+  // theme role; `--spacing` is the authored gap.
+  'open-dropdown': ['--oe-dropdown-anchor', '--spacing'],
   'component-recipes': [
     '--color-border',
     '--color-card',

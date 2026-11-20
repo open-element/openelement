@@ -111,7 +111,7 @@ Nine merged PRs (seven rows), keyed to the squash SHA each landed as
 
 | | Blocker | State | Who can close it |
 | --- | --- | --- | --- |
-| B1 | **`M09-3` is defined but not delivered** (D-①): the generated CE is not yet in the third-party interoperability corpus. `M09-4` is the closeout bookkeeping this record performs and is no longer counted as a gap. | Defined, not delivered | implementation — one bounded slice |
+| B1 | **`M09-3` is defined but not delivered** (D-①): the generated CE is not yet in the third-party interoperability corpus. (Superseded 2026-11-18: the interop corpus `generatedHost` block landed — see `alpha16-18-progress.md` §5 and the TSX-14 record at `564eab336`; this row is kept as decision history.) `M09-4` is the closeout bookkeeping this record performs and is no longer counted as a gap. | Defined, not delivered | implementation — one bounded slice |
 | B2 | **§14.2's three retained obligations** are OPEN. `16b-migration-note.md` is the tracked carrier for all three and records them as open rows; the CEM obligation has no bounded mechanism at all, while non-primitive conversion and form validity are bounded-LOCAL. | Not delivered | implementation |
 | B3 | **§13.5 P5 evidence.** The tracked capability inventory, the final-SHA matrix and the owner sign-off do not exist; §13.5: "A draft does not satisfy P5 … until then, P5 is not claimable and Alpha16 release qualification is not openable". | Absent | owner + author |
 | B4 | **Evidence provenance limits.** The run is `LOCAL`, chromium-only, with no CI run/job identity and no Firefox/WebKit leg; the engine revision is not recorded. M13 is where three engines are qualified, and this docket does not pre-empt it. | Recorded limit | — (a limit, not a gap in the plan) |
@@ -162,3 +162,13 @@ The record becomes effective as an exit record only when the §4 blocking set
 is cleared — B1 closed by a decision or B1–B2 explicitly accepted as scope in a
 dated §14-style amendment, and the remaining blockers closed or explicitly
 accepted. This owner sign-off does not discharge those.
+
+## Later reading (2026-11-20)
+
+**P1–P5/M10/M11 status follows the 2026-11-20 re-record in the head
+[progress ledger](./alpha16-18-progress.md) and the
+[P1 applicability record](./p1-applicability-record.md); the `NOT MET`
+statements and the blocking set in this docket are the state as recorded at the
+time of writing.** The docket's job is decision and provenance history, not a
+verdict: this later reading is append-only, flips no row, records no §13.5/P5
+sign-off, and claims no M09 exit or release.

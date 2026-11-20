@@ -90,7 +90,7 @@ test.describe('open-input / open-button form participation', () => {
     expect(await page.evaluate(formDataJsonExpr)).toEqual({ username: '', email: '' });
   });
 
-  test('disabled fieldset mirrors through formDisabledCallback and drops out of FormData', async ({
+  test('a disabled fieldset seats the effective state, refuses input, and drops out of FormData', async ({
     page,
   }) => {
     const locked = await page.evaluate(`(() => {
@@ -98,21 +98,50 @@ test.describe('open-input / open-button form participation', () => {
       const inner = host?.shadowRoot?.querySelector('input');
       return {
         stateDisabled: host?.matches(':state(disabled)') ?? false,
-        innerDisabled: inner?.disabled ?? false,
+        authorDisabled: host?.disabled ?? null,
+        // The class lane mirrored the lock onto the inner control; the
+        // generated lane's shell owns the internals record and never touches
+        // the component's DOM, so the inner control stays as authored and the
+        // the lock reaches COMPONENT CODE through the custom state only
+        // (m09-2d-forms.md "the consumable effective-disabled channel").
+        innerDisabled: inner?.disabled ?? null,
       };
     })()`);
-    expect(locked).toEqual({ stateDisabled: true, innerDisabled: true });
-    // Disabled controls never appear in FormData.
+    expect(locked).toEqual({ stateDisabled: true, authorDisabled: false, innerDisabled: false });
+
+    // The two things a consumer can actually observe:
+    // 1. the entry never appears in FormData;
     expect(await page.evaluate(formDataJsonExpr)).not.toHaveProperty('locked');
+    // 2. typing is REFUSED — the guard reads the same custom state at the
+    //    interaction, and the value row is not written. Without it a locked
+    //    field accepts keystrokes and publishes them (measured before the
+    //    guard existed), which is a behaviour regression from the class lane.
+    await page.locator('#locked input').focus();
+    await page.keyboard.type('hacked');
+    const afterTyping = await page.evaluate(`(() => {
+      const host = ${deepFirstExpr('#locked')};
+      return {
+        hostValue: host?.value ?? null,
+        inputValue: host?.shadowRoot?.querySelector('input')?.value ?? null,
+      };
+    })()`);
+    expect(afterTyping, 'a locked field must not accept or publish input').toEqual({
+      hostValue: '',
+      inputValue: '',
+    });
 
     // Re-enable the fieldset: the control rejoins the form (#1226: the
-    // re-enable only works because formDisabledCallback mirrors onto the
-    // property — an own `disabled` attribute would lock the state).
+    // re-enable only works because the effective state stays separate from the
+    // author property — an own `disabled` attribute would lock the state).
     await page.evaluate(`${deepFirstExpr('#locked-group')}?.removeAttribute('disabled')`);
     await expect
       .poll(() => page.evaluate(`${deepFirstExpr('#locked')}?.matches(':state(disabled)') ?? true`))
       .toBe(false);
     expect(await page.evaluate(formDataJsonExpr)).toHaveProperty('locked', '');
+    // …and the control accepts input again.
+    await page.locator('#locked input').focus();
+    await page.keyboard.type('ok');
+    expect(await page.evaluate(`${deepFirstExpr('#locked')}?.value ?? null`)).toBe('ok');
   });
 
   test('delegatesFocus lands host focus on the inner control; open-input fires per input', async ({

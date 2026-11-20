@@ -22,6 +22,8 @@
   "include": [
     "app",
     "e2e",
-    "vite.config.ts"
+    "vite.config.ts",
+    "generated-only/app",
+    "generated-only/vite.config.ts"
   ]
 }

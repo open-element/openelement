@@ -107,7 +107,10 @@ test.describe('open-input control surface', () => {
   });
 
   test('hover moves the border to the derived violet mix', async ({ page }) => {
-    const resting = await hostSurface(page, '#username');
+    // `#email` is the valid subject: `#username` is required-and-empty, so the
+    // generated lane's form mapping seats :state(invalid) on it and the
+    // destructive border wins over hover by design.
+    const resting = await hostSurface(page, '#email');
 
     // A real pointer move, not locator.hover(): WebKit's actionability check
     // hit-tests `<form-page>` (the shadow HOST) at the control's coordinates
@@ -117,7 +120,7 @@ test.describe('open-input control surface', () => {
     // and `:hover` on the control is asserted first, so a platform that failed
     // to hover it would fail here as a hover defect, never as a colour one.
     const point = await page.evaluate<{ x: number; y: number } | null>(`(() => {
-      const control = ${deepFirstExpr('#username')}?.shadowRoot?.querySelector('input');
+      const control = ${deepFirstExpr('#email')}?.shadowRoot?.querySelector('input');
       if (!control) return null;
       control.scrollIntoView({ block: 'center' });
       const rect = control.getBoundingClientRect();
@@ -128,29 +131,27 @@ test.describe('open-input control surface', () => {
     await expect
       .poll(() =>
         page.evaluate(
-          `${deepFirstExpr('#username')}?.shadowRoot?.querySelector('input')?.matches(':hover') ?? false`,
+          `${deepFirstExpr('#email')}?.shadowRoot?.querySelector('input')?.matches(':hover') ?? false`,
         ),
       )
       .toBe(true);
 
     await expect
-      .poll(async () => (await hostSurface(page, '#username')).borderTopColor)
+      .poll(async () => (await hostSurface(page, '#email')).borderTopColor)
       .not.toBe(resting.borderTopColor);
   });
 
   test('keyboard focus is visible: the sheet ring appears and the border turns to primary', async ({
     page,
   }) => {
-    const resting = await hostSurface(page, '#username');
+    const resting = await hostSurface(page, '#email');
     const primary = await page.evaluate(roleColourExpr('color-primary'));
-    await page.locator('#username input').focus();
+    await page.locator('#email input').focus();
 
     // `transition-[border-color,box-shadow] duration-200` is part of the
     // authored treatment, so the settled value is the one that counts.
-    await expect
-      .poll(async () => (await hostSurface(page, '#username')).borderTopColor)
-      .toBe(primary);
-    const focused = await hostSurface(page, '#username');
+    await expect.poll(async () => (await hostSurface(page, '#email')).borderTopColor).toBe(primary);
+    const focused = await hostSurface(page, '#email');
 
     // outline-none retires the UA outline, so the ring must be the sheet's.
     expect(focused.outlineStyle).toBe('none');
@@ -245,27 +246,25 @@ test.describe('open-input control surface', () => {
     expect(wiring.text).toBe('Required field');
 
     // The state is live in both directions, not just an SSR snapshot.
-    const cleared = await page.evaluate<{
-      state: boolean;
-      invalid: string | null;
-      describedBy: string | null;
-      hidden: boolean;
-    }>(`(() => {
-      const host = ${deepFirstExpr('#invalid')};
-      host.removeAttribute('error');
-      const input = host.shadowRoot.querySelector('input');
-      const error = host.shadowRoot.querySelector('[part=error]');
-      return {
-        state: host.matches(':state(invalid)'),
-        invalid: input?.getAttribute('aria-invalid') ?? null,
-        describedBy: input?.getAttribute('aria-describedby') ?? null,
-        hidden: error?.hasAttribute('hidden') ?? false,
-      };
-    })()`);
-    expect(cleared.state).toBe(false);
-    expect(cleared.invalid).toBe(null);
-    expect(cleared.describedBy).toBe(null);
-    expect(cleared.hidden).toBe(true);
+    await page.evaluate(`${deepFirstExpr('#invalid')}.removeAttribute('error')`);
+    // The generated lane's sinks settle on a queued channel (the same contract
+    // the dialog/dropdown rows pin), so the cleared state is polled rather than
+    // sampled in the removing tick.
+    await expect
+      .poll(() =>
+        page.evaluate(`(() => {
+          const host = ${deepFirstExpr('#invalid')};
+          const input = host?.shadowRoot?.querySelector('input');
+          const error = host?.shadowRoot?.querySelector('[part=error]');
+          return {
+            state: host?.matches(':state(invalid)') ?? null,
+            invalid: input?.getAttribute('aria-invalid') ?? null,
+            describedBy: input?.getAttribute('aria-describedby') ?? null,
+            hidden: error?.hasAttribute('hidden') ?? null,
+          };
+        })()`),
+      )
+      .toEqual({ state: false, invalid: null, describedBy: null, hidden: true });
   });
 
   test('part=control is the customization surface: a consumer rule reaches the inner input', async ({

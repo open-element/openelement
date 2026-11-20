@@ -7,6 +7,7 @@
 
 import { readFileSync, readdirSync } from 'node:fs';
 import process from 'node:process';
+import { emitSummary } from './checker-io.ts';
 import { extractStaticModuleSpecifiers } from '../lib/typescript-ast.ts';
 
 const SOURCE_ROOTS = ['packages/element/src', 'packages/router/src', 'packages/create/src'];
@@ -49,7 +50,7 @@ function main(): void {
     );
     process.exit(1);
   }
-  console.log('Validation-library boundary check passed.');
+  emitSummary('Validation-library boundary check passed.');
 }
 
 if (import.meta.main) main();

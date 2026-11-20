@@ -282,3 +282,59 @@ M12 packed qualification, three engines for the generated desktop surface,
 M11/M12/M13, an author-facing API, or an ABI freeze. It is one bounded
 M09-1 slice (emitter, registration wiring, packaging, one packed consumer) with
 LOCAL evidence.
+
+## 2026-11-16 amendment — static module imports (binding import channel)
+
+This is an append-only fact record for the M09-1 lane. It changes no decision
+text above and creates no milestone, gate, exit or release claim.
+
+A generated component may now read a **static import** of its own module. The
+generated module replaces the authored one at the same graph position, so the
+used import is re-emitted verbatim (`specifier`, named/alias/default/namespace
+spelling) and the read stays a DIRECT module reference. Such a read is no longer
+collected as a host binding: `OEIR_GENERATED_ELEMENT_UNBOUND_BINDING` keeps its
+meaning for values the shell would have to supply, but a module import is not
+one of them.
+
+Boundaries:
+
+- The import table is a model fact (`FunctionModelModule.imports`, optional so a
+  hand-built fixture model keeps its exact meaning). Type-only and side-effect
+  imports carry no readable binding and are not part of it.
+- Only imports an admitted component body actually reads are emitted; the
+  sidecar helper and the erased compiler intrinsics are never re-emitted.
+- A **reactive resource** is unchanged: `const t = signal(0)` still lands in the
+  host-binding refusal (`t` is a resource, not the import), so the channel
+  admits values, not runtime resources.
+- Byte identity: a module with no used import keeps its exact pre-slice bytes;
+  every existing pin stays green.
+
+Evidence: `packages/compiler/__tests__/semantic-ir/generated-element.imports.test.ts`
+(named/alias/default/namespace emission, unused-import pruning, the retained
+signal refusal) and the updated carry rows in
+`packages/compiler/__tests__/semantic-ir/generated-leaf.event-ref.test.ts`
+(an imported handler is now a static reference the module re-emits) plus the
+Chromium failure fixture, whose import now resolves through the emitted module.
+LOCAL.
+
+## 2026-11-16 amendment — SVG subtrees (namespace-aware mount and claim)
+
+An `<svg>` subtree lives in the SVG namespace. `document.createElement` produces
+an HTML-namespaced lookalike that renders nothing, and the HTML claim walk
+refuses it (`non-HTML namespace`), so the first migrated component (the ui theme
+toggle's icons) could not be claimed.
+
+- Mount: an `<svg>` element and its descendants are created with
+  `document.createElementNS('http://www.w3.org/2000/svg', tag)`.
+- Claim: inside the subtree the claim asserts the element's OWN namespace
+  (`assertElementInNamespace`), not the HTML ancestor walk — the ancestors are
+  legitimately SVG. An HTML-only module keeps the existing
+  `assertElementInHtmlNamespace` bytes.
+- Boundary: the admitted tag grammar is lowercase (`TAG_PATTERN`), so camelCase
+  SVG tags (`foreignObject`, `linearGradient`) stay refused with
+  `OEIR_LEAF_UNSUPPORTED_TAG` rather than created in the wrong namespace.
+
+Evidence: `packages/compiler/__tests__/semantic-ir/generated-element.svg.test.ts`
+(mount uses `createElementNS` for the subtree, claim asserts the SVG namespace
+per element, camelCase tags stay refused) and the www theme-toggle e2e path,
+which claims the shipped component's icons. LOCAL.

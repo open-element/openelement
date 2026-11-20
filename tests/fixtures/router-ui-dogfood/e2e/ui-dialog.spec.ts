@@ -29,7 +29,10 @@ async function waitForDialogs(page: Page): Promise<void> {
  * rest of the page is inert (top layer), so interactive tests close it first.
  */
 async function closeSsrOpenDialog(page: Page): Promise<void> {
-  await page.evaluate(`${deepFirstExpr('#ssr-open-dialog')}.close()`);
+  // The generated lane retired the class's close() sugar: the declared `open`
+  // property is the programmatic path, and the change channel drives the
+  // custom states and the top-layer exit.
+  await page.evaluate(`${deepFirstExpr('#ssr-open-dialog')}.open = false`);
   await page.waitForFunction(
     `${deepFirstExpr('#ssr-open-dialog')}?.matches(':state(closed)') ?? false`,
   );
@@ -84,8 +87,8 @@ test.describe('open-dialog', () => {
     await expect(host).toHaveAttribute('open', '');
     await expect(host).toHaveJSProperty('open', true);
 
-    // close() clears the reflected attribute, leaves the top layer and flips
-    // the custom state.
+    // The property write clears the reflected attribute, leaves the top layer
+    // and flips the custom state.
     await closeSsrOpenDialog(page);
     await expect(host).not.toHaveAttribute('open', '');
     const closed = await page.evaluate(`(() => {

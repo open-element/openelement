@@ -23,6 +23,7 @@ import {
 } from '../../src/internal/compiler/semantic-ir/generated-element/contract.ts';
 import {
   resolveGeneratedElementProps,
+  seedGeneratedElementHostProperties,
   type GeneratedElementDescriptor,
 } from '../../../element/src/internal/compiled/generated-element/shell.ts';
 import { trustedHtml, trustedHtmlValue } from '../../../element/src/internal/core/security.ts';
@@ -742,5 +743,81 @@ describe('resolveGeneratedElementProps (SSR folding helper)', () => {
     expect(() =>
       resolveGeneratedElementProps(invalidPrimitive as unknown as GeneratedElementDescriptor),
     ).toThrow(/default must be a string primitive value/);
+  });
+});
+
+/**
+ * D-18c / M11-3 — the non-primitive JSON seed channel.
+ *
+ * Before this channel a supplied non-primitive row existed only on the client:
+ * the server rendered the declared DEFAULT while the component would upgrade
+ * into the caller's value, so a visitor saw content the upgraded state no longer
+ * matched. These rows pin the producer half (what the host attribute carries)
+ * and the boundary that must NOT travel.
+ */
+describe('non-primitive JSON seed (D-18c)', () => {
+  const rows = [
+    {
+      name: 'status',
+      attribute: 'status',
+      type: 'string' as const,
+      reflect: false,
+      default: 'idle',
+    },
+    { name: 'hits', attribute: null, type: 'array' as const, reflect: false, default: [] },
+    { name: 'model', attribute: null, type: 'object' as const, reflect: false, default: {} },
+    {
+      name: 'articleHtml',
+      attribute: null,
+      type: 'trustedHtml' as const,
+      reflect: false,
+      default: undefined,
+    },
+  ];
+
+  /** The seed attribute the producer emitted, or undefined. */
+  function seedAttribute(seeded: Record<string, unknown>): string | undefined {
+    const pairs = (seeded as { __oeHostAttributes?: Array<[string, string]> }).__oeHostAttributes;
+    return pairs?.find(([name]) => name === 'data-oe-prop-seed')?.[1];
+  }
+
+  test('supplied array/object rows travel as ONE JSON host attribute', () => {
+    const seeded = seedGeneratedElementHostProperties(
+      rows,
+      { hits: [{ id: 'a', body: 'x' }], model: { k: 1 } },
+      [],
+    );
+    const raw = seedAttribute(seeded);
+    expect(raw, 'the seed attribute exists').toBeTypeOf('string');
+    expect(JSON.parse(raw!)).toEqual({
+      hits: [{ id: 'a', body: 'x' }],
+      model: { k: 1 },
+    });
+    // The content record still reads the supplied value (the seed is transport,
+    // not a replacement).
+    expect(seeded.hits).toEqual([{ id: 'a', body: 'x' }]);
+  });
+
+  test('trustedHtml is NOT carried: a brand cannot round-trip through JSON', () => {
+    const seeded = seedGeneratedElementHostProperties(
+      rows,
+      { hits: [], articleHtml: { __brand: 'trustedHtml', value: '<b>x</b>' } },
+      [],
+    );
+    const parsed = JSON.parse(seedAttribute(seeded) ?? '{}');
+    expect(Object.keys(parsed), 'the brand row is excluded').toEqual(['hits']);
+  });
+
+  test('an unsupplied non-primitive row puts nothing on the wire', () => {
+    const seeded = seedGeneratedElementHostProperties(rows, {}, []);
+    expect(seedAttribute(seeded), 'no rows supplied, no seed').toBeUndefined();
+  });
+
+  test('a supplied value that cannot JSON round-trip fails closed', () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    expect(() => seedGeneratedElementHostProperties(rows, { model: cyclic }, [])).toThrow(
+      /OEIR_LEAF_UNSEEDABLE_PROPERTY/,
+    );
   });
 });

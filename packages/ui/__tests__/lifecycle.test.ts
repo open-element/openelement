@@ -22,19 +22,10 @@
  * persistence/multi-toggle on the shipped page).
  */
 import { expect, test } from 'vitest';
-import {
-  dialogWith,
-  fakeDialog,
-  installDomHarness,
-  installThemeGlobals,
-  themeHarness,
-} from './harness.ts';
+import { dialogHostWith, dropdownHostWith, fakeDialog, installDomHarness } from './harness.ts';
 import { readInstanceState, writeInstanceState } from '../src/instance-state.ts';
 
 installDomHarness();
-
-// oxlint-disable-next-line no-explicit-any
-type AnyComponent = any;
 
 // ─── instance-state: the per-host foundation every lifecycle guard builds on ─
 
@@ -56,306 +47,132 @@ test('instance-state: slots are per-host — writes never leak across instances'
   expect(readInstanceState(hostB, 'key', () => 'other')).toEqual('b-value');
 });
 
-// ─── open-theme-toggle: multi-instance / dual-state / reconnect / dispose (L4) ─
+// ─── open-theme-toggle: generated element (see the www e2e suite) ────────────
+//
+// The class these rows drove no longer exists: the component is authored as a
+// function component and compiled into `OpenThemeToggleElement`, registered by
+// the build. The same L4 semantics (multi-instance priority chains, document
+// convergence, dual-state transitions, reconnect exactly-once, disconnect
+// teardown and the attribute-driven no-persist rule) are asserted in
+// `www/e2e/theme-toggle-instances.spec.ts` against the real element.
 
-async function newToggle() {
-  const { OpenThemeToggle } = await import('../src/open-theme-toggle.tsx');
-  return new (OpenThemeToggle as unknown as new () => AnyComponent)();
-}
-
-test('open-theme-toggle: two instances on one page resolve independently from their own priority chains', async () => {
-  const harness = themeHarness({ savedTheme: 'dark', mediaLight: false });
-  installThemeGlobals(harness);
-
-  const fromStorage = await newToggle();
-  const withAttr = await newToggle();
-  withAttr.setAttribute('theme', 'light');
-
-  // The storage instance resolves first, from storage (document untouched).
-  fromStorage.initTheme();
-  // The attribute instance resolves from its own attribute — not from the
-  // document theme the first instance just propagated.
-  withAttr.initTheme();
-
-  // Per-instance resolution: storage said dark for one, the attribute light
-  // for the other; neither read the other's instance state.
-  expect(fromStorage.theme).toEqual('dark');
-  expect(withAttr.theme).toEqual('light');
-  // Each instance writes only its own host attribute.
-  expect(fromStorage.getAttribute('data-theme')).toEqual('dark');
-  expect(withAttr.getAttribute('data-theme')).toEqual('light');
-  // The shared document reflects each application in order (last writer wins)
-  // — instances converge through the document channel, never by sharing state.
-  expect(harness.docAttributes).toEqual([
-    ['data-theme', 'dark'],
-    ['data-theme', 'light'],
-  ]);
-  // Each instance propagated its own resolution exactly once.
-  expect(harness.dispatched).toEqual(['open:theme-change', 'open:theme-change']);
-  expect(harness.writes, 'init must not persist').toEqual([]);
-});
-
-test('open-theme-toggle: a later-initializing instance converges to the live document theme', async () => {
-  const harness = themeHarness({ savedTheme: 'dark' });
-  installThemeGlobals(harness);
-  const first = await newToggle();
-  first.setAttribute('theme', 'light');
-  first.initTheme();
-  expect(first.theme).toEqual('light');
-
-  // The first instance's application wrote data-theme to the document; a
-  // second instance initializing now follows the DOCUMENT (the page's live
-  // theme) over its stale storage value — this is how multiple toggles on one
-  // page agree instead of fighting.
-  const second = await newToggle();
-  second.initTheme();
-  expect(second.theme).toEqual('light');
-  expect(harness.dispatched).toEqual(['open:theme-change', 'open:theme-change']);
-  expect(harness.writes).toEqual([]);
-});
-
-test("open-theme-toggle: one instance's toggle never disturbs another instance's state", async () => {
-  const harness = themeHarness({ savedTheme: 'dark' });
-  installThemeGlobals(harness);
-  const first = await newToggle();
-  const second = await newToggle();
-  first.initTheme();
-  second.initTheme();
-  expect(first.theme).toEqual('dark');
-  expect(second.theme).toEqual('dark');
-  harness.dispatched.length = 0;
-  harness.docAttributes.length = 0;
-
-  first.handleToggle();
-
-  expect(first.theme).toEqual('light');
-  expect(first.getAttribute('data-theme')).toEqual('light');
-  // The second instance's resolved state, host attribute and propagation
-  // bookkeeping are untouched — no shared static leaks between instances.
-  expect(second.theme).toEqual('dark');
-  expect(second.getAttribute('data-theme')).toEqual('dark');
-  expect(harness.dispatched).toEqual(['open:theme-change']);
-  expect(harness.writes).toEqual(['light']);
-
-  // The second instance still toggles from ITS OWN state, not the first's.
-  second.handleToggle();
-  expect(second.theme).toEqual('light');
-  expect(harness.writes).toEqual(['light', 'light']);
-  expect(harness.dispatched).toEqual(['open:theme-change', 'open:theme-change']);
-});
-
-test('open-theme-toggle: dual-state transitions re-apply host attribute, document and colorScheme per change', async () => {
-  const harness = themeHarness({});
-  installThemeGlobals(harness);
-  const el = await newToggle();
-  el.initTheme();
-  expect(el.theme).toEqual('dark');
-
-  el.handleToggle();
-  expect(el.theme).toEqual('light');
-  el.handleToggle();
-  expect(el.theme).toEqual('dark');
-
-  // Every actual transition is observable on all three channels.
-  expect(harness.docAttributes).toEqual([
-    ['data-theme', 'dark'],
-    ['data-theme', 'light'],
-    ['data-theme', 'dark'],
-  ]);
-  expect(harness.colorSchemes).toEqual(['dark', 'light', 'dark']);
-  expect(harness.dispatched).toEqual([
-    'open:theme-change',
-    'open:theme-change',
-    'open:theme-change',
-  ]);
-  expect(el.getAttribute('data-theme')).toEqual('dark');
-});
-
-test('open-theme-toggle: re-applying the current theme dispatches nothing and persists nothing', async () => {
-  const harness = themeHarness({});
-  installThemeGlobals(harness);
-  const el = await newToggle();
-  el.initTheme();
-  expect(harness.dispatched).toEqual(['open:theme-change']);
-
-  // The attribute echo of the already-resolved theme (old === val) is a no-op.
-  el.attributeChangedCallback('theme', 'dark', 'dark');
-  // Re-applying the propagated theme must not re-dispatch: subscribers would
-  // re-apply a theme that never changed.
-  el.applyTheme('dark');
-
-  expect(harness.dispatched).toEqual(['open:theme-change']);
-  expect(harness.writes).toEqual([]);
-  expect(el.theme).toEqual('dark');
-});
-
-test('open-theme-toggle: reconnect re-runs initTheme zero times — resolution, writes and dispatch happen exactly once per instance', async () => {
-  const harness = themeHarness({ savedTheme: 'dark' });
-  installThemeGlobals(harness);
-  const el = await newToggle();
-  el.initTheme();
-  expect(el.theme).toEqual('dark');
-  expect(harness.dispatched).toEqual(['open:theme-change']);
-  expect(harness.docAttributes).toEqual([['data-theme', 'dark']]);
-
-  // While "disconnected", every resolution source changes: a reconnect must
-  // NOT re-resolve — the instance keeps the theme it resolved and propagated.
-  harness.savedTheme = 'light';
-  harness.mediaLight = true;
-  (document.documentElement as unknown as { dataset: Record<string, string> }).dataset.theme =
-    'light';
-
-  // connectedCallback (rAF) + onDsdHydrated (rAF) both schedule initTheme per
-  // connect; across a disconnect/reconnect cycle that is several calls.
-  el.initTheme();
-  el.initTheme();
-
-  expect(el.theme, 'reconnect must not re-resolve from changed sources').toEqual('dark');
-  expect(harness.dispatched, 'no re-dispatch on reconnect').toEqual(['open:theme-change']);
-  expect(harness.docAttributes, 'no re-write on reconnect').toEqual([['data-theme', 'dark']]);
-  expect(harness.writes, 'reconnect never persists').toEqual([]);
-});
-
-test('open-theme-toggle: dispose is teardown-free and a replacement instance initializes fresh', async () => {
-  const harness = themeHarness({ savedTheme: 'dark' });
-  installThemeGlobals(harness);
-  const first = await newToggle();
-  first.initTheme();
-  expect(harness.dispatched).toEqual(['open:theme-change']);
-
-  // The component registers no listeners or effects of its own (the compiled
-  // click sink is kernel-owned), so dispose has nothing to clean: the base
-  // teardown must be a safe no-op and the instance stays inert afterwards.
-  first.disconnectedCallback();
-  first.initTheme();
-  expect(harness.dispatched, 'disposed instance does not re-init').toEqual(['open:theme-change']);
-
-  // Instance state is keyed by host (WeakMap): the replacement instance on
-  // the same page initializes fully and independently. The first instance
-  // left data-theme='dark' on the document, so the replacement converges to
-  // the page's live theme even though storage now disagrees.
-  harness.savedTheme = 'light';
-  const second = await newToggle();
-  second.initTheme();
-  expect(second.theme).toEqual('dark');
-  expect(harness.dispatched).toEqual(['open:theme-change', 'open:theme-change']);
-  expect(first.theme).toEqual('dark');
-  expect(harness.writes).toEqual([]);
-});
-
-test('open-theme-toggle: an attribute-driven change applies but never persists (#804 complement)', async () => {
-  const harness = themeHarness({});
-  installThemeGlobals(harness);
-  const el = await newToggle();
-  el.attributeChangedCallback('theme', null, 'light');
-  expect(el.theme).toEqual('light');
-  expect(el.getAttribute('data-theme')).toEqual('light');
-  expect(harness.dispatched).toEqual(['open:theme-change']);
-  // Persistence is exclusive to the explicit user toggle (handleToggle).
-  expect(harness.writes).toEqual([]);
-  // A non-light value resolves to dark (the only two states).
-  el.attributeChangedCallback('theme', 'light', 'blue');
-  expect(el.theme).toEqual('dark');
-  expect(harness.writes).toEqual([]);
-});
-
-// ─── open-dialog: session lifecycle + dispose ────────────────────────────────
+// ─── open-dialog: session lifecycle (dialog-machine helpers; generated lane) ─
 
 test('open-dialog: each open session enters the top layer exactly once; reopen re-enters', async () => {
+  const { syncOpenDialog } = await import('../src/dialog-machine.ts');
   const fake = fakeDialog();
-  const el = await dialogWith(fake);
+  const el = dialogHostWith(fake);
+  const states = new Set<string>();
   el.open = true;
-  el.onDsdHydrated();
+  syncOpenDialog(el, states);
   expect(fake.calls).toEqual(['showModal']);
   // A repeated sync inside the same open session must not re-enter (the
   // modalActive guard), or showModal() would throw InvalidStateError.
-  el.syncDialogElement();
+  syncOpenDialog(el, states);
   expect(fake.calls).toEqual(['showModal']);
 
   el.open = false;
-  el.syncDialogElement();
+  syncOpenDialog(el, states);
   expect(fake.calls).toEqual(['showModal', 'close']);
 
   // A new session re-enters the top layer exactly once.
   el.open = true;
-  el.syncDialogElement();
+  syncOpenDialog(el, states);
   expect(fake.calls).toEqual(['showModal', 'close', 'showModal']);
 });
 
-test('open-dialog: dispose tears the open effect down exactly once; reconnect re-establishes it', async () => {
-  const el = await dialogWith(fakeDialog());
-  el.onCsrRendered();
-  expect(typeof readInstanceState(el, 'openEffect', () => undefined)).toEqual('function');
+// The class's openEffect dispose/reconnect rows moved with the component: the
+// generated lane's connection-signal teardown is shell-owned (not observable
+// through this harness, per the header), and the same disconnect/reconnect
+// semantics — clean teardown, exactly-once close events across reconnect —
+// are pinned at browser level in
+// packages/element/__wtr__/tests/overlay-contract.test.js ('disconnect/
+// reconnect leaves a working dialog with single-event closes').
 
-  el.disconnectedCallback();
-  expect(
-    readInstanceState(el, 'openEffect', () => 'missing'),
-    'the effect teardown must run and the slot must be cleared',
-  ).toEqual(undefined);
-  // Double dispose is safe (the cleared slot yields no second teardown call).
-  el.disconnectedCallback();
+// ─── open-dropdown: activation wiring is reconnect-safe (dropdown-machine) ───
 
-  // Reconnect re-subscribes the compiled-signal effect for the new session.
-  el.onCsrRendered();
-  expect(typeof readInstanceState(el, 'openEffect', () => undefined)).toEqual('function');
-});
-
-// ─── open-dropdown: activation wiring is reconnect-safe ──────────────────────
-
-test('open-dropdown: focus-return wiring attaches once across dispose/reconnect; anchor name stays stable', async () => {
-  const { OpenDropdown } = await import('../src/open-dropdown.tsx');
-  const el = new (OpenDropdown as unknown as new () => AnyComponent)();
-  const listenerCounts: Record<string, number> = {};
-  const content = {
-    matches: () => false,
-    togglePopover: () => {},
-    addEventListener: (type: string) => {
-      listenerCounts[type] = (listenerCounts[type] ?? 0) + 1;
-    },
+test('open-dropdown: activation wires the focus-return listeners on the retained root and keeps the anchor stable', async () => {
+  const { activateDropdown } = await import('../src/dropdown-machine.ts');
+  const additions: Record<string, number> = {};
+  const removals: Record<string, number> = {};
+  const content = { matches: () => false, togglePopover: () => {} };
+  const el = dropdownHostWith(content);
+  el.shadowRoot.addEventListener = (type: string) => {
+    additions[type] = (additions[type] ?? 0) + 1;
   };
-  el.shadowRoot = { querySelector: (sel: string) => (sel === '.content' ? content : null) };
+  el.shadowRoot.removeEventListener = (type: string) => {
+    removals[type] = (removals[type] ?? 0) + 1;
+  };
 
-  el.onCsrRendered();
-  expect(listenerCounts).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1 });
+  activateDropdown(el);
+  expect(additions).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1 });
   const anchor = el.anchorName;
   expect(anchor).not.toEqual('');
+  // Both anchor halves: the host carries `anchor-name` and the custom property
+  // the authored sheet reads; the compiled content leaf stays style-free.
+  expect(el.style.getPropertyValue('anchor-name')).toEqual(anchor);
+  expect(el.style.getPropertyValue('--oe-dropdown-anchor')).toEqual(anchor);
 
-  // Reconnect: the focusWired guard keeps the listeners at one each, and the
-  // realm-unique anchor name is NOT re-assigned (both halves must keep the
-  // name the SSR/CSR activation paired).
-  el.disconnectedCallback();
-  el.onCsrRendered();
-  expect(listenerCounts).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1 });
+  // A reconnect re-runs activation: the previous generation's listeners come
+  // off FIRST and the new generation wires exactly once more, so a queued task
+  // from the dead connection cannot mutate the fresh claim. The realm-unique
+  // anchor name is not re-assigned.
+  activateDropdown(el);
+  expect(removals).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1 });
+  expect(additions).toEqual({ focusin: 2, beforetoggle: 2, toggle: 2 });
   expect(el.anchorName).toEqual(anchor);
 });
 
-// ─── open-input: activation id stability + focus/blur events ─────────────────
+// ─── open-dropdown: element teardown removes the wiring ─────────────────────
 
-test('open-input: activation assigns the control id once — reconnect keeps it', async () => {
-  const { OpenInput } = await import('../src/open-input.tsx');
-  const el = new (OpenInput as unknown as new () => AnyComponent)();
-  el.onCsrRendered();
-  const id = el.inputId;
-  expect(id).not.toEqual('');
-  el.disconnectedCallback();
-  el.onCsrRendered();
-  expect(el.inputId, 're-activation must not re-assign the realm-unique id').toEqual(id);
+test('open-dropdown: element teardown removes the wiring once, idempotently', async () => {
+  const { activateDropdown, disposeDropdownFocusWiring } =
+    await import('../src/dropdown-machine.ts');
+  const removals: Record<string, number> = {};
+  const content = { matches: () => false, togglePopover: () => {} };
+  const el = dropdownHostWith(content);
+  el.shadowRoot.addEventListener = () => {};
+  el.shadowRoot.removeEventListener = (type: string) => {
+    removals[type] = (removals[type] ?? 0) + 1;
+  };
+
+  activateDropdown(el);
+  disposeDropdownFocusWiring(el);
+  expect(removals).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1 });
+  expect(readInstanceState(el, 'focusWired', () => true)).toEqual(false);
+  // Idempotent: a second teardown removes nothing.
+  disposeDropdownFocusWiring(el);
+  expect(removals).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1 });
 });
 
-test('open-input: focus and blur dispatch composed open-focus/open-blur events', async () => {
-  const { OpenInput } = await import('../src/open-input.tsx');
-  const el = new (OpenInput as unknown as new () => AnyComponent)();
-  const seen: Array<{ type: string; bubbles: boolean; composed: boolean }> = [];
-  el.addEventListener('open-focus', (e: Event) => {
-    seen.push({ type: e.type, bubbles: e.bubbles, composed: e.composed });
-  });
-  el.addEventListener('open-blur', (e: Event) => {
-    seen.push({ type: e.type, bubbles: e.bubbles, composed: e.composed });
-  });
-  el.handleFocus();
-  el.handleBlur();
-  expect(seen).toEqual([
-    { type: 'open-focus', bubbles: true, composed: true },
-    { type: 'open-blur', bubbles: true, composed: true },
-  ]);
+// ─── open-dropdown: the anchor identity is a host custom property ───────────
+
+test('open-dropdown: renaming the anchor moves the host custom property the sheet reads', async () => {
+  const { syncDropdownAnchor, clearDropdownPositionAnchor } =
+    await import('../src/dropdown-machine.ts');
+  const content = { matches: () => false, togglePopover: () => {} };
+  const el = dropdownHostWith(content);
+  syncDropdownAnchor(el);
+  expect(el.style.getPropertyValue('--oe-dropdown-anchor')).toEqual(el.anchorName);
+
+  el.anchorName = '--author-renamed';
+  syncDropdownAnchor(el);
+  expect(el.style.getPropertyValue('anchor-name')).toEqual('--author-renamed');
+  expect(el.style.getPropertyValue('--oe-dropdown-anchor')).toEqual('--author-renamed');
+
+  // The content leaf never receives an inline declaration, so the reconnect
+  // claim's static-seed compare stays satisfied; the guard clears a stale one.
+  clearDropdownPositionAnchor(el);
+  expect(content.hasAttribute('style')).toEqual(false);
 });
+
+// ─── open-input is a generated (function-component) element ─────────────────
+//
+// It is no longer a class with `onCsrRendered` / `inputId` / `handleFocus`.
+// The generated lane spells its ids statically inside the shadow template
+// (the shadow boundary is its own id scope, and a connect-time id write would
+// fail the claim's static-seed check) and installs the focus/blur listeners in
+// the compiled template, so the class-time rows above have no subject left.
+// Browser evidence for the shipped element: `ui-input-control.spec.ts`
+// (control surface, error/ARIA both directions) and `ui-form.spec.ts`
+// (delegatesFocus, per-input events, form participation), three engines.

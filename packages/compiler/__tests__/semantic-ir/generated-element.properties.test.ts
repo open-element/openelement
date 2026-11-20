@@ -50,7 +50,9 @@ import {
 } from '../../src/internal/compiler/semantic-ir/generated-element/site.ts';
 import {
   createGeneratedElementClass,
+  resolveGeneratedElementProps,
   type GeneratedElementDescriptor,
+  type GeneratedElementProperty,
 } from '../../../element/src/internal/compiled/generated-element/shell.ts';
 
 const FILE = '/proj/src/islands/counter.tsx';
@@ -376,6 +378,40 @@ test('a property row is a plain descriptor input the shell normalizes', () => {
   );
 });
 
+test('descriptor normalization is memoized by identity (known limitation: a mutated descriptor keeps the stale normalization)', () => {
+  // A generated module evaluates its descriptor literal once, so the shell
+  // normalizes it once: the SSR props resolver (per render) and the
+  // class-definition pass reuse the one normalized descriptor instead of
+  // re-running the authoring-shape validation family per render. The props
+  // record itself stays per-render (fresh record, lazily evaluated getters).
+  const descriptor: GeneratedElementDescriptor = {
+    tag: 'x-props-memo',
+    properties: [{ name: 'label', type: 'string' }],
+    createRecipe: (() => ({ mount: () => [], createProps: () => ({}) })) as never,
+  };
+  const first = resolveGeneratedElementProps(descriptor);
+  expect(resolveGeneratedElementProps(descriptor)).not.toBe(first);
+
+  // Mutate the SAME object into a shape the shell's own duplicate-name check
+  // rejects. The identity contract returns the memoized normalization without
+  // re-running it; a fresh object carrying the same rows still fails closed,
+  // so the absence of a throw can only be the memoization.
+  //
+  // This is the known limitation recorded in ADR-0174 (amendment 2026-11-15):
+  // the descriptor is a compile-time literal that nothing mutates, and it is
+  // not frozen at runtime. Freezing would change the generated-module ABI
+  // shared by server and client, so the boundary is documented instead of
+  // enforced. The fresh-identity case below stays fail-closed.
+  (descriptor.properties as GeneratedElementProperty[]).push({ name: 'label', type: 'string' });
+  expect(() => resolveGeneratedElementProps(descriptor)).not.toThrow();
+  expect(() =>
+    resolveGeneratedElementProps({
+      ...descriptor,
+      properties: [...(descriptor.properties as GeneratedElementProperty[])],
+    }),
+  ).toThrow(/duplicate property "label"/);
+});
+
 test('a cyclic props type alias refuses instead of overflowing the stack (B1)', () => {
   const cases: Array<[string, string, string]> = [
     ['self alias', 'type CounterProps = CounterProps;\n', 'props: CounterProps'],
@@ -499,4 +535,53 @@ test('duplicate sidecar property names are refused before any attribute resoluti
   if (read.kind !== 'refused') throw new Error('unreachable');
   expect(read.diagnostic.code).toBe(GENERATED_ELEMENT_DIAGNOSTIC.PROPERTY_INVALID);
   expect(read.diagnostic.message).toContain('more than once');
+});
+
+/**
+ * The dependency edge is derived from the expression the compiler EMITS, so an
+ * alias in the JSX position silently downgrades a sink to a setup-time one-shot.
+ *
+ * This is not a shape preference — it is the difference between a reactive
+ * surface and an SSR-only snapshot, and it is invisible in the source (both
+ * spellings read the same, and the aliased one still renders the right value at
+ * mount/claim). The open-input migration found it the hard way: `hidden={noError}`
+ * and `aria-describedby={errorRef}` produced attributes that never cleared when
+ * the `error` row changed, while `aria-invalid` looked fine only because a
+ * helper wrote it by hand.
+ *
+ * The pin: a sink whose JSX expression reads the prop DIRECTLY gets its own
+ * `__oe_refreshN` bound to the prop dependency; a sink whose JSX expression is a
+ * bare local does not. Both mount and claim paths are counted, because the claim
+ * path is the one a DSD page actually runs.
+ */
+test('a sink must read the prop inline to gain a refresh edge (aliases are one-shot)', () => {
+  const TABLE = "properties: { hidden: { default: false }, text: { default: '' } }";
+  const probe = (expression: string, prelude: string): string =>
+    `function Probe(props: { hidden: boolean; text: string }) {\n` +
+    `${prelude}\n` +
+    `  return <div><p hidden={${expression}}>{props.text}</p></div>;\n` +
+    '}\n' +
+    'export default Probe;\n';
+  const aliased = compileGeneratedElementIfAdmitted(
+    island(TABLE, probe('noText', "  const noText = props.text === '';")),
+    FILE,
+    { site: SITE },
+  );
+  const inline = compileGeneratedElementIfAdmitted(
+    island(TABLE, probe("props.text === ''", '')),
+    FILE,
+    { site: SITE },
+  );
+  expect(aliased).not.toBeNull();
+  expect(inline).not.toBeNull();
+
+  /** Refresh functions whose body writes the `hidden` sink. */
+  const boundSinks = (code: string): number =>
+    [...code.matchAll(/function __oe_refresh\d+\(\) \{[\s\S]*?\n {2}\}/g)].filter((match) =>
+      match[0].includes('toggleAttribute("hidden"'),
+    ).length;
+
+  // One bound sink per path (mount + claim).
+  expect(boundSinks(inline!.code), 'the inline expression must be reactive').toBe(2);
+  expect(boundSinks(aliased!.code), 'an aliased sink must not look reactive').toBe(0);
 });

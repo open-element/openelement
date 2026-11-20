@@ -87,11 +87,12 @@
  * Exit 0 = every scanned invocation is fail-closed; 1 = at least one
  * violation (printed with file:line and the offending invocation).
  */
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { isMap, isScalar, isSeq, LineCounter, parseDocument, type Document } from 'yaml';
+import { emitSummary, reportPathArg } from './checker-io.ts';
 import {
   CANONICAL_PACKAGE_COMMAND,
   parseVpRunForm,
@@ -572,8 +573,15 @@ async function main(): Promise<void> {
       ? arg.slice('--root='.length)
       : fileURLToPath(new URL('../..', import.meta.url));
   const report = await scanRepository(repoRoot);
-  for (const exemption of report.exemptions) {
-    console.log(`exempt ${exemption.file}:${exemption.line}: ${exemption.reason}`);
+  // The exemption inventory is the detailed report, not stdout content: the
+  // summary line already carries the exemption count, and `--report <path>`
+  // moves the per-exemption detail into a file artifact.
+  const reportPath = reportPathArg(process.argv.slice(2));
+  if (reportPath !== undefined) {
+    const lines = report.exemptions.map(
+      (exemption) => `exempt ${exemption.file}:${exemption.line}: ${exemption.reason}`,
+    );
+    writeFileSync(reportPath, `${lines.join('\n')}\n`, 'utf8');
   }
   if (report.violations.length > 0) {
     console.error(
@@ -592,7 +600,7 @@ async function main(): Promise<void> {
     );
     process.exit(1);
   }
-  console.log(
+  emitSummary(
     `vp-selector-flags: ${report.protectedCount}/${report.qualifiedCount} package-qualified ` +
       `invocation(s) use the fail-closed --filter form, ${report.exemptions.length} exemption(s), ` +
       `${report.filesScanned} file(s) scanned.`,

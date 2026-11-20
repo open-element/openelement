@@ -22,7 +22,8 @@
  * import { registerOpenUi } from '@openelement/ui';
  * registerOpenUi();
  *
- * // Or import specific components
+ * // Or import specific components (authored source; the elements register
+ * // themselves through the build, not through a class export)
  * import { OpenButton } from '@openelement/ui/open-button';
  * ```
  *
@@ -35,12 +36,14 @@
 export { readInstanceState, writeInstanceState } from './instance-state.ts';
 
 // Components
-export { OpenButton } from './open-button.tsx';
-export { OpenInput } from './open-input.tsx';
-export { OpenCodeBlock } from './open-code-block.tsx';
-export { OpenThemeToggle } from './open-theme-toggle.tsx';
-export { OpenDialog } from './open-dialog.tsx';
-export { OpenDropdown } from './open-dropdown.tsx';
+export { default as OpenButton } from './open-button.tsx';
+export { default as OpenInput } from './open-input.tsx';
+export { default as OpenCodeBlock } from './open-code-block.tsx';
+// Authored function component; the element constructor is build-emitted and
+// registered by the build (see docs/adr/ADR-0182).
+export { default as OpenThemeToggle } from './open-theme-toggle.tsx';
+export { default as OpenDialog } from './open-dialog.tsx';
+export { default as OpenDropdown } from './open-dropdown.tsx';
 
 // Package manifest (WC Package Protocol)
 // Consumers (the router build) read manifest.declarations to derive island metadata.

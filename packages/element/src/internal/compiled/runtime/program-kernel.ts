@@ -57,8 +57,9 @@ export type ProgramBranchSinkPart = Extract<
  * when Block's branches own, per branch. Attribution is by the sink's
  * location element id — ids are globally unique across the template and every
  * branch tree, so the plan is exact even where both branches carry a sink at
- * the same branch-relative suffix. Built once per MountContext; a program
- * without when Parts plans nothing.
+ * the same branch-relative suffix. Built once per program object (memoized by
+ * program identity — see {@linkcode plansOf}); a program without when Parts
+ * plans nothing.
  */
 interface BranchPartPlan {
   /** Branch-owned value sinks keyed by the owning when Part's index. */
@@ -141,6 +142,45 @@ function buildBranchPartPlan(program: PartProgramV2): BranchPartPlan {
   return { byWhen, owned };
 }
 
+/**
+ * The per-program planning the two executors rebuild through
+ * {@linkcode createContext} per instance: the fixed value sinks grouped by
+ * their template walk path, and the branch-sink plan. Both are pure functions
+ * of the program, so they are memoized by program object identity — the same
+ * contract as `runtime-program.ts`'s `normalizedByProgram`, whose memoized IR
+ * is exactly the object every executor passes here
+ * (`createContext(normalizePartProgram(program), ...)`): one validated program
+ * literal means one plan shared by every MountContext of every instance,
+ * instead of re-walking the parts/template per connect.
+ *
+ * Invalidation: none. The cached structures are read-only by contract —
+ * `fixedPartsAtPath` copies before sorting, and no consumer writes to
+ * `fixedPartsByPath`, `byWhen` or `owned` after context creation.
+ */
+interface ProgramPlans {
+  readonly fixedPartsByPath: Map<string, ProgramFixedPart[]>;
+  readonly branchParts: BranchPartPlan;
+}
+
+const plansByProgram = new WeakMap<PartProgramV2, ProgramPlans>();
+
+function plansOf(program: PartProgramV2): ProgramPlans {
+  let plans = plansByProgram.get(program);
+  if (plans === undefined) {
+    const fixedPartsByPath = new Map<string, ProgramFixedPart[]>();
+    for (const part of program.parts) {
+      if (!isFixedPart(part)) continue;
+      const key = part.path.join('.');
+      const list = fixedPartsByPath.get(key) ?? [];
+      list.push(part);
+      fixedPartsByPath.set(key, list);
+    }
+    plans = { fixedPartsByPath, branchParts: buildBranchPartPlan(program) };
+    plansByProgram.set(program, plans);
+  }
+  return plans;
+}
+
 /** The retained binding of one Part anchor (see MountContext.bindings). */
 type PartBinding = TextPartSlot | WhenBlock | EachBlock;
 
@@ -207,20 +247,13 @@ export function createContext(
   host: CompiledRuntimeHost,
   ownerScope?: LifetimeScope,
 ): MountContext {
-  const fixedPartsByPath = new Map<string, ProgramFixedPart[]>();
-  for (const part of program.parts) {
-    if (!isFixedPart(part)) continue;
-    const key = part.path.join('.');
-    const list = fixedPartsByPath.get(key) ?? [];
-    list.push(part);
-    fixedPartsByPath.set(key, list);
-  }
+  const plans = plansOf(program);
   return {
     program,
     host,
     rootScope: ownerScope?.child() ?? new LifetimeScope(),
-    fixedPartsByPath,
-    branchParts: buildBranchPartPlan(program),
+    fixedPartsByPath: plans.fixedPartsByPath,
+    branchParts: plans.branchParts,
     bindings: new Map(),
   };
 }

@@ -1088,6 +1088,47 @@ function List(props) {
     expect(attribute).not.toContain('update(next)');
   });
 
+  test('condition dependency subscriptions drop the signal value (force stays entry-update-only)', () => {
+    const module = generate(`function Card(props) {
+  return <div><h1>{props.title}</h1>{props.open ? <b>x</b> : null}</div>;
+}
+`).module!;
+    // The condition refresh keeps its force parameter and guard...
+    expect(module).toMatch(/function __oe_whenRefresh\d+\(force\) \{/);
+    expect(module).toMatch(/if \(!force && __oe_next === __oe_whenActive\d+\) return;/);
+    // ...but BOTH generated subscription sites (mount + claim) subscribe through
+    // a value-dropping arrow, so `propsChanged`'s numeric value is not a force.
+    const conditionSubscriptions =
+      module.match(/bindSignalWrites\([^\n]*"props", \(\) => __oe_whenRefresh\d+\(\)\);/g) ?? [];
+    expect(conditionSubscriptions).toHaveLength(2);
+    expect(module).not.toMatch(/"props", __oe_whenRefresh\d+\);/);
+    // The ordinary text refresh keeps the raw callback (it ignores the value).
+    expect(module).toMatch(/bindSignalWrites\([^\n]*"props", __oe_refresh\d+\);/);
+    expect(module).not.toMatch(/"props", \(\) => __oe_refresh\d+\(\)\);/);
+  });
+
+  test('an entry condition keeps the explicit forced refresh path', () => {
+    const module = generate(`import { signal } from '@openelement/element';
+function List(props) {
+  const items = signal([]);
+  return <ul>{items.value.map((item) => <li>{item.on ? <b>{item.label}</b> : <em>off</em>}</li>)}</ul>;
+}
+`).module!;
+    const updates = updateBodies(module);
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatch(/__oe_whenRefresh\d+\(true\)/);
+    // The entry-update force call is NOT routed through a subscription wrapper.
+    expect(module).not.toMatch(/__oe_whenRefresh\d+\(\)\(true\)/);
+  });
+
+  test('non-condition modules keep their raw subscription bytes', () => {
+    const module = generate(COUNTER).module!;
+    expect(module).not.toContain('() => __oe_refresh');
+    expect(module).not.toContain('() => __oe_whenRefresh');
+    expect(module).toMatch(/bindSignalWrites\(__oe_scope, count, "count", __oe_refresh\d+\);/);
+    expect(module).toMatch(/bindSignalWrites\(__oe_scope, doubled, "doubled", __oe_refresh\d+\);/);
+  });
+
   test('the fixed list output is deterministic and parses as JavaScript', () => {
     for (const source of [
       UNKEYED,

@@ -31,8 +31,17 @@
  *   connection and the disposal side.
  *
  * One engine (Chromium), LOCAL. Not M09 exit, not the M13 matrix, no
- * nested/hostless hook admission, no connection-scope helper channel, no
- * public API freeze.
+ * nested/hostless hook admission, no public API freeze.
+ *
+ * Env form (`onConnect(env)` / `onDispose(env)`, 2026-11-16): the callback
+ * receives `{ host, signal }`. `host` is the generated element the connection
+ * belongs to (the nearest ancestor generated element for a depth-1 retained
+ * hostless child) and is a real, queryable DOM node. The connection `signal`
+ * aborts at the START of the disconnection, so the callback's own cleanup
+ * observes `aborted === true`; a reconnect gets a FRESH signal. The dispose
+ * `signal` is the instance-lifetime teardown signal, aborted before the
+ * disposal callbacks run. Zero-argument callbacks keep the pre-env behaviour
+ * (asserted by the C1–C4 rows still passing unchanged).
  */
 
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -90,6 +99,91 @@ const LIFECYCLE_SOURCE =
   '  return <span className="seed">{snapshot}</span>;\n' +
   '}\n' +
   'export default LifeCard;\n';
+
+const NESTED_SIDECAR = sidecar('seed: { default: 0 }, showChild: { default: true }');
+
+/**
+ * Nested/hostless depth-1 fixture: a ROOT component retains a direct hostless
+ * Child that declares both intrinsics. The Child's hooks are carried by its
+ * own retained `<Child>__setup` record (no root hook, no dispatcher): connection
+ * = the child projection's insertion, disposal = the retained owner's release
+ * (structural removal or parent teardown).
+ */
+const NESTED_SOURCE =
+  `import { onConnect, onDispose } from '@openelement/element';\n` +
+  NESTED_SIDECAR +
+  'function Child(props: { seed: number }) {\n' +
+  '  const setupRuns = (globalThis.__oeNestedSetupRuns = (globalThis.__oeNestedSetupRuns ?? 0) + 1);\n' +
+  '  const snapshot = props.seed;\n' +
+  '  onConnect(() => {\n' +
+  "    globalThis.__oeJournal.push('child-connect');\n" +
+  '    globalThis.__oeNestedSnapshotAtConnect = snapshot;\n' +
+  "    return () => { globalThis.__oeJournal.push('child-cleanup'); };\n" +
+  '  });\n' +
+  '  onDispose(() => {\n' +
+  "    globalThis.__oeJournal.push('child-dispose');\n" +
+  '  });\n' +
+  '  return <em className="nested-child">{snapshot}</em>;\n' +
+  '}\n' +
+  'function NestedHost(props: { seed: number; showChild: boolean }) {\n' +
+  '  const rootSnapshot = props.seed;\n' +
+  '  return (\n' +
+  '    <span className="nested-root">\n' +
+  '      <b>{rootSnapshot}</b>\n' +
+  '      {props.showChild ? <Child seed={props.seed} /> : null}\n' +
+  '    </span>\n' +
+  '  );\n' +
+  '}\n' +
+  'export default NestedHost;\n';
+
+/** Throwing nested connect: the child's FIRST callback registers a cleanup, the
+ *  second throws; the parent's connect pass must release the child's entries and
+ *  surface the original error (existing rollback, no new engine). */
+const NESTED_THROW_SOURCE =
+  `import { onConnect } from '@openelement/element';\n` +
+  NESTED_SIDECAR +
+  'function Child(props: { seed: number }) {\n' +
+  '  const snapshot = props.seed;\n' +
+  '  onConnect(() => {\n' +
+  "    globalThis.__oeJournal.push('child-connect-1');\n" +
+  "    return () => { globalThis.__oeJournal.push('child-cleanup-1'); };\n" +
+  '  });\n' +
+  '  onConnect(() => {\n' +
+  "    globalThis.__oeJournal.push('child-connect-2');\n" +
+  "    throw new Error('nested onConnect boom');\n" +
+  '  });\n' +
+  '  return <em>{snapshot}</em>;\n' +
+  '}\n' +
+  'function NestedThrowHost(props: { seed: number; showChild: boolean }) {\n' +
+  '  return <span>{props.showChild ? <Child seed={props.seed} /> : null}</span>;\n' +
+  '}\n' +
+  'export default NestedThrowHost;\n';
+
+/**
+ * SSR companion fixture: the SAME depth-1 child, but the root has no
+ * conditional branch (the SSR serializer does not admit an unsupported
+ * conditional shape, so the lifecycle fixture's root export is absent by
+ * design). Calling this module's real root producer proves the nested child's
+ * hooks never run on the server path.
+ */
+const NESTED_SSR_SOURCE =
+  `import { onConnect, onDispose } from '@openelement/element';\n` +
+  NESTED_SIDECAR +
+  'function Child(props: { seed: number }) {\n' +
+  '  const setupRuns = (globalThis.__oeNestedSetupRuns = (globalThis.__oeNestedSetupRuns ?? 0) + 1);\n' +
+  '  const snapshot = props.seed;\n' +
+  '  onConnect(() => {\n' +
+  "    globalThis.__oeJournal.push('child-connect');\n" +
+  '    globalThis.__oeNestedSnapshotAtConnect = snapshot;\n' +
+  "    return () => { globalThis.__oeJournal.push('child-cleanup'); };\n" +
+  '  });\n' +
+  "  onDispose(() => { globalThis.__oeJournal.push('child-dispose'); });\n" +
+  '  return <em>{snapshot}</em>;\n' +
+  '}\n' +
+  'function NestedSsrHost(props: { seed: number; showChild: boolean }) {\n' +
+  '  return <span><Child seed={props.seed} /></span>;\n' +
+  '}\n' +
+  'export default NestedSsrHost;\n';
 
 /**
  * Throw fixture: the first connect callback registers a cleanup, the second
@@ -164,6 +258,102 @@ const DISPOSE_CLEANUP_THROW_SOURCE =
   '}\n' +
   'export default DisposeCleanupCard;\n';
 
+/**
+ * Env-form fixture: one connect callback and one dispose callback, both
+ * declaring the single allowed `env` parameter. Every observation goes through
+ * `globalThis` (the expression model admits ECMAScript builtins, not
+ * `window`/`document`); the element reference itself is pushed into the
+ * journal arrays so the page can compare identity afterwards.
+ */
+const ENV_SOURCE =
+  `import { onConnect, onDispose } from '@openelement/element';\n` +
+  SIDECAR +
+  'function EnvCard(props: { seed: number }) {\n' +
+  '  const snapshot = props.seed;\n' +
+  '  onConnect((env) => {\n' +
+  '    globalThis.__oeEnv.hosts.push(env.host);\n' +
+  '    globalThis.__oeEnv.tags.push(env.host.tagName);\n' +
+  '    globalThis.__oeEnv.connected.push(env.host.isConnected);\n' +
+  '    globalThis.__oeEnv.aborted.push(env.signal.aborted);\n' +
+  '    globalThis.__oeEnv.signals.push(env.signal);\n' +
+  '    globalThis.__oeEnv.queried.push(env.host.querySelector("span") !== null);\n' +
+  '    return () => {\n' +
+  '      globalThis.__oeEnv.cleanupAborted.push(env.signal.aborted);\n' +
+  '      globalThis.__oeEnv.cleanupSameSignal.push(env.signal === globalThis.__oeEnv.signals[0]);\n' +
+  '    };\n' +
+  '  });\n' +
+  '  onDispose((env) => {\n' +
+  '    globalThis.__oeEnv.disposeAborted.push(env.signal.aborted);\n' +
+  '  });\n' +
+  '  return <span className="seed">{snapshot}</span>;\n' +
+  '}\n' +
+  'export default EnvCard;\n';
+
+/**
+ * Env-form depth-1 fixture: the retained hostless Child's `env.host` must be
+ * the nearest ancestor GENERATED ELEMENT (the root host), never its own `<em>`.
+ */
+const NESTED_ENV_SOURCE =
+  `import { onConnect } from '@openelement/element';\n` +
+  NESTED_SIDECAR +
+  'function Child(props: { seed: number }) {\n' +
+  '  const snapshot = props.seed;\n' +
+  '  onConnect((env) => {\n' +
+  '    globalThis.__oeNestedEnv.hosts.push(env.host);\n' +
+  '    globalThis.__oeNestedEnv.confirmed.push(env.host === globalThis.__oeNestedEnv.root);\n' +
+  '    return () => { globalThis.__oeNestedEnv.cleanupAborted.push(env.signal.aborted); };\n' +
+  '  });\n' +
+  '  return <em className="nested-child">{snapshot}</em>;\n' +
+  '}\n' +
+  'function NestedHost(props: { seed: number; showChild: boolean }) {\n' +
+  '  return (\n' +
+  '    <span className="nested-root">\n' +
+  '      <b>{props.seed}</b>\n' +
+  '      {props.showChild ? <Child seed={props.seed} /> : null}\n' +
+  '    </span>\n' +
+  '  );\n' +
+  '}\n' +
+  'export default NestedHost;\n';
+
+/**
+ * Change-form fixture: `onPropertyChange` must run after a DECLARED row commits
+ * a new value, for a property write and an attribute write, and never at setup.
+ */
+const PROPERTY_CHANGE_SOURCE =
+  `import { onPropertyChange } from '@openelement/element';\n` +
+  SIDECAR +
+  'function ChangeCard(props: { seed: number }) {\n' +
+  '  onPropertyChange((event) => {\n' +
+  '    event.states.add("changed");\n' +
+  '    globalThis.__oeChangeJournal.push([event.name, event.value]);\n' +
+  '    globalThis.__oeChangeHosts.push(event.host);\n' +
+  '    globalThis.__oeChangeAborted.push(event.signal.aborted);\n' +
+  '  });\n' +
+  '  return <span className="seed">{props.seed}</span>;\n' +
+  '}\n' +
+  'export default ChangeCard;\n';
+
+/**
+ * The change channel on the shape the ui components actually are: a
+ * FORM-ASSOCIATED element with a SHADOW root. The C9 row above is a light root,
+ * so this pair is what proves the channel is not lane/root specific.
+ */
+const FORM_SHADOW_CHANGE_SOURCE =
+  `import { onPropertyChange } from '@openelement/element';\n` +
+  "import { defineIslandConfig } from '@openelement/router';\n" +
+  'export const openElement = defineIslandConfig({\n' +
+  "  root: 'shadow',\n" +
+  '  formAssociated: true,\n' +
+  "  properties: { seed: { default: 0 }, error: { default: '' } },\n" +
+  '});\n' +
+  'function FormShadowCard(props: { seed: number; error: string }) {\n' +
+  '  onPropertyChange((event) => {\n' +
+  '    globalThis.__oeFsJournal.push([event.name, event.value]);\n' +
+  '  });\n' +
+  '  return <p>{props.error}</p>;\n' +
+  '}\n' +
+  'export default FormShadowCard;\n';
+
 interface PageRuntime {
   GeneratedElement: CustomElementConstructor;
   __oeElementTag: string;
@@ -183,10 +373,36 @@ declare global {
     __oeSetupRuns: number | undefined;
     __oeSnapshotAtConnect: number | undefined;
     __oeLiveSeedAtConnect: number | undefined;
+    __oeEnv: {
+      hosts: HTMLElement[];
+      tags: string[];
+      connected: boolean[];
+      aborted: boolean[];
+      signals: AbortSignal[];
+      queried: boolean[];
+      cleanupAborted: boolean[];
+      cleanupSameSignal: boolean[];
+      disposeAborted: boolean[];
+    };
+    __oeNestedEnv: {
+      root: HTMLElement;
+      hosts: HTMLElement[];
+      confirmed: boolean[];
+      cleanupAborted: boolean[];
+    };
+    __oeChangeJournal: Array<[string, unknown]>;
+    __oeChangeHosts: HTMLElement[];
+    __oeChangeAborted: boolean[];
   }
 }
 
 let browser: Browser;
+let nestedTag = '';
+let nestedBundle = '';
+let nestedThrowTag = '';
+let nestedThrowBundle = '';
+let nestedSsrBundle = '';
+let nestedSsrTag = '';
 let tempDir = '';
 let mainBundle = '';
 let throwBundle = '';
@@ -196,6 +412,12 @@ let mainTag = '';
 let throwTag = '';
 let connCleanupTag = '';
 let disposeCleanupTag = '';
+let envBundle = '';
+let envTag = '';
+let nestedEnvBundle = '';
+let nestedEnvTag = '';
+let changeBundle = '';
+let changeTag = '';
 
 const PAGE_SETUP = `
   window.__oeTick = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -334,6 +556,48 @@ beforeAll(async () => {
     '__oeDisposeCleanup',
     disposeCleanup.component,
   );
+  const nested = compileIsland('lifecycle-nested-browser', NESTED_SOURCE);
+  nestedTag = nested.tag;
+  nestedBundle = await buildBundle(tempDir, nested.code, 'nested', '__oeNested', nested.component);
+  const nestedThrow = compileIsland('lifecycle-nested-throw-browser', NESTED_THROW_SOURCE);
+  nestedThrowTag = nestedThrow.tag;
+  nestedThrowBundle = await buildBundle(
+    tempDir,
+    nestedThrow.code,
+    'nested-throw',
+    '__oeNestedThrow',
+    nestedThrow.component,
+  );
+  const nestedSsr = compileIsland('lifecycle-nested-ssr-browser', NESTED_SSR_SOURCE);
+  nestedSsrTag = nestedSsr.tag;
+  nestedSsrBundle = await buildBundle(
+    tempDir,
+    nestedSsr.code,
+    'nested-ssr',
+    '__oeNestedSsr',
+    nestedSsr.component,
+  );
+  const env = compileIsland('lifecycle-env-browser', ENV_SOURCE);
+  envTag = env.tag;
+  envBundle = await buildBundle(tempDir, env.code, 'env', '__oeEnvCard', env.component);
+  const nestedEnv = compileIsland('lifecycle-nested-env-browser', NESTED_ENV_SOURCE);
+  nestedEnvTag = nestedEnv.tag;
+  nestedEnvBundle = await buildBundle(
+    tempDir,
+    nestedEnv.code,
+    'nested-env',
+    '__oeNestedEnvCard',
+    nestedEnv.component,
+  );
+  const change = compileIsland('lifecycle-property-change-browser', PROPERTY_CHANGE_SOURCE);
+  changeTag = change.tag;
+  changeBundle = await buildBundle(
+    tempDir,
+    change.code,
+    'property-change',
+    '__oeChangeCard',
+    change.component,
+  );
   browser = await chromium.launch();
 }, 180_000);
 
@@ -453,6 +717,33 @@ describe('16b-LC lifecycle hooks (Chromium)', () => {
       await page.close();
     }
   }, 120_000);
+
+  test('C1b the generated host joins the document-theme broadcast', async () => {
+    const page = await openPage(mainBundle);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeLifecycle;
+        customElements.define(tagName, mod.GeneratedElement);
+        document.documentElement.setAttribute('data-theme', 'light');
+        const host = document.createElement(tagName) as HTMLElement;
+        document.body.append(host);
+        await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+        const initial = host.getAttribute('data-theme');
+        document.documentElement.setAttribute('data-theme', 'dark');
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const updated = host.getAttribute('data-theme');
+        host.remove();
+        document.documentElement.removeAttribute('data-theme');
+        return { initial, updated };
+      }, mainTag);
+      // The shared component sheet's token layer keys its dark overrides off
+      // `:host([data-theme])`; the class lane's manager writes it on connect and
+      // follows the document. A generated host does the same.
+      expect(result).toEqual({ initial: 'light', updated: 'dark' });
+    } finally {
+      await page.close();
+    }
+  });
 
   test('C2 a throwing onConnect releases the earlier cleanup and aborts the pass', async () => {
     const page = await openPage(throwBundle);
@@ -592,6 +883,445 @@ describe('16b-LC lifecycle hooks (Chromium)', () => {
       expect(result.journal).toEqual([]);
       expect(result.setupRuns).toBeUndefined();
       expect(result.snapshotAtConnect).toBeUndefined();
+    } finally {
+      await page.close();
+    }
+  }, 120_000);
+
+  test('C5 a depth-1 nested hostless child connects per insertion, cleans at disconnect, setup once; SSR invokes nothing', async () => {
+    // SSR first, on the unconditional fixture whose real root producer is
+    // emitted: no child hook runs on the server path.
+    const ssrPage = await openPage(nestedSsrBundle);
+    try {
+      const ssr = await ssrPage.evaluate(() => {
+        const mod = window.__oeNestedSsr;
+        const html = mod.NestedSsrHost__ssr({ seed: 1, showChild: true });
+        return { html, journal: [...window.__oeJournal] };
+      });
+      expect(ssr.journal).toEqual([]);
+      expect(ssr.html).toContain('<em>');
+      expect(ssr.html).toContain('1<!--oe:/t:0-->');
+    } finally {
+      await ssrPage.close();
+    }
+    const page = await openPage(nestedSsrBundle);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeNestedSsr;
+        const tick = window.__oeTick;
+        customElements.define(tagName, mod.GeneratedElement);
+        const host = document.createElement(tagName) as HTMLElement & {
+          seed: number;
+          showChild: boolean;
+          dispose: (detach?: boolean) => void;
+        };
+        host.seed = 1;
+        host.showChild = true;
+        document.body.append(host);
+        await tick();
+        const afterFirstConnect = [...window.__oeJournal];
+        const setupRunsAfterFirst = window.__oeNestedSetupRuns;
+        const snapshotAtConnect = window.__oeNestedSnapshotAtConnect;
+        host.remove();
+        await tick();
+        const afterDisconnect = [...window.__oeJournal];
+        const setupRunsAfterDisconnect = window.__oeNestedSetupRuns;
+        document.body.append(host);
+        await tick();
+        const afterReconnect = [...window.__oeJournal];
+        const setupRunsAfterReconnect = window.__oeNestedSetupRuns;
+        host.dispose(true);
+        await tick();
+        return {
+          afterFirstConnect,
+          setupRunsAfterFirst,
+          snapshotAtConnect,
+          afterDisconnect,
+          setupRunsAfterDisconnect,
+          afterReconnect,
+          setupRunsAfterReconnect,
+          afterTeardown: [...window.__oeJournal],
+          errors: window.__oeErrors,
+        };
+      }, nestedSsrTag);
+      expect(result.errors).toEqual([]);
+      expect(result.afterFirstConnect).toEqual(['child-connect']);
+      expect(result.setupRunsAfterFirst).toBe(1);
+      expect(result.snapshotAtConnect).toBe(1);
+      expect(result.afterDisconnect).toEqual(['child-connect', 'child-cleanup']);
+      expect(result.setupRunsAfterDisconnect).toBe(1);
+      expect(result.afterReconnect).toEqual(['child-connect', 'child-cleanup', 'child-connect']);
+      expect(result.setupRunsAfterReconnect).toBe(1);
+      expect(result.afterTeardown).toEqual([
+        'child-connect',
+        'child-cleanup',
+        'child-connect',
+        'child-cleanup',
+        'child-dispose',
+      ]);
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('C5b structural removal disposes the retained depth-1 child exactly once', async () => {
+    const page = await openPage(nestedBundle);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeNested;
+        const tick = window.__oeTick;
+        customElements.define(tagName, mod.GeneratedElement);
+        const host = document.createElement(tagName) as HTMLElement & {
+          seed: number;
+          showChild: boolean;
+          dispose: (detach?: boolean) => void;
+        };
+        host.seed = 1;
+        host.showChild = true;
+        document.body.append(host);
+        await tick();
+        const afterConnect = [...window.__oeJournal];
+        const setupRunsAfterConnect = window.__oeNestedSetupRuns;
+        // Structural removal of the retained child (condition flips): the
+        // ledger releases the retained instance; its connection cleanup runs
+        // first, then its onDispose exactly once.
+        host.showChild = false;
+        await tick();
+        const afterStructuralRemoval = [...window.__oeJournal];
+        host.dispose(true);
+        await tick();
+        return {
+          afterConnect,
+          setupRunsAfterConnect,
+          afterStructuralRemoval,
+          afterTeardown: [...window.__oeJournal],
+          errors: window.__oeErrors,
+        };
+      }, nestedTag);
+      expect(result.errors).toEqual([]);
+      expect(result.afterConnect).toEqual(['child-connect']);
+      expect(result.setupRunsAfterConnect).toBe(1);
+      expect(result.afterStructuralRemoval).toEqual([
+        'child-connect',
+        'child-cleanup',
+        'child-dispose',
+      ]);
+      // Parent teardown after the child was already released adds no duplicate
+      // child disposal (except-once contract).
+      expect(result.afterTeardown).toEqual(result.afterStructuralRemoval);
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('C6 a throwing nested child connect releases earlier cleanups and surfaces the original error', async () => {
+    const page = await openPage(nestedThrowBundle);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeNestedThrow;
+        const tick = window.__oeTick;
+        customElements.define(tagName, mod.GeneratedElement);
+        const host = document.createElement(tagName) as HTMLElement & {
+          seed: number;
+          showChild: boolean;
+        };
+        host.seed = 1;
+        host.showChild = true;
+        document.body.append(host);
+        await tick();
+        return {
+          journal: [...window.__oeJournal],
+          errors: [...window.__oeErrors],
+          connected: host.isConnected,
+        };
+      }, nestedThrowTag);
+      // First child callback registered a cleanup, second threw: the shell's
+      // connect catch released it and the original error surfaced.
+      expect(result.errors.join('\n')).toContain('nested onConnect boom');
+      expect(result.journal).toEqual(['child-connect-1', 'child-connect-2', 'child-cleanup-1']);
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('C7 onConnect(env) gets the owning element and a signal that aborts at disconnect', async () => {
+    const page = await openPage(envBundle);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        window.__oeEnv = {
+          hosts: [],
+          tags: [],
+          connected: [],
+          aborted: [],
+          signals: [],
+          queried: [],
+          cleanupAborted: [],
+          cleanupSameSignal: [],
+          disposeAborted: [],
+        };
+        const mod = window.__oeEnvCard as unknown as {
+          GeneratedElement: CustomElementConstructor;
+        };
+        const tick = window.__oeTick;
+        customElements.define(tagName, mod.GeneratedElement);
+        const host = document.createElement(tagName) as HTMLElement & {
+          seed: number;
+          dispose: (detach?: boolean) => void;
+        };
+        host.seed = 1;
+        document.body.append(host);
+        await tick();
+        const snapshot = () => ({
+          hosts: [...window.__oeEnv.hosts],
+          tags: [...window.__oeEnv.tags],
+          connected: [...window.__oeEnv.connected],
+          aborted: [...window.__oeEnv.aborted],
+          signals: [...window.__oeEnv.signals],
+          queried: [...window.__oeEnv.queried],
+          cleanupAborted: [...window.__oeEnv.cleanupAborted],
+          cleanupSameSignal: [...window.__oeEnv.cleanupSameSignal],
+          disposeAborted: [...window.__oeEnv.disposeAborted],
+        });
+        const mounted = snapshot();
+        const sameHost = window.__oeEnv.hosts[0] === host;
+        host.remove();
+        await tick();
+        const disconnected = snapshot();
+        document.body.append(host);
+        await tick();
+        const reconnected = snapshot();
+        host.dispose(true);
+        const afterDispose = snapshot();
+        const errors = [...window.__oeErrors];
+        return {
+          mounted,
+          sameHost,
+          disconnected,
+          reconnected,
+          afterDispose,
+          errors,
+          sameHostOnReconnect: window.__oeEnv.hosts[1] === host,
+        };
+      }, envTag);
+      // First connection: the element is the real, connected custom element;
+      // its signal is live; the DOM is not mounted yet (the replay is a
+      // prologue), so querySelector finds nothing yet.
+      expect(result.mounted.tags).toEqual([envTag.toUpperCase()]);
+      expect(result.sameHost).toBe(true);
+      expect(result.mounted.connected).toEqual([true]);
+      expect(result.mounted.aborted).toEqual([false]);
+      expect(result.mounted.queried).toEqual([false]);
+      // Disconnect: the signal aborted BEFORE the callback's own cleanup ran.
+      expect(result.disconnected.cleanupAborted).toEqual([true]);
+      expect(result.disconnected.cleanupSameSignal).toEqual([true]);
+      // Reconnect: a FRESH, un-aborted signal for the new connection, and the
+      // retained DOM is now queryable from the host element.
+      expect(result.reconnected.aborted).toEqual([false, false]);
+      expect(result.mounted.signals[0]).not.toBe(result.reconnected.signals[1]);
+      expect(result.reconnected.queried).toEqual([false, true]);
+      expect(result.sameHostOnReconnect).toBe(true);
+      // Teardown: the instance-lifetime signal is aborted before the dispose
+      // callbacks run, and the disposal callback ran exactly once.
+      expect(result.afterDispose.disposeAborted).toEqual([true]);
+      expect(result.errors).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 120_000);
+
+  test('C8 a depth-1 child onConnect(env).host is the nearest generated element', async () => {
+    const page = await openPage(nestedEnvBundle);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        window.__oeNestedEnv = {
+          root: null as unknown as HTMLElement,
+          hosts: [],
+          confirmed: [],
+          cleanupAborted: [],
+        };
+        const mod = window.__oeNestedEnvCard as unknown as {
+          GeneratedElement: CustomElementConstructor;
+        };
+        const tick = window.__oeTick;
+        customElements.define(tagName, mod.GeneratedElement);
+        const host = document.createElement(tagName) as HTMLElement & {
+          seed: number;
+          showChild: boolean;
+        };
+        window.__oeNestedEnv.root = host;
+        host.seed = 1;
+        host.showChild = true;
+        document.body.append(host);
+        await tick();
+        const connected = {
+          confirmed: [...window.__oeNestedEnv.confirmed],
+          hostIsRoot: window.__oeNestedEnv.hosts[0] === host,
+          childText: host.querySelector('em')?.textContent,
+        };
+        host.showChild = false;
+        await tick();
+        const afterRemoval = {
+          cleanupAborted: [...window.__oeNestedEnv.cleanupAborted],
+          childNodes: host.querySelectorAll('em').length,
+        };
+        return { connected, afterRemoval, errors: [...window.__oeErrors] };
+      }, nestedEnvTag);
+      // The retained child's env.host is the root generated element, not its
+      // own <em>, and its cleanup sees the aborted projection signal.
+      expect(result.connected.confirmed).toEqual([true]);
+      expect(result.connected.hostIsRoot).toBe(true);
+      expect(result.connected.childText).toBe('1');
+      expect(result.afterRemoval.cleanupAborted).toEqual([true]);
+      expect(result.afterRemoval.childNodes).toBe(0);
+      expect(result.errors).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 120_000);
+
+  test('C9 onPropertyChange runs after a committed declared-row change, not at setup or after teardown', async () => {
+    const page = await openPage(changeBundle);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        window.__oeChangeJournal = [];
+        window.__oeChangeHosts = [];
+        window.__oeChangeAborted = [];
+        const mod = window.__oeChangeCard as unknown as {
+          GeneratedElement: CustomElementConstructor;
+        };
+        const tick = window.__oeTick;
+        customElements.define(tagName, mod.GeneratedElement);
+        const host = document.createElement(tagName) as HTMLElement & {
+          seed: number;
+          dispose: (detach?: boolean) => void;
+        };
+        // Before the listener exists: this write must not be reported.
+        host.seed = 5;
+        document.body.append(host);
+        await tick();
+        const afterConnect = [...window.__oeChangeJournal];
+        host.seed = 7;
+        await tick();
+        const afterProperty = [...window.__oeChangeJournal];
+        const stateAfterProperty = host.matches(':state(changed)');
+        host.setAttribute('seed', '9');
+        await tick();
+        const afterAttribute = [...window.__oeChangeJournal];
+        // Removing the attribute resolves the declared row to its default and is
+        // a committed change in its own right.
+        host.removeAttribute('seed');
+        await tick();
+        const afterAttributeRemoval = [...window.__oeChangeJournal];
+        host.dispose(true);
+        host.seed = 11;
+        await tick();
+        const afterTeardown = [...window.__oeChangeJournal];
+        document.body.append(host);
+        await tick();
+        host.seed = 13;
+        await tick();
+        return {
+          afterConnect,
+          afterProperty,
+          stateAfterProperty,
+          afterAttribute,
+          afterAttributeRemoval,
+          afterTeardown,
+          afterReconnect: [...window.__oeChangeJournal],
+          hostMatch: window.__oeChangeHosts.every((element) => element === host),
+          aborted: [...window.__oeChangeAborted],
+          errors: [...window.__oeErrors],
+        };
+      }, changeTag);
+      // Setup-time seeding and the initial connect report nothing.
+      expect(result.afterConnect).toEqual([]);
+      // A property write and an attribute write each report the committed row.
+      expect(result.afterProperty).toEqual([['seed', 7]]);
+      // The change callback's env carries the element's CustomStateSet.
+      expect(result.stateAfterProperty).toBe(true);
+      expect(result.afterAttribute).toEqual([
+        ['seed', 7],
+        ['seed', 9],
+      ]);
+      // Removing the attribute resolves the row back to its declared default and
+      // IS a committed change (the value moves 9 -> 0), so the channel reports
+      // it. This path had no row before; the open-input error projection depends
+      // on it.
+      expect(result.afterAttributeRemoval).toEqual([
+        ['seed', 7],
+        ['seed', 9],
+        ['seed', 0],
+      ]);
+      // Teardown clears the element-lifetime listeners.
+      expect(result.afterTeardown).toEqual(result.afterAttributeRemoval);
+      // A fresh instance registers exactly once (no duplicate from the old one).
+      expect(result.afterReconnect).toEqual([
+        ['seed', 7],
+        ['seed', 9],
+        ['seed', 0],
+        ['seed', 13],
+      ]);
+      expect(result.hostMatch).toBe(true);
+      expect(result.aborted).toEqual([false, false, false, false]);
+      expect(result.errors).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 120_000);
+
+  test('C9b the change channel also fires on a form-associated SHADOW root', async () => {
+    const compiled = compileIsland('lifecycle-form-shadow-change', FORM_SHADOW_CHANGE_SOURCE);
+    const tag = compiled.tag;
+    const bundle = await buildBundle(
+      tempDir,
+      compiled.code,
+      'form-shadow-change',
+      '__oeFsMod',
+      compiled.component,
+    );
+    const page = await openPage(bundle);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        globalThis.__oeFsJournal = [];
+        void 0;
+        const mod = globalThis.__oeFsMod as unknown as {
+          GeneratedElement: CustomElementConstructor;
+        };
+        const tick = globalThis.__oeTick;
+        customElements.define(tagName, mod.GeneratedElement);
+        const host = document.createElement(tagName);
+        document.body.append(host);
+        await tick();
+        const afterConnect = [...globalThis.__oeFsJournal];
+        host.setAttribute('seed', '4');
+        await tick();
+        const afterAttribute = [...globalThis.__oeFsJournal];
+        host.setAttribute('error', 'boom');
+        await tick();
+        const afterError = [...globalThis.__oeFsJournal];
+        host.removeAttribute('error');
+        await tick();
+        return {
+          afterConnect,
+          afterAttribute,
+          afterError,
+          afterRemoval: [...globalThis.__oeFsJournal],
+          hasShadow: Boolean(host.shadowRoot),
+        };
+      }, tag);
+      // Setup/connect report nothing; each committed declared row does.
+      expect(result.hasShadow, 'the shadow root exists').toBe(true);
+      expect(result.afterConnect).toEqual([]);
+      expect(result.afterAttribute).toEqual([['seed', 4]]);
+      expect(result.afterError).toEqual([
+        ['seed', 4],
+        ['error', 'boom'],
+      ]);
+      expect(result.afterRemoval).toEqual([
+        ['seed', 4],
+        ['error', 'boom'],
+        ['error', ''],
+      ]);
     } finally {
       await page.close();
     }

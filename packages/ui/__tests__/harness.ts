@@ -24,7 +24,18 @@ class TestHTMLElement {
   static observedAttributes?: readonly string[];
 
   shadowRoot: unknown = null;
-  style = { setProperty: (_name: string, _value: string) => {} };
+  // A real read-back so assertion rows can observe the properties the
+  // activation applies (anchor-name and the --oe-dropdown-anchor channel).
+  readonly #styleProps = new Map<string, string>();
+  style = {
+    setProperty: (name: string, value: string) => {
+      this.#styleProps.set(name, value);
+    },
+    getPropertyValue: (name: string) => this.#styleProps.get(name) ?? '',
+    removeProperty: (name: string) => {
+      this.#styleProps.delete(name);
+    },
+  };
 
   readonly #attributes: TestAttributeStore;
   readonly #listeners: TestListenerStore;
@@ -127,12 +138,16 @@ export interface ThemeHarness {
   writes: string[];
   /** globalThis.dispatchEvent event types, in order. */
   dispatched: string[];
+  /** `CustomEvent.detail` of every dispatched event, in order (parallel array). */
+  eventDetails: unknown[];
   /** documentElement.setAttribute arguments, in order. */
   docAttributes: Array<readonly [string, string]>;
   /** documentElement.style.colorScheme assignments, in order. */
   colorSchemes: string[];
   docTheme?: string;
   mediaLight?: boolean;
+  /** Make matchMedia throw, like an embedded WebView with no media support. */
+  mediaThrows?: boolean;
 }
 
 export function themeHarness(init: Partial<ThemeHarness>): ThemeHarness {
@@ -140,6 +155,7 @@ export function themeHarness(init: Partial<ThemeHarness>): ThemeHarness {
     savedTheme: null,
     writes: [],
     dispatched: [],
+    eventDetails: [],
     docAttributes: [],
     colorSchemes: [],
     ...init,
@@ -150,7 +166,7 @@ export function themeHarness(init: Partial<ThemeHarness>): ThemeHarness {
  * Install the globals open-theme-toggle reads: a fresh capturing
  * document.documentElement (per call, so tests never leak dataset.theme into
  * each other), localStorage, matchMedia, CustomEvent and a dispatchEvent
- * wrapper that records every global event.
+ * wrapper that records every global event's type and detail.
  */
 export function installThemeGlobals(harness: ThemeHarness): void {
   const style: Record<string, string> = {};
@@ -164,7 +180,10 @@ export function installThemeGlobals(harness: ThemeHarness): void {
   const documentElement = {
     dataset: {} as Record<string, string>,
     style,
-    getAttribute: () => null,
+    // A realistic read-back: the seam owner's idempotent write compares against
+    // the attribute actually present, so a same-value hydration writes nothing.
+    getAttribute: (name: string) =>
+      name === 'data-theme' ? (documentElement.dataset.theme ?? null) : null,
     setAttribute: (name: string, value: string) => {
       harness.docAttributes.push([name, value]);
       if (name === 'data-theme') documentElement.dataset.theme = value;
@@ -187,9 +206,10 @@ export function installThemeGlobals(harness: ThemeHarness): void {
   });
   Object.defineProperty(globalThis, 'matchMedia', {
     configurable: true,
-    value: (query: string) => ({
-      matches: query.includes('light') ? harness.mediaLight === true : false,
-    }),
+    value: (query: string) => {
+      if (harness.mediaThrows === true) throw new Error('matchMedia unavailable');
+      return { matches: query.includes('light') ? harness.mediaLight === true : false };
+    },
   });
   Object.defineProperty(globalThis, 'CustomEvent', {
     configurable: true,
@@ -206,6 +226,7 @@ export function installThemeGlobals(harness: ThemeHarness): void {
     configurable: true,
     value: (event: Event) => {
       harness.dispatched.push((event as CustomEvent).type);
+      harness.eventDetails.push((event as CustomEvent).detail);
       return prevDispatch ? prevDispatch(event) : true;
     },
   });
@@ -216,9 +237,12 @@ export function installThemeGlobals(harness: ThemeHarness): void {
 export interface FakeDialog {
   open: boolean;
   calls: string[];
+  /** Platform top-layer session mirror: true while `:modal` matches. */
+  modal: boolean;
   show(): void;
   showModal(): void;
   close(): void;
+  matches(selector: string): boolean;
   setAttribute(name: string, value: string): void;
 }
 
@@ -227,6 +251,7 @@ export function fakeDialog(): FakeDialog {
   const fake: FakeDialog = {
     open: false,
     calls,
+    modal: false,
     show: () => {
       calls.push('show');
       fake.open = true;
@@ -234,11 +259,14 @@ export function fakeDialog(): FakeDialog {
     showModal: () => {
       calls.push('showModal');
       fake.open = true;
+      fake.modal = true;
     },
     close: () => {
       calls.push('close');
       fake.open = false;
+      fake.modal = false;
     },
+    matches: (selector: string) => selector === ':modal' && fake.modal,
     setAttribute: (name: string, _value: string) => {
       calls.push(`setAttribute:${name}`);
       if (name === 'open') fake.open = true;
@@ -247,14 +275,47 @@ export function fakeDialog(): FakeDialog {
   return fake;
 }
 
-/** An uncompiled OpenDialog whose shadow root resolves `dialog` to `fake`. */
-export function dialogWith(fake: FakeDialog, mode?: string) {
-  return (async () => {
-    const { OpenDialog } = await import('../src/open-dialog.tsx');
-    // oxlint-disable-next-line no-explicit-any
-    const el = new (OpenDialog as unknown as new () => any)();
-    el.shadowRoot = { querySelector: (sel: string) => (sel === 'dialog' ? fake : null) };
-    if (mode) el.setAttribute('mode', mode);
-    return el;
-  })();
+/**
+ * A fake generated-element host whose shadow root resolves `dialog` to
+ * `fake` and whose declared `open` property stands in for the compiled row:
+ * the dialog-machine helpers take this host shape directly.
+ */
+export function dialogHostWith(fake: FakeDialog, mode?: string) {
+  installDomHarness();
+  // oxlint-disable-next-line no-explicit-any
+  const el = new (globalThis.HTMLElement as unknown as new () => any)();
+  el.shadowRoot = { querySelector: (sel: string) => (sel === 'dialog' ? fake : null) };
+  if (mode) el.setAttribute('mode', mode);
+  el.open = false;
+  return el;
+}
+
+/**
+ * A fake generated-element host whose shadow root resolves `.content` to
+ * `content` and whose declared `anchorName` property stands in for the
+ * compiled row: the dropdown-machine helpers take this host shape directly.
+ */
+export function dropdownHostWith(content: Record<string, unknown>) {
+  installDomHarness();
+  // The compiled content leaf's inline-style guard reads the attribute API.
+  if (typeof (content as { hasAttribute?: unknown }).hasAttribute !== 'function') {
+    const attributes = new Set<string>();
+    Object.assign(content, {
+      hasAttribute: (name: string) => attributes.has(name),
+      removeAttribute: (name: string) => attributes.delete(name),
+      setAttribute: (name: string) => attributes.add(name),
+    });
+  }
+  // oxlint-disable-next-line no-explicit-any
+  const el = new (globalThis.HTMLElement as unknown as new () => any)();
+  el.shadowRoot = {
+    querySelector: (sel: string) => (sel === '.content' ? content : null),
+    // The focus-return listeners wire on the retained shadow root (the
+    // popover's beforetoggle/toggle events neither bubble nor compose, so the
+    // root is the last node on their truncated path).
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  };
+  el.anchorName = '';
+  return el;
 }

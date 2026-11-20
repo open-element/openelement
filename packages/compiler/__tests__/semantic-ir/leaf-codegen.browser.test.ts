@@ -106,7 +106,13 @@ function execute(
       const host = document.getElementById('host') as HTMLElement;
       host.replaceChildren();
       const script = document.createElement('script');
-      script.textContent = `${code}\nwindow.__oeMount = mount;`;
+      // Each injection owns its own scope: the emitted artifact is a real ES
+      // module in production (evaluated once per module), but repeated classic
+      // <script> injection into one page turns its module-level declarations
+      // (`const __oe_required`) into persistent global lexical bindings that
+      // collide with the next injection — script removal does not undo them.
+      // The IIFE gives every evaluation the isolation a module boundary would.
+      script.textContent = `(function () {\n${code}\nwindow.__oeMount = mount;\n})();`;
       document.head.appendChild(script);
 
       const mountFn = (

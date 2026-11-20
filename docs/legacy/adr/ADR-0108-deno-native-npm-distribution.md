@@ -1,6 +1,6 @@
 # ADR-0108: npm distribution via `deno pack`
 
-- Status: SUPERSEDED by [ADR-0161](./ADR-0161-node-pnpm-consumer-surface.md)
+- Status: SUPERSEDED by [ADR-0161](../../adr/ADR-0161-node-pnpm-consumer-surface.md)
   (the Deno-native repository toolchain and the Deno consumer requirement are
   retired; the npm-only publishing half stands and is restated there). The
   `deno pack` tarball generator named below was itself replaced by `vp pack`
@@ -40,4 +40,4 @@ import, and release tooling now rejects `jsr:`, `@jsr/`, `@std/`, and
 `npm:@jsr/` dependency inputs instead of filtering them. `npm.jsr.io` is not an
 allowed registry host. The contemporaneous decision text above is left
 unchanged; npm is the only public registry
-([ADR-0161](./ADR-0161-node-pnpm-consumer-surface.md)).
+([ADR-0161](../../adr/ADR-0161-node-pnpm-consumer-surface.md)).

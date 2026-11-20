@@ -92,3 +92,161 @@ Focused rows (Node + Chromium) at the same commit:
 - A `LOCAL` row is reproducible from a clone (the commands are in-tree) but
   carries no CI run identity. Canonical runs are produced on `main` after merge
   by the release train, never at PR time.
+
+## 2026-11-16 verticals — integration at `4fb4ac635`
+
+Addendum to the 2026-11-15 records above; same five-field form (commit,
+status, command, result, provenance). The slices are integrated by
+`4fb4ac635` (`test: pin the seeded host attributes in the FACE and interop
+baselines`): `1a1763cd5` (M09-2e shadow DSD style links), `7af784d2a` (M11-2
+generated pages, light-root document styles, canonical shell seeds),
+`554512d26` (direct lock pinning), `4fb4ac635` (FACE/interop baseline pins).
+
+### 7. M09-2e — generated shadow styles through the canonical DSD link (`4fb4ac635`)
+
+| Field | Record |
+| --- | --- |
+| commit | `4fb4ac63586bf430a7760511bc3f080b67250ac3` (slice `1a1763cd5`) |
+| status | clean at capture start (see the addendum caveat below) |
+| command | `cd tests/fixtures/web-component-interop && OPEN_ELEMENT_KEEP_INTEROP=1 node qualify.ts` |
+| result | exit 0, `Web Components interoperability qualification passed`. Three engines (chromium / firefox / webkit): the generated shadow host's DSD template carries exactly one canonical marked `<link data-oe-static-styles>` before AND after claim, the link names the emitted content-addressed `.css` asset, the claimed sheet resolves the authored class's computed color, and the `wrong-props` / `no-client-registration` negatives stay red on every engine. |
+| provenance | `LOCAL` (macOS arm64, Node 24.18.0; worktree caveat below); no CI identity used for this row |
+
+### 8. M11-2 — generated page: SSR / SSG / error / 404 / action + claim parity (`4fb4ac635`)
+
+| Field | Record |
+| --- | --- |
+| commit | `4fb4ac63586bf430a7760511bc3f080b67250ac3` (slice `7af784d2a`) |
+| status | clean at capture start (see the addendum caveat below) |
+| command | `cd tests/fixtures/router-request-time && ../../../node_modules/.bin/playwright test --config e2e/playwright.config.ts e2e/generated-page.spec.ts` |
+| result | 21 passed (8.6 s) = 7 rows × 3 engines: SSG 200 with the pre-definition DSD template and loader props; dynamic 200 from `dist/server`; error projector 500; loader `notFound()` 404 status page; native POST action 422 with the actionData text; page-root stylesheet applies with JavaScript disabled (computed `rgb(12, 34, 56)`); browser claim SSR→claim props parity, no re-mount, zero claim mutations. The same fixture's full browser run (`… playwright test --config e2e/playwright.config.ts`) also passed 342/342 (1.4 min). |
+| provenance | `LOCAL` (macOS arm64, Node 24.18.0; worktree caveat below); no CI identity used for this row |
+
+### 9. Light-root generated-island document styles, JavaScript disabled (`4fb4ac635`)
+
+| Field | Record |
+| --- | --- |
+| commit | `4fb4ac63586bf430a7760511bc3f080b67250ac3` (slice `7af784d2a`) |
+| status | clean at capture start (see the addendum caveat below) |
+| command | `cd tests/fixtures/site-light-probe && ../../../node_modules/.bin/playwright test --config e2e/playwright.config.ts` |
+| result | 75 passed (15.7 s) = 25 rows × 3 engines. The generated light-root island's document-head marked link is exactly one after claim; its build-time `@scope` sheet styles the host with JavaScript disabled; the reconnect and repeated-navigation lanes keep one link and zero adopted duplicate sheets. |
+| provenance | `LOCAL` (macOS arm64, Node 24.18.0; worktree caveat below); no CI identity used for this row |
+
+### 10. Canonical generated-host attribute seeds — FACE and interop pins (`4fb4ac635`)
+
+| Field | Record |
+| --- | --- |
+| commit | `4fb4ac63586bf430a7760511bc3f080b67250ac3` (slice `4fb4ac635`, projection in `7af784d2a`) |
+| status | clean at capture start (see the addendum caveat below) |
+| command | `node_modules/.bin/vitest run --project compiler packages/compiler/__tests__/semantic-ir/generated-element.forms.browser.test.ts` → 10/10 passed; `node_modules/.bin/vitest run --project tests tests/fixtures/web-component-interop/generated-ssr-host.test.ts` → 4/4 passed |
+| result | both exit 0. The no-JS FACE baseline pins the canonical seeded `value`/`name` host attributes beside its "no form entry, no hidden input, no internals" facts; the interop baseline pin expects the descriptor-row seed-record merge instead of the caller-only attribute line. Rows 7 and 8 read the same seeded attributes (claim parity / qualified props); `attribute: false` and non-primitive seeds remain the ADR-0181 A5 boundary. |
+| provenance | `LOCAL` (macOS arm64, Node 24.18.0; worktree caveat below); no CI identity used for this row |
+
+### 11. #1715 direct lock pins — `pack:dry-run` (`4fb4ac635`)
+
+| Field | Record |
+| --- | --- |
+| commit | `4fb4ac63586bf430a7760511bc3f080b67250ac3` (slice `554512d26`) |
+| status | clean at capture start (see the addendum caveat below) |
+| command | `pnpm --dir tools/release run pack:dry-run` |
+| result | exit 0, `pack:dry-run complete`; six workspace tarballs; per-package pack diagnostics `errors=0 unexpectedWarnings=0 … unresolvedExternals=0`. Supporting regression: `node_modules/.bin/vitest run --project tools tools/lib/vp-pack.test.ts` → 28/28 passed (derived range and alias devDependency pinned; the installed-version assertion skips the aliased vp toolchain install). |
+| provenance | `LOCAL` (macOS arm64, Node 24.18.0; worktree caveat below); no CI identity used for this row |
+
+### Cross-cutting aggregate and CI provenance at `4fb4ac635`
+
+- `node_modules/.bin/vitest run --project element --project router` → **282 files /
+  2798 tests passed** (288 s). This aggregate includes the router real-CLI
+  generated-island style rows (`island-style-build.test.ts`) and the
+  route-document-styles fact rows.
+- CI at this SHA: workflow run **`43752486495`** — jobs `lint`, `test`, `e2e`,
+  `pack`, `sha-guard` **success**; CodeQL run **`132930180165`** **success**.
+  `e2e-full`, `bfcache`, `node-serve-smoke`, `packed-consumer-matrix` and
+  `fresh-install` are **skipped by design** (`workflow_dispatch &&
+  full_qualification=true`) and are not claimed. This CI record is provenance
+  for the SHA; it is not substituted into the `LOCAL` rows above.
+
+### Full source gate at the final feature head
+
+| Field | Record |
+| --- | --- |
+| commit | `61b7eeac0129f3b3e0e07f63fe93cb6b7bbaa6a8` |
+| status | clean (`git status --porcelain` empty before and after the run) |
+| command | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo gate:source` |
+| result | exit 0; `gate ok: 20 step(s)`, every step PASS. Suites inside the gate: element 124 files / 969 tests, router 159 files / 1834 tests, request-time fixture build + three-engine E2E 342 passed, base-path fixture E2E 9 passed, Element browser gate 28 passed; generator wiring, seams registry (with merge-base Owner-state ratchet), output discipline, constitution parity, shims, ADR index, docs index, content dates, doc claims and the interface snapshot all passed. |
+| provenance | `LOCAL` (macOS arm64, Node 24.18.0); no CI identity. |
+
+Boundary: this is the LOCAL 20-step source gate only. It does not run the
+five dispatch-only heavy qualification jobs, does not qualify a production app
+for P1, does not execute M12/M13 and does not flip any milestone or status row.
+
+### What these 2026-11-16 records do not do
+
+- No milestone, exit, closeout or release claim: M09, M10, M11, M12, M13 and
+  M14 keep their recorded statuses, and P1–P5 keep their recorded `NOT MET`
+  states.
+- Boundaries stay exactly as recorded: light-root generated **pages** still fail
+  closed at build (no host producer); the dev server keeps its explicit
+  fail-closed style carrier; `attribute: false` and non-primitive property seeds
+  remain the ADR-0181 A5 boundary; streamed pages are refused; one generated
+  component may not own two page routes until a per-route descriptor table
+  exists; C08–C11 retirement is not claimed.
+- **Worktree caveat:** the capture pass started on a clean worktree at
+  `4fb4ac635` (`git status --porcelain` empty, verified 03:51 +08), but
+  concurrent uncommitted edits from another lane (task13: compiler lifecycle /
+  generated-page client codegen / router client entry) appeared during and after
+  the pass, so the tree is **not clean at publication**. Every row above is a
+  `LOCAL` record with that caveat; re-derive it on a clean worktree at the cited
+  commit before citing it as gate evidence.
+- `LOCAL` and `CI` stay separate labels: the CI record does not upgrade a LOCAL
+  row's provenance, and a green local run is never written into a CI column.
+
+## Later reading (2026-11-20)
+
+**P1–P5/M10/M11 status follows the 2026-11-20 re-record in the head
+[progress ledger](./alpha16-18-progress.md) and the
+[P1 applicability record](./p1-applicability-record.md); the `NOT MET`
+statements in this file are the state as recorded at the time of writing**,
+including the 2026-11-16 addendum's "P1–P5 keep their recorded `NOT MET`
+states". This is an append-only later reading: no five-field record above is
+rewritten, no row is upgraded, and no milestone, exit or release claim is
+created.
+
+## Re-record (2026-11-20)
+
+Append-only re-record note. The rows above keep their original commits and their
+original `LOCAL` provenance; this appendix was **not** re-run at the 2026-11-20
+head, so under the per-record rule of the
+[evidence baseline](./evidence-baseline.md) and the per-head rule of the
+[progress ledger](./alpha16-18-progress.md) §2, the rows stay historical for
+delivery (the committed history is unchanged). The measured commit of the
+2026-11-20 re-record is
+`f514c1290539993f9bdbeca9b02b6f99ca0a4dff`; the later commit
+`434a624d39496eed70d29df4c1bba3fef17cca56` changes only one JSON annotation and
+one test comment, so it neither changes behavior nor is re-measured.
+
+- **What the re-record measures (delivery-line evidence).** P1 (`site:build` →
+  checker `1 MET, 0 VIOLATED, 0 UNPROVEN`; 8 islands, `loadedModuleCount` 135,
+  13 chunks, `0/6` executor entries, runtime chunk 41 module-table entries), P2
+  (78/78 pages carry a generated host; host counts 68/78/78/278/18;
+  `data-oe-prop-seed` 68 pages), P3 (10 `@element(` hits — diagnostic
+  messages/comments plus the `plugin-mdx-lower.ts:204` generator), P4 (client
+  tree 0; HTML **2 files / 6 occurrences, all API-reference prose (en+zh
+  reference pages)**), the three Node suites (element 132 files / 1036 tests,
+  compiler 95 / 1386, router 166 / 1876), the element browser suite (7 files /
+  33 tests), M12 (9 PASS / 0 FAIL), M13 (1092 passed / 0 failed / 2 flaky
+  retry-cleared, 26.0 min) and the M14 focused commands (32 / 54 / 19). The
+  four-part records are the P1 applicability record's
+  `FINAL VERDICTS — re-recorded 2026-11-20` section, the progress ledger M10–M14
+  rows, the capability inventory's `Final-SHA matrix (2026-11-20)`, the migration
+  note's 16b-REF/16b-CTX re-runs and ADR-0182's
+  `## Evidence re-recorded (2026-11-20)` section.
+- **What was not re-run and is not upgraded.** The qualification and vertical
+  rows in this appendix — the interop qualification recorded at `2545e0ac6`, the
+  2026-11-16 verticals at `4fb4ac635`, the final feature head `61b7eeac0`, and
+  the §6 `P1 is NOT MET` record — were not re-executed by the 2026-11-20 run;
+  they remain the historical rows above, `advisory only` for delivery, and no
+  row is upgraded to `CI`. The delivery-line P1 verdict is the 2026-11-20
+  re-record (MET), not the historical §6 row; the later reading above already
+  says so and this section points at the evidence.
+- No milestone, gate, exit, closeout or release claim is created, moved or
+  declared here.

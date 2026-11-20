@@ -385,3 +385,52 @@ test('readIslandConfig: throws on duplicate property names independent of the at
     );
   }
 });
+
+/**
+ * The explicit `tag` declaration (alpha16 tag-source slice) is the authored
+ * identity of a module no convention owns (a page-local component under
+ * `app/site-ui/`). The static scan is the build-time authority for its accepted
+ * shape; the compiler lane re-reads the same key and the router's resolver
+ * ranks it above the path convention.
+ */
+test('readIslandConfig: reads a declared tag and keeps every other fact', () => {
+  expect(
+    readIslandConfig(
+      `export const openElement = defineIslandConfig({ tag: 'open-artifact-panel', hydrate: 'idle' });\n`,
+    ),
+  ).toEqual({ hydrate: 'idle', tag: 'open-artifact-panel' });
+  // Absent stays absent: every existing sidecar is unaffected.
+  expect(
+    readIslandConfig(`export const openElement = defineIslandConfig({ hydrate: 'idle' });\n`),
+  ).toEqual({ hydrate: 'idle' });
+});
+
+test('readIslandConfig: throws on a dynamic or invalid tag instead of guessing', () => {
+  const dynamic = `const configuredTag = 'open-artifact-panel';
+export const openElement = defineIslandConfig({ tag: configuredTag });
+`;
+  assertThrowsIncludes(
+    () => readIslandConfig(dynamic),
+    Error,
+    'openElement.tag must be a static literal',
+  );
+  for (const spelling of ['openartifactpanel', 'Open-Panel', 'open_panel', '']) {
+    assertThrowsIncludes(
+      () =>
+        readIslandConfig(
+          `export const openElement = defineIslandConfig({ tag: '${spelling}' });\n`,
+        ),
+      Error,
+      'is not a valid custom-element name',
+    );
+  }
+});
+
+test('readIslandConfig: the accepted-shape message advertises tag', () => {
+  const error = assertThrowsIncludes(
+    () => readIslandConfig(`export const openElement = defineIslandConfig({ tag: 1 });\n`),
+    Error,
+    'tag?: string',
+  );
+  expect(error.message).toContain('Accepted shape:');
+});

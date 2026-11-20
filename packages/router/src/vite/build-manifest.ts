@@ -1,14 +1,22 @@
 /**
  * @openelement/router - Build Manifest / Observability
  *
- * Scans build output directories after each phase and prints a structured
- * summary table. This gives developers visibility into:
+ * Scans build output directories after each phase and reports what was
+ * produced:
  *   - Per-chunk raw and gzip sizes, with totals (Phase 2 size receipt)
  *   - Total JS/CSS bundle budgets (Phase 3)
  *   - HTML page counts and compression potential
  *   - headExtras injection size
  *
- * Output format: Fixed-width table via console.info (no external dependency).
+ * Output discipline (docs/architecture/design-principles.md): the DEFAULT
+ * success output is ONE summary line (phase, key counts, budget verdict) so
+ * build logs stay a data channel. Two opt-in modes exist:
+ *   - OE_BUILD_MANIFEST_VERBOSE=1 prints the full fixed-width table
+ *     (ASCII-only, via console.info, no external dependency).
+ *   - `json: true` prints the machine payload — exactly one JSON line of the
+ *     BuildManifest object via console.log, never mixed with human status
+ *     (the checker-io emitMachinePayload precedent; this is a build CLI, not
+ *     a checker, so the payload goes through plain console.log).
  *
  * Called by:
  *   - cli/build-client.ts (after Phase 2: client chunks ready)
@@ -18,6 +26,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { basename, join, resolve } from 'pathe';
+import process from 'node:process';
 import { createLogger } from '@openelement/element';
 import { normalizeSeparators } from '@openelement/element/build-utils';
 import { DEFAULT_OUT_DIR } from './internal/paths.ts';
@@ -186,10 +195,12 @@ function printChunkRow(info: ArtifactInfo, displayName: string = info.name): voi
 }
 
 /**
- * Print a formatted build manifest table to console.
+ * Report the build manifest for one build phase.
  *
- * This is called at the end of each build phase to provide observability
- * into what was produced and how large everything is.
+ * Default success output is one summary line (phase + key counts + budget
+ * verdict). `OE_BUILD_MANIFEST_VERBOSE=1` switches to the full table; the
+ * `json` option prints the machine payload as exactly one JSON line and no
+ * human output. Returns the manifest object either way.
  */
 export function printBuildManifest(options: {
   root: string;
@@ -197,8 +208,17 @@ export function printBuildManifest(options: {
   phase: 2 | 3;
   headExtras?: string;
   budget?: BuildManifestBudget;
+  /** Machine payload: one JSON line of the manifest, no human output. */
+  json?: boolean;
 }): BuildManifest {
-  const { root, outDir = DEFAULT_OUT_DIR, phase, headExtras = '', budget = {} } = options;
+  const {
+    root,
+    outDir = DEFAULT_OUT_DIR,
+    phase,
+    headExtras = '',
+    budget = {},
+    json = false,
+  } = options;
   const timestamp = new Date().toISOString();
 
   // Gather data
@@ -254,7 +274,35 @@ export function printBuildManifest(options: {
     warnings,
   };
 
-  // Print table using ASCII-only output so build logs remain portable.
+  if (json === true) {
+    // Machine payload, emitMachinePayload precedent: the one-line JSON
+    // document is the data contract; human status never mixes into it.
+    console.log(JSON.stringify(manifest));
+    return manifest;
+  }
+
+  const budgetVerdict =
+    warnings.length === 0
+      ? `within budget (island ${ISLAND_BUDGET_KB} KB, total JS ${TOTAL_JS_BUDGET_KB} KB, page ${PAGE_BUDGET_KB} KB)`
+      : `${warnings.length} budget warning(s) — rerun with OE_BUILD_MANIFEST_VERBOSE=1 for details`;
+
+  if (process.env.OE_BUILD_MANIFEST_VERBOSE !== '1') {
+    // Output discipline: the default success output is one summary line —
+    // phase, key counts, budget verdict.
+    console.info(
+      `build manifest: phase ${phase} | islands ${manifest.islands.length} | ` +
+        `shared chunks ${manifest.sharedChunks.length} | ` +
+        `client entry ${manifest.clientEntry === null ? '0' : '1'} | ` +
+        `HTML pages ${manifest.htmlPages.length} | ` +
+        `JS ${formatSize(manifest.totalJsBytes)} (gzip ${formatSize(manifest.totalJsGzipBytes)}) | ` +
+        `HTML total ${formatSize(manifest.totalHtmlBytes)} | ` +
+        `headExtras ${formatSize(manifest.headExtrasSize)} | ${budgetVerdict}`,
+    );
+    return manifest;
+  }
+
+  // Verbose table (OE_BUILD_MANIFEST_VERBOSE=1), ASCII-only output so build
+  // logs remain portable.
   console.info('');
   console.info(`== openElement Build Manifest - Phase ${phase} @ ${timestamp.slice(11, 19)} ==`);
 

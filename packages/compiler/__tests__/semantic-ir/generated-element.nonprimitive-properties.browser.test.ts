@@ -681,7 +681,7 @@ describe('non-primitive property retention on the generated element (Chromium)',
     }
   });
 
-  test('SSR host folds supplied props through the resolver without a JSON/attribute wire', async () => {
+  test('SSR host folds supplied props through the resolver and seeds the non-primitive rows', async () => {
     const page = await openPage();
     try {
       const result = await page.evaluate((tagName) => {
@@ -725,13 +725,18 @@ describe('non-primitive property retention on the generated element (Chromium)',
         };
       }, SITE.tag);
       expect(result.hostHtml).toContain('server-row');
+      // No PER-ROW attribute is invented: the channel is one JSON seed
+      // attribute (D-18c), never `events=…`/`model=…`.
       expect(result.hostHtml).not.toContain('events=');
       expect(result.hostHtml).not.toContain('model=');
       expect(result.hostHtml).not.toContain('articleHtml=');
-      // SSR bytes show the folded server values; the client instance keeps its
-      // own defaults because no seed wire exists (M11 transport gap).
+      // The seed attribute IS present, and it carries the array/object rows.
+      expect(result.hostHtml).toContain('data-oe-prop-seed');
+      // SSR bytes show the folded server values, and — since D-18c shipped the
+      // transport — the claimed instance starts from the SAME values instead of
+      // silently reverting to its own defaults.
       expect(result.claimedList).toBe('server-row');
-      expect(result.clientEvents).toBe('seed');
+      expect(result.clientEvents).toBe('server');
       expect(result.forgedCode).toBe('OEIR_SHELL_PROPERTY_TYPE_MISMATCH');
       expect(result.unusedForgedCode).toBeNull();
     } finally {
@@ -831,6 +836,234 @@ describe('non-primitive property retention on the generated element (Chromium)',
       });
     } finally {
       await page.close();
+    }
+  });
+
+  test('consumer round-trip (mount -> update -> claim): array/object/trustedHtml property channel only, no SSR seed', async () => {
+    const page = await openPage();
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeNp;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        customElements.define(tagName, mod.NpElement);
+        const list = (host: HTMLElement): string =>
+          [...host.shadowRoot!.querySelectorAll('li')].map((item) => item.textContent).join(',');
+        const title = (host: HTMLElement): string | null =>
+          host.shadowRoot!.querySelector('h2')?.textContent ?? null;
+
+        // 1) MOUNT: caller-owned references assigned before the first connect.
+        const host = document.createElement(tagName) as HTMLElement & {
+          events: Array<{ id: string; body: string }>;
+          model: { title: string; rows: string[] };
+          articleHtml: unknown;
+        };
+        const mountEvents = [{ id: 'mount', body: 'mount-row' }];
+        const mountModel = { title: 'mount-title', rows: ['mount'] };
+        const mountHtml = mod.trustedHtml('<b>mount-safe</b>');
+        host.events = mountEvents;
+        host.model = mountModel;
+        host.articleHtml = mountHtml;
+        document.body.append(host);
+        await tick();
+        const mounted = {
+          sameEvents: host.events === mountEvents,
+          sameModel: host.model === mountModel,
+          sameHtml: host.articleHtml === mountHtml,
+          list: list(host),
+          title: title(host),
+        };
+
+        // 2) UPDATE: every row takes a NEW caller reference; no clone.
+        const updateEvents = [{ id: 'update', body: 'update-row' }];
+        const updateModel = { title: 'update-title', rows: ['update'] };
+        host.events = updateEvents;
+        host.model = updateModel;
+        await tick();
+        const updated = {
+          sameEvents: host.events === updateEvents,
+          sameModel: host.model === updateModel,
+          list: list(host),
+          title: title(host),
+        };
+
+        // 3) CLAIM: retained-DOM claim on re-insert keeps the same instance
+        // state/references and re-renders the update.
+        host.remove();
+        await tick();
+        document.body.append(host);
+        await tick();
+        const claimed = {
+          sameEvents: host.events === updateEvents,
+          sameModel: host.model === updateModel,
+          list: list(host),
+          title: title(host),
+        };
+
+        // 4) NO SSR SEED: the emitted host producer folds only in-process props
+        // (none here), so the serializer/inline rows are defaults; the host tag
+        // carries no property payload/attribute channel (A5 boundary unchanged).
+        const frame = document.createElement('div');
+        frame.setHTMLUnsafe(mod.NpCard__ssrHost(undefined));
+        const ssrHost = frame.firstElementChild as HTMLElement & {
+          events: Array<{ id: string }>;
+        };
+        document.body.append(frame);
+        await tick();
+        const noSeed = {
+          hostAttributeNames: ssrHost.getAttributeNames(),
+          clientDefault: ssrHost.events?.[0]?.id ?? null,
+          claimedList: list(ssrHost),
+        };
+        return { mounted, updated, claimed, noSeed };
+      }, SITE.tag);
+      // MOUNT: property channel only; references preserved; content refreshed.
+      expect(result.mounted).toEqual({
+        sameEvents: true,
+        sameModel: true,
+        sameHtml: true,
+        list: 'mount-row',
+        title: 'mount-title',
+      });
+      // UPDATE: new references win (no clone) and refresh the DOM.
+      expect(result.updated).toEqual({
+        sameEvents: true,
+        sameModel: true,
+        list: 'update-row',
+        title: 'update-title',
+      });
+      // CLAIM: retained-DOM reconnect preserves the client instance state.
+      expect(result.claimed).toEqual({
+        sameEvents: true,
+        sameModel: true,
+        list: 'update-row',
+        title: 'update-title',
+      });
+      // NO SEED: no property attributes on the host tag; the claim starts from
+      // the client default (server folded content is shown, but it is not a
+      // transport seed for the client property — ADR-0181 A5).
+      expect(result.noSeed.hostAttributeNames).toEqual([]);
+      expect(result.noSeed.clientDefault).toBe('seed');
+      expect(result.noSeed.claimedList).toBe('default-row');
+    } finally {
+      await page.close();
+    }
+  });
+  /**
+   * D-18c / M11-3 — the JSON seed actually round-trips through a real claim.
+   *
+   * The producer half is pinned in the Node suite. These two rows prove the
+   * claim reads it: a supplied array/object row reaches the client instance as
+   * the SAME value the server rendered with, and a seed the descriptor cannot
+   * explain fails closed instead of silently keeping defaults.
+   */
+  test('the SSR prop seed restores supplied non-primitive rows on claim', async () => {
+    const page = await openPage();
+    try {
+      const result = await page.evaluate(
+        async ([tagName, seed]) => {
+          const mod = (window as unknown as { __oeNp: Record<string, unknown> }).__oeNp;
+          const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+          const frame = document.createElement('div');
+          // The REAL path: the caller supplies the non-primitive rows to the
+          // host producer, which serializes them onto the seed attribute itself.
+          // Passing a hand-built attribute would test a wire nobody writes.
+          const withSeed = (mod.NpCard__ssrHost as (p?: unknown, l?: unknown) => string)(
+            JSON.parse(seed as string),
+            undefined,
+          );
+          frame.setHTMLUnsafe(withSeed);
+          const host = frame.firstElementChild as HTMLElement & {
+            events?: Array<{ id: string; body: string }>;
+            model?: { title: string; rows: string[] };
+          };
+          const debugMarkup = withSeed;
+          document.body.append(frame);
+          // Upgrade AFTER the markup is in the document, the ordering the other
+          // SSR verticals use: the parser is what creates the host, and the
+          // claim then runs against an already-parsed DSD tree.
+          customElements.define(tagName as string, mod.NpElement as CustomElementConstructor);
+          await tick();
+          return {
+            debugMarkup,
+            attributeGone: host.getAttribute('data-oe-prop-seed') === null,
+            events: host.events,
+            model: host.model,
+            listText: [...host.shadowRoot!.querySelectorAll('li')]
+              .map((item) => item.textContent)
+              .join(','),
+          };
+        },
+        [
+          SITE.tag,
+          JSON.stringify({
+            events: [{ id: 'from-ssr', body: 'server-row' }],
+            model: { title: 'server-title', rows: ['r1'] },
+          }),
+        ],
+      );
+      // What did the producer actually emit? Asserting this first names the
+      // failure precisely instead of reporting "no events".
+      expect(result.debugMarkup, 'the producer emits the seed attribute').toContain(
+        'data-oe-prop-seed',
+      );
+      expect(result.events).toEqual([{ id: 'from-ssr', body: 'server-row' }]);
+      expect(result.model).toEqual({ title: 'server-title', rows: ['r1'] });
+      // The RENDERED content follows the restored state, so a visitor and the
+      // upgraded component agree.
+      expect(result.listText).toContain('server-row');
+      // Consumed once: the shell removes the transport attribute.
+      expect(result.attributeGone, 'the seed attribute is consumed').toBe(true);
+    } finally {
+      await page.context().close();
+    }
+  });
+
+  test('a prop seed the descriptor cannot explain fails closed', async () => {
+    const page = await openPage();
+    try {
+      const outcome = await page.evaluate(
+        async ([tagName, seed]) => {
+          const mod = (window as unknown as { __oeNp: Record<string, unknown> }).__oeNp;
+          const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+          // A payload the descriptor cannot explain is written STRAIGHT onto the
+          // claim input: the producer only ever emits declared rows, so the
+          // fail-closed path is exactly "markup arrived with a row the
+          // descriptor does not declare".
+          const markup = (mod.NpCard__ssrHost as (p?: unknown, l?: unknown) => string)(
+            undefined,
+            undefined,
+          ).replace('<np-card', `<np-card data-oe-prop-seed='${seed}'`);
+          if (!markup.includes('data-oe-prop-seed')) {
+            return { stage: 'markup', message: markup.slice(0, 120) };
+          }
+          // A custom element's connect failure is thrown from the upgrade, so it
+          // surfaces as a window error rather than a rejected promise.
+          let caught: string | null = null;
+          const onError = (event: ErrorEvent): void => {
+            const error = event.error as { code?: string; message?: string } | undefined;
+            caught ??= `${error?.code ?? ''} ${error?.message ?? event.message}`;
+          };
+          window.addEventListener('error', onError);
+          if (customElements.get(tagName as string) === undefined) {
+            customElements.define(tagName as string, mod.NpElement as CustomElementConstructor);
+          }
+          const frame = document.createElement('div');
+          frame.setHTMLUnsafe(markup);
+          document.body.append(frame);
+          await tick();
+          window.removeEventListener('error', onError);
+          return {
+            stage: 'claim',
+            message: caught,
+            attribute: frame.firstElementChild?.getAttribute('data-oe-prop-seed') ?? null,
+          };
+        },
+        [SITE.tag, JSON.stringify({ undeclaredRow: 1 })],
+      );
+      expect(outcome.message, `${outcome.stage}: ${String(outcome.message)}`).not.toBeNull();
+      expect(String(outcome.message)).toContain('OEIR_SHELL_PROP_SEED_MISMATCH');
+    } finally {
+      await page.context().close();
     }
   });
 });

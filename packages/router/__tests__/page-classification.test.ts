@@ -44,8 +44,10 @@ import {
   readPageModuleFacts,
   resolvePageKind,
   type PageClassificationContext,
+  type PageKindCarrier,
   type PageModuleFacts,
 } from '../src/vite/internal/ssg/page-classification.ts';
+import { DescriptorErrorCode } from '../src/internal/error-codes.ts';
 import type { GeneratedElementHostCarrier } from '../src/vite/internal/ssg/generated-element-host-metadata.ts';
 
 /** The code one call raised (throw form). */
@@ -343,32 +345,91 @@ const GENERATED_PAGE_ROUTE = [
 
 type ScannedIslandMeta = Record<string, Partial<IslandDecl> & GeneratedElementHostCarrier>;
 
-function islandOptions(generatedLaneKind: GeneratedElementHostCarrier['generatedElementHost']) {
+function islandOptions(islandMeta: Partial<IslandDecl> & GeneratedElementHostCarrier) {
   return {
     routesDir: 'app/routes',
     islandsDir: 'app/islands',
     islandTagNames: ['profile-card'],
     islandFiles: ['profile-card.tsx'],
-    islandMeta: {
-      'profile-card': { generatedElementHost: generatedLaneKind },
-    } as ScannedIslandMeta,
+    islandMeta: { 'profile-card': islandMeta } as ScannedIslandMeta,
   };
 }
 
-test('a page whose component is a generated element is classified and refused (no silent class page)', async () => {
+test('a producer generated-element page is classified with the compiler tag fact (M11-2)', async () => {
   const { route } = await scanOneRoute('about.tsx', GENERATED_PAGE_ROUTE);
   const options = islandOptions({
-    kind: 'producer',
-    component: 'ProfileCard',
-    ssrHostExport: 'ProfileCard__ssrHost',
+    ssr: true,
+    generatedElementHost: {
+      kind: 'producer',
+      component: 'ProfileCard',
+      ssrHostExport: 'ProfileCard__ssrHost',
+    },
   });
-  const code = codeOf(() => buildEntryDescriptor([route], options));
+  const desc = buildEntryDescriptor([route], options);
+  const decl = desc.pageRoutes[0] as PageRouteDecl & PageKindCarrier;
+  expect(readPageKind(decl)).toEqual('generated-element-page');
+  // The page tag is the island scan's tag (also the emitted class/host tag).
+  expect(decl.tagName).toEqual('profile-card');
+  expect(decl.defaultTagName).toEqual('profile-card');
+  expect(decl.generatedElementPage).toEqual({
+    tagName: 'profile-card',
+    identity: {
+      kind: 'producer',
+      component: 'ProfileCard',
+      ssrHostExport: 'ProfileCard__ssrHost',
+    },
+  });
+  // The page route is registered by the island loop (host pairing), never by
+  // the page-class loop; the entry literates the build-fact tag.
+  const entry = renderEntry(desc);
+  expect(entry).toContain('__registerSsrIsland("profile-card"');
+  expect(entry).not.toContain('__registerSsrComponent("profile-card"');
+  expect(entry).not.toContain('__resolvePageTag($pageAbout');
+});
+
+test('a light-root generated page has no host producer and fails closed precisely', async () => {
+  const { route } = await scanOneRoute('about.tsx', GENERATED_PAGE_ROUTE);
+  const code = codeOf(() =>
+    buildEntryDescriptor(
+      [route],
+      islandOptions({
+        ssr: true,
+        generatedElementHost: { kind: 'light-no-producer', component: 'ProfileCard' },
+      }),
+    ),
+  );
   expect(code).toEqual(PageClassificationCode.GENERATED_ELEMENT_PAGE_UNSUPPORTED);
-  const message = messageOf(() => buildEntryDescriptor([route], options));
+  const message = messageOf(() =>
+    buildEntryDescriptor(
+      [route],
+      islandOptions({
+        ssr: true,
+        generatedElementHost: { kind: 'light-no-producer', component: 'ProfileCard' },
+      }),
+    ),
+  );
   expect(message).toContain('<profile-card>');
-  expect(message).toContain('not wired in this build');
-  // The refusal is not a support claim for the M11-2 render path.
-  expect(message).toContain('Render the generated island inside a compiled @element class page');
+  expect(message).toContain('the component root is light');
+  // Not hidden behind ssr:false: a page root never silently downgrades.
+  expect(message).toContain('no DSD host producer');
+});
+
+test('a generated page whose island is not SSR-admitted fails closed (no silent downgrade)', async () => {
+  const { route } = await scanOneRoute('about.tsx', GENERATED_PAGE_ROUTE);
+  const code = codeOf(() =>
+    buildEntryDescriptor(
+      [route],
+      islandOptions({
+        ssr: false,
+        generatedElementHost: {
+          kind: 'producer',
+          component: 'ProfileCard',
+          ssrHostExport: 'ProfileCard__ssrHost',
+        },
+      }),
+    ),
+  );
+  expect(code).toEqual(DescriptorErrorCode.MODULE_IMPORT);
 });
 
 test('the generated-element page kind is reachable from the pure classifier', () => {
@@ -383,7 +444,16 @@ test('the generated-element page kind is reachable from the pure classifier', ()
     routesDir: 'app/routes',
     islandsDir: 'app/islands',
     islands: [
-      { filePath: 'profile-card.tsx', tagName: 'profile-card', generatedLaneKind: 'producer' },
+      {
+        filePath: 'profile-card.tsx',
+        tagName: 'profile-card',
+        generatedLaneKind: 'producer',
+        generatedElementHost: {
+          kind: 'producer',
+          component: 'ProfileCard',
+          ssrHostExport: 'ProfileCard__ssrHost',
+        },
+      },
     ],
   };
   const route: RouteEntry = {
@@ -393,14 +463,25 @@ test('the generated-element page kind is reachable from the pure classifier', ()
     varName: 'pageProfile',
     definePage: true,
   };
-  // resolvePageKind resolves the import to the local island and refuses.
-  const code = codeOf(() =>
-    resolvePageKind({ ...route, pageModule: facts } as RouteEntry, context),
-  );
-  expect(code).toEqual(PageClassificationCode.GENERATED_ELEMENT_PAGE_UNSUPPORTED);
-  // The pure classifier names the lane that owns the page component.
+  // A producer page is classified with its compiler tag fact (M11-2).
   const classification = classifyPageModule(facts, context.islands[0]);
-  expect(classification.kind).toEqual('unsupported-generated-page');
+  expect(classification).toMatchObject({
+    kind: 'classified',
+    pageKind: 'generated-element-page',
+    generatedElementPage: { tagName: 'profile-card' },
+  });
+  expect(resolvePageKind({ ...route, pageModule: facts } as RouteEntry, context)).toEqual(
+    'generated-element-page',
+  );
+  // The same lane kind WITHOUT the compiler host identity (a hand-built
+  // context) cannot prove a producer and stays a classified-but-unwired refusal.
+  expect(
+    classifyPageModule(facts, {
+      filePath: 'profile-card.tsx',
+      tagName: 'profile-card',
+      generatedLaneKind: 'producer',
+    }).kind,
+  ).toEqual('unsupported-generated-page');
 });
 
 test('an island that is NOT a generated element (class lane) keeps the class-page path', async () => {
@@ -414,7 +495,9 @@ test('an island that is NOT a generated element (class lane) keeps the class-pag
   );
   const desc = buildEntryDescriptor(
     [route],
-    islandOptions({ kind: 'lane-declined', reason: 'compiler-declined' }),
+    islandOptions({
+      generatedElementHost: { kind: 'lane-declined', reason: 'compiler-declined' },
+    }),
   );
   expect(readPageKind(desc.pageRoutes[0])).toEqual('class-page');
 });

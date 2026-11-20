@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the client island build and the client asset manifest it emits are one fact — compile-time island identity joined with the build manifest and Rollup module metadata can only be authored where the build runs; the boundary is a library module exporting buildClient() for closeBundle() in the open:build plugin, producing dist/client/islands/*.js plus the manifest consumed by SSG post-processing, with a required ctx and no globalThis fallback.
 /**
  * @openelement/router - CLI: Client Island Build
  *
@@ -18,6 +19,7 @@ import process from 'node:process';
 import { build as viteBuild, type InlineConfig } from 'vite';
 import { dirname, isAbsolute, join, relative, resolve } from 'pathe';
 import {
+  clientEntryHasClientJs,
   clientEntryNeedsElementRuntime,
   extractCustomElementTags,
   generateClientEntry,
@@ -25,8 +27,11 @@ import {
   elementRuntimeBlocksAlias,
 } from '../vite/internal/ssg/index.ts';
 import { runtimeModulePath } from '../vite/internal/runtime-module-path.ts';
-import { findBuildWorkspaceRoot } from '../vite/workspace-alias.ts';
-import { createGeneratedElementSiteResolver } from '../vite/generated-element-site.ts';
+import { findBuildWorkspaceRootOrUndefined } from '../vite/workspace-alias.ts';
+import {
+  collectPackageIslandModuleSites,
+  createGeneratedElementSiteResolver,
+} from '../vite/generated-element-site.ts';
 import { buildClientIslandEntries } from '../vite/internal/ssg/client-island-entries.ts';
 import { resolveElementServicesRuntimeModule } from '../vite/internal/ssg/entry-client-codegen.ts';
 import {
@@ -59,12 +64,19 @@ import {
   resolveElementRuntimeIdentity,
 } from '../vite/internal/element-runtime-chunk.ts';
 import { requireViteHelperChunk, viteHelperChunkName } from '../vite/internal/vite-helper-chunk.ts';
+import { islandStyleDeclarations } from '../vite/internal/island-style-declarations.ts';
+import { setClientIslandStyleAssets } from '../vite/internal/island-style-build-assets.ts';
+import {
+  buildPageClassificationContext,
+  resolvePageComponentIsland,
+} from '../vite/internal/ssg/page-classification.ts';
 import { browserEntryBoundaryPlugin } from '../vite/internal/browser-entry-boundary.ts';
 import { browserEntryGraphPlugin } from '../vite/internal/browser-entry-graph.ts';
 import {
   analyzeModuleSemantics,
   clearStyleRequests,
   compiledElementPlugin,
+  styleRequestModuleId,
 } from '@openelement/compiler';
 import { ELEMENT_RUNTIME_MESSAGES_DEFINE } from '../vite/internal/element-error-messages.ts';
 import {
@@ -344,9 +356,26 @@ export function findReachableIslandTags(
   }
 
   const routesDir = ctx.phase3.routesDir || 'app/routes';
+  // A generated page route imports its island component as a VALUE
+  // (`definePage(ImportedCard)`): the route source carries no tag string and the
+  // island module registers no element, so the source walk above cannot see the
+  // tag. The page-classification context (ONE builder, shared with the entry
+  // descriptor) resolves that import edge to the local island, and the tag joins
+  // the reachable set only when it is already admitted (`candidateSet`).
+  const pageClassificationContext = buildPageClassificationContext({
+    routesDir,
+    islandsDir: ctx.phase3.islandsDir || DEFAULT_ISLANDS_DIR,
+    islandTagNames: ctx.phase1.islandTagNames ?? [],
+    islandFiles: ctx.phase1.islandFiles ?? [],
+    islandMeta: ctx.phase1.islandMeta ?? {},
+  });
   for (const route of ctx.phase1.cachedRoutes ?? []) {
     if (route.type !== 'page' || route.special) continue;
     recordSourceFile(resolve(root, routesDir, route.filePath));
+    const pageIsland = resolvePageComponentIsland(route, pageClassificationContext);
+    if (pageIsland !== undefined && candidateSet.has(pageIsland.tagName)) {
+      reachable.add(pageIsland.tagName);
+    }
   }
 
   const layoutConfigs = [ctx.phase3.layout, ...Object.values(ctx.phase3.layouts ?? {})];
@@ -618,9 +647,15 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
   const entryNeedsElementRuntime = clientEntryNeedsElementRuntime(islandEntries, {
     enhancedForms,
   });
-  const styleOnlyEmission = !entryNeedsElementRuntime;
+  // M11-3: client JS and the legacy executor runtime are two facts. A page whose
+  // only islands are generated-lane islands keeps its island entry (and JS) but
+  // must not be held to the executor runtime's chunk contract.
+  const entryHasClientJs = clientEntryHasClientJs(islandEntries, { enhancedForms });
+  const styleOnlyEmission = !entryHasClientJs;
   if (styleOnlyEmission) {
     log.info('Island-free client entry - style-only client build, zero client JS');
+  } else if (!entryNeedsElementRuntime) {
+    log.info('Generated-element islands only - client entry without the executor runtime');
   }
 
   // #1471: island identity comes from this build's own resolver. Each
@@ -978,7 +1013,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       compiledElementPlugin({
         // Linked workspace packages sit outside the project root; without the
         // workspace anchor their absolute ids would land in the source maps.
-        workspaceRoot: findBuildWorkspaceRoot(root) ?? undefined,
+        workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
         staticSidecars: [ISLAND_ADMISSION],
         // This build's own class-candidate registry (defect C): the transform's
         // write path and the discovery pass share exactly this instance, and no
@@ -991,7 +1026,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
         // module would ship authored JSX.
         resolveServerComponentModule: createServerComponentSourceResolver({
           root,
-          workspaceRoot: findBuildWorkspaceRoot(root) ?? undefined,
+          workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
         }),
         // The union the entry's SSR registry carries (renderable islands plus
         // static compiled components): a function page's nested host rides
@@ -1005,7 +1040,19 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
         // local default-exported function component ships as a real
         // constructor for the existing entry-driven registration. The same
         // resolver is the dev host's and the SSG host's (one tag source).
-        generatedElementSite: createGeneratedElementSiteResolver(islandsDir),
+        generatedElementSite: createGeneratedElementSiteResolver(
+          islandsDir,
+          collectPackageIslandModuleSites(ctx.phase1.packageIslandDecls, {
+            root,
+            workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
+          }),
+          // The sidecar-declared tags the Phase 1 scan read (alpha16
+          // tag-source slice): the second source, after package manifests and
+          // before the islands-directory convention. A page-local component
+          // under `app/site-ui/` has no convention of its own, so its own
+          // sidecar `tag` is the only thing that admits it to the lane.
+          ctx.phase1.declaredElementTags,
+        ),
       }),
       // intercepts the compiled modules' authored `.css` imports before
       // vite's CSS plugin, emits the real `.css` assets, and hands the sheet
@@ -1105,14 +1152,24 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
         root,
         outDir: clientOutDir,
         base: clientBase,
-        workspaceRoot: findBuildWorkspaceRoot(root) ?? root,
+        workspaceRoot: findBuildWorkspaceRootOrUndefined(root) ?? root,
         clientEntryModuleId: RESOLVED_CLIENT_ENTRY_ID,
         getElementPackageRoot: () => elementRuntimeIdentity?.packageRoot ?? null,
-        islands: islandEntries.map((entry) => ({
-          tag: entry.tagName,
-          specifier: entry.modulePath,
-          strategy: entry.strategy,
-        })),
+        // Only the islands that actually enter the client bundle. A
+        // `hydrate: 'none'` island is SSR-only by design — the generated entry
+        // emits no import for it, so its module is absent from the emitted
+        // chunks by construction (the same `strategy !== 'none'` fact
+        // `clientEntryNeedsElementRuntime` consumes). Handing it to the
+        // island-attribution pass would be a category error, not a missing
+        // module: the writer's `island-chunk-unresolved` contract stays
+        // fail-closed for islands that SHOULD be there.
+        islands: islandEntries
+          .filter((entry) => entry.strategy !== 'none')
+          .map((entry) => ({
+            tag: entry.tagName,
+            specifier: entry.modulePath,
+            strategy: entry.strategy,
+          })),
         islandModuleIds,
       }),
     ],
@@ -1216,6 +1273,84 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
     ctx.clientStyleAssetFiles = new Map(
       [...styleAssetRecords.entries()].map(([key, record]) => [key, record.fileName]),
     );
+
+    // M09-2e / #1803 shadow links + Alpha16 retained stylesheet delivery: join EVERY admitted
+    // generated island's declared sheets to the client asset this build
+    // emitted. The join is the ONE check that a declared link and the emitted
+    // bytes agree — a declared sheet with no emitted asset fails the build
+    // closed here, before any consumer can point at a missing resource. One
+    // map, two consumers of the SAME plan: a shadow root's DSD template declares
+    // its links (task4's channel), and a LIGHT root's sheet feeds the per-route
+    // document fact (route-style-links.ts, seeded into the existing head
+    // `styleLinks` sink). Delivery aliases are recorded too, because a page's
+    // JSX may reference the delivered alias tag rather than the primary one.
+    const islandStyleAssets = new Map<string, string[]>();
+    for (const declaration of islandStyleDeclarations()) {
+      const urls: string[] = [];
+      const joinedSheets = new Set<string>();
+      for (const specifier of declaration.specifiers) {
+        // The declared sheet's asset is joined by its registry KEY, not by
+        // importer attribution: a shadow edge is keyed by its sheet file, so a
+        // sheet shared with a class island's authored import carries ONE
+        // registry entry under whichever importer registered last — the
+        // per-importer request list cannot be the join for a shared sheet
+        // (open-dialog and open-dropdown share overlay-recipe.css). The
+        // emitted asset is per key (content-addressed per sheet file), so the
+        // declaration → asset join recomputes the same key the registration
+        // used and reads the emission state directly.
+        const key = styleRequestModuleId(
+          declaration.moduleId,
+          specifier,
+          declaration.root === 'shadow' ? undefined : declaration.tagName,
+        );
+        const emitted = ctx.clientStyleAssetFiles.get(key);
+        if (emitted === undefined) {
+          throw buildError(
+            ClientAssetErrorCode.STYLESHEET_MISSING,
+            `Generated ${declaration.root} island <${declaration.tagName}> declares ` +
+              `openElement.styles "${specifier}" but the client build emitted no ` +
+              'stylesheet asset for it. A declared sheet is never silently dropped: fix the ' +
+              'stylesheet edge or remove the declaration.',
+          );
+        }
+        if (!joinedSheets.has(key)) {
+          joinedSheets.add(key);
+          urls.push(`${clientBase}client/${emitted}`);
+        }
+      }
+      if (urls.length !== declaration.specifiers.length) {
+        throw buildError(
+          ClientAssetErrorCode.STYLESHEET_MISSING,
+          `Generated ${declaration.root} island <${declaration.tagName}> declares ` +
+            `${declaration.specifiers.length} stylesheet(s) but joined ` +
+            `${urls.length} sheet file(s); a duplicated declared specifier cannot be ` +
+            'told apart from its sibling, and the style plan and the declaration disagree.',
+        );
+      }
+      if (urls.length === 0) {
+        throw buildError(
+          ClientAssetErrorCode.STYLESHEET_MISSING,
+          `Generated ${declaration.root} island <${declaration.tagName}> is styled but ` +
+            'produced no stylesheet URL; an unstyled island must not be rendered silently.',
+        );
+      }
+      const meta = ctx.phase1.islandMeta[declaration.tagName] as
+        | { tags?: readonly string[]; tagNames?: readonly string[] }
+        | undefined;
+      // The delivered tag set is the sidecar's own one-to-many list through the
+      // ONE resolver (primary tag when the sidecar declares no aliases), so a
+      // consumer that looks up the delivered tag never misses the sheet.
+      for (const tag of resolveIslandDeliveryTags(
+        declaration.tagName,
+        meta?.tags,
+        meta?.tagNames,
+        declaration.tagName,
+      )) {
+        if (islandStyleAssets.has(tag)) continue;
+        islandStyleAssets.set(tag, urls);
+      }
+    }
+    setClientIslandStyleAssets(ctx, islandStyleAssets);
 
     // The component stylesheet (alpha15 S lane): a discovered shadow-candidate
     // set whose entry emitted no CSS would ship unstyled shadow components —

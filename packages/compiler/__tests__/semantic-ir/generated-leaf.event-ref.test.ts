@@ -23,6 +23,9 @@
  * - claim ordering: installation is emitted after the structural mismatch walk
  *   (phase-2), so a claim mismatch installs nothing; the claim's static
  *   attribute seed does not treat event/ref names as DOM attributes;
+ * - update: value slots refresh in place against the same element the ref
+ *   attached to, and no refresh adds a second install site (consumer form: the
+ *   Chromium update vertical in `generated-element.event-ref.browser.test.ts`);
  * - SSR exclusion: event/ref render no bytes, keep the M08-1a static
  *   no-argument form and bytes, and never request a handler callable via
  *   `requireBinding`;
@@ -380,9 +383,10 @@ describe('SSR producer excludes client-only channels and prunes unreachable loca
       "import { format } from './util';\nfunction C(props) { const helper = () => format(); return <button title={props.t} onClick={() => helper()}>{props.x}</button>; }\n",
     );
     expect(compilation.module).not.toBeNull();
-    // The mount still needs the callable (the handler may run), but the SSR
-    // producer never evaluates or requests it.
-    expect(compilation.requiredBindings).toEqual(['format']);
+    // The import is a static module reference now (binding import channel), not
+    // a host binding; the SSR producer still never evaluates or requests it.
+    expect(compilation.requiredBindings).toEqual([]);
+    expect(compilation.module).toContain('import { format } from "./util";');
     const ssr = ssrSection(compilation);
     expect(ssr).not.toContain('const helper =');
     expect(ssr).not.toContain('requireBinding("format")');
@@ -538,20 +542,71 @@ describe('claim installs client-only channels only after the structural walk', (
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Update phase: the ref-attached node is rewritten in place, never rebuilt
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The ref-bearing `<input>` also carries a dynamic attribute
+ * (`title={props.label}`) while an unrelated sibling renders `{props.tick}`:
+ * a props write is a real update of the node the ref attached to.
+ */
+const UPDATE_COMPONENT = `
+function C(props) {
+  return (
+    <div>
+      <button id="hit" onClick={() => (globalThis.__hits = (globalThis.__hits ?? 0) + 1)}>hit</button>
+      <input id="field" title={props.label} ref={(el) => (el === null ? undefined : () => {})} />
+      <span id="tick">{props.tick}</span>
+    </div>
+  );
+}
+`;
+
+describe('update path rewrites the ref-attached node in place', () => {
+  test('props updates target the attached element and add no install site', () => {
+    const compilation = compileLeaf(UPDATE_COMPONENT);
+    expect(compilation.module).not.toBeNull();
+    const moduleText = compilation.module!;
+    const install = /const (__oe_refCleanup\d+) = __oe_refHandler\d+\((__oe_el\d+)\);/.exec(
+      moduleText,
+    );
+    expect(install, 'mount ref install').not.toBeNull();
+    const [, , elementName] = install!;
+    // The cleanup the mount registered is the one the ref handler returned;
+    // a static backreference keeps the assertion free of constructed source.
+    expect(moduleText).toMatch(
+      /__oe_scope\.add\(\(\) => \{ try \{ if \(typeof (__oe_refCleanup\d+) === "function"\) \1\(\); \} finally \{/,
+    );
+    // The attribute slot refresh writes the SAME element variable the ref was
+    // called with (in-place update, no node rebuild); the props channel drives
+    // both slots, so this is the real update path.
+    expect(moduleText).toContain(`${elementName}.setAttribute("title"`);
+    const propsBindings =
+      moduleText.match(/bindSignalWrites\(__oe_scope, __oe_propDep, "props", __oe_refresh\d+\)/g) ??
+      [];
+    expect(propsBindings.length).toBeGreaterThanOrEqual(2);
+    // Mount and claim are the only install sites; the update path adds none.
+    expect(moduleText.match(/const __oe_refCleanup\d+ = /g)?.length).toBe(2);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Carry boundaries: imported handlers and owned signals stay refused
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('binding/import carry is not faked', () => {
-  test('an imported handler is a host binding and the lane refuses UNBOUND_BINDING', () => {
+  test('an imported handler is a static reference the module re-emits', () => {
     const component =
       "import { handler } from './util';\nfunction C() { return <button onClick={handler}>go</button>; }\n";
     const leaf = compileLeaf(component);
     expect(leaf.module).not.toBeNull();
-    expect(leaf.requiredBindings).toEqual(['handler']);
-    const error = laneError(island(component));
-    expect(error.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
-      GENERATED_ELEMENT_DIAGNOSTIC.UNBOUND_BINDING,
-    ]);
+    // The binding import channel keeps the static import: it is not a host
+    // binding and the lane does not refuse the module.
+    expect(leaf.requiredBindings).toEqual([]);
+    expect(leaf.module).toContain('import { handler } from "./util";');
+    expect(() =>
+      compileGeneratedElementIfAdmitted(island(component), FILE, { site: SITE }),
+    ).not.toThrow();
   });
 
   test('a handler closing over an owned signal keeps the signal-carry refusal', () => {

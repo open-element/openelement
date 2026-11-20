@@ -14,6 +14,7 @@ import {
   documentResolutionSetupLines,
   documentWrapOptionsLines,
   pageRouteTagExpr,
+  readRouteDocumentStyleLinks,
   renderMatchingRenderersFn,
 } from './entry-route-helpers.ts';
 
@@ -29,6 +30,11 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   if (!desc.isSSG) return '';
 
   const lines: string[] = [];
+  // task12: build-only route → document stylesheet facts. Empty means no seed
+  // lines at all, keeping a project without light-root generated styles
+  // byte-identical.
+  const routeDocumentStyleLinks = readRouteDocumentStyleLinks(desc);
+  const hasRouteDocumentStyles = Object.keys(routeDocumentStyleLinks).length > 0;
 
   lines.push('');
   lines.push('// - DSD-first rendering API -');
@@ -38,13 +44,18 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   // --- routeInfo: structured route metadata ---
   lines.push('export const routeInfo = [');
   for (const r of desc.pageRoutes) {
-    const tagNameExpr = pageRouteTagExpr(r.varName, r.tagName);
+    const tagNameExpr = pageRouteTagExpr(r.varName, r.tagName, pageKindOf(r));
     // M11-1: the build-time page-kind fact. Emitted only for a non-class page,
     // so a class-page-only project's routeInfo stays byte-identical; the
     // renderRoute branches read this fact instead of the page descriptor's
     // runtime `kind`.
     const pageKind = pageKindOf(r);
-    const pageKindField = pageKind === 'function-page' ? `, pageKind: "function-page"` : '';
+    const pageKindField =
+      pageKind === 'function-page'
+        ? `, pageKind: "function-page"`
+        : pageKind === 'generated-element-page'
+          ? `, pageKind: "generated-element-page"`
+          : '';
     lines.push(
       `  { path: ${quoteGeneratedJavaScriptValue(r.path)}, filePath: ${quoteGeneratedJavaScriptValue(
         r.filePath,
@@ -120,7 +131,14 @@ export function renderSsgSection(desc: EntryDescriptor): string {
     '    const __pageContext = { data, actionData: undefined, params, request: options.request, locale, route: loadContext.route, meta: routeMeta };',
   );
   lines.push('    const props = __pageProps(info.module, __pageContext);');
-  lines.push(...documentResolutionSetupLines('page', '__pageContext', '    '));
+  lines.push(
+    ...documentResolutionSetupLines(
+      'page',
+      '__pageContext',
+      '    ',
+      hasRouteDocumentStyles ? 'routePath' : undefined,
+    ),
+  );
   // Per-property og dedup: the wrap below serializes this page's __doc.meta,
   // so the site-level fallback drops the og tags the route declares. Status
   // pages below keep the raw headExtrasValue — they emit no route meta, so
@@ -238,7 +256,14 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   // render reports its light-root stylesheets into `__documentStyles`
   // (alpha15 S lane, S-C1.2), and the wrap below reads both. Same context
   // object, same order as the success path.
-  lines.push(...documentResolutionSetupLines('page', '__errorPageContext', '        '));
+  lines.push(
+    ...documentResolutionSetupLines(
+      'page',
+      '__errorPageContext',
+      '        ',
+      hasRouteDocumentStyles ? 'routePath' : undefined,
+    ),
+  );
   lines.push(...routeHeadExtrasStatements('headExtrasValue', '        '));
   // Same fork on the boundary re-render: the alpha15 server function page
   // takes the typed seam — the error channel re-renders through the compiled

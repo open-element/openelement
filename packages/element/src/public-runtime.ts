@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the root-facade implementation boundary is ONE surface — the server-render entry (`renderToString`: compiled Part Program serializer dispatch, generated-host registry pairing, light-host attribute writing, property seeding), the pre-upgrade capture bootstrap over the claim capture/replay seam, and the core/protocol/signal surface a compiled module resolves against — because a page root and a NESTED host must render and seed through the same decision table (serializer selection, host-attribute merge, prop seed) rather than two that can disagree; the boundary is that it is NOT a package subpath: it hosts no compiler, no second serializer and no DOM executor of its own, and every compiled/runtime fact it re-exports keeps its own owner.
 /**
  * Deliberate root-facade implementation boundary. Not a package subpath.
  *
@@ -15,8 +16,12 @@ import {
 import { SSR_REGISTRY_GENERATED_HOSTS } from '@openelement/protocol/registry-markers';
 import { convertToAttribute } from './internal/compiled/facade-host.ts';
 import { sheetResourceUrls } from './internal/compiled/style-links.ts';
-import { requestTimeStyleLinks } from './internal/compiled/server/style-links.ts';
+import {
+  requestTimeIslandStyleLinks,
+  requestTimeStyleLinks,
+} from './internal/compiled/server/style-links.ts';
 import type { DocumentStyleResources } from './internal/core/html-escape.ts';
+import { escapeAttrValue } from './internal/core/html-escape.ts';
 import type {
   CompiledElementMetadata,
   CompiledPropertyMetadata,
@@ -41,6 +46,8 @@ import { signal } from './internal/signal/index.ts';
 import { serializeStyleLinks } from './internal/compiled/server/index.ts';
 import type { CompiledProgramHost, CompiledSignalLike } from './internal/compiled/server/index.ts';
 import { type TrustedHtml, trustedHtmlValue } from './internal/core/security.ts';
+import { substituteSlotAnchors } from './internal/compiled/slot-anchors.ts';
+import { CompiledProgramValidationError } from './internal/compiled/runtime/values.ts';
 
 export { collectPublicProps } from './internal/core/props-utils.ts';
 export type { SsrAdmissionDecision } from '@openelement/protocol/render';
@@ -63,7 +70,14 @@ export type { ErrorTelemetryHook } from '@openelement/protocol/errors';
 export { computed, effect, signal } from './internal/signal/index.ts';
 export type { ReadonlySignal, Signal } from '@openelement/protocol/signal';
 export { element, property } from './internal/core/compile-decorators.ts';
-export { onConnect, onDispose } from './internal/core/compile-lifecycle.ts';
+export {
+  onConnect,
+  onDispose,
+  onError,
+  onPropertyChange,
+  ref,
+  useContext,
+} from './internal/core/compile-lifecycle.ts';
 export {
   DANGEROUS_KEYS,
   isDangerousKey,
@@ -299,6 +313,146 @@ function classNameOf(ctor: object): string {
   return (ctor as { name?: string }).name ?? 'anonymous';
 }
 
+/**
+ * Serialize one LIGHT-root generated host: the element tag, its canonical
+ * attribute pairs and the compiled content (with caller projections
+ * substituted into it) as the host's children.
+ *
+ * The producer is content-only because that is exactly what a light root owns —
+ * its region is the host's children, not a template. The attribute pairs go
+ * through the SAME normalization the shadow host producer receives, so a light
+ * and a shadow host spell the same authored attributes identically.
+ *
+ * `projectedChildren` is the compiled children channel's light-side half. A
+ * generated light producer names each of its `<slot>` elements with an
+ * `oe:s:` / `oe:/s:` anchor pair, so substitution is a walk over the producer's
+ * OWN marker comments — there is no markup pattern match and no second parse of
+ * the content. A projection that names a slot the content does not declare
+ * fails closed with the serializer's validation identity, exactly like the
+ * class lane's `projectedChildren` check.
+ */
+/**
+ * The light-root class static's result: the serialized content plus the seeded
+ * host attribute pairs (`__oeHostAttributes`) it computed but has no wrapper to
+ * return. A string is the pre-existing shape and carries no pairs, so an older
+ * emitted module keeps rendering byte-identically.
+ */
+interface LightSsrResult {
+  readonly content: string;
+  readonly hostAttributes: readonly (readonly [string, string])[] | undefined;
+  /**
+   * The declared rows whose ONLY host wire is the JSON seed (`array`/`object`).
+   * The shell owns that set; the light writer only needs the names. A caller
+   * pair addressed to one of them has no attribute channel — the descriptor
+   * refuses one and `observedAttributes` never observes it — so the writer must
+   * not spell it as text. Absent for the string shape (an older emitted module),
+   * which keeps the pre-existing bytes.
+   */
+  readonly seedRows?: readonly string[];
+}
+
+function lightResult(rendered: unknown, lane: string, tag: string): LightSsrResult {
+  if (typeof rendered === 'string') return { content: rendered, hostAttributes: undefined };
+  if (
+    rendered !== null &&
+    typeof rendered === 'object' &&
+    typeof (rendered as LightSsrResult).content === 'string'
+  ) {
+    return rendered as LightSsrResult;
+  }
+  throw new OpenElementError(
+    `[openElement] the ${lane} generated element <${tag}> produced ${typeof rendered} instead ` +
+      'of an HTML string; the compiler-emitted `__ssr` producer must always return serialized ' +
+      'content.',
+    { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+  );
+}
+
+/**
+ * Merge the caller's authored attribute pairs with the ones the class static
+ * seeded. The seeded pair for a name REPLACES the authored one: it is the
+ * canonical converted value the claim will re-read, and the JSON seed is
+ * emitted only by the seeder.
+ *
+ * `seedRows` names the rows the JSON seed ALREADY carries — the seeder's own
+ * verdict, never re-derived here. A declared `array`/`object` row is
+ * property-only: the descriptor refuses an attribute for it and
+ * `observedAttributes` never observes one, so a pair naming it is not a second
+ * spelling of the row. Leaving it on the tag is worse than redundant — the host
+ * writer normalizes pairs through the class lane's value algebra, which is
+ * `String()` for anything that is not `class`/`style`, so an array arrives as
+ * `items="[object Object],…"`. Both sides are dropped for those names, and the
+ * value travels on `data-oe-prop-seed` alone (the ONE channel
+ * `applyGeneratedPropSeed` reads). Primitive rows and static attributes keep
+ * their bytes; a row the seed does not carry is untouched.
+ */
+function mergeHostAttributes(
+  authored: readonly (readonly [name: string, value: unknown])[] | undefined,
+  seeded: readonly (readonly [string, string])[] | undefined,
+  seedRows: readonly string[] | undefined,
+): readonly (readonly [name: string, value: unknown])[] | undefined {
+  const carried = (name: string): boolean => seedRows?.includes(name) === true;
+  const authoredPairs =
+    seedRows === undefined || seedRows.length === 0 || authored === undefined
+      ? authored
+      : authored.filter(([name]) => !carried(name));
+  const seededPairs =
+    seedRows === undefined || seedRows.length === 0 || seeded === undefined
+      ? seeded
+      : seeded.filter(([name]) => !carried(name));
+  if (seededPairs === undefined || seededPairs.length === 0) return authoredPairs;
+  const byName = new Map<string, unknown>();
+  for (const [name, value] of authoredPairs ?? []) byName.set(name, value);
+  for (const [name, value] of seededPairs) byName.set(name, value);
+  return [...byName];
+}
+
+function serializeLightGeneratedHost(
+  tag: string,
+  content: string,
+  authoredAttributes: readonly (readonly [string, unknown])[] | undefined,
+  projectedChildren?: ReadonlyMap<string, string>,
+): string {
+  const pairs =
+    authoredAttributes === undefined
+      ? []
+      : normalizeHostAttributePairs(authoredAttributes).attributes.map(
+          (attribute) => [attribute.name, attribute.bare ? '' : attribute.value] as const,
+        );
+  const attributes = pairs.map(([name, value]) => ` ${name}="${escapeAttrValue(value)}"`).join('');
+  // The marker is the light-root OWNERSHIP fact, not an authored attribute: the
+  // class lane's serializer always writes it, and the claim path plus the
+  // light-root CSS scope both key off it. A generated light host that omitted it
+  // would serialize the right CONTENT under the wrong ownership contract, and
+  // the divergence would only surface when something asked the DOM whose
+  // children those were.
+  // Order matches the class lane's serializer (authored attributes first, the
+  // marker last), so a consumer keying off attribute order — a snapshot, a
+  // string patch, a CSS attribute selector list — sees one spelling.
+  const children = projectSlotAnchors(content, projectedChildren);
+  return `<${tag}${attributes} data-oe-light>${children}</${tag}>`;
+}
+
+/**
+ * Substitute caller projections into a generated light producer's anchored slot
+ * regions, translating this module's one failure shape into the serializer's
+ * existing validation identity.
+ *
+ * The substitution itself lives in `./internal/compiled/slot-anchors.ts`: it
+ * walks the producer's OWN slot-anchor comments and never inspects element
+ * markup, so there is no second HTML parser here and no markup pattern match.
+ */
+function projectSlotAnchors(
+  content: string,
+  projectedChildren: ReadonlyMap<string, string> | undefined,
+): string {
+  const result = substituteSlotAnchors(content, projectedChildren);
+  if ('path' in result) {
+    throw new CompiledProgramValidationError(result.path, result.message);
+  }
+  return result.html;
+}
+
 function failUncompiled(ctor: object, tag: string): never {
   raiseFrameworkError(
     'ssr',
@@ -307,6 +461,99 @@ function failUncompiled(ctor: object, tag: string): never {
       'renderToString only serializes classes produced by the OpenElement compiler ' +
       '(@openelement/compiler open:compiled-element transform).',
   );
+}
+
+/** The compiler-emitted generated host producer the entry's registry guard pairs with a tag. */
+type RegisteredGeneratedHostRenderer = (
+  props: Readonly<Record<string, unknown>>,
+  lightChildren: string | undefined,
+  attributes: readonly (readonly [string, string])[] | undefined,
+  styleLinks?: readonly string[],
+) => unknown;
+
+/**
+ * Resolve one registered generated host renderer from the ONE protocol pair
+ * table the generated entry's registry guard writes
+ * (`SSR_REGISTRY_GENERATED_HOSTS`).
+ *
+ * `undefined` means "this tag is not a generated host": the caller keeps the
+ * compiled-class path byte-identical. A malformed table, or a present-but-
+ * invalid entry, fails closed with the existing program-missing identity —
+ * treating it as absent would silently dispatch the tag to a different renderer
+ * (L1 fail-closed rule, shared by the root page path and nested expansion).
+ */
+function registeredGeneratedHostRenderer(tag: string): RegisteredGeneratedHostRenderer | undefined {
+  const registry =
+    typeof customElements === 'undefined'
+      ? undefined
+      : (customElements as unknown as Record<string, unknown>);
+  const rawTable = registry === undefined ? undefined : registry[SSR_REGISTRY_GENERATED_HOSTS];
+  if (rawTable === undefined) return undefined;
+  if (!(rawTable instanceof Map)) {
+    throw new OpenElementError(
+      "[openElement] the SSR registry's generated-host table is malformed " +
+        '(expected a Map); the generated entry registry guard is its only writer.',
+      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+    );
+  }
+  const table = rawTable as Map<string, unknown>;
+  if (!table.has(tag)) return undefined;
+  const hostRenderer = table.get(tag);
+  if (typeof hostRenderer !== 'function') {
+    throw new OpenElementError(
+      `[openElement] admitted generated host <${tag}> is paired with a ` +
+        `${typeof hostRenderer} renderer; the registry guard only writes the ` +
+        'compiler-emitted host function.',
+      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+    );
+  }
+  return hostRenderer as RegisteredGeneratedHostRenderer;
+}
+
+/**
+ * Render one paired generated host through the ONE typed channel shared by the
+ * generated page ROOT path and nested expansion: the compiler-emitted host
+ * producer receives the props/lightChildren/attributes plus the per-island
+ * stylesheet URLs from the same request-time style-link channel the generated
+ * entry fills.
+ *
+ * `null` is the explicit "declared but carrier unavailable" state and fails
+ * closed instead of rendering the host silently unstyled (M09-2e / #1803).
+ * A non-string result is a malformed emitted artifact and fails closed too.
+ */
+function renderRegisteredGeneratedHost(
+  tag: string,
+  hostRenderer: RegisteredGeneratedHostRenderer,
+  props: Readonly<Record<string, unknown>> | undefined,
+  lightChildren: string | undefined,
+  attributes: readonly (readonly [string, string])[] | undefined,
+): string {
+  const islandStyleLinks = requestTimeIslandStyleLinks(tag);
+  if (islandStyleLinks === null) {
+    throw new OpenElementError(
+      `[openElement] admitted generated host <${tag}> declares ` +
+        'IslandConfig.styles on a shadow root, but this render has no DSD ' +
+        'style-link carrier for it (the dev server emits no style assets). ' +
+        'Run a production build, or remove the declaration; rendering it ' +
+        'unstyled would silently drop the authored sheets.',
+      { code: ErrorCode.SSR_RENDER_ERROR, phase: 'ssr' },
+    );
+  }
+  const rendered = hostRenderer(
+    props ?? {},
+    lightChildren,
+    attributes,
+    islandStyleLinks === undefined ? undefined : islandStyleLinks,
+  );
+  if (typeof rendered !== 'string') {
+    throw new OpenElementError(
+      `[openElement] admitted generated host <${tag}> produced ` +
+        `${typeof rendered} instead of an HTML string; the compiler-emitted host ` +
+        'producer must always return the serialized host markup.',
+      { code: ErrorCode.SSR_RENDER_ERROR, phase: 'ssr' },
+    );
+  }
+  return rendered;
 }
 
 /** Coerce a JS-side prop value per the compiled converter record. */
@@ -781,6 +1028,39 @@ function renderToStringAtDepth(
       { code: FacadeErrorCode.COMPOSITION_DEPTH, phase: 'ssr' },
     );
   }
+  // M11-2 generated page root: a generated element page carries no
+  // `__partProgram`; its server artifact is the compiler-emitted host producer
+  // the entry paired with the tag through the ONE registry guard. Dispatch
+  // through the SAME pair channel the nested expansion uses, BEFORE any class
+  // or program probe, so the generated page root and a nested generated host
+  // cannot diverge. A tag that is not paired (every compiled class page) keeps
+  // the class path byte-identical.
+  if (typeof input === 'string') {
+    const rootGeneratedHostRenderer = registeredGeneratedHostRenderer(input);
+    if (rootGeneratedHostRenderer !== undefined) {
+      // A generated host reached through the server function lane's `__ssr`
+      // carries authored children (its composition groups) and passthrough host
+      // attributes; a generated PAGE root carries neither. Forward both so a
+      // nested generated host keeps its slotted light DOM — the class path's
+      // nested expansion and this dispatch stay the same host artifact.
+      // Absent author data stays absent: the generated PAGE root passes
+      // neither, and the producer sees exactly what the pre-composition lane
+      // passed (undefined), not an empty list.
+      const hostAttributes =
+        options.hostAttrs === undefined
+          ? undefined
+          : normalizeHostAttributePairs(options.hostAttrs).attributes.map(
+              (attribute) => [attribute.name, attribute.bare ? '' : attribute.value] as const,
+            );
+      return renderRegisteredGeneratedHost(
+        input,
+        rootGeneratedHostRenderer,
+        options.props,
+        options.hostChildren,
+        hostAttributes,
+      );
+    }
+  }
   const resolvedClass = (options.componentClass ??
     (typeof input === 'string'
       ? typeof customElements !== 'undefined'
@@ -798,7 +1078,42 @@ function renderToStringAtDepth(
     );
   }
   const program = resolvedClass.__partProgram;
-  if (!program) failUncompiled(resolvedClass, typeof input === 'string' ? input : '<unknown>');
+  if (!program) {
+    // A LIGHT-root generated element serializes its own children, so its
+    // compiled artifact is the shell-attached static `__ssr()` (the compiler
+    // emits the leaf producer and the descriptor's `ssrProducer` row; the shell
+    // installs it on the class). No Part Program, no registry pair, no DSD
+    // wrapper: the host's children ARE the region, exactly as on the client.
+    const lightSsr = (resolvedClass as { __ssr?: unknown }).__ssr;
+    if (typeof lightSsr === 'function') {
+      // Pass the host attribute pairs: the class static now folds them through
+      // the shell's own seeder/resolver so a declared row gets its server value.
+      // Before this, a light-root component with any row threw on `props.x`.
+      const rendered = (lightSsr as (input?: unknown, attributes?: unknown) => unknown).call(
+        resolvedClass,
+        options.props,
+        options.hostAttrs,
+      );
+      const light = lightResult(
+        rendered,
+        'light-root',
+        typeof input === 'string' ? input : '<unknown>',
+      );
+      const renderedContent = light.content;
+      // The producer is content-only (the shadow lane's `<Name>__ssrHost` wraps
+      // its own DSD template). A light root's region IS the host's children, so
+      // the serializer owns the host element: the tag plus the canonical
+      // attribute pairs, then the compiled content with the caller's projections
+      // substituted into the producer's anchored slots.
+      return serializeLightGeneratedHost(
+        typeof input === 'string' ? input : '<unknown>',
+        renderedContent,
+        mergeHostAttributes(options.hostAttrs, light.hostAttributes, light.seedRows),
+        options.projectedChildren,
+      );
+    }
+    failUncompiled(resolvedClass, typeof input === 'string' ? input : '<unknown>');
+  }
   const tag = program.tag;
   if (typeof input === 'string' && input !== tag) {
     throw new OpenElementError(
@@ -865,12 +1180,13 @@ function renderToStringAtDepth(
           ? undefined
           : (nested) => {
               if (!admitted.has(nested.tag)) return undefined;
-              // M11 complete vertical: a generated element class carries no
-              // `__partProgram`; its server artifact is the compiler-emitted
-              // `<Name>__ssrHost` the entry paired with the class through the
-              // ONE registry guard. The pair table is the protocol marker the
-              // guard writes; a hit is dispatched BEFORE the class path, with
-              // no class read, no static check and no program probe.
+              // M11-2: a generated element class carries no `__partProgram`;
+              // its server artifact is the compiler-emitted `<Name>__ssrHost`
+              // the entry paired with the class through the ONE registry guard.
+              // The pair table is the protocol marker the guard writes; a hit
+              // is dispatched BEFORE the class path, through the SAME helper the
+              // generated page root uses (styleLinks + fail-closed checks
+              // included), with no class read and no program probe.
               //
               // STREAM BOUNDARY (OWED, L3 — characterized, not supported):
               // the deferred/stream executor never reaches this branch — it
@@ -882,68 +1198,54 @@ function renderToStringAtDepth(
               // only; streaming/deferred DSD for them is explicitly owed to a
               // later, separately approved slice and this branch claims no
               // stream support.
-              const generatedHostRegistry =
-                typeof customElements === 'undefined'
-                  ? undefined
-                  : (customElements as unknown as Record<string, unknown>);
-              const rawGeneratedHostTable =
-                generatedHostRegistry === undefined
-                  ? undefined
-                  : generatedHostRegistry[SSR_REGISTRY_GENERATED_HOSTS];
-              if (rawGeneratedHostTable !== undefined) {
-                // L1: the guard is the ONLY writer and always writes a Map. A
-                // marker value of another shape is a corrupted registry, not a
-                // reason to silently fall back to the class path.
-                if (!(rawGeneratedHostTable instanceof Map)) {
-                  throw new OpenElementError(
-                    "[openElement] the SSR registry's generated-host table is malformed " +
-                      '(expected a Map); the generated entry registry guard is its only writer.',
-                    { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
-                  );
-                }
-                const generatedHostTable = rawGeneratedHostTable as Map<string, unknown>;
-                // L1: an entry that EXISTS for the tag must be a callable
-                // compiler-emitted renderer. Treating a present-but-invalid entry
-                // as "absent" would silently dispatch to a different path.
-                if (generatedHostTable.has(nested.tag)) {
-                  const hostRenderer = generatedHostTable.get(nested.tag);
-                  if (typeof hostRenderer !== 'function') {
-                    throw new OpenElementError(
-                      `[openElement] admitted generated host <${nested.tag}> is paired with a ` +
-                        `${typeof hostRenderer} renderer; the registry guard only writes the ` +
-                        'compiler-emitted host function.',
-                      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
-                    );
-                  }
-                  // The ONE host-attribute value algebra is reused: the class
-                  // serializer's host writer and this typed pair channel cannot
-                  // drift. Presence rides as the canonical empty-string pair.
-                  const normalizedAttributes = normalizeHostAttributePairs(nested.attributes);
-                  const hostAttributes = normalizedAttributes.attributes.map(
-                    (attribute) => [attribute.name, attribute.bare ? '' : attribute.value] as const,
-                  );
-                  const rendered = (
-                    hostRenderer as (
-                      props: Readonly<Record<string, unknown>>,
-                      lightChildren: string,
-                      attributes: readonly (readonly [string, string])[],
-                    ) => unknown
-                  )(nested.properties, nested.children, hostAttributes);
-                  if (typeof rendered !== 'string') {
-                    throw new OpenElementError(
-                      `[openElement] admitted generated host <${nested.tag}> produced ` +
-                        `${typeof rendered} instead of an HTML string; the compiler-emitted host ` +
-                        'producer must always return the serialized host markup.',
-                      { code: ErrorCode.SSR_RENDER_ERROR, phase: 'ssr' },
-                    );
-                  }
-                  return rendered;
-                }
+              const generatedHostRenderer = registeredGeneratedHostRenderer(nested.tag);
+              if (generatedHostRenderer !== undefined) {
+                // The ONE host-attribute value algebra is reused: the class
+                // serializer's host writer and this typed pair channel cannot
+                // drift. Presence rides as the canonical empty-string pair.
+                const normalizedAttributes = normalizeHostAttributePairs(nested.attributes);
+                const hostAttributes = normalizedAttributes.attributes.map(
+                  (attribute) => [attribute.name, attribute.bare ? '' : attribute.value] as const,
+                );
+                return renderRegisteredGeneratedHost(
+                  nested.tag,
+                  generatedHostRenderer,
+                  nested.properties,
+                  nested.children,
+                  hostAttributes,
+                );
               }
               const nestedClass =
                 typeof customElements === 'undefined'
                   ? undefined
                   : (customElements.get(nested.tag) as CompiledComponentConstructor | undefined);
+              // A LIGHT-root generated element serializes its own children and
+              // has no Part Program and no registry pair, so the nested path
+              // reaches its compiled producer through the class static the
+              // shell installed (the same one the root path uses).
+              const nestedLightSsr = (nestedClass as { __ssr?: unknown } | undefined)?.__ssr;
+              if (nestedClass !== undefined && typeof nestedLightSsr === 'function') {
+                const rendered = (
+                  nestedLightSsr as (input?: unknown, attributes?: unknown) => unknown
+                ).call(nestedClass, nested.properties, nested.attributes);
+                const nestedLight = lightResult(rendered, 'nested light-root', nested.tag);
+                // The nested host's authored children arrive as the parent
+                // serializer's own per-slot groups (`nested.projectedChildren`),
+                // exactly the map the class-lane nested expansion hands a light
+                // child. A generated light host substitutes them into its
+                // anchored slots; a projection naming a slot it does not declare
+                // fails closed inside the serializer.
+                return serializeLightGeneratedHost(
+                  nested.tag,
+                  nestedLight.content,
+                  mergeHostAttributes(
+                    nested.attributes,
+                    nestedLight.hostAttributes,
+                    nestedLight.seedRows,
+                  ),
+                  nested.projectedChildren,
+                );
+              }
               if (!nestedClass?.__partProgram) {
                 throw new OpenElementError(
                   `[openElement] admitted nested component <${nested.tag}> is not registered with a compiled Part Program.`,

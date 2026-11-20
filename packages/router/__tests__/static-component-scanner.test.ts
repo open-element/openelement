@@ -12,7 +12,10 @@ import {
 import { expect, test } from 'vitest';
 import { assertRejectsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import type { RouteEntry } from '@openelement/protocol/framework';
-import { scanStaticComponents } from '../src/vite/internal/ssg/static-component-scanner.ts';
+import {
+  scanStaticComponents,
+  StaticScanDiagnosticCode,
+} from '../src/vite/internal/ssg/static-component-scanner.ts';
 import type { ModuleWalkResolver } from '../src/vite/internal/module-graph-walk.ts';
 
 async function write(root: string, path: string, source: string): Promise<void> {
@@ -108,15 +111,14 @@ test('scanStaticComponents follows the local route graph deterministically', asy
       `import { element, OpenElement } from '@openelement/element';\n@element('open-counter')\nexport default class Counter extends OpenElement {}`,
     );
 
-    expect(
-      await scanStaticComponents({
-        root,
-        routesDir: 'app/routes',
-        islandsDir: 'app/islands',
-        routes: ROUTES,
-        resolve: resolverFor(root),
-      }),
-    ).toEqual([
+    const staticScan = await scanStaticComponents({
+      root,
+      routesDir: 'app/routes',
+      islandsDir: 'app/islands',
+      routes: ROUTES,
+      resolve: resolverFor(root),
+    });
+    expect(staticScan.declarations).toEqual([
       {
         tagName: 'open-article-view',
         modulePath: '/app/components/article.tsx',
@@ -161,7 +163,7 @@ test('scanStaticComponents reaches a component through the imports map (defect B
       `import { element, OpenElement } from '@openelement/element';\n@element('oe-alias-card')\nexport default class AliasCard extends OpenElement {}`,
     );
 
-    const decls = await scanStaticComponents({
+    const { declarations: decls } = await scanStaticComponents({
       root,
       routesDir: 'app/routes',
       islandsDir: 'app/islands',
@@ -204,6 +206,42 @@ test('scanStaticComponents fails closed on duplicate reachable tags', async () =
       Error,
       'declared by both',
     );
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+test('scanStaticComponents reports the walk bound instead of shipping a partial registry silently', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-static-components-bound-'));
+  try {
+    await write(root, 'package.json', JSON.stringify({ name: 'proof', type: 'module' }));
+    await write(
+      root,
+      'app/routes/index.tsx',
+      `import { OpenElement } from '@openelement/element';\nimport '../components/bound-card.tsx';\nexport default class Route extends OpenElement {}`,
+    );
+    await write(
+      root,
+      'app/components/bound-card.tsx',
+      `import { element, OpenElement } from '@openelement/element';\n@element('oe-bound-card')\nexport default class BoundCard extends OpenElement {}`,
+    );
+
+    // maxModules: 1 stops the walk before the seed's edges are followed, so
+    // the component is never reached — and the stop itself is a coded note on
+    // the result, not a fact only the build log carries.
+    const { declarations, notes } = await scanStaticComponents({
+      root,
+      routesDir: 'app/routes',
+      islandsDir: 'app/islands',
+      routes: ROUTES,
+      resolve: resolverFor(root),
+      maxModules: 1,
+    });
+    expect(declarations).toEqual([]);
+    expect(notes.map((note) => note.code)).toEqual([
+      StaticScanDiagnosticCode.MODULE_BOUND_EXCEEDED,
+    ]);
+    expect(notes[0]!.message).toContain('module bound');
   } finally {
     await rm(root, { recursive: true });
   }

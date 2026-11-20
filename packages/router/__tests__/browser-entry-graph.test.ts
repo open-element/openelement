@@ -437,10 +437,34 @@ test('T1 real router CLI build emits a normalized, VIOLATED browser-entry graph'
   ).toBe(true);
 
   // The checker's real CLI agrees, and names an executor entry in its output.
-  const checked = await runChecker([relative(REPO_ROOT, artifactPath)]);
+  // Output discipline: a failing human run keeps stdout (the data channel)
+  // empty — the verdict block moves to stderr, and the structured verdict
+  // lives in the `--json` machine document.
+  const artifactArg = relative(REPO_ROOT, artifactPath);
+  const checked = await runChecker([artifactArg]);
   expect(checked.code, checked.stderr).toBe(1);
-  expect(checked.stdout).toContain('VIOLATED');
-  expect(checked.stdout).toContain('loaded ');
+  expect(checked.stdout).toBe('');
+  expect(checked.stderr).toContain('VIOLATED');
+  expect(checked.stderr).toContain('loaded ');
+
+  const cliReport = JSON.parse((await runChecker(['--json', artifactArg])).stdout) as {
+    format: string;
+    exitCode: number;
+    artifacts: Array<{
+      verdict: string;
+      violations: Array<{ moduleId: string; islands: string[] }>;
+    }>;
+    summary: { met: number; violated: number; unproven: number };
+  };
+  expect(cliReport.format).toBe('openelement.browser-entry-graph-check/1');
+  expect(cliReport.exitCode).toBe(1);
+  expect(cliReport.summary).toEqual({ met: 0, violated: 1, unproven: 0 });
+  expect(cliReport.artifacts).toHaveLength(1);
+  expect(cliReport.artifacts[0]!.verdict).toBe('VIOLATED');
+  expect(
+    cliReport.artifacts[0]!.violations.some((violation) => gateIds.has(violation.moduleId)),
+    JSON.stringify(cliReport.artifacts[0]!.violations),
+  ).toBe(true);
 
   evidence = { t1: { root, build, artifact, source } };
 });
@@ -469,6 +493,118 @@ test('T2 real Vite build of the generated shell + neutral primitives is MET', as
   if (evidence !== undefined) {
     evidence.t2 = { root, artifact, source: source! };
   }
+});
+
+test('T2b an SSR-only (hydrate:none) island is not an island-attribution input', async () => {
+  // A `hydrate: 'none'` island has NO module in the emitted client bundle by
+  // design: the generated entry emits no import for it. Feeding it to the
+  // island-attribution pass asked the writer to resolve a module that cannot
+  // exist there, and the writer's fail-closed contract turned the WHOLE
+  // artifact incomplete (`island-chunk-unresolved` / `module-not-in-chunk`),
+  // which the checker reports as UNPROVEN rather than a verdict. The build's
+  // own `strategy !== 'none'` filter keeps that artifact complete while the
+  // writer keeps refusing a genuinely absent island (next test).
+  const root = await makeTempRoot();
+  await writeFixtureFile(
+    join(root, 'package.json'),
+    JSON.stringify({ name: 'oe-browser-graph-ssr-only', private: true, type: 'module' }),
+  );
+  await writeFixtureFile(
+    join(root, 'vite.config.ts'),
+    [
+      "import { openElement } from '@openelement/router/vite';",
+      "import { defineConfig } from 'vite';",
+      '',
+      "export default defineConfig({ base: '/', plugins: [...openElement({ layout: false })] });",
+      '',
+    ].join('\n'),
+  );
+  await writeFixtureFile(join(root, 'app', 'components', 'probe-home.tsx'), PAGE_CLASS);
+  await writeFixtureFile(
+    join(root, 'app', 'islands', 'probe-counter.tsx'),
+    ISLAND_CLASS.replace("hydrate: 'load'", "hydrate: 'none'"),
+  );
+  await writeFixtureFile(
+    join(root, 'app', 'islands', 'probe-counter.css'),
+    ':host { display: inline-block; }\n',
+  );
+  // The route is the same page as T1; only the island's strategy differs.
+  await writeFixtureFile(
+    join(root, 'app', 'routes', 'index.tsx'),
+    [
+      "import { definePage } from '@openelement/router';",
+      "import ProbeHome from '../components/probe-home.tsx';",
+      '',
+      "export default definePage(ProbeHome, { head: { title: 'ssr-only probe' } });",
+      '',
+    ].join('\n'),
+  );
+  await linkRouterPackages(root);
+
+  const build = await runRouterBuild(root);
+  expect(build.code, build.output).toBe(0);
+  const artifactPath = join(root, 'dist', 'client', GRAPH_ASSET);
+  expect(existsSync(artifactPath), `artifact missing; build output:\n${build.output}`).toBe(true);
+  const artifact = JSON.parse(await readFile(artifactPath, 'utf8')) as BrowserEntryGraphArtifact;
+
+  // The capture completed and the SSR-only island is absent from the island
+  // list — not present-with-a-missing-chunk.
+  expect(artifact.status, JSON.stringify(artifact, null, 2)).toBe('complete');
+  expect(artifact.islands).toEqual([]);
+  // A complete capture is a verdict, not UNPROVEN, at the checker boundary.
+  const evaluation = evaluateBrowserEntryGraphArtifact(artifact);
+  expect(evaluation.reason, evaluation.detail ?? 'no detail').toBeNull();
+  expect(evaluation.islandCount).toBe(0);
+});
+
+test('T2c the writer still fails closed on a strategy-resolved island with no emitted module', () => {
+  // The complement of T2b: the build-side filter must not weaken the writer.
+  // An island the build DOES feed (strategy !== 'none') whose resolved module
+  // the emitted bundle does not carry is a broken capture, not a category
+  // error — the artifact must stay `incomplete` / `island-chunk-unresolved`.
+  // The id is a real workspace-relative spelling that simply is not in the
+  // bundle, so it normalizes and reaches the chunk-attribution check.
+  const missingModuleId = 'www/app/islands/probe-absent.ts';
+  const specifier = './app/islands/probe-absent.ts';
+  const plugin = browserEntryGraphPlugin({
+    ...directPluginOptions(join(REPO_ROOT, 'www')),
+    islands: [{ tag: 'probe-absent', specifier, strategy: 'load' }],
+    islandModuleIds: new Map([[specifier, missingModuleId]]),
+  });
+  const emitted: Array<{ fileName: string; source: string }> = [];
+  const context = {
+    emitFile: (asset: { fileName: string; source: string }) => emitted.push(asset),
+    getModuleInfo: (id: string) => ({ id }),
+  };
+  (
+    plugin.generateBundle as unknown as (this: unknown, options: object, bundle: object) => void
+  ).call(
+    context,
+    {},
+    {
+      'islands/client.js': {
+        type: 'chunk',
+        fileName: 'islands/client.js',
+        isEntry: true,
+        isDynamicEntry: false,
+        facadeModuleId: '\0virtual:open-client-entry',
+        imports: [],
+        dynamicImports: [],
+        implicitlyLoadedBefore: [],
+        modules: { '\0virtual:open-client-entry': { renderedLength: 10 } },
+      },
+    },
+  );
+  expect(emitted).toHaveLength(1);
+  const artifact = JSON.parse(emitted[0]!.source) as {
+    status: string;
+    reason: string;
+    diagnostics: string[];
+  };
+  expect(artifact.status).toBe('incomplete');
+  expect(artifact.reason).toBe('island-chunk-unresolved');
+  expect(artifact.diagnostics).toEqual(['module-not-in-chunk']);
+  expect(evaluateBrowserEntryGraphArtifact(artifact).verdict).toBe('UNPROVEN');
 });
 
 test('T3 a parsed-but-unused executor entry is a diagnostic, not a gate failure', async () => {
@@ -500,10 +636,23 @@ test('T3 a parsed-but-unused executor entry is a diagnostic, not a gate failure'
 
   const artifactPath = join(root, 'parsed-only.json');
   await writeFile(artifactPath, source!, 'utf8');
-  const checked = await runChecker([relative(REPO_ROOT, artifactPath)]);
+  const reportPath = join(root, 'parsed-only-report.txt');
+  const checked = await runChecker([
+    relative(REPO_ROOT, artifactPath),
+    '--report',
+    relative(REPO_ROOT, reportPath),
+  ]);
   expect(checked.code, checked.stderr).toBe(0);
+  // Output discipline: the passing run's stdout is exactly one summary line.
+  const summaryLines = checked.stdout.split('\n').filter((line) => line.length > 0);
+  expect(summaryLines).toHaveLength(1);
   expect(checked.stdout).toContain('MET');
-  expect(checked.stdout).toContain(facadeHost);
+  // The parsed-only residue is diagnostic detail: it lives in the --report
+  // artifact, never on the one-line stdout.
+  expect(checked.stdout).not.toContain(facadeHost);
+  const reportText = await readFile(reportPath, 'utf8');
+  expect(reportText).toContain('parsed-only executor residues');
+  expect(reportText).toContain(facadeHost);
 });
 
 test('T4 exact identity: a foreign same-named module is not the element executor entry', async () => {
@@ -688,30 +837,50 @@ test('T5 forged/derived artifacts fail closed: UNPROVEN exit 2, never a green cl
   ];
 
   for (const [label, artifactPath, expectedReason] of cases) {
-    const checked = await runChecker([artifactPath]);
+    // The UNPROVEN semantics (verdict + stable reason) are read from the
+    // `--json` machine channel; no human mode puts them on stdout.
+    const checked = await runChecker(['--json', artifactPath]);
     expect(checked.code, `${label}: ${checked.stdout}${checked.stderr}`).toBe(2);
-    expect(checked.stdout, label).toContain('UNPROVEN');
-    expect(checked.stdout, label).toContain(expectedReason);
+    const report = JSON.parse(checked.stdout) as {
+      exitCode: number;
+      artifacts: Array<{ verdict: string; reason: string | null }>;
+      summary: { met: number; violated: number; unproven: number };
+    };
+    expect(report.exitCode, label).toBe(2);
+    expect(report.summary, label).toEqual({ met: 0, violated: 0, unproven: 1 });
+    expect(report.artifacts, label).toHaveLength(1);
+    expect(report.artifacts[0]!.verdict, label).toBe('UNPROVEN');
+    expect(report.artifacts[0]!.reason, label).toBe(expectedReason);
   }
 
   // The opaque style-asset id must not leak the machine path it encodes,
-  // through either the artifact or the checker output.
-  const opaqueCheck = await runChecker([await writeForged('opaque-style-id-check', opaqueStyle)]);
+  // through either the artifact or the checker output. `--json` echoes the
+  // full evaluation, so a leak there would surface; stderr is checked too.
+  const opaqueCheck = await runChecker([
+    '--json',
+    await writeForged('opaque-style-id-check', opaqueStyle),
+  ]);
   expect(opaqueCheck.code).toBe(2);
   expect(opaqueCheck.stdout).not.toContain('/Users/');
   expect(opaqueCheck.stdout).not.toContain(REPO_ROOT);
+  expect(opaqueCheck.stderr).not.toContain('/Users/');
+  expect(opaqueCheck.stderr).not.toContain(REPO_ROOT);
 
   // The same real artifacts keep their honest verdicts through the CLI.
   const t2Path = join(forgedDir, 'real-t2.json');
   await writeFile(t2Path, t2Source, 'utf8');
   const met = await runChecker([relative(REPO_ROOT, t2Path)]);
   expect(met.code, met.stderr).toBe(0);
+  // A passing run's stdout is exactly one summary line.
+  expect(met.stdout.split('\n').filter((line) => line.length > 0)).toHaveLength(1);
   expect(met.stdout).toContain('MET');
 
   const violated = await runChecker([
     relative(REPO_ROOT, join(realEvidence.t1.root, 'dist', 'client', GRAPH_ASSET)),
   ]);
   expect(violated.code, violated.stderr).toBe(1);
+  // A failing human run keeps stdout a data channel (empty).
+  expect(violated.stdout).toBe('');
 
   // --json is a deterministic document and repeats the honesty.
   const jsonChecked = await runChecker([

@@ -94,7 +94,7 @@ function frontModuleWithRoot(
 ): FunctionModelModule {
   const front = compileFunctionModule(source, file, {
     importClassifier: GENERATED_ELEMENT_IMPORT_CLASSIFIER,
-    lifecycleRoot,
+    lifecycleAdmission: { admission: 'root', root: lifecycleRoot },
   });
   expect(front.diagnostics, front.diagnostics.map((item) => item.message).join('\n')).toEqual([]);
   return front.module!;
@@ -340,11 +340,19 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     }
   });
 
-  test('A8 hook-free modules stay byte-identical to clean HEAD 6bd3667d4 (SHA-256 pins)', () => {
-    // Captured by running the clean HEAD generator on the same sources before
-    // the lifecycle change: these pins are the "uses neither hook keeps the
-    // exact bytes" obligation, covering a hostless leaf, a generated element
-    // root with setup, one without setup, and a depth-1 nested-retention root.
+  test('A8 hook-free modules stay byte-identical to their M11-3 baseline (SHA-256 pins)', () => {
+    // These pins are the "uses neither hook keeps the exact bytes" obligation,
+    // covering a hostless leaf, a generated element root with setup, one without
+    // setup, and a depth-1 nested-retention root.
+    //
+    // 2026-11-17 (M11-3): the baseline moved ONCE for a GLOBAL, mechanical
+    // reason — the emitted leaf imports its runtime primitives from
+    // `@openelement/element/internal/compiled/leaf-runtime` instead of the
+    // `internal/compiled/runtime` facade. That is one import-specifier string in
+    // every module (verified: replacing the new spelling with the old one
+    // reproduces the previous bytes exactly), and it is what stops a generated
+    // island chunk from loading the generic executor. Nothing about the
+    // lifecycle surface changed, which is what these pins actually guard.
     const hostlessWithSetup = frontModule(
       "import { signal } from '@openelement/element';\n" +
         'function Hostless(props) { const s = props.seed; return <span>{s}</span>; }\n',
@@ -352,14 +360,14 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     );
     const hostlessWithSetupLeaf = generateLeafModule(hostlessWithSetup);
     expect(sha256(hostlessWithSetupLeaf.module!)).toBe(
-      '121b63fd46ae0b4997a4fb9683c6dd4ddf57d9e9814e8b9044892d56ab317d71',
+      'fb1ae5f28641db6ad094d64b4038369293037df9210b404895f94fda2e660ed7',
     );
     const hostlessPlain = frontModule(
       'function Plain(props) { return <p>{props.x}</p>; }\n',
       '/proj/src/leaf.tsx',
     );
     expect(sha256(generateLeafModule(hostlessPlain).module!)).toBe(
-      'd6eb754c315b6cf859bc5aff1c6ad3af29b38a099714aaf2d0d87c0d8b2d5025',
+      'b20d1a40affc168631728a4ee51079acf8007fa4edb287c11aac2f8be9f9160b',
     );
     const hostlessSetupSsr = functionText(hostlessWithSetupLeaf.module!, 'Hostless__ssr');
     expect(sha256(hostlessSetupSsr)).toBe(
@@ -375,8 +383,14 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
         '}\n' +
         'export default SeedCard;\n',
     );
+    // 2026-11-17: the light-root SSR capability (B4) adds ONE descriptor row to
+    // a light/absent-root module whose leaf emitted `__ssr` — the class-attached
+    // `ssrProducer` the serializer reads. That is a new capability, not a change
+    // to the lifecycle surface, so the pin moves once and the shape assertion
+    // below states what changed.
+    expect(rootSetup).toContain('  ssrProducer: SeedCard__ssr,');
     expect(sha256(rootSetup)).toBe(
-      'f5c4423d117ec97aca862066bc5affab24a4486cb413bfdfaf29bb2224d3bc76',
+      'e07b0675516972e7e9fb037f897bc13b6295e63ef34e3ddce63c6cac4fecfbba',
     );
     expect(sha256(functionText(rootSetup, 'SeedCard__ssr'))).toBe(
       '328059b07b89719ed2fc03f659a041a022982e21a5837f7628046bae6b473d50',
@@ -390,8 +404,10 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
         '}\n' +
         'export default PlainCard;\n',
     );
+    // Same B4 row as above: the light-root producer is one descriptor line.
+    expect(rootPlain).toContain('  ssrProducer: PlainCard__ssr,');
     expect(sha256(rootPlain)).toBe(
-      '5e78893e33aee71c7a95dc322cc170edee29666f76397e33e15a064cd5e77b8a',
+      'ef0659e8e63ea38a51998739a073893ecab9a1b34b04aa0eaedcb79e6cc434d3',
     );
     expect(sha256(functionText(rootPlain, 'PlainCard__ssr'))).toBe(
       '16e96344e5dc9cd26db72789d8bab36f12c2b815b15c646be3da4c383f28bef1',
@@ -410,8 +426,10 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
         '}\n' +
         'export default Host;\n',
     );
+    // Same B4 row: one light-root producer line on a composable light host.
+    expect(rootChild).toContain('  ssrProducer: Host__ssr,');
     expect(sha256(rootChild)).toBe(
-      '8c39f5542cfbbf0ce646a79ff8fc10cb8090b08643b1751f0538f66de1815dc3',
+      '32b9ea75adce82c8bd34d522f371a550311aa17769b4fca44d77e2a97cdc8411',
     );
     expect(sha256(functionText(rootChild, 'Host__ssr'))).toBe(
       'd361eae8d21a2959954c5ca83cf12b68887ed2fe5e4da21a21fd335259526863',
@@ -422,15 +440,22 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     const hook = 'onConnect(() => { globalThis.__oeX = 1; });';
     const importLine = "import { onConnect, onDispose } from '@openelement/element';\n";
 
-    const frontendCodes = (source: string, lifecycleRoot: string | undefined): string[] => {
+    const frontendCodes = (
+      source: string,
+      admission: { admission: 'root'; root: string } | { admission: 'module' } | undefined,
+    ): string[] => {
       const front = compileFunctionModule(source, '/proj/src/refused.tsx', {
         importClassifier: GENERATED_ELEMENT_IMPORT_CLASSIFIER,
-        ...(lifecycleRoot === undefined ? {} : { lifecycleRoot }),
+        ...(admission === undefined ? {} : { lifecycleAdmission: admission }),
       });
       return front.diagnostics.map((diagnostic) => diagnostic.code);
     };
+    const moduleAdmission = { admission: 'module' } as const;
+    const rootAdmission = { admission: 'root', root: 'Root' } as const;
 
-    // Nested component hook: the unchanged component-body statement refusal.
+    // Nested component hooks are admitted MODULE-WIDE by the frontend now; the
+    // generator owns the placement verdict (authored-span refusal), so the
+    // frontend reports no diagnostic here. `A13` pins the placement gate.
     expect(
       frontendCodes(
         importLine +
@@ -438,9 +463,9 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
           hook +
           '\n  return <em>{props.x}</em>;\n}\n' +
           'function Root(props) { return <p><Child x={props.x} /></p>; }\n',
-        'Root',
+        moduleAdmission,
       ),
-    ).toEqual(['OEC9041']);
+    ).toEqual([]);
     // No lifecycle marker (function-page / hostless lane): same unchanged refusal.
     expect(
       frontendCodes(
@@ -451,7 +476,11 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     // Malformed admitted shapes use the existing OEC9042 form code.
     for (const malformed of [
       'onConnect(async () => { globalThis.__oeX = 1; });',
-      'onConnect((connection) => { globalThis.__oeX = connection; });',
+      'onConnect((a, b) => { globalThis.__oeX = a + b; });',
+      'onConnect((...rest) => { globalThis.__oeX = rest; });',
+      'onConnect((env?) => { globalThis.__oeX = env; });',
+      'onConnect((env = 1) => { globalThis.__oeX = env; });',
+      'onConnect(([a]) => { globalThis.__oeX = a; });',
       'onConnect();',
       'onConnect(fn);',
       'onDispose(async () => { globalThis.__oeX = 1; });',
@@ -460,21 +489,21 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
         'const fn = () => { globalThis.__oeX = 1; };\n' +
         importLine +
         `function Root(props) {\n  ${malformed}\n  return <p>{props.x}</p>;\n}\n`;
-      expect(frontendCodes(source, 'Root'), malformed).toEqual(['OEC9042']);
+      expect(frontendCodes(source, moduleAdmission), malformed).toEqual(['OEC9042']);
     }
     // A same-named foreign import or a local declaration is NOT an intrinsic.
     expect(
       frontendCodes(
         "import { onConnect } from 'somewhere-else';\n" +
           `function Root(props) {\n  ${hook}\n  return <p>{props.x}</p>;\n}\n`,
-        'Root',
+        rootAdmission,
       ),
     ).toEqual(['OEC9041']);
     expect(
       frontendCodes(
         `function onConnect(cb: () => void) { cb(); }\n` +
           `function Root(props) {\n  ${hook}\n  return <p>{props.x}</p>;\n}\n`,
-        'Root',
+        rootAdmission,
       ),
     ).toEqual(['OEC9041']);
   });
@@ -494,6 +523,87 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     expect(module).not.toContain('connect(() =>');
     expect(module).not.toContain('dispose(() =>');
     expect(module).not.toContain('@openelement/element"');
+  });
+
+  test('A10b the tree-shakeable /lifecycle subpath is the SAME intrinsic', () => {
+    // A16-LANE-M (M10-P1/P4): the intrinsics are compiler-ERASED, so an authored
+    // import exists only to satisfy binding provenance. Importing them from the
+    // side-effect-free `@openelement/element/lifecycle` subpath keeps the root
+    // entry (whose `sideEffects` flag carries the hydration/Blocks installs) out
+    // of the client graph. Admission is otherwise identical.
+    const source =
+      SIDECAR +
+      "import { onConnect, onDispose } from '@openelement/element/lifecycle';\n" +
+      'function SubpathHook(props: { seed: number }) {\n' +
+      '  onConnect((env) => { globalThis.__oeSubpathHost = env.host; });\n' +
+      '  onDispose(() => { globalThis.__oeSubpathDispose = 1; });\n' +
+      '  return <p>{props.seed}</p>;\n' +
+      '}\n' +
+      'export default SubpathHook;\n';
+    const module = compileIsland('lifecycle-subpath', source);
+    // The hook is carried into the retained factory and the intrinsic call is
+    // erased; the authored specifier is gone from the emitted module, exactly as
+    // it is for the root-entry spelling. The env form lands in its own recorded
+    // bucket (`__oe_connectEnv`), the same as the root-entry spelling does.
+    expect(functionText(module, '__oe_rootInstance')).toContain('__oe_connectEnv.push((');
+    // The authored ROOT-ENTRY and /lifecycle specifiers are both gone from the
+    // emitted IMPORT list: the module imports only the internal leaf-runtime
+    // artifact target. (The inline source map still carries the authored text,
+    // so the assertion is scoped to the import statements.)
+    const emittedImports = module
+      .split('\n')
+      .filter((line) => line.startsWith('import '))
+      .join('\n');
+    expect(emittedImports).not.toContain('/lifecycle');
+    expect(emittedImports).not.toContain('from "@openelement/element"');
+    expect(emittedImports).toContain('@openelement/element/internal/compiled/leaf-runtime');
+
+    // Aliases are followed for the subpath spelling too.
+    const aliased =
+      SIDECAR +
+      "import { onConnect as connect } from '@openelement/element/lifecycle';\n" +
+      'function SubpathAliased(props: { seed: number }) {\n' +
+      '  connect(() => { globalThis.__oeSubpathAlias = 1; });\n' +
+      '  return <p>{props.seed}</p>;\n' +
+      '}\n' +
+      'export default SubpathAliased;\n';
+    const aliasedModule = compileIsland('lifecycle-subpath-alias', aliased);
+    expect(functionText(aliasedModule, '__oe_rootInstance')).toContain('__oe_connect.push((');
+    expect(aliasedModule).not.toContain('connect(() =>');
+
+    // Every other admission rule is unchanged: a third subpath and a foreign
+    // module both fall through to the unchanged statement refusal.
+    const frontendCodes = (
+      text: string,
+      admission: { admission: 'root'; root: string },
+    ): string[] =>
+      compileFunctionModule(text, '/proj/src/subpath.tsx', {
+        importClassifier: GENERATED_ELEMENT_IMPORT_CLASSIFIER,
+        lifecycleAdmission: admission,
+      }).diagnostics.map((diagnostic) => diagnostic.code);
+    const rootAdmission = { admission: 'root', root: 'Root' } as const;
+    const hook = 'onConnect(() => { globalThis.__oeX = 1; });';
+    for (const specifier of [
+      '@openelement/element/lifecycle/extra',
+      '@openelement/element/no-blocks',
+    ]) {
+      expect(
+        frontendCodes(
+          `import { onConnect } from '${specifier}';\n` +
+            `function Root(props) {\n  ${hook}\n  return <p>{props.x}</p>;\n}\n`,
+          rootAdmission,
+        ),
+        specifier,
+      ).toEqual(['OEC9041']);
+    }
+    // A malformed hook on the new specifier keeps the same OEC9042 form code.
+    expect(
+      frontendCodes(
+        "import { onConnect } from '@openelement/element/lifecycle';\n" +
+          'function Root(props) {\n  onConnect();\n  return <p>{props.x}</p>;\n}\n',
+        rootAdmission,
+      ),
+    ).toEqual(['OEC9042']);
   });
 
   test('A11 host-binding reads keep the existing fail-closed gates', () => {
@@ -624,5 +734,341 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
       }
     }
     expect(callbackPlacements).toBe(3);
+  });
+
+  test('A12 a depth-1 retained hostless child carries hooks in its own setup record', () => {
+    const nested = (hooks: boolean): string =>
+      SIDECAR +
+      "import { onConnect, onDispose } from '@openelement/element';\n" +
+      'function Child(props: { seed: number }) {\n' +
+      '  const snapshot = props.seed;\n' +
+      (hooks
+        ? '  onConnect(() => {\n' +
+          '    globalThis.__oeChildConnect = snapshot;\n' +
+          '    return () => { globalThis.__oeChildCleanup = 1; };\n' +
+          '  });\n' +
+          '  onDispose(() => { globalThis.__oeChildDispose = 1; });\n'
+        : '') +
+      '  return <em className="child">{snapshot}</em>;\n' +
+      '}\n' +
+      'function Host(props: { seed: number }) {\n' +
+      '  const rootSnapshot = props.seed;\n' +
+      '  return <span className="root"><b>{rootSnapshot}</b><Child seed={props.seed} /></span>;\n' +
+      '}\n' +
+      'export default Host;\n';
+    const module = compileIsland('lifecycle-nested', nested(true));
+    // The depth-1 retained child's ONE setup factory carries both channels:
+    // connect callbacks recorded in the retained record, dispose registrations
+    // on the instance owner. No second lifecycle engine.
+    const childSetup = functionText(module, 'Child__setup');
+    expect(childSetup).toContain('__oe_connect.push((');
+    expect(childSetup).toContain('__oe_owner.add((');
+    expect(childSetup).toContain('return { snapshot, __oe_connect }');
+    // The child replays from its OWN retained setup record...
+    expect(functionText(module, 'Child__mount')).toContain('__oe_host.setup.__oe_connect');
+    // ...while the root body (no hooks here) never invents the setup channel.
+    expect(functionText(module, 'Host__mount')).not.toContain('setup.__oe_connect');
+    // The SSR producer is untouched by hooks (no invocation text).
+    const childSsr = functionText(module, 'Child__ssr');
+    expect(childSsr).not.toContain('__oe_connect');
+    expect(childSsr).not.toContain('__oe_owner');
+    // Root/module bytes that do not carry the hooks are unchanged by them.
+    const plain = compileIsland('lifecycle-nested-plain', nested(false));
+    expect(functionText(module, 'Host__ssr')).toBe(functionText(plain, 'Host__ssr'));
+    expect(functionText(module, 'Child__ssr')).toBe(functionText(plain, 'Child__ssr'));
+    expect(functionText(plain, 'Child__setup')).not.toContain('__oe_connect');
+    expect(functionText(plain, 'Child__setup')).not.toContain('__oe_owner.add');
+  });
+
+  test('A13 nested hook placement outside depth-1 fails closed at the AUTHORED span', () => {
+    const importLine = "import { onConnect } from '@openelement/element';\n";
+    const hookLine = '  onConnect(() => { globalThis.__oeNested = 1; });';
+    const authoredLine = (source: string): number =>
+      source.split('\n').findIndex((line) => line.includes('onConnect(')) + 1;
+    const cases: Array<{ name: string; source: string; expected: RegExp }> = [
+      {
+        name: 'depth2',
+        expected: /depth>=2|no lifecycle owner/,
+        source:
+          SIDECAR +
+          importLine +
+          'function Child(props: { seed: number }) {\n' +
+          hookLine +
+          '\n  return <em>{props.seed}</em>;\n}\n' +
+          'function Mid(props: { seed: number }) {\n' +
+          '  return <div><Child seed={props.seed} /></div>;\n}\n' +
+          'function Host(props: { seed: number }) {\n' +
+          '  return <span><Mid seed={props.seed} /></span>;\n}\n' +
+          'export default Host;\n',
+      },
+      {
+        name: 'recipe',
+        expected: /recipe\/list bodies|no lifecycle owner/,
+        source:
+          SIDECAR +
+          importLine +
+          'function Child(props: { seed: number }) {\n' +
+          hookLine +
+          '\n  return <em>{props.seed}</em>;\n}\n' +
+          'function Host(props: { seed: number }) {\n' +
+          '  const card = <Child seed={props.seed} />;\n' +
+          '  return <span>{card}</span>;\n}\n' +
+          'export default Host;\n',
+      },
+      {
+        name: 'list',
+        expected: /recipe\/list bodies|no lifecycle owner/,
+        source:
+          SIDECAR +
+          importLine +
+          'function Child(props: { seed: number }) {\n' +
+          hookLine +
+          '\n  return <em>{props.seed}</em>;\n}\n' +
+          'function Host(props: { seed: number }) {\n' +
+          '  return <span>{[props.seed].map((item) => <Child seed={item} />)}</span>;\n}\n' +
+          'export default Host;\n',
+      },
+      {
+        name: 'non-retained-target',
+        expected: /no lifecycle owner|depth>=2/,
+        source:
+          SIDECAR +
+          importLine +
+          'function Child(props: { seed: number }) {\n' +
+          hookLine +
+          '\n  return <em>{props.seed}</em>;\n}\n' +
+          'function Host(props: { seed: number }) {\n' +
+          '  return <span><Child seed={props.seed} /></span>;\n}\n' +
+          'export function Outer() {\n  return <Host seed={1} />;\n}\n' +
+          'export default Host;\n',
+      },
+    ];
+    for (const item of cases) {
+      const fact = site(`lifecycle-nested-refused-${item.name}`);
+      let error: unknown = null;
+      try {
+        compileGeneratedElementIfAdmitted(item.source, fact.file, { site: fact.site });
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error, item.name).not.toBeNull();
+      const diagnostics = (error as CompiledElementError).diagnostics;
+      const relevant = diagnostics.find(
+        (diagnostic) => diagnostic.code === 'OEIR_LEAF_INVALID_ARTIFACT',
+      );
+      expect(relevant, item.name).toBeDefined();
+      expect(relevant!.message, item.name).toMatch(item.expected);
+      // Authored span: the refusal points at the author's hook line, never 1:1.
+      expect(relevant!.file, item.name).toBe(fact.file);
+      expect(relevant!.line, item.name).toBe(authoredLine(item.source));
+    }
+  });
+
+  test('A14 a nested hook reading a host binding keeps the UNBOUND_BINDING refusal', () => {
+    // A module-scope read is a host binding in this lane (same rule that makes
+    // a root hook that reads one fail closed): the nested child cannot receive
+    // it through the retained setup record, so the existing module gate keeps
+    // the identity instead of emitting a factory with an undeclared name.
+    const source =
+      SIDECAR +
+      "import { onConnect } from '@openelement/element';\n" +
+      'const external = 1;\n' +
+      'function Child(props: { seed: number }) {\n' +
+      '  const snapshot = props.seed;\n' +
+      '  onConnect(() => { globalThis.__oeNestedExt = external + snapshot; });\n' +
+      '  return <em>{snapshot}</em>;\n' +
+      '}\n' +
+      'function Host(props: { seed: number }) {\n' +
+      '  return <span><Child seed={props.seed} /></span>;\n' +
+      '}\n' +
+      'export default Host;\n';
+    const fact = site('lifecycle-nested-binding');
+    let error: unknown = null;
+    try {
+      compileGeneratedElementIfAdmitted(source, fact.file, { site: fact.site });
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).not.toBeNull();
+    expect(codes(error)).toContain(GENERATED_ELEMENT_DIAGNOSTIC.UNBOUND_BINDING);
+    // The binding refusal is the module gate, not an invalid-artifact drop.
+    expect(codes(error)).not.toContain('OEIR_LEAF_INVALID_ARTIFACT');
+    expect(String((error as CompiledElementError).diagnostics[0]!.message)).toContain('"external"');
+  });
+
+  test('A15 an env-form hook is recorded separately and replayed with {host, signal}', () => {
+    const source =
+      SIDECAR +
+      "import { onConnect, onDispose } from '@openelement/element';\n" +
+      'function EnvCard(props: { seed: number }) {\n' +
+      '  const snapshot = props.seed;\n' +
+      '  onConnect(({ host, signal }) => {\n' +
+      '    globalThis.__oeHostTag = host.tagName;\n' +
+      '    globalThis.__oeAbortedAtConnect = signal.aborted;\n' +
+      '    return () => { globalThis.__oeAbortedAtCleanup = signal.aborted; };\n' +
+      '  });\n' +
+      '  onDispose((env) => { globalThis.__oeAbortedAtDispose = env.signal.aborted; });\n' +
+      '  return <span className="seed">{snapshot}</span>;\n' +
+      '}\n' +
+      'export default EnvCard;\n';
+    const module = compileIsland('lifecycle-env', source);
+    const factory = functionText(module, '__oe_rootInstance');
+    // The env form has its OWN retained record; no zero-argument record is
+    // emitted in an env-only module, so the two byte paths never mix.
+    expect(factory).toContain('const __oe_connectEnv = [];');
+    expect(factory).toContain('__oe_connectEnv.push((');
+    expect(factory).not.toContain('const __oe_connect = [];');
+    expect(factory).toContain('const __oe_teardownSignal = __oe_owner.signal;');
+    expect(factory).toContain('__oe_owner.add(() => (');
+    expect(factory).toContain(
+      ')({ host: __oe_host.__oe_hostElement, signal: __oe_teardownSignal, states: __oe_host.__oe_states }));',
+    );
+    expect(factory).toContain('return { snapshot, __oe_connectEnv };');
+    for (const body of ['EnvCard__mount', 'EnvCard__claim']) {
+      const text = functionText(module, body);
+      expect(text).toContain('const __oe_lifecycleEnvHooks = __oe_host.bindings.__oe_connectEnv;');
+      expect(text).toContain('for (const __oe_lifecycleEnvHook of __oe_lifecycleEnvHooks)');
+      expect(text).toContain(
+        '__oe_lifecycleEnvHook({ host: __oe_host.__oe_hostElement, signal: __oe_scope.signal, states: __oe_host.__oe_states })',
+      );
+      expect(text).toContain('__oe_scope.add(__oe_lifecycleEnvCleanup)');
+      // The zero-argument replay is not emitted for an env-only module.
+      expect(text).not.toContain('__oe_lifecycleHooks');
+    }
+    // The recipe's mount host forwards the shell-attached runtime property.
+    expect(functionText(module, 'createEnvCardRecipe')).toContain(
+      '__oe_hostElement: __oe_host.__oe_hostElement',
+    );
+    // The intrinsic calls, their import and the env parameter never reach the
+    // emitted module.
+    expect(module).not.toContain('onConnect');
+    expect(module).not.toContain('onDispose');
+    expect(module).not.toMatch(/from\s+"@openelement\/element"/);
+  });
+
+  test('A16 a zero-argument module keeps the pre-env host record and replay bytes', () => {
+    const module = compileIsland('lifecycle-zero-arg', LIFECYCLE_SOURCE);
+    const factory = functionText(module, '__oe_rootInstance');
+    expect(factory).not.toContain('__oe_connectEnv');
+    expect(factory).not.toContain('__oe_teardownSignal');
+    expect(factory).toContain('const __oe_connect = [];');
+    expect(factory).toContain('return { snapshot, __oe_connect };');
+    for (const body of ['LifeCard__mount', 'LifeCard__claim']) {
+      const text = functionText(module, body);
+      expect(text).not.toContain('__oe_lifecycleEnv');
+      expect(text).not.toContain('__oe_hostElement');
+      for (const line of CONNECT_REPLAY_LINES) {
+        expect(text, `${body}: ${line}`).toContain(line);
+      }
+    }
+    // No host-record forwarding is added to a module without the env form.
+    expect(functionText(module, 'createLifeCardRecipe')).not.toContain('__oe_hostElement');
+  });
+
+  test('A17 a depth-1 retained child receives the ancestor element and its own signal', () => {
+    const source =
+      SIDECAR +
+      "import { onConnect, onDispose } from '@openelement/element';\n" +
+      'function Child(props: { seed: number }) {\n' +
+      '  const snapshot = props.seed;\n' +
+      '  onConnect((env) => {\n' +
+      '    globalThis.__oeChildHost = env.host;\n' +
+      '    globalThis.__oeChildSignal = env.signal;\n' +
+      '    return () => { globalThis.__oeChildAbort = env.signal.aborted; };\n' +
+      '  });\n' +
+      '  onDispose((env) => { globalThis.__oeChildDisposeAbort = env.signal.aborted; });\n' +
+      '  return <em className="child">{snapshot}</em>;\n' +
+      '}\n' +
+      'function Host(props: { seed: number }) {\n' +
+      '  const rootSnapshot = props.seed;\n' +
+      '  return <span className="root"><b>{rootSnapshot}</b><Child seed={props.seed} /></span>;\n' +
+      '}\n' +
+      'export default Host;\n';
+    const module = compileIsland('lifecycle-nested-env', source);
+    const childSetup = functionText(module, 'Child__setup');
+    expect(childSetup).toContain('const __oe_connectEnv = [];');
+    expect(childSetup).toContain('__oe_owner.add(() => (');
+    expect(childSetup).toContain(
+      ')({ host: __oe_host.__oe_hostElement, signal: __oe_teardownSignal, states: __oe_host.__oe_states }));',
+    );
+    expect(childSetup).toContain('return { snapshot, __oe_connectEnv };');
+    // The child replays from its OWN retained record and the per-projection
+    // scope signal (the parent's connection signal only for the root body).
+    const childMount = functionText(module, 'Child__mount');
+    expect(childMount).toContain('__oe_host.setup.__oe_connectEnv');
+    expect(childMount).toContain('signal: __oe_scope.signal');
+    expect(childMount).toContain('host: __oe_host.__oe_hostElement');
+    // The retaining site forwards the element into BOTH hosts it builds: the
+    // setup host the factory reads and the mount/claim host the body reads.
+    const hostMount = functionText(module, 'Host__mount');
+    expect(occurrences(hostMount, '__oe_hostElement: __oe_host.__oe_hostElement')).toBe(2);
+    // The root body itself has no hooks, so it invents no replay.
+    expect(hostMount).not.toContain('__oe_lifecycleEnv');
+  });
+
+  test('A18 mixed forms in one component keep one record per form and both replays', () => {
+    const source =
+      SIDECAR +
+      "import { onConnect } from '@openelement/element';\n" +
+      'function Mixed(props: { seed: number }) {\n' +
+      '  const snapshot = props.seed;\n' +
+      '  onConnect(() => { globalThis.__oeLegacy = snapshot; });\n' +
+      '  onConnect((env) => { globalThis.__oeHostTag = env.host.tagName; });\n' +
+      '  return <span>{snapshot}</span>;\n' +
+      '}\n' +
+      'export default Mixed;\n';
+    const module = compileIsland('lifecycle-mixed', source);
+    const factory = functionText(module, '__oe_rootInstance');
+    expect(factory).toContain('const __oe_connect = [];');
+    expect(factory).toContain('const __oe_connectEnv = [];');
+    expect(factory).toContain('return { snapshot, __oe_connect, __oe_connectEnv };');
+    for (const body of ['Mixed__mount', 'Mixed__claim']) {
+      const text = functionText(module, body);
+      expect(text).toContain('__oe_lifecycleHooks');
+      expect(text).toContain('__oe_lifecycleEnvHooks');
+      // Zero-argument callbacks are still invoked with no argument.
+      expect(text).toContain('__oe_lifecycleHook();');
+    }
+  });
+
+  test('A19 an onPropertyChange root registers on the instance host and erases the intrinsic', () => {
+    const source =
+      SIDECAR +
+      "import { onPropertyChange } from '@openelement/element';\n" +
+      'function ChangeCard(props: { seed: number }) {\n' +
+      '  onPropertyChange((event) => { globalThis.__oeSeen = event.value; });\n' +
+      '  return <p>{props.seed}</p>;\n' +
+      '}\n' +
+      'export default ChangeCard;\n';
+    const module = compileIsland('lifecycle-change', source);
+    const factory = functionText(module, '__oe_rootInstance');
+    // The registration is a setup-time side effect on the instance host, not a
+    // retained record field and not a connection hook.
+    expect(factory).toContain(
+      'if (__oe_host.__oe_onPropertyChange !== undefined) __oe_host.__oe_onPropertyChange((',
+    );
+    expect(factory).not.toContain('__oe_connect');
+    expect(factory).toContain('return {};');
+    // The authored intrinsic and its public import never reach the emitted
+    // module; the only channel is the compiler-owned host-record property.
+    expect(module).not.toMatch(/from\s+"@openelement\/element"/);
+    expect(module).not.toContain("from '@openelement/element'");
+    // The connection host forwards the channel so a depth-1 child setup host
+    // can carry it too.
+    expect(functionText(module, 'createChangeCardRecipe')).toContain(
+      '__oe_onPropertyChange: __oe_host.__oe_onPropertyChange',
+    );
+  });
+
+  test('A20 a module without the intrinsic forwards no change channel', () => {
+    for (const module of [
+      compileIsland('lifecycle-no-change', LIFECYCLE_SOURCE),
+      compileIsland(
+        'lifecycle-no-change-plain',
+        SIDECAR + LIFECYCLE_SOURCE_NO_HOOKS.split(SIDECAR)[1]!,
+      ),
+    ]) {
+      expect(module).not.toContain('__oe_onPropertyChange');
+    }
   });
 });

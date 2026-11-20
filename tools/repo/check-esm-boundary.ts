@@ -26,6 +26,7 @@
 import { readPackages } from '../lib/package-graph.ts';
 import { readFile } from 'node:fs/promises';
 import process from 'node:process';
+import { emitSummary } from './checker-io.ts';
 import { spawnCommand } from './node-command.ts';
 
 /** Non-package source roots covered by the pure-ESM boundary. Package src
@@ -158,5 +159,5 @@ if (import.meta.main) {
     console.error(`${violations.length} esm-boundary violation(s)`);
     process.exit(1);
   }
-  console.log(`esm-boundary ok (${syntaxFiles.length} first-party modules scanned)`);
+  emitSummary(`esm-boundary ok (${syntaxFiles.length} first-party modules scanned)`);
 }

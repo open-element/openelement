@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): one leg proving the packed-UnoCSS claim end to end — the engine peer loads from the APPLICATION's resolution tree, which only a tarball consumer outside the repository can demonstrate; the boundary is its cells (install, typecheck, build, dev, browser) over the six tarballs plus unocss/open-props, with both stylesheet channels observed over the wire.
 /**
  * Packed-artifact UnoCSS consumer walkthrough (alpha15 Stage 4).
  *

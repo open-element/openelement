@@ -7,7 +7,7 @@
  * rules into this shadow root.
  *
  * What stays here, and why (CUSTOMIZATION.md → "Why the residue is CSS"): each
- * block below has a real utility spelling — `[:host(:state(invalid))_&]:border-destructive`
+ * block below has a real utility spelling — `.control[aria-invalid='true'] { border-color: var(--color-destructive) }`
  * compiles to exactly the rule kept here — and the sheet keeps it because one
  * owned rule reads as the component's state contract, where the utility form
  * embeds an escaped ancestor selector in the class attribute.
@@ -15,9 +15,15 @@
  *   - the control's DERIVED surfaces: the popover/border mixes of its resting
  *     border and background, the violet-400 hover border, and the focus ring's
  *     doubled box-shadow, each computed from pairs of role variables;
- *   - the disabled and invalid treatments, which are scoped to the HOST's form
- *     state (`:host(:state(disabled))` / `:host(:state(invalid))`) — the state
- *     lives on the host, so the selector is what ties the rule to it.
+ *   - the DISABLED treatment, scoped to the host's form state
+ *     (`:host(:state(disabled))`, owned by the shell's form mapping);
+ *   - the INVALID treatment, scoped to the control's own `[aria-invalid]`. The
+ *     `:state(invalid)` custom state is FORM VALIDITY and belongs to the shell's
+ *     form mapping (it is recomputed from required/value and deleted when the
+ *     control is valid); an `error` MESSAGE is the author's. Sharing one channel
+ *     would make this component a second writer whose value the owner wipes, so
+ *     the invalid border reads the ARIA attribute the message already implies —
+ *     one fact, one attribute, no extra host state.
  * The `hidden` attributes need no rules: nothing here sets `display` on the
  * label or the error message, so the platform's own `[hidden]` behavior holds.
  * One owner per property: nothing here is also authored as a utility.
@@ -53,6 +59,17 @@
   background: var(--color-muted);
 }
 
-:host(:state(invalid)) .control {
+.control[aria-invalid='true'] {
   border-color: var(--color-destructive);
+}
+/* The control's outline is retired by the component sheet, not by a utility.
+ *
+ * `outline-none` is a Tailwind utility that lives in the DOCUMENT sheet; a
+ * shadow root cannot see the document sheet, and the utility extractor emitted
+ * it only into the document layer for this class list. The focus affordance is
+ * this component's own contract (the sheet's `box-shadow` ring), so its "no UA
+ * outline" half belongs here too — one owner for the control's focus surface.
+ */
+.control {
+  outline: none;
 }

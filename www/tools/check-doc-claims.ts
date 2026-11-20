@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the claim classes share one mechanism — reading prose and its authority in one pass so a fact change fails the change that made it — and one coverage/report shape, so splitting per claim class would fork that contract; the boundary is honesty by construction: only machine-decidable claims (plus the two declared POLICY budgets) are owned, each mapped to the authority that owns the fact.
 /**
  * doc-claims: every machine-checkable factual claim in the covered docs must
  * agree with the source that owns the fact.
@@ -346,8 +347,9 @@ export function gateDefinitions(root: string): Map<string, string[]> {
  * claims in the docs go red — exactly the reminder its author needs — and a
  * step that joins CI must be recorded here before the docs may say so.
  * `base` = the four fast jobs (lint/test/e2e/pack) on every pull request and
- * push; `full` = the heavy jobs (e2e-full and friends) on a main push or a
- * `full_qualification` dispatch.
+ * push; `full` = the heavy jobs (e2e-full and friends), which run only through
+ * a `full_qualification` dispatch (dispatch-only since W4b, 2026-11-12; a main
+ * push carries the base layer and is not evidence).
  */
 export interface CiStepEvidence {
   layer: 'base' | 'full';
@@ -355,6 +357,10 @@ export interface CiStepEvidence {
 }
 
 export const CI_STEP_EVIDENCE: ReadonlyMap<string, CiStepEvidence> = new Map([
+  [
+    '@openelement/www#check:theme-init',
+    { layer: 'base', where: 'lint job, "Theme-init artifact check (before generate:all)"' },
+  ],
   [
     '@openelement/tools-repo#generate:all',
     { layer: 'base', where: 'lint job, "Generate all artifacts"' },
@@ -379,12 +385,24 @@ export const CI_STEP_EVIDENCE: ReadonlyMap<string, CiStepEvidence> = new Map([
     { layer: 'base', where: 'lint job, "Seams registry (P8 reader)"' },
   ],
   [
+    '@openelement/tools-repo#output-discipline:check',
+    { layer: 'base', where: 'lint job, "Governance checks" step' },
+  ],
+  [
+    '@openelement/tools-repo#constitution-parity:check',
+    { layer: 'base', where: 'lint job, "Governance checks" step' },
+  ],
+  [
     '@openelement/tools-repo#docs-index:check',
     { layer: 'base', where: 'lint job, "Governance checks" step' },
   ],
   [
     '@openelement/www#check:content-dates',
     { layer: 'base', where: 'lint job, "Content-date manifest check (gate:source)"' },
+  ],
+  [
+    '@openelement/www#check:doc-claims',
+    { layer: 'base', where: 'lint job, "Governance checks" step' },
   ],
   [
     '@openelement/tools-repo#interface:snapshot',
@@ -396,11 +414,11 @@ export const CI_STEP_EVIDENCE: ReadonlyMap<string, CiStepEvidence> = new Map([
   ],
   [
     '@openelement/fixture-router-request-time#gate',
-    { layer: 'full', where: 'e2e-full fixture-gates leg (main push / full_qualification)' },
+    { layer: 'full', where: 'e2e-full fixture-gates leg (full_qualification dispatch)' },
   ],
   [
     '@openelement/fixture-router-base-path#gate',
-    { layer: 'full', where: 'e2e-full fixture-gates leg (main push / full_qualification)' },
+    { layer: 'full', where: 'e2e-full fixture-gates leg (full_qualification dispatch)' },
   ],
 ]);
 

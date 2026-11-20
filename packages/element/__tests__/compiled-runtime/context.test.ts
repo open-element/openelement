@@ -7,7 +7,10 @@ import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 // retained content, which is a claim.
 import '../../src/internal/compiled/runtime/hydrate-install.ts';
 import { CompiledElementKernel } from '../../src/internal/compiled/runtime/kernel.ts';
-import { CompiledContextService } from '../../src/internal/compiled/runtime/context.ts';
+import {
+  CompiledContextService,
+  createRenderContextScope,
+} from '../../src/internal/compiled/runtime/context.ts';
 import { createContext } from '../../src/internal/core/signal-context.ts';
 import { signal } from '../../src/internal/signal/framework.ts';
 import { TestDocument, type TestElement } from './test-dom.ts';
@@ -319,4 +322,228 @@ test('the kernel owns context provision and consumption at the activation bounda
   provider.context.provide(theme, 'void');
   expect(seen, 'kernel dispose stays unsubscribed').toEqual(['dark', 'dim', 'solar', 'amber']);
   provider.dispose();
+});
+
+// ─── `16b-CTX`: the generated lane's owner-scope mode ────────────────────────
+//
+// The generated function lane's owners are NOT all elements: a component
+// reference creates no element, so two sibling hostless children share one
+// element host. These rows pin the ADDITIVE owner-scope mode of the SAME
+// service — `child()` / `provideOwned()` / `use()` / `refreshProviders()` — in a
+// real DOM, so the class-lane protocol rows above keep their unchanged
+// behaviour. The service's DOM path and the owner path share one consumer set,
+// one subscription map and one disconnect release.
+
+test('16b-CTX: the nearest owner-scope provider wins, and an outer one is shadowed', () => {
+  const document = new TestDocument();
+  const theme = createContext<string>(Symbol('ctx-owner-nested'), 'light');
+  const host = document.createElement('x-ctx-host');
+
+  const anchor = new CompiledContextService(asElement(host));
+  const outerOwner = anchor.child();
+  const innerOwner = outerOwner.child();
+  const leafOwner = innerOwner.child();
+
+  outerOwner.provideOwned(theme, () => 'outer');
+  innerOwner.provideOwned(theme, () => 'inner');
+
+  const seen: string[] = [];
+  const consumer = leafOwner.use(theme);
+  consumer.subscribe((value) => seen.push(value));
+  anchor.connect();
+  expect(consumer.value, 'the nearest owner-scope provider wins').toEqual('inner');
+  expect(seen, 'the resolver reads once at subscribe time').toEqual(['light', 'inner']);
+
+  outerOwner.provideOwned(theme, () => 'outer-2');
+  anchor.refreshProviders();
+  expect(consumer.value, 'an outer provider cannot cross the nearest one').toEqual('inner');
+
+  innerOwner.provideOwned(theme, () => 'inner-2');
+  anchor.refreshProviders();
+  expect(consumer.value, 'the nearest provider updates its consumers').toEqual('inner-2');
+  expect(seen, 'one notification per changed value').toEqual(['light', 'inner', 'inner-2']);
+
+  anchor.dispose();
+});
+
+test('16b-CTX: sibling owners are isolated even though they share one element host', () => {
+  const document = new TestDocument();
+  const theme = createContext<string>(Symbol('ctx-sibling'), 'light');
+  const host = document.createElement('x-ctx-sibling-host');
+
+  const anchor = new CompiledContextService(asElement(host));
+  const siblingA = anchor.child();
+  const siblingB = anchor.child();
+  const leafA = siblingA.child();
+  const leafB = siblingB.child();
+
+  siblingA.provideOwned(theme, () => 'a');
+  siblingB.provideOwned(theme, () => 'b');
+
+  const consumerA = leafA.use(theme);
+  const consumerB = leafB.use(theme);
+  anchor.connect();
+  expect(consumerA.value, 'sibling A reads its own subtree').toEqual('a');
+  expect(consumerB.value, 'sibling B reads its own subtree').toEqual('b');
+
+  siblingA.provideOwned(theme, () => 'a2');
+  anchor.refreshProviders();
+  expect(consumerA.value).toEqual('a2');
+  expect(consumerB.value, 'A never leaks into B').toEqual('b');
+
+  anchor.dispose();
+});
+
+test('16b-CTX: a consumer with no owner-scope provider reads the declared default', () => {
+  const document = new TestDocument();
+  const theme = createContext<string>(Symbol('ctx-default'), 'fallback');
+  const host = document.createElement('x-ctx-default-host');
+
+  const anchor = new CompiledContextService(asElement(host));
+  const owner = anchor.child();
+  const consumer = owner.use(theme);
+  anchor.connect();
+  // The protocol path has no provider either, so the default stands — the same
+  // answer the class lane gives, from the same engine.
+  expect(consumer.value).toEqual('fallback');
+  anchor.dispose();
+});
+
+test('16b-CTX: a disconnect publishes nothing and a reconnect re-reads without duplicating', () => {
+  const document = new TestDocument();
+  const theme = createContext<string>(Symbol('ctx-connection-lifecycle'), 'light');
+  const host = document.createElement('x-ctx-lifecycle-host');
+
+  const anchor = new CompiledContextService(asElement(host));
+  const providerOwner = anchor.child();
+  // The consumer must live INSIDE the provider's subtree: a sibling owner is
+  // deliberately isolated (its own row above pins that), so a sibling here would
+  // fall through to the DOM default and prove nothing about the reconnect.
+  const consumerOwner = providerOwner.child();
+  let current = 'v1';
+  providerOwner.provideOwned(theme, () => current);
+
+  const consumer = consumerOwner.use(theme);
+  const seen: string[] = [];
+  consumer.subscribe((value) => seen.push(value));
+
+  anchor.connect();
+  expect(consumer.value).toEqual('v1');
+
+  current = 'v2';
+  anchor.refreshProviders();
+  expect(consumer.value, 'a provider change reaches the consumer').toEqual('v2');
+
+  anchor.disconnect();
+  current = 'v3-during-disconnect';
+  anchor.refreshProviders();
+  expect(consumer.value, 'a disconnected scope publishes nothing').toEqual('v2');
+
+  anchor.connect();
+  expect(consumer.value, 'a reconnect re-reads the current provider value').toEqual(
+    'v3-during-disconnect',
+  );
+
+  // Exactly one subscription after the reconnect: one more change is one more
+  // notification, never two.
+  const before = seen.length;
+  current = 'v4';
+  anchor.refreshProviders();
+  expect(seen.length, 'a reconnect adds no duplicate subscription').toEqual(before + 1);
+  expect(consumer.value).toEqual('v4');
+
+  anchor.dispose();
+});
+
+test('16b-CTX: a provider publishes only CHANGED values, and dispose drops every record', () => {
+  const document = new TestDocument();
+  const theme = createContext<string>(Symbol('ctx-changed-only'), 'light');
+  const host = document.createElement('x-ctx-changed-host');
+
+  const anchor = new CompiledContextService(asElement(host));
+  const providerOwner = anchor.child();
+  const consumerOwner = providerOwner.child();
+  providerOwner.provideOwned(theme, () => 'same');
+  const consumer = consumerOwner.use(theme);
+  const seen: string[] = [];
+  consumer.subscribe((value) => seen.push(value));
+  anchor.connect();
+  expect(seen).toEqual(['light', 'same']);
+
+  anchor.refreshProviders();
+  anchor.refreshProviders();
+  expect(seen, 'an unchanged value notifies nobody').toEqual(['light', 'same']);
+
+  anchor.dispose();
+  // `use` after disposal fails closed with the engine's existing identity.
+  assertThrowsIncludes(
+    () => consumerOwner.use(theme),
+    Error,
+    '[compiled-context] service is disposed',
+  );
+});
+
+// ─── `16b-CTX` RENDER mode: the server half of the SAME engine ───────────────
+//
+// A render scope is created per producer call, is published from birth and never
+// touches the DOM. These rows pin the three facts the emitter's server path
+// depends on: the PROVIDED value is resolved synchronously, two scopes are
+// independent, and a scope with no provider answers the declared default without
+// dispatching a protocol request (the fake DOM records every listener, so a
+// stray `consumeContext` would show up in `contextListenerCount`).
+
+test('16b-CTX render mode: a consumer resolves the PROVIDED value synchronously', () => {
+  const theme = createContext<string>(Symbol('ctx-render-provided'), 'default');
+  const scope = createRenderContextScope();
+  scope.provider(theme, () => 'provided');
+  const consumer = scope.use(theme) as { readonly value: string };
+  // Written before `use` returns: the producer reads `.value` on the very next
+  // line of its emitted body.
+  expect(consumer.value).toEqual('provided');
+});
+
+test('16b-CTX render mode: providers shadow nearest-first, and a child joins as owner()', () => {
+  const theme = createContext<string>(Symbol('ctx-render-nested'), 'default');
+  const anchor = createRenderContextScope();
+  anchor.provider(theme, () => 'outer');
+
+  const child = anchor.owner();
+  child.provider(theme, () => 'inner');
+
+  expect((anchor.use(theme) as { value: string }).value, 'the anchor keeps its own').toEqual(
+    'outer',
+  );
+  expect((child.use(theme) as { value: string }).value, 'the child reads its own').toEqual('inner');
+  // A SIBLING owner of the same anchor cannot see the child's provider — the
+  // server side of TSX-13 sibling isolation.
+  const sibling = anchor.owner();
+  expect((sibling.use(theme) as { value: string }).value).toEqual('outer');
+});
+
+test('16b-CTX render mode: two scopes never share a value, and none touches the DOM', () => {
+  const theme = createContext<string>(Symbol('ctx-render-isolation'), 'default');
+  const first = createRenderContextScope();
+  const second = createRenderContextScope();
+  first.provider(theme, () => 'first');
+  second.provider(theme, () => 'second');
+  const readFirst = first.use(theme) as { value: string };
+  const readSecond = second.use(theme) as { value: string };
+  expect(readFirst.value).toEqual('first');
+  expect(readSecond.value).toEqual('second');
+  // …and re-reading proves neither was mutated by the other's registration.
+  expect(readFirst.value).toEqual('first');
+});
+
+test('16b-CTX render mode: no provider answers the declared default, with no protocol request', () => {
+  const theme = createContext<string>(Symbol('ctx-render-default'), 'fallback');
+  const scope = createRenderContextScope();
+  const consumer = scope.use(theme) as { value: string };
+  expect(consumer.value).toEqual('fallback');
+  // Structural proof that the render path opened no DOM subscription: the fake
+  // document records a listener per `consumeContext` call, and the scope has no
+  // element to dispatch from at all.
+  const document = new TestDocument();
+  const host = document.createElement('x-unused');
+  expect(contextListenerCount(host), 'no protocol listener was ever installed').toEqual(0);
+  expect(document).toBeInstanceOf(TestDocument);
 });

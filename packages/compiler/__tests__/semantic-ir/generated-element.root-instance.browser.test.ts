@@ -270,10 +270,15 @@ function injectAfterSignature(source: string, fnName: string, lines: readonly st
 
 function instrumentModule(code: string, component: string, options: InstrumentOptions): string {
   let out = code;
+  // `safeComponent` is an IDENTIFIER (assertSafeIdentifier), so every probe
+  // line interpolates it as a property name directly — an identifier cannot
+  // terminate a string or introduce a call, which is the injection-proof
+  // shape this harness builds from (no string-literal interpolation at all).
+  const safeComponent = assertSafeIdentifier(component);
   const setupLines: string[] = [];
   if (options.setupCounts) {
     setupLines.push(
-      `window.__oeSetupCounts[${JSON.stringify(component)}] = (window.__oeSetupCounts[${JSON.stringify(component)}] ?? 0) + 1;`,
+      `window.__oeSetupCounts.${safeComponent} = (window.__oeSetupCounts.${safeComponent} ?? 0) + 1;`,
     );
   }
   if (options.throwingSetupCleanup) {
@@ -281,20 +286,19 @@ function instrumentModule(code: string, component: string, options: InstrumentOp
       `if (window.__oeFailSetupCleanup) __oe_owner.add(() => { throw new Error("child cleanup boom"); });`,
     );
   }
-  const safeComponent = assertSafeIdentifier(component);
   if (setupLines.length > 0) {
     out = injectAfterSignature(out, `${safeComponent}__setup`, setupLines);
   }
   const mountLines: string[] = [];
   if (options.legacySetupCounts) {
     mountLines.push(
-      `window.__oeSetupCounts[${JSON.stringify(component)}] = (window.__oeSetupCounts[${JSON.stringify(component)}] ?? 0) + 1;`,
+      `window.__oeSetupCounts.${safeComponent} = (window.__oeSetupCounts.${safeComponent} ?? 0) + 1;`,
     );
   }
   if (options.connectLifetimes) {
     mountLines.push(
-      `window.__oeConnects[${JSON.stringify(component)}] = (window.__oeConnects[${JSON.stringify(component)}] ?? 0) + 1;`,
-      `__oe_scope.add(() => { window.__oeConnects[${JSON.stringify(component)}] -= 1; });`,
+      `window.__oeConnects.${safeComponent} = (window.__oeConnects.${safeComponent} ?? 0) + 1;`,
+      `__oe_scope.add(() => { window.__oeConnects.${safeComponent} -= 1; });`,
     );
   }
   if (options.failChildMount) {

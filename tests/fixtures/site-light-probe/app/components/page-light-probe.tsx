@@ -52,6 +52,11 @@ export default class LightProbePage extends OpenElement {
             sheet is a document link, so the registration must be effective. */}
         <span class='doc-ratio-default'>doc ratio default</span>
         <span class='doc-ratio-invalid'>doc ratio invalid</span>
+        {/* The generated light-root island: a plain tag with no SSR producer,
+            styled only by its document-head sheet (Alpha16 retained stylesheet
+            delivery). Its host box is observable without JS; its content is
+            client-mounted. */}
+        <gen-light-probe></gen-light-probe>
         <light-probe-runtime-carrier hidden></light-probe-runtime-carrier>
       </main>
     );

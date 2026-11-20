@@ -67,7 +67,11 @@ async function write(joinPath: string, content: string): Promise<void> {
 /** One generated-element (function) island module, light root by default. */
 function generatedIslandSource(
   tag: string,
-  options: { readonly styles?: boolean; readonly root?: 'light' | 'shadow' } = {},
+  options: {
+    readonly styles?: boolean;
+    readonly root?: 'light' | 'shadow';
+    readonly ssr?: boolean;
+  } = {},
 ): string {
   const className = tag
     .split('-')
@@ -79,7 +83,7 @@ function generatedIslandSource(
     '',
     'export const openElement = defineIslandConfig({',
     "  hydrate: 'load',",
-    '  ssr: false,',
+    `  ssr: ${options.ssr === true ? 'true' : 'false'},`,
     `  root: '${options.root ?? 'light'}',`,
     // The no-styles form keeps ONE sidecar line in the same position, so the
     // two fixtures differ only in the declaration itself (the generated module
@@ -149,7 +153,11 @@ async function createFixture(): Promise<string> {
       "@element('gen-style-live-page', { root: 'shadow-open' })",
       'export default class ProofLivePage extends OpenElement {',
       '  render() {',
-      "    return <div class='proof-live'>request-time proof</div>;",
+      '    return (',
+      "      <div class='proof-live'>",
+      '        <gen-style-card></gen-style-card>',
+      '      </div>',
+      '    );',
       '  }',
       '}',
       '',
@@ -255,6 +263,11 @@ let styledCssBytes: Map<string, string>;
 let plainCssAssets: string[];
 let styledManifest: { entry: string; styles: string[] };
 let plainManifest: { entry: string; styles: string[] };
+/** Build A's rendered page + request-time server entry (captured before build B). */
+let styledHtml: string;
+let styledServerEntry: string;
+/** Build B's rendered page (a styled island declaration must add no link). */
+let plainHtml: string;
 
 beforeAll(async () => {
   appDir = await createFixture();
@@ -272,6 +285,9 @@ beforeAll(async () => {
     );
   }
   styledManifest = await readClientAssetManifest(appDir);
+  // Capture build A's rendered artifacts before build B overwrites the output.
+  styledHtml = await readFile(join(appDir, 'dist', 'index.html'), 'utf8');
+  styledServerEntry = await readFile(join(appDir, 'dist', 'server', 'entry.js'), 'utf8');
 
   // Build B: the SAME fixture, with the declaration removed. The island source
   // line count changes (so that island's own chunk hash may change), while the
@@ -286,6 +302,7 @@ beforeAll(async () => {
   plainArtifacts = await clientIslandArtifacts(appDir);
   plainCssAssets = await emittedCssAssets(appDir);
   plainManifest = await readClientAssetManifest(appDir);
+  plainHtml = await readFile(join(appDir, 'dist', 'index.html'), 'utf8');
 }, 300_000);
 
 afterAll(async () => {
@@ -309,6 +326,39 @@ test('light-root generated island: the declared sheet is a real content-addresse
   expect(compact).toContain('.card-title{font-weight:700}');
   // The manifest records the preloadable style URL under the configured base.
   expect(styledManifest.styles).toEqual([`${BASE}client/${styleAssetFileName(css)}`]);
+});
+
+test('light-root generated island: the static document head declares the emitted sheet', () => {
+  expect(styledBuild.code).toBe(0);
+  const cssFile = styledCssAssets[0]!;
+  const href = `${BASE}client/assets/${cssFile}`;
+  const head = styledHtml.slice(0, styledHtml.indexOf('</head>'));
+  // Parser-visible, marked, exactly once in the head: the document is the light
+  // root's delivery, and the marker is what the client's adoption guard reads.
+  expect(head.split(`href="${href}" data-oe-static-styles`).length - 1).toBe(1);
+  // Exactly one declaration in the WHOLE document — no duplicate delivery.
+  expect(styledHtml.split(`href="${href}" data-oe-static-styles`).length - 1).toBe(1);
+  // The light host is the plain tag the compiler emits (no SSR producer, so no
+  // DSD template and no inline framework stylesheet papers over the link).
+  expect(styledHtml).toContain(`<${STYLED_TAG}></${STYLED_TAG}>`);
+  expect(/<style[^>]*data-oe-static-styles/.test(styledHtml)).toBe(false);
+});
+
+test('light-root generated island: the request-time entry carries the same route→sheet fact', () => {
+  expect(styledBuild.code).toBe(0);
+  const cssFile = styledCssAssets[0]!;
+  const href = `${BASE}client/assets/${cssFile}`;
+  // ONE fact, two renderers: the generated request-time server artifact carries
+  // the literal data channel the shared document renderer seeds into the head,
+  // and the live route's seed reads its own key.
+  expect(styledServerEntry).toContain('__routeDocumentStyleLinks');
+  expect(styledServerEntry).toContain(href);
+  expect(styledServerEntry).toContain('"/live"');
+});
+
+test('without any styles declaration the document declares no marked link', () => {
+  expect(plainBuild.code).toBe(0);
+  expect(plainHtml.includes('data-oe-static-styles')).toBe(false);
 });
 
 test('the emitted island chunks carry no CSS text (zero-inline guarantee)', () => {
@@ -362,32 +412,43 @@ test('without any styles declaration no stylesheet asset is emitted and the mani
   expect(plainManifest.styles).toEqual([]);
 });
 
-test('a shadow-root generated island declaring styles fails the build with the coded carrier gap', async () => {
-  const negativeApp = await createFixture();
+test('a styled shadow generated island builds and declares the marked DSD link', async () => {
+  // M09-2e / #1803, real Router CLI build: the shadow island is SSR-admitted
+  // and its class page renders it through the generated entry. The emitted
+  // server HTML must carry the canonical marked link INSIDE the DSD template,
+  // before the authored content, and the link must name the emitted asset.
+  const app = await createFixture();
   await write(
-    join(negativeApp, 'app', 'islands', `${STYLED_TAG}.tsx`),
-    generatedIslandSource(STYLED_TAG, { styles: true, root: 'shadow' }),
+    join(app, 'app', 'islands', `${STYLED_TAG}.tsx`),
+    generatedIslandSource(STYLED_TAG, { styles: true, root: 'shadow', ssr: true }),
   );
-  const build = await runBuild(negativeApp, ['--diagnostics=json']);
-  expect(build.code, `shadow-root styles build must fail:\n${build.output}`).not.toBe(0);
-  // The human log carries the stable coded token.
-  expect(build.output).toContain('[OE_ISLAND_STYLE_SHADOW_UNWIRED]');
-  // The machine-readable diagnostics channel carries the code, not prose.
-  const reportLine = build.output
-    .split('\n')
-    .filter((line) => line.startsWith('{"format":"openelement.diagnostics/1"'))
-    .at(-1);
-  expect(reportLine, 'expected a diagnostics report on the JSON channel').toBeDefined();
-  const report = JSON.parse(reportLine!) as {
-    ok: boolean;
-    diagnostics: Array<{ code: string; message: string; severity: string }>;
-  };
-  expect(report.ok).toBe(false);
-  const refusal = report.diagnostics.filter(
-    (diagnostic) => diagnostic.code === 'OE_ISLAND_STYLE_SHADOW_UNWIRED',
-  );
-  expect(refusal.length).toBeGreaterThan(0);
-  expect(refusal[0]!.severity).toBe('error');
-  expect(refusal[0]!.message).toContain('M09-2e');
-  expect(refusal[0]!.message).toContain('#1800');
+  const build = await runBuild(app);
+  expect(build.code, `styled shadow build failed:\n${build.output}`).toBe(0);
+
+  const assets = await emittedCssAssets(app);
+  expect(assets).toHaveLength(1);
+  // A shadow-root edge ships the authored bytes verbatim (no `@scope` wrapper):
+  // the single emitted asset IS the sheet, never a scoped projection.
+  const expectedAsset = await readFile(join(app, 'dist', 'client', 'assets', assets[0]!), 'utf8');
+  expect(expectedAsset).not.toContain('@scope');
+  expect(expectedAsset).toContain('.gen-style-card');
+
+  const html = await readFile(join(app, 'dist', 'index.html'), 'utf8');
+  const hostOpen = html.indexOf(`<${STYLED_TAG}`);
+  expect(hostOpen).toBeGreaterThan(-1);
+  const templateOpen = html.indexOf('<template shadowrootmode="open">', hostOpen);
+  const link = html.indexOf('<link rel="stylesheet"', templateOpen);
+  const content = html.indexOf('<article class="gen-style-card">', templateOpen);
+  expect(templateOpen).toBeGreaterThan(hostOpen);
+  expect(link).toBeGreaterThan(templateOpen);
+  expect(content).toBeGreaterThan(link);
+  expect(html.slice(link, content)).toContain(`href="${BASE}client/assets/${assets[0]!}"`);
+  expect(html.slice(link, content)).toContain('data-oe-static-styles');
+  // Exactly one link for this host: the claim's prefix walk consumes the same
+  // node the server declared, never a duplicate.
+  expect((html.slice(hostOpen, content).match(/<link rel="stylesheet"/g) ?? []).length).toBe(1);
+  // The emitted client asset manifest records the sheet too (same plan, no
+  // second pipeline).
+  const manifest = await readClientAssetManifest(app);
+  expect(manifest.styles).toContain(`${BASE}client/assets/${assets[0]!}`);
 }, 240_000);

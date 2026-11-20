@@ -24,19 +24,34 @@ import {
   scanPackageManifests,
   scanRoutes,
   scanStaticComponents,
+  takeRouteScanDiagnostics,
 } from './internal/ssg/index.ts';
-import type { EntryDescriptor } from './internal/ssg/index.ts';
-import { buildPackageIslandDecls } from './internal/ssg/island-scanner.ts';
+import type {
+  CemDetectionResult,
+  EntryDescriptor,
+  ForeignTagScanResult,
+} from './internal/ssg/index.ts';
+import {
+  buildPackageIslandDecls,
+  registerPackageIslandStyleDeclarations,
+} from './internal/ssg/island-scanner.ts';
 import { resolveIslandDeliveryTags } from './internal/ssg/delivery.ts';
 import type { OpenPluginState } from './plugin-config.ts';
 import type { ModuleWalkResolver } from './internal/module-graph-walk.ts';
 import { collectShadowClassCandidates } from './internal/collect-shadow-candidates.ts';
 import { serverComponentAdmissionTags } from './internal/server-component-host.ts';
+import { scanDeclaredElementTags } from './internal/ssg/declared-element-tags.ts';
 import {
   deriveAdmittedPackages,
   mergeAdmittedManifests,
 } from './internal/ssg/derived-admission.ts';
-import { PackageAdmissionErrorCode } from '../internal/error-codes.ts';
+import {
+  buildError,
+  describeError,
+  errorCause,
+  PackageAdmissionErrorCode,
+  ScanSurfaceErrorCode,
+} from '../internal/error-codes.ts';
 import {
   formatDiagnosticLine,
   recordBuildDiagnostic,
@@ -104,6 +119,22 @@ async function scanRoutesAndStaticComponents(state: OpenPluginState): Promise<Ro
     root: state.viteRoot ?? process.cwd(),
     workspaceRoot: state.workspaceRoot,
   });
+  // The route scan's Tier-2 degradation notes surface through the envelope
+  // channel (#1612): reported, never silent, never fatal. Warnings print on
+  // the build log; the advisory class (the normal no-tagName-export note)
+  // stays at debug so a routine site is not told anything surprising.
+  for (const diagnostic of takeRouteScanDiagnostics()) {
+    const envelope = {
+      code: diagnostic.code,
+      severity: diagnostic.severity,
+      phase: 'build',
+      message: diagnostic.message,
+      file: diagnostic.file,
+    } as const;
+    recordBuildDiagnostic(envelope);
+    if (diagnostic.severity === 'info') log.debug(formatDiagnosticLine(envelope));
+    else log.warn(formatDiagnosticLine(envelope));
+  }
   const resolve = state.resolveModule;
   if (resolve === undefined) {
     // The scan's reachability is the BUNDLER's: without its resolver a component
@@ -115,13 +146,28 @@ async function scanRoutesAndStaticComponents(state: OpenPluginState): Promise<Ro
         '(buildStart captures it); refusing to scan with relative imports only',
     );
   }
-  state.ctx.phase1.staticComponents = await scanStaticComponents({
+  const staticScan = await scanStaticComponents({
     root: process.cwd(),
     routesDir: state.resolvedOptions.routesDir!,
     islandsDir: state.resolvedOptions.islandsDir || DEFAULT_ISLANDS_DIR,
     routes,
     resolve,
   });
+  state.ctx.phase1.staticComponents = staticScan.declarations;
+  // The discovery walk's boundaries are NOT silent: a partial registry must
+  // say so through the same envelope channel as every other scan degradation
+  // (#1612) — the machine-readable exit replays it, the log carries the line.
+  for (const diagnostic of staticScan.notes) {
+    const envelope = {
+      code: diagnostic.code,
+      severity: 'warning',
+      phase: 'build',
+      message: diagnostic.message,
+      ...(diagnostic.file !== undefined ? { file: diagnostic.file } : {}),
+    } as const;
+    recordBuildDiagnostic(envelope);
+    log.warn(formatDiagnosticLine(envelope));
+  }
   return routes;
 }
 
@@ -218,6 +264,21 @@ export async function scanPackageIslandsInto(
     recordBuildDiagnostic(warning);
     log.warn(formatDiagnosticLine(warning));
   }
+  // The derivation's per-module exclusion notes (unreadable sources, refused
+  // analyses, unresolvable dynamic imports): the same admission diagnostics
+  // channel, non-fatal, each with its code and reason — reported, never
+  // silent, exactly like the walk bound above.
+  for (const note of derived?.notes ?? []) {
+    const warning = {
+      code: note.code,
+      severity: 'warning',
+      phase: 'build',
+      message: note.message,
+      ...(note.file !== undefined ? { file: note.file } : {}),
+    } as const;
+    recordBuildDiagnostic(warning);
+    log.warn(formatDiagnosticLine(warning));
+  }
 
   const merged = mergeAdmittedManifests({
     explicit: explicitManifests,
@@ -236,6 +297,13 @@ export async function scanPackageIslandsInto(
     `Package islands: ${state.ctx.phase1.packageIslandDecls.map((i) => i.tagName).join(', ')}`,
   );
   syncDerivedNoExternal(state, manifests);
+  // A package component publishes its host root and authored sheets in the
+  // manifest; register them in the build's style declaration carrier so they
+  // travel the same plan a local island's `styles` declaration rides.
+  registerPackageIslandStyleDeclarations(state.ctx.phase1.packageIslandDecls, manifests, {
+    root: state.viteRoot ?? process.cwd(),
+    workspaceRoot: state.workspaceRoot,
+  });
 }
 
 /**
@@ -271,6 +339,71 @@ function syncDerivedNoExternal(
   }
 }
 
+/**
+ * Read every reachable module's sidecar-declared tag into ctx (the
+ * generated-element site resolver's second source).
+ *
+ * The seeds are the same three the package-admission derivation walks (page
+ * routes, local islands, layout modules), so one reachability convention covers
+ * the app's whole authored graph. A page-local component (`app/site-ui/…`) is
+ * reached through its importing route, which is exactly the module the scan
+ * needs to see. The walk's own boundaries ride the build-diagnostics envelope:
+ * a partial map is a reported fact, never a silent one.
+ */
+async function scanDeclaredTagsInto(
+  state: OpenPluginState,
+  routes: readonly RouteEntry[],
+): Promise<void> {
+  const resolve = state.resolveModule;
+  const root = state.viteRoot ?? process.cwd();
+  const routesDir = state.resolvedOptions.routesDir!;
+  const islandsDir = state.resolvedOptions.islandsDir || DEFAULT_ISLANDS_DIR;
+  const seeds: string[] = [];
+  for (const route of routes) {
+    if (route.type !== 'page' || route.special) continue;
+    seeds.push(join(root, routesDir, route.filePath));
+  }
+  for (const file of state.ctx.phase1.islandFiles) {
+    seeds.push(join(root, islandsDir, file));
+  }
+  for (const shell of [
+    state.resolvedOptions.layout,
+    ...Object.values(state.resolvedOptions.layouts ?? {}),
+  ]) {
+    if (!shell || typeof shell !== 'object' || typeof shell.import !== 'string') continue;
+    seeds.push(join(root, shell.import));
+  }
+  if (resolve === undefined) {
+    // The scan is resolver-driven (alias/imports/package specifiers are the
+    // bundler's answers). Rescan paths that never captured one keep the map
+    // empty, which is the pre-slice behavior: the resolver falls through to
+    // the path convention exactly as before.
+    state.ctx.phase1.declaredElementTags = new Map();
+    return;
+  }
+  const scanned = await scanDeclaredElementTags({
+    root,
+    workspaceRoot: state.workspaceRoot,
+    resolve,
+    seeds,
+  });
+  for (const note of scanned.notes) {
+    const envelope = {
+      code: note.code,
+      severity: 'warning',
+      phase: 'build',
+      message: note.message,
+      ...(note.file !== undefined ? { file: note.file } : {}),
+    } as const;
+    recordBuildDiagnostic(envelope);
+    log.warn(formatDiagnosticLine(envelope));
+  }
+  state.ctx.phase1.declaredElementTags = scanned.tags;
+  if (scanned.tags.size > 0) {
+    log.info(`Declared element tags: ${[...scanned.tags.values()].sort().join(', ')}`);
+  }
+}
+
 /** Rescan the islands dir into ctx; returns the islands root for later reuse. */
 async function scanIslandsIntoCtx(state: OpenPluginState): Promise<string> {
   const islandsRoot = join(process.cwd(), state.resolvedOptions.islandsDir || DEFAULT_ISLANDS_DIR);
@@ -284,6 +417,14 @@ async function scanIslandsIntoCtx(state: OpenPluginState): Promise<string> {
     islandsRoot,
     islandFiles,
     state.viteRoot ?? process.cwd(),
+  );
+  // The island scan reset the style declaration carrier; re-register the
+  // admitted packages' declared sheets (idempotent, and order-independent with
+  // the package scan that may run before or after this one).
+  registerPackageIslandStyleDeclarations(
+    state.ctx.phase1.packageIslandDecls ?? [],
+    state.ctx.phase1.packageManifests ?? [],
+    { root: state.viteRoot ?? process.cwd(), workspaceRoot: state.workspaceRoot },
   );
   return islandsRoot;
 }
@@ -327,7 +468,241 @@ export async function rescanRoutes(state: OpenPluginState): Promise<void> {
  */
 export async function rescanIslands(state: OpenPluginState): Promise<void> {
   await scanIslandsIntoCtx(state);
+  // A rescan re-reads the island sources, so the declared-tag provider must be
+  // refreshed in the same pass: an edited sidecar `tag` (or a newly added
+  // page-local component the route graph now reaches) has to replace the stale
+  // map, exactly as `islandMeta` is replaced.
+  await scanDeclaredTagsInto(state, state.ctx.phase1.cachedRoutes || []);
   syncEntryDescriptor(state, state.ctx.phase1.cachedRoutes || []);
+}
+
+/**
+ * The injectable seam for the CEM detection scan (crash-injection tests and
+ * hosts that scan a different tree). The production value is
+ * {@linkcode detectAndClassifyCemPackages}.
+ */
+export type DetectCemPackages = (nodeModulesDir: string) => Promise<CemDetectionResult>;
+
+/**
+ * The injectable seam for the foreign-tag source scan (crash-injection
+ * tests). The production value is {@linkcode scanForeignTags}.
+ */
+export type ForeignTagScanner = typeof scanForeignTags;
+
+/**
+ * CEM auto-detection - scan node_modules for custom-elements.json without
+ * importing or executing any package code, into ctx. Runs BEFORE the entry
+ * descriptor is built so the emitted entry and the SSR admission plan share
+ * one descriptor instantiation.
+ *
+ * Two-tier semantics. Tier-1: the whole detection channel crashing (a
+ * directory-walk I/O failure) fails the build closed with a coded error — a
+ * half-read compatibility surface would silently mis-admit components, and
+ * "best-effort" is not a licence for a silently half-empty scan. The fatal
+ * reports first through `reportScanFatal` (the buildStart error surface does
+ * not carry the thrown message to the CLI on rolldown-vite 8 — see the
+ * reportScanFatal contract). Tier-2: one unparseable manifest is a per-item
+ * degradation — its structured reason rides the envelope channel (#1612) and
+ * the scan proceeds without that package's classifications.
+ */
+export async function scanCemClassificationsInto(
+  state: OpenPluginState,
+  detect: DetectCemPackages = detectAndClassifyCemPackages,
+): Promise<void> {
+  const nodeModulesDir = join(process.cwd(), 'node_modules');
+  let detection: CemDetectionResult;
+  try {
+    detection = await detect(nodeModulesDir);
+  } catch (err) {
+    throw reportScanFatal(
+      buildError(
+        ScanSurfaceErrorCode.CEM_DETECTION_UNAVAILABLE,
+        'CEM auto-detection failed, so the component compatibility surface cannot be ' +
+          `proven: ${describeError(err)}`,
+        { cause: errorCause(err) },
+      ),
+    );
+  }
+  // A skipped manifest leaves its package's capability unproven, so record one
+  // synthetic `client-only` per DELIVERED tag (the same tag set
+  // `expandIslandDeliveryDecl` hands the plan) unless real classification
+  // evidence already exists; `openElement.ssr` is only a candidate signal
+  // (ADR-0157), never proof.
+  const classifiedTags = new Set(detection.classifications.map((entry) => entry.tagName));
+  for (const entry of detection.skipped) {
+    const skippedManifest = state.ctx.phase1.packageManifests.find(
+      (pkg) => pkg.packageName === entry.packageName,
+    );
+    const downgradedTags: string[] = [];
+    for (const declaration of skippedManifest?.declarations ?? []) {
+      if (!declaration.openElement?.module) continue;
+      const delivery = declaration as typeof declaration & {
+        tags?: readonly string[];
+        tagNames?: readonly string[];
+      };
+      const openElement = declaration.openElement as typeof declaration.openElement & {
+        tags?: readonly string[];
+        tagNames?: readonly string[];
+      };
+      const deliveredTags = resolveIslandDeliveryTags(
+        declaration.tagName,
+        delivery.tags ?? openElement.tags,
+        delivery.tagNames ?? openElement.tagNames,
+        declaration.tagName,
+      );
+      for (const tagName of deliveredTags) {
+        if (classifiedTags.has(tagName)) continue;
+        detection.classifications.push({
+          tagName,
+          tier: 'client-only',
+          reason:
+            `CEM manifest unparseable (${entry.reason}); the SSR capability is unproven, ` +
+            'downgraded to client-only',
+          source: 'package',
+          ssr: false,
+        });
+        classifiedTags.add(tagName);
+        downgradedTags.push(tagName);
+      }
+    }
+    const warning = {
+      code: ScanSurfaceErrorCode.CEM_MANIFEST_SKIPPED,
+      severity: 'warning',
+      phase: 'build',
+      message:
+        `The CEM manifest of package "${entry.packageName}" could not be parsed, so its ` +
+        `components are not classified (${entry.reason}). ` +
+        (downgradedTags.length > 0
+          ? `${downgradedTags.length} delivered tag(s) are downgraded to client-only for this ` +
+            "build: the manifest's openElement.ssr flag is a candidate signal (ADR-0157), not " +
+            'proof, and no classifier ran.'
+          : 'No delivered tag was downgraded: the package is not an admitted component package ' +
+            'here, or every delivered tag already has real classification evidence.'),
+      file: entry.packageName,
+      hint:
+        downgradedTags.length > 0
+          ? "Fix or remove the package's custom-elements.json; the client-only fallback keeps the " +
+            'site working but drops server rendering for these components.'
+          : "Fix or remove the package's custom-elements.json; existing classifications were " +
+            'preserved and no synthetic downgrade was applied.',
+    } as const;
+    recordBuildDiagnostic(warning);
+    log.warn(formatDiagnosticLine(warning));
+  }
+  state.ctx.phase1.cemClassifications = detection.classifications;
+  if (detection.classifications.length > 0) {
+    log.info(
+      `CEM auto-detection: classified ${detection.classifications.length} component(s) from node_modules`,
+    );
+  }
+}
+
+/**
+ * #979: foreign-tag discovery — scan page route and island sources for
+ * custom-element tags that are neither local islands, package-manifest
+ * islands, nor openElement-authored elements, into ctx, so the admission
+ * plan records them explicitly (client-only, visibility only) instead of
+ * never seeing them.
+ *
+ * Two-tier semantics. Tier-1: the whole discovery channel crashing (the
+ * known-tag assembly or the compiler-backed discovery pass) fails the build
+ * closed with a coded error, reported first through `reportScanFatal`. A
+ * single unreadable module is NOT a channel crash — it is the scan result's
+ * own per-item degradation record (Tier-2), surfaced here through the
+ * envelope channel (#1612) while the rest of the scan proceeds.
+ */
+export async function scanForeignTagsInto(
+  state: OpenPluginState,
+  routes: RouteEntry[],
+  islandsRoot: string,
+  islandFiles: string[],
+  scan: ForeignTagScanner = scanForeignTags,
+): Promise<void> {
+  const knownTags = new Set<string>(state.ctx.phase1.islandTagNames);
+  for (const [tagName, meta] of Object.entries(state.ctx.phase1.islandMeta)) {
+    const delivery = meta as IslandDecl & {
+      tags?: readonly string[];
+      tagNames?: readonly string[];
+    };
+    for (const deliveredTag of resolveIslandDeliveryTags(
+      tagName,
+      delivery.tags,
+      delivery.tagNames,
+      tagName,
+    ))
+      knownTags.add(deliveredTag);
+  }
+  for (const pkg of state.ctx.phase1.packageManifests) {
+    for (const decl of pkg.declarations) {
+      const delivery = decl as typeof decl & {
+        tags?: readonly string[];
+        tagNames?: readonly string[];
+      };
+      const openElement = decl.openElement as typeof decl.openElement & {
+        tags?: readonly string[];
+        tagNames?: readonly string[];
+      };
+      for (const deliveredTag of resolveIslandDeliveryTags(
+        decl.tagName,
+        delivery.tags ?? openElement?.tags,
+        delivery.tagNames ?? openElement?.tagNames,
+        decl.tagName,
+      ))
+        knownTags.add(deliveredTag);
+    }
+  }
+  const pageRoutes = routes.filter((r) => r.type === 'page' && !r.special);
+  for (const route of pageRoutes) {
+    knownTags.add(fileToTagName(route.filePath));
+    if (route.tagName) knownTags.add(route.tagName);
+  }
+  const layoutConfigs = [
+    state.resolvedOptions.layout,
+    ...Object.values(state.resolvedOptions.layouts ?? {}),
+  ];
+  for (const shell of layoutConfigs) {
+    if (shell && typeof shell === 'object' && shell.tagName) {
+      knownTags.add(shell.tagName);
+    }
+  }
+
+  let result: ForeignTagScanResult;
+  try {
+    result = await scan({
+      routesDir: join(process.cwd(), state.resolvedOptions.routesDir || DEFAULT_ROUTES_DIR),
+      islandsDir: islandsRoot,
+      routeFiles: pageRoutes.map((r) => r.filePath),
+      islandFiles,
+      knownTags,
+    });
+  } catch (err) {
+    throw reportScanFatal(
+      buildError(
+        ScanSurfaceErrorCode.FOREIGN_TAG_SCAN_UNAVAILABLE,
+        'The foreign-tag scan failed, so the admission plan cannot record the third-party ' +
+          `custom elements this app consumes: ${describeError(err)}`,
+        { cause: errorCause(err) },
+      ),
+    );
+  }
+  state.ctx.phase1.foreignTags = result.foreignTags;
+  for (const entry of result.unreadable) {
+    const warning = {
+      code: ScanSurfaceErrorCode.FOREIGN_TAG_MODULE_UNREADABLE,
+      severity: 'warning',
+      phase: 'build',
+      message:
+        `The foreign-tag scan could not read module ${entry.path}, so tags used only ` +
+        `there are not recorded (${entry.reason}).`,
+      file: entry.path,
+      hint: 'Restore the module (or remove it) so the admission plan sees its tags.',
+    } as const;
+    recordBuildDiagnostic(warning);
+    log.warn(formatDiagnosticLine(warning));
+  }
+  if (result.foreignTags.length > 0) {
+    log.info(`Foreign WC tags consumed in JSX: ${result.foreignTags.join(', ')}`);
+  }
 }
 
 /** Create the `buildStart` hook of `open:core` over the shared plugin state. */
@@ -348,6 +723,11 @@ export function createBuildStartHook(state: OpenPluginState): Pick<Plugin, 'buil
         const routes = await scanRoutesAndStaticComponents(state);
         const islandsRoot = await scanIslandsIntoCtx(state);
         const islandFiles = state.ctx.phase1.islandFiles;
+
+        // The declared-tag provider (the site resolver's second source). Runs
+        // after the island scan so its seeds include the island files, and
+        // before any transform can ask the resolver for a site fact.
+        await scanDeclaredTagsInto(state, routes);
 
         // Auto admission derives the package set from the scanned graph, so
         // the admission scan runs on EVERY build now — the value may be an
@@ -397,92 +777,9 @@ export function createBuildStartHook(state: OpenPluginState): Pick<Plugin, 'buil
           });
         }
 
-        // CEM auto-detection - scan node_modules for custom-elements.json
-        // without importing or executing any package code. Runs BEFORE the entry
-        // descriptor is built so the emitted entry and the SSR admission plan
-        // share one descriptor instantiation.
-        try {
-          const nodeModulesDir = join(process.cwd(), 'node_modules');
-          state.ctx.phase1.cemClassifications = await detectAndClassifyCemPackages(nodeModulesDir);
-          if (state.ctx.phase1.cemClassifications.length > 0) {
-            log.info(
-              `CEM auto-detection: classified ${state.ctx.phase1.cemClassifications.length} component(s) from node_modules`,
-            );
-          }
-        } catch (err) {
-          // CEM detection is best-effort - never fail the build
-          log.debug(`CEM auto-detection failed (non-fatal): ${formatError(err)}`);
-          state.ctx.phase1.cemClassifications = [];
-        }
+        await scanCemClassificationsInto(state);
 
-        // #979: foreign-tag discovery. Scan page route and
-        // island sources for custom-element tags that are neither local
-        // islands, package-manifest islands, nor openElement-authored
-        // elements, so the admission plan records them explicitly
-        // (client-only, visibility only) instead of never seeing them.
-        try {
-          const knownTags = new Set<string>(state.ctx.phase1.islandTagNames);
-          for (const [tagName, meta] of Object.entries(state.ctx.phase1.islandMeta)) {
-            const delivery = meta as IslandDecl & {
-              tags?: readonly string[];
-              tagNames?: readonly string[];
-            };
-            for (const deliveredTag of resolveIslandDeliveryTags(
-              tagName,
-              delivery.tags,
-              delivery.tagNames,
-              tagName,
-            ))
-              knownTags.add(deliveredTag);
-          }
-          for (const pkg of state.ctx.phase1.packageManifests) {
-            for (const decl of pkg.declarations) {
-              const delivery = decl as typeof decl & {
-                tags?: readonly string[];
-                tagNames?: readonly string[];
-              };
-              const openElement = decl.openElement as typeof decl.openElement & {
-                tags?: readonly string[];
-                tagNames?: readonly string[];
-              };
-              for (const deliveredTag of resolveIslandDeliveryTags(
-                decl.tagName,
-                delivery.tags ?? openElement?.tags,
-                delivery.tagNames ?? openElement?.tagNames,
-                decl.tagName,
-              ))
-                knownTags.add(deliveredTag);
-            }
-          }
-          const pageRoutes = routes.filter((r) => r.type === 'page' && !r.special);
-          for (const route of pageRoutes) {
-            knownTags.add(fileToTagName(route.filePath));
-            if (route.tagName) knownTags.add(route.tagName);
-          }
-          const layoutConfigs = [
-            state.resolvedOptions.layout,
-            ...Object.values(state.resolvedOptions.layouts ?? {}),
-          ];
-          for (const shell of layoutConfigs) {
-            if (shell && typeof shell === 'object' && shell.tagName) {
-              knownTags.add(shell.tagName);
-            }
-          }
-          state.ctx.phase1.foreignTags = await scanForeignTags({
-            routesDir: join(process.cwd(), state.resolvedOptions.routesDir || DEFAULT_ROUTES_DIR),
-            islandsDir: islandsRoot,
-            routeFiles: pageRoutes.map((r) => r.filePath),
-            islandFiles,
-            knownTags,
-          });
-          if (state.ctx.phase1.foreignTags.length > 0) {
-            log.info(`Foreign WC tags consumed in JSX: ${state.ctx.phase1.foreignTags.join(', ')}`);
-          }
-        } catch (err) {
-          // Foreign-tag discovery is best-effort - never fail the build
-          log.debug(`Foreign-tag scan failed (non-fatal): ${formatError(err)}`);
-          state.ctx.phase1.foreignTags = [];
-        }
+        await scanForeignTagsInto(state, routes, islandsRoot, islandFiles);
 
         // Single descriptor instantiation: the emitted entry code and the
         // admission plan come from the same object. The returned code string

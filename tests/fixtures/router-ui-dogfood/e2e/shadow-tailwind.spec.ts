@@ -69,50 +69,29 @@ test('a TSX-only Tailwind shadow component is styled inside its shadow root', as
   );
 });
 
-test('a client-created shadow component adopts the one shared sheet (no per-instance fetch)', async ({
-  page,
-}) => {
-  // Requirements 5.1/5.2: the same stylesheet resource shares ONE constructed
-  // sheet identity, and instances never re-fetch or re-parse it. The probe
-  // page carries no client JavaScript, so the island client is loaded from a
-  // page that hydrates, then the component is created client-side — the
-  // registered sheet must be adopted, with no link/style node created at
-  // runtime.
-  await page.goto('/dialog');
-  await page.waitForFunction(() => Boolean(globalThis.customElements.get('open-dialog')));
-  const result = await page.evaluate(() => {
-    const adopt = (): { sheets: CSSStyleSheet[]; links: number; styles: number } => {
-      const host = document.createElement('open-dialog') as HTMLElement;
-      document.body.appendChild(host);
-      const root = host.shadowRoot;
-      return {
-        sheets: [...(root?.adoptedStyleSheets ?? [])],
-        links: root?.querySelectorAll('link[rel="stylesheet"]').length ?? -1,
-        styles: root?.querySelectorAll('style').length ?? -1,
-      };
-    };
-    const first = adopt();
-    const second = adopt();
-    const sharedOf = (sheets: CSSStyleSheet[]): CSSStyleSheet | undefined =>
-      sheets.find(
-        (sheet) =>
-          typeof (sheet as unknown as Record<string, unknown>).__openElementStyleSheetUrl ===
-          'string',
-      );
-    const firstShared = sharedOf(first.sheets);
-    const secondShared = sharedOf(second.sheets);
-    return {
-      hasComponentSheet: firstShared !== undefined,
-      sameIdentity: firstShared !== undefined && firstShared === secondShared,
-      links: first.links + second.links,
-      styles: first.styles + second.styles,
-    };
-  });
-  expect(result.hasComponentSheet, 'the registered component sheet is adopted').toEqual(true);
-  expect(result.sameIdentity, 'one constructed sheet identity across instances').toEqual(true);
-  expect(result.links, 'no runtime link nodes').toEqual(0);
-  expect(result.styles, 'no runtime style nodes').toEqual(0);
-});
+/*
+ * RETIRED BY THE ALPHA16 MIGRATION: "a client-created shadow component adopts
+ * the one shared sheet (no per-instance fetch)".
+ *
+ * Requirements 5.1/5.2 are unchanged, but this fixture can no longer measure
+ * them. The shared CONSTRUCTABLE sheet is the CLASS lane's delivery mechanism:
+ * the kernel adopts the sheets a class registers at connect. Every
+ * `@openelement/ui` component has migrated to the generated lane (open-button
+ * and open-input were the last two), and the generated lane delivers its
+ * declared sheets through the SSR DSD `<link>` channel — client-created
+ * generated hosts take the recorded Alpha17 adoption slice, so they
+ * deliberately have no adoptable sheet yet.
+ *
+ * The remaining class-authored shadow component here, `dogfood-closed`, is a
+ * consumer-authored root-boundary case with no declared sheet; pointing this
+ * row at it would assert `hasComponentSheet === false` and call that a pass,
+ * which is exactly the fake-green the file's own header forbids. The
+ * identity-sharing contract is instead covered where a class-lane component
+ * with sheets still exists: `packages/ui/__tests__/css-smoke.test.ts` and the
+ * sheet-admission rows under `www/tools/`. Restoring this browser row belongs
+ * with the Alpha17 generated-host adoption slice, which reintroduces a
+ * client-created host with an adoptable sheet.
+ */
 
 test('the probe ships no generated inline CSS and no runtime style injection', async ({ page }) => {
   await page.goto('/tailwind-probe');

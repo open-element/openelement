@@ -35,6 +35,7 @@ import { expect, test } from '@playwright/test';
 const PROBE_TAG = 'open-light-probe';
 const CARD_TAG = 'light-probe-card';
 const PAGE_TAG = 'light-probe-page';
+const GEN_TAG = 'gen-light-probe';
 
 /** `.probe-shared` in each of the three scopes that declare it. */
 const PROBE_COLOR = 'rgb(200, 0, 0)'; // open-light-probe.css
@@ -42,6 +43,8 @@ const CARD_COLOR = 'rgb(0, 128, 0)'; // light-probe-card.css
 const DOCUMENT_COLOR = 'rgb(64, 64, 64)'; // page-light-probe.css
 /** `.probe-count`, declared by the probe island only. */
 const PROBE_COUNT_COLOR = 'rgb(0, 0, 200)';
+/** `.gen-probe-child`, declared by the generated light-root island only. */
+const GEN_CHILD_COLOR = 'rgb(9, 9, 9)';
 
 const DIST = new URL('../dist/', import.meta.url);
 const CLIENT_ASSETS_DIR = new URL('client/assets/', DIST);
@@ -81,6 +84,12 @@ const cardAsset = assetFor(assets, CARD_TAG);
  * the same protocol as every other component sheet (#1609).
  */
 const pageAsset = assetFor(assets, PAGE_TAG);
+/**
+ * The generated (function) light-root island has no SSR host producer: the
+ * document head is the only delivery that styles it without JS (Alpha16
+ * retained stylesheet delivery), so its sheet must be a marked head link.
+ */
+const genAsset = assetFor(assets, GEN_TAG);
 
 /** Read one computed style value of the first match inside `host`. */
 function computedStyle(
@@ -113,7 +122,7 @@ test('the build emits content-addressed scoped assets and declares them in the d
   const html = readDist('index.html');
 
   const head = html.slice(0, html.indexOf('</head>'));
-  for (const asset of [probeAsset, cardAsset, pageAsset]) {
+  for (const asset of [probeAsset, cardAsset, pageAsset, genAsset]) {
     // Parser-visible, marked, exactly once IN THE HEAD — the document is the
     // delivery for document-level light roots. The same asset may also be
     // declared inside a shadow template: content inside a shadow tree is
@@ -127,6 +136,8 @@ test('the build emits content-addressed scoped assets and declares them in the d
   // Scoped at build time: the asset the browser parses IS the scoped sheet.
   assert.ok(probeAsset.css.includes(`@scope (${PROBE_TAG}) {`));
   assert.ok(cardAsset.css.includes(`:scope{display:block}`));
+  assert.ok(genAsset.css.includes(`@scope (${GEN_TAG}) {`));
+  assert.ok(genAsset.css.includes(':scope{display:block}'));
 
   // The retired runtime sink left no trace in the document, and NO
   // framework-generated inline stylesheet exists: every component sheet,
@@ -304,6 +315,37 @@ test('once the link is gone a reconnect adopts the sheet, keeping styles and add
   expect(await computedColor(page, CARD_TAG, '.probe-shared')).toBe(CARD_COLOR);
 });
 
+test('the generated light-root island upgrades inside its document-linked sheet', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.waitForFunction((tag) => customElements.get(tag) !== undefined, GEN_TAG, {
+    timeout: 30_000,
+  });
+
+  expect(await computedStyle(page, GEN_TAG, '.gen-probe-child', 'color')).toBe(GEN_CHILD_COLOR);
+  // ONE delivery: the head link styles both the pre-upgrade host box and the
+  // mounted content; no adopted duplicate and no inline style node exists.
+  const state = await page.evaluate(
+    ([tag, href]) => {
+      const host = document.querySelector(tag);
+      return {
+        links: [...document.querySelectorAll('link[data-oe-static-styles]')].filter(
+          (link) => link.getAttribute('href') === href,
+        ).length,
+        adopted: document.adoptedStyleSheets.length,
+        inline: document.querySelectorAll('style[data-open-element-compiled-style]').length,
+        display: host === null ? null : getComputedStyle(host).display,
+      };
+    },
+    [GEN_TAG, genAsset.href] as const,
+  );
+  expect(state.links).toBe(1);
+  expect(state.adopted).toBe(0);
+  expect(state.inline).toBe(0);
+  expect(state.display).toBe('block');
+});
+
 test('an unfetchable stylesheet asset is reported, never replaced by an inline fallback', async ({
   page,
 }) => {
@@ -353,5 +395,24 @@ test.describe('computed styles without client JavaScript', () => {
     expect(await computedColor(page, PROBE_TAG, '.probe-shared')).toBe(PROBE_COLOR);
     expect(await computedColor(page, PAGE_TAG, 'p.document-probe')).toBe(DOCUMENT_COLOR);
     expect(await computedColor(page, PROBE_TAG, '.probe-count')).toBe(PROBE_COUNT_COLOR);
+
+    // The generated light root has no SSR content, but its host box is styled
+    // by the document-head link alone: one marked link, no JS, no inline style.
+    const generated = await page.evaluate(
+      ([tag, href]) => {
+        const host = document.querySelector(tag);
+        return {
+          links: [...document.querySelectorAll('link[data-oe-static-styles]')].filter(
+            (link) => link.getAttribute('href') === href,
+          ).length,
+          display: host === null ? null : getComputedStyle(host).display,
+          inline: document.querySelectorAll('style[data-open-element-compiled-style]').length,
+        };
+      },
+      [GEN_TAG, genAsset.href] as const,
+    );
+    expect(generated.links).toBe(1);
+    expect(generated.display).toBe('block');
+    expect(generated.inline).toBe(0);
   });
 });

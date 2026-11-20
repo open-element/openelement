@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the Lowering walk is a single pass over the analyzed render() tree, and the compiler-owned location identities, source records and Part/Block shape invariants span every construct it lowers, so per-construct files would duplicate them; the boundary is its input (analyze-module facts over the classified AST) and its output (Part Program records with stable compiler-owned paths) — nothing else in the compiler authors locations.
 /**
  * JSX → Part Program lowering for the compiled grammar (#1473 split): the
  * {@link Lowering} walk turns

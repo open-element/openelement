@@ -20,6 +20,7 @@
 import { compare } from 'semver';
 import { readdir, readFile } from 'node:fs/promises';
 import process from 'node:process';
+import { emitSummary } from './checker-io.ts';
 import { wwwReleaseAnchorFailures } from './www-release-anchor.ts';
 import { spawnCommand } from './node-command.ts';
 
@@ -348,7 +349,7 @@ async function main(): Promise<void> {
     for (const failure of failures) console.error(`- ${failure}`);
     process.exit(1);
   }
-  console.log(
+  emitSummary(
     `Release state check passed: source ${state.sourceVersion}; ` +
       `common complete ${
         state.commonCompleteVersion ?? 'none'

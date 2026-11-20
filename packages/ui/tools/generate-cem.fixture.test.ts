@@ -44,7 +44,7 @@ const FIXTURE_EXPORTS = {
 };
 
 function fixtureManifest(): UiManifest {
-  return buildManifestFromRoot(pathToFileURL(`${ADMITTED}/`), fixtureSites);
+  return buildManifestFromRoot(pathToFileURL(`${ADMITTED}/`), { site: fixtureSites });
 }
 
 test('fixture manifest becomes a schema-valid CEM class declaration with metadata', () => {

@@ -22,9 +22,37 @@
  *     chunk fetched on the first search open, so no byte of it reaches first
  *     paint). totalJsKB moved 400 → 344 (~5% headroom) now that CSS bytes
  *     left the JS total; the earlier raise existed to admit that runtime.
+ *   - 2026-11-17 (owner decision): totalJsKB 344 → 376. The Alpha16
+ *     generated-element migration moves islands off the class lane, and a
+ *     generated island carries its own compiled recipe instead of sharing the
+ *     class runtime's one chunk. Measured at the first two moved islands
+ *     (`open-dragon-live-gaze`, `open-cinematic-scroll`): 353.5 KiB total, i.e.
+ *     +8.8 KiB for two islands. 376 keeps ~6% headroom over that measurement
+ *     and covers the remaining three www islands plus normal drift; it is a
+ *     deliberate product decision, not a measurement artefact. Lowering this
+ *     value again is the way to tighten the SLO. (P1's end state removes the
+ *     generic executor from the shared chunk once every island has moved —
+ *     re-measure and re-decide the budget at that point rather than carrying
+ *     this number as permanent slack.)
  *     The self-hosted Prism runtime (~40 KiB) that an older paragraph counted
  *     was retired with the build-time highlighter (#1552) — code highlighting
  *     is static page HTML with zero client-JS cost.
+ *   - 2026-11-18: totalJsKB 376 → 408, on the `open-search` migration — the
+ *     fourth and largest www island to move, and the one the previous entry's
+ *     "covers the remaining three www islands plus normal drift" intended to
+ *     absorb. It did not: the search island is the biggest of the five (its
+ *     compiled recipe mounts a dialog, a combobox shell and a keyed hit list),
+ *     and it went 21.7 → 47.0 KiB (+25.3 KiB) while the shared runtime chunk
+ *     grew 125.0 → 127.3 KiB (+2.3 KiB). Baseline 359.4 KiB → 390.0 KiB
+ *     measured, i.e. +30.6 KiB; 408 keeps ~4.4% headroom over that measurement
+ *     and leaves the 376-era headroom intact for `open-page-rail`, which is
+ *     still class-lane (its `computed` rows block it) and still to move.
+ *     Same standing instruction as above: lowering this is how the SLO is
+ *     tightened, and P1's end state — the generic executor leaving the shared
+ *     chunk once every island has moved — is the next re-measure point.
+ *   - 2026-11-20 (owner-approved, delegated remediation session): the two
+ *     raises above are ratified as owner decisions; measured head total
+ *     332.9 KiB (81.6% of 408); next re-measure point remains the P1 end state.
  *
  * Exceeding either value fails the official-Site build test; the build
  * manifest reports against the same numbers. Lowering these values is the
@@ -34,7 +62,7 @@
  */
 export const SITE_BUDGET = {
   islandKB: 84,
-  totalJsKB: 344,
+  totalJsKB: 408,
 } as const;
 
 /**

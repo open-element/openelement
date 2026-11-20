@@ -5,7 +5,7 @@
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { printBuildManifest, scanClientBuild, scanSSGOutput } from '../src/vite/build-manifest.ts';
 
 import { join } from 'node:path';
@@ -347,6 +347,40 @@ test('scanClientBuild: non-existent islands directory', () => {
     expect(result.islands.length).toEqual(0);
     expect(result.clientEntry).toEqual(null);
     expect(result.totalJsBytes).toEqual(0);
+  } finally {
+    cleanup(tmp);
+  }
+});
+
+test('the JSON mode writes exactly one machine payload to stdout and no human lines', () => {
+  // The machine contract (see build-manifest.ts:280): `--json` puts ONE
+  // parseable line on stdout through console.log and never mixes human status
+  // into it. console.info is the human channel; in JSON mode it must stay
+  // silent, otherwise a consumer that pipes stdout to a JSON parser breaks.
+  const tmp = makeTempDir();
+  try {
+    mkdirSync(join(tmp, 'dist'), { recursive: true });
+    const logs: string[] = [];
+    const infos: string[] = [];
+    const logSpy = vi.spyOn(console, 'log').mockImplementation((message: unknown) => {
+      logs.push(String(message));
+    });
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation((message: unknown) => {
+      infos.push(String(message));
+    });
+    try {
+      const manifest = printBuildManifest({ root: tmp, phase: 2, json: true });
+      expect(logs).toHaveLength(1);
+      expect(logs[0]).not.toContain('\n');
+      const parsed = JSON.parse(logs[0]!) as { phase: number; islands: unknown[] };
+      expect(parsed.phase).toBe(2);
+      expect(Array.isArray(parsed.islands)).toBe(true);
+      expect(infos).toEqual([]);
+      expect(manifest.phase).toBe(2);
+    } finally {
+      logSpy.mockRestore();
+      infoSpy.mockRestore();
+    }
   } finally {
     cleanup(tmp);
   }

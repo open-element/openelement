@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the per-component-kind qualification pins (tag presence, DSD, event binding, admission decision, browser capability evidence) are collected across one build-and-probe pipeline that shares the fixture app, so they are one harness; the boundary is its consumption rule: workspace SOURCE for the framework, pinned npm packages (Shoelace, Material Web, FAST, Ionic/Stencil, Lit) for the third-party components, exactly as a real application consumes them.
 /**
  * Third-party Web Components qualification fixture.
  *

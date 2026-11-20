@@ -84,6 +84,16 @@ export interface GeneratedElementModule extends GeneratedLeafModule {
   readonly ssrHostExport: string | null;
 }
 
+/**
+ * Compiler-private record key + local name of the generated host producer's
+ * canonical host-attribute projection (M11-2). The shell's seed helper attaches
+ * the merged caller+computed pairs under this ONE literal key; the emitted
+ * wrapper reads it with the same literal (like the other `__oe_` compiler-owned
+ * names, authored identifiers cannot carry the prefix).
+ */
+const HOST_ATTRIBUTES_KEY = '__oeHostAttributes';
+const HOST_ATTRIBUTES_VAR = '__oeHostAttrs';
+
 export interface GenerateElementModuleOptions {
   /**
    * The default-exported root component's local name. Required when a site is
@@ -122,6 +132,13 @@ export interface GenerateElementModuleOptions {
   readonly properties?: readonly GeneratedElementPlatformProperty[];
   /** The authored source for the leaf source map (required for `sourcesContent`). */
   readonly authoredSource?: string;
+  /**
+   * M09-2e / #1803 compiler-private marker: the authored sidecar declares
+   * `styles`, so this shadow host's DSD template will carry the canonical
+   * marked link prefix. Emits the typed styleLinks channel and the claim prefix
+   * walk; omitted keeps the pre-slice bytes exactly.
+   */
+  readonly styleLinkPrefix?: boolean;
 }
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -246,6 +263,21 @@ interface PropertyEmission {
   readonly identifiers: readonly string[];
   /** True when at least one non-primitive row needs the SSR props resolver. */
   readonly usesPropsResolver: boolean;
+  /**
+   * True when at least one descriptor row has an attribute channel. Only then
+   * does the emitted host producer need the canonical attribute projection from
+   * the seeded record (M11-2 SSR->claim parity); a module without attribute rows
+   * keeps the pre-slice wrapper bytes exactly.
+   */
+  readonly hasAttributeRows: boolean;
+  /**
+   * The host producer must consume the seeder's merged attribute pairs, which
+   * happens for TWO reasons: the descriptor has an attribute-backed row, OR it
+   * has a JSON-seedable non-primitive row (D-18c) whose seed travels as one
+   * shell-owned host attribute. A module with ONLY property-only primitive rows
+   * still emits no attribute seed, keeping those bytes unchanged.
+   */
+  readonly emitsHostAttributeSeed: boolean;
 }
 
 /**
@@ -268,6 +300,8 @@ function buildPropertyEmission(
       rowLines: ['  properties: [],'],
       identifiers: [],
       usesPropsResolver: false,
+      hasAttributeRows: false,
+      emitsHostAttributeSeed: false,
     };
   }
   const factoryLines: string[] = [];
@@ -301,6 +335,11 @@ function buildPropertyEmission(
     rowLines: ['  properties: [', ...rows, '  ],'],
     identifiers,
     usesPropsResolver,
+    hasAttributeRows: properties.some((property) => property.attribute !== null),
+    emitsHostAttributeSeed: properties.some(
+      (property) =>
+        property.attribute !== null || property.type === 'array' || property.type === 'object',
+    ),
   };
 }
 
@@ -335,9 +374,19 @@ export function generateElementModule(
     module.components.some((component) => component.name === rootCandidate)
       ? rootCandidate
       : undefined;
+  // M09-2e / #1803: derived from the authored sidecar by the lane admission,
+  // never from a host fact. An unstyled module passes nothing, so its bytes
+  // stay exactly the pre-slice output.
+  const styleLinkPrefix = options.styleLinkPrefix === true;
   const leaf = generateLeafModule(module, {
     ...(options.authoredSource === undefined ? {} : { authoredSource: options.authoredSource }),
     ...(rootInstanceName === undefined ? {} : { rootInstance: rootInstanceName }),
+    ...(styleLinkPrefix ? { claimStyleLinkPrefix: true } : {}),
+    // Slot anchors are a LIGHT-root feature only: a light root's children are
+    // projections into its own `<slot>` elements, so its producer must name
+    // them. A shadow root distributes its light children through the platform
+    // and a hostless module is not a host, so both keep the pre-slice bytes.
+    ...(hostTemplateRoot(options.root) === null ? { lightRoot: true } : {}),
   });
   const leafText = leaf.module;
   if (leafText === null) {
@@ -401,6 +450,8 @@ export function generateElementModule(
     hostPropsVar: '__oeHostProps',
     propsResolver: 'resolveGeneratedElementProps',
     ssrHost: `${rootName}__ssrHost`,
+    // The light-root SSR producer name (the leaf's parameterless `<Name>__ssr`).
+    ssrProducer: `${rootName}__ssr`,
   };
   const root = options.root;
   const templateRoot = hostTemplateRoot(root);
@@ -435,7 +486,13 @@ export function generateElementModule(
     ...(propertyEmission.usesPropsResolver && hostWrapper !== null ? [names.propsResolver] : []),
     ...(hostWrapper === null
       ? []
-      : [names.ssrHostImport, names.hostPropsSeed, names.hostPropsVar, names.ssrHost]),
+      : [
+          names.ssrHostImport,
+          names.hostPropsSeed,
+          names.hostPropsVar,
+          names.ssrHost,
+          ...(styleLinkPrefix ? ['styleLinks'] : []),
+        ]),
   ];
   const collisions = collisionNames.filter((name) => identifierOccurs(leafText, name));
   if (collisions.length > 0) {
@@ -482,6 +539,16 @@ export function generateElementModule(
     // LC-0). Emitted only when the leaf declared it; `createBindings` remains
     // never emitted.
     ...(rootInstanceFactory === null ? [] : [`  createInstance: ${rootInstanceFactory},`]),
+    // A LIGHT (or absent) descriptor root serializes its own children, so its
+    // SSR entry point is the leaf's parameterless `<Name>__ssr` — the shadow
+    // root's `<Name>__ssrHost` DSD wrapper has no light DOM to produce. The row
+    // is emitted only when the leaf really emitted that producer, and the shell
+    // attaches it as the class's static `__ssr` (one class = one registration).
+    ...(root !== undefined && root !== 'light'
+      ? []
+      : exportsSsrFunction(leafText, rootName)
+        ? [`  ssrProducer: ${names.ssrProducer},`]
+        : []),
     '};',
     '',
     `const ${names.element} = createGeneratedElementClass(${names.descriptor});`,
@@ -501,21 +568,59 @@ export function generateElementModule(
       : [
           '',
           '// ---- generated shadow host SSR (M09-2a) ----',
-          `export function ${hostWrapper.name}(props, lightChildren, attributes) {`,
-          `  const ${names.hostPropsVar} = ${names.hostPropsSeed}(${names.descriptor}.properties, props, attributes);`,
-          `  return ${names.ssrHostImport}({`,
-          `    tag: ${JSON.stringify(site.tag)},`,
-          `    root: ${JSON.stringify(hostWrapper.root)},`,
-          ...(delegatesFocus ? ['    dsd: { delegatesFocus: true },'] : []),
-          `    content: ${rootName}__ssr(${
-            propertyEmission.usesPropsResolver
-              ? `${names.propsResolver}(${names.descriptor}, ${names.hostPropsVar})`
-              : names.hostPropsVar
-          }, undefined),`,
-          '    ...(lightChildren === undefined ? {} : { lightChildren }),',
-          '    ...(attributes === undefined ? {} : { attributes }),',
-          '  });',
-          '}',
+          styleLinkPrefix
+            ? `export function ${hostWrapper.name}(props, lightChildren, attributes, styleLinks) {`
+            : `export function ${hostWrapper.name}(props, lightChildren, attributes) {`,
+          // Mixed generated-element/entry artifacts: the new producer requires
+          // the declared stylesheet URLs, but an old 3-arg caller (or a missing
+          // carrier) would otherwise render the shadow host silently unstyled.
+          // Fail closed before any seed/serialization work; the per-URL shape
+          // stays owned by the canonical marked-link serializer.
+          ...(styleLinkPrefix
+            ? [
+                '  if (!Array.isArray(styleLinks) || styleLinks.length === 0) throw new Error("OEIR_LEAF_MISSING_VALUE: styleLinks (the styled generated element received no declared stylesheet URLs; mixed generated-element/entry artifacts or a missing style-link carrier)");',
+              ]
+            : []),
+          ...(propertyEmission.emitsHostAttributeSeed
+            ? [
+                `  const ${names.hostPropsVar} = ${names.hostPropsSeed}(${names.descriptor}.properties, props, attributes);`,
+                `  const ${HOST_ATTRIBUTES_VAR} = ${names.hostPropsVar}.${HOST_ATTRIBUTES_KEY};`,
+                `  return ${names.ssrHostImport}({`,
+                `    tag: ${JSON.stringify(site.tag)},`,
+                `    root: ${JSON.stringify(hostWrapper.root)},`,
+                ...(delegatesFocus ? ['    dsd: { delegatesFocus: true },'] : []),
+                `    content: ${rootName}__ssr(${
+                  propertyEmission.usesPropsResolver
+                    ? `${names.propsResolver}(${names.descriptor}, ${names.hostPropsVar})`
+                    : names.hostPropsVar
+                }, undefined),`,
+                '    ...(lightChildren === undefined ? {} : { lightChildren }),',
+                `    ...(attributes === undefined && ${HOST_ATTRIBUTES_VAR} === undefined ? {} : { attributes: ${HOST_ATTRIBUTES_VAR} === undefined ? attributes : ${HOST_ATTRIBUTES_VAR} }),`,
+                ...(styleLinkPrefix
+                  ? ['    ...(styleLinks === undefined ? {} : { styleLinks }),']
+                  : []),
+                '  });',
+                '}',
+              ]
+            : [
+                `  const ${names.hostPropsVar} = ${names.hostPropsSeed}(${names.descriptor}.properties, props, attributes);`,
+                `  return ${names.ssrHostImport}({`,
+                `    tag: ${JSON.stringify(site.tag)},`,
+                `    root: ${JSON.stringify(hostWrapper.root)},`,
+                ...(delegatesFocus ? ['    dsd: { delegatesFocus: true },'] : []),
+                `    content: ${rootName}__ssr(${
+                  propertyEmission.usesPropsResolver
+                    ? `${names.propsResolver}(${names.descriptor}, ${names.hostPropsVar})`
+                    : names.hostPropsVar
+                }, undefined),`,
+                '    ...(lightChildren === undefined ? {} : { lightChildren }),',
+                '    ...(attributes === undefined ? {} : { attributes }),',
+                ...(styleLinkPrefix
+                  ? ['    ...(styleLinks === undefined ? {} : { styleLinks }),']
+                  : []),
+                '  });',
+                '}',
+              ]),
         ]),
     '',
   ].join('\n');

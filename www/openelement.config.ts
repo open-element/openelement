@@ -30,7 +30,11 @@ export default defineConfig({
   // meaning <title> should carry. Setting it here would additionally emit the
   // site-level og:title/og:site_name pair, which the page-level head owns.
   head: {
-    // All scripts are same-origin. theme-init is inlined instead of requested;
+    // All scripts are same-origin. theme-init is an external synchronous
+    // script (`/theme-init.js`, generated from packages/ui/src/theme-contract.ts
+    // by www/tools/generate-theme-init.ts) because the framework ships no raw
+    // inline-script channel (H-04); it must stay external and sync so it runs
+    // before first paint.
     // goatcounter was removed (unreachable from CN networks, cost a console
     // error + best-practices points on every page). Code highlighting compiles
     // into the page HTML at build time (www/lib/markdown.ts) — no highlighting

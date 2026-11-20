@@ -15,6 +15,10 @@ import type { IslandDecl } from '@openelement/protocol/ssg';
 
 import { fsPathToModuleSpecifier } from './module-specifier.ts';
 import { resolveIslandHydrate, resolveIslandSsrDsd } from './island-scanner.ts';
+import {
+  ownsGeneratedLaneKind,
+  readGeneratedElementHost,
+} from './generated-element-host-metadata.ts';
 import type { ClientIslandDeliveryEntry, IslandDeliveryStrategy } from './delivery.ts';
 
 type ScannedIslandMeta = Partial<IslandDecl> & {
@@ -55,6 +59,10 @@ export function buildClientIslandEntries(options: {
         meta?.hydrate as IslandDeliveryStrategy | undefined,
         upgradeStrategy,
       ) as IslandDeliveryStrategy;
+      // M11-3 lane fact: the scan's compiler-owned generated-host identity is
+      // the ONE source, and its verdict is the identity owner's ONE predicate —
+      // never a second kind list here (see ownsGeneratedLaneKind).
+      const generatedLane = ownsGeneratedLaneKind(readGeneratedElementHost(meta)?.kind);
       return {
         tagName,
         // #460: resolve() emits drive-letter backslash paths on Windows; convert
@@ -68,6 +76,7 @@ export function buildClientIslandEntries(options: {
         ),
         isPackage: false,
         strategy,
+        ...(generatedLane ? { generatedLane: true as const } : {}),
         ...(strategy === 'media' && meta?.media !== undefined ? { media: meta.media } : {}),
         ...(meta?.tags !== undefined ? { tags: meta.tags } : {}),
         ...(meta?.tagNames !== undefined ? { tagNames: meta.tagNames } : {}),
@@ -87,10 +96,18 @@ export function buildClientIslandEntries(options: {
         (island as IslandDecl & { hydrate?: IslandDeliveryStrategy }).hydrate,
         upgradeStrategy,
       ) as IslandDeliveryStrategy;
+      // M11-3 lane fact, SAME single source as the local branch: the package
+      // declaration carries the compiler-owned generated-host identity the
+      // manifest published (`buildPackageIslandDecls`) or the scan resolved
+      // (`attachPackageIslandHostIdentities`). Read it through the one accessor
+      // and the identity owner's one verdict — never re-derive it from a
+      // published name, and never re-list the owned kinds here.
+      const generatedLane = ownsGeneratedLaneKind(readGeneratedElementHost(island)?.kind);
       return {
         tagName: island.tagName,
         modulePath: island.modulePath,
         isPackage: island.source === 'package' || island.isPackage === true,
+        ...(generatedLane ? { generatedLane: true as const } : {}),
         // #638: forward the named export so the client factory reads
         // mod[exportName] (UI package chunks dropped `export default`).
         exportName: island.exportName,

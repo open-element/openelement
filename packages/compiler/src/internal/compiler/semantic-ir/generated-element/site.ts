@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): site admission is one decision — the structural opt-out walk, the default-export fact and the fail-closed gates answer the same question ("does this module belong to the generated element lane?") and must agree in one place; the boundary is that the host supplies the one GeneratedElementSite fact (the lane cannot see __tagName) and this module re-derives no semantic model, refusing with OEIR_GENERATED_ELEMENT_NOT_A_COMPONENT instead of compiling something the function frontend does not model.
 /**
  * M09-1a — site admission for the generated native element lane.
  *
@@ -35,7 +36,14 @@ import ts from 'typescript';
 import { camelToKebab, isSafeAttributeName } from '@openelement/protocol/forbidden-sinks';
 import type { RootMode } from '@openelement/protocol/part-program';
 import { literalValue } from '../../semantic-core/analyze-module.ts';
-import { createModuleIntrinsicBindings } from '../../semantic-core/module-analysis.ts';
+import {
+  createModuleIntrinsicBindings,
+  isCustomElementTag,
+} from '../../semantic-core/module-analysis.ts';
+import {
+  hasIslandPolicyStatement as locateIslandPolicyStatement,
+  islandPolicyObjectLiteral as locateIslandPolicyObjectLiteral,
+} from '../../semantic-core/island-policy-statement.ts';
 import { forbiddenSinkReason } from '@openelement/protocol/forbidden-sinks';
 import { type SourceSpan } from '../../semantic-core/scope-resolution.ts';
 import { type FunctionModelComponent } from '../../semantic-core/function-frontend.ts';
@@ -70,6 +78,19 @@ export type DefaultExportFact =
 
 /** The root-component facts the gates need, derived from the authored AST. */
 export interface GeneratedElementSiteAdmission {
+  /**
+   * The authored sidecar declares `styles` (M09-2e / #1803): the emitted host
+   * producer grows the typed styleLinks channel and the claim skips the marked
+   * DSD link prefix. Unstyled modules keep the pre-slice bytes exactly.
+   */
+  readonly declaresStyles: boolean;
+  /**
+   * The static string entries of the declared `styles` list, in authored order.
+   * The router island scan owns validation; this field is the fact carrier a
+   * package manifest publishes so a consuming build can register the same
+   * declaration a local island scan records.
+   */
+  readonly styles: readonly string[];
   readonly componentName: string;
   /** The default-export node, used for source-located refusals. */
   readonly defaultExportSpan: SourceSpan;
@@ -153,48 +174,26 @@ function diagnosticAt(
   return { severity: 'error', code, message, span, origin: 'module' };
 }
 
+function tagDiagnostic(sourceFile: ts.SourceFile, node: ts.Node, message: string): IrDiagnostic {
+  return diagnosticAt(sourceFile, node, GENERATED_ELEMENT_DIAGNOSTIC.TAG_INVALID, message);
+}
+
 function hasModifier(node: ts.Node, kind: ts.SyntaxKind): boolean {
   if (!ts.canHaveModifiers(node)) return false;
   return (ts.getModifiers(node) ?? []).some((modifier) => modifier.kind === kind);
 }
 
 /**
- * The island policy statement, `export const openElement = defineIslandConfig({ ... })`.
- *
- * This is the STATEMENT shape validated by the class lane's
- * `isIslandConfigStatement`, with one deliberate difference: binding
- * provenance (which local name the injected static-sidecar descriptor binds)
- * is the host's admission decision and is not re-derived here. The compiler
- * package cannot import the router's `defineIslandConfig`; the host's site
- * predicate has already answered that question, and this check is the defense
- * in depth the `OEIR_GENERATED_ELEMENT_MISSING_SITE_MARKER` code names.
+ * The island policy statement locator lives in `semantic-core/island-policy-statement.ts`
+ * — ONE definition shared with the module-semantics fact
+ * `hasGeneratedElementSidecar`, so the two readers cannot disagree about which
+ * statement is the policy. Re-exported through explicit forwarding bindings (not
+ * `export { ... } from`) because the bundler's re-export handling of a name this
+ * module ALSO imports left the inner call site unbound.
  */
-export function hasIslandPolicyStatement(sourceFile: ts.SourceFile): boolean {
-  return islandPolicyObjectLiteral(sourceFile) !== null;
-}
-
-/**
- * The one locator for the sidecar statement's config object literal. Both the
- * marker check and {@link readIslandRoot} read through it, so the two can never
- * disagree about which statement is the island policy.
- */
-function islandPolicyObjectLiteral(sourceFile: ts.SourceFile): ts.ObjectLiteralExpression | null {
-  for (const statement of sourceFile.statements) {
-    if (!ts.isVariableStatement(statement)) continue;
-    const modifiers = ts.getModifiers(statement) ?? [];
-    if (modifiers.length !== 1 || modifiers[0]!.kind !== ts.SyntaxKind.ExportKeyword) continue;
-    const declarations = statement.declarationList.declarations;
-    if (declarations.length !== 1) continue;
-    const declaration = declarations[0]!;
-    if (!ts.isIdentifier(declaration.name) || declaration.name.text !== 'openElement') continue;
-    const initializer = declaration.initializer;
-    if (initializer === undefined || !ts.isCallExpression(initializer)) continue;
-    if (initializer.arguments.length !== 1) continue;
-    const descriptor = initializer.arguments[0]!;
-    if (ts.isObjectLiteralExpression(descriptor)) return descriptor;
-  }
-  return null;
-}
+export const hasIslandPolicyStatement = (sourceFile: ts.SourceFile): boolean =>
+  locateIslandPolicyStatement(sourceFile);
+export const islandPolicyObjectLiteral = locateIslandPolicyObjectLiteral;
 
 /**
  * The result of reading the sidecar's `root` from the authored AST.
@@ -218,6 +217,22 @@ export type IslandRootRead =
 export interface IslandMetadataFacts {
   readonly root: RootMode | undefined;
   readonly delegatesFocus: boolean;
+  /**
+   * The sidecar declares a `styles` key (M09-2e / #1803). Presence, not the
+   * list: the router's island scan owns the specifier admission. The compiler
+   * lane only needs "this host's DSD template will carry the canonical marked
+   * link prefix", so it emits the typed styleLinks channel and the claim prefix
+   * walk from the SAME authored sidecar it already reads for root/focus/props.
+   */
+  readonly declaresStyles: boolean;
+  /**
+   * The sidecar's `styles` entries that are static string literals, in authored
+   * order. Validation (a safe relative `.css` specifier, the lane, the root) is
+   * the router island scan's admission, which owns the coded refusals; this
+   * list is only the fact carrier so a package manifest can publish the same
+   * declaration the scan records for a local island.
+   */
+  readonly styles: readonly string[];
   /** Sidecar `formAssociated: true`; false covers absent/explicit false. */
   readonly formAssociated: boolean;
   /**
@@ -227,6 +242,18 @@ export interface IslandMetadataFacts {
    * that can see the root component's parameter.
    */
   readonly properties: readonly IslandPropertyDeclaration[] | undefined;
+  /**
+   * The custom-element tag the sidecar declares explicitly, or undefined when
+   * it declares none.
+   *
+   * This is the authored identity a module that is neither an island nor a
+   * package declaration can carry: the host's site resolver admits a module
+   * whose sidecar pins a tag, because no path convention or manifest owns its
+   * identity. The descriptor's tag still comes from the host site fact — this
+   * field is the input that resolver reads, never a second emitter source, so
+   * an emitted element and its registration cannot disagree.
+   */
+  readonly tag: string | undefined;
 }
 
 /**
@@ -278,6 +305,21 @@ export type IslandMetadataRead =
   | { readonly kind: 'absent' }
   | { readonly kind: 'read'; readonly facts: IslandMetadataFacts }
   | { readonly kind: 'refused'; readonly diagnostic: IrDiagnostic };
+
+/**
+ * The static string entries of a `styles` initializer. A non-array initializer
+ * or a non-literal element contributes nothing here: the router scan refuses
+ * that shape with its own coded diagnostic, so this reader never becomes a
+ * second validator and never invents a specifier.
+ */
+function staticStyleSpecifiers(initializer: ts.Expression): readonly string[] {
+  if (!ts.isArrayLiteralExpression(initializer)) return [];
+  const specifiers: string[] = [];
+  for (const element of initializer.elements) {
+    if (ts.isStringLiteralLike(element)) specifiers.push(element.text);
+  }
+  return specifiers;
+}
 
 /** The static property name of a key/value pair, or null when unreadable. */
 function staticPropertyName(name: ts.PropertyName): string | null {
@@ -679,6 +721,12 @@ function readIslandPropertyTable(
  * mapping to `shadow-closed` exists here. `delegatesFocus: true` requires
  * `root: 'shadow'`, exactly as the scanner and the runtime authoring surface
  * enforce it: a light root has no shadow boundary to delegate focus through.
+ *
+ * `tag` is the sidecar's EXPLICIT custom-element identity. It is read here so
+ * the host site resolver can admit a module that is neither an island nor a
+ * package declaration (a page-local component under `app/site-ui/`); the
+ * descriptor still takes its tag from the host site fact, so this read is the
+ * resolver's input, never a second emitter source.
  */
 export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRead {
   const descriptor = islandPolicyObjectLiteral(sourceFile);
@@ -688,10 +736,14 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
   let seenDelegatesFocus = false;
   let delegatesFocus = false;
   let delegatesFocusSpan: ts.Node | null = null;
+  let declaresStyles = false;
+  let styles: readonly string[] = [];
   let seenFormAssociated = false;
   let formAssociated = false;
   let seenProperties = false;
   let properties: readonly IslandPropertyDeclaration[] | undefined;
+  let seenTag = false;
+  let tag: string | undefined;
   for (const property of descriptor.properties) {
     // A spread, a shorthand, a method or a computed key makes the object's key
     // set unprovable: a platform fact could hide behind it, so nothing is read.
@@ -757,6 +809,14 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
       declaredRoot = initializer.text;
       continue;
     }
+    if (name === 'styles') {
+      // Presence is the compiler fact; the router scan validates the list and
+      // owns the coded refusals. The literals are carried so a package manifest
+      // can publish the declaration without a second sidecar read.
+      declaresStyles = true;
+      styles = staticStyleSpecifiers(property.initializer);
+      continue;
+    }
     if (name === 'properties') {
       if (seenProperties) {
         return {
@@ -773,6 +833,49 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
       const read = readIslandPropertyTable(sourceFile, property.initializer);
       if (read.kind === 'refused') return read;
       properties = read.declarations;
+      continue;
+    }
+    if (name === 'tag') {
+      // The authored identity for a module no path convention or manifest
+      // owns. Static-literal only, and screened by the ONE tag predicate the
+      // module analysis already applies to JSX references: a dynamic or
+      // malformed spelling must refuse here rather than become an element the
+      // platform rejects at `customElements.define`.
+      if (seenTag) {
+        return {
+          kind: 'refused',
+          diagnostic: tagDiagnostic(
+            sourceFile,
+            property,
+            'the openElement sidecar declares tag more than once, so the tag fact is ambiguous',
+          ),
+        };
+      }
+      seenTag = true;
+      const initializer = property.initializer;
+      if (!ts.isStringLiteral(initializer)) {
+        return {
+          kind: 'refused',
+          diagnostic: tagDiagnostic(
+            sourceFile,
+            initializer,
+            'openElement.tag must be a static literal, got dynamic value ' +
+              `"${initializer.getText(sourceFile)}"`,
+          ),
+        };
+      }
+      if (!isCustomElementTag(initializer.text)) {
+        return {
+          kind: 'refused',
+          diagnostic: tagDiagnostic(
+            sourceFile,
+            initializer,
+            `openElement.tag "${initializer.text}" is not a valid custom-element name; ` +
+              'use a lowercase hyphenated name such as "open-page-rail"',
+          ),
+        };
+      }
+      tag = initializer.text;
       continue;
     }
     if (name === 'formAssociated') {
@@ -855,7 +958,7 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
   }
   return {
     kind: 'read',
-    facts: { root, delegatesFocus, formAssociated, properties },
+    facts: { tag, root, delegatesFocus, formAssociated, declaresStyles, styles, properties },
   };
 }
 
@@ -1884,7 +1987,15 @@ export function admitGeneratedElementSite(
   const facts =
     metadata.kind === 'read'
       ? metadata.facts
-      : { root: undefined, delegatesFocus: false, formAssociated: false, properties: undefined };
+      : {
+          root: undefined,
+          delegatesFocus: false,
+          formAssociated: false,
+          declaresStyles: false,
+          styles: [],
+          properties: undefined,
+          tag: undefined,
+        };
   const propertiesAdmission = admitGeneratedElementProperties(
     sourceFile,
     fact.node,
@@ -1912,6 +2023,8 @@ export function admitGeneratedElementSite(
       root: facts.root,
       delegatesFocus: facts.delegatesFocus,
       formAssociated: facts.formAssociated,
+      declaresStyles: facts.declaresStyles,
+      styles: facts.styles,
       propertiesDeclared: propertiesAdmission.kind === 'admitted',
       properties,
       propsParameter: propsParameterOf(fact.node),
@@ -1920,14 +2033,25 @@ export function admitGeneratedElementSite(
 }
 
 /**
- * The bounded M09-2d form mapping gate.
+ * The bounded M09-2d form mapping gate (two shapes).
  *
- * The author declares `formAssociated: true` and an ordinary declared string
- * `value` property; there is no separate `formValue` field. Optional declared
- * boolean `required`/`disabled` properties enable the required→valueMissing
- * mirror and the fieldset-disabled state. A reflected `disabled` row is refused
- * because the class path deliberately writes the property, not the attribute,
- * so the fieldset/authored state stays reversible (#1226).
+ * The shape is derived from the declared rows — no separate `formValue` field
+ * or shape field is invented:
+ *
+ * - **value shape** — `formAssociated: true` plus the ordinary declared string
+ *   `value` property, which is the form value source. Optional declared boolean
+ *   `required`/`disabled` properties enable the required→valueMissing mirror
+ *   and the fieldset-disabled state. A reflected `disabled` row is refused
+ *   because the shell deliberately writes the property, not the attribute, so
+ *   the fieldset/authored state stays reversible (#1226).
+ * - **button shape** — `formAssociated: true` without a declared `value` row
+ *   (the open-button contract): the element stays form-associated (it is listed
+ *   in `form.elements` and an external `form=<id>` association resolves), but
+ *   it publishes no form value, makes no validity claim, and its declared
+ *   boolean `disabled` row MAY reflect. `required` mirrors valueMissing on the
+ *   form value, so it has nothing to mirror here and is refused.
+ *
+ * Both shapes require the optional `required`/`disabled` rows to be boolean.
  */
 function admitGeneratedElementForm(
   sourceFile: ts.SourceFile,
@@ -1943,25 +2067,6 @@ function admitGeneratedElementForm(
   const declarationByName = new Map(
     (declarations ?? []).map((declaration) => [declaration.name, declaration]),
   );
-  const value = byName.get('value');
-  if (value === undefined) {
-    return [
-      refuse(
-        defaultExport,
-        'a form-associated generated element requires a declared property named "value" ' +
-          '(the existing declared string property is the form value source; no formValue field ' +
-          'is introduced)',
-      ),
-    ];
-  }
-  if (value.type !== 'string') {
-    return [
-      refuse(
-        declarationByName.get('value')?.node ?? defaultExport,
-        `the form value property "value" must be a string, got ${value.type}`,
-      ),
-    ];
-  }
   for (const name of ['required', 'disabled'] as const) {
     const property = byName.get(name);
     if (property === undefined) continue;
@@ -1973,15 +2078,39 @@ function admitGeneratedElementForm(
         ),
       ];
     }
-    if (name === 'disabled' && property.reflect) {
+  }
+  const value = byName.get('value');
+  if (value === undefined) {
+    const required = byName.get('required');
+    if (required !== undefined) {
       return [
         refuse(
-          declarationByName.get(name)?.node ?? defaultExport,
-          'the form property "disabled" must not reflect to its attribute: the fieldset/authored ' +
-            'disabled state must stay reversible',
+          declarationByName.get('required')?.node ?? defaultExport,
+          'the optional form property "required" mirrors valueMissing on the declared form value; ' +
+            'a form-associated element without a declared "value" property publishes no form ' +
+            'value, so "required" has nothing to mirror',
         ),
       ];
     }
+    return [];
+  }
+  if (value.type !== 'string') {
+    return [
+      refuse(
+        declarationByName.get('value')?.node ?? defaultExport,
+        `the form value property "value" must be a string, got ${value.type}`,
+      ),
+    ];
+  }
+  const disabled = byName.get('disabled');
+  if (disabled?.reflect) {
+    return [
+      refuse(
+        declarationByName.get('disabled')?.node ?? defaultExport,
+        'the form property "disabled" must not reflect to its attribute: the fieldset/authored ' +
+          'disabled state must stay reversible',
+      ),
+    ];
   }
   return [];
 }

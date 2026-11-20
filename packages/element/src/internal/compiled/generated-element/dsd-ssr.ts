@@ -19,20 +19,24 @@
  * - attributes are `[name, value]` string pairs only, screened by the one
  *   canonical safe-attribute-name predicate and escaped by the shared
  *   `escapeAttrValue`, so there is no second escape table;
- * - no `<style>`, no `<link>`, no CSS and no `class`/`style` value algebra:
- *   style delivery is a later typed link-resource slice (M09-2e) and the
- *   caller normalizes values before they cross this boundary.
+ * - no `<style>`, no CSS and no `class`/`style` value algebra: the caller
+ *   normalizes values before they cross this boundary. External stylesheet
+ *   delivery is the typed `styleLinks` channel: the template declares the
+ *   canonical marked `<link>` nodes through the ONE browser-safe serializer
+ *   (`internal/compiled/style-link-tags.ts`, M09-2e / #1803), never inline CSS.
  *
  * This module is a browser-safe leaf. It imports strings and validation only:
- * `dsd.ts`, the shared escapers, the safe-attribute predicate and the compiled
- * validation error. It never imports `server/index.ts`, `server/shared.ts`,
- * `serialize-program.ts`, the kernel or any execution backend.
+ * `dsd.ts`, the shared escapers, the safe-attribute predicate, the shared
+ * marked-link writer and the compiled validation error. It never imports
+ * `server/index.ts`, `server/shared.ts`, `serialize-program.ts`, the kernel or
+ * any execution backend.
  *
  * @module ./dsd-ssr.ts
  */
 
 import { escapeAttrValue } from '../../core/html-escape.ts';
 import { isSafeAttributeName } from '../../core/security.ts';
+import { serializeStyleLinks } from '../style-link-tags.ts';
 import { CompiledProgramValidationError } from '../runtime/values.ts';
 import {
   serializeShadowTemplate,
@@ -70,6 +74,16 @@ export interface GeneratedElementSsrInput {
   readonly dsd?: CompiledDsdOptions;
   /** Trusted, already-escaped generated content (the `<Name>__ssr` bytes). */
   readonly content: string;
+  /**
+   * The external stylesheets the shadow template declares, as site-absolute
+   * asset URLs (M09-2e / #1803). The links are written by the ONE canonical
+   * marked-link serializer, so the claim's delivery check recognizes them.
+   * A shadow root's sheets are declared INSIDE its template (the document head
+   * cannot reach a shadow tree); a LIGHT root's document-level delivery is the
+   * separate adoption channel, so a non-empty value on a light root is a
+   * caller defect.
+   */
+  readonly styleLinks?: readonly string[];
   /**
    * The host's light children, placed AFTER the template. A shadow root
    * distributes them through its own `<slot>` elements; a light root
@@ -151,6 +165,13 @@ export function serializeGeneratedElementHtml(input: GeneratedElementSsrInput): 
     throw new CompiledProgramValidationError('lightChildren', 'light children must be a string');
   }
   const attributes = hostAttributes(input.attributes);
+  const styleLinks = input.styleLinks;
+  if (styleLinks !== undefined && !Array.isArray(styleLinks)) {
+    throw new CompiledProgramValidationError(
+      'styleLinks',
+      'styleLinks must be an array of stylesheet URLs when present',
+    );
+  }
   if (root === 'light') {
     if (lightChildren !== '') {
       throw new CompiledProgramValidationError(
@@ -159,8 +180,29 @@ export function serializeGeneratedElementHtml(input: GeneratedElementSsrInput): 
           'through projectedChildren',
       );
     }
-    return `<${tag}${attributes}>${content}</${tag}>`;
+    if (styleLinks !== undefined && styleLinks.length > 0) {
+      throw new CompiledProgramValidationError(
+        'styleLinks',
+        'styleLinks is for shadow-root hosts: a light root delivers its sheets through ' +
+          'the document-level adoption channel, not its own subtree',
+      );
+    }
+    // The marker is the light-root OWNERSHIP fact (its region is the host's
+    // children), so it is written here exactly as the class lane's serializer
+    // writes it: authored attributes first, the marker last. The name is spelled
+    // literally because this module is the browser-safe producer LEAF and must
+    // not take a package dependency for one constant (the leaf's import set is
+    // pinned by `generated-element-dsd-ssr.test.ts`).
+    return `<${tag}${attributes} data-oe-light>${content}</${tag}>`;
   }
-  const template = serializeShadowTemplate(root, content, input.dsd ?? {});
+  // The canonical marked-link writer is shared with the class serializer: one
+  // node shape, one URL rule. The template spelling itself stays owned by
+  // `serializeShadowTemplate`; the links are a prefix of the same content
+  // channel (D-claim-prefix, M09-2e).
+  const template = serializeShadowTemplate(
+    root,
+    `${serializeStyleLinks(styleLinks)}${content}`,
+    input.dsd ?? {},
+  );
   return `<${tag}${attributes}>${template}${lightChildren}</${tag}>`;
 }

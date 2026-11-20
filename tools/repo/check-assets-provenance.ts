@@ -17,6 +17,7 @@
 import { readdirSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import process from 'node:process';
+import { emitSummary } from './checker-io.ts';
 
 export const ASSETS_DIR = 'www/public/assets';
 export const MANIFEST_PATH = `${ASSETS_DIR}/manifest.json`;
@@ -341,5 +342,5 @@ if (import.meta.main) {
     for (const failure of failures) console.error(`- ${failure}`);
     process.exit(1);
   }
-  console.log('Asset provenance check passed.');
+  emitSummary('Asset provenance check passed.');
 }

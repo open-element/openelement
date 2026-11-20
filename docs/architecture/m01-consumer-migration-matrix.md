@@ -209,3 +209,17 @@ a silent failure rather than a type error:
 It does not authorise deletion. Every row's retirement condition must be met and
 evidenced before the code is removed; approval of the policy is not approval of a
 specific deletion.
+
+## Later reading (2026-11-20)
+
+The M11-2 cells above (the C07 row and the "M11-2 request-time generated page
+rendering is not done" sentences) record the state at M01-A2/M10 authoring time
+and are superseded by the 2026-11-20 owner-approved remediation: execution-plan
+§18.1 records M11-2 as the **bounded delivered lane** (build-time
+generated-element page classification; only streaming/deferred and genuinely
+unsupported shapes stay refused with the unchanged identity) and the P1 verdict
+as re-measured **MET at the final head** (see the 2026-11-20 re-record in the
+[p1 applicability record](./p1-applicability-record.md) and the head
+[progress ledger](./alpha16-18-progress.md)). No retirement condition in this
+matrix is relaxed: C08–C11 remain open and every row still needs its own
+evidence before deletion.

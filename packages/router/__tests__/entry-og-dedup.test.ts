@@ -177,7 +177,6 @@ async function loadRequestTimeHandler(): Promise<
         allowHeadExtrasScripts: desc.document.allowHeadExtrasScripts,
       },
       desc.isSSG,
-      desc.renderer,
     );
   }
   const harness = `

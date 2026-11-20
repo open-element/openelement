@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): every mount shape this codegen emits — intrinsics, fragments, conditions, lists, attribute/property channels, component children projection — is emitted by one walker against the same M04 recipe/insertion primitives, so the shared emission invariants cannot fork; the boundary is compiler-private: it consumes the merged M03 FunctionModelModule + ExpressionRegistry and emits one real JS module, re-deriving no resolution, lowering or erasure.
 /**
  * M06b2a — generated leaf/component mount with reusable JSX values and
  * component children projection (compiler-private).
@@ -265,8 +266,9 @@
  */
 
 import ts from 'typescript';
+import { BOOLEAN_ATTRIBUTES } from '../../semantic-core/attribute-classification.ts';
 import { unsafeStreamFrameAttribute } from '@openelement/protocol/stream-frame-policy';
-import { VOID_TAGS } from '@openelement/protocol/part-program';
+import { STATIC_STYLES_MARKER, VOID_TAGS } from '@openelement/protocol/part-program';
 import type {
   FunctionExpressionRef,
   FunctionModelAttribute,
@@ -274,6 +276,7 @@ import type {
   FunctionModelComponent,
   FunctionModelComponentRef,
   FunctionModelCondition,
+  FunctionModelContextProvider,
   FunctionModelInsertionSite,
   FunctionModelList,
   FunctionModelModule,
@@ -281,6 +284,7 @@ import type {
   FunctionModelRecipe,
 } from '../../semantic-core/function-frontend.ts';
 import type { LoweredExpressionRecord } from '../../semantic-core/expression-registry.ts';
+import type { FunctionModelImport } from '../../semantic-core/function-frontend.ts';
 import type { BindingId } from '../../semantic-core/scope-resolution.ts';
 import type { IrDiagnostic, IrSpan } from '../types.ts';
 import {
@@ -291,7 +295,15 @@ import {
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 
 /** Compiler-private runtime entry the emitted module imports from. */
-export const GENERATED_LEAF_RUNTIME_SPECIFIER = '@openelement/element/internal/compiled/runtime';
+// M11-3: the generated leaf imports its primitives from the CLOSED leaf entry,
+// never from the `internal/compiled/runtime` facade. The facade re-exports the
+// generic executor's three endpoints and their kernels, so importing it put the
+// whole executor in every generated island chunk (measured at M10-P1: one
+// 64-module `element-runtime-<hash>.js` reachable from all eight www islands).
+// The leaf entry re-exports the same symbols from their ORIGIN modules and
+// nothing else; see its module doc for why each import site matters.
+export const GENERATED_LEAF_RUNTIME_SPECIFIER =
+  '@openelement/element/internal/compiled/leaf-runtime';
 
 const RUNTIME_IMPORTS = [
   'assertSafeUrlAttribute',
@@ -320,6 +332,10 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
     predicate: (body) => body.includes('assertElementInHtmlNamespace('),
   },
   {
+    symbol: 'assertElementInNamespace',
+    predicate: (body) => body.includes('assertElementInNamespace('),
+  },
+  {
     symbol: 'assertStaticAttributeSeed',
     predicate: (body) => body.includes('assertStaticAttributeSeed('),
   },
@@ -336,6 +352,10 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
   {
     symbol: 'textSlotMarker',
     predicate: (body) => body.includes('textSlotMarker('),
+  },
+  {
+    symbol: 'slotAnchorMarker',
+    predicate: (body) => body.includes('slotAnchorMarker('),
   },
   {
     symbol: 'assertWhenAnchor',
@@ -385,6 +405,12 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
     symbol: 'runUntracked',
     predicate: (body) => body.includes('runUntracked('),
   },
+  // `16b-EB`: the update-phase isolation contract. Registered by the same body
+  // predicate, so a module without an `onError` handler never imports it.
+  {
+    symbol: 'guardUpdate',
+    predicate: (body) => body.includes('guardUpdate('),
+  },
   {
     symbol: 'claimStaticSiblingRange',
     predicate: (_body, _usesClaimRecipe, usesDirectory) => usesDirectory,
@@ -416,9 +442,20 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
     symbol: 'endInstancePass',
     predicate: (body) => body.includes('endInstancePass('),
   },
+  // `16b-CTX` SERVER side: the per-render owner scope a producer creates when it
+  // is the module root of the render. Registered by the body predicate like the
+  // other optional symbols, so a module that never renders a context consumer
+  // does not import it (and keeps its graph and bytes).
+  {
+    symbol: 'createRenderContextScope',
+    predicate: (body) => body.includes('createRenderContextScope('),
+  },
 ];
 
 const INTERNAL_PREFIX = '__oe_';
+/** The namespace URI an `<svg>` subtree is created and claimed in. */
+const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
 /**
  * T3 / 16b-LC-1: the module-local ROOT setup factory name.
  *
@@ -446,10 +483,225 @@ const GENERATED_ROOT_INSTANCE_NAME = `${INTERNAL_PREFIX}rootInstance`;
  * name or a `nextName` identifier.
  */
 const GENERATED_ROOT_CONNECT_RECORD = `${INTERNAL_PREFIX}connect`;
+/**
+ * `16b-LC` option 1a env form: the compiler-owned retained-record key carrying
+ * the callbacks that declare the one `env` parameter. It is a SEPARATE record
+ * on purpose: a module whose hooks are all zero-argument keeps the exact
+ * pre-env bytes, and the replay for each form is emitted only when that form is
+ * present. Like `__oe_connect`, the key is read by generated code only.
+ */
+const GENERATED_ROOT_CONNECT_ENV_RECORD = `${INTERNAL_PREFIX}connectEnv`;
+/**
+ * The compiler-private host-record property carrying the element a connection
+ * belongs to: the generated element itself for the root, and the nearest
+ * ancestor generated element for a depth-1 retained hostless child. The shell
+ * attaches it as a runtime property (`hostFor`/`instanceHostFor`) — the
+ * exported host types are not changed and no exported symbol is added.
+ */
+const HOST_ELEMENT_PROPERTY = `${INTERNAL_PREFIX}hostElement`;
 /** Replay locals the root mount/claim prologue uses (all compiler-owned). */
 const LIFECYCLE_HOOKS_VAR = `${INTERNAL_PREFIX}lifecycleHooks`;
 const LIFECYCLE_HOOK_VAR = `${INTERNAL_PREFIX}lifecycleHook`;
 const LIFECYCLE_CLEANUP_VAR = `${INTERNAL_PREFIX}lifecycleCleanup`;
+/** Env-form replay locals (separate from the zero-argument ones). */
+const LIFECYCLE_ENV_HOOKS_VAR = `${INTERNAL_PREFIX}lifecycleEnvHooks`;
+const LIFECYCLE_ENV_HOOK_VAR = `${INTERNAL_PREFIX}lifecycleEnvHook`;
+const LIFECYCLE_ENV_CLEANUP_VAR = `${INTERNAL_PREFIX}lifecycleEnvCleanup`;
+/** The instance-lifetime signal an `onDispose(env)` registration captures. */
+const TEARDOWN_SIGNAL_VAR = `${INTERNAL_PREFIX}teardownSignal`;
+/**
+ * The compiler-private host-record property that registers an element-lifetime
+ * `onPropertyChange` callback. The shell owns the actual listener list and the
+ * env it builds; generated code only registers through this channel, exactly
+ * like `__oe_hostElement` is a runtime property and not an exported symbol.
+ */
+const PROPERTY_CHANGE_PROPERTY = `${INTERNAL_PREFIX}onPropertyChange`;
+/** The host-record property exposing the element's `CustomStateSet` to the env. */
+const STATES_PROPERTY = `${INTERNAL_PREFIX}states`;
+/**
+ * `16b-EB`: the compiler-private host-record property that registers the
+ * element-lifetime `onError` handler. The shell owns the capture points and the
+ * handler list; generated code only registers through this channel, exactly like
+ * `__oe_onPropertyChange`. Registration is FORWARDED through host literals only
+ * for modules that use the intrinsic, so every other module keeps its bytes.
+ */
+const ERROR_HANDLER_PROPERTY = `${INTERNAL_PREFIX}onError`;
+/**
+ * `16b-EB`: the compiler-private host-record property that carries the
+ * update-phase error sink into `guardUpdate`. A GETTER on the shell side, so
+ * registration order cannot matter; generated code only reads it where a refresh
+ * subscription is opened.
+ */
+const ERROR_REPORT_PROPERTY = `${INTERNAL_PREFIX}reportError`;
+
+/**
+ * `16b-CTX`: the compiler-private host-record property that exposes the
+ * generated element's ONE context scope. The shell owns the service; generated
+ * code only calls `provider(token, read)`, `use(token)` and `owner()` through
+ * this channel, exactly like `__oe_onPropertyChange` and `__oe_onError` are
+ * runtime properties rather than exported symbols.
+ */
+const CONTEXT_SCOPE_PROPERTY = `${INTERNAL_PREFIX}context`;
+
+/**
+ * `16b-CTX`: the compiler-owned retained record field carrying THIS component's
+ * owner scope channel.
+ *
+ * A generated element ROOT provides and consumes on the element anchor itself
+ * (so every depth-1 child sees its providers). A hostless component is an owner
+ * in its own right: its scope is `anchor.owner()`, a CHILD of the anchor, so its
+ * provider is invisible to its siblings while its own consumers still resolve
+ * the anchor's ancestors. Storing that channel in the retained record is what
+ * makes the component's whole subtree — and its own consumers — agree on one
+ * scope across a reconnect.
+ */
+const GENERATED_CONTEXT_SCOPE_RECORD = `${INTERNAL_PREFIX}contextScope`;
+
+/**
+ * `16b-CTX` — the SSR producer's optional trailing parameter carrying the
+ * ENCLOSING render scope channel.
+ *
+ * It is a PARAMETER, never a module global: two concurrent server renders each
+ * own their scope, and a producer that reads one request's value out of module
+ * state would share it with the other. A context-using component's producer does
+ *
+ *   `const __oe_contextScope = __oe_ssrContext === undefined
+ *      ? createRenderContextScope()
+ *      : __oe_ssrContext.owner();`
+ *
+ * which is the SERVER spelling of the client's two owner shapes: the module root
+ * creates the render's anchor (the host wrapper and the light serializer pass no
+ * scope), and a depth-1 child joins it as `anchor.owner()` — the identical rule
+ * the client's retained setup factory uses.
+ */
+const SSR_CONTEXT_PARAM = `${INTERNAL_PREFIX}ssrContext`;
+
+/**
+ * Whether any component in the module uses a `16b-CTX` intrinsic. The channel is
+ * forwarded through the host-record literals only for such a module, so every
+ * other module keeps its exact bytes.
+ */
+function moduleUsesContext(state: EmitState): boolean {
+  for (const component of state.componentByName.values()) {
+    if (component.contextProviders.length > 0) return true;
+    if (component.resources.some((resource) => resource.kind === 'context')) return true;
+  }
+  return false;
+}
+
+/**
+ * Whether any component in the module registers an `onPropertyChange`
+ * callback. The registration channel is forwarded through the host-record
+ * literals only for such a module, so every other module keeps its exact bytes.
+ */
+function moduleUsesPropertyChange(state: EmitState): boolean {
+  for (const component of state.componentByName.values()) {
+    if (component.lifecycle.some((hook) => hook.kind === 'property-change')) return true;
+  }
+  return false;
+}
+
+/**
+ * Whether any component in the module declares an env-form lifecycle callback.
+ * The host-element property is forwarded through the host-record literals only
+ * for such a module, so a module that never opts into the env form keeps its
+ * exact pre-env bytes (including every hook-free SHA pin).
+ */
+function moduleUsesLifecycleEnv(state: EmitState): boolean {
+  for (const component of state.componentByName.values()) {
+    if (
+      component.lifecycle.some(
+        (hook) => hook.kind !== 'property-change' && hook.kind !== 'error' && hook.receivesEnv,
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * The host-element field a RETAINED reference-site host literal forwards to a
+ * depth-1 child that declares an env-form lifecycle callback. Empty otherwise,
+ * so every other module and reference site keeps its exact bytes.
+ */
+function childHostElementField(state: EmitState, node: FunctionModelComponentRef): string {
+  if (!moduleUsesLifecycleEnv(state)) return '';
+  const child = state.componentByName.get(node.name);
+  if (child === undefined || !child.lifecycle.some((hook) => hook.receivesEnv)) return '';
+  return `, ${HOST_ELEMENT_PROPERTY}: ${state.hostVar}.${HOST_ELEMENT_PROPERTY}, ${STATES_PROPERTY}: ${state.hostVar}.${STATES_PROPERTY}`;
+}
+
+/** The change channel a retained child setup host forwards (empty otherwise). */
+function childPropertyChangeField(state: EmitState, node: FunctionModelComponentRef): string {
+  if (!moduleUsesPropertyChange(state)) return '';
+  const child = state.componentByName.get(node.name);
+  if (child === undefined || !child.lifecycle.some((hook) => hook.kind === 'property-change')) {
+    return '';
+  }
+  return `, ${PROPERTY_CHANGE_PROPERTY}: ${state.hostVar}.${PROPERTY_CHANGE_PROPERTY}`;
+}
+
+/**
+ * The `16b-CTX` channel a RETAINED reference-site host literal forwards to a
+ * depth-1 child that uses a context intrinsic. Empty otherwise, so every other
+ * module and reference site keeps its exact bytes. Both the child's setup host
+ * (provider registration and consumer construction) and its mount/claim host
+ * (the alias the body reads) need it, which is why the same field rides both.
+ */
+function childContextField(state: EmitState, node: FunctionModelComponentRef): string {
+  if (!moduleUsesContext(state)) return '';
+  const child = state.componentByName.get(node.name);
+  if (child === undefined) return '';
+  const uses =
+    child.contextProviders.length > 0 ||
+    child.resources.some((resource) => resource.kind === 'context');
+  if (!uses) return '';
+  return `, ${CONTEXT_SCOPE_PROPERTY}: ${state.hostVar}.${CONTEXT_SCOPE_PROPERTY}`;
+}
+
+/**
+ * Whether any component in the module registers an `onError` handler
+ * (`16b-EB`). The registration AND the update-phase sink ride the host-record
+ * literals only for such a module, so every other module keeps its exact bytes
+ * (including every `guardUpdate` call, which stays a two-name call).
+ */
+function moduleUsesErrorBoundary(state: EmitState): boolean {
+  for (const component of state.componentByName.values()) {
+    if (component.lifecycle.some((hook) => hook.kind === 'error')) return true;
+  }
+  return false;
+}
+
+/**
+ * The `16b-EB` channels a RETAINED reference-site host literal forwards to a
+ * depth-1 child that declares `onError`: the registration channel (so the
+ * child's `<Name>__setup` can register on the element's one handler list) and
+ * the update-phase sink (so the child's own refresh subscriptions are guarded).
+ * Empty otherwise, so every other module and reference site keeps its bytes.
+ */
+function childErrorBoundaryField(state: EmitState, node: FunctionModelComponentRef): string {
+  if (!moduleUsesErrorBoundary(state)) return '';
+  const child = state.componentByName.get(node.name);
+  if (child === undefined || !child.lifecycle.some((hook) => hook.kind === 'error')) return '';
+  return `, ${ERROR_HANDLER_PROPERTY}: ${state.hostVar}.${ERROR_HANDLER_PROPERTY}, ${ERROR_REPORT_PROPERTY}: ${state.hostVar}.${ERROR_REPORT_PROPERTY}`;
+}
+
+/**
+ * The `16b-EB` update-phase sink alone, for the `__oe_childHost` literal a
+ * retained child's MOUNT/CLAIM body reads. Registration belongs to the setup
+ * host, but the refresh subscriptions are opened by the mount/claim body, so it
+ * needs the sink there too. Without this the child's refresh would call
+ * `guardUpdate(fn, undefined)` and propagate — the enclosing element's handler
+ * would never see the throw. Empty otherwise, keeping every other site's bytes.
+ */
+function childErrorReportField(state: EmitState, node: FunctionModelComponentRef): string {
+  if (!moduleUsesErrorBoundary(state)) return '';
+  const child = state.componentByName.get(node.name);
+  if (child === undefined || !child.lifecycle.some((hook) => hook.kind === 'error')) return '';
+  return `, ${ERROR_REPORT_PROPERTY}: ${state.hostVar}.${ERROR_REPORT_PROPERTY}`;
+}
+
 /**
  * 16b-LC retained-child: the module-local setup factory a RETAINED hostless child exposes to
  * its retaining reference site (`<Name>__setup`). Synthesized from the
@@ -699,6 +951,25 @@ export interface GeneratedLeafModule {
   readonly diagnostics: readonly IrDiagnostic[];
 }
 
+/**
+ * The module's static import table as the generated lane may keep it.
+ *
+ * Registered per component in a WeakMap so the many `EmitState` construction
+ * sites keep their shape: a read that resolves to a static import stays a
+ * DIRECT module reference (the import is re-emitted verbatim) instead of
+ * becoming a host binding the shell would have to supply.
+ */
+interface ModuleImportContext {
+  readonly byLocal: ReadonlyMap<string, FunctionModelImport>;
+  readonly used: Map<string, FunctionModelImport>;
+}
+
+const importContexts = new WeakMap<FunctionModelComponent, ModuleImportContext>();
+
+function importContextOf(component: FunctionModelComponent): ModuleImportContext | undefined {
+  return importContexts.get(component);
+}
+
 interface EmitState {
   readonly component: FunctionModelComponent;
   readonly lines: string[];
@@ -795,6 +1066,8 @@ interface EmitState {
    * Static-only claims leave this false and keep the M07a local cursor.
    */
   claimCursorShared: boolean;
+  /** M09-2e / #1803: skip the canonical marked stylesheet-link prefix before the root claim walk. */
+  claimStyleLinkPrefix: boolean;
   /** Runtime array that collects adopted root nodes, or null for the M07a static return. */
   claimAdoptedVar: string | null;
   /**
@@ -1198,9 +1471,15 @@ function emitBranchRelease(state: EmitState, ownerVar: string): void {
  * Attempt the branch owner's `dispose(true)` and the structural release, drop
  * both cleanup errors and rethrow the ORIGINAL construction error (B2).
  */
-function emitBranchRollback(state: EmitState, branchOwnerVar: string): void {
+function emitBranchRollback(state: EmitState, branchOwnerVar: string, activeVar?: string): void {
   push(state, `} catch (error) {`);
   state.indent += 1;
+  // The branch state is unknown after a failed rebuild: reset the active marker
+  // BEFORE rethrowing so a later signal (even one carrying the same test value)
+  // retries instead of being suppressed by the `next === active` guard. This
+  // keeps retry-on-next-write semantics without treating the signal VALUE as an
+  // explicit force.
+  if (activeVar !== undefined) push(state, `${activeVar} = -1;`);
   push(state, `try { ${branchOwnerVar}.dispose(true); } catch { /* construction error wins */ }`);
   push(
     state,
@@ -1274,6 +1553,10 @@ function emitCondition(
   const select = alternateFn === null ? `? 1 : 0` : `? 1 : 2`;
   pushParts(state, [`const ${INTERNAL_PREFIX}next = (`, { record }, `) ${select};`]);
   push(state, `if (!force && ${INTERNAL_PREFIX}next === ${activeVar}) return;`);
+  // The old branch is about to be released: mark the branch state unknown FIRST
+  // so a throwing release leaves a retryable condition instead of an `active`
+  // marker that suppresses the next refresh.
+  push(state, `${activeVar} = -1;`);
   if (emitsRetentionReleaseText(state)) {
     emitBranchRelease(state, ownerVar);
   } else {
@@ -1292,9 +1575,12 @@ function emitCondition(
   );
   state.indent -= 1;
   if (emitsRetentionReleaseText(state)) {
-    emitBranchRollback(state, `${INTERNAL_PREFIX}branchOwner`);
+    emitBranchRollback(state, `${INTERNAL_PREFIX}branchOwner`, activeVar);
   } else {
-    push(state, `} catch (error) { ${INTERNAL_PREFIX}branchOwner.dispose(true); throw error; }`);
+    push(
+      state,
+      `} catch (error) { ${activeVar} = -1; ${INTERNAL_PREFIX}branchOwner.dispose(true); throw error; }`,
+    );
   }
   push(
     state,
@@ -1335,7 +1621,9 @@ function emitCondition(
   push(state, `const ${endVar} = emitComment(MARKERS.whenEnd);`, node.span);
   sink.push({ kind: 'spread', name: initialNodesVar });
   sink.push({ kind: 'node', name: endVar });
-  emitDependencySubscriptions(state, dependencies, refreshVar, node.span);
+  emitDependencySubscriptions(state, dependencies, refreshVar, node.span, {
+    ignoreSignalValue: true,
+  });
   registerRefresh(state, refreshVar);
 }
 
@@ -1687,7 +1975,36 @@ function declareReads(state: EmitState, record: LoweredExpressionRecord): boolea
       );
       return false;
     }
+    // A read of a STATIC MODULE IMPORT is a direct reference: the generated
+    // module re-emits the import at the same graph position, so the value needs
+    // no host binding and no shell channel. The resource checks below stay
+    // first: a component-local declaration shadows the import.
+    const imported = importContextOf(state.component)?.byLocal.get(read.name);
+    if (imported !== undefined) {
+      importContextOf(state.component)!.used.set(
+        `${imported.specifier}#${imported.imported}#${imported.local}`,
+        imported,
+      );
+      continue;
+    }
     const resource = state.component.resources.find((candidate) => candidate.name === read.name);
+    if (resource !== undefined && resource.kind === 'ref') {
+      // `16b-REF`: the handle is a component-local compiler-owned value, so a
+      // read of it is a closure capture (never a host binding). Reading it in a
+      // TRACKED slot is a different question: `current` is not a reactive
+      // source, so the frontend admits the handle only in a `ref` attribute
+      // expression and the read never reaches a refresh subscription.
+      state.localResources.add(read.name);
+      continue;
+    }
+    if (resource !== undefined && resource.kind === 'context') {
+      // `16b-CTX`: the consumer is a component-local compiler-owned Signal. A
+      // read of the DECLARATION (the signal object) is a closure capture; a
+      // tracked slot reads `.value` through the ordinary signal protocol, and
+      // `dependencyNames` turns that into the lane's standard subscription.
+      state.localResources.add(read.name);
+      continue;
+    }
     if (resource !== undefined && resource.kind !== 'local') {
       state.hostBindings.add(read.name);
       state.requiredBindings.add(read.name);
@@ -1716,6 +2033,14 @@ interface Dependency {
   readonly name: string;
   /** Props reads refresh through the host `propsChanged` signal (see contract). */
   readonly fromProps: boolean;
+  /**
+   * `16b-CTX`: a read of a component-local compiler-owned Signal (a `useContext`
+   * consumer). It needs a real write subscription like any other dependency but
+   * NO host-binding declaration — the retained setup factory already emitted the
+   * `const`. Without this the consumer would be misreported as an unbound host
+   * binding and the module would be refused.
+   */
+  readonly local: boolean;
 }
 
 function dependencyNames(
@@ -1746,7 +2071,16 @@ function dependencyNames(
       continue;
     }
     const fromProps = read.name === 'props' || read.binding.name === 'props';
-    if (fromProps) {
+    // `16b-CTX`: a consumer is a component-local setup value, so it is neither a
+    // props read nor a host binding. It still refreshes through the ordinary
+    // `bindSignalWrites` subscription below — the signal protocol is the same
+    // one every other dependency uses.
+    const local = state.component.resources.some(
+      (resource) => resource.kind === 'context' && resource.name === read.name,
+    );
+    if (local) {
+      // Already a declared local (the setup factory emitted it); nothing to add.
+    } else if (fromProps) {
       // Per-read props refresh: the leaf contract supplies a `propsChanged`
       // signal (the M04 tracked-props record's version channel analogue). The
       // per-read getter semantics are M06's contract; the leaf slice only
@@ -1757,7 +2091,7 @@ function dependencyNames(
       state.requiredBindings.add(read.name);
     }
     if (!names.some((entry) => entry.name === read.name))
-      names.push({ name: read.name, fromProps });
+      names.push({ name: read.name, fromProps, local });
   }
   return names;
 }
@@ -1774,19 +2108,49 @@ function emitDependencySubscriptions(
   dependencies: readonly Dependency[],
   refreshVar: string,
   anchor: SpanLike,
+  options?: {
+    /**
+     * Condition refreshes interpret their first argument as `force`. The signal
+     * subscription callback receives the signal VALUE (`bindSignalWrites` calls
+     * `fn(value)`), and the generated element root's `propsChanged` channel is a
+     * monotonically increasing number: passing it through would make every
+     * props write look like an explicit force and rebuild the branch even when
+     * the condition test is unchanged. Subscribe through `() => refresh()` for
+     * condition collectors; entry/list collectors keep their explicit
+     * `refresh(true)` calls.
+     */
+    readonly ignoreSignalValue?: boolean;
+  },
 ): void {
+  const handler = options?.ignoreSignalValue === true ? `() => ${refreshVar}()` : refreshVar;
+  // `16b-EB`: a module that registers an `onError` handler submits its refresh
+  // closures through the executor's existing `guardUpdate` (the ONE
+  // update-phase isolation contract: a throw is reported to the sink and never
+  // rethrown, so the subscription stays live for the next write). The sink is
+  // the shell's compiler-private reporter, read off the host record HERE, at
+  // subscribe time, so a refresh registered before the handler still reaches it
+  // (the reporter re-reads the live list at dispatch time).
+  //
+  // A module WITHOUT the intrinsic keeps the exact two-name call: `bindSignalWrites`
+  // is handed the bare refresh, which is byte-identical to the pre-`16b-EB`
+  // output and allocates no wrapper. The predicate reads the SAME module-wide
+  // fact that forwards the sink through the host literals, so a new emission
+  // site cannot forget the guard.
+  const guarded = moduleUsesErrorBoundary(state)
+    ? `guardUpdate(${handler}, ${state.hostVar}.${ERROR_REPORT_PROPERTY})`
+    : handler;
   for (const dependency of dependencies) {
     if (dependency.fromProps) {
       push(
         state,
-        `for (const ${MOUNT_DEP_LOOP} of ${state.hostVar}.propDeps) bindSignalWrites(${state.scopeVar}, ${MOUNT_DEP_LOOP}, ${JSON.stringify(dependency.name)}, ${refreshVar});`,
+        `for (const ${MOUNT_DEP_LOOP} of ${state.hostVar}.propDeps) bindSignalWrites(${state.scopeVar}, ${MOUNT_DEP_LOOP}, ${JSON.stringify(dependency.name)}, ${guarded});`,
         anchor,
       );
       continue;
     }
     push(
       state,
-      `bindSignalWrites(${state.scopeVar}, ${dependency.name}, ${JSON.stringify(dependency.name)}, ${refreshVar});`,
+      `bindSignalWrites(${state.scopeVar}, ${dependency.name}, ${JSON.stringify(dependency.name)}, ${guarded});`,
       anchor,
     );
   }
@@ -1914,7 +2278,19 @@ function emitClientOnlyInstall(
       return;
     }
     const listenerVar = nextName(state, 'eventListener');
-    push(state, `const ${listenerVar} = (event) => ${handlerVar}(event);`, span);
+    // `16b-EB`: a module that registers an `onError` handler routes a throwing
+    // listener through the executor's `guardUpdate` with the shell's sink, so an
+    // author handler failure is reported instead of escaping as uncaught
+    // platform dispatch. A module WITHOUT the intrinsic keeps the unwrapped
+    // listener (the pre-existing contract: platform dispatch is not a
+    // suppression point).
+    push(
+      state,
+      moduleUsesErrorBoundary(state)
+        ? `const ${listenerVar} = guardUpdate((event) => ${handlerVar}(event), ${state.hostVar}.${ERROR_REPORT_PROPERTY});`
+        : `const ${listenerVar} = (event) => ${handlerVar}(event);`,
+      span,
+    );
     push(
       state,
       `${elementVar}.addEventListener(${quoteGeneratedJavaScriptValue(eventName)}, ${listenerVar});`,
@@ -2349,7 +2725,7 @@ function emitComponentRef(
     : `() => ({})`;
   push(
     state,
-    `const ${setupHostVar} = { bindings: ${state.hostVar}.bindings, propDeps: ${depList} };`,
+    `const ${setupHostVar} = { bindings: ${state.hostVar}.bindings, propDeps: ${depList}${childHostElementField(state, node)}${childPropertyChangeField(state, node)}${childErrorBoundaryField(state, node)}${childContextField(state, node)} };`,
     span,
   );
   push(
@@ -2360,7 +2736,7 @@ function emitComponentRef(
   push(state, `const ${scopeVar} = ${state.scopeVar}.child();`, span);
   push(
     state,
-    `const ${hostVar} = { bindings: ${setupHostVar}.bindings, propDeps: ${setupHostVar}.propDeps, instance: ${instanceVar}.scope, setup: ${instanceVar}.record };`,
+    `const ${hostVar} = { bindings: ${setupHostVar}.bindings, propDeps: ${setupHostVar}.propDeps, instance: ${instanceVar}.scope, setup: ${instanceVar}.record${childHostElementField(state, node)}${childErrorReportField(state, node)}${childContextField(state, node)} };`,
     span,
   );
   push(state, `let ${nodesVar};`);
@@ -2581,23 +2957,79 @@ function collectModuleRefSites(module: FunctionModelModule, recipes: 'emitted' |
  * record, so such a component stays legacy and its references emit today's
  * inline text.
  */
+function setupReadAllowed(
+  read: LoweredExpressionRecord['reads'][number],
+  setupLocals: ReadonlySet<string>,
+  imports?: ModuleImportContext,
+): boolean {
+  if (read.name === 'props' || read.binding.name === 'props') return true;
+  if (setupLocals.has(read.name) || setupLocals.has(read.binding.name)) return true;
+  if (
+    read.value === 'plain' &&
+    read.binding.name === read.name &&
+    read.binding.scope.path === 'global'
+  ) {
+    return true;
+  }
+  // `16b-CTX`: a context TOKEN is normally a static module import (`createContext`
+  // in a tokens module). `declareReads` already treats such a read as a direct
+  // module reference with no host binding, so the gateway must agree — otherwise
+  // a token-bearing consumer is demoted out of the retained-child plan and the
+  // context placement gate refuses a shape the lane can actually carry.
+  if (imports !== undefined && imports.byLocal.has(read.name)) return true;
+  return false;
+}
+
 function setupGatewayPasses(
   component: FunctionModelComponent,
   records: ReadonlyMap<string, LoweredExpressionRecord>,
+  imports: ModuleImportContext | undefined,
 ): boolean {
+  // `signal`/`computed` are the only host-binding resource kinds. A `local`
+  // snapshot and a `16b-REF` handle are BOTH retained setup values: the handle
+  // is built by the factory (its notification callback, when present, reads the
+  // same captured scope), so both belong in `setupLocals`.
   const hostBindings = new Set(
-    component.resources.filter((resource) => resource.kind !== 'local').map((r) => r.name),
+    component.resources
+      .filter((resource) => resource.kind === 'signal' || resource.kind === 'computed')
+      .map((r) => r.name),
   );
   const setupLocals = new Set(
     component.resources
       .filter(
         (resource) =>
-          resource.kind === 'local' && resource.recipeId === null && resource.expression !== null,
+          (resource.kind === 'local' || resource.kind === 'ref' || resource.kind === 'context') &&
+          resource.recipeId === null &&
+          resource.expression !== null,
       )
       .map((resource) => resource.name),
   );
+  // `16b-LC` nested/hostless depth-1: a lifecycle callback is placement work,
+  // not a resource, but it reads the SAME retained setup scope. Any read the
+  // setup gateway cannot evaluate (host binding, recipe reference) keeps the
+  // component out of the retained-child plan (the lane's existing
+  // `UNBOUND_BINDING` gate then refuses the module).
+  for (const hook of component.lifecycle) {
+    const record = records.get(hook.callback.id);
+    if (record === undefined) return false;
+    if (record.lowered.includes(RECIPE_REFERENCE_CALLEE)) return false;
+    if (!record.reads.every((read) => setupReadAllowed(read, setupLocals, imports))) return false;
+  }
+  // `16b-CTX`: a provider THUNK is placement work too — it is re-read inside the
+  // retained factory on every connect, so it must be evaluable there.
+  for (const provider of component.contextProviders) {
+    for (const ref of [provider.token, provider.value]) {
+      const record = records.get(ref.id);
+      if (record === undefined) return false;
+      if (record.lowered.includes(RECIPE_REFERENCE_CALLEE)) return false;
+      if (!record.reads.every((read) => setupReadAllowed(read, setupLocals, imports))) {
+        return false;
+      }
+    }
+  }
   for (const resource of component.resources) {
-    if (resource.kind !== 'local' || resource.recipeId !== null || resource.expression === null) {
+    if (resource.recipeId !== null || resource.expression === null) continue;
+    if (resource.kind !== 'local' && resource.kind !== 'ref' && resource.kind !== 'context') {
       continue;
     }
     const record = records.get(resource.expression.id);
@@ -2613,6 +3045,9 @@ function setupGatewayPasses(
       ) {
         continue;
       }
+      // `16b-CTX`: a static import is a direct module reference (never a host
+      // binding), so a token imported from a tokens module is evaluable here.
+      if (imports !== undefined && imports.byLocal.has(read.name)) continue;
       if (hostBindings.has(read.name) || hostBindings.has(read.binding.name)) return false;
       // Every remaining read becomes a host binding in `declareReads`; the
       // retained setup scope has no bindings channel.
@@ -2651,7 +3086,9 @@ function planRetention(
   const candidates = new Set<string>();
   for (const component of module.components) {
     if (component.name === rootName) continue;
-    if (setupGatewayPasses(component, records)) candidates.add(component.name);
+    if (setupGatewayPasses(component, records, importContextOf(component))) {
+      candidates.add(component.name);
+    }
   }
   // Monotone fixpoint: demotion only removes candidates; the iteration is kept
   // explicit so a future site class (one that depends on the target's body
@@ -2680,10 +3117,17 @@ function planRetention(
   const setupBodies = new Set<string>();
   for (const name of candidates) {
     const component = componentByName.get(name)!;
+    // A hook-bearing retained child needs its `<Name>__setup` factory even when
+    // it has no setup local: the factory is the only carrier of its retained
+    // connect callbacks + disposal registrations (same one factory as a setup
+    // snapshot; no second engine).
     if (
+      component.lifecycle.length > 0 ||
+      component.contextProviders.length > 0 ||
       component.resources.some(
         (resource) =>
-          resource.kind === 'local' && resource.recipeId === null && resource.expression !== null,
+          (resource.kind === 'local' || resource.kind === 'ref' || resource.kind === 'context') &&
+          resource.recipeId === null,
       )
     ) {
       setupBodies.add(name);
@@ -3002,6 +3446,109 @@ function textOrdinal(state: EmitState, node: FunctionModelNode): number | null {
     return null;
   }
   return ordinal;
+}
+
+/**
+ * Pre-order ordinals for every `<slot>` an SSR producer emits from `nodes`,
+ * descending into condition branches and list templates.
+ *
+ * This is the SSR view, not the mount/claim chunk view: the SSR producers INLINE
+ * both node kinds into the SAME function, so their slots share one ordinal
+ * sequence. A reusable-JSX body is emitted as its own render function and is
+ * therefore not part of this map (it gets none — see `emitSsrRecipeHelpers`).
+ */
+type SlotAnchors = ReadonlyMap<FunctionModelNode, number>;
+
+function ssrSlotAnchorOrdinals(nodes: readonly FunctionModelNode[]): SlotAnchors {
+  const ordinals = new Map<FunctionModelNode, number>();
+  let next = 0;
+  const visit = (list: readonly FunctionModelNode[]): void => {
+    for (const node of list) {
+      if (node.kind === 'element') {
+        if (node.tag === 'slot') {
+          ordinals.set(node, next);
+          next += 1;
+        }
+        visit(node.children);
+        continue;
+      }
+      if (node.kind === 'fragment') visit(node.children);
+      else if (node.kind === 'condition') {
+        visit(node.consequent);
+        if (node.alternate !== null) visit(node.alternate);
+      } else if (node.kind === 'list') visit(node.template);
+    }
+  };
+  visit(nodes);
+  return ordinals;
+}
+
+/**
+ * Walk the whole component once, before emission, to answer the two questions
+ * the per-chunk maps cannot answer:
+ *
+ * - does this light root contain a `<slot>` at all? (none → emit nothing)
+ * - does every `<slot>` declare a STATIC `name`? The anchor carries the name in
+ *   its marker text so the serializer needs no second lookup, and a `name={…}`
+ *   binding has no compile-time value to carry — the module is refused rather
+ *   than baking a guess that would point a projection at a slot the producer
+ *   never named.
+ *
+ * A shadow root's children are distributed by the platform (`<slot>` in the
+ * shadow tree plus light DOM after the template), and a hostless leaf module is
+ * not a host at all, so both answers are "emit nothing" and keep their
+ * pre-slice bytes.
+ */
+function lightSlotAnchorsEnabled(state: EmitState, lightRoot: boolean): boolean {
+  if (!lightRoot) return false;
+  let found = false;
+  let refused = false;
+  const visit = (list: readonly FunctionModelNode[]): void => {
+    for (const node of list) {
+      if (node.kind === 'element') {
+        if (node.tag === 'slot') {
+          found = true;
+          if (slotNameOf(node) === null) {
+            refused = true;
+            diag(
+              state,
+              'OEIR_LEAF_UNSUPPORTED_SLOT_NAME',
+              'a light-root <slot> must declare a static name: the slot anchor carries the name ' +
+                'in its marker text so the serializer needs no second lookup, and a dynamic ' +
+                'name={…} binding has no compile-time value to carry',
+              node.span,
+            );
+          }
+        }
+        visit(node.children);
+        continue;
+      }
+      if (node.kind === 'fragment') visit(node.children);
+      else if (node.kind === 'condition') {
+        visit(node.consequent);
+        if (node.alternate !== null) visit(node.alternate);
+      } else if (node.kind === 'list') visit(node.template);
+    }
+  };
+  visit(state.component.roots);
+  return found && !refused;
+}
+
+/**
+ * The slot name one `<slot>` element declares, read the way the element lane's
+ * `slotNameOf` reads it: the static `name` attribute's value, `''` (the default
+ * slot) when there is none. `null` is the "no compile-time name" case — a
+ * dynamic `name={…}` — which the anchor cannot carry.
+ */
+function slotNameOf(node: FunctionModelNode): string | null {
+  if (node.kind !== 'element') return null;
+  let name = '';
+  for (const attribute of node.attributes) {
+    if (attribute.name !== 'name') continue;
+    if (attribute.kind !== 'static') return null;
+    name = attribute.value;
+  }
+  return name;
 }
 
 type TextParserContext =
@@ -3333,6 +3880,7 @@ function emitNode(
   sink: SinkEntry[],
   records: ReadonlyMap<string, LoweredExpressionRecord>,
   allowDirectory = true,
+  namespace: 'html' | 'svg' = 'html',
 ): void {
   const span: IrSpan = node.span;
   if (node.kind === 'text') {
@@ -3351,7 +3899,7 @@ function emitNode(
     // interior emit its own `oe:r` pair. The child list is normalized on the
     // same gate as every other claimable surface.
     for (const child of emissionNodes(state, node.children))
-      emitNode(state, child, sink, records, allowDirectory);
+      emitNode(state, child, sink, records, allowDirectory, namespace);
     return;
   }
   if (node.kind === 'condition') {
@@ -3373,9 +3921,15 @@ function emitNode(
       return;
     }
     const varName = nextName(state, 'el');
+    // An `<svg>` element (and its subtree) lives in the SVG namespace; a
+    // `document.createElement` call would produce an HTML-namespaced lookalike
+    // that renders nothing. `foreignObject` switches its children back to HTML.
+    const elementNamespace = node.tag === 'svg' ? 'svg' : namespace;
     push(
       state,
-      `const ${varName} = document.createElement(${JSON.stringify(node.tag)});`,
+      elementNamespace === 'svg'
+        ? `const ${varName} = document.createElementNS(${JSON.stringify(SVG_NAMESPACE)}, ${JSON.stringify(node.tag)});`
+        : `const ${varName} = document.createElement(${JSON.stringify(node.tag)});`,
       node.span,
     );
     for (const attribute of node.attributes) {
@@ -3395,9 +3949,18 @@ function emitNode(
           );
           continue;
         }
+        // A static BOOLEAN attribute is a presence marker: the HTML parser
+        // spells it `name=""` and `getAttribute` returns the empty string. The
+        // authored `muted` JSX shorthand folds to the string "true", which would
+        // make the created DOM disagree with the same element parsed from SSR
+        // bytes (and with the class lane). Emitting the canonical empty value
+        // keeps mount and claim byte-equivalent.
+        const staticValue = BOOLEAN_ATTRIBUTES.has(attribute.name.toLowerCase())
+          ? ''
+          : attribute.value;
         push(
           state,
-          `${varName}.setAttribute(${JSON.stringify(attribute.name)}, ${JSON.stringify(attribute.value)});`,
+          `${varName}.setAttribute(${JSON.stringify(attribute.name)}, ${JSON.stringify(staticValue)});`,
           attribute.span,
         );
         continue;
@@ -3460,9 +4023,14 @@ function emitNode(
     if (ranges !== null)
       emitMountedDirectory(state, ranges, records, { kind: 'element', name: varName });
     else {
+      // The admitted tag grammar is lowercase (`TAG_PATTERN`), so camelCase SVG
+      // tags (`foreignObject`, `linearGradient`) are outside this lane; the
+      // subtree keeps its namespace. An SVG subtree needing one of them stays
+      // unsupported instead of silently mis-namespaced.
+      const childNamespace = elementNamespace;
       for (const child of emissionNodes(state, node.children)) {
         const childSink: SinkEntry[] = [];
-        emitNode(state, child, childSink, records, allowDirectory);
+        emitNode(state, child, childSink, records, allowDirectory, childNamespace);
         appendSinkToElement(state, childSink, varName);
       }
     }
@@ -3754,6 +4322,13 @@ function componentClaimable(
   context: TextParserContext = { kind: 'flow' },
 ): boolean {
   if (ctx.stack.has(component.name)) return false;
+  // `16b-CTX` — a component that READS a context consumer is CLAIMABLE, because
+  // the producer resolves the same value at render time the client will resolve
+  // on connect: both call the ONE engine (`CompiledContextService`), one in
+  // render mode and one in connection mode, from the same provider tree. There
+  // is therefore no divergence to avoid and no reason to force a mount: the
+  // server bytes carry the PROVIDED value and `<Name>__claim` adopts them with
+  // the existing static-seed discipline (an equal value writes nothing).
   ctx.stack.add(component.name);
   try {
     return component.roots.every((node) => nodeClaimable(node, component, ctx, false, context));
@@ -3865,6 +4440,27 @@ function emitClaimMismatch(
  * in the HTML namespace. Text and comment ancestors are not element checks.
  * A failure here is before any claim write.
  */
+/**
+ * The own-element namespace assertion for a claimed SVG subtree (or an HTML
+ * element inside an SVG `foreignObject`). Kept beside the HTML ancestor walk so
+ * the two claim namespace rules read together.
+ */
+function emitClaimElementNamespace(
+  state: EmitState,
+  nodeExpr: string,
+  namespace: 'html' | 'svg',
+  where: string,
+  anchor?: SpanLike,
+): void {
+  state.usesLeafClaimMismatch = true;
+  push(
+    state,
+    `assertElementInNamespace(${nodeExpr}, ${JSON.stringify(
+      namespace === 'svg' ? SVG_NAMESPACE : HTML_NAMESPACE,
+    )}, ${JSON.stringify(where)}${originArgs(anchor)});`,
+  );
+}
+
 function emitClaimHtmlNamespace(
   state: EmitState,
   nodeExpr: string,
@@ -3911,10 +4507,13 @@ function emitClaimStaticAttributeSeed(
     )
     .map((attribute) => attribute.name);
   const declared = staticAttrs
-    .map(
-      (attribute) =>
-        `{ name: ${JSON.stringify(attribute.name)}, value: ${JSON.stringify(attribute.value)} }`,
-    )
+    .map((attribute) => {
+      // The seed must spell a static BOOLEAN attribute exactly as the mount and
+      // the SSR bytes do (`name=""`), or the claim compares the parsed empty
+      // value against the authored "true" shorthand and fails closed.
+      const seedValue = BOOLEAN_ATTRIBUTES.has(attribute.name.toLowerCase()) ? '' : attribute.value;
+      return `{ name: ${JSON.stringify(attribute.name)}, value: ${JSON.stringify(seedValue)} }`;
+    })
     .join(', ');
   const skip = `[${dynamicNames.map((name) => JSON.stringify(name)).join(', ')}]`;
   state.usesLeafClaimMismatch = true;
@@ -4327,6 +4926,7 @@ function emitConditionClaim(
     node.span,
   );
   push(state, `if (!force && ${nextVar} === ${activeVar}) return;`);
+  push(state, `${activeVar} = -1;`);
   if (emitsRetentionReleaseText(state)) {
     emitBranchRelease(state, ownerVar);
   } else {
@@ -4345,9 +4945,12 @@ function emitConditionClaim(
   );
   state.indent -= 1;
   if (emitsRetentionReleaseText(state)) {
-    emitBranchRollback(state, branchOwnerVar);
+    emitBranchRollback(state, branchOwnerVar, activeVar);
   } else {
-    push(state, `} catch (error) { ${branchOwnerVar}.dispose(true); throw error; }`);
+    push(
+      state,
+      `} catch (error) { ${activeVar} = -1; ${branchOwnerVar}.dispose(true); throw error; }`,
+    );
   }
   push(state, `${branchOwnerVar}.addRangeCleanup(() => removeNodes(${branchNodesVar}));`);
   push(state, `const ${refreshParentVar} = ${endVar}.parentNode;`);
@@ -4367,7 +4970,9 @@ function emitConditionClaim(
   });
   if (slot.dependencies.length > 0) {
     phase2.push(() => {
-      emitDependencySubscriptions(state, slot.dependencies, refreshVar, node.span);
+      emitDependencySubscriptions(state, slot.dependencies, refreshVar, node.span, {
+        ignoreSignalValue: true,
+      });
     });
   }
   if (thenCreate !== null || elseCreate !== null) {
@@ -4796,6 +5401,7 @@ function emitClaimInto(
   adoptIf: (name: string, condition: string) => void,
   parentExpr: string,
   collect: boolean,
+  namespace: 'html' | 'svg' = 'html',
 ): void {
   const list = state.emitTextBoundaries ? normalizeTextRuns(nodes) : nodes;
   list.forEach((node, index) => {
@@ -4821,6 +5427,7 @@ function emitClaimInto(
         adoptIf,
         parentExpr,
         collect,
+        namespace,
       );
       return;
     }
@@ -4894,7 +5501,17 @@ function emitClaimInto(
         `expected element '${node.tag}' at ${here}`,
         node.span,
       );
-      emitClaimHtmlNamespace(state, name, here, node.span);
+      const elementNamespace = node.tag === 'svg' ? 'svg' : namespace;
+      if (elementNamespace === 'svg') {
+        emitClaimElementNamespace(state, name, 'svg', here, node.span);
+      } else if (namespace === 'svg') {
+        // HTML inside an SVG subtree (`foreignObject`): the element itself is
+        // HTML, but its ancestors are legitimately SVG, so the own-namespace
+        // rule applies instead of the ancestor walk.
+        emitClaimElementNamespace(state, name, 'html', here, node.span);
+      } else {
+        emitClaimHtmlNamespace(state, name, here, node.span);
+      }
       emitClaimStaticAttributeSeed(state, name, node.attributes, here, node.span);
       for (const attribute of node.attributes) {
         if (attribute.kind === 'static') continue;
@@ -4953,6 +5570,7 @@ function emitClaimInto(
           () => {},
           name,
           false,
+          elementNamespace,
         );
         emitClaimCursorEnd(state, childCursor, here, node.span);
         if (saved !== null) {
@@ -5157,7 +5775,7 @@ function emitClaimComponentRef(
     : `() => ({})`;
   push(
     state,
-    `const ${setupHostVar} = { bindings: ${state.hostVar}.bindings, propDeps: ${depList} };`,
+    `const ${setupHostVar} = { bindings: ${state.hostVar}.bindings, propDeps: ${depList}${childHostElementField(state, node)}${childPropertyChangeField(state, node)}${childErrorBoundaryField(state, node)}${childContextField(state, node)} };`,
     span,
   );
   push(
@@ -5168,7 +5786,7 @@ function emitClaimComponentRef(
   push(state, `const ${scopeVar} = ${state.scopeVar}.child();`, span);
   push(
     state,
-    `const ${hostVar} = { bindings: ${setupHostVar}.bindings, propDeps: ${setupHostVar}.propDeps, instance: ${instanceVar}.scope, setup: ${instanceVar}.record };`,
+    `const ${hostVar} = { bindings: ${setupHostVar}.bindings, propDeps: ${setupHostVar}.propDeps, instance: ${instanceVar}.scope, setup: ${instanceVar}.record${childHostElementField(state, node)}${childErrorReportField(state, node)}${childContextField(state, node)} };`,
     span,
   );
   push(state, `let ${nodesVar};`);
@@ -5309,8 +5927,260 @@ function emitClaimTimeRecipes(
 /** One component-local setup snapshot (M03 "evaluate once" resource). */
 interface SetupLocal {
   readonly name: string;
-  readonly record: LoweredExpressionRecord;
+  /**
+   * `local` is a snapshot evaluated once in the retained setup factory; `ref`
+   * is a `16b-REF` NODE HANDLE the factory builds (one object for the whole
+   * element lifetime) and the emitted `ref` channel drives.
+   */
+  readonly kind: 'local' | 'ref' | 'context';
+  /**
+   * The record the factory evaluates for a `local`. For a `ref` this is the
+   * OPTIONAL attach/detach notification callback (the same record the plain
+   * `ref` channel admits), or `null` for a handle-only declaration.
+   */
+  readonly record: LoweredExpressionRecord | null;
   readonly span: SpanLike;
+}
+
+/**
+ * The `16b-REF` handle expression the retained setup factory emits.
+ *
+ * A handle is a CALLABLE with one `current` field, which is exactly what the
+ * existing intrinsic `ref` channel already accepts: the channel validates
+ * `typeof handler === "function"`, calls it with the element on attach, keeps
+ * the returned cleanup for detach, and calls it with `null` after that cleanup
+ * ran. So the handle IS the channel value — the ref slice adds no sink kind, no
+ * second attachment mechanism and no new cleanup ordering; it only makes the
+ * handle survive mount/claim/reconnect by building it in the retained factory.
+ *
+ * Attach order: `current` is populated BEFORE the notification runs, so an
+ * author callback observing the handle sees the node. Detach order is the
+ * channel's existing one: the notification's cleanup runs first (while
+ * `current` still names the node), then this handle is called with `null`,
+ * which clears `current` and forwards `null` to the notification.
+ */
+function emitSetupBinding(state: EmitState, local: SetupLocal): void {
+  if (local.kind === 'local') {
+    if (local.record === null) return;
+    pushParts(state, [`const ${local.name} = (`, { record: local.record }, ');'], local.span);
+    return;
+  }
+  if (local.kind === 'context') {
+    // `16b-CTX`: ONE persistent consumer-local signal per declaration. The
+    // token record is the authored expression; the shell's context channel
+    // builds the signal and starts the bridge on connect. This is the reactive
+    // counterpart of the `ref` handle: a tracked slot reading `.value` is a
+    // real dependency, which is why no read-position gate exists for it.
+    if (local.record === null) return;
+    pushParts(
+      state,
+      [
+        `const ${local.name} = ${GENERATED_CONTEXT_SCOPE_RECORD}.use((`,
+        { record: local.record },
+        '));',
+      ],
+      local.span,
+    );
+    return;
+  }
+  const handle = local.name;
+  // The `current` seed and the two writes live in the closure; the notification
+  // (if any) is the ONE authored record, passed in verbatim.
+  const tail = ` fn.current = null; return fn; })();`;
+  if (local.record === null) {
+    pushParts(
+      state,
+      [`const ${handle} = (() => { const fn = (element) => { fn.current = element; };${tail}`],
+      local.span,
+    );
+    return;
+  }
+  pushParts(
+    state,
+    [
+      `const ${handle} = (() => { const notify = (`,
+      { record: local.record },
+      `); const fn = (element) => { fn.current = element; return notify(element); };${tail}`,
+    ],
+    local.span,
+  );
+}
+
+/**
+ * `16b-CTX` — emit this component's provider registrations into a retained setup
+ * factory.
+ *
+ * Each admitted `provideContext(token, () => value)` becomes ONE registration on
+ * this component's OWNER scope. The owner expression is the channel itself for a
+ * generated element ROOT (so a root provider covers every depth-1 child) and
+ * `host.<channel>.owner()` for a nested hostless component (so siblings are
+ * isolated from each other while both still see the element's ancestors). The
+ * thunk is emitted verbatim: the VALUE is re-read on connect and after every
+ * declared-property commit — the lane's one change channel — instead of being
+ * snapshotted here.
+ *
+ * `nested` is the placement fact, decided by the same rule that carries the
+ * lifecycle hooks (root setup vs retained depth-1 child setup).
+ */
+function emitContextProviders(
+  state: EmitState,
+  providers: readonly FunctionModelContextProvider[],
+  records: ReadonlyMap<string, LoweredExpressionRecord>,
+): void {
+  for (const provider of providers) {
+    const token = recordFor(state, provider.token, records);
+    const value = recordFor(state, provider.value, records);
+    if (token === null || value === null) continue;
+    if (!declareReads(state, token)) continue;
+    if (!declareReads(state, value)) continue;
+    pushParts(
+      state,
+      [
+        `${GENERATED_CONTEXT_SCOPE_RECORD}.provider((`,
+        { record: token },
+        '), (',
+        { record: value },
+        '));',
+      ],
+      provider.span,
+    );
+  }
+}
+
+/**
+ * `16b-CTX` — emit the component's owner-scope declaration into a retained setup
+ * factory.
+ *
+ * The ROOT owns the element anchor. Every other component is a hostless owner,
+ * so its scope is `anchor.owner()` — a child of the anchor. Two sibling hostless
+ * children therefore get two distinct scopes and cannot see each other's
+ * providers, while both still resolve the element's ancestors, which is exactly
+ * the ADR-0182 "nearest owning component, hostless owners included" rule.
+ *
+ * The declaration is emitted only for a component that uses a context intrinsic,
+ * so every other component's bytes are unchanged.
+ */
+function emitContextScopeDeclaration(
+  state: EmitState,
+  component: FunctionModelComponent,
+  nested: boolean,
+): void {
+  if (!componentUsesContextIntrinsic(component)) return;
+  const channel = `${MOUNT_HOST}.${CONTEXT_SCOPE_PROPERTY}`;
+  const expression = nested ? `${channel}.owner()` : channel;
+  push(state, `const ${GENERATED_CONTEXT_SCOPE_RECORD} = ${expression};`, component.span);
+}
+
+/** Does one component itself use `provideContext` or `useContext`? */
+function componentUsesContextIntrinsic(component: FunctionModelComponent): boolean {
+  return (
+    component.contextProviders.length > 0 ||
+    component.resources.some((resource) => resource.kind === 'context')
+  );
+}
+
+/**
+ * `16b-CTX` SERVER side — declare this producer call's owner scope.
+ *
+ * The scope arrives as a PARAMETER (`__oe_ssrContext`) when an enclosing
+ * component reference supplies one, and is created fresh otherwise:
+ *
+ * - a MODULE ROOT producer (called by the host wrapper or the light serializer
+ *   with no scope) creates the render's anchor — one per producer call, so two
+ *   concurrent renders are independent and no request value lives in module
+ *   state;
+ * - a NESTED producer joins the caller as `anchor.owner()`, which is the exact
+ *   server image of the client's depth-1 hostless owner: a child provider is
+ *   invisible to the caller's other children while the child still resolves the
+ *   anchor's providers.
+ *
+ * The `undefined` guard keeps a hand-written or older caller working: a producer
+ * invoked without a scope behaves as the root of its own render rather than
+ * reading provider state that does not exist.
+ */
+function emitSsrContextScope(state: EmitState): void {
+  // ONE spelling for both owner shapes, because the parameter is supplied by
+  // exactly one kind of caller — a component reference rendering this component
+  // as its child. With no scope this producer IS a module root and creates the
+  // render's anchor; with a scope it joins that anchor as `owner()`, the server
+  // image of the client's depth-1 hostless owner.
+  push(
+    state,
+    `const ${GENERATED_CONTEXT_SCOPE_RECORD} = ${SSR_CONTEXT_PARAM} === undefined ? createRenderContextScope() : ${SSR_CONTEXT_PARAM}.owner();`,
+  );
+}
+
+/**
+ * `16b-CTX` SERVER side — does this component's producer need a render scope at
+ * all? True when the component itself uses a context intrinsic, or when it
+ * renders a component reference whose own producer does (the scope must be
+ * threaded down as an argument, never read from module state).
+ *
+ * A component that neither provides, consumes nor references a scope-using
+ * child keeps its exact pre-`16b-CTX` producer bytes: no parameter, no import,
+ * no declaration.
+ */
+function componentNeedsSsrContextScope(
+  component: FunctionModelComponent,
+  componentByName: ReadonlyMap<string, FunctionModelComponent>,
+): boolean {
+  return ssrScopeNeed(component, componentByName, new Set());
+}
+
+function ssrScopeNeed(
+  component: FunctionModelComponent,
+  componentByName: ReadonlyMap<string, FunctionModelComponent>,
+  stack: Set<string>,
+): boolean {
+  if (componentUsesContextIntrinsic(component)) return true;
+  if (stack.has(component.name)) return false;
+  stack.add(component.name);
+  try {
+    return ssrScopeNeedInNodes(component.roots, component, componentByName, stack);
+  } finally {
+    stack.delete(component.name);
+  }
+}
+
+function ssrScopeNeedInNodes(
+  nodes: readonly FunctionModelNode[],
+  component: FunctionModelComponent,
+  componentByName: ReadonlyMap<string, FunctionModelComponent>,
+  stack: Set<string>,
+): boolean {
+  const recipes = recipeMap(component);
+  const walk = (list: readonly FunctionModelNode[]): boolean => {
+    for (const node of list) {
+      if (node.kind === 'fragment' || node.kind === 'element') {
+        if (walk(node.children)) return true;
+        continue;
+      }
+      if (node.kind === 'condition') {
+        if (walk(node.consequent)) return true;
+        if (node.alternate !== null && walk(node.alternate)) return true;
+        continue;
+      }
+      if (node.kind === 'list') {
+        if (walk(node.template)) return true;
+        continue;
+      }
+      if (node.kind === 'component-ref') {
+        const target = componentByName.get(node.name);
+        if (target !== undefined && ssrScopeNeed(target, componentByName, stack)) return true;
+        if (node.childrenRecipeId !== null) {
+          const recipe = recipes.get(node.childrenRecipeId);
+          if (recipe !== undefined && walk([recipe.target])) return true;
+        }
+        continue;
+      }
+      if (node.kind === 'insertion-site') {
+        const recipe = recipes.get(node.recipeId);
+        if (recipe !== undefined && walk([recipe.target])) return true;
+      }
+    }
+    return false;
+  };
+  return walk(nodes);
 }
 
 /**
@@ -5319,8 +6189,10 @@ interface SetupLocal {
  * callback expression the factory emits verbatim as an ordinary closure.
  */
 interface AdmittedLifecycleHook {
-  readonly kind: 'connect' | 'dispose';
+  readonly kind: 'connect' | 'dispose' | 'property-change' | 'error';
   readonly record: LoweredExpressionRecord;
+  /** `true` when the authored callback declares the one admitted env parameter. */
+  readonly receivesEnv: boolean;
   readonly span: SpanLike;
 }
 
@@ -5349,6 +6221,15 @@ function emitSetupAlias(
     state,
     `const ${ROOT_SETUP_REQUIRE} = (name) => { if (!Object.hasOwn(${ROOT_SETUP_RECORD}, name)) throw new Error("OEIR_LEAF_MISSING_VALUE: " + name); return ${ROOT_SETUP_RECORD}[name]; };`,
   );
+  // `16b-CTX`: the retained record carries this component's OWNER SCOPE, so the
+  // mount/claim body resolves consumers against the same owner a reconnect
+  // would. Emitted only for a component that uses a context intrinsic.
+  if (componentUsesContextIntrinsic(state.component)) {
+    push(
+      state,
+      `const ${GENERATED_CONTEXT_SCOPE_RECORD} = ${ROOT_SETUP_REQUIRE}(${JSON.stringify(GENERATED_CONTEXT_SCOPE_RECORD)});`,
+    );
+  }
   for (const line of localLines) {
     push(state, `const ${line.name} = ${ROOT_SETUP_REQUIRE}(${JSON.stringify(line.name)});`);
   }
@@ -5359,7 +6240,7 @@ function emitSetupAlias(
  * per-connection scope of the ROOT body that is about to mount or claim.
  *
  * The callbacks were lowered into the compiler-owned
- * `__oe_rootInstance` factory and carried by the retained instance record, so
+ * `__oe_rootInstance`/`<Name>__setup` factory and carried by the retained instance record, so
  * replaying here never repeats setup. Each callback's optional returned cleanup
  * is registered on the SAME per-connection scope the projection owns, so the
  * shell's existing disconnect/rollback disposal releases it (LIFO, first error
@@ -5373,13 +6254,39 @@ function emitSetupAlias(
  * Absence of the key is the hand-built-descriptor / hook-free shape and is a
  * no-op (never a fabricated subscription).
  */
-function emitRootLifecycleReplay(): string[] {
+function emitLifecycleReplay(hostRecordProperty: 'bindings' | 'setup'): string[] {
   return [
-    `  const ${LIFECYCLE_HOOKS_VAR} = ${MOUNT_HOST}.bindings.${GENERATED_ROOT_CONNECT_RECORD};`,
+    `  const ${LIFECYCLE_HOOKS_VAR} = ${MOUNT_HOST}.${hostRecordProperty}.${GENERATED_ROOT_CONNECT_RECORD};`,
     `  if (${LIFECYCLE_HOOKS_VAR} !== undefined) {`,
     `    for (const ${LIFECYCLE_HOOK_VAR} of ${LIFECYCLE_HOOKS_VAR}) {`,
     `      const ${LIFECYCLE_CLEANUP_VAR} = ${LIFECYCLE_HOOK_VAR}();`,
     `      if (typeof ${LIFECYCLE_CLEANUP_VAR} === "function") ${MOUNT_SCOPE}.add(${LIFECYCLE_CLEANUP_VAR});`,
+    '    }',
+    '  }',
+  ];
+}
+
+/**
+ * `16b-LC` option 1a, env form — replay the retained `onConnect(env)` callbacks
+ * on the per-connection scope of the body that is about to mount or claim.
+ *
+ * The env argument is built HERE, from data the body already has: the host
+ * element the shell attached to the host record (runtime property; no exported
+ * type change) and the per-connection scope's own `signal`. `LifetimeScope`
+ * aborts that signal at the FIRST step of `dispose()`, before children and
+ * before any registered cleanup, so a cleanup that runs at disconnect observes
+ * an aborted signal. Each returned cleanup registers on the same scope, exactly
+ * like the zero-argument form. The env form has its own retained record and its
+ * own replay lines, so a module whose callbacks are all zero-argument keeps its
+ * exact pre-env bytes.
+ */
+function emitLifecycleEnvReplay(hostRecordProperty: 'bindings' | 'setup'): string[] {
+  return [
+    `  const ${LIFECYCLE_ENV_HOOKS_VAR} = ${MOUNT_HOST}.${hostRecordProperty}.${GENERATED_ROOT_CONNECT_ENV_RECORD};`,
+    `  if (${LIFECYCLE_ENV_HOOKS_VAR} !== undefined) {`,
+    `    for (const ${LIFECYCLE_ENV_HOOK_VAR} of ${LIFECYCLE_ENV_HOOKS_VAR}) {`,
+    `      const ${LIFECYCLE_ENV_CLEANUP_VAR} = ${LIFECYCLE_ENV_HOOK_VAR}({ host: ${MOUNT_HOST}.${HOST_ELEMENT_PROPERTY}, signal: ${MOUNT_SCOPE}.signal, states: ${MOUNT_HOST}.${STATES_PROPERTY} });`,
+    `      if (typeof ${LIFECYCLE_ENV_CLEANUP_VAR} === "function") ${MOUNT_SCOPE}.add(${LIFECYCLE_ENV_CLEANUP_VAR});`,
     '    }',
     '  }',
   ];
@@ -5396,8 +6303,19 @@ function emitClaimFunction(
   componentByName: ReadonlyMap<string, FunctionModelComponent>,
   sharedClaimCursor: boolean,
   rootSetup: boolean,
-  connectReplay: boolean,
+  /**
+   * `16b-CTX`: whether the body aliases the retained setup record. It is the
+   * SAME fact `emitComponent` computed for the mount (setup locals present, or a
+   * context intrinsic whose owner scope the factory carries), passed in so the
+   * claim makes the identical decision and a hook-only component keeps its
+   * exact pre-existing bytes.
+   */
+  aliasesSetupRecord: boolean,
+  rootComponent: boolean,
+  connectReplaySource: 'bindings' | 'setup' | null,
+  connectEnvReplaySource: 'bindings' | 'setup' | null,
   retention: RetentionPlan | null,
+  claimStyleLinkPrefix: boolean,
 ): ClaimEmission | null {
   const ctx: ClaimContext = { componentByName, stack: new Set() };
   if (!componentClaimable(component, ctx)) return null;
@@ -5436,6 +6354,7 @@ function emitClaimFunction(
     directorySource: `${file}#${component.name}`,
     usesStaticSiblingDirectoryConsumer: false,
     claimCursorShared: useShared,
+    claimStyleLinkPrefix: claimStyleLinkPrefix && rootComponent,
     claimAdoptedVar: null,
     claimActivationVar: null,
     usesClaimRecipe: false,
@@ -5462,12 +6381,40 @@ function emitClaimFunction(
     if (!IDENTIFIER_PATTERN.test(resource.name) || resource.name.startsWith(INTERNAL_PREFIX)) {
       continue;
     }
+    if (resource.kind === 'ref') {
+      // `16b-REF`: a handle is a compiler-owned value, not a lowered snapshot;
+      // only its OPTIONAL notification record needs read classification. A
+      // DECLARED notification that cannot be resolved fails closed through
+      // `recordFor`'s own diagnostic — it never silently degrades to the
+      // handle-only form, which would drop the author's callback.
+      if (resource.expression === null) {
+        localLines.push({ name: resource.name, kind: 'ref', record: null, span: resource.span });
+        continue;
+      }
+      const record = recordFor(state, resource.expression, records);
+      if (record === null || !declareReads(state, record)) continue;
+      state.localResources.add(resource.name);
+      localLines.push({ name: resource.name, kind: 'ref', record, span: resource.span });
+      continue;
+    }
+    if (resource.kind === 'context') {
+      // `16b-CTX`: a consumer is a retained setup value (the signal identity is
+      // the contract, so a reconnect writes into the same object). Only its
+      // TOKEN record needs read classification; a declared token that cannot be
+      // resolved fails closed through `recordFor`'s own diagnostic.
+      if (resource.expression === null) continue;
+      const record = recordFor(state, resource.expression, records);
+      if (record === null || !declareReads(state, record)) continue;
+      state.localResources.add(resource.name);
+      localLines.push({ name: resource.name, kind: 'context', record, span: resource.span });
+      continue;
+    }
     if (resource.kind === 'local') {
       if (resource.recipeId !== null || resource.expression === null) continue;
       const record = recordFor(state, resource.expression, records);
       if (record === null || !declareReads(state, record)) continue;
       state.localResources.add(resource.name);
-      localLines.push({ name: resource.name, record, span: resource.span });
+      localLines.push({ name: resource.name, kind: 'local', record, span: resource.span });
       continue;
     }
     state.hostBindings.add(resource.name);
@@ -5490,26 +6437,47 @@ function emitClaimFunction(
     // before the claim walk reads them (authored side effects therefore run
     // during claim); the ROOT aliases the retained `createInstance` record
     // instead and never re-runs an initializer (T3 / 16b-LC-1).
-    if (rootSetup && localLines.length > 0) {
+    if (rootSetup && aliasesSetupRecord) {
+      // `16b-CTX`: the alias prologue also declares the retained OWNER SCOPE
+      // (from the record's `__oe_contextScope` field), so a context-only root
+      // with no setup locals still aliases rather than falling through. A
+      // HOOK-only root keeps the pre-existing no-op fallback (byte identity).
       emitSetupAlias(state, localLines, ROOT_SETUP_HOST_PROPERTY);
-    } else if (leafSetup) {
+    } else if (leafSetup && (localLines.length > 0 || componentUsesContextIntrinsic(component))) {
       emitSetupAlias(state, localLines, LEAF_SETUP_HOST_PROPERTY);
     } else {
-      for (const line of localLines) {
-        pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
-      }
+      for (const line of localLines) emitSetupBinding(state, line);
     }
     push(state, `const ${rootAdoptedVar} = [];`);
   }
   const rootDirectory = staticElementDirectory(component.roots);
-  if (!useShared && rootDirectory !== null) {
+  // M09-2e / #1803: a styled shadow host's DSD template prefixes the claimed
+  // content with canonical marked links, and the static sibling directory
+  // consumer parses the parent from its first child. The styled root claim
+  // therefore uses the general cursor walk (which skips that prefix) instead of
+  // the directory fast path; the admissibility of the shape is unchanged.
+  if (!useShared && rootDirectory !== null && !state.claimStyleLinkPrefix) {
     for (const interior of emitClaimedDirectory(state, CLAIM_PARENT, rootDirectory)) {
       push(state, `${rootAdoptedVar}.push(${interior});`);
     }
   } else if (!useShared) {
     emitClaimHtmlNamespace(state, CLAIM_PARENT, '/', component.span);
     const rootCursor = nextName(state, 'cursor');
-    push(state, `const ${rootCursor} = { node: ${CLAIM_PARENT}.firstChild };`);
+    if (state.claimStyleLinkPrefix) {
+      // D-claim-prefix (M09-2e / #1803): a shadow host's DSD template declares
+      // its stylesheets as canonical marked `<link>` nodes BEFORE the authored
+      // content. They are borrowed server DOM: the claim adopts the authored
+      // nodes after them and never writes, moves or duplicates a link.
+      const startVar = nextName(state, 'claimStart');
+      push(state, `let ${startVar} = ${CLAIM_PARENT}.firstChild;`);
+      push(
+        state,
+        `while (${startVar} !== null && ${startVar}.nodeType === 1 && ${startVar}.nodeName === "LINK" && ${startVar}.hasAttribute(${JSON.stringify(STATIC_STYLES_MARKER)})) ${startVar} = ${startVar}.nextSibling;`,
+      );
+      push(state, `const ${rootCursor} = { node: ${startVar} };`);
+    } else {
+      push(state, `const ${rootCursor} = { node: ${CLAIM_PARENT}.firstChild };`);
+    }
     emitClaimInto(
       state,
       component.roots,
@@ -5531,14 +6499,12 @@ function emitClaimFunction(
     // Shared-cursor claim: both branches of the claim walk read the same setup
     // names, so this branch aliases the retained root record exactly like the
     // non-shared one instead of re-evaluating the setup initializers.
-    if (rootSetup && localLines.length > 0) {
+    if (rootSetup && aliasesSetupRecord) {
       emitSetupAlias(state, localLines, ROOT_SETUP_HOST_PROPERTY);
-    } else if (leafSetup) {
+    } else if (leafSetup && (localLines.length > 0 || componentUsesContextIntrinsic(component))) {
       emitSetupAlias(state, localLines, LEAF_SETUP_HOST_PROPERTY);
     } else {
-      for (const line of localLines) {
-        pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
-      }
+      for (const line of localLines) emitSetupBinding(state, line);
     }
     if (state.childrenRecipeVar !== null) {
       push(state, `const ${state.childrenRecipeVar} = ${MOUNT_PROPS}.children;`);
@@ -5553,6 +6519,15 @@ function emitClaimFunction(
     state.claimAdoptedVar = adoptedVar;
     push(state, `const ${adoptedVar} = [];`);
     const activationSteps = emitClaimQueueInit(state, CLAIM_PARENT);
+    if (state.claimStyleLinkPrefix) {
+      // D-claim-prefix (M09-2e / #1803) for the shared-cursor owner: the
+      // module-level cursor was initialized at `parent.firstChild`; skip exactly
+      // the canonical marked stylesheet links before the authored walk.
+      push(
+        state,
+        `while (__oe_claimCursor.node !== null && __oe_claimCursor.node.nodeType === 1 && __oe_claimCursor.node.nodeName === "LINK" && __oe_claimCursor.node.hasAttribute(${JSON.stringify(STATIC_STYLES_MARKER)})) __oe_claimCursor.node = __oe_claimCursor.node.nextSibling;`,
+      );
+    }
     push(state, 'try {');
     state.indent += 1;
     emitClaimInto(
@@ -5622,8 +6597,11 @@ function emitClaimFunction(
   // callbacks are replayed here on the fresh per-connection scope before any
   // claim work. No setup is repeated (the callbacks come from the retained
   // instance record) and the probe is absent on the hook-free bytes path.
-  if (connectReplay) {
-    for (const line of emitRootLifecycleReplay()) prologue.push(line);
+  if (connectReplaySource !== null) {
+    for (const line of emitLifecycleReplay(connectReplaySource)) prologue.push(line);
+  }
+  if (connectEnvReplaySource !== null) {
+    for (const line of emitLifecycleEnvReplay(connectEnvReplaySource)) prologue.push(line);
   }
   const shift = fragmentLineCount(prologue);
   return {
@@ -5664,7 +6642,10 @@ function emitClaimFunction(
  * use. A second escape table in the compiler would be exactly the drift P6
  * forbids.
  */
-function staticSsrDirectory(ranges: readonly FunctionModelNode[]): string | null {
+function staticSsrDirectory(
+  ranges: readonly FunctionModelNode[],
+  slots: SlotAnchors | null,
+): string | null {
   const parts: string[] = [];
   for (const [ordinal, range] of ranges.entries()) {
     // The mount suppresses directories inside a range (`allowDirectory` false
@@ -5672,7 +6653,7 @@ function staticSsrDirectory(ranges: readonly FunctionModelNode[]): string | null
     // `oe:r` pair. The SSR form is the same tree: markers stop at this range
     // layer. Emitting markers into the interior would put nested comments
     // there and the directory parser would refuse its own SSR output.
-    const inner = staticSsrNode(range, false);
+    const inner = staticSsrNode(range, false, slots);
     if (inner === null) return null;
     parts.push(
       `"<!--" + markerText(rangeMarker(${ordinal})) + "-->"`,
@@ -5683,10 +6664,14 @@ function staticSsrDirectory(ranges: readonly FunctionModelNode[]): string | null
   return parts.length === 0 ? '""' : parts.join(' + ');
 }
 
-function staticSsrExpression(nodes: readonly FunctionModelNode[], markers: boolean): string | null {
+function staticSsrExpression(
+  nodes: readonly FunctionModelNode[],
+  markers: boolean,
+  slots: SlotAnchors | null,
+): string | null {
   const parts: string[] = [];
   for (const node of normalizeTextRuns(nodes)) {
-    const part = staticSsrNode(node, markers);
+    const part = staticSsrNode(node, markers, slots);
     if (part === null) return null;
     parts.push(part);
   }
@@ -5697,9 +6682,13 @@ function literalText(value: string): string {
   return JSON.stringify(value);
 }
 
-function staticSsrNode(node: FunctionModelNode, markers: boolean): string | null {
+function staticSsrNode(
+  node: FunctionModelNode,
+  markers: boolean,
+  slots: SlotAnchors | null,
+): string | null {
   if (node.kind === 'text') return `escapeText(${literalText(node.value)})`;
-  if (node.kind === 'fragment') return staticSsrExpression(node.children, markers);
+  if (node.kind === 'fragment') return staticSsrExpression(node.children, markers, slots);
   if (node.kind !== 'element') return null;
   if (!TAG_PATTERN.test(node.tag)) return null;
   const isVoid = VOID_TAGS.has(node.tag);
@@ -5718,11 +6707,15 @@ function staticSsrNode(node: FunctionModelNode, markers: boolean): string | null
     // known at compile time, so this component has no static SSR form yet.
     if (attribute.kind !== 'static') return null;
     if (unsafeStreamFrameAttribute(attribute.name, attribute.value)) return null;
+    // Same canonical spelling as the mount: a static BOOLEAN attribute renders
+    // as `name=""` (the class lane and the HTML parser's own spelling), so the
+    // SSR bytes and the created DOM agree byte-for-byte.
+    const staticValue = BOOLEAN_ATTRIBUTES.has(attribute.name.toLowerCase()) ? '' : attribute.value;
     attributes.push(
       [
         '" "',
         literalText(`${attribute.name}="`),
-        `escapeAttrValue(${literalText(attribute.value)})`,
+        `escapeAttrValue(${literalText(staticValue)})`,
         literalText('"'),
       ].join(' + '),
     );
@@ -5737,11 +6730,39 @@ function staticSsrNode(node: FunctionModelNode, markers: boolean): string | null
   const directory = markers ? staticElementDirectory(node.children) : null;
   const children =
     directory === null
-      ? staticSsrExpression(node.children, markers)
-      : staticSsrDirectory(directory);
+      ? staticSsrExpression(node.children, markers, slots)
+      : staticSsrDirectory(directory, slots);
   if (children === null) return null;
   const close = `"</${node.tag}>"`;
-  return [open, ...attributes, '">"', children, close].join(' + ');
+  // The slot anchor brackets the slot ELEMENT'S INTERIOR, not the element: the
+  // serializer substitutes the caller's children for the fallback content and
+  // keeps the `<slot>` node itself, which is exactly the shape the class lane's
+  // projected-children channel produces (`<slot name="x">…projection…</slot>`).
+  // A light root is the only root whose children are projections; the caller
+  // gates `slots` to that case, and a slotless tree passes null, so its bytes
+  // stay byte-identical.
+  if (node.tag !== 'slot' || slots === null) {
+    return [open, ...attributes, '">"', children, close].join(' + ');
+  }
+  const ordinal = slots.get(node);
+  const name = ordinal === undefined ? null : slotNameOf(node);
+  // A slot this producer's map does not cover (a reusable-JSX body is its own
+  // render helper and is not part of the root's map) is emitted UNANCHORED, not
+  // refused: an unprojected slot must still render its fallback, and a
+  // projection into it fails closed at the serializer because no anchor names
+  // it. A non-static name never reaches here — `lightSlotAnchorsEnabled` refused it.
+  if (name === null || ordinal === undefined) {
+    return [open, ...attributes, '">"', children, close].join(' + ');
+  }
+  return [
+    open,
+    ...attributes,
+    '">"',
+    `"<!--" + markerText(slotAnchorMarker(${ordinal}, ${literalText(name)})) + "-->"`,
+    children,
+    `"<!--" + markerText(slotAnchorMarker(${ordinal}, ${literalText(name)}, true)) + "-->"`,
+    close,
+  ].join(' + ');
 }
 
 /**
@@ -5808,6 +6829,7 @@ function ssrEmitState(
     directorySource: `${file}#${component.name}`,
     usesStaticSiblingDirectoryConsumer: false,
     claimCursorShared: false,
+    claimStyleLinkPrefix: false,
     claimAdoptedVar: null,
     claimActivationVar: null,
     usesClaimRecipe: false,
@@ -6033,17 +7055,29 @@ function emitSsrComponentRef(
     push(state, '};');
     propsExpr = propsVar;
   }
+  // `16b-CTX` SERVER side: a child producer whose subtree uses context takes the
+  // render scope as its trailing argument. The scope is the CALLER's own
+  // (`__oe_contextScope`), and the child joins it as `owner()` — which is why a
+  // nested provider shadows the outer one for its subtree and a sibling
+  // reference cannot see it, on the server exactly as on the client.
+  const childScopeArg = componentNeedsSsrContextScope(target, state.componentByName)
+    ? `, ${GENERATED_CONTEXT_SCOPE_RECORD}`
+    : '';
   if (componentProjectsChildren(target)) {
     if (childrenRenderVar === null) return false;
     push(
       state,
-      `${outVar}.push(${SSR_HELPER_PREFIX}${target.name}(${propsExpr}, ${state.hostVar}, ${childrenRenderVar}));`,
+      `${outVar}.push(${SSR_HELPER_PREFIX}${target.name}(${propsExpr}, ${state.hostVar}, ${childrenRenderVar}${childScopeArg}));`,
       span,
     );
   } else {
     // A fully static child keeps the parameterless M08-1a function; extra
     // arguments are harmless and the static body reads no prop by definition.
-    push(state, `${outVar}.push(${node.name}${SSR_SUFFIX}(${propsExpr}, ${state.hostVar}));`, span);
+    push(
+      state,
+      `${outVar}.push(${node.name}${SSR_SUFFIX}(${propsExpr}, ${state.hostVar}${childScopeArg}));`,
+      span,
+    );
   }
   return true;
 }
@@ -6083,7 +7117,7 @@ function emitSsrRecipeHelpers(
     push(state, `const ${outVar} = [];`);
     const outerDepth = state.recipeDepth;
     state.recipeDepth = outerDepth + 1;
-    const emitted = emitDynamicSsrNodes(state, prepared, outVar, true, records);
+    const emitted = emitDynamicSsrNodes(state, prepared, outVar, true, records, null);
     state.recipeDepth = outerDepth;
     state.textOrdinals = outerOrdinals;
     if (!emitted) return false;
@@ -6107,6 +7141,7 @@ function emitDynamicSsrNodes(
   outVar: string,
   markers: boolean,
   records: ReadonlyMap<string, LoweredExpressionRecord>,
+  slots: SlotAnchors | null,
 ): boolean {
   const list = state.emitTextBoundaries ? normalizeTextRuns(nodes) : nodes;
   for (const node of list) {
@@ -6115,7 +7150,7 @@ function emitDynamicSsrNodes(
       continue;
     }
     if (node.kind === 'fragment') {
-      if (!emitDynamicSsrNodes(state, node.children, outVar, markers, records)) return false;
+      if (!emitDynamicSsrNodes(state, node.children, outVar, markers, records, slots)) return false;
       continue;
     }
     if (node.kind === 'dynamic-text') {
@@ -6153,7 +7188,7 @@ function emitDynamicSsrNodes(
       const thenOrdinals = state.textOrdinals;
       const preparedThen = emissionNodes(state, node.consequent);
       state.textOrdinals = textSlotOrdinals(preparedThen);
-      if (!emitDynamicSsrNodes(state, preparedThen, outVar, markers, records)) {
+      if (!emitDynamicSsrNodes(state, preparedThen, outVar, markers, records, slots)) {
         state.textOrdinals = thenOrdinals;
         return false;
       }
@@ -6165,7 +7200,7 @@ function emitDynamicSsrNodes(
         const elseOrdinals = state.textOrdinals;
         const preparedElse = emissionNodes(state, node.alternate);
         state.textOrdinals = textSlotOrdinals(preparedElse);
-        if (!emitDynamicSsrNodes(state, preparedElse, outVar, markers, records)) {
+        if (!emitDynamicSsrNodes(state, preparedElse, outVar, markers, records, slots)) {
           state.textOrdinals = elseOrdinals;
           return false;
         }
@@ -6219,7 +7254,7 @@ function emitDynamicSsrNodes(
       // A component reference inside an entry cannot re-read props on a keyed
       // reuse (M06b1b), so the SSR walk keeps mount's refusal.
       state.listDepth += 1;
-      const entriesEmitted = emitDynamicSsrNodes(state, prepared, outVar, markers, records);
+      const entriesEmitted = emitDynamicSsrNodes(state, prepared, outVar, markers, records, slots);
       state.listDepth -= 1;
       state.textOrdinals = outerOrdinals;
       if (!outerEntryName) state.entryNames.delete(node.parameter);
@@ -6293,6 +7328,20 @@ function emitDynamicSsrNodes(
       );
       return false;
     }
+    // A light-root `<slot>` anchor: the pair brackets the slot element's
+    // INTERIOR (after the open tag, around the fallback content), so the
+    // serializer substitutes the caller's children for the fallback while the
+    // `<slot>` node itself stays — the same shape the class lane's
+    // projected-children channel produces. Both halves carry the slot NAME so a
+    // substitution needs no lookup. `slots` is non-null only for a light root
+    // that contains a slot (`lightSlotAnchorsEnabled`), so a shadow/absent root
+    // and a slotless light tree emit exactly the pre-slice bytes.
+    const slotOrdinal = node.tag === 'slot' && slots !== null ? slots.get(node) : undefined;
+    // A slot outside this producer's map (a reusable-JSX body is a separate
+    // render helper) renders UNANCHORED: its fallback must still appear, and a
+    // projection into it fails closed at the serializer because no anchor names
+    // it.
+    const slotName = slotOrdinal === undefined ? null : slotNameOf(node);
     push(state, `${outVar}.push(${literalText(`<${node.tag}`)});`, node.span);
     for (const attribute of node.attributes) {
       if (
@@ -6307,9 +7356,14 @@ function emitDynamicSsrNodes(
       if (attribute.kind === 'static') {
         if (!ATTRIBUTE_PATTERN.test(attribute.name)) return false;
         if (unsafeStreamFrameAttribute(attribute.name, attribute.value)) return false;
+        // Same canonical spelling as the mount and the static producer: a
+        // static BOOLEAN attribute renders `name=""`.
+        const ssrValue = BOOLEAN_ATTRIBUTES.has(attribute.name.toLowerCase())
+          ? ''
+          : attribute.value;
         push(
           state,
-          `${outVar}.push(${JSON.stringify(` ${attribute.name}="`)}, escapeAttrValue(${literalText(attribute.value)}), ${JSON.stringify('"')});`,
+          `${outVar}.push(${JSON.stringify(` ${attribute.name}="`)}, escapeAttrValue(${literalText(ssrValue)}), ${JSON.stringify('"')});`,
           attribute.span,
         );
         continue;
@@ -6318,6 +7372,13 @@ function emitDynamicSsrNodes(
     }
     push(state, `${outVar}.push(">");`, node.span);
     if (isVoid) continue;
+    if (slotOrdinal !== null && slotName !== null) {
+      push(
+        state,
+        `${outVar}.push("<!--", markerText(slotAnchorMarker(${slotOrdinal}, ${literalText(slotName)})), "-->");`,
+        node.span,
+      );
+    }
     const directory =
       markers && directoryParentAllowed(node.tag) ? staticElementDirectory(node.children) : null;
     if (directory !== null) {
@@ -6327,15 +7388,22 @@ function emitDynamicSsrNodes(
           `${outVar}.push("<!--", markerText(rangeMarker(${ordinal})), "-->");`,
           range.span,
         );
-        if (!emitDynamicSsrNodes(state, [range], outVar, false, records)) return false;
+        if (!emitDynamicSsrNodes(state, [range], outVar, false, records, slots)) return false;
         push(
           state,
           `${outVar}.push("<!--", markerText(rangeMarker(${ordinal}, true)), "-->");`,
           range.span,
         );
       }
-    } else if (!emitDynamicSsrNodes(state, node.children, outVar, markers, records)) {
+    } else if (!emitDynamicSsrNodes(state, node.children, outVar, markers, records, slots)) {
       return false;
+    }
+    if (slotOrdinal !== null && slotName !== null) {
+      push(
+        state,
+        `${outVar}.push("<!--", markerText(slotAnchorMarker(${slotOrdinal}, ${literalText(slotName)}, true)), "-->");`,
+        node.span,
+      );
     }
     push(state, `${outVar}.push(${literalText(`</${node.tag}>`)});`, node.span);
   }
@@ -6368,6 +7436,10 @@ function ssrReachableLocalResourceNames(
 ): ReadonlySet<string> {
   const localRecords = new Map<string, LoweredExpressionRecord>();
   for (const resource of component.resources) {
+    // A `16b-REF` handle is a CLIENT-ONLY channel value (its `ref` attribute
+    // never renders SSR bytes and its notification never runs on the server),
+    // so it is never a server-reachable local. Its notification callback is not
+    // a value the producer reads either.
     if (resource.kind !== 'local' || resource.recipeId !== null || resource.expression === null) {
       continue;
     }
@@ -6469,18 +7541,60 @@ function emitDynamicSsrFunction(
   component: FunctionModelComponent,
   records: ReadonlyMap<string, LoweredExpressionRecord>,
   componentByName: ReadonlyMap<string, FunctionModelComponent>,
+  slots: SlotAnchors | null,
 ): SsrEmission | null {
   const propsName = component.propsParam;
   const projectsChildren = componentProjectsChildren(component);
   const composition = treeHasComposition(component.roots);
   const state = ssrEmitState(component, file, propsName, componentByName, projectsChildren);
   if (!assertTextBoundaryContext(state, component.roots)) return failedSsr(state);
+  const usesContext = componentUsesContextIntrinsic(component);
+  // `16b-CTX` SERVER side: the render's owner scope is a PARAMETER of this
+  // producer call (or a fresh scope created here for the module root). It is
+  // declared before any consumer/provider line so the emitted body reads exactly
+  // one scope, and it is never module state — two concurrent renders cannot see
+  // each other's providers (see `CompiledContextService.forRender`). A component
+  // that only FORWARDS a scope to a context-using child still declares one: that
+  // is the server image of "every component reference is one owner".
+  if (componentNeedsSsrContextScope(component, componentByName)) emitSsrContextScope(state);
+  // Providers publish BEFORE consumers resolve, so a component that both
+  // provides and consumes reads its OWN value — the same ordering the client's
+  // retained setup factory uses.
+  if (usesContext) emitContextProviders(state, component.contextProviders, records);
   // Only locals the server output actually (transitively) evaluates are
   // declared. A client-only handler/ref helper must not make `__ssr` request a
   // callable it never reads; surviving locals keep their authored order.
   const reachableLocalResources = ssrReachableLocalResourceNames(component, records);
   for (const resource of component.resources) {
     if (!IDENTIFIER_PATTERN.test(resource.name) || resource.name.startsWith(INTERNAL_PREFIX)) {
+      continue;
+    }
+    if (resource.kind === 'ref') {
+      // `16b-REF`: the handle exists on the CLIENT only. The `ref` channel
+      // renders no SSR bytes and its notification never runs on the server, so
+      // the producer neither builds the handle nor evaluates the callback —
+      // exactly the phase-labelled setup-pruning rule the plain `ref` channel
+      // already follows for client-only setup locals.
+      state.localResources.add(resource.name);
+      continue;
+    }
+    if (resource.kind === 'context') {
+      // `16b-CTX`: a consumer is resolved AT RENDER TIME from the nearest
+      // provider the render's owner scope can see, so the producer builds the
+      // SAME consumer-local signal the client builds — with the PROVIDED value
+      // instead of the declared default. The signal is written synchronously by
+      // `use` (render mode has no connection and no later write), which is what
+      // makes the server bytes and the claimed value provably the same rule.
+      if (resource.expression === null) continue;
+      const record = recordFor(state, resource.expression, records);
+      if (record === null || !declareReads(state, record)) return failedSsr(state);
+      state.localResources.add(resource.name);
+      emitSetupBinding(state, {
+        name: resource.name,
+        kind: 'context',
+        record,
+        span: resource.span,
+      });
       continue;
     }
     if (resource.kind === 'local') {
@@ -6519,7 +7633,7 @@ function emitDynamicSsrFunction(
   }
   const outVar = nextName(state, 'out');
   push(state, `const ${outVar} = [];`);
-  if (!emitDynamicSsrNodes(state, component.roots, outVar, true, records)) {
+  if (!emitDynamicSsrNodes(state, component.roots, outVar, true, records, slots)) {
     return state.diagnostics.length > 0 ? failedSsr(state) : null;
   }
   push(state, `return ${outVar}.join("");`);
@@ -6530,11 +7644,21 @@ function emitDynamicSsrFunction(
   // lives in one module-local helper. The exported interface keeps its
   // existing M08-1b `(props, host)` shape; the helper name never leaves the
   // generated module (no cross-module/A17 ABI).
+  //
+  // `16b-CTX`: a producer whose SUBTREE uses context also takes the render scope
+  // as a trailing parameter, so the scope rides the call graph and is never
+  // module state (two concurrent renders stay independent). A producer that
+  // neither provides, consumes nor references a context user keeps its exact
+  // pre-`16b-CTX` signature and bytes.
+  const needsScope = componentNeedsSsrContextScope(component, componentByName);
+  const scopeParam = needsScope ? `, ${SSR_CONTEXT_PARAM}` : '';
   const prologue: string[] = composition
     ? [
-        `function ${SSR_HELPER_PREFIX}${component.name}(${MOUNT_PROPS}, ${MOUNT_HOST}, ${SSR_CHILDREN_RENDER}) {`,
+        `function ${SSR_HELPER_PREFIX}${component.name}(${MOUNT_PROPS}, ${MOUNT_HOST}, ${SSR_CHILDREN_RENDER}${scopeParam}) {`,
       ]
-    : [`export function ${component.name}${SSR_SUFFIX}(${MOUNT_PROPS}, ${MOUNT_HOST}) {`];
+    : [
+        `export function ${component.name}${SSR_SUFFIX}(${MOUNT_PROPS}, ${MOUNT_HOST}${scopeParam}) {`,
+      ];
   if (propsName !== null) {
     prologue.push(`  const ${propsName} = ${MOUNT_PROPS};`);
     state.requiredProps.add(propsName);
@@ -6551,8 +7675,8 @@ function emitDynamicSsrFunction(
   }
   const wrapper: string[] = composition
     ? [
-        `export function ${component.name}${SSR_SUFFIX}(${MOUNT_PROPS}, ${MOUNT_HOST}) {`,
-        `  return ${SSR_HELPER_PREFIX}${component.name}(${MOUNT_PROPS}, ${MOUNT_HOST}, null);`,
+        `export function ${component.name}${SSR_SUFFIX}(${MOUNT_PROPS}, ${MOUNT_HOST}${scopeParam}) {`,
+        `  return ${SSR_HELPER_PREFIX}${component.name}(${MOUNT_PROPS}, ${MOUNT_HOST}, null${needsScope ? `, ${SSR_CONTEXT_PARAM}` : ''});`,
         '}',
         '',
       ]
@@ -6578,6 +7702,12 @@ function emitDynamicSsrFunction(
  * component with an admitted dynamic slot gets the M08-1b
  * `__ssr(props, host)` form. Returns `null` when the tree is outside the
  * producer slice.
+ *
+ * `lightRoot` is the ONE gate for the slot-anchor family. It is true only for
+ * the root component of a light-descriptor generated element; a shadow root's
+ * children are distributed by the platform (a `<slot>` in the shadow tree plus
+ * light DOM after `</template>`) and a hostless leaf module is not a host, so
+ * both emit no anchor and keep their pre-slice bytes.
  */
 function emitSsrFunction(
   file: string,
@@ -6585,12 +7715,31 @@ function emitSsrFunction(
   rootDirectory: readonly FunctionModelNode[] | null,
   records: ReadonlyMap<string, LoweredExpressionRecord>,
   componentByName: ReadonlyMap<string, FunctionModelComponent>,
+  lightRoot: boolean,
 ): SsrEmission | null {
+  // The gate runs FIRST, on its own emit state: a dynamic slot name must be
+  // refused before any byte is emitted, and both producer shapes below share the
+  // resulting map so a static and a dynamic tree cannot disagree about an
+  // ordinal. A null map means "emit nothing" — the byte-identity cases, where no
+  // emission site is reached at all.
+  const state = ssrEmitState(
+    component,
+    file,
+    component.propsParam,
+    componentByName,
+    componentProjectsChildren(component),
+  );
+  const enabled = lightSlotAnchorsEnabled(state, lightRoot);
+  if (state.diagnostics.length > 0) return failedSsr(state);
+  // The SSR producers INLINE conditions and list templates (mount/claim emit
+  // them as their own chunks), so this map descends into both: a slot inside a
+  // branch still needs an ordinal, and it must be the one the producer writes.
+  const slots = enabled ? ssrSlotAnchorOrdinals(component.roots) : null;
   let expression: string | null;
   if (rootDirectory !== null) {
-    expression = staticSsrDirectory(rootDirectory);
+    expression = staticSsrDirectory(rootDirectory, slots);
   } else {
-    expression = staticSsrExpression(component.roots, true);
+    expression = staticSsrExpression(component.roots, true, slots);
   }
   if (expression !== null) {
     return {
@@ -6605,7 +7754,7 @@ function emitSsrFunction(
       placements: [],
     };
   }
-  return emitDynamicSsrFunction(file, component, records, componentByName);
+  return emitDynamicSsrFunction(file, component, records, componentByName, slots);
 }
 
 function emitComponent(
@@ -6616,6 +7765,8 @@ function emitComponent(
   sharedClaimCursor: boolean,
   rootInstance: string | undefined,
   retention: RetentionPlan | null,
+  claimStyleLinkPrefix: boolean,
+  lightRoot: boolean,
 ): EmittedComponent {
   const propsName = component.propsParam;
   const projectsChildren = componentProjectsChildren(component);
@@ -6662,6 +7813,7 @@ function emitComponent(
     directorySource: `${file}#${component.name}`,
     usesStaticSiblingDirectoryConsumer: false,
     claimCursorShared: false,
+    claimStyleLinkPrefix: false,
     claimAdoptedVar: null,
     claimActivationVar: null,
     usesClaimRecipe: false,
@@ -6713,6 +7865,33 @@ function emitComponent(
       );
       continue;
     }
+    if (resource.kind === 'ref') {
+      // `16b-REF`: a handle is a compiler-owned value, not a lowered snapshot;
+      // only its OPTIONAL notification record needs read classification. A
+      // DECLARED notification that cannot be resolved fails closed through
+      // `recordFor`'s own diagnostic — it never silently degrades to the
+      // handle-only form, which would drop the author's callback.
+      if (resource.expression === null) {
+        localLines.push({ name: resource.name, kind: 'ref', record: null, span: resource.span });
+        continue;
+      }
+      const record = recordFor(state, resource.expression, records);
+      if (record === null || !declareReads(state, record)) continue;
+      state.localResources.add(resource.name);
+      localLines.push({ name: resource.name, kind: 'ref', record, span: resource.span });
+      continue;
+    }
+    if (resource.kind === 'context') {
+      // `16b-CTX`: the consumer signal is built by the retained factory, so a
+      // reconnect writes into the SAME object. Only the TOKEN expression needs
+      // read classification here.
+      if (resource.expression === null) continue;
+      const record = recordFor(state, resource.expression, records);
+      if (record === null || !declareReads(state, record)) continue;
+      state.localResources.add(resource.name);
+      localLines.push({ name: resource.name, kind: 'context', record, span: resource.span });
+      continue;
+    }
     if (resource.kind === 'local') {
       // A reusable JSX value has no lowered initializer: its recipe is emitted
       // by `emitRecipes` only when at least one insertion site references it.
@@ -6721,7 +7900,7 @@ function emitComponent(
       if (record === null) continue;
       if (!declareReads(state, record)) continue;
       state.localResources.add(resource.name);
-      localLines.push({ name: resource.name, record, span: resource.span });
+      localLines.push({ name: resource.name, kind: 'local', record, span: resource.span });
       continue;
     }
     state.hostBindings.add(resource.name);
@@ -6758,30 +7937,85 @@ function emitComponent(
     };
   }
 
-  // `16b-LC` option 1a: the ROOT setup's admitted lifecycle intrinsics. Each
-  // callback is an ordinary lowered expression, classified against the SAME
-  // state the setup locals use: a setup local is a closure capture, `props`
-  // stays the live frozen props record, builtin globals stay direct, and any
-  // other read keeps the leaf's existing fail-closed binding gate. The callback
-  // TEXT is emitted inside the factory BELOW, after the setup locals it may
-  // close over; the intrinsic call itself is erased.
+  // `16b-LC` nested/hostless depth-1: the frontend admits the intrinsics
+  // MODULE-WIDE; THIS emitter owns placement. One callback is an ordinary
+  // lowered expression classified against the SAME state the setup locals use:
+  // a setup local is a closure capture, `props` stays the live frozen props
+  // record, builtin globals stay direct. A read the retained setup scope cannot
+  // satisfy (host binding) keeps the existing `UNBOUND_BINDING` identity: the
+  // read is declared, the module gate refuses, and no factory is emitted with a
+  // name it cannot receive.
+  //
+  // A callback is carried by exactly two body shapes:
+  //   - the generated element ROOT setup (unchanged bytes), or
+  //   - a DEPTH-1 retained hostless child setup body (`leafBody` plus the same
+  //     component marked a setup body by the retention plan).
+  // Depth>=2, a reusable JSX/list body and a non-retained target have no
+  // connection/disposal owner; they fail closed at the AUTHORED span instead of
+  // silently dropping the author's work.
+  // The SAME fact `declareReads` just recorded: a read it turned into a host
+  // binding cannot be satisfied by the retained setup factory (no bindings
+  // channel there), so the hook is NOT admitted here and the module gate keeps
+  // the existing `UNBOUND_BINDING` identity. Imports/module globals/local setup
+  // reads are declared as their normal scope and stay admitted exactly as the
+  // root hooks were before this slice.
+  const hookReadsHostBinding = (record: LoweredExpressionRecord): boolean =>
+    record.reads.some(
+      (read) =>
+        state.hostBindings.has(read.name) ||
+        state.hostBindings.has(read.binding.name) ||
+        state.requiredBindings.has(read.name) ||
+        state.requiredBindings.has(read.binding.name),
+    );
+  // `16b-CTX`: a context intrinsic needs an OWNER SCOPE, and this lane's owner
+  // scopes exist at exactly two places — the generated element ROOT setup and a
+  // DEPTH-1 retained hostless child setup (the same carry rule as the lifecycle
+  // hooks, because both are carried by the same retained instance factory).
+  // Depth >= 2, a reusable JSX/list body and a non-retained target have no owner
+  // scope, so they fail closed at the AUTHORED span instead of emitting a
+  // reference to a channel nothing supplied. Depth >= 2 retention is OWED by
+  // ADR-0181 and is not implied here.
+  const carriedByOwner =
+    rootInstance === component.name ||
+    (state.leafBody && state.retention?.setupBodies.has(component.name) === true);
+  if (componentUsesContextIntrinsic(component) && !carriedByOwner) {
+    const span = componentUsesContextIntrinsic(component)
+      ? (component.contextProviders[0]?.span ??
+        component.resources.find((resource) => resource.kind === 'context')?.span ??
+        component.span)
+      : component.span;
+    diag(
+      state,
+      'OEIR_LEAF_INVALID_ARTIFACT',
+      'a context intrinsic needs an owner scope: context is carried only by the generated element ' +
+        'ROOT setup or a depth-1 retained hostless child setup (a direct root-body reference that ' +
+        'is not inside a reusable JSX/list body); depth>=2, recipe/list bodies and non-retained ' +
+        'targets fail closed',
+      toIrSpan({ id: 'context', mode: 'setup', span }),
+    );
+  }
+
   const admittedHooks: AdmittedLifecycleHook[] = [];
   for (const hook of component.lifecycle) {
-    if (rootInstance !== component.name) {
-      // Emitter invariant (the frontend admits hooks only for the supplied
-      // root): fail closed instead of emitting a module that silently drops an
-      // author's connection/disposal work.
+    const record = recordFor(state, hook.callback, records);
+    if (record === null || !declareReads(state, record)) continue;
+    if (hookReadsHostBinding(record)) continue;
+    const carriedByRoot = rootInstance === component.name;
+    const carriedByLeaf =
+      state.leafBody && state.retention?.setupBodies.has(component.name) === true;
+    if (!carriedByRoot && !carriedByLeaf) {
       diag(
         state,
         'OEIR_LEAF_INVALID_ARTIFACT',
-        `the '${hook.kind}' lifecycle hook is outside the generated element root setup`,
+        `the '${hook.kind}' lifecycle hook has no lifecycle owner: nested hooks are carried ` +
+          'only by a depth-1 retained hostless child setup (a direct root-body reference that ' +
+          'is not inside a reusable JSX/list body); depth>=2, recipe/list bodies and ' +
+          'non-retained targets fail closed',
         hook.span,
       );
       continue;
     }
-    const record = recordFor(state, hook.callback, records);
-    if (record === null || !declareReads(state, record)) continue;
-    admittedHooks.push({ kind: hook.kind, record, span: hook.span });
+    admittedHooks.push({ kind: hook.kind, record, receivesEnv: hook.receivesEnv, span: hook.span });
   }
   if (state.diagnostics.length > 0) {
     return {
@@ -6797,6 +8031,8 @@ function emitComponent(
   }
   const connectHooks = admittedHooks.filter((hook) => hook.kind === 'connect');
   const disposeHooks = admittedHooks.filter((hook) => hook.kind === 'dispose');
+  const changeHooks = admittedHooks.filter((hook) => hook.kind === 'property-change');
+  const errorHooks = admittedHooks.filter((hook) => hook.kind === 'error');
 
   // T3 / 16b-LC-1: the ROOT's local snapshots are element-lifetime setup, not
   // per-projection work. They move into one module-local factory the shell's
@@ -6811,7 +8047,7 @@ function emitComponent(
   // here preserves the pre-change emitted text instead of writing a factory
   // that references a name it never declares.
   const setupReadsHostBinding = localLines.some((line) =>
-    line.record.reads.some(
+    (line.record?.reads ?? []).some(
       (read) =>
         state.hostBindings.has(read.name) ||
         state.hostBindings.has(read.binding.name) ||
@@ -6819,12 +8055,21 @@ function emitComponent(
         state.requiredBindings.has(read.binding.name),
     ),
   );
-  const hooksOnRoot = admittedHooks.length > 0;
+  // `16b-CTX`: a provider is element-lifetime setup work exactly like a hook, so
+  // it forces the retained factory on the component that owns it.
+  const providersOnRoot =
+    rootInstance === component.name && componentUsesContextIntrinsic(component);
+  const hooksOnRoot = rootInstance === component.name && admittedHooks.length > 0;
   const rootSetup =
     rootInstance === component.name &&
-    (localLines.length > 0 || hooksOnRoot) &&
+    (localLines.length > 0 || hooksOnRoot || providersOnRoot) &&
     !setupReadsHostBinding;
-  if (hooksOnRoot && !rootSetup) {
+  // A component ALIASES the retained record only when the record can satisfy
+  // every read the body needs. That is: it has setup locals, or it uses a context
+  // intrinsic (whose owner scope the factory carries). A HOOK-only root is the
+  // pre-existing shape and keeps its exact bytes, so it falls through.
+  const aliasesSetupRecord = localLines.length > 0 || componentUsesContextIntrinsic(component);
+  if ((hooksOnRoot || providersOnRoot) && !rootSetup) {
     // The factory is the ONLY carrier of the admitted hooks, so a setup shape
     // that cannot host the factory fails closed here instead of emitting an
     // instance record without its connect/dispose work. (The same module is
@@ -6839,9 +8084,9 @@ function emitComponent(
           severity: 'error',
           code: 'OEIR_LEAF_UNSUPPORTED_BINDING',
           message:
-            'the root setup reads a host binding, so the admitted onConnect/onDispose hooks ' +
-            'cannot be carried by the retained instance factory; the generated element lane ' +
-            'has no binding channel',
+            'the root setup reads a host binding, so the admitted lifecycle hooks and context ' +
+            'providers cannot be carried by the retained instance factory; the generated ' +
+            'element lane has no binding channel',
           span: { file: '', start: 0, end: 0, line: 1, column: 1 },
           origin: 'module',
         },
@@ -6905,10 +8150,32 @@ function emitComponent(
     }
     const setupReadsProps =
       localLines.some((line) =>
-        line.record.reads.some((read) => read.name === 'props' || read.binding.name === 'props'),
+        (line.record?.reads ?? []).some(
+          (read) => read.name === 'props' || read.binding.name === 'props',
+        ),
       ) ||
       admittedHooks.some((hook) =>
         hook.record.reads.some((read) => read.name === 'props' || read.binding.name === 'props'),
+      ) ||
+      // `16b-CTX`: the PROVIDER thunks also live in the retained factory, so a
+      // thunk reading props needs the same alias. Without this the emitted
+      // factory references an undeclared `props`.
+      component.contextProviders.some((provider) =>
+        [records.get(provider.token.id), records.get(provider.value.id)].some((record) =>
+          (record?.reads ?? []).some(
+            (read) => read.name === 'props' || read.binding.name === 'props',
+          ),
+        ),
+      ) ||
+      // `16b-CTX`: a consumer's TOKEN is usually an import, but it may read
+      // props too, and the consumer declaration itself lives in the factory.
+      component.resources.some(
+        (resource) =>
+          resource.kind === 'context' &&
+          (records
+            .get(resource.expression?.id ?? '')
+            ?.reads.some((read) => read.name === 'props' || read.binding.name === 'props') ??
+            false),
       );
     const setupPrologue: string[] = [
       `function ${GENERATED_ROOT_INSTANCE_NAME}(${INTERNAL_PREFIX}owner, ${MOUNT_HOST}) {`,
@@ -6929,35 +8196,116 @@ function emitComponent(
       placements: [],
       segmentKeys: new Set(),
     };
-    for (const line of localLines) {
-      pushParts(setupState, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
-    }
+    // `16b-CTX` ordering: scope, then PROVIDERS, then locals. A component that
+    // both provides and consumes must read its OWN value, so the provider has to
+    // be published before the consumer declaration resolves. A root provides on
+    // the element anchor itself, so its provider also covers every depth-1 child.
+    emitContextScopeDeclaration(setupState, component, false);
+    emitContextProviders(setupState, component.contextProviders, records);
+    for (const line of localLines) emitSetupBinding(setupState, line);
     // `16b-LC` option 1a: the connect callbacks are RECORDED, not replayed
     // here. The root mount/claim prologue replays them on the per-connection
     // scope, so "setup runs once" and "the callback runs on every connection"
     // stay separate phases with no second lifecycle engine.
     if (connectHooks.length > 0) {
-      push(setupState, `const ${GENERATED_ROOT_CONNECT_RECORD} = [];`);
-    }
-    for (const hook of connectHooks) {
-      pushParts(
-        setupState,
-        [`${GENERATED_ROOT_CONNECT_RECORD}.push((`, { record: hook.record }, '));'],
-        hook.span,
-      );
+      const legacyConnectHooks = connectHooks.filter((hook) => !hook.receivesEnv);
+      const envConnectHooks = connectHooks.filter((hook) => hook.receivesEnv);
+      if (legacyConnectHooks.length > 0) {
+        push(setupState, `const ${GENERATED_ROOT_CONNECT_RECORD} = [];`);
+      }
+      for (const hook of legacyConnectHooks) {
+        pushParts(
+          setupState,
+          [`${GENERATED_ROOT_CONNECT_RECORD}.push((`, { record: hook.record }, '));'],
+          hook.span,
+        );
+      }
+      // Env-form callbacks get their OWN retained record: the replay passes the
+      // env argument only for this form, so an all-zero-argument module keeps
+      // its exact pre-env bytes (see the record constant's comment).
+      if (envConnectHooks.length > 0) {
+        push(setupState, `const ${GENERATED_ROOT_CONNECT_ENV_RECORD} = [];`);
+      }
+      for (const hook of envConnectHooks) {
+        pushParts(
+          setupState,
+          [`${GENERATED_ROOT_CONNECT_ENV_RECORD}.push((`, { record: hook.record }, '));'],
+          hook.span,
+        );
+      }
     }
     // `onDispose` registers on the element/island instance owner the shell
     // hands the factory: the existing LifetimeScope teardown cascade owns it
     // (once, after the connection/projection cleanups, LIFO, first-error rule).
+    // An env-form callback is wrapped so the owner's own `signal` is read at
+    // teardown: `LifetimeScope.dispose` aborts it BEFORE any cleanup runs, so
+    // the callback observes an aborted signal. The signal is created here (once
+    // per instance) so the abort is teardown-start, not first-callback.
+    if (disposeHooks.some((hook) => hook.receivesEnv)) {
+      push(setupState, `const ${TEARDOWN_SIGNAL_VAR} = ${INTERNAL_PREFIX}owner.signal;`);
+    }
     for (const hook of disposeHooks) {
+      if (hook.receivesEnv) {
+        pushParts(
+          setupState,
+          [
+            `${INTERNAL_PREFIX}owner.add(() => (`,
+            { record: hook.record },
+            `)({ host: ${MOUNT_HOST}.${HOST_ELEMENT_PROPERTY}, signal: ${TEARDOWN_SIGNAL_VAR}, states: ${MOUNT_HOST}.${STATES_PROPERTY} }));`,
+          ],
+          hook.span,
+        );
+        continue;
+      }
       pushParts(
         setupState,
         [`${INTERNAL_PREFIX}owner.add((`, { record: hook.record }, '));'],
         hook.span,
       );
     }
+    for (const hook of changeHooks) {
+      // Registration only: the shell owns the listener list, the env it builds
+      // and the teardown clearing. The channel check keeps a hand-built
+      // descriptor without the runtime property a no-op instead of a crash.
+      pushParts(
+        setupState,
+        [
+          `if (${MOUNT_HOST}.${PROPERTY_CHANGE_PROPERTY} !== undefined) ${MOUNT_HOST}.${PROPERTY_CHANGE_PROPERTY}((`,
+          { record: hook.record },
+          '));',
+        ],
+        hook.span,
+      );
+    }
+    for (const hook of errorHooks) {
+      // `16b-EB` registration only. The SHELL owns both capture points (the
+      // connect/claim catch it already had, and the update-phase sink below),
+      // the env it builds, and the teardown clearing; generated code never calls
+      // the callback itself, so there is no second error channel. The callback
+      // is handed to the channel verbatim: the shell always calls it with the
+      // `{ host, signal, states, error }` env, and a zero-parameter authored
+      // callback simply ignores it (same contract as the change channel's
+      // event).
+      pushParts(
+        setupState,
+        [
+          `if (${MOUNT_HOST}.${ERROR_HANDLER_PROPERTY} !== undefined) ${MOUNT_HOST}.${ERROR_HANDLER_PROPERTY}((`,
+          { record: hook.record },
+          '));',
+        ],
+        hook.span,
+      );
+    }
     const recordFields = localLines.map((line) => line.name);
-    if (connectHooks.length > 0) recordFields.push(GENERATED_ROOT_CONNECT_RECORD);
+    if (componentUsesContextIntrinsic(component)) {
+      recordFields.push(GENERATED_CONTEXT_SCOPE_RECORD);
+    }
+    if (connectHooks.some((hook) => !hook.receivesEnv)) {
+      recordFields.push(GENERATED_ROOT_CONNECT_RECORD);
+    }
+    if (connectHooks.some((hook) => hook.receivesEnv)) {
+      recordFields.push(GENERATED_ROOT_CONNECT_ENV_RECORD);
+    }
     const setupReturn =
       recordFields.length === 0 ? '  return {};' : `  return { ${recordFields.join(', ')} };`;
     setupLines = [...setupPrologue, ...setupState.lines, setupReturn, '}', ''];
@@ -6976,13 +8324,22 @@ function emitComponent(
   // ledger-owned retained scope. The retaining reference site calls this
   // module-local factory inside `retainChildInstance`; the body itself only
   // aliases the returned record (never re-evaluates an initializer and never
-  // emits a ledger call). A leaf with no setup local needs no factory at all.
-  const leafSetup = state.leafBody && localLines.length > 0;
+  // emits a ledger call). A leaf with neither setup local nor lifecycle hook
+  // needs no factory at all; a hook-only depth-1 child DOES need this one
+  // factory (it is the only carrier of the retained callbacks — no second
+  // lifecycle engine).
+  const leafSetup =
+    state.leafBody &&
+    (localLines.length > 0 || admittedHooks.length > 0 || componentUsesContextIntrinsic(component));
   if (leafSetup) {
     // Belt mirroring the root factory: the alias names are compiler-owned and
     // an authored identifier cannot carry the `__oe_` prefix; refusing here
     // keeps a model that bypassed both from emitting a duplicate declaration.
-    const fixedNames: readonly string[] = [ROOT_SETUP_RECORD, ROOT_SETUP_REQUIRE];
+    const fixedNames: readonly string[] = [
+      ROOT_SETUP_RECORD,
+      ROOT_SETUP_REQUIRE,
+      GENERATED_ROOT_CONNECT_RECORD,
+    ];
     const authoredNames = new Set<string>([
       component.name,
       ...component.resources.map((resource) => resource.name),
@@ -7015,9 +8372,34 @@ function emitComponent(
         placements: [],
       };
     }
-    const setupReadsProps = localLines.some((line) =>
-      line.record.reads.some((read) => read.name === 'props' || read.binding.name === 'props'),
-    );
+    const setupReadsProps =
+      localLines.some((line) =>
+        (line.record?.reads ?? []).some(
+          (read) => read.name === 'props' || read.binding.name === 'props',
+        ),
+      ) ||
+      admittedHooks.some((hook) =>
+        hook.record.reads.some((read) => read.name === 'props' || read.binding.name === 'props'),
+      ) ||
+      // `16b-CTX`: the provider THUNKS and the consumer TOKENS also live in the
+      // retained factory, so either reading props needs the same alias. Without
+      // this the emitted factory references an undeclared `props` (a runtime
+      // ReferenceError on the first connect).
+      component.contextProviders.some((provider) =>
+        [records.get(provider.token.id), records.get(provider.value.id)].some((record) =>
+          (record?.reads ?? []).some(
+            (read) => read.name === 'props' || read.binding.name === 'props',
+          ),
+        ),
+      ) ||
+      component.resources.some(
+        (resource) =>
+          resource.kind === 'context' &&
+          (records
+            .get(resource.expression?.id ?? '')
+            ?.reads.some((read) => read.name === 'props' || read.binding.name === 'props') ??
+            false),
+      );
     const setupPrologue: string[] = [
       `function ${component.name}${LEAF_SETUP_SUFFIX}(${INTERNAL_PREFIX}owner, ${MOUNT_PROPS}, ${MOUNT_HOST}) {`,
     ];
@@ -7035,10 +8417,102 @@ function emitComponent(
       placements: [],
       segmentKeys: new Set(),
     };
-    for (const line of localLines) {
-      pushParts(setupState, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
+    // `16b-CTX`: a hostless component owns a CHILD of the anchor scope, so its
+    // providers are invisible to its siblings and visible to its subtree. Same
+    // ordering as the root factory: the provider publishes before a consumer of
+    // the SAME component resolves.
+    emitContextScopeDeclaration(setupState, component, true);
+    emitContextProviders(setupState, component.contextProviders, records);
+    for (const line of localLines) emitSetupBinding(setupState, line);
+    // `16b-LC` nested/hostless depth-1: the connect callbacks are RECORDED in
+    // the same retained setup record the locals use; the child mount/claim
+    // prologue replays them on its per-projection scope. `onDispose` registers
+    // on the retained instance owner, so the ledger's structural release /
+    // owner teardown cascades it exactly once (LIFO, first-error rule). The env
+    // form mirrors the root factory: its own retained record, and a wrapper
+    // that reads the retained owner's signal at teardown.
+    if (connectHooks.some((hook) => !hook.receivesEnv)) {
+      push(setupState, `const ${GENERATED_ROOT_CONNECT_RECORD} = [];`);
     }
-    const setupReturn = `  return { ${localLines.map((line) => line.name).join(', ')} };`;
+    for (const hook of connectHooks) {
+      if (hook.receivesEnv) continue;
+      pushParts(
+        setupState,
+        [`${GENERATED_ROOT_CONNECT_RECORD}.push((`, { record: hook.record }, '));'],
+        hook.span,
+      );
+    }
+    if (connectHooks.some((hook) => hook.receivesEnv)) {
+      push(setupState, `const ${GENERATED_ROOT_CONNECT_ENV_RECORD} = [];`);
+    }
+    for (const hook of connectHooks) {
+      if (!hook.receivesEnv) continue;
+      pushParts(
+        setupState,
+        [`${GENERATED_ROOT_CONNECT_ENV_RECORD}.push((`, { record: hook.record }, '));'],
+        hook.span,
+      );
+    }
+    if (disposeHooks.some((hook) => hook.receivesEnv)) {
+      push(setupState, `const ${TEARDOWN_SIGNAL_VAR} = ${INTERNAL_PREFIX}owner.signal;`);
+    }
+    for (const hook of disposeHooks) {
+      if (hook.receivesEnv) {
+        pushParts(
+          setupState,
+          [
+            `${INTERNAL_PREFIX}owner.add(() => (`,
+            { record: hook.record },
+            `)({ host: ${MOUNT_HOST}.${HOST_ELEMENT_PROPERTY}, signal: ${TEARDOWN_SIGNAL_VAR}, states: ${MOUNT_HOST}.${STATES_PROPERTY} }));`,
+          ],
+          hook.span,
+        );
+        continue;
+      }
+      pushParts(
+        setupState,
+        [`${INTERNAL_PREFIX}owner.add((`, { record: hook.record }, '));'],
+        hook.span,
+      );
+    }
+    for (const hook of changeHooks) {
+      pushParts(
+        setupState,
+        [
+          `if (${MOUNT_HOST}.${PROPERTY_CHANGE_PROPERTY} !== undefined) ${MOUNT_HOST}.${PROPERTY_CHANGE_PROPERTY}((`,
+          { record: hook.record },
+          '));',
+        ],
+        hook.span,
+      );
+    }
+    for (const hook of errorHooks) {
+      // `16b-EB`: same registration shape as the root factory. The child's setup
+      // host carries the channel because the retaining reference site forwarded
+      // it (see `childErrorBoundaryField`), so both the handler list and the
+      // update-phase sink belong to the ONE enclosing generated element.
+      pushParts(
+        setupState,
+        [
+          `if (${MOUNT_HOST}.${ERROR_HANDLER_PROPERTY} !== undefined) ${MOUNT_HOST}.${ERROR_HANDLER_PROPERTY}((`,
+          { record: hook.record },
+          '));',
+        ],
+        hook.span,
+      );
+    }
+    const setupFields = localLines.map((line) => line.name);
+    if (componentUsesContextIntrinsic(component)) {
+      setupFields.push(GENERATED_CONTEXT_SCOPE_RECORD);
+    }
+    if (connectHooks.some((hook) => !hook.receivesEnv)) {
+      setupFields.push(GENERATED_ROOT_CONNECT_RECORD);
+    }
+    if (connectHooks.some((hook) => hook.receivesEnv)) {
+      setupFields.push(GENERATED_ROOT_CONNECT_ENV_RECORD);
+    }
+    const setupReturn =
+      setupFields.length === 0 ? '  return {};' : `  return { ${setupFields.join(', ')} };`;
     setupLines = [...setupPrologue, ...setupState.lines, setupReturn, '}', ''];
     const setupShift = fragmentLineCount(setupPrologue);
     setupSegments = setupState.segments.map((segment) => ({
@@ -7055,14 +8529,12 @@ function emitComponent(
   // any setup/DOM work; the shell aborts it when mount/claim throws.
   if (state.retainBody) push(state, `beginInstancePass(${MOUNT_HOST}.instance);`);
   push(state, `const ${INTERNAL_PREFIX}nodes = [];`);
-  if (rootSetup && localLines.length > 0) {
+  if (rootSetup && aliasesSetupRecord) {
     emitSetupAlias(state, localLines, ROOT_SETUP_HOST_PROPERTY);
-  } else if (leafSetup) {
+  } else if (leafSetup && (localLines.length > 0 || componentUsesContextIntrinsic(component))) {
     emitSetupAlias(state, localLines, LEAF_SETUP_HOST_PROPERTY);
   } else {
-    for (const line of localLines) {
-      pushParts(state, [`const ${line.name} = (`, { record: line.record }, ');'], line.span);
-    }
+    for (const line of localLines) emitSetupBinding(state, line);
   }
   // One read of the children recipe per mount (M06b2a): every projection site
   // inserts this same recipe value, and dynamic children content refreshes
@@ -7128,10 +8600,19 @@ function emitComponent(
       );
     }
   }
-  // `16b-LC` option 1a: the mount is a connection too, so the same retained
-  // connect callbacks replay on this fresh per-connection scope.
-  if (connectHooks.length > 0) {
-    for (const line of emitRootLifecycleReplay()) mountPrologue.push(line);
+  // `16b-LC`: the mount is a connection too, so the same retained connect
+  // callbacks replay on this fresh per-connection scope. A retained depth-1
+  // hostless child reads them from its own setup record (`host.setup`); the
+  // root keeps the unchanged `host.bindings` spelling (byte-identical).
+  if (connectHooks.some((hook) => !hook.receivesEnv)) {
+    for (const line of emitLifecycleReplay(rootSetup ? 'bindings' : 'setup')) {
+      mountPrologue.push(line);
+    }
+  }
+  if (connectHooks.some((hook) => hook.receivesEnv)) {
+    for (const line of emitLifecycleEnvReplay(rootSetup ? 'bindings' : 'setup')) {
+      mountPrologue.push(line);
+    }
   }
   const mountHostVar = `${INTERNAL_PREFIX}mountHost`;
   const factoryLines: string[] = [
@@ -7142,6 +8623,30 @@ function emitComponent(
   // root component of a retained module changes bytes; every other factory keeps
   // today's literal exactly.
   const forwardedInstance = state.retainBody ? `, instance: ${INTERNAL_PREFIX}host.instance` : '';
+  // Env-form callbacks read the owning element from the host record. The shell
+  // attaches it; this literal carries it into the mount/claim host the replay
+  // prologues read. Guests: modules without the env form keep today's bytes.
+  const forwardedHostElement = moduleUsesLifecycleEnv(state)
+    ? `, ${HOST_ELEMENT_PROPERTY}: ${INTERNAL_PREFIX}host.${HOST_ELEMENT_PROPERTY}, ${STATES_PROPERTY}: ${INTERNAL_PREFIX}host.${STATES_PROPERTY}`
+    : '';
+  // The change channel rides the same literal for the depth-1 child setup host.
+  const forwardedPropertyChange = moduleUsesPropertyChange(state)
+    ? `, ${PROPERTY_CHANGE_PROPERTY}: ${INTERNAL_PREFIX}host.${PROPERTY_CHANGE_PROPERTY}`
+    : '';
+  // `16b-EB`: the registration channel AND the update-phase sink ride the same
+  // literal, so the root setup can register its handler and the body's refresh
+  // subscriptions can be guarded. Guests: modules without the intrinsic keep
+  // today's bytes, including every two-argument `guardUpdate(fn)` call, which
+  // then keeps the pre-`16b-EB` propagating form.
+  const forwardedErrorBoundary = moduleUsesErrorBoundary(state)
+    ? `, ${ERROR_HANDLER_PROPERTY}: ${INTERNAL_PREFIX}host.${ERROR_HANDLER_PROPERTY}, ${ERROR_REPORT_PROPERTY}: ${INTERNAL_PREFIX}host.${ERROR_REPORT_PROPERTY}`
+    : '';
+  // `16b-CTX`: the channel rides the same literal, so the mount/claim body's
+  // consumer alias and the setup factory's provider registration resolve the one
+  // element scope. Guests: modules without the intrinsic keep today's bytes.
+  const forwardedContext = moduleUsesContext(state)
+    ? `, ${CONTEXT_SCOPE_PROPERTY}: ${INTERNAL_PREFIX}host.${CONTEXT_SCOPE_PROPERTY}`
+    : '';
   if (state.requiresPropsChanged) {
     // The root instance's defining scope is the host props channel: the
     // original OEIR_LEAF_MISSING_VALUE contract stays at factory creation.
@@ -7149,11 +8654,11 @@ function emitComponent(
       `  const ${INTERNAL_PREFIX}propsChanged = ${INTERNAL_PREFIX}host.propsChanged; if (${INTERNAL_PREFIX}propsChanged === undefined) throw new Error("OEIR_LEAF_MISSING_VALUE: propsChanged");`,
     );
     factoryLines.push(
-      `  const ${mountHostVar} = { bindings: ${INTERNAL_PREFIX}host.bindings, propDeps: [${INTERNAL_PREFIX}propsChanged]${forwardedInstance} };`,
+      `  const ${mountHostVar} = { bindings: ${INTERNAL_PREFIX}host.bindings, propDeps: [${INTERNAL_PREFIX}propsChanged]${forwardedInstance}${forwardedHostElement}${forwardedPropertyChange}${forwardedErrorBoundary}${forwardedContext} };`,
     );
   } else {
     factoryLines.push(
-      `  const ${mountHostVar} = { bindings: ${INTERNAL_PREFIX}host.bindings, propDeps: []${forwardedInstance} };`,
+      `  const ${mountHostVar} = { bindings: ${INTERNAL_PREFIX}host.bindings, propDeps: []${forwardedInstance}${forwardedHostElement}${forwardedPropertyChange}${forwardedErrorBoundary}${forwardedContext} };`,
     );
   }
   const claim =
@@ -7165,8 +8670,16 @@ function emitComponent(
           componentByName,
           sharedClaimCursor,
           rootSetup,
-          connectHooks.length > 0,
+          aliasesSetupRecord,
+          rootInstance === component.name,
+          connectHooks.some((hook) => !hook.receivesEnv)
+            ? rootSetup
+              ? 'bindings'
+              : 'setup'
+            : null,
+          connectHooks.some((hook) => hook.receivesEnv) ? (rootSetup ? 'bindings' : 'setup') : null,
           retention,
+          claimStyleLinkPrefix,
         )
       : null;
   if (claim !== null && claim.diagnostics.length > 0) {
@@ -7207,7 +8720,7 @@ function emitComponent(
   const ssr =
     claim === null
       ? null
-      : emitSsrFunction(file, component, rootDirectory, records, componentByName);
+      : emitSsrFunction(file, component, rootDirectory, records, componentByName, lightRoot);
   if (ssr !== null && ssr.diagnostics.length > 0) {
     return {
       lines: [],
@@ -7438,6 +8951,32 @@ function parsesAsModule(text: string): boolean {
  * Emit the generated leaf module for one M03 `FunctionModelModule`.
  * Deterministic for the same model/registry; unsupported shapes fail closed.
  */
+/** The import table of one module, with the used entries recorded during emit. */
+function createImportContext(module: FunctionModelModule): ModuleImportContext {
+  const byLocal = new Map<string, FunctionModelImport>();
+  for (const entry of module.imports ?? []) {
+    // A duplicate local spelling is a TypeScript error in the authored module;
+    // the first declaration wins here so the emitted text always parses.
+    if (!byLocal.has(entry.local)) byLocal.set(entry.local, entry);
+  }
+  return { byLocal, used: new Map() };
+}
+
+/** One re-emitted static import, verbatim in form and specifier. */
+function emitAuthoredImport(entry: FunctionModelImport): string {
+  const from = JSON.stringify(entry.specifier);
+  switch (entry.form) {
+    case 'default':
+      return `import ${entry.local} from ${from};`;
+    case 'namespace':
+      return `import * as ${entry.local} from ${from};`;
+    default:
+      return entry.imported === entry.local
+        ? `import { ${entry.local} } from ${from};`
+        : `import { ${entry.imported} as ${entry.local} } from ${from};`;
+  }
+}
+
 export function generateLeafModule(
   module: FunctionModelModule,
   options: {
@@ -7452,6 +8991,28 @@ export function generateLeafModule(
      * and a root with no setup snapshot also emits no factory.
      */
     readonly rootInstance?: string;
+    /**
+     * M09-2e / #1803 compiler-private claim-prefix marker: `true` when the
+     * generated-element lane read a `styles` declaration from the same authored
+     * sidecar (shadow root only), so this module's DSD template prefixes its
+     * claimed content with the canonical marked stylesheet links. The ROOT claim
+     * then skips exactly that leading marked <link> prefix — borrowed server
+     * DOM, never deleted, re-written or duplicated. Omitted keeps every byte of
+     * the pre-slice claim unchanged.
+     */
+    readonly claimStyleLinkPrefix?: boolean;
+    /**
+     * Compiler-private LIGHT-root marker: `true` when the generated element this
+     * module becomes has a LIGHT descriptor root (or an absent root, which the
+     * shell defaults to light). The light-root root component then emits a
+     * `oe:s:` / `oe:/s:` anchor pair inside each `<slot>` element so the
+     * serializer can substitute caller children into exactly that slot without
+     * pattern-matching markup.
+     *
+     * Omitted (hostless leaf modules, shadow roots, every pre-slice caller)
+     * emits today's bytes exactly: no anchor, no runtime import.
+     */
+    readonly lightRoot?: boolean;
   } = {},
 ): GeneratedLeafModule {
   const records = new Map(module.expressions.expressions.map((record) => [record.id, record]));
@@ -7478,6 +9039,11 @@ export function generateLeafModule(
   const componentByName = new Map(
     module.components.map((component) => [component.name, component] as const),
   );
+  // The module's static imports are admitted as DIRECT references: every
+  // component shares one context, and the used entries are re-emitted in the
+  // module header. A model without an import table keeps today's bytes.
+  const importContext = createImportContext(module);
+  for (const component of module.components) importContexts.set(component, importContext);
   const cycle = findMountCycle(module);
   if (cycle !== null) {
     return {
@@ -7519,6 +9085,14 @@ export function generateLeafModule(
       sharedClaimCursor,
       options.rootInstance,
       retention,
+      options.claimStyleLinkPrefix === true,
+      // Only the ROOT component of a light-root generated element emits slot
+      // anchors: a nested/child component in the same module is a separate host
+      // whose root kind is its own descriptor's, and the leaf generator has no
+      // fact for it. Restricting the gate to `options.rootInstance` keeps the
+      // anchor exactly where the serializer can consume it and leaves every
+      // other component's bytes untouched.
+      options.lightRoot === true && component.name === options.rootInstance,
     );
     diagnostics.push(...emitted.diagnostics);
     if (emitted.diagnostics.length > 0) continue;
@@ -7568,9 +9142,23 @@ export function generateLeafModule(
     }
   }
   if (runtimeImports.length !== RUNTIME_IMPORTS.length) runtimeImports.sort();
+  const authoredImports = [...importContext.used.values()]
+    .sort((left, right) =>
+      left.specifier === right.specifier
+        ? left.imported < right.imported
+          ? -1
+          : left.imported > right.imported
+            ? 1
+            : 0
+        : left.specifier < right.specifier
+          ? -1
+          : 1,
+    )
+    .map(emitAuthoredImport);
   const headerLines = [
     '// <generated by openelement M07a leaf-claim (mount M06b2a); do not edit>',
     `import { ${runtimeImports.join(', ')} } from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)};`,
+    ...authoredImports,
     '',
   ];
   if (sharedClaimCursor) {

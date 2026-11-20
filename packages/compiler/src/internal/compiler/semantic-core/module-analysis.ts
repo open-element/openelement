@@ -1,6 +1,7 @@
 /** Bundler-neutral module semantics consumed by compiler and Vite graph adapters. */
 
 import ts from 'typescript';
+import { hasIslandPolicyStatement } from './island-policy-statement.ts';
 
 /**
  * The bundler-neutral facts one module source yields: its relative imports, the
@@ -68,6 +69,23 @@ export interface ModuleSemanticFacts {
   definedCustomElementTags: string[];
   referencedCustomElementTags: string[];
   compilerInteractionEvents: string[];
+  /**
+   * The module declares a GENERATED element: it carries the island policy
+   * sidecar statement (`export const openElement = defineIslandConfig({...})` /
+   * `defineComponentConfig({...})`) that the generated-element lane reads.
+   *
+   * This is the generated lane's counterpart to `definedCustomElementTags`:
+   * a generated component never applies the `@element` decorator (its element
+   * class is emitted by the compiler), so a consumer that asks "is this module
+   * a component module?" must consult BOTH facts. The TAG is deliberately NOT
+   * derived here — it stays the manifest's identity (the sidecar does not
+   * spell it), and this boolean only answers the module-shape question.
+   *
+   * The statement shape is read through the compiler's own sidecar locator
+   * (`hasIslandPolicyStatement`), so this fact and the generated-element lane
+   * cannot disagree about which statement is the policy.
+   */
+  hasGeneratedElementSidecar: boolean;
 }
 
 /**
@@ -438,7 +456,13 @@ export function createModuleIntrinsicBindings(
   };
 }
 
-function isCustomElementTag(value: string): boolean {
+/**
+ * The compiler's custom-element tag predicate. Exported for the generated-element
+ * lane's sidecar `tag` read (`semantic-ir/generated-element/site.ts`): the lane
+ * must not carry a second hyphenated-name regex, so the one this module already
+ * applies to JSX references is the one the sidecar fact is screened by.
+ */
+export function isCustomElementTag(value: string): boolean {
   return /^[a-z][a-z0-9]*(-[a-z0-9]+)+$/.test(value);
 }
 
@@ -811,5 +835,6 @@ export function analyzeModuleSemantics(
     definedCustomElementTags: [...defined].sort(),
     referencedCustomElementTags: [...referenced].sort(),
     compilerInteractionEvents: [...interactionEvents].sort(),
+    hasGeneratedElementSidecar: hasIslandPolicyStatement(sourceFile),
   };
 }

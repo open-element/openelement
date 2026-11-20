@@ -79,6 +79,37 @@ export interface OpenElementExtensions {
   module?: string;
   export?: string;
   tailwind?: OpenElementTailwindDeclaration;
+  /**
+   * The host root a generated-element declaration was compiled with. Absent for
+   * a class declaration (its descriptor owns the root) and for a generated
+   * declaration whose sidecar declares none (the descriptor default is light).
+   */
+  root?: 'light' | 'shadow';
+  /**
+   * The authored package-relative `.css` specifiers a generated SHADOW host
+   * declares, published so a consuming build can emit the sheet and hand its
+   * URL to the DSD style-link carrier. Absent when the component declares none;
+   * class declarations deliver their sheets through `static styles` instead.
+   */
+  styles?: readonly string[];
+  /**
+   * The compiler-emitted SSR host producer's export name
+   * (`<Component>__ssrHost`) for a generated declaration whose root is
+   * `shadow`.
+   *
+   * A consuming build cannot otherwise learn it: the name is the compiler's
+   * return-only `ssrHostExport` metadata, and re-deriving it from a naming
+   * convention inside the router would be exactly the drift ADR-0182 forbids
+   * ("read the compiler's return value, never re-derive it"). With it, a
+   * package island can be paired through the SAME `__registerSsrIsland` channel
+   * a local island uses, so its SSR emits the DSD template and the client can
+   * claim it.
+   *
+   * Absent for a class declaration and for a LIGHT-root generated declaration
+   * (a light root serializes through the shell-attached `__ssr` static instead,
+   * which the entry resolves from the class).
+   */
+  ssrHostExport?: string;
 }
 
 /** One custom element declaration in a package manifest: tag, members and delivery metadata. */

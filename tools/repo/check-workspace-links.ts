@@ -20,6 +20,7 @@ import { isAbsolute, relative, resolve } from 'node:path';
 import { lstat, realpath } from 'node:fs/promises';
 import type { Stats } from 'node:fs';
 import process from 'node:process';
+import { emitSummary } from './checker-io.ts';
 import { readWorkspaces } from './workspace-tasks.ts';
 
 export const NODE_MODULES_DIR = 'node_modules';
@@ -136,5 +137,5 @@ if (import.meta.main) {
     for (const failure of failures) console.error(`- ${failure}`);
     process.exit(1);
   }
-  console.log('Workspace links check passed.');
+  emitSummary('Workspace links check passed.');
 }

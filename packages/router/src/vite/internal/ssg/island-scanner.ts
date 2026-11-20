@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the scan stages share one private type flow; the public boundary is the structured scan-result union consumed by the SSG pipeline.
 /** Island and package-manifest discovery without executing local island modules. */
 import ts from 'typescript';
 import { createRequire } from 'node:module';
@@ -111,6 +112,17 @@ export interface LocalIslandMeta {
    * root decision stands, and the generated shell applies its `light` default.
    */
   root?: 'light' | 'shadow';
+  /**
+   * The tag this island's sidecar declares EXPLICITLY (`openElement.tag`), or
+   * undefined when it declares none. The generated-element site resolver reads
+   * this as its second resolution source: a module the path convention and the
+   * package manifests both miss (a page-local component under `app/site-ui/`)
+   * is admitted only through an authored tag, so the identity is authored
+   * rather than inferred. For an island under `islandsDir` a declared tag must
+   * agree with the derived one; the scan refuses a disagreement instead of
+   * shipping an element whose descriptor and registration disagree.
+   */
+  tag?: string;
   /**
    * M11 prerequisite — the compiler-owned generated-host identity resolved by
    * this scan from the source it already read (see
@@ -296,6 +308,160 @@ export function admittedTailwindDeclarations(
 }
 
 /**
+ * The `openElement.styles` facts a package manifest declares, validated by the
+ * ONE specifier rule the local island scan applies
+ * (`internal/island-style-specifiers.ts`). A decl-class package component
+ * publishes its host root and its authored sheets in the manifest, so the
+ * consuming build registers the SAME declaration a local island scan records —
+ * no second sidecar read and no second validator.
+ */
+export interface PackageIslandStyleFact {
+  readonly tagName: string;
+  readonly root: 'light' | 'shadow';
+  readonly specifiers: readonly string[];
+}
+
+export function packageIslandStyleDeclarations(
+  packageManifests: readonly OpenElementPackageManifest[],
+): PackageIslandStyleFact[] {
+  const facts: PackageIslandStyleFact[] = [];
+  for (const pkg of packageManifests) {
+    for (const declaration of pkg.declarations) {
+      const styles = declaration.openElement?.styles;
+      if (styles === undefined) continue;
+      const check = checkIslandStyleList([...styles]);
+      if (!check.ok) {
+        throw buildError(
+          PackageIslandErrorCode.STYLES_SHAPE,
+          `Package island "${declaration.tagName}" (${pkg.packageName}) ${check.reason}`,
+        );
+      }
+      facts.push({
+        tagName: declaration.tagName,
+        root: declaration.openElement?.root === 'shadow' ? 'shadow' : 'light',
+        specifiers: [...check.styles],
+      });
+    }
+  }
+  return facts;
+}
+
+/** Where the app that consumes a package lives (the module-id anchors). */
+export interface PackageIslandStyleHost {
+  readonly root: string;
+  readonly workspaceRoot?: string;
+}
+
+/**
+ * Register every package manifest's declared sheets in the build's style
+ * declaration carrier, keyed by the package module's stable module id.
+ *
+ * A specifier the host cannot resolve is skipped: the island pipeline already
+ * reports that package module with its own coded failure, and a style record
+ * for a module the build never transforms would emit an orphan asset. The
+ * caller runs this after every scan that can change either side (local islands
+ * or the admitted package set), so the carrier is rebuilt from the current
+ * context instead of depending on scan order.
+ */
+export function registerPackageIslandStyleDeclarations(
+  packageIslandDecls: readonly IslandDecl[],
+  packageManifests: readonly OpenElementPackageManifest[],
+  host: PackageIslandStyleHost,
+): void {
+  const facts = packageIslandStyleDeclarations(packageManifests);
+  if (facts.length === 0) return;
+  const requireFromRoot = createRequire(join(host.root, 'package.json'));
+  const moduleByTag = new Map<string, string>();
+  for (const declaration of packageIslandDecls) {
+    if (declaration.source !== 'package') continue;
+    const specifier = declaration.modulePath;
+    if (specifier === undefined || specifier === '') continue;
+    try {
+      // The style registry resolves every specifier against the module's own
+      // directory, exactly like the local island scan (which passes the
+      // island module's ABSOLUTE path). A project-relative stable id would
+      // make the emitted edge a relative filesystem path the loader cannot
+      // read.
+      moduleByTag.set(declaration.tagName, requireFromRoot.resolve(specifier));
+    } catch {
+      continue;
+    }
+  }
+  for (const fact of facts) {
+    const moduleId = moduleByTag.get(fact.tagName);
+    if (moduleId === undefined) continue;
+    registerIslandStyleDeclaration({
+      tagName: fact.tagName,
+      root: fact.root,
+      moduleId,
+      // Diagnostic-only fields for a package module: the file name and its
+      // directory. The style plan reads moduleId + specifiers + root only.
+      filePath: moduleId.slice(moduleId.lastIndexOf('/') + 1),
+      islandsDir: moduleId.slice(0, Math.max(0, moduleId.lastIndexOf('/'))),
+      specifiers: fact.specifiers,
+    });
+  }
+}
+
+/**
+ * Attach the compiler-owned generated host identity to every package island
+ * declaration whose module source resolves.
+ *
+ * The identity is what the generated entry pairs a tag with (`__registerSsrIsland`
+ * writer); a local island gets it from its own source scan, and a package
+ * component needs the same carrier even though its declaration comes from a
+ * manifest. The compiler is the authority: the declaration supplies the tag and
+ * the published root, the module source supplies everything else. A module the
+ * host cannot resolve keeps no identity (its own coded failure is reported by
+ * the island pipeline) and the entry keeps the class-only bytes.
+ */
+export function attachPackageIslandHostIdentities(
+  declarations: readonly IslandDecl[],
+  packageManifests: readonly OpenElementPackageManifest[],
+): IslandDecl[] {
+  const declaredRoots = new Map<string, 'light' | 'shadow' | undefined>();
+  for (const pkg of packageManifests) {
+    for (const declaration of pkg.declarations) {
+      declaredRoots.set(
+        declaration.tagName,
+        declaration.openElement?.root === 'shadow'
+          ? 'shadow'
+          : declaration.openElement?.root === 'light'
+            ? 'light'
+            : undefined,
+      );
+    }
+  }
+  const requireFromRoot = createRequire(join(process.cwd(), 'package.json'));
+  return declarations.map((declaration) => {
+    if (declaration.source !== 'package') return declaration;
+    const specifier = declaration.modulePath;
+    if (specifier === undefined || specifier === '') return declaration;
+    let file: string;
+    try {
+      file = requireFromRoot.resolve(specifier);
+    } catch {
+      return declaration;
+    }
+    if (!/\.tsx$/.test(file)) return declaration;
+    let source: string;
+    try {
+      source = readFileSync(file, 'utf8');
+    } catch {
+      return declaration;
+    }
+    const identity = resolveGeneratedElementHost({
+      source,
+      moduleId: file,
+      filePath: file,
+      root: declaredRoots.get(declaration.tagName),
+      site: { tag: declaration.tagName },
+    });
+    return { ...declaration, generatedElementHost: identity };
+  });
+}
+
+/**
  * Build package island declarations from scanned package manifests.
  *
  * Shared implementation for plugin.ts (build-time scan) and
@@ -362,11 +528,26 @@ export function buildPackageIslandDecls(
             `Package island "${d.tagName}" declares media without media delivery`,
           );
         }
+        // A package island whose manifest publishes the compiler's
+        // `ssrHostExport` is a GENERATED element, so it must be paired through
+        // `__registerSsrIsland` exactly like a local island — otherwise the
+        // build registers it as a class, its SSR emits no DSD template, and the
+        // client never claims it (the shell then installs no listener at all).
+        //
+        // The name is the compiler's return-only metadata, published by the
+        // package's own manifest generator. Re-deriving it from a `<X>__ssrHost`
+        // convention here would be the drift ADR-0182 forbids.
+        const ssrHostExport = openElement?.ssrHostExport;
+        const generatedElementHost: GeneratedElementHostIdentity | undefined =
+          typeof ssrHostExport === 'string' && ssrHostExport.length > 0
+            ? { kind: 'producer', component: d.className ?? d.tagName, ssrHostExport }
+            : undefined;
         return {
           tagName: d.tagName,
           modulePath,
           isPackage: true,
           source: 'package' as const,
+          ...(generatedElementHost === undefined ? {} : { generatedElementHost }),
           // #638: package island chunks dropped `export default`; the client
           // island factory must read the named export (CEM class name) instead.
           exportName: exportNames?.[d.tagName] ?? d.className,
@@ -383,7 +564,7 @@ export function buildPackageIslandDecls(
 
 function staticOpenElementError(message: string): OpenElementError {
   return new OpenElementError(
-    `Invalid static island metadata export "openElement": ${message}. Accepted shape: export const openElement = defineIslandConfig({ ssr?: boolean, dsd?: boolean, hydrate?: "load" | "idle" | "visible" | "media" | "only", media?: string, styles?: readonly string[], root?: "light" | "shadow", delegatesFocus?: boolean, formAssociated?: boolean, properties?: Record<string, { reflect?: boolean, attribute?: string | false, default?: string | number | boolean }> }).`,
+    `Invalid static island metadata export "openElement": ${message}. Accepted shape: export const openElement = defineIslandConfig({ ssr?: boolean, dsd?: boolean, hydrate?: "load" | "idle" | "visible" | "media" | "only", media?: string, styles?: readonly string[], root?: "light" | "shadow", delegatesFocus?: boolean, formAssociated?: boolean, properties?: Record<string, { reflect?: boolean, attribute?: string | false, default?: string | number | boolean }>, tag?: string }).`,
     {
       code: 'ISLAND_METADATA_ERROR',
       statusCode: 500,
@@ -407,6 +588,7 @@ type StaticIslandConfig = Pick<
   | 'tags'
   | 'tagNames'
   | 'exportNames'
+  | 'tag'
 >;
 
 function staticEntryKey(name: ts.PropertyName): string {
@@ -828,6 +1010,7 @@ function parseStaticIslandConfig(
         'tags',
         'tagNames',
         'exportNames',
+        'tag',
       ].includes(key)
     ) {
       throw staticOpenElementError(`unsupported openElement metadata key "${key}"`);
@@ -893,6 +1076,23 @@ function parseStaticIslandConfig(
       meta.properties = parseStaticPropertyTable(sourceFile, raw, 'openElement.properties');
     } else if (key === 'tags' || key === 'tagNames') {
       meta[key] = parseStaticStringArray(raw, `openElement.${key}`);
+    } else if (key === 'tag') {
+      // The explicit authored identity (a page-local component's only tag
+      // source). Static literal, screened by `isValidTagName` — the SAME
+      // predicate the runtime authoring face uses, so the router's two readers
+      // agree. The COMPILER's sidecar read screens with its own
+      // `isCustomElementTag` (the compiler package must not depend on the
+      // element package): it is the stricter spelling, so anything this reader
+      // accepts there is accepted here too. The reverse — a name this reader
+      // rejects (a reserved HTML name, an `xml` prefix) — is refused earlier,
+      // by this scan, before the compiler ever sees it.
+      const value = literalText(raw, 'openElement.tag');
+      if (!isValidTagName(value)) {
+        throw staticOpenElementError(
+          `openElement.tag "${value}" is not a valid custom-element name`,
+        );
+      }
+      meta.tag = value;
     } else {
       meta.exportNames = parseStaticStringRecord(raw, 'openElement.exportNames');
     }
@@ -1048,10 +1248,15 @@ const ISLAND_STYLES_LANE_UNSUPPORTED_CODE = IslandErrorCode.STYLE_LANE_UNSUPPORT
  *   turns into the SAME content-addressed `.css` asset and client asset
  *   manifest entry the class lane's sheets get. The document-level application
  *   of that asset is the Alpha17 adoption slice, not this one.
- * - `producer` / `missing-producer` (a shadow-root generated-element island):
- *   refused. The DSD style-link carrier is the later M09-2e slice, so there is
- *   nothing a shadow root could read the emitted sheet through — shipping the
- *   asset anyway would be a silent loss dressed up as delivery.
+ * - `producer` (a shadow-root generated-element island whose leaf emitted the
+ *   compiled host producer): admitted with root `shadow`. The carried sheet is
+ *   declared INSIDE the host's DSD template as the canonical marked `<link>`
+ *   prefix (M09-2e / #1803); a sheet the client build did not emit fails the
+ *   build closed, so the asset and the declared link cannot disagree.
+ * - `missing-producer` (a shadow-root island with no compiled host producer):
+ *   refused. There is no DSD template to declare the sheet in and no client
+ *   adoption channel yet, so shipping the asset would be a silent loss dressed
+ *   up as delivery.
  * - `lane-declined` (the module is not a generated-element island: a class
  *   island or a file outside the lane's admission): refused. A class island
  *   owns the `static styles` + `.css` import channel; this field would be
@@ -1075,6 +1280,7 @@ function admitIslandStyles(input: {
     case 'light-no-producer':
       registerIslandStyleDeclaration({
         tagName: input.tagName,
+        root: 'light',
         moduleId: input.absoluteModuleId,
         filePath: input.filePath,
         islandsDir: normalizeSeparators(input.islandsDir),
@@ -1082,17 +1288,29 @@ function admitIslandStyles(input: {
       });
       return [...input.styles];
     case 'producer':
+      // M09-2e / #1803: the DSD style-link carrier exists for a shadow host
+      // with a compiled producer. The client build joins this declaration to
+      // the emitted asset and the generated SSR entry declares the canonical
+      // marked `<link>` inside the template; a missing asset fails closed there.
+      registerIslandStyleDeclaration({
+        tagName: input.tagName,
+        root: 'shadow',
+        moduleId: input.absoluteModuleId,
+        filePath: input.filePath,
+        islandsDir: normalizeSeparators(input.islandsDir),
+        specifiers: input.styles,
+      });
+      return [...input.styles];
     case 'missing-producer':
       throw reportScanFatal(
         buildError(
           ISLAND_STYLES_SHADOW_UNWIRED_CODE,
           `Island "${input.filePath}" (<${input.tagName}>) declares openElement.styles on a ` +
-            'shadow-root generated element, but the DSD style-link carrier for a shadow root is ' +
-            'not wired yet (M09-2e owed; generated-island style adoption is GH issue #1800, ' +
-            'Alpha17). The declared sheets would be silently lost, so the build fails closed: ' +
-            "set root: 'light' or remove styles. This slice admits styles only on a light-root " +
-            'generated island, where the build emits the sheet as a content-addressed client ' +
-            'asset and records it in the client asset manifest.',
+            'shadow-root generated element whose leaf emitted no compiled DSD host producer, ' +
+            'so there is no template the canonical style link could be declared in. The ' +
+            'declared sheets would be silently lost, so the build fails closed: give the ' +
+            "component a claimable/SSR-capable shadow shape, set root: 'light', or remove " +
+            'styles (generated-island client style adoption is GH issue #1800, Alpha17).',
         ),
       );
     case 'lane-refused':
@@ -1129,7 +1347,9 @@ function admitIslandStyles(input: {
  * authoring intent; resolveIslandHydrate() applies the upgrade-strategy
  * fallback downstream where the configured strategy is known.
  *
- * If a module cannot be read, its metadata is silently skipped.
+ * If a module cannot be read, its metadata is skipped with a structured
+ * status: the unreadable module is reported on the scan log (never a silent
+ * drop), and the scan result simply carries no record for that file.
  *
  * Delivery-tag ownership is checked HERE, at scan time: this record is keyed
  * by derived tag, so a second file deriving the same tag would silently
@@ -1201,6 +1421,22 @@ export async function scanIslandMeta(
     const islandConfig = readIslandConfig(source);
     if (!islandConfig) continue;
 
+    // A declared tag must agree with the tag the path derives. The resolver
+    // ranks a declared tag above the path convention, so a disagreement would
+    // ship an element whose descriptor names the authored tag while the island
+    // entry registers (and the client entry splits) the path-derived one — two
+    // identities for one module, i.e. an unregistered element. Fail closed with
+    // the existing producer code instead of picking a winner.
+    if (islandConfig.tag !== undefined && islandConfig.tag !== tagName) {
+      throw buildError(
+        IslandErrorCode.TAGS,
+        `Island "${filePath}" declares openElement.tag "${islandConfig.tag}" but its path ` +
+          `derives "${tagName}". The declared tag outranks the path convention, so the two ` +
+          'identities would disagree: keep the declaration equal to the derived tag, or move ' +
+          'the module out of the islands directory and declare its tag where no path owns it.',
+      );
+    }
+
     // readIslandConfig() already rejects unsupported hydrate values.
     const hydrate = islandConfig.hydrate;
 
@@ -1270,6 +1506,7 @@ export async function scanIslandMeta(
         ? {}
         : { formAssociated: islandConfig.formAssociated }),
       ...(islandConfig.properties === undefined ? {} : { properties: islandConfig.properties }),
+      ...(islandConfig.tag === undefined ? {} : { tag: islandConfig.tag }),
       ...(islandConfig.tags === undefined ? {} : { tags: islandConfig.tags }),
       ...(islandConfig.tagNames === undefined ? {} : { tagNames: islandConfig.tagNames }),
       ...(islandConfig.exportNames === undefined ? {} : { exportNames: islandConfig.exportNames }),

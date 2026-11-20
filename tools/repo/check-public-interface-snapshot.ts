@@ -11,6 +11,7 @@ import ts from 'typescript';
 import { resolve } from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';
 import process from 'node:process';
+import { emitSummary } from './checker-io.ts';
 import { type PackageInfo, readPackages, releasePublishOrder } from '../lib/package-graph.ts';
 
 const SNAPSHOT = 'docs/release/public-interface-snapshot.json';
@@ -387,7 +388,7 @@ async function main(): Promise<void> {
       `${SNAPSHOT} drifted; run pnpm --filter @openelement/tools-repo run interface:snapshot:write`,
     );
   }
-  console.log(
+  emitSummary(
     `Public interface snapshot ${write ? 'written' : 'matches'} (${packages.length} packages).`,
   );
 }

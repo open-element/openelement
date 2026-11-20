@@ -464,6 +464,35 @@ function composedParent(node: Node): Node | null {
  * rejected. The function name is retained because generated claims already call
  * it; renaming it would require an emitter change for the same rule.
  */
+/**
+ * Own-element namespace invariant for a claimed SVG subtree (and for an HTML
+ * element inside an SVG `foreignObject`).
+ *
+ * The HTML walker above exists for the ROOT claim target, where the borrowed
+ * element's ancestors up to the host must be HTML. Inside an SVG subtree the
+ * ancestors are legitimately SVG, so the claim checks the element's own
+ * namespace instead: the parser puts an `<svg>` subtree in the SVG namespace,
+ * and a claim that adopted an HTML-namespaced lookalike would render nothing.
+ */
+export function assertElementInNamespace(
+  node: Node | null,
+  namespace: string,
+  where: string,
+  origin?: ClaimOrigin,
+): void {
+  if (node === null || node.nodeType !== 1) {
+    throw leafClaimMismatch(`missing element at ${where}`, origin);
+  }
+  const element = node as Element;
+  if (element.namespaceURI !== namespace) {
+    throw leafClaimMismatch(
+      `wrong namespace at ${where} (${describe(element.namespaceURI)} on ` +
+        `${describe(element.localName ?? element.nodeName)})`,
+      origin,
+    );
+  }
+}
+
 export function assertElementInHtmlNamespace(
   node: Node | null,
   where: string,

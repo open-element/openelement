@@ -51,6 +51,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { emitSummary } from './checker-io.ts';
 import { parseGateStep, type GateStep } from './gate.ts';
 import {
   CANONICAL_PACKAGE_COMMAND,
@@ -654,11 +655,14 @@ async function main(): Promise<void> {
       'gates',
       renderGatesBlock(facts),
     );
+    // The writer mode is a writer, not a check: its progress note goes to
+    // stderr, because stdout is a data channel and the check's one summary
+    // line below is the only thing that belongs there.
     if (updated !== markdown) {
       await import('node:fs/promises').then((fs) => fs.writeFile(contractPath, updated, 'utf8'));
-      console.log('agent-contract: derived blocks regenerated.');
+      console.error('agent-contract: derived blocks regenerated.');
     } else {
-      console.log('agent-contract: derived blocks already current.');
+      console.error('agent-contract: derived blocks already current.');
     }
   }
 
@@ -668,7 +672,7 @@ async function main(): Promise<void> {
     for (const failure of failures) console.error(`- ${failure}`);
     process.exit(1);
   }
-  console.log(`agent-contract: contract conforms (${commandCount} commands resolved).`);
+  emitSummary(`agent-contract: contract conforms (${commandCount} commands resolved).`);
 }
 
 if (import.meta.main) await main();

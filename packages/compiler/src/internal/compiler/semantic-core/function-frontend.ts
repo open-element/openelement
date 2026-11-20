@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the frontend is the one parallel entry joining the M03 slices (scope resolution, expression registry, type erasure) into a single component model with a shared OEC diagnostics dialect, which is what the Alpha15 parity harness compares field-for-field; the boundary is explicit — it emits no Part Program v2, no __partProgram, no module ABI and no generated module, and nothing here is serialized, package-exported or written to disk.
 /**
  * M03-I-4 — production function-component frontend (Alpha16a, compiler-private).
  *
@@ -80,6 +81,34 @@ const CODES = {
   /** A security sink the function model refuses on its own. */
   security: 'OEC9044',
 } as const;
+
+/**
+ * The module specifiers the compiler-erased intrinsics may be imported from
+ * (A16-LANE-M, M10-P1/P4; `16b-REF` adds `ref` to the same table).
+ *
+ * Both spellings name the SAME functions: `@openelement/element/lifecycle` is a
+ * side-effect-free subpath that re-exports the identical fail-closed stand-ins,
+ * and exists only so an author module's import survives tree shaking — the root
+ * entry is flagged in `sideEffects` (it carries the hydration and Block install
+ * edges), so importing an intrinsic the compiler will ERASE from the root
+ * dragged the generic executor into the client graph for a binding the emitted
+ * module never references.
+ *
+ * Admission is otherwise IDENTICAL for both spellings: the same import form,
+ * the same imported names, the same placement/arity/shape rules. A subpath
+ * other than this one stays a foreign module (unchanged fall-through to the
+ * pre-existing component-body grammar), and an unrelated name imported from
+ * `/lifecycle` is not an intrinsic.
+ */
+const LIFECYCLE_INTRINSIC_SPECIFIERS: ReadonlySet<string> = new Set([
+  '@openelement/element',
+  '@openelement/element/lifecycle',
+]);
+
+/** True when `specifier` is a canonical lifecycle-intrinsic module. */
+function isLifecycleIntrinsicSpecifier(specifier: string): boolean {
+  return LIFECYCLE_INTRINSIC_SPECIFIERS.has(specifier);
+}
 
 // ─── Component model (compiler-private; M05/M06 consumers) ─────────────────
 
@@ -204,7 +233,23 @@ export interface FunctionModelRecipe {
 /** One component-scope value declaration. */
 export interface FunctionModelResource {
   readonly name: string;
-  readonly kind: 'signal' | 'computed' | 'local';
+  /**
+   * `ref` is a `16b-REF` NODE HANDLE, not a readable value: it is a
+   * compiler-owned object whose `current` field the emitted `ref` channel
+   * writes on attach and clears on detach. Its `expression` carries the
+   * OPTIONAL authored notification callback (the same
+   * `(element | null) => void | cleanup` contract the plain `ref` channel
+   * already has), lowered in `handler` mode; `null` means "handle only, no
+   * notification". A `ref` handle differs from `local` in that its initializer
+   * is not evaluated once as a snapshot — the compiler emits the handle itself.
+   *
+   * `context` is a `16b-CTX` CONSUMER (`const value = useContext(token)`): the
+   * name is bound to ONE persistent consumer-local Signal the compiler builds in
+   * the retained setup factory, so a tracked slot reading `.value` is a real
+   * reactive dependency (unlike `ref`) and a reconnect re-reads the nearest
+   * provider into the same object. `expression` carries the lowered TOKEN.
+   */
+  readonly kind: 'signal' | 'computed' | 'local' | 'ref' | 'context';
   /** Lowered initializer/derivation; absent when the declared form has none. */
   readonly expression: FunctionExpressionRef | null;
   /**
@@ -227,13 +272,37 @@ export interface FunctionModelResource {
  * `__oe_rootInstance` factory; the intrinsic call itself is erased.
  *
  * The model carries no runtime hook identity: there is no dispatcher, no
- * hook-order slot and no callback-context record. Nested/hostless component
- * hooks are not admitted in this slice (their placement keeps the existing
- * frontend statement refusal).
+ * hook-order slot and no callback-context record. `receivesEnv` is a plain
+ * static fact about the authored callback: `true` when it declares the one
+ * admitted `env` parameter, `false` when it keeps the zero-argument form. The
+ * generator uses it only to decide whether the replay passes the env argument
+ * (zero-argument callbacks and their emitted bytes stay exactly as they were).
+ * Nested/hostless component hooks are admitted module-wide; their placement
+ * verdict stays with the generator (authored-span refusal).
  */
 export interface FunctionModelLifecycleHook {
-  readonly kind: 'connect' | 'dispose';
+  readonly kind: 'connect' | 'dispose' | 'property-change' | 'error';
   readonly callback: FunctionExpressionRef;
+  /** `true` when the authored callback declares the one admitted env parameter. */
+  readonly receivesEnv: boolean;
+  readonly span: SourceSpan;
+}
+
+/**
+ * One admitted `16b-CTX` PROVIDER statement of a generated component setup.
+ *
+ * `provideContext(token, () => value)` is erased into the retained setup
+ * factory, which registers it on the component's owner scope. The value is a
+ * THUNK by contract: the emitted closure is re-read on connect and after every
+ * declared-property commit, so "provider changed" is this lane's existing change
+ * channel and no second reactivity model is introduced (the lane deliberately
+ * has no author `computed`).
+ */
+export interface FunctionModelContextProvider {
+  /** The lowered context token expression (usually a static module import). */
+  readonly token: FunctionExpressionRef;
+  /** The lowered value thunk — an inline arrow/function expression. */
+  readonly value: FunctionExpressionRef;
   readonly span: SourceSpan;
 }
 
@@ -251,31 +320,69 @@ export interface FunctionModelComponent {
    * generator is the only consumer.
    */
   readonly lifecycle: readonly FunctionModelLifecycleHook[];
+  /**
+   * The admitted `16b-CTX` provider statements, in authored order. Empty for a
+   * component that provides nothing; the generator is the only consumer.
+   */
+  readonly contextProviders: readonly FunctionModelContextProvider[];
   readonly span: SourceSpan;
 }
 
 /** The lowered module: components plus the per-compilation expression sidecar. */
+/**
+ * One static import of the authored module, as the generated lane may keep it.
+ *
+ * The generated module replaces the authored one at the same graph position, so
+ * a used import is re-emitted verbatim (`specifier` + the local spelling) and a
+ * read of it stays a direct module reference instead of becoming a host
+ * binding. The sidecar helper and the erased intrinsics are never READ in a
+ * component body, so they are never re-emitted.
+ */
+export interface FunctionModelImport {
+  readonly specifier: string;
+  readonly imported: string;
+  readonly local: string;
+  readonly form: 'named' | 'default' | 'namespace';
+}
+
 export interface FunctionModelModule {
   readonly file: string;
   readonly components: readonly FunctionModelComponent[];
   /** A2 sidecar: lowered text, captures/dependencies, anchors, segments. */
   readonly expressions: ExpressionRegistry;
+  /**
+   * The module's static (non-type-only) imports. Optional so a hand-built model
+   * in a fixture keeps its exact meaning; the generated lane treats an absent
+   * list as "no import channel".
+   */
+  readonly imports?: readonly FunctionModelImport[];
 }
+
+/**
+ * `16b-LC` compiler-private lifecycle admission (never author syntax).
+ *
+ * - `root`: only the named component's direct top-level intrinsics are admitted
+ *   (the pre-nested slice behavior);
+ * - `module`: every component's direct top-level intrinsics are admitted. ONLY
+ *   the generated-element lane selects this mode, and the GENERATOR owns
+ *   placement: a hook is carried only by the generated element root setup or a
+ *   depth-1 retained hostless child setup; every other placement fails closed
+ *   with the authored span. No dispatcher, hook slot or lifecycle context is
+ *   introduced.
+ *
+ * Omitted (function pages, leaf tests, the facts projection) keeps the existing
+ * statement grammar exactly: a hook call stays the "statement outside the
+ * admitted component grammar" refusal (`OEC9041`).
+ */
+export type FunctionLifecycleAdmission =
+  | { readonly admission: 'root'; readonly root: string }
+  | { readonly admission: 'module' };
 
 export interface FunctionFrontendOptions {
   /** Host classifier for imported symbols (A1 §6); omitted = nothing known. */
   readonly importClassifier?: ImportClassifier;
-  /**
-   * `16b-LC` compiler-private admission marker: the component name whose
-   * direct top-level `onConnect`/`onDispose` intrinsic statements are admitted
-   * (the generated element ROOT the host lane resolved). Compiler-private and
-   * never author syntax. Omitted (function pages, leaf tests, the
-   * facts projection) keeps today's statement grammar exactly: a hook call
-   * stays the existing "statement outside the admitted component grammar"
-   * refusal, which is why nested/hostless hooks keep their current behavior
-   * with no new diagnostic code and no admission narrowing.
-   */
-  readonly lifecycleRoot?: string;
+  /** Compiler-private lifecycle admission; see {@linkcode FunctionLifecycleAdmission}. */
+  readonly lifecycleAdmission?: FunctionLifecycleAdmission;
 }
 
 export interface FunctionFrontendResult {
@@ -406,8 +513,8 @@ class FunctionFrontendBuilder {
   private readonly sourceFile: ts.SourceFile;
   private readonly resolved: ResolvedModule;
   private readonly registry: ExpressionRegistry;
-  /** `16b-LC`: the one component whose root lifecycle hooks are admitted. */
-  private readonly lifecycleRoot: string | undefined;
+  /** `16b-LC`: the compiler-private lifecycle admission mode for this module. */
+  private readonly lifecycleAdmission: FunctionLifecycleAdmission | undefined;
   private readonly diagnostics: CompilerDiagnostic[] = [];
   private readonly recipeIds = new Map<ts.Node, string>();
   /**
@@ -425,11 +532,11 @@ class FunctionFrontendBuilder {
   constructor(
     sourceFile: ts.SourceFile,
     resolved: ResolvedModule,
-    lifecycleRoot: string | undefined,
+    lifecycleAdmission: FunctionLifecycleAdmission | undefined,
   ) {
     this.sourceFile = sourceFile;
     this.resolved = resolved;
-    this.lifecycleRoot = lifecycleRoot;
+    this.lifecycleAdmission = lifecycleAdmission;
     this.registry = createExpressionRegistry({
       module: resolved,
       recipeReference: (jsx) => this.recipeReference(jsx),
@@ -478,6 +585,19 @@ class FunctionFrontendBuilder {
     | { readonly id: string; readonly fragment: FunctionModelFragment }
   > = [];
 
+  /**
+   * `16b-REF` — the current component's declared ref-handle names.
+   *
+   * A handle's `current` field is written on attach and cleared on detach; it
+   * notifies nothing. A TRACKED slot reading it would therefore be a one-shot
+   * snapshot (the exact "silently SSR-only surface" defect the generated lane
+   * exists to remove), so a handle may only be READ from a `handler`-mode
+   * expression — a `ref` attribute or an authored callback body. This set is
+   * the source of that refusal; it is rebuilt per component, like
+   * `localRecipeNames`.
+   */
+  private refHandleNames = new Set<string>();
+
   /** Register one component-reference children fragment as a recipe (M06b2a). */
   private registerChildrenRecipe(fragment: FunctionModelFragment): string {
     const id = `#children${this.childrenRecipeCounter}`;
@@ -504,6 +624,44 @@ class FunctionFrontendBuilder {
       );
       return null;
     }
+    // `16b-REF`: `ref(...)` is a DECLARATION form, not a value. An invocation in
+    // any other position (`ref={ref(cb)}`, `useThing(ref(cb))`, a return value)
+    // would survive into the emitted module as a call to the fail-closed
+    // stand-in and then throw at MOUNT — a build defect surfacing as a runtime
+    // one. Refuse it at the authored span instead; the legal spelling is
+    // `const handle = ref(cb?)` then `ref={handle}`.
+    const misplacedRef = this.misplacedRefCall(node);
+    if (misplacedRef !== null) {
+      this.fail(
+        misplacedRef,
+        CODES.form,
+        'ref(...) is a COMPILED DECLARATION, not a value: write `const handle = ref(cb?)` and ' +
+          'pass `<node ref={handle} />`. A ref(...) call in any other position would erase to ' +
+          'nothing and throw outside the compiler pipeline',
+      );
+      return null;
+    }
+    // `16b-REF`: a ref handle is an ATTACH/DETACH-ONLY value. Its `current` field
+    // is written when the node attaches and cleared when it detaches, and it
+    // notifies nothing, so reading it in a value position outside a
+    // `handler`-mode expression (a `ref` attribute or an authored callback body)
+    // would emit a snapshot that never refreshes — the silently-stale surface
+    // class this lane exists to remove. Fail closed at the read, with the
+    // authored span, instead of compiling a one-shot write.
+    if (mode !== 'handler') {
+      const handle = this.refHandleReadIn(node);
+      if (handle !== null) {
+        this.fail(
+          node,
+          CODES.form,
+          `the ref handle '${handle}' is an attach/detach-only value: 'current' is written when ` +
+            'the node attaches and cleared when it detaches, and it notifies nothing. Read it ' +
+            'inside a ref attribute `ref={(el) => …}` or a callback body (ref(...) notification, ' +
+            'onConnect/onDispose/onPropertyChange/onError, event handler), not in a tracked slot',
+        );
+        return null;
+      }
+    }
     const { record, diagnostics } = this.registry.lower(node, mode);
     if (record === null) {
       for (const diagnostic of diagnostics) {
@@ -512,6 +670,72 @@ class FunctionFrontendBuilder {
       return null;
     }
     return { id: record.id, mode, span: record.authoredSpan };
+  }
+
+  /**
+   * `16b-REF` — the first `ref(...)` CALL in this expression that is not the
+   * initializer of a ref-handle declaration, or `null`.
+   *
+   * `buildDeclaration` consumes the declaration's own call before any general
+   * lowering, so a call reaching {@linkcode expression} is by definition in a
+   * value position. Matching is binding provenance (a namespace member or a
+   * different module's `ref` is not the intrinsic), and JSX subtrees are
+   * skipped: their attribute positions are lowered by the node walk, whose own
+   * `ref` attribute handling is the SUPPORTED way to hand a handle to a node.
+   */
+  private misplacedRefCall(node: ts.Node): ts.Node | null {
+    let found: ts.Node | null = null;
+    const visit = (current: ts.Node): void => {
+      if (found !== null) return;
+      if (
+        ts.isJsxElement(current) ||
+        ts.isJsxSelfClosingElement(current) ||
+        ts.isJsxFragment(current)
+      ) {
+        return;
+      }
+      if (ts.isCallExpression(current) && this.refIntrinsicImport(current) !== null) {
+        found = current;
+        return;
+      }
+      ts.forEachChild(current, visit);
+    };
+    visit(node);
+    return found;
+  }
+
+  /**
+   * `16b-REF` — the first ref-handle name this expression reads, or `null`.
+   *
+   * Reads are matched by RESOLVED BINDING, not by spelling: a handle name is in
+   * {@linkcode refHandleNames} only for this component, and a local shadow in a
+   * nested scope resolves to a different binding. JSX subtrees are skipped for
+   * the same reason as {@linkcode containsPropsChildrenRead}: they become
+   * recipes, and their own attribute positions are classified separately.
+   */
+  private refHandleReadIn(node: ts.Node): string | null {
+    if (this.refHandleNames.size === 0) return null;
+    let found: string | null = null;
+    const visit = (current: ts.Node): void => {
+      if (found !== null) return;
+      if (
+        ts.isJsxElement(current) ||
+        ts.isJsxSelfClosingElement(current) ||
+        ts.isJsxFragment(current)
+      ) {
+        return;
+      }
+      if (ts.isIdentifier(current) && this.refHandleNames.has(current.text)) {
+        const binding = this.resolved.resolveIdentifier(current);
+        if (binding !== undefined && binding.origin.form === 'local') {
+          found = current.text;
+          return;
+        }
+      }
+      ts.forEachChild(current, visit);
+    };
+    visit(node);
+    return found;
   }
 
   /**
@@ -551,6 +775,7 @@ class FunctionFrontendBuilder {
 
   buildComponent(candidate: ComponentCandidate): FunctionModelComponent | null {
     this.localRecipeNames = new Map();
+    this.refHandleNames = new Set();
     const node = candidate.node;
     const parameters = node.parameters;
     if (parameters.length > 1) {
@@ -574,6 +799,7 @@ class FunctionFrontendBuilder {
 
     const resources: FunctionModelResource[] = [];
     const lifecycle: FunctionModelLifecycleHook[] = [];
+    const contextProviders: FunctionModelContextProvider[] = [];
     const body = node.body;
     if (body === undefined) {
       this.fail(node, CODES.shape, 'a function component must have a body');
@@ -590,6 +816,15 @@ class FunctionFrontendBuilder {
           if (lifecycleHook === 'refused') continue;
           if (lifecycleHook !== null) {
             lifecycle.push(lifecycleHook);
+            continue;
+          }
+          // `16b-CTX`: a direct top-level `provideContext(token, () => value)`.
+          // Also a compiler-erased intrinsic with no model node of its own: the
+          // generator emits the registration inside the retained setup factory.
+          const contextProvider = this.buildContextProvider(statement, candidate.name);
+          if (contextProvider === 'refused') continue;
+          if (contextProvider !== null) {
+            contextProviders.push(contextProvider);
             continue;
           }
         }
@@ -656,6 +891,7 @@ class FunctionFrontendBuilder {
       recipes,
       roots,
       lifecycle,
+      contextProviders,
       span: spanOf(this.sourceFile, node),
     };
   }
@@ -666,11 +902,14 @@ class FunctionFrontendBuilder {
    *
    * Recognition is binding provenance, exactly like the `element`/`property`
    * decorator intrinsics: the callee must be a value-position identifier whose
-   * resolved binding is a named import of '@openelement/element' (aliases
-   * followed) whose imported name is `onConnect`/`onDispose`. A local shadow,
-   * a namespace member or a foreign module's same-named function is NOT an
-   * intrinsic and falls through to the pre-existing component-body grammar
-   * (its `ExpressionStatement` refusal is the unchanged diagnostic).
+   * resolved binding is a named import of '@openelement/element' or
+   * '@openelement/element/lifecycle' (aliases followed) whose imported name is
+   * `onConnect`/`onDispose`/`onPropertyChange`. The two specifiers name the
+   * same intrinsics — the subpath is the tree-shakeable spelling and admits
+   * under exactly the same rules. A local shadow, a namespace member, a third
+   * subpath or a foreign module's same-named function is NOT an intrinsic and
+   * falls through to the pre-existing component-body grammar (its
+   * `ExpressionStatement` refusal is the unchanged diagnostic).
    *
    * The callback is lowered as an ordinary authored expression in `handler`
    * mode (no tracked dependencies; type-erased). Its reads are classified by
@@ -685,24 +924,46 @@ class FunctionFrontendBuilder {
    * problems inside the admitted root use the existing function-frontend
    * `OEC9042` form code; a hook in any other component keeps the existing
    * `OEC9041` statement refusal because this method returns null there. The
-   * callback takes no parameters in this slice (there is no connection-scope
-   * helper channel yet), so a parameter is refused rather than silently
-   * receiving `undefined`.
+   * callback admits exactly zero parameters (the pre-existing zero-argument
+   * form) or ONE `env` parameter — an identifier or an object binding pattern,
+   * no rest/optional/default form. The parameter is typed by the public
+   * `onConnect`/`onDispose` signature and erased from the emitted module; the
+   * generator passes the env argument only for the one-parameter form, so a
+   * zero-argument callback keeps its exact bytes.
    */
+  /**
+   * The compiler-private admission check. Placement (root vs depth-1 retained
+   * hostless child vs everywhere else) is NOT decided here: the generator owns
+   * that verdict and fails closed with the authored span, because only the
+   * emitted reference graph can tell whether a component is a retained body.
+   */
+  private admitsLifecycle(componentName: string): boolean {
+    const admission = this.lifecycleAdmission;
+    if (admission === undefined) return false;
+    return admission.admission === 'module' || admission.root === componentName;
+  }
+
   private buildLifecycleHook(
     statement: ts.ExpressionStatement,
     componentName: string,
   ): FunctionModelLifecycleHook | 'refused' | null {
-    if (this.lifecycleRoot !== componentName) return null;
+    if (!this.admitsLifecycle(componentName)) return null;
     const expression = statement.expression;
     if (!ts.isCallExpression(expression)) return null;
     const callee = unwrap(expression.expression);
     if (!ts.isIdentifier(callee)) return null;
     const binding = this.resolved.resolveIdentifier(callee);
     if (binding === undefined || binding.origin.form !== 'import') return null;
-    if (binding.origin.specifier !== '@openelement/element') return null;
+    if (!isLifecycleIntrinsicSpecifier(binding.origin.specifier)) return null;
     const importedName = binding.origin.importedName;
-    if (importedName !== 'onConnect' && importedName !== 'onDispose') return null;
+    if (
+      importedName !== 'onConnect' &&
+      importedName !== 'onDispose' &&
+      importedName !== 'onPropertyChange' &&
+      importedName !== 'onError'
+    ) {
+      return null;
+    }
     const writtenName = importedName;
     if (expression.typeArguments !== undefined || expression.arguments.length !== 1) {
       this.fail(
@@ -736,21 +997,206 @@ class FunctionFrontendBuilder {
       );
       return 'refused';
     }
-    if (callback.parameters.length > 0) {
+    if (callback.parameters.length > 1) {
       this.fail(
         statement,
         CODES.form,
-        `the ${writtenName} callback takes no parameters in this slice; the connection-scope ` +
-          'helper channel is a later, additive slice',
+        `the ${writtenName} callback takes at most one 'env' parameter (drop the extra one)`,
       );
       return 'refused';
+    }
+    const parameter = callback.parameters[0];
+    if (parameter !== undefined) {
+      if (
+        parameter.dotDotDotToken !== undefined ||
+        parameter.questionToken !== undefined ||
+        parameter.initializer !== undefined
+      ) {
+        this.fail(
+          statement,
+          CODES.form,
+          `the ${writtenName} 'env' parameter is a plain identifier or object binding pattern; ` +
+            'rest, optional and default forms are outside the lifecycle slice',
+        );
+        return 'refused';
+      }
+      if (!ts.isIdentifier(parameter.name) && !ts.isObjectBindingPattern(parameter.name)) {
+        this.fail(
+          statement,
+          CODES.form,
+          `the ${writtenName} 'env' parameter must be an identifier or an object binding pattern`,
+        );
+        return 'refused';
+      }
     }
     const lowered = this.expression(callback, 'handler');
     if (lowered === null) return 'refused';
     return {
-      kind: importedName === 'onConnect' ? 'connect' : 'dispose',
+      kind:
+        importedName === 'onConnect'
+          ? 'connect'
+          : importedName === 'onDispose'
+            ? 'dispose'
+            : importedName === 'onError'
+              ? 'error'
+              : 'property-change',
       callback: lowered,
+      receivesEnv: parameter !== undefined,
       span: spanOf(this.sourceFile, statement),
+    };
+  }
+
+  /**
+   * `16b-CTX` — the imported name when `call` invokes a canonical context
+   * intrinsic (a named import of `@openelement/element` or
+   * `@openelement/element/lifecycle`), or `null` for anything else.
+   *
+   * Recognition is BINDING PROVENANCE only: a local shadow, a namespace member
+   * and a foreign module's same-named function are NOT the intrinsic and keep
+   * every pre-existing refusal.
+   */
+  private contextIntrinsicImport(call: ts.CallExpression): 'provideContext' | 'useContext' | null {
+    const callee = unwrap(call.expression);
+    if (!ts.isIdentifier(callee)) return null;
+    const binding = this.resolved.resolveIdentifier(callee);
+    if (binding === undefined || binding.origin.form !== 'import') return null;
+    if (!isLifecycleIntrinsicSpecifier(binding.origin.specifier)) return null;
+    const importedName = binding.origin.importedName;
+    if (importedName === 'provideContext') return 'provideContext';
+    if (importedName === 'useContext') return 'useContext';
+    return null;
+  }
+
+  /**
+   * `16b-CTX` — admit one direct top-level `provideContext(token, () => value)`
+   * statement of a generated component setup.
+   *
+   * The call shape is deliberately as narrow as the other intrinsics: exactly two
+   * arguments, no type arguments, the token lowered in `setup` mode (it is read
+   * once, and in practice is a static module import), and the value as an INLINE
+   * synchronous arrow/function expression taking no parameters — the THUNK whose
+   * re-read is the lane's provider-change event. Refusals use the existing
+   * `OEC9042` form code; no new diagnostic identity is introduced.
+   *
+   * Placement is the generator's verdict, like the lifecycle intrinsics: the
+   * frontend admits module-wide and the emitter decides whether the component is
+   * a retained setup body. Returns `null` when the statement is not this
+   * intrinsic at all, so the pre-existing component-body grammar keeps its
+   * refusal for a non-intrinsic statement.
+   */
+  private buildContextProvider(
+    statement: ts.ExpressionStatement,
+    componentName: string,
+  ): FunctionModelContextProvider | 'refused' | null {
+    if (!this.admitsLifecycle(componentName)) return null;
+    const expression = statement.expression;
+    if (!ts.isCallExpression(expression)) return null;
+    if (this.contextIntrinsicImport(expression) !== 'provideContext') return null;
+    const writtenName = 'provideContext';
+    if (expression.typeArguments !== undefined || expression.arguments.length !== 2) {
+      this.fail(
+        statement,
+        CODES.form,
+        `${writtenName}(token, () => value) takes exactly a context token and one inline value thunk`,
+      );
+      return 'refused';
+    }
+    const token = this.expression(unwrap(expression.arguments[0]!), 'setup');
+    if (token === null) return 'refused';
+    const thunk = unwrap(expression.arguments[1]!);
+    if (!ts.isArrowFunction(thunk) && !ts.isFunctionExpression(thunk)) {
+      this.fail(
+        statement,
+        CODES.form,
+        `${writtenName}(...) needs an INLINE arrow/function-expression value thunk; a plain value or ` +
+          'an indirect function reference is outside the admitted context slice',
+      );
+      return 'refused';
+    }
+    if (thunk.asteriskToken !== undefined) {
+      this.fail(statement, CODES.form, `${writtenName}(...) cannot take a generator value thunk`);
+      return 'refused';
+    }
+    const modifiers = ts.canHaveModifiers(thunk) ? ts.getModifiers(thunk) : undefined;
+    if (modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) === true) {
+      this.fail(
+        statement,
+        CODES.form,
+        `the ${writtenName} value thunk must be synchronous; an async provider value is outside ` +
+          'the context slice',
+      );
+      return 'refused';
+    }
+    if (thunk.parameters.length !== 0) {
+      this.fail(
+        statement,
+        CODES.form,
+        `the ${writtenName} value thunk takes no parameters (it is re-read, not called with a value)`,
+      );
+      return 'refused';
+    }
+    const value = this.expression(thunk, 'handler');
+    if (value === null) return 'refused';
+    return { token, value, span: spanOf(this.sourceFile, statement) };
+  }
+
+  /**
+   * `16b-CTX` — the imported name when `call` invokes a canonical `useContext`
+   * intrinsic, or `null`.
+   */
+  private useContextIntrinsicImport(call: ts.CallExpression): string | null {
+    return this.contextIntrinsicImport(call) === 'useContext' ? 'useContext' : null;
+  }
+
+  /**
+   * `16b-CTX` — admit one `const value = useContext(token)` declaration as a
+   * component-scope CONSUMER.
+   *
+   * The call takes exactly one argument (the token, lowered in `setup` mode) and
+   * no type arguments. The declared name is bound to the compiler-owned
+   * consumer-local Signal, so — unlike a `ref` handle — reading `.value` in a
+   * tracked slot is the SUPPORTED use and needs no read-position gate.
+   *
+   * The declaration must be `const`: the retained setup record aliases it and
+   * the signal identity is the contract (a reconnect writes into the SAME
+   * object), so a reassignable binding would imply something the emitted code
+   * cannot honour. Refusals keep `OEC9042`.
+   */
+  private buildContextConsumer(
+    declaration: ts.VariableDeclaration,
+    name: string,
+    call: ts.CallExpression,
+  ): FunctionModelResource | null {
+    if (
+      call.typeArguments !== undefined ||
+      call.arguments.length !== 1 ||
+      this.useContextIntrinsicImport(call) === null
+    ) {
+      this.fail(
+        call,
+        CODES.form,
+        'useContext(token) takes exactly one context token and no type arguments',
+      );
+      return null;
+    }
+    const list = declaration.parent;
+    if (!ts.isVariableDeclarationList(list) || (list.flags & ts.NodeFlags.Const) === 0) {
+      this.fail(
+        call,
+        CODES.form,
+        'a useContext consumer must be declared with const: the consumer signal identity is the ' +
+          'contract and the emitted alias is not reassignable',
+      );
+      return null;
+    }
+    const expression = this.expression(unwrap(call.arguments[0]!), 'setup');
+    if (expression === null) return null;
+    return {
+      name,
+      kind: 'context',
+      expression,
+      recipeId: null,
+      span: spanOf(this.sourceFile, declaration),
     };
   }
 
@@ -781,12 +1227,32 @@ class FunctionFrontendBuilder {
         span: spanOf(this.sourceFile, declaration),
       };
     }
+    // `16b-CTX`: a `useContext(token)` declaration is a compiler-erased
+    // CONSUMER, not a lowered snapshot. It is recognized BEFORE the generic
+    // signal/computed branch on purpose: the host classifier reports
+    // `useContext` as a factory whose result is a signal (so a tracked slot
+    // reading `.value` is an ordinary reactive dependency), and this branch is
+    // what turns that classification into the lane's own consumer RESOURCE —
+    // one persistent consumer-local signal built by the retained setup factory,
+    // so a reconnect writes into the SAME object.
+    if (ts.isCallExpression(value) && this.useContextIntrinsicImport(value) !== null) {
+      return this.buildContextConsumer(declaration, name, value);
+    }
     const binding = this.resolved.resolveIdentifier(declaration.name);
     const kind = binding?.value;
     if (ts.isCallExpression(value) && (kind === 'signal' || kind === 'computed')) {
       const argument = value.arguments[0] ?? value;
       const expression = this.expression(argument, kind === 'computed' ? 'derived' : 'setup');
       return { name, kind, expression, recipeId: null, span: spanOf(this.sourceFile, declaration) };
+    }
+    // `16b-REF`: a `ref(...)` declaration is a compiler-erased NODE HANDLE, not
+    // a lowered snapshot. Admission is binding provenance (a named import from
+    // the canonical intrinsic specifiers, aliases followed) plus the call
+    // shape; the handle's optional notification callback lowers in `handler`
+    // mode, exactly like the plain `ref` attribute it is handed to, so its
+    // reads are declared without becoming reactive dependencies.
+    if (ts.isCallExpression(value) && this.refIntrinsicImport(value) !== null) {
+      return this.buildRefHandle(declaration, name, value);
     }
     const expression = this.expression(value, 'setup');
     return {
@@ -796,6 +1262,121 @@ class FunctionFrontendBuilder {
       recipeId: null,
       span: spanOf(this.sourceFile, declaration),
     };
+  }
+
+  /**
+   * `16b-REF` — the imported name when `call` invokes a canonical `ref`
+   * intrinsic, or `null` when it invokes anything else.
+   *
+   * Recognized by BINDING PROVENANCE only: the callee must be a value-position
+   * identifier whose resolved binding is a named import of one of the
+   * {@linkcode LIFECYCLE_INTRINSIC_SPECIFIERS} whose imported name is `ref`.
+   * A local shadow, a namespace member, a third subpath or a foreign module's
+   * same-named factory is NOT the intrinsic and keeps every existing refusal.
+   */
+  private refIntrinsicImport(call: ts.CallExpression): string | null {
+    const callee = unwrap(call.expression);
+    if (!ts.isIdentifier(callee)) return null;
+    const binding = this.resolved.resolveIdentifier(callee);
+    if (binding === undefined || binding.origin.form !== 'import') return null;
+    if (!isLifecycleIntrinsicSpecifier(binding.origin.specifier)) return null;
+    return binding.origin.importedName === 'ref' ? 'ref' : null;
+  }
+
+  /**
+   * `16b-REF` — admit one `const handle = ref<T>(callback?)` declaration as a
+   * component-scope NODE HANDLE.
+   *
+   * The call shape is deliberately as narrow as the other intrinsics: no type
+   * arguments beyond the erased handle element type, at most one argument, and
+   * that argument (when present) is an INLINE synchronous arrow or function
+   * expression — the same attach/detach notification the plain `ref` channel
+   * admits, so the compiler has exactly one ref contract. A non-inline
+   * callback, a second argument, a generator, an `async` form or a rest/
+   * optional/default parameter fails closed with the existing `OEC9042` form
+   * code; no new diagnostic identity is introduced.
+   */
+  private buildRefHandle(
+    declaration: ts.VariableDeclaration,
+    name: string,
+    call: ts.CallExpression,
+  ): FunctionModelResource | null {
+    // The emitted alias is a `const` (the handle identity IS the contract: it
+    // survives mount/claim and a reconnect must observe the same object). An
+    // authored `let` would imply reassignment the emitted code cannot honor, so
+    // it fails closed here instead of diverging silently.
+    const list = declaration.parent;
+    if (!ts.isVariableDeclarationList(list) || (list.flags & ts.NodeFlags.Const) === 0) {
+      this.fail(
+        call,
+        CODES.form,
+        'a ref handle must be declared with const: the handle identity is the contract and the ' +
+          'emitted alias is not reassignable',
+      );
+      return null;
+    }
+    if (call.arguments.length > 1) {
+      this.fail(
+        call,
+        CODES.form,
+        'ref(...) takes at most one inline callback (the attach/detach notification)',
+      );
+      return null;
+    }
+    const span = spanOf(this.sourceFile, declaration);
+    const argument = call.arguments[0];
+    if (argument === undefined) {
+      this.refHandleNames.add(name);
+      return { name, kind: 'ref', expression: null, recipeId: null, span };
+    }
+    const callback = unwrap(argument);
+    if (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) {
+      this.fail(
+        call,
+        CODES.form,
+        'ref(...) needs an INLINE arrow/function-expression callback; an indirect function ' +
+          'reference is outside the admitted ref slice',
+      );
+      return null;
+    }
+    if (callback.asteriskToken !== undefined) {
+      this.fail(call, CODES.form, 'a ref callback cannot be a generator');
+      return null;
+    }
+    const modifiers = ts.canHaveModifiers(callback) ? ts.getModifiers(callback) : undefined;
+    if (modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) === true) {
+      this.fail(
+        call,
+        CODES.form,
+        'the ref callback must be synchronous; an async callback (and an async cleanup) is ' +
+          'outside the ref slice',
+      );
+      return null;
+    }
+    if (callback.parameters.length > 1) {
+      this.fail(call, CODES.form, "a ref callback takes at most one 'element' parameter");
+      return null;
+    }
+    const parameter = callback.parameters[0];
+    if (
+      parameter !== undefined &&
+      (parameter.dotDotDotToken !== undefined ||
+        parameter.questionToken !== undefined ||
+        parameter.initializer !== undefined ||
+        !ts.isIdentifier(parameter.name))
+    ) {
+      this.fail(
+        call,
+        CODES.form,
+        'a ref callback parameter is a plain identifier; rest, optional, default and ' +
+          'destructuring forms are outside the ref slice',
+      );
+      return null;
+    }
+    const lowered = this.expression(callback, 'handler');
+    if (lowered === null) return null;
+    this.refHandleNames.add(name);
+    return { name, kind: 'ref', expression: lowered, recipeId: null, span };
   }
 
   // ── JSX / node tree ────────────────────────────────────────────────────
@@ -1168,7 +1749,47 @@ class FunctionFrontendBuilder {
       file: this.sourceFile.fileName,
       components,
       expressions: this.registry,
+      imports: this.collectModuleImports(),
     };
+  }
+
+  /**
+   * The module's static import table. Type-only and side-effect imports carry
+   * no readable binding, so they are not part of it; a named alias keeps the
+   * authored `imported as local` spelling.
+   */
+  private collectModuleImports(): FunctionModelImport[] {
+    const imports: FunctionModelImport[] = [];
+    for (const statement of this.sourceFile.statements) {
+      if (!ts.isImportDeclaration(statement)) continue;
+      if (!ts.isStringLiteral(statement.moduleSpecifier)) continue;
+      const clause = statement.importClause;
+      if (clause === undefined || clause.isTypeOnly) continue;
+      const specifier = statement.moduleSpecifier.text;
+      if (clause.name !== undefined) {
+        imports.push({ specifier, imported: 'default', local: clause.name.text, form: 'default' });
+      }
+      const bindings = clause.namedBindings;
+      if (bindings !== undefined && ts.isNamespaceImport(bindings)) {
+        imports.push({
+          specifier,
+          imported: '*',
+          local: bindings.name.text,
+          form: 'namespace',
+        });
+      } else if (bindings !== undefined) {
+        for (const element of bindings.elements) {
+          if (element.isTypeOnly) continue;
+          imports.push({
+            specifier,
+            imported: (element.propertyName ?? element.name).text,
+            local: element.name.text,
+            form: 'named',
+          });
+        }
+      }
+    }
+    return imports;
   }
 }
 
@@ -1241,7 +1862,7 @@ export function compileFunctionModule(
   );
   if (diagnostics.length > 0) return { module: null, diagnostics };
 
-  const builder = new FunctionFrontendBuilder(sourceFile, resolved, options.lifecycleRoot);
+  const builder = new FunctionFrontendBuilder(sourceFile, resolved, options.lifecycleAdmission);
   const module = builder.build(components);
   return module === null
     ? { module: null, diagnostics: builder.diagnosticsView() }

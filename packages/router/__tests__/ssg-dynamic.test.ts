@@ -1,6 +1,6 @@
 import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { assertRejectsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { join } from 'node:path';
 import { expandDynamicRoutes, expandI18nLocales } from '../src/vite/internal/ssg/ssg-dynamic.ts';
@@ -333,6 +333,150 @@ test('expandI18nLocales - getStaticPaths throw in warn mode skips the route', as
     );
     expect(await exists(join(root, 'dist', 'zh', 'blog', 'a', 'index.html'))).toEqual(false);
   } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+// ─── TA-02: unsafe static-path params follow the failure policy ────
+
+test('expandDynamicRoutes - unsafe static-path params fail the build by default (no policy bypass)', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
+  try {
+    let thrown: unknown;
+    try {
+      await expandDynamicRoutes(
+        [blogRoute],
+        () => Promise.resolve(okOutput()),
+        () => Promise.resolve([{ slug: '../etc' }]),
+        { root, outDir: 'dist' },
+        root,
+        'dist',
+      );
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown, 'the traversal attempt must abort the build by default').toBeInstanceOf(Error);
+    const error = thrown as { code?: string; message?: string };
+    // The coded verdict is the grep surface: the policy's own code (the
+    // buildError carrier), with the inner PARAM_UNSAFE refusal in the text.
+    expect(error.code).toEqual('OE_SSG_RENDER_FAILED');
+    expect(error.message).toContain('unresolvable static-path params');
+    expect(error.message).toContain('Unsafe value for route parameter');
+    expect(await exists(join(root, 'dist', 'blog'))).toEqual(false);
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+test('expandDynamicRoutes - a missing parameter fails the build by default (same policy)', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
+  try {
+    await assertRejectsIncludes(
+      () =>
+        expandDynamicRoutes(
+          [blogRoute],
+          () => Promise.resolve(okOutput()),
+          () => Promise.resolve([{}]),
+          { root, outDir: 'dist' },
+          root,
+          'dist',
+        ),
+      Error,
+      'unresolvable static-path params',
+    );
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+test('expandDynamicRoutes - unsafe static-path params in warn mode skip the page and emit the diagnostic line', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
+  const lines: string[] = [];
+  const spy = vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+    lines.push(args.map((argument) => String(argument)).join(' '));
+  });
+  try {
+    const map = await expandDynamicRoutes(
+      [blogRoute],
+      () => Promise.resolve(okOutput()),
+      () => Promise.resolve([{ slug: '../etc' }]),
+      { root, outDir: 'dist', dynamicRouteFailure: 'warn' },
+      root,
+      'dist',
+    );
+    expect(await exists(join(root, 'dist', 'blog'))).toEqual(false);
+    expect(map.get('/blog/:slug') ?? []).toEqual([]);
+    // The warn-mode diagnostic line exists: the skip names the route and the
+    // unsafe-parameter refusal, never a silent drop.
+    expect(
+      lines.some(
+        (line) =>
+          line.includes('unresolvable static-path params') &&
+          line.includes('Unsafe value for route parameter') &&
+          line.includes('../etc'),
+      ),
+      `expected a coded skip diagnostic, got: ${JSON.stringify(lines)}`,
+    ).toBeTruthy();
+  } finally {
+    spy.mockRestore();
+    await rm(root, { recursive: true });
+  }
+});
+
+test('expandI18nLocales - unsafe static-path params fail the build by default (i18n twin, no bypass)', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
+  try {
+    let thrown: unknown;
+    try {
+      await expandI18nLocales(
+        { i18nOptions: { locales: ['en', 'zh'], defaultLocale: 'en' } },
+        () => Promise.resolve(okOutput()),
+        [blogRoute],
+        () => Promise.resolve([{ slug: 'a/../b' }]),
+        { root, outDir: 'dist' },
+        root,
+        'dist',
+      );
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown, 'the i18n path must follow the same fail policy').toBeInstanceOf(Error);
+    expect((thrown as { code?: string }).code).toEqual('OE_SSG_RENDER_FAILED');
+    expect((thrown as Error).message).toContain('i18n');
+    expect(await exists(join(root, 'dist', 'zh', 'blog'))).toEqual(false);
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+test('expandI18nLocales - unsafe static-path params in warn mode skip and emit the diagnostic line', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-'));
+  const lines: string[] = [];
+  const spy = vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+    lines.push(args.map((argument) => String(argument)).join(' '));
+  });
+  try {
+    await expandI18nLocales(
+      { i18nOptions: { locales: ['en', 'zh'], defaultLocale: 'en' } },
+      () => Promise.resolve(okOutput()),
+      [blogRoute],
+      () => Promise.resolve([{ slug: 'a/../b' }]),
+      { root, outDir: 'dist', dynamicRouteFailure: 'warn' },
+      root,
+      'dist',
+    );
+    expect(await exists(join(root, 'dist', 'zh', 'blog'))).toEqual(false);
+    expect(
+      lines.some(
+        (line) =>
+          line.includes('i18n') &&
+          line.includes('unresolvable static-path params') &&
+          line.includes('Unsafe value for route parameter'),
+      ),
+      `expected the i18n skip diagnostic, got: ${JSON.stringify(lines)}`,
+    ).toBeTruthy();
+  } finally {
+    spy.mockRestore();
     await rm(root, { recursive: true });
   }
 });

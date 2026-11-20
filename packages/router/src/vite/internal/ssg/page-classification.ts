@@ -64,7 +64,12 @@
 
 import ts from 'typescript';
 import { dirname, join, normalize } from 'pathe';
+import type { IslandDecl } from '@openelement/protocol/ssg';
 import type { RouteEntry } from '../../framework.ts';
+import {
+  ownsGeneratedLaneKind,
+  readGeneratedElementHost,
+} from './generated-element-host-metadata.ts';
 import type { PageRouteDecl } from '@openelement/protocol/ssg';
 import { buildError } from '../../../internal/error-codes.ts';
 import type { GeneratedElementHostIdentity } from './generated-element-host-metadata.ts';
@@ -133,6 +138,14 @@ export interface PageModuleCarrier {
   readonly pageModule?: PageModuleFacts;
 }
 
+/** The compiler-owned facts of one generated-element page (M11-2). */
+export interface GeneratedElementPageFact {
+  /** The island scan's tag: also the tag the compiler emitted the class + host under. */
+  readonly tagName: string;
+  /** The island's generated-element lane identity (validated: `producer`). */
+  readonly identity: GeneratedElementHostIdentity;
+}
+
 /** The build-only carrier field route/page generation adds to one page declaration. */
 export interface PageKindCarrier {
   /**
@@ -140,6 +153,13 @@ export interface PageKindCarrier {
    * record; the public protocol type stays unchanged.
    */
   readonly pageKind?: PageKind;
+  /**
+   * Build-only generated-element page fact (M11-2). Present exactly when
+   * `pageKind` is `generated-element-page`; the page tag is a compiler-owned
+   * build fact (island tag = emitted class/host tag), never a runtime
+   * `__partProgram` read. The public protocol type stays unchanged.
+   */
+  readonly generatedElementPage?: GeneratedElementPageFact;
 }
 
 /** One local island the classification may resolve a page component to. */
@@ -150,6 +170,12 @@ export interface LocalPageIsland {
   readonly tagName: string;
   /** The generated-element lane identity kind the island scan recorded, if any. */
   readonly generatedLaneKind: GeneratedElementHostIdentity['kind'] | undefined;
+  /**
+   * The full compiler-owned host identity (M11-2): the tag's producer name is
+   * needed to admit a generated page; the kind alone cannot tell a producer
+   * from a missing/light lane.
+   */
+  readonly generatedElementHost?: GeneratedElementHostIdentity;
 }
 
 /** The build context the classifier resolves a page component import against. */
@@ -159,10 +185,51 @@ export interface PageClassificationContext {
   readonly islands: readonly LocalPageIsland[];
 }
 
+/** Inputs one build host has for the page-classification context. */
+export interface PageClassificationContextInput {
+  readonly routesDir: string;
+  readonly islandsDir: string;
+  readonly islandTagNames: readonly string[];
+  readonly islandFiles: readonly string[];
+  readonly islandMeta: Readonly<Record<string, Partial<IslandDecl>>>;
+}
+
+/**
+ * Build the ONE page-classification context from the scanned island facts.
+ *
+ * Two build hosts need it: the entry descriptor (which classifies page routes)
+ * and the client build's island reachability walk (which seeds a generated
+ * page's island into the client entry). The islands mapping, the
+ * `generatedElementHost` re-attachment and the fallback file spelling live here
+ * ONCE — a caller must not re-derive them (P6: one source of truth).
+ */
+export function buildPageClassificationContext(
+  input: PageClassificationContextInput,
+): PageClassificationContext {
+  return {
+    routesDir: input.routesDir,
+    islandsDir: input.islandsDir,
+    islands: input.islandTagNames.map((tagName, index): LocalPageIsland => {
+      const host = readGeneratedElementHost(input.islandMeta[tagName]);
+      return {
+        filePath: input.islandFiles[index] ?? `${tagName}.tsx`,
+        tagName,
+        generatedLaneKind: host === undefined ? undefined : host.kind,
+        ...(host === undefined ? {} : { generatedElementHost: host }),
+      };
+    }),
+  };
+}
+
 /** The classification result: data, never a throw (the consumer owns the verdict). */
 export type PageClassification =
-  | { readonly kind: 'classified'; readonly pageKind: PageKind }
-  /** The generated-element lane owns the page component; rendering is not wired here. */
+  | {
+      readonly kind: 'classified';
+      readonly pageKind: PageKind;
+      /** Present exactly for `generated-element-page` (producer identity). */
+      readonly generatedElementPage?: GeneratedElementPageFact;
+    }
+  /** The generated-element lane owns the page component but cannot render it. */
   | {
       readonly kind: 'unsupported-generated-page';
       readonly islandTag: string;
@@ -374,12 +441,6 @@ export function buildPageModuleFacts(facts: PageModuleSourceFacts): PageModuleFa
  * Generation side: classify one route into a page kind.
  * ------------------------------------------------------------------------- */
 
-const GENERATED_LANE_OWNED_KINDS = new Set<GeneratedElementHostIdentity['kind']>([
-  'producer',
-  'missing-producer',
-  'light-no-producer',
-]);
-
 /**
  * Classify one page module from its build facts plus the optional resolved
  * generated-element island. Pure: the caller owns the fail-closed verdict.
@@ -402,11 +463,10 @@ export function classifyPageModule(
     owners.push(`server function page "${facts.functionPage}" (server component lane)`);
     kinds.add('function-page');
   }
-  if (
-    resolvedIsland !== undefined &&
-    resolvedIsland.generatedLaneKind !== undefined &&
-    GENERATED_LANE_OWNED_KINDS.has(resolvedIsland.generatedLaneKind)
-  ) {
+  if (resolvedIsland !== undefined && ownsGeneratedLaneKind(resolvedIsland.generatedLaneKind)) {
+    // M-4a/P6: the owned-kind verdict is the generated-host identity owner's
+    // (generated-element-host-metadata.ts). This classifier and the client
+    // island entry read that one predicate; neither keeps a kind list.
     owners.push(`generated element <${resolvedIsland.tagName}> (generated-element lane)`);
     kinds.add('generated-element-page');
   }
@@ -422,6 +482,18 @@ export function classifyPageModule(
   if (kinds.size === 1) {
     const pageKind = [...kinds][0];
     if (pageKind === 'generated-element-page' && resolvedIsland?.generatedLaneKind !== undefined) {
+      const identity = resolvedIsland.generatedElementHost;
+      // M11-2: only the compiler-emitted host producer can render a generated
+      // page root. A `missing-producer` / `light-no-producer` lane has no
+      // host artifact, so the shape stays a classified-but-unwired refusal
+      // (the consumer owns the coded verdict; no silent fallback).
+      if (identity?.kind === 'producer') {
+        return {
+          kind: 'classified',
+          pageKind,
+          generatedElementPage: { tagName: resolvedIsland.tagName, identity },
+        };
+      }
       return {
         kind: 'unsupported-generated-page',
         islandTag: resolvedIsland.tagName,
@@ -463,15 +535,72 @@ export function readPageModuleFacts(route: RouteEntry | undefined): PageModuleFa
  * generated handler/routeInfo branch reads that fact instead of a runtime
  * module-shape check.
  */
-export function resolvePageKind(route: RouteEntry, context: PageClassificationContext): PageKind {
+/**
+ * Resolve the LOCAL generated-element island a page component import points at.
+ *
+ * Build-only, path-based (the same bounded resolution the classifier uses). The
+ * client island reachability walk needs this edge: a generated page route
+ * imports its island component as a VALUE (`definePage(ImportedCard)`), so the
+ * route source carries no tag string and the island module carries no
+ * registration; without this seed the island would never enter the client
+ * entry and the SSR DSD would have no class to upgrade it. Shared with the
+ * classifier, never a second resolver.
+ */
+export function resolvePageComponentIsland(
+  route: RouteEntry,
+  context: PageClassificationContext,
+): LocalPageIsland | undefined {
+  const facts = (route as RouteEntry & PageModuleCarrier).pageModule;
+  const argument = facts?.pageArgument;
+  if (argument?.kind !== 'import') return undefined;
+  return resolveLocalIsland(argument.specifier, route.filePath, context);
+}
+
+/** The build-only verdict for one page route (kind + generated-page facts). */
+export interface PageRouteClassification {
+  readonly pageKind: PageKind;
+  readonly generatedElementPage?: GeneratedElementPageFact;
+}
+
+/** Why a generated-element page shape has no renderable host artifact. */
+function generatedPageRefusalReason(laneKind: GeneratedElementHostIdentity['kind']): string {
+  if (laneKind === 'light-no-producer') {
+    return (
+      'the component root is light, so the compiler emits no DSD host producer for it; a ' +
+      'generated page root needs the compiler-emitted host producer (the light document style ' +
+      'plan does not create one). Set root: shadow on the island, render the island inside a ' +
+      'compiled @element class page, or move the page to a server function page form.'
+    );
+  }
+  return (
+    'the shadow leaf emitted no compiler-owned host producer (no `<Name>__ssr`), so there is no ' +
+    'server artifact to render the page root with. Make the component claimable/SSR-capable, ' +
+    'render the island inside a compiled @element class page, or move the page to a server ' +
+    'function page form.'
+  );
+}
+
+/**
+ * Classify one page route into the build-only page kind + generated-page fact.
+ *
+ * This is the ONE consumer verdict (M11-1/M11-2): the classified fact is
+ * recorded on the page declaration, and every generated handler/routeInfo
+ * branch reads that fact. Genuinely undecidable or unwired shapes fail closed
+ * with the router-internal coded build errors below (no public catalogue row is
+ * added by this slice).
+ */
+export function classifyPageRoute(
+  route: RouteEntry,
+  context: PageClassificationContext,
+): PageRouteClassification {
   const carried = readPageModuleFacts(route);
   if (carried === undefined) {
     // No scan-produced build facts (a hand-built descriptor route — an
-    // adapter integration or a test — has no module artifact to classify).
-    // The protocol facts are all there is, and the pre-M11 contract already
-    // answers from them: the recorded function-page fact, else class page.
-    // Fail-closed ambiguity needs the module facts; it is not guessed here.
-    return route.functionPage === undefined ? 'class-page' : 'function-page';
+    // adapter integration or a test). The protocol facts are all there is and
+    // the pre-M11 contract already answers from them: the recorded
+    // function-page fact, else class page. Fail-closed ambiguity needs the
+    // module facts; it is not guessed here.
+    return { pageKind: route.functionPage === undefined ? 'class-page' : 'function-page' };
   }
   const facts = carried;
   const resolvedIsland =
@@ -479,16 +608,38 @@ export function resolvePageKind(route: RouteEntry, context: PageClassificationCo
       ? resolveLocalIsland(facts.pageArgument.specifier, route.filePath, context)
       : undefined;
   const classification = classifyPageModule(facts, resolvedIsland);
-  if (classification.kind === 'classified') return classification.pageKind;
+  if (classification.kind === 'classified') {
+    if (classification.pageKind !== 'generated-element-page') {
+      return { pageKind: classification.pageKind };
+    }
+    // M11-2 bounded lane: a generated host is synchronous-SSR only (ADR-0181
+    // A6 structurally refuses the stream executor), so a stream declaration is
+    // refused at build instead of emitting a guard the runtime cannot serve.
+    if ((route as { readonly streamManifest?: unknown }).streamManifest !== undefined) {
+      throw buildError(
+        PageClassificationCode.GENERATED_ELEMENT_PAGE_UNSUPPORTED,
+        `[openElement] page route ${route.path} (${route.filePath}) is a generated element page ` +
+          'and declares renderIntent.stream; generated element hosts are synchronous-SSR only, ' +
+          'so streaming/deferred DSD for them is not supported. Remove the stream declaration, ' +
+          'or move the page to a compiled @element class page.',
+      );
+    }
+    const generatedElementPage = classification.generatedElementPage;
+    if (generatedElementPage === undefined) {
+      throw buildError(
+        PageClassificationCode.GENERATED_ELEMENT_PAGE_UNSUPPORTED,
+        `[openElement] page route ${route.path} (${route.filePath}) classified as a generated ` +
+          'element page without a compiler-owned host producer identity.',
+      );
+    }
+    return { pageKind: classification.pageKind, generatedElementPage };
+  }
   if (classification.kind === 'unsupported-generated-page') {
     throw buildError(
       PageClassificationCode.GENERATED_ELEMENT_PAGE_UNSUPPORTED,
       `[openElement] page route ${route.path} (${route.filePath}) resolves its page component to ` +
         `generated element <${classification.islandTag}> (generated-element lane: ` +
-        `${classification.laneKind}). The generated-element page render path is not wired in ` +
-        'this build: the entry would register a generated class with no compiled Part Program. ' +
-        'Render the generated island inside a compiled @element class page, or move the page to ' +
-        'a server function page form.',
+        `${classification.laneKind}), but ${generatedPageRefusalReason(classification.laneKind)}`,
     );
   }
   throw buildError(
@@ -502,6 +653,11 @@ export function resolvePageKind(route: RouteEntry, context: PageClassificationCo
       'page (one exported function with a single JSX return declared by the route module and ' +
       'passed to definePage), or a .mdx route.',
   );
+}
+
+/** The page kind of one route (M11-1 consumer contract; no fact accessor). */
+export function resolvePageKind(route: RouteEntry, context: PageClassificationContext): PageKind {
+  return classifyPageRoute(route, context).pageKind;
 }
 
 /* ------------------------------------------------------------------------- *

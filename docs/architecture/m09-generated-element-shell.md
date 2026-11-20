@@ -232,6 +232,7 @@ This shell is a bounded M09-0 slice. It does **not** implement or claim:
   registration decision or package export. The descriptor remains internal and
   is not an author API. M09-1, M09-2, M09-3 and M09-4 are not started by this
   record; M13 three-engine and packed-consumer evidence are also not claimed.
+  (Superseded 2026-11-18: M09-1b/2/3/4 landed — see `alpha16-18-progress.md` §5.)
 - The M08 dynamic-text residual (adjacent text slots coalesce into one Text
   node) is unchanged here; this slice's claim case deliberately uses one dynamic
   text slot per element.
@@ -239,6 +240,30 @@ This shell is a bounded M09-0 slice. It does **not** implement or claim:
 `dispose(true)` while the element stays connected leaves it without a
 projection until the next connect event; the shell does not auto-remount. That
 is the explicit teardown contract, not a hidden recovery path.
+
+**Re-connect after `dispose(true)` keeps the host's declared state
+(2026-11-16 clarification).** The teardown contract above is not a host-state
+reset. `dispose(true)` destroys the retained *instance*: a later connect creates
+a new instance, re-runs setup and mounts a fresh region. The focused Chromium
+row `packages/compiler/__tests__/semantic-ir/generated-element.shell.test.ts:2496-2537`
+sets declared attributes before `dispose(true)` and asserts the fresh mount still
+reads them (remounted text `hello` from the pre-teardown `label` attribute,
+`sameNode: false`); the Chromium R1 row
+`packages/compiler/__tests__/semantic-ir/generated-element.root-instance.browser.test.ts:438-490`
+makes the same point for a declared property: after teardown the reconnect
+re-runs setup on a new instance and observes the live `seed` value. Declared
+properties and attributes are **host/platform state on the element node**, not
+part of the disposed instance: the framework resets no value and restores no
+declared default at teardown, and defaults keep only their documented paths
+(first write, attribute removal/reflection, pre-upgrade own-property rules) —
+the same no-reset rule the JSX model records for live host state
+(`docs/architecture/jsx-value-and-children-model.md`:350; the shell contract
+states it as "connect creates a NEW instance and re-runs setup: dispose is not
+disconnect", `packages/element/src/internal/compiled/generated-element/shell.ts`:112).
+A reset of declared properties/attributes on `dispose(true)` would therefore be a
+**new semantic decision for the owner** — it would contradict the platform host
+model this shell follows and the JSX no-reset rule — not a defect in this
+contract; this record claims no such reset and no test pins one.
 
 ## Seams and generated views
 

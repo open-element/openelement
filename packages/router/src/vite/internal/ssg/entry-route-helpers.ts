@@ -17,8 +17,66 @@ export function renderImport(imp: ImportDecl): string {
  * handlers, and the SSG routeInfo — one canonical binding for every
  * page-route tag consumer.
  */
-export function pageRouteTagExpr(varName: string, fallbackTagName: string): string {
+export function pageRouteTagExpr(
+  varName: string,
+  fallbackTagName: string,
+  pageKind?: 'class-page' | 'function-page' | 'generated-element-page',
+): string {
+  // M11-2: a generated element page's tag is a compiler-owned build fact (the
+  // island scan's tag, which is also the tag the compiler emitted the class
+  // and host producer under). The class lane keeps the runtime program-tag
+  // resolver; the generated lane never reads `__partProgram`.
+  if (pageKind === 'generated-element-page') {
+    return quoteGeneratedJavaScriptValue(fallbackTagName);
+  }
   return `__resolvePageTag(${varName}, ${quoteGeneratedJavaScriptValue(fallbackTagName)})`;
+}
+
+/* ------------------------------------------------------------------------- *
+ * Build-only route → document stylesheet facts (task12; structure twin of the
+ * router's route-style-links helper). Entry files never import that helper:
+ * the value is handed in through the build-only descriptor side channel and
+ * emitted as ONE literal data channel below.
+ * ------------------------------------------------------------------------- */
+
+/** key = `PageRouteDecl.path`; value = base-joined document stylesheet URLs. */
+export type RouteDocumentStyleLinks = Readonly<Record<string, readonly string[]>>;
+
+/** The build-only descriptor side channel carrying the route → urls facts. */
+export interface RouteDocumentStyleLinksCarrier {
+  readonly routeDocumentStyleLinks?: RouteDocumentStyleLinks;
+}
+
+/** Read + normalize the build-only side channel; absent/undefined = no links. */
+export function readRouteDocumentStyleLinks(value: unknown): RouteDocumentStyleLinks {
+  const carried = (value as RouteDocumentStyleLinksCarrier | undefined)?.routeDocumentStyleLinks;
+  if (carried === undefined || carried === null || typeof carried !== 'object') return {};
+  const normalized: Record<string, readonly string[]> = {};
+  for (const route of Object.keys(carried).sort()) {
+    const urls = carried[route];
+    if (!Array.isArray(urls)) continue;
+    normalized[route] = Object.freeze(urls.filter((url): url is string => typeof url === 'string'));
+  }
+  return Object.keys(normalized).length === 0 ? {} : Object.freeze(normalized);
+}
+
+/** The emitted literal data channel; empty links emit NO line (byte identity). */
+export function routeDocumentStyleLinksLiteralLines(links: RouteDocumentStyleLinks): string[] {
+  const routes = Object.keys(links).sort();
+  if (routes.length === 0) return [];
+  const fields = routes
+    .map(
+      (route) =>
+        `${quoteGeneratedJavaScriptValue(route)}: [${links[route]!.map((url) =>
+          quoteGeneratedJavaScriptValue(url),
+        ).join(', ')}]`,
+    )
+    .join(', ');
+  return [
+    '// build-only route→document stylesheet URLs (task12; omitted when empty)',
+    `const __routeDocumentStyleLinks = { ${fields} };`,
+    '',
+  ];
 }
 
 export function pageDefinitionExpr(varName: string): string {
@@ -85,11 +143,24 @@ export function documentResolutionSetupLines(
   pageExpr: string,
   contextExpr: string,
   indent: string,
+  routePathExpr?: string,
 ): string[] {
-  return [
+  const lines = [
     `${indent}const __doc = __resolvePageDocument(${pageExpr}.head, ${contextExpr}, __clientScriptDescriptors());`,
     `${indent}const __documentStyles = createDocumentStyleResources();`,
   ];
+  if (routePathExpr !== undefined) {
+    // task12: the build's route → document stylesheet facts seed the SAME
+    // per-render collection the class lane's light-root components report
+    // into; `wrapInDocument` is the one writer of the head links (no HTML
+    // postprocess, no second channel). The literal only exists when the build
+    // produced at least one route fact.
+    lines.push(
+      `${indent}const __routeStyles = __routeDocumentStyleLinks[${routePathExpr}];`,
+      `${indent}if (__routeStyles !== undefined) __documentStyles.add(__routeStyles);`,
+    );
+  }
+  return lines;
 }
 
 /**
@@ -112,12 +183,25 @@ export function documentResolutionSetupLines(
  */
 export function requestTimePageContextLines(
   lines: string[],
-  options: { dataExpr: string; actionDataExpr: string; indent: string },
+  options: {
+    dataExpr: string;
+    actionDataExpr: string;
+    indent: string;
+    /** Route-path expression selecting this render's build-only document style facts. */
+    routePathExpr?: string;
+  },
 ): void {
   lines.push(
     `${options.indent}const __pageContext = { data: ${options.dataExpr}, actionData: ${options.actionDataExpr}, params: __params, request: c.req.raw, locale: __locales.length > 0 ? __localeFromPath(__locales, c.req.path, __getDefaultLocale()) : undefined, route: __routeContext, meta: __routeMetaValue };`,
   );
-  lines.push(...documentResolutionSetupLines('__page', '__pageContext', options.indent));
+  lines.push(
+    ...documentResolutionSetupLines(
+      '__page',
+      '__pageContext',
+      options.indent,
+      options.routePathExpr,
+    ),
+  );
 }
 
 /** wrapInDocument() options object shared by page handlers and the SSG renderRoute. */

@@ -12,7 +12,10 @@
  * only registers pages that were actually written.
  *
  * #672: getStaticPaths() throws follow the same dynamicRouteFailure policy in
- * both expansion paths (dynamic routes and i18n locale expansion).
+ * both expansion paths (dynamic routes and i18n locale expansion). So do
+ * unresolvable static-path parameter sets (a missing or unsafe parameter —
+ * TA-02): they are a page that cannot be prerendered, the same failure class
+ * a render failure is, never a policy bypass.
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -202,7 +205,15 @@ export async function expandDynamicRoutes(
         try {
           resolvedPath = resolveDynamicRoutePath(route.path, route.paramNames, params);
         } catch (e) {
-          log.warn(`Skipping unsafe dynamic route ${route.path}: ${formatError(e)}`);
+          // TA-02: a static-path parameter set that is missing or unsafe is a
+          // page that cannot be prerendered — the same failure class a render
+          // failure is, so it follows the SAME dynamicRouteFailure policy
+          // (:72-75) instead of a warn-and-continue bypass of it.
+          handleRenderFailure(
+            policy,
+            `dynamic route ${route.path} has unresolvable static-path params`,
+            e,
+          );
           continue;
         }
 
@@ -289,7 +300,14 @@ export async function expandI18nLocales(
         try {
           resolvedPath = resolveDynamicRoutePath(route.path, route.paramNames, params);
         } catch (e) {
-          log.warn(`i18n: skipping unsafe dynamic route ${route.path}: ${formatError(e)}`);
+          // TA-02 (i18n twin): the same policy as the dynamic-route path
+          // above — an unsafe/missing parameter set follows the configured
+          // dynamicRouteFailure policy, never a warn-and-continue bypass.
+          handleRenderFailure(
+            policy,
+            `i18n: dynamic route ${route.path} has unresolvable static-path params`,
+            e,
+          );
           continue;
         }
 

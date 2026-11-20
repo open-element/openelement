@@ -68,12 +68,18 @@ test('the real ssr:true generated shadow island compiles to the host-producer AB
   // M11 host-producer ABI: third host-attribute parameter, canonical property
   // seeding over the SAME descriptor rows, conditional host-attribute forwarding.
   expect(code).toContain(
-    'export function InteropGeneratedSsrCard__ssrHost(props, lightChildren, attributes) {',
+    // M09-2e / #1803: the island declares a stylesheet on its shadow root, so
+    // the emitted host producer grows the typed styleLinks channel.
+    'export function InteropGeneratedSsrCard__ssrHost(props, lightChildren, attributes, styleLinks) {',
   );
   expect(code).toContain(
     'seedGeneratedElementHostProperties(__oeElementDescriptor.properties, props, attributes)',
   );
-  expect(code).toContain('...(attributes === undefined ? {} : { attributes })');
+  // M11-2: a declared row with an attribute channel is projected from the seed
+  // record (canonical attribute/type/default), so the wrapper merges the seed
+  // pairs instead of forwarding only the caller's attributes.
+  expect(code).toContain('const __oeHostAttrs = __oeHostProps.__oeHostAttributes;');
+  expect(code).toContain('attributes: __oeHostAttrs === undefined ? attributes : __oeHostAttrs');
   expect(code).toContain('serializeGeneratedElementHtml');
   // The producer is content-only composition: no registration, no class static,
   // no namespace/runtime module-shape read.

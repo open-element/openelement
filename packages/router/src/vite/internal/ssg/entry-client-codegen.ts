@@ -3,7 +3,7 @@ import process from 'node:process';
 import { ACTION_FETCH_HEADER, IDLE_FALLBACK_TIMEOUT_MS } from '@openelement/element';
 import { stableModuleId } from '@openelement/compiler';
 import { runtimeModulePath } from '../runtime-module-path.ts';
-import { findBuildWorkspaceRoot } from '../../workspace-alias.ts';
+import { findBuildWorkspaceRootOrUndefined } from '../../workspace-alias.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import {
   type AdmittedClientIslandEntry,
@@ -15,7 +15,7 @@ import type { ClientIslandDeliveryEntry, ClientIslandDeliveryInput } from './del
 
 // Machine-independent identity for the generated error copy: the workspace
 // anchor keeps absolute build paths out of the shipped client bundle.
-const WORKSPACE_ROOT = findBuildWorkspaceRoot(process.cwd()) ?? undefined;
+const WORKSPACE_ROOT = findBuildWorkspaceRootOrUndefined(process.cwd());
 
 /**
  * One island's activation factory.
@@ -34,6 +34,7 @@ function islandImportFactory(
   modulePath: AdmittedIslandModuleSpecifier,
   tagName: string,
   exportName?: string,
+  generatedLane = false,
 ): string {
   const nameLiteral = exportName ? quoteGeneratedJavaScriptValue(exportName) : 'undefined';
   const tagLiteral = quoteGeneratedJavaScriptValue(tagName);
@@ -47,6 +48,17 @@ function islandImportFactory(
     )} did not export a constructor for ${tagName}`,
   );
   const define = `var _name = ${nameLiteral}; var Ctor = _name ? mod[_name] : mod.default; if (typeof Ctor !== 'function') throw new Error(${errorLiteral}); if (!customElements.get(${tagLiteral})) customElements.define(${tagLiteral}, Ctor); return mod;`;
+  if (generatedLane) {
+    // M11-3: a generated Native Custom Element island owns its mount/claim
+    // through the compiler-emitted shell; the legacy executor runtime is not a
+    // prerequisite for defining it, so the factory never waits for (or loads)
+    // that runtime. Class-lane islands keep the B2 runtime-first ordering.
+    return `function () {
+    return import(${quoteGeneratedJavaScriptValue(modulePath)}).then(function (mod) {
+      ${define}
+    });
+  }`;
+  }
   return `function () {
     var __island = import(${quoteGeneratedJavaScriptValue(modulePath)});
     return Promise.all([__island, __loadElementRuntime()]).then(function (__loaded) {
@@ -58,6 +70,8 @@ function islandImportFactory(
 
 interface NormalizedClientIsland extends AdmittedClientIslandEntry {
   tagName: string;
+  /** M11-3 build-only lane fact; absent means the class/executor lane. */
+  generatedLane?: true;
 }
 
 /** JavaScript single-quoted literal used in the media-query evidence. */
@@ -69,6 +83,23 @@ function quoteSingle(value: string): string {
     .replaceAll('\r', '\\r')
     .replaceAll('\u2028', '\\u2028')
     .replaceAll('\u2029', '\\u2029')}'`;
+}
+
+/**
+ * One declaration's normalized identity, for a conflict message that names BOTH
+ * sources. The dedup below must never resolve a disagreement by keeping the
+ * first declaration silently: the message has to say which two declarations
+ * collided and on which side of the generated/class lane each sits, because the
+ * lane fact decides whether the activation factory loads the executor runtime.
+ */
+function describeClientIslandDeclaration(entry: NormalizedClientIsland): string {
+  const source = entry.isPackage ? 'package' : 'local';
+  const lane = entry.generatedLane === true ? 'generated-lane' : 'class-lane';
+  return (
+    `${source} ${lane} declaration ` +
+    `(module ${entry.modulePath}, strategy ${entry.strategy}, ` +
+    `media ${entry.media ?? 'none'}, export ${entry.exportName ?? 'default'})`
+  );
 }
 
 /** Expand one capability declaration into its one-to-many element names. */
@@ -93,16 +124,27 @@ function expandClientIslandEntries(
         ...admitted,
         tagName,
         ...(delivery.exportNames?.[tagName] ? { exportName: delivery.exportNames[tagName] } : {}),
+        ...(delivery.generatedLane === true ? { generatedLane: true as const } : {}),
       };
       const prior = seen.get(tagName);
       if (prior) {
+        // M-4b: `generatedLane` is part of the declaration identity, not
+        // decoration. It decides whether the factory waits for (and loads) the
+        // executor runtime (`islandImportFactory` / `activationGroupKey`), so
+        // two declarations that agree on module/strategy/media/export but
+        // disagree on the lane are NOT interchangeable. Fail closed and name
+        // both sources instead of silently keeping the first one.
         if (
           prior.modulePath !== item.modulePath ||
           prior.strategy !== item.strategy ||
           prior.media !== item.media ||
-          prior.exportName !== item.exportName
+          prior.exportName !== item.exportName ||
+          prior.generatedLane !== item.generatedLane
         ) {
-          throw new Error(`Conflicting island capability declarations for ${tagName}`);
+          throw new Error(
+            `Conflicting island capability declarations for ${tagName}: ` +
+              `${describeClientIslandDeclaration(prior)} vs ${describeClientIslandDeclaration(item)}`,
+          );
         }
         continue;
       }
@@ -119,21 +161,32 @@ interface ActivationGroup {
 }
 
 function activationGroupKey(entry: NormalizedClientIsland): string {
-  return `${entry.modulePath}\u0000${entry.strategy}\u0000${entry.media ?? ''}`;
+  return `${entry.modulePath}\u0000${entry.strategy}\u0000${entry.media ?? ''}\u0000${
+    entry.generatedLane === true ? 'generated' : 'class'
+  }`;
 }
 
 function sharedActivationFactory(group: ActivationGroup, index: number): string {
   const promise = `__activation${index}Promise`;
   const factory = `__activation${index}`;
-  const importExpression = `Promise.all([import(${quoteGeneratedJavaScriptValue(
-    group.modulePath,
-  )}), __loadElementRuntime()])`;
-  const lines = [
-    `var ${promise};`,
-    `var ${factory} = function() {`,
-    `  if (!${promise}) ${promise} = ${importExpression}.then(function(__loaded) {`,
-    '    var mod = __loaded[0];',
-  ];
+  const generatedLane = group.entries.every((entry) => entry.generatedLane === true);
+  const importExpression = generatedLane
+    ? `import(${quoteGeneratedJavaScriptValue(group.modulePath)})`
+    : `Promise.all([import(${quoteGeneratedJavaScriptValue(
+        group.modulePath,
+      )}), __loadElementRuntime()])`;
+  const lines = generatedLane
+    ? [
+        `var ${promise};`,
+        `var ${factory} = function() {`,
+        `  if (!${promise}) ${promise} = ${importExpression}.then(function(mod) {`,
+      ]
+    : [
+        `var ${promise};`,
+        `var ${factory} = function() {`,
+        `  if (!${promise}) ${promise} = ${importExpression}.then(function(__loaded) {`,
+        '    var mod = __loaded[0];',
+      ];
   group.entries.forEach((entry, entryIndex) => {
     const ctor = `__Ctor${index}_${entryIndex}`;
     const value = entry.exportName
@@ -271,6 +324,27 @@ export const ELEMENT_SERVICES_RUNTIME_SPECIFIERS = {
 } as const;
 
 /**
+ * The machine-independent virtual specifier for the document-services wrapper
+ * ({@linkcode ./element-document-services.ts}), the third narrow element
+ * surface beside the lazy `element-services-*` trio above.
+ *
+ * It exists because the two document-level services the entry installs —
+ * deep fragment navigation and the pre-hydration click capture — used to
+ * arrive only as a side effect of the LAZY element-runtime import. A page whose
+ * islands are all generated-lane emits no such import (M11-3 / the P1 win), so
+ * both services stopped being installed there; the deep-fragment regression is
+ * the measured consequence. This surface carries the two installers and no
+ * executor entry, so a generated-lane page floor can install them without
+ * loading the generic Part Program executor.
+ *
+ * Same resolution rule as the trio: the generated entry is a virtual module,
+ * so it carries this stable id and each client-entry host resolves it through
+ * {@linkcode resolveElementServicesRuntimeModule}.
+ */
+export const ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER =
+  'virtual:open-client-runtime/element-document-services.ts';
+
+/**
  * Resolve one {@linkcode ELEMENT_SERVICES_RUNTIME_SPECIFIERS} id to the real
  * wrapper module, or null when the id is not one of ours. Both client-entry
  * hosts call this from their `resolveId` hook — `cli/build-client.ts` for the
@@ -292,6 +366,8 @@ export function resolveElementServicesRuntimeModule(id: string): string | null {
       return runtimeModulePath('./ssg/element-services-client-only.ts');
     case ELEMENT_SERVICES_RUNTIME_SPECIFIERS.base:
       return runtimeModulePath('./ssg/element-services-base.ts');
+    case ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER:
+      return runtimeModulePath('./ssg/element-document-services.ts');
     default:
       return null;
   }
@@ -336,23 +412,39 @@ interface GenerateClientEntryOptions {
 }
 
 /**
- * Does the generated client entry need the element runtime at all?
+ * Does the generated client entry need the legacy compiled executor runtime?
  *
- * The island-free entry shapes (zero client JS, and the CSS-only entry a
- * Tailwind-enabled app without islands or enhanced forms generates) import the
- * document stylesheet and nothing else — no runtime module is reachable from
- * them. This is the ONE place that fact is decided: the generator below selects
- * the island-free branch with it, and the client build's element-runtime chunk
- * guard consumes it instead of inferring a runtime requirement from the
- * emission shape (defect D). A `hydrate: 'none'` island is SSR-only and never
- * enters the client bundle, so it does not require the runtime either.
- *
- * "Needs" is a graph fact, not an evaluation-order fact: since B2 the entry
- * reaches the runtime through a dynamic import only, so the runtime chunk
- * still exists in the emitted graph (and the guard still validates its
- * layout) while an island-free entry never requests it at runtime.
+ * This is the executor lane question (defect D / M11-3), not the "is there any
+ * client JS" question — that one is {@linkcode clientEntryHasClientJs}. A
+ * generated Native Custom Element island defines/claims through the
+ * compiler-emitted shell, so it does not need the executor runtime; a class-lane
+ * island (or the form-enhancement layer) does. The generator emits
+ * `__loadElementRuntime`/the element-services dynamic import only when this
+ * returns true, and the client build's element-runtime chunk guard consumes the
+ * same fact instead of inferring a runtime requirement from the emission shape.
+ * A `hydrate: 'none'` island never enters the client bundle at all.
  */
 export function clientEntryNeedsElementRuntime(
+  islands: readonly ClientIslandDeliveryInput[],
+  options: GenerateClientEntryOptions = {},
+): boolean {
+  if (options.enhancedForms === true) return true;
+  // M11-3: an island owned by the generated Native Custom Element lane defines
+  // and claims through the compiler-emitted shell, so it is not a reason to
+  // load the legacy compiled executor runtime. Any class-lane island (and the
+  // form-enhancement layer) still is.
+  return expandClientIslandEntries(islands).some(
+    (island) => island.strategy !== 'none' && island.generatedLane !== true,
+  );
+}
+
+/**
+ * Does the generated client entry carry any client JavaScript at all? This is
+ * a different fact from {@linkcode clientEntryNeedsElementRuntime} (M11-3): a
+ * page whose only islands are generated-lane islands has client JS but no
+ * executor runtime, so the island-free/style-only shapes must not swallow it.
+ */
+export function clientEntryHasClientJs(
   islands: readonly ClientIslandDeliveryInput[],
   options: GenerateClientEntryOptions = {},
 ): boolean {
@@ -375,9 +467,10 @@ export function generateClientEntry(
       ? ''
       : `import ${quoteGeneratedJavaScriptValue(options.styleEntry)};\n`;
 
-  // The island-free shapes (clientEntryNeedsElementRuntime owns the decision):
-  // the document stylesheet import is the only import they carry.
-  if (!clientEntryNeedsElementRuntime(islands, options)) {
+  // The island-free shapes (clientEntryHasClientJs owns the decision): the
+  // document stylesheet import is the only import they carry. A generated-lane
+  // island still has client JS even though it needs no executor runtime.
+  if (!clientEntryHasClientJs(islands, options)) {
     if (styleImport !== '') {
       return `// openElement Client Entry - no client islands; the document stylesheet only\n${styleImport}`;
     }
@@ -413,7 +506,13 @@ export function generateClientEntry(
       const group = groups.find((candidate) => candidate.entries.includes(entry));
       const factory = group && groupFactories.get(group);
       return `  ${quoteGeneratedJavaScriptValue(entry.tagName)}: ${
-        factory || islandImportFactory(entry.modulePath, entry.tagName, entry.exportName)
+        factory ||
+        islandImportFactory(
+          entry.modulePath,
+          entry.tagName,
+          entry.exportName,
+          entry.generatedLane === true,
+        )
       }`;
     })
     .join(',\n');
@@ -489,7 +588,9 @@ export function generateClientEntry(
   // existing host, while island chunks still download in parallel.
   // Island-bearing pages keep their warm start through the build's per-page
   // `<link rel="modulepreload">` projection of the island manifest.
-  const runtimeLoader = `var __elementRuntimePromise = null;
+  const needsElementRuntime = clientEntryNeedsElementRuntime(islands, options);
+  const runtimeLoader = needsElementRuntime
+    ? `var __elementRuntimePromise = null;
 var __loadElementRuntime = function () {
   if (!__elementRuntimePromise) {
     __elementRuntimePromise = import('${elementServicesSpecifier(
@@ -512,15 +613,58 @@ var __loadElementRuntime = function () {
     });
   }
   return __elementRuntimePromise;
-};`;
+};`
+    : '';
 
   const schedulerImport = `import { createIslandScheduler as __schedule } from '${VIRTUAL_RUNTIME_SPECIFIERS.scheduler}';`;
+  // ── Document services: one installer per emission shape ──────────────────
+  //
+  // The two document-level services (deep fragment navigation, pre-hydration
+  // click capture) must be installed on EVERY client-JS page, and the installer
+  // is chosen by whether the entry already fetches the element-runtime chunk:
+  //
+  //   - `needsElementRuntime` FALSE (every island is generated-lane, M11-3):
+  //     no `__loadElementRuntime` exists, so nothing else would ever install
+  //     them — that was the measured regression (`#start` never got
+  //     `data-open-target`). This shape installs them STATICALLY from the
+  //     executor-free `document-services` surface, at entry evaluation, because
+  //     a direct load with a `#hash` must scroll into a DSD subtree before any
+  //     island activates.
+  //   - `needsElementRuntime` TRUE: the lazy `element-services` import below is
+  //     the installer, and its `.then()` keeps both calls. It is deliberately
+  //     NOT made static here: this shape's emitted bytes are pinned by the ABI
+  //     hash in entry-client-codegen/generated-lane.test.ts, and more
+  //     importantly `requireEntryStaticGraphFreeOfRuntime` fails the build when
+  //     the entry statically reaches the shared runtime chunk — which a static
+  //     import from the element package always does, since #1544 groups every
+  //     module under that package root into `element-runtime-<hash>.js`. On
+  //     this shape the chunk is fetched anyway, so the lazy install costs no
+  //     extra bytes and stays the single owner.
+  //
+  // The condition is exactly the generator's own executor-lane fact, so the
+  // two shapes cannot disagree about who installs the services.
+  const staticDocumentServices = !needsElementRuntime;
+  const documentServicesImport = staticDocumentServices
+    ? `import { ensureDeepFragmentNavigation as __installDeepFragments, ensurePreHydrationClickCapture as __installPreHydrationCapture } from '${ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER}';\n`
+    : '';
+  const documentServicesInstall = staticDocumentServices
+    ? `// Generated-lane page floor: install the document-level services here, once,
+// at entry evaluation. Neither is reachable from the compiler-emitted shell, and
+// this entry carries no element-runtime loader — without these two calls
+// fragment navigation inside nested shadow roots and the pre-upgrade capture
+// simply do not exist on the page. Both installers are idempotent per document
+// (an \`installed\` / registry-entry check), so a later module repeating the call
+// is a no-op rather than a second listener set.
+__installDeepFragments();
+__installPreHydrationCapture(document, __tags);
+`
+    : '';
   const enhanceImport =
     options.enhancedForms === true
       ? `import { createEnhanceClient } from '${VIRTUAL_RUNTIME_SPECIFIERS.enhance}';\n`
       : '';
   const importsBlock = `${schedulerImport}
-${enhanceImport}
+${documentServicesImport}${enhanceImport}
 ${loggerBlock}
 
 ${runtimeLoader}`;
@@ -538,20 +682,20 @@ var __map = {
 ${islandMap}
 };
 var __tags = [${tags}];
-${
-  // The call below is safe only because `runtimeLoader` — the definition of
-  // `__loadElementRuntime` — is emitted above in importsBlock. The 88bda88bf
-  // regression class was a shared block calling a binding that one emission
-  // shape did not define; generated-entry-gate.test.ts pins that shape check.
-  options.enhancedForms === true
-    ? `// B2: the form-enhancement layer is a document-level enhancement that uses
+${documentServicesInstall}${
+    // The call below is safe only because `runtimeLoader` — the definition of
+    // `__loadElementRuntime` — is emitted above in importsBlock. The 88bda88bf
+    // regression class was a shared block calling a binding that one emission
+    // shape did not define; generated-entry-gate.test.ts pins that shape check.
+    options.enhancedForms === true
+      ? `// B2: the form-enhancement layer is a document-level enhancement that uses
 // the element runtime's services (pre-upgrade capture, deep fragment
 // navigation), so its presence is a genuine trigger for the lazy runtime
 // import — a page with enhanced forms but no islands still gets the runtime.
 __loadElementRuntime();
 `
-    : ''
-}
+      : ''
+  }
 ${activationLines.length > 0 ? `\n${activationLines.join('\n\n')}\n` : ''}
 
 var __scheduler = __schedule({

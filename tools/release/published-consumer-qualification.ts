@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the portable JSON report and the release-gate verdict contract are shared by the entry surfaces (qualification matrix, --smoke, --prepublish-alias), so the contract is one module; the boundary is network posture per surface — registry-only smoke, offline alias probe from packed tarballs, and CI entering the matrix with a report that uploads even when a platform-specific command fails.
 /**
  * Published-consumer qualification, release-gate verdicts, and post-publish
  * consumer smoke — one tool, two entry surfaces.

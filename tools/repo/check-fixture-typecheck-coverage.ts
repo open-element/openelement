@@ -21,6 +21,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import process from 'node:process';
+import { emitSummary } from './checker-io.ts';
 
 /** Directories scanned for application-shaped sources. */
 export const APPLICATION_ROOTS = ['tests/fixtures', 'tests/e2e'];
@@ -169,7 +170,7 @@ export async function main(): Promise<void> {
     );
     process.exit(1);
   }
-  console.log(
+  emitSummary(
     `fixture typecheck coverage ok (${report.covered.length} application-shaped surfaces covered)`,
   );
 }

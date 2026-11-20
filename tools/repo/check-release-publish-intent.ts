@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the policy proof is one evaluation over one workflow document — trigger surface, guard conditions and extracted shell steps must agree for the Continuous-Integration / Explicit-Release-Intent / Automated-Verified-Publishing claim to hold; the boundary is that nothing real happens: it reads .github/workflows/autoflow-release.yml plus the CI workflow, executes extracted steps under a fake gh/npm on PATH, and performs no publish, tag or GitHub Release.
 /**
  * Explicit-release-intent harness (Q-Release, WP3).
  *
@@ -75,6 +76,7 @@ import { join } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
+import { emitSummary, reportPathArg } from './checker-io.ts';
 import { spawnCommandSync } from './node-command.ts';
 import {
   CI_BASE_LISTING,
@@ -1754,6 +1756,7 @@ function main(): void {
   const releasePath = flag('release-workflow');
   const ciPath = flag('ci-workflow');
   const scenarioId = flag('scenario');
+  const reportPath = reportPathArg(args);
   const outcomes = runMatrix({
     ...(releasePath ? { releasePath } : {}),
     ...(ciPath ? { ciPath } : {}),
@@ -1765,12 +1768,23 @@ function main(): void {
     );
     process.exit(2);
   }
-  for (const outcome of selected) console.log(formatOutcome(outcome));
+  // The full scenario matrix is the detailed report, not stdout content: a
+  // passing check prints one summary line, and `--report <path>` moves the
+  // matrix into a file artifact.
+  if (reportPath !== undefined) {
+    writeFileSync(reportPath, `${selected.map(formatOutcome).join('\n')}\n`, 'utf8');
+  }
   const failed = selected.filter((outcome) => !outcome.ok);
-  console.log(
-    `release-intent matrix: ${selected.length - failed.length}/${selected.length} scenario(s) behaved as required.`,
+  if (failed.length > 0) {
+    for (const outcome of failed) console.error(formatOutcome(outcome));
+    console.error(
+      `release-intent matrix: ${selected.length - failed.length}/${selected.length} scenario(s) behaved as required.`,
+    );
+    process.exit(1);
+  }
+  emitSummary(
+    `release-intent matrix: ${selected.length}/${selected.length} scenario(s) behaved as required.`,
   );
-  process.exit(failed.length === 0 ? 0 : 1);
 }
 
 if (import.meta.main) main();

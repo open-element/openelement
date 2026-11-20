@@ -16,8 +16,14 @@ import {
   type ProgramWhenPart,
 } from '@openelement/protocol/part-program';
 import { ClaimErrorCode, OpenElementError, RuntimeErrorCode } from '@openelement/protocol/errors';
-// The broadcast attribute's single writer names it; hydration only classifies it.
-import { THEME_ATTRIBUTE } from '../../../open-element-theme.ts';
+// The runtime-only host attributes one fact: the light-root marker, the theme
+// broadcast and the JSON prop seed, single-sourced in the generated-element
+// shell's DOM-free leaf. Hydration derives its exemption from that fact instead
+// of keeping a third hand-written list — and imports the LEAF, never the shell
+// itself, so this runtime barrel stays evaluable before any DOM exists (the
+// shell's module graph captures `HTMLElement`). C-1: the seed was written by
+// the generated host but missing from the claim's exemption.
+import { GENERATED_RUNTIME_ONLY_ATTRIBUTES } from '../generated-element/runtime-only-host-attributes.ts';
 // Canonical each-Block item-key derivation (#1374) — single source shared
 // with the server serializer; do not reintroduce a private copy.
 import { isExpectedStyleResource, styleResourceIdentity } from '../style-identity.ts';
@@ -180,6 +186,11 @@ function hydrateElementAttributes(
     const expected = new Set(node.attrs.map(([name]) => name));
     for (const name of dynamic) expected.add(name);
     for (const name of actualNames) {
+      // The light-root ownership marker is runtime-managed only on a NESTED
+      // host whose content this program does not own (`node.children.length
+      // === 0`; the walk below treats such a subtree as opaque). A program node
+      // that declares children claims that content itself, so a marker there is
+      // genuine drift.
       if (
         name.toLowerCase() === DATA_OE_LIGHT &&
         node.children.length === 0 &&
@@ -187,13 +198,23 @@ function hydrateElementAttributes(
         element.getAttribute(DATA_OE_LIGHT) !== null
       )
         continue;
-      // The theme manager writes its broadcast attribute on a custom-element
-      // host at that host's own connect — which under chunked island loading
-      // can precede THIS hydration (the parent upgrades after the child island's
-      // chunk). The attribute is runtime-managed state (THEME_ATTRIBUTE is the
-      // manager's own constant), not server-rendered drift; its authored
-      // value, when the program declares one, is still drift-checked above.
-      if (name === THEME_ATTRIBUTE && node.tag.includes('-')) continue;
+      // Every OTHER runtime-only host attribute comes from the generated
+      // shell's ONE fact (GENERATED_RUNTIME_ONLY_ATTRIBUTES): the theme
+      // broadcaster mirrors the theme attribute on a custom-element host at
+      // that host's own connect, and the JSON prop seed is written by the
+      // generated host's SSR producer and consumed by its own claim. Under
+      // chunked island loading either can be present before THIS parent
+      // hydrates the same element — they are runtime-managed state, not
+      // server-rendered drift. The authored value of a DECLARED one is still
+      // drift-checked above. The C-1 defect was exactly that this exemption was
+      // a hand-written list here and missed the seed.
+      //
+      // Scoped to custom-element hosts: every writer targets a compiled or
+      // generated host, so the same name on a plain element (or any unlisted
+      // attribute) still fails closed as drift.
+      const runtimeOnly =
+        node.tag.includes('-') && GENERATED_RUNTIME_ONLY_ATTRIBUTES.has(name.toLowerCase());
+      if (runtimeOnly && name.toLowerCase() !== DATA_OE_LIGHT) continue;
       if (!expected.has(name)) hydrateFailure(path, `unexpected attribute "${name}"`, owner);
     }
     for (const name of expected) {

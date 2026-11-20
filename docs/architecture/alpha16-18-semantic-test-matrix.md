@@ -9,10 +9,18 @@ summary: Per-case evidence ledger; a case is done only when its required cells c
 Date: 2026-11-03. Status: **results are recorded in the per-milestone annexes
 below; a grid cell carries a result only where an annex names the artifact and
 the SHA**. Baseline:
-`4f1f2001b24909086f7e7efe9e5016d48d615c91`. Latest recorded annex: the **M08
-recorded results** annex at the end of this document (the same stateful list
+`4f1f2001b24909086f7e7efe9e5016d48d615c91`. Latest recorded annex: the
+**TSX-17 recorded results** annex at the end of this document (the M14
+full-await server async boundary: all six required cells `T+`, `T−`, `C+`,
+`C−`, `S`, `F` recorded — the type cells from the new
+`packages/compiler/__tests__/server-component-full-await.typecheck.test.ts`,
+the compile/SSR/failure cells for the D1 and R7 channels and the nine located
+`OEC9032` boundaries, with no D2-as-authored fixture), recorded at
+`1b23f677e7e315a479aad385033ff6b60dfc5926` plus the `T+`/`T−` fixture commit.
+Before it, the **M08
+recorded results** annex records the stateful list
 across S → K → U → D, the composition shapes, the claim negatives and the
-authored-location diagnostics), recorded by
+authored-location diagnostics, recorded by
 [the M08 closeout record](./m08-closeout.md) at `116f4b5dffc2a4b8eb0aa730cb5208b7b142c59f`. The M07
 annexes below are unchanged history: M07-1 is signed off on
 `ac8c218614e2d4749435c51edf3eaf15eb65f6fd` (Node DOM shim, 非浏览器资格), M07-2
@@ -22,9 +30,9 @@ on `70eb2381cab2ef238903cb583f3925976206e901` (browser qualification, chromium
 `b82e63bdfa1794897e9ddf1ef32c262f48368883` (owner decision 2026-11-12, progress
 ledger §4.4). The M08-1b, M08 text-boundary, M08 condition, M08 list and M08
 input/void annexes are LOCAL slice records: each states what it does not
-record, and none of them fills a grid cell by itself. The M08 annex at the end
+record, and none of them fills a grid cell by itself. The M08 annex
 is the one record that fills TSX-18 and TSX-30, for the cells it names; every
-other cell stays `R`, including `T+`/`T−`/`C−` for those two rows, the
+other cell of those two rows stays `R`, including `T+`/`T−`/`C−`, the
 cross-engine `B` (M13) and the packed `P` (M12). Leaf-range protocol notes
 under TSX-18 / TSX-30 that are not browser evidence stay 非浏览器资格 (Node DOM
 shim, LOCAL) comments only.
@@ -69,7 +77,9 @@ a pass.
 | **P** | independent packed consumer |
 
 Symbols: `R` required, `o` optional-but-recorded, `n/a` inapplicable (the reason
-is in the contract's matrix), `—` not yet defined and therefore an OPEN blocker.
+is in the contract's matrix), `—` not yet defined and therefore an OPEN blocker,
+`not claimed` no backing artifact exists at any recorded SHA (the row's annex
+states why; it is not a pass and not a silently unrecorded `R`).
 
 Cross-engine is required for every case that touches DOM, and is marked `R` for
 the slices that the release gates on (TSX-04, 06, 07, 09, 10, 14, 18, 23, 30).
@@ -91,13 +101,13 @@ the slices that the release gates on (TSX-04, 06, 07, 09, 10, 14, 18, 23, 30).
 | TSX-11 spread order/removal | R | R | R | R | R | R | R | R | n/a | R | R | o |
 | TSX-12 events/callbacks/refs | R | R | R | R | R | R | n/a | R | R | R | R | o |
 | TSX-13 context isolation | R | R | R | R | R | R | R | R | R | R | R | o |
-| TSX-14 CE connection lifetime | R | R | R | R | R | R | n/a | R | R | R | R | o |
+| TSX-14 CE connection lifetime | not claimed — no type-check fixture exists | not claimed — no type-check fixture exists | pass | pass | pass | pass | n/a | pass | pass | pass | pass | not claimed — M12 packed proof covers one island, not this row |
 | TSX-15 runtime renderability | R | R | R | R | R | R | R | R | n/a | R | R | o |
 | TSX-16 iterables | R | R | R | R | R | R | R | R | n/a | R | R | o |
-| TSX-17 server async boundary | R | R | R | R | n/a | n/a | R | n/a | n/a | R | o | o |
+| TSX-17 server async boundary | pass | pass | pass | pass | n/a | n/a | pass | n/a | n/a | pass | o | o |
 | TSX-18 SSR seed/claim fidelity | R | R | pass | R | n/a | pass | pass | pass | pass | pass | R | o |
 | TSX-19 error/cleanup containment | R | R | R | R | R | R | R | R | R | R | R | o |
-| TSX-20 native CE / third-party WC | R | R | R | R | R | R | n/a | R | R | R | R | R |
+| TSX-20 native CE / third-party WC | not claimed — no type-check fixture exists | not claimed — no type-check fixture exists | pass | pass | pass | pass | n/a | pass | pass | pass | pass | pass |
 | TSX-21 precompiled package | R | R | R | R | R | R | R | R | R | R | o | R |
 | TSX-22 HMR/source locations | R | R | R | R | R | R | R | n/a | n/a | R | o | n/a |
 | TSX-23 one recipe inserted twice | R | R | R | R | R | R | R | R | R | R | R | R |
@@ -112,9 +122,12 @@ the slices that the release gates on (TSX-04, 06, 07, 09, 10, 14, 18, 23, 30).
 `n/a` reasons live in the contract's applicability matrix and must not be
 invented per row.
 
-`pass` appears only where the M08 annex names the artifact and the SHA; a cell
-that annex does not name stays `R`, even when the same phase is recorded
-elsewhere for another case. `B` is M13 and `P` is M12 in every Alpha16a row.
+`pass` appears only where a named annex names the artifact and the SHA; a cell
+that annex does not name stays `R` (or `not claimed`, where the annex says no
+backing artifact exists at all), even when the same phase is recorded
+elsewhere for another case. TSX-18/TSX-30 `pass` cells are the M08 annex's;
+the TSX-17 cells are the M14 annex's. `B` is M13 and `P` is M12 in every
+Alpha16a row.
 
 **Claim acceptance chain.** Rows TSX-18 and TSX-30 are one chain, not separate
 checkboxes: marker/order encoding, key alignment, permitted seed state, bounded
@@ -913,4 +926,285 @@ helper's optional last argument. The directory range interior is excluded:
 `B`, no packed consumer `P`, no TSX-30 `F`, no directory range-interior DOM
 path, no entry-internal condition/list/composition, no `property` channel, no
 request-scoped props/bindings lifecycle, no production wiring, no public ABI.
+
+## TSX-14 / TSX-20 recorded results — generated CE boundary (M09-4)
+
+```
+case:      TSX-14 CE connection lifetime
+phase:     M (mount) / U (update) / K (claim) / D (dispose) / F (failure)
+result:    pass
+sha:       422960a23
+artifact:  packages/element/__wtr__/tests/compiled-lifecycle.test.js, run through
+           `OE_BROWSER_MATRIX=full vp run --no-cache --fail-if-no-match
+           --filter @openelement/element browser:test` →
+           21 files / 99 tests passed
+engines:   chromium 147.0.7727.15, firefox 148.0.2, webkit 26.4
+notes:     the element-browser project is the ONLY three-engine conformance
+           surface in the repo (the compiler's own .browser.test.ts files launch
+           chromium directly); a generated element's connection lifetime is
+           therefore recorded HERE, not from the compiler suite.
+```
+
+```
+case:      TSX-20 native CE / third-party WC
+phase:     M / U / K / D / F / P
+result:    pass
+sha:       422960a23
+artifact:  the same three-engine gate (native CE registration, upgrade from
+           plain HTML, slot/slotchange and the foreign-host rows live in
+           lit-host.test.js + composed-event.test.js + overlay-contract.test.js),
+           plus the packed proof `consumer:packaged-element`
+           (9 PASS across chromium/firefox/webkit) for the P column
+engines:   chromium 147.0.7727.15, firefox 148.0.2, webkit 26.4
+notes:     T+/T- are not claimed: neither the generated-element nor the CE
+           interop corpus has a TypeScript type-check fixture. (The gap those
+           two corpora share is NOT the TSX-17 gap any more: TSX-17 now has a
+           type-check fixture and its T+/T- cells are recorded in the M14
+           annex; this row's gap is its own and is unchanged.)
+```
+
+Not claimed by these two rows: any engine revision beyond the three above, the
+server matrix, or an M09 exit. `B` is filled from the element-browser gate's full
+matrix, which the release lane runs through `browser:gate:full`.
+
+## TSX-17 recorded results — server async boundary (M14 full-await)
+
+Scope: the M14 full-await definition
+([the definition](./m14-full-await-definition.md) §2 admitted set, §3 located
+boundary) as a per-cell record for the TSX-17 row. Status: **recorded, not an
+M14 exit** — the exit wording and what is still missing are stated in
+[the progress ledger](./alpha16-18-progress.md) §3 M14 row. LOCAL only, Node
+`v24.18.0`; TSX-17 is SSR-only, so no browser instance is required and no
+`M`/`U`/`K`/`D` cell exists to run. Baseline: clean worktree at
+`1b23f677e7e315a479aad385033ff6b60dfc5926` (`git status --porcelain` empty
+before and after every command below) for `C+`/`C−`/`S`/`F`; the `T+`/`T−`
+cells were added later on the same LOCAL terms (Node `v24.18.0`, no CI
+identity, no browser required) by the type-check fixture commit recorded in the
+artifact column.
+
+The row fills exactly these cells: `T+`, `T−`, `C+`, `C−`, `S`, `F`.
+`M`/`U`/`K`/`D` stay `n/a` (the contract's applicability matrix gives the
+server async boundary no client phase); `B` (M13) and `P` (M12) stay `o` and
+unrecorded.
+
+| Case | T+ | T− | C+ | C− | S | F | Artifact | Head |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| TSX-17 server async boundary | pass | pass | pass | pass | pass | pass | `packages/compiler/__tests__/server-component-full-await.typecheck.test.ts` (2) for `T+`/`T−`; `packages/compiler/__tests__/server-component-full-await.test.ts` (29), `packages/router/__tests__/function-page.test.ts` (48), `packages/router/__tests__/browser-entry-boundary.test.ts` (4), `packages/router/__tests__/entry-graph-boundary.test.ts` (2), `packages/element/__tests__/server-html.test.ts` (19) for `C+`/`C−`/`S`/`F` | `1b23f677e` (C+/C−/S/F), the `T+`/`T−` fixture commit |
+
+Commands and their summary lines (verbatim, this tree):
+
+```text
+vp run --no-cache --fail-if-no-match --filter @openelement/compiler test packages/compiler/__tests__/server-component-full-await.test.ts
+  → Test Files 1 passed (1) / Tests 29 passed (29)
+vp run --no-cache --fail-if-no-match --filter @openelement/router test packages/router/__tests__/function-page.test.ts packages/router/__tests__/browser-entry-boundary.test.ts packages/router/__tests__/entry-graph-boundary.test.ts
+  → Test Files 3 passed (3) / Tests 54 passed (54)
+vp run --no-cache --fail-if-no-match --filter @openelement/element test packages/element/__tests__/server-html.test.ts
+  → Test Files 1 passed (1) / Tests 19 passed (19)
+```
+
+The `T+`/`T−` cells were recorded on the same LOCAL terms, in the same tree:
+
+```text
+vp run --no-cache --fail-if-no-match --filter @openelement/compiler test packages/compiler/__tests__/server-component-full-await.typecheck.test.ts
+  → Test Files 1 passed (1) / Tests 2 passed (2)
+vp run --no-cache --fail-if-no-match --filter @openelement/compiler test
+  → Test Files 91 passed (91) / Tests 1340 passed (1340)
+```
+
+The whole-package line is recorded because the new file joins the compiler
+project: it proves the fixture is counted by the canonical task, not only by
+the file-level invocation. The 91/1340 totals include the two new tests.
+
+**C+ (compiles successfully).** `server-component-full-await.test.ts` group
+`full-await emission stays inside the admitted grammar` — `a synchronous
+component keeps the previous function shape` (the sync shape is not turned
+async and still emits `__t(props.name)`), `an async function awaits a call
+before the text helper runs` (D1: `__t(await pending())`, no `<p>` in the
+emitted body), `an async arrow keeps async on the generated const` (D1 in an
+arrow envelope, `__t(await load(props.id))`), `an async parent awaits an
+imported async child, in source order` (the R7 composition channel:
+`await Child({` is emitted after `__t(await mark("a"))`), and `the artifact
+still imports only the server helper entry` (R6: the only runtime import is
+`@openelement/element/server`). `a Promise is not a normal child (M14-2)` →
+`the sanctioned spelling {await props.p} stays admitted` adds the D1
+Promise-prop spelling (`__t(await props.p)`, no `[object Promise]`).
+
+**C+ scope limit — the D2 authored prop position has no fixture.** D2 as
+*defined* is `<Child value={await load()} />` (one leading await as the whole
+prop value, [definition](./m14-full-await-definition.md) §2). The only D2 row
+in the suite is the **composition** channel, whose child prop is a literal
+(`<Child n="b" />`); searching the whole tree for the authored spelling
+(`={await` in any JSX attribute) returns only the *refused* shapes
+(`title={await pending()}`, `n={await mark("a") + "!"}`, the list-item
+attribute) and the definition's own prose. The compiler does admit the
+defined spelling — an ad-hoc probe of
+`<Child value={await load()} />` compiled to
+`__h("article", { }, [await Child({ "value": await load() })])` — but a probe
+run for this record is not a repo fixture and is therefore **not** a C+
+claim for D2-as-authored. The `C+` cell above is a pass for the channels it
+names (the sync shape, D1 and the R7 composition channel); D2-as-authored is a
+named sub-gap inside this row, not a covered position.
+
+**The D2-as-authored spelling is now covered at the TYPE level only.** The
+`T+`/`T−` fixture added to this row compiles and type-checks
+`<Child value={await load(props.id)} />` as a repo fixture, so the D2 prop
+position is no longer prose-only: `T+` states the emitted call
+`Child({ "value": await load(props.id) })` AND zero diagnostics for that exact
+spelling. The `C+` sub-gap above therefore stays open only as a question about
+the RUNTIME suite's own D2 row set (the compile/emit suite still has no
+D2-as-authored row of its own); the position itself is admitted, emitted and
+type-checked by fixtures in the tree. The two records must be read together and
+neither is a substitute for the other.
+
+**C− (source-located compile diagnostic).** `OEC9032` at the authored node,
+one per-position clause per refused position. Group `full-await refusals stay
+located OEC9032`: `a synchronous parent cannot render an async child`,
+`statements before the return fail closed on the production transform`, `an
+await in an attribute is refused`, `an await inside a condition is refused`,
+`an arbitrary awaited expression is refused`, `a block-bodied async arrow
+fails closed on the production transform`. Group `the refusal names the
+position and the nearest lawful spelling` (each asserts code, line/character
+of the authored fragment, the stable head sentence and its clause): `an
+attribute value names the prop and text-child spellings`, `a condition test
+names the sync-child branch spelling`, `a list item or mapper body names the
+whole-list spelling`, `a static branch names the prop and sync-child
+spellings`, `a nested server-component prop names the leading-await spelling`,
+`an awaited operand shape names the closed operand grammar`. Group
+`previously untested refused shapes keep a located OEC9032`: `an await in a
+static branch is located on the branch expression`, `an await on a __ssr host
+prop is located on the attribute`, `an await in a list-item attribute is
+located on the mapper expression`, `an await with a member-expression callee
+is located on the call`, `an authored await of a reserved generated helper is
+refused as a reserved callee`, `an await of eval is refused as a reserved
+callee`, `an authored await of an imported server component is refused —
+composition auto-awaits`. From `a Promise is not a normal child (M14-2)`: `an
+annotated Promise prop read as text is refused at the read` and `an annotated
+Promise prop read as an attribute is refused at the read` (both assert the
+read-site line/character). These nine boundary groups are the C− set; they
+are compile refusals, not runtime negatives.
+
+**S (SSR).** `function-page.test.ts` §8 (`M14 full-await: production transform
+→ published awaited seam`): `production transform → request handler: no HTML
+until the awaited value settles` (the handler reaches its first unresolved
+await with no bytes emitted, then serves `<p>late-value</p>` with no
+`[object Promise]` and no `<script`), `production transform → SSG renderRoute
+waits for the same awaited seam` (`<p>ssg-value</p>`, zero errors),
+`production transform → 404 handler waits on the awaited seam` (status 404,
+`<p>missing-value</p>`), `nested async components settle left to right before
+the parent HTML exists` (`<article>a<span>b</span></article>` with probe order
+`['start:a', 'end:a', 'start:b', 'end:b']`), and `renderFunctionPageAwaited is
+Promise<string>; a sync render still fulfills with that string`.
+`the sync production transform still emits the original HTML through the
+awaited seam` keeps the sync contract (`export function AboutPage`, no `async
+function AboutPage`) while the entry still goes through the awaited seam.
+`element/server-html.test.ts` → `an awaited value is ordinary text again once
+it settles` pins the post-settle text value (`__t(await Promise.resolve(...))`
+escapes as `&lt;ok&gt;`).
+
+**F (failure recovery).** `function-page.test.ts`: `production transform →
+error re-render waits, then keeps the original failure channel` (status 500
+with the recovered `<h1>recovered</h1>`, no `[object Promise]`), `a rejected
+async render reaches the handler with the original message` (status 500
+carrying `boom-origin`, no `<p>`), `renderFunctionPageAwaited rejects with the
+original reason` (`rejects.toBe(reason)` — identity, not a rewrap), and `the
+awaited seam uses the same synchronous boundary codes`
+(`FUNCTION_RENDER` / `FUNCTION_PROPS` unchanged). `element/server-html.test.ts`
+→ `a thenable is refused before coercion (a Promise is not a normal child)`
+pins the runtime backstop: `OE_SERVER_TEXT_THENABLE`, phase `ssr`, message
+`a Promise is not a normal child`, for both a Promise and a bare thenable.
+The `F` cell is the failure channel of an *already admitted* component plus
+that runtime backstop; the refusal path itself is `C−`.
+
+**Server-only graph guard intact (the M14 exit's second clause).**
+`browser-entry-boundary.test.ts` — `the guard matches the node: scheme only`
+(the coded guard is the `node:` scheme, not a bare `fs` or a `node-` prefix),
+`an island importing node:* fails the build with the coded diagnostic`, `a
+transitive node:* import fails the build too (the whole client graph)`, and `a
+route loader importing node:* still builds: the server graph is not the
+browser graph` (the island still reaches the client build, so the pass is not
+"no client graph"). `entry-graph-boundary.test.ts` — `element/html and
+element/authoring leaves are kernel-free` plus its `negative control: the
+native server entry graph DOES reach the kernel`.
+`function-page.test.ts` → `a function page does not put server helpers or the
+page function on the client entry` (no `@openelement/element/server`, no
+`renderFunctionPage`, no page function, no `__h(` on the client entry).
+
+**T+ (type-checks with the authored types).**
+`server-component-full-await.typecheck.test.ts` →
+`TSX-17 T+: an admitted async server-component shape type-checks`. The fixture
+is the type-level statement of the §2 admitted set: one module holding D1 with
+a call operand (`{await load(props.id)}`), D1 with the sanctioned Promise
+field (`{await props.p}`), and D2 with an awaited call as the whole prop value
+(`<Child value={await load(props.id)} />`, `Child` a sync server function
+component composed by direct call). The test asserts the COMPILE half first
+(the emitted text contains `__t(await load(props.id))`, `__t(await props.p)`
+and `Child({ "value": await load(props.id) })`), so the type result is a
+statement about the definition's shape and not about an arbitrary type-clean
+program; then it requires ZERO TypeScript diagnostics. The checker is the
+package's existing `typeCheckEmittedModule` (#1386), so the fixture inherits
+the real `strict` options and the workspace `exports` map — no second harness.
+Compiler options are narrowed to `jsx: react-jsx` +
+`jsxImportSource: @openelement/element` + `types: []`, so the authored JSX
+namespace comes from `packages/element/src/jsx-runtime.ts` and no ambient Node
+global can supply a diagnostic.
+
+**T− (a type error is reported for the stated misuse).**
+Same file → `TSX-17 T−: an un-awaited Promise crossing a nested
+server-component sink is a type error`. Two channels, both the M14-2 read-side
+law, both asserted on the exact diagnostic CODE (`2322`) and the authored
+line/character — never "there were errors", so an unrelated diagnostic cannot
+make the cell pass:
+
+- **prop channel** — `<Child value={props.p} />` with `p: Promise<string>`
+  checked against the child's declared `value: string`. The compiler ADMITS
+  this shape (a component prop is a literal or a `props.<field>` read, never
+  type-inspected), so the checker is the only guard; the test asserts that
+  admission explicitly, then requires exactly
+  `TS2322 Type 'Promise<string>' is not assignable to type 'string'` located on
+  `value={`.
+- **children channel** — `<Child value="x">{props.p}</Child>`. Both lanes
+  refuse it at ONE authored position: `TS2322` (same type pair) and the
+  compiler's located `OEC9032` carrying the M14-2 sentence "a Promise is not a
+  normal child" / "props.p is annotated Promise<...>". The test asserts the two
+  lanes report the same line and character, so the type cell and the compile
+  cell name one law.
+
+**Two scope limits bound what these cells mean, and they are recorded here
+because reading `T−` wider would be a false pass.**
+
+1. **The M14-2 shape at an INTRINSIC sink is not a TypeScript error.**
+   `{props.p}` / `title={props.p}` on `<p>` type-checks cleanly: the authored
+   JSX namespace types an intrinsic element's attributes as
+   `Record<string, unknown>` and the children channel as `unknown`
+   (`packages/element/src/jsx-runtime.ts`), so `Promise<string>` is accepted at
+   both. That refusal is the compiler's located `OEC9032` only — measured, not
+   assumed: the fixture probe returns zero diagnostics for both spellings. It
+   therefore stays part of the `C−` cell and is NOT claimed as `T−`. The `T−`
+   claim is made where the authored prop types exist on a nested server
+   component, which is where the checker can actually see the pending value.
+2. **The R7 composition channel as authored does not type-check.** `<Child />`
+   where `Child` is declared `async` is rejected by the checker as `TS2786`
+   ("its return type 'Promise<Element>' is not a valid JSX element"), the same
+   rule R3 enforces at compile time for a sync parent. `T+` therefore composes
+   a SYNC child, exactly like the runtime suite's D2 rows.
+
+**Bite proof.** Both halves were broken and restored (the working tree has no
+residue). `T+` broken by widening one authored props field
+(`props.id: string` → `props.id: number`), which leaves the emitted text
+byte-identical and fails only the type assertion:
+`TS2345 6:22 Argument of type 'number' is not assignable to parameter of type
+'string'.` (plus the same at `8:32`). `T−` broken by rewriting both refused
+reads to the admitted spellings (`value={await props.p}` /
+`{await props.p}`), which yields zero diagnostics and fails the `toBe(1)`
+count. Each half was also broken alone — the children channel rewritten while
+the prop channel stayed refused — and failed independently.
+
+**What this annex does not record.** No D2-as-authored C+ (no in-repo fixture
+for `<Child value={await load()} />`; see the scope limit above). No `T−` at an
+intrinsic text/attribute sink (limit 1). No `B`
+(cross-engine, M13), no `P` (packed consumer, M12), no browser `M`/`U`/`K`/`D`
+phases (TSX-17 is SSR-only). No streaming, defer, cancellation or
+per-fragment output — those stay Alpha18 §7 and are not Alpha16 results. No
+M14 exit claim, no version/tag/publication, no M13 qualification, and no
+replacement for the M08 generated-leaf SSR producer.
 Skip / NOT RUN is not a pass, and CI green is not browser qualification.

@@ -44,9 +44,11 @@ export const DANGEROUS_KEYS: ReadonlySet<string> = new Set([
  * (collectPublicProps / normalizePublicProps in props-utils.ts), guarded
  * assignment (injectPropsSafe below — the SPA bootstrap page-projection
  * write boundary in @openelement/router), and page projection (authoring.ts
- * projectPageProps; the Router tooling generated server runtime via the
- * serialized DANGEROUS_KEYS list) all filter through this single source so a
- * new dangerous pattern cannot be missed on one path.
+ * projectPageProps; the Router tooling generated server runtime, which
+ * imports this canonical predicate through the kernel-free /authoring leaf
+ * — #1470 block e retired the serialized DANGEROUS_KEYS copy in generated
+ * code) all filter through this single source so a new dangerous pattern
+ * cannot be missed on one path.
  */
 export function isDangerousKey(key: string): boolean {
   return DANGEROUS_KEYS.has(key);

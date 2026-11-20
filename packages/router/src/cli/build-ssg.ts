@@ -28,7 +28,21 @@ import type {
 import type { EntryDescriptor, IslandDecl, StaticComponentDecl } from '@openelement/protocol/ssg';
 import type { OpenElementBuildContext } from '../vite/build-context.ts';
 import { elementStyleLinksPlugin } from '../vite/internal/element-style-links.ts';
-import { findBuildWorkspaceRoot } from '../vite/workspace-alias.ts';
+import { findBuildWorkspaceRootOrUndefined } from '../vite/workspace-alias.ts';
+import { clientIslandStyleAssets } from '../vite/internal/island-style-build-assets.ts';
+import { islandStyleDeclarations } from '../vite/internal/island-style-declarations.ts';
+import {
+  buildRouteDocumentStyleLinks,
+  deliveredIslandStyleTags,
+  islandStyleEntryLinks,
+  setRouteDocumentStyleLinks,
+  type RouteDocumentStyleLinks,
+} from '../vite/internal/ssg/route-style-links.ts';
+import {
+  admittedTailwindDeclarations,
+  buildPackageIslandDecls,
+} from '../vite/internal/ssg/island-scanner.ts';
+import { buildError, RouteScanErrorCode } from '../internal/error-codes.ts';
 import {
   buildEntryDescriptor,
   fileToTagName,
@@ -44,12 +58,16 @@ import { createLogger, formatError } from '@openelement/element';
 import { createSsgRenderEvidence } from './ssg-render.ts';
 import { mdxPlugin } from '../vite/plugin-mdx.ts';
 import { quoteGeneratedJavaScriptValue } from '../vite/internal/ssg/codegen-literals.ts';
+import { formatDiagnosticLine, recordBuildDiagnostic } from '../vite/internal/build-diagnostics.ts';
 import {
   generateCustomElementsPolyfill,
   generateSsrPolyfillBanner,
 } from '../vite/internal/ssg/index.ts';
 import { clearStyleRequests, compiledElementPlugin } from '@openelement/compiler';
-import { createGeneratedElementSiteResolver } from '../vite/generated-element-site.ts';
+import {
+  collectPackageIslandModuleSites,
+  createGeneratedElementSiteResolver,
+} from '../vite/generated-element-site.ts';
 import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
 import { serverStyleAssetPlugin } from '../vite/internal/style-assets.ts';
 import {
@@ -214,6 +232,81 @@ interface SsgEntryDescriptorInputs {
   renderer?: 'native';
   /** Declared project locales — threaded from the build context. */
   i18n?: { locales: string[]; defaultLocale: string };
+  /**
+   * Per-route document stylesheet URLs for generated light-root islands
+   * (derived in buildSSG before this builder runs; the descriptor carries it as
+   * build-only data for the entry's head-style seed).
+   */
+  routeDocumentStyleLinks?: RouteDocumentStyleLinks;
+}
+
+/**
+ * Derive the per-route document stylesheet URLs for generated light-root
+ * islands (Alpha16 retained stylesheet delivery).
+ *
+ * The fact is a build product: ONE module walk over the page-route seeds records
+ * per-module edges and compiler-referenced tags, then an in-memory closure per
+ * route intersects those with the styled-island tag set and joins the Phase 2
+ * emitted URLs. A walk boundary (bound stop, analysis failure) or a missing
+ * bundler resolver makes the map partially derived, so it fails the build: an
+ * under-linked page is a styled light root shipping without its sheet.
+ */
+async function deriveRouteDocumentStyleLinks(input: {
+  ctx: OpenElementBuildContext;
+  root: string;
+  routesDir: string;
+  routes: readonly RouteEntry[];
+  islandMeta: Record<string, Partial<IslandDecl>>;
+  resolve: import('../vite/internal/module-graph-walk.ts').ModuleWalkResolver | undefined;
+}): Promise<RouteDocumentStyleLinks> {
+  const declarations = islandStyleDeclarations();
+  if (declarations.length === 0) return {};
+  const tags = deliveredIslandStyleTags(
+    declarations,
+    input.islandMeta as Record<
+      string,
+      { tags?: readonly string[]; tagNames?: readonly string[] } | undefined
+    >,
+  );
+  if (tags.light.size === 0) return {};
+  if (input.resolve === undefined) {
+    throw buildError(
+      RouteScanErrorCode.DOCUMENT_STYLE_LINKS_INCOMPLETE,
+      '[openElement] styled light-root generated islands need their document stylesheet links, ' +
+        'but this build has no module resolver to derive the per-route fact (no Phase 1 ' +
+        'resolver was supplied). Shipping the islands unstyled is not an option, so the build ' +
+        'fails instead.',
+    );
+  }
+  const result = await buildRouteDocumentStyleLinks({
+    root: input.root,
+    routes: input.routes,
+    routesDir: input.routesDir,
+    resolve: input.resolve,
+    lightIslandTags: tags.light,
+    islandStyleUrls: clientIslandStyleAssets(input.ctx),
+  });
+  for (const note of result.notes) {
+    const envelope = {
+      code: note.code,
+      severity: 'warning',
+      phase: 'build',
+      message: note.message,
+      ...(note.file === undefined ? {} : { file: note.file }),
+    } as const;
+    recordBuildDiagnostic(envelope);
+    log.warn(formatDiagnosticLine(envelope));
+  }
+  if (result.incomplete) {
+    throw buildError(
+      RouteScanErrorCode.DOCUMENT_STYLE_LINKS_INCOMPLETE,
+      '[openElement] route document stylesheet discovery was incomplete (the reported ' +
+        'diagnostics name the module boundary), so some pages carrying a styled light-root ' +
+        'generated island would ship without its sheet; the build fails instead of emitting an ' +
+        'unstyled page.',
+    );
+  }
+  return result.links;
 }
 
 /**
@@ -254,6 +347,7 @@ export function buildSsgEntryDescriptor(
     layouts: inputs.layouts,
     renderer: inputs.renderer,
     i18n: inputs.i18n,
+    routeDocumentStyleLinks: inputs.routeDocumentStyleLinks,
   });
   ctx.phase1.ssrAdmissionPlan = descriptor.ssrAdmissionPlan;
   return descriptor;
@@ -300,6 +394,26 @@ async function buildSSG(
   const componentStyleSheetUrls = ctx.componentStyleSheet
     ? [`${options.base}client/${ctx.componentStyleSheet.fileName}`]
     : [];
+  // The element style-links channel carries generated SHADOW hosts only: a
+  // light root's sheet rides the per-route document fact, and the Phase 2 map
+  // now records both roots. Filtering here keeps the channel's documented
+  // contract (tag -> shadow DSD URLs) intact.
+  const styledShadowTags = deliveredIslandStyleTags(
+    islandStyleDeclarations(),
+    ctx.phase1.islandMeta as Record<
+      string,
+      { tags?: readonly string[]; tagNames?: readonly string[] } | undefined
+    >,
+  ).shadow;
+  // A generated shadow host has no emitted class static to carry the class
+  // lane's `__oeUtilityClasses` fact, so the manifest declaration is the
+  // build-time authority for "this component's shadow tree needs the app's
+  // shared utility sheet".
+  const utilityRequiredTags = new Set(
+    admittedTailwindDeclarations(ctx.phase1.packageManifests, ctx.phase1.packageIslandDecls)
+      .filter((fact) => fact.required)
+      .map((fact) => fact.tagName),
+  );
   if (componentStyleSheetUrls.length > 0) {
     log.info(`Component stylesheet linked into DSD: ${componentStyleSheetUrls.join(', ')}`);
   }
@@ -310,7 +424,7 @@ async function buildSSG(
     options.routes ??
     (await scanRoutes(routesDir, '', {
       root,
-      workspaceRoot: findBuildWorkspaceRoot(root) ?? undefined,
+      workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
     }));
   const staticComponents =
     options.staticComponents ??
@@ -322,13 +436,29 @@ async function buildSSG(
             'discover them with the bundler’s own reachability',
         );
       }
-      return await scanStaticComponents({
+      const staticScan = await scanStaticComponents({
         root,
         routesDir,
         islandsDir,
         routes,
         resolve: options.resolve,
       });
+      // The walk's boundaries reach the developer the same way the plugin
+      // path reports them (#1612): the envelope is recorded for the exit, and
+      // the human line carries the `[CODE]` token. A truncated registry is a
+      // reported fact, never a silent one.
+      for (const diagnostic of staticScan.notes) {
+        const envelope = {
+          code: diagnostic.code,
+          severity: 'warning',
+          phase: 'build',
+          message: diagnostic.message,
+          ...(diagnostic.file !== undefined ? { file: diagnostic.file } : {}),
+        } as const;
+        recordBuildDiagnostic(envelope);
+        log.warn(formatDiagnosticLine(envelope));
+      }
+      return staticScan.declarations;
     })());
 
   const islandsRoot = join(root, islandsDir);
@@ -338,6 +468,19 @@ async function buildSSG(
   const ssgIslandMeta: Record<string, Partial<IslandDecl>> = Object.keys(islandMeta).length > 0
     ? islandMeta
     : await scanIslandMeta(islandsRoot, ssgIslandFiles, root);
+  // Per-route document stylesheet links for generated LIGHT-root islands
+  // (Alpha16 retained stylesheet delivery): ONE module walk + in-memory closure,
+  // derived before the descriptor so the entry's literal data channel is never
+  // stale. The carrier is the internal build fact; no public context field.
+  const routeStyleLinks = await deriveRouteDocumentStyleLinks({
+    ctx,
+    root,
+    routesDir,
+    routes,
+    islandMeta: ssgIslandMeta,
+    resolve: options.resolve,
+  });
+  setRouteDocumentStyleLinks(ctx, routeStyleLinks);
   // Single descriptor instantiation: the SSR admission plan and the emitted
   // SSG entry code come from the same descriptor, so they can never diverge.
   // cemClassifications come from Phase 1 (plugin.ts buildStart auto-detection)
@@ -345,6 +488,7 @@ async function buildSSG(
   const ssgDescriptor = buildSsgEntryDescriptor(
     {
       routes,
+      routeDocumentStyleLinks: routeStyleLinks,
       routesDir,
       islandsDir,
       middleware: options.middleware,
@@ -477,7 +621,15 @@ async function buildSSG(
         // imports this module, which hands the emitted asset addresses to the
         // element runtime before the render pass (and at request-time startup,
         // because the module is bundled into dist/server/index.js).
-        elementStyleLinksPlugin(componentStyleSheetUrls),
+        elementStyleLinksPlugin(
+          componentStyleSheetUrls,
+          islandStyleEntryLinks(
+            clientIslandStyleAssets(ctx),
+            styledShadowTags,
+            componentStyleSheetUrls,
+            utilityRequiredTags,
+          ),
+        ),
         // MDX route support must mirror the outer plugin list (plugin.ts),
         // otherwise .mdx routes fail Phase 3 parse (the oxc transform treats
         // them as JS).
@@ -496,13 +648,13 @@ async function buildSSG(
         compiledElementPlugin({
           // Linked workspace packages sit outside the project root; without the
           // workspace anchor their absolute ids would land in the source maps.
-          workspaceRoot: findBuildWorkspaceRoot(root) ?? undefined,
+          workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
           // Route/island sources carry the island delivery policy statement;
           // the compiler admits it only through the injected descriptor.
           staticSidecars: [ISLAND_ADMISSION],
           resolveServerComponentModule: createServerComponentSourceResolver({
             root,
-            workspaceRoot: findBuildWorkspaceRoot(root) ?? undefined,
+            workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
           }),
           // The union the entry's SSR registry carries — renderable islands
           // plus static compiled components (the same union
@@ -516,7 +668,25 @@ async function buildSSG(
           // The generated Native Custom Element site (M09-1b): the SSR build
           // must lower an admitted island's function default export to the
           // same generated class the client build emits.
-          generatedElementSite: createGeneratedElementSiteResolver(islandsDir),
+          generatedElementSite: createGeneratedElementSiteResolver(
+            islandsDir,
+            // Admission facts for the SSR compile come from the manifest set,
+            // not from the client build's delivery narrowing: the generated
+            // entry pairs an SSR-admitted package host producer regardless of
+            // whether a page uses the tag, so every package module it may
+            // import must be admitted here or the import cannot resolve.
+            collectPackageIslandModuleSites(
+              buildPackageIslandDecls(ctx.phase1.packageManifests ?? []),
+              {
+                root,
+                workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
+              },
+            ),
+            // The same declared-tag provider the client and dev hosts pass
+            // (alpha16 tag-source slice): the SSR half must lower the very
+            // modules the client half compiled, so the source order is shared.
+            ctx.phase1.declaredElementTags,
+          ),
         }),
         // serves the server half of the style edge protocol — the
         // sheet adapter embeds the authored .css file's bytes, the same bytes

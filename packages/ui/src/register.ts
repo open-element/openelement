@@ -1,28 +1,22 @@
-import { OpenButton } from './open-button.tsx';
-import { OpenCodeBlock } from './open-code-block.tsx';
-import { OpenDialog } from './open-dialog.tsx';
-import { OpenDropdown } from './open-dropdown.tsx';
-import { OpenInput } from './open-input.tsx';
-import { OpenThemeToggle } from './open-theme-toggle.tsx';
+/**
+ * @openelement/ui - explicit registration
+ *
+ * Every first-party UI element is now authored as a function component: the
+ * build emits each element class from the manifest declaration and the island
+ * entry defines it. The class registration table this module used to carry is
+ * therefore empty — `open-button` was the last entry, and it migrated to the
+ * generated lane after `open-input`.
+ *
+ * The function stays: it is a published API (`registerOpenUi`), callers may
+ * invoke it repeatedly, and a future class-authored component joins by adding
+ * one row here. Removing the export is a P5 retirement decision, not a
+ * migration side effect.
+ */
 
-// Compiled modules carry no runtime tagName export (the compiled
-// program owns the tag), so the registration table lives here, beside the
-// class imports. Keep aligned with manifest.declarations order.
-const COMPONENTS: ReadonlyArray<readonly [string, CustomElementConstructor]> = [
-  ['open-button', OpenButton],
-  ['open-input', OpenInput],
-  ['open-theme-toggle', OpenThemeToggle],
-  ['open-code-block', OpenCodeBlock],
-  ['open-dialog', OpenDialog],
-  ['open-dropdown', OpenDropdown],
-];
-
-/** Explicitly register every first-party UI element. Safe to call repeatedly. */
+/** Explicitly register every class-authored first-party UI element. */
 export function registerOpenUi(
   registry: CustomElementRegistry | undefined = globalThis.customElements,
 ): void {
   if (!registry) return;
-  for (const [tagName, constructor] of COMPONENTS) {
-    if (!registry.get(tagName)) registry.define(tagName, constructor);
-  }
+  // No class-authored components remain (see the module doc comment).
 }

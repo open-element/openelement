@@ -380,3 +380,48 @@ test('compiled server preserves structured custom-element property values for ne
     '<oe-child model="{&quot;title&quot;:&quot;safe &amp; exact&quot;,&quot;items&quot;:[1,2]}" enabled="false"></oe-child>',
   );
 });
+
+test('assertCompiledProgram memoizes the asserted result by program identity', async () => {
+  const { assertCompiledProgram } = await import('../../src/internal/compiled/server/index.ts');
+  // Two html Parts own one DOM sink: wire-valid (the protocol validator does
+  // not carry the ownership invariant) but server-invalid — the exact shape
+  // the server-only duplicate-sink check exists to reject.
+  const twoSinks = testProgram({
+    tag: 'oe-memo-html',
+    template: [{ k: 'el', tag: 'div', attrs: [] as Array<[string, string]>, children: [] }],
+    parts: [
+      { k: 'html', index: 0, signal: 'body', path: [0] },
+      { k: 'html', index: 1, signal: 'body2', path: [0] },
+    ],
+  });
+  const control = assertThrowsIncludes(() => assertCompiledProgram(twoSinks), Error);
+  expect(control.message).toContain('multiple html Parts own one DOM sink');
+  // Failures are not memoized: the same invalid program re-validates and
+  // re-throws on every call.
+  assertThrowsIncludes(() => assertCompiledProgram(twoSinks), Error);
+  assertThrowsIncludes(() => assertCompiledProgram(twoSinks), Error);
+
+  const program = testProgram({
+    tag: 'oe-memo-html',
+    template: [{ k: 'el', tag: 'div', attrs: [] as Array<[string, string]>, children: [] }],
+    parts: [{ k: 'html', index: 0, signal: 'body', path: [0] }],
+  });
+  const ir = assertCompiledProgram(program);
+  // Same program object: the memoized assertion returns the one validated IR.
+  expect(assertCompiledProgram(program)).toBe(ir);
+
+  // Cache-hit proof without a diagnostics counter: mutate the raw program into
+  // the duplicate-sink shape the validator rejects. A fresh object with this
+  // shape throws (the control above); the SAME identity returns the cached IR
+  // and never re-walks the validation surface. This is the known limitation
+  // recorded in ADR-0174 (the compiler emits the literal once and no caller
+  // mutates it) — not a promise that mutating a program is safe.
+  (program.parts as unknown[]).push({ k: 'html', index: 1, signal: 'body2', path: [0] });
+  expect(assertCompiledProgram(program)).toBe(ir);
+
+  // A structurally identical program under a NEW object identity is a
+  // different key: it validates from scratch and fails closed on the forged
+  // duplicate sink.
+  const clone = structuredClone(program);
+  assertThrowsIncludes(() => assertCompiledProgram(clone), Error);
+});

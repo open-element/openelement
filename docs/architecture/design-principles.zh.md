@@ -156,9 +156,8 @@ truth。不为已知机制另建注册表、扫描器或手工维护的副本。
 让 E2E 证据可伪造。
 
 本仓实践：一份 protocol 层禁列表谓词服务编译器、客户端校验器与服务端
-校验器，序列化的 `DANGEROUS_KEYS` 副本配漂移守卫；starter 用原生目录
-递归做 typecheck；E2E 证据从原始 Playwright report 重算，并以
-SHA-256 与候选 SHA 绑定。
+校验器；starter 用原生目录递归做 typecheck；E2E 证据从原始 Playwright
+report 重算，并以 SHA-256 与候选 SHA 绑定。
 
 判别问句：_这是第二份 source of truth 吗？_
 

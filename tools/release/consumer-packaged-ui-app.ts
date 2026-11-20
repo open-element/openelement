@@ -1,3 +1,4 @@
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): this is one leg of the packed-consumer family, owning the full adopter lifecycle (install → dev → build → evidence) for the package-island story whose full-chain breakage no workspace consumer could see; the boundary is the scratch tree it creates outside the repository — six tarballs plus the packed create scaffold, applianced into a packageIslands consumer, with its own overrides carrier rather than a shared one.
 /**
  * Packed-artifact UI-appliance consumer walkthrough (#1558 / KR-10, alpha.13
  * I1 10c) — the leg that should have caught KR-10.

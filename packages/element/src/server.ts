@@ -309,11 +309,25 @@ export function __ssr(
     ...(hostAttrs === undefined ? {} : { hostAttrs }),
   };
   if (composition !== undefined && composition.groups.length > 0) {
-    const rootKind =
+    // Two lanes expose the root kind differently, and both must be read here:
+    // a compiled CLASS carries `__partProgram.root.kind`; a GENERATED element
+    // has no Part Program at all and instead carries the compiler-attached
+    // static `__ssr` producer ONLY when its descriptor root is light. Without
+    // the second read a generated light host falls into the shadow branch, its
+    // authored children ride the wrong channel, and the light serializer drops
+    // them — the host renders with empty slots.
+    const registered =
       typeof customElements === 'undefined'
         ? undefined
-        : (customElements.get(tag) as { __partProgram?: { root?: { kind?: string } } } | undefined)
-            ?.__partProgram?.root?.kind;
+        : (customElements.get(tag) as
+            | {
+                __partProgram?: { root?: { kind?: string } };
+                __ssr?: unknown;
+              }
+            | undefined);
+    const rootKind =
+      registered?.__partProgram?.root?.kind ??
+      (typeof registered?.__ssr === 'function' ? 'light' : undefined);
     if (rootKind === 'light') {
       // Light root: fold the authored-order groups into per-slot projections
       // (the serializer substitutes each group into its own <slot>). The name
