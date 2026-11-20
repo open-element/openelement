@@ -1036,3 +1036,31 @@ Two facts this batch established, both worth carrying into the remaining rows:
 
 Still class-lane in `apps/saas`: `page-notes` (needs the D-M5-style decision for
 its form rows) and `app/layout.tsx` (D-M1 tag source). Both are tracked rows.
+
+**2026-11-20 (same batch) — two rows measured and deliberately NOT migrated, and
+one probe result worth keeping.**
+
+1. **`packages/create/templates` keep the class lane for this slice.** Migrating
+   `page-home.tsx.tmpl` was attempted and reverted: the template's page sheet
+   rides `static styles`, and the generated lane's sidecar `styles` channel is
+   explicitly refused on a LIGHT root until the Alpha17 document-level
+   application slice (#1800, `packages/router/src/authoring.ts:796-806`). A
+   rewrite that drops the sheet would ship an unstyled starter — a behaviour
+   change, not a migration. The starter moves when #1800 lands or when the
+   light-root document-sheet delivery is wired to the generated render path.
+2. **`www/app/components/article-routes/*` (27 generated modules) stay
+   generator-owned and class-lane in this slice.** The generator is the single
+   writer (`renderComponent`), so the migration is one template change plus a
+   regeneration — but the binding it emits carries `model: ArticlePageModel` and
+   a `locale` field, i.e. exactly the `attribute: false` non-primitive rows whose
+   server→client crossing is the D-M5/D-18c decision that is still open.
+   Editing the template before that decision would ship a binding whose model
+   never reaches the client.
+3. **Probe result (kept because it un-blocks the next row):** a SHADOW-root
+   function component with named slots (`<slot name="meta">`), a default slot and
+   a props-derived `computed` compiles through `compileGeneratedElementIfAdmitted`
+   (9660 bytes emitted, no diagnostic). So `open-reading-shell` (21 computed,
+   shadow root, 4 slots) is mechanically admissible now; what it still needs is
+   the D-M4 caller-order row (`blog`/`changelog`/`contributing`/`errors` render it
+   from FUNCTION pages already, so the caller side is satisfied) — the remaining
+   work is the mechanical 31-row port, not a capability.
