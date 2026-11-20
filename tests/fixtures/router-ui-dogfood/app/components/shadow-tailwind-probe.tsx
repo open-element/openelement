@@ -1,33 +1,35 @@
 /**
  * Shadow-native Tailwind probe (alpha15 S lane) — the RED consumer.
  *
- * Authored exactly the way the product contract promises: an ordinary
- * `@element` shadow component whose ONLY styling is Tailwind utility classes
- * written in TSX. There is deliberately
+ * GENERATED lane (2026-11-21 closeout: class → function). Authored exactly the
+ * way the product contract promises: an ordinary shadow component whose ONLY
+ * styling is Tailwind utility classes written in TSX. There is deliberately
  *   - no authored `.css` file,
- *   - no `static styles`,
+ *   - no `styles` declaration,
  *   - no manual CSSStyleSheet creation/adoption,
  *   - no per-component scan configuration.
  *
- * Document-level stylesheets cannot reach a shadow tree, so these utilities
- * only work when the build compiles them for the component and delivers the
- * result as a real external CSS asset (adopted through `adoptedStyleSheets`
- * on the client; referenced as `<link rel="stylesheet">` inside the DSD
- * template on the server). Until that pipeline exists the shadow content is
- * unstyled — which is exactly what `e2e/shadow-tailwind.spec.ts` pins.
+ * Document-level stylesheets cannot reach a shadow tree, so these utilities only
+ * work when the build compiles them for the component (the generated lane's
+ * `classCandidates`, P-1) and delivers the result as a real external CSS asset
+ * referenced by the DSD template (P-1b). `e2e/shadow-tailwind.spec.ts` pins the
+ * computed styles without any client JavaScript.
  */
-import { element, OpenElement, property } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
 
-@element('oe-tailwind-probe', { root: 'shadow-open' })
-export default class OeTailwindProbe extends OpenElement {
-  @property({ reflect: false }) label = '';
+export const openElement = defineIslandConfig({
+  tag: 'oe-tailwind-probe',
+  root: 'shadow',
+  // Static SSR with DSD: no hydration, exactly the pre-migration delivery.
+  hydrate: 'none',
+  properties: { label: { reflect: false } },
+});
 
-  render() {
-    return (
-      <article class='probe-card rounded-xl bg-primary p-8 text-white'>
-        <h2 class='text-2xl font-semibold'>{this.label}</h2>
-        <p class='mt-2 opacity-80'>shadow-native utilities</p>
-      </article>
-    );
-  }
+export default function OeTailwindProbe(props: { label: string }) {
+  return (
+    <article class="probe-card rounded-xl bg-primary p-8 text-white">
+      <h2 class="text-2xl font-semibold">{props.label}</h2>
+      <p class="mt-2 opacity-80">shadow-native utilities</p>
+    </article>
+  );
 }

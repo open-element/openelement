@@ -426,26 +426,35 @@ async function buildSSG(
   // light root's sheet rides the per-route document fact, and the Phase 2 map
   // now records both roots. Filtering here keeps the channel's documented
   // contract (tag -> shadow DSD URLs) intact.
-  const styledShadowTags = deliveredIslandStyleTags(
-    islandStyleDeclarations(),
-    ctx.phase1.islandMeta as Record<
-      string,
-      { tags?: readonly string[]; tagNames?: readonly string[] } | undefined
-    >,
-  ).shadow;
+  const styledShadowTags = new Set([
+    ...deliveredIslandStyleTags(
+      islandStyleDeclarations(),
+      ctx.phase1.islandMeta as Record<
+        string,
+        { tags?: readonly string[]; tagNames?: readonly string[] } | undefined
+      >,
+    ).shadow,
+    // A page-local GENERATED shadow component (P-2) has no island declaration —
+    // its identity is the sidecar's own tag — but its DSD template is a shadow
+    // root that must declare its sheets like any other. Admitted here so the
+    // entry seeds an island-entry row for it (an authored `styles` list when it
+    // has one, the shared component sheet when it does not).
+    ...(ctx.phase1.staticComponents ?? [])
+      .filter((component) => component.root === 'shadow')
+      .map((component) => component.tagName),
+  ]);
   // A generated shadow host has no emitted class static to carry the class
   // lane's `__oeUtilityClasses` fact, so the manifest declaration is the
   // build-time authority for "this component's shadow tree needs the app's
   // shared utility sheet".
   const utilityRequiredTags = new Set([
+    // A page-local GENERATED shadow component (P-2) declares no `styles`: the
+    // class-candidate registry is the only fact saying its utilities live in the
+    // shared sheet. Phase 2 recorded it, so this channel carries it too.
+    ...clientIslandUtilityTags(ctx),
     ...admittedTailwindDeclarations(ctx.phase1.packageManifests, ctx.phase1.packageIslandDecls)
       .filter((fact) => fact.required)
       .map((fact) => fact.tagName),
-    // P-1b (2026-11-21): a generated shadow island whose class tokens reached the
-    // shared component stylesheet needs that sheet appended to its DSD link list.
-    // The build recorded the exact tag set in Phase 2, where the candidate
-    // registry and the island declarations are both in scope.
-    ...clientIslandUtilityTags(ctx),
   ]);
   if (componentStyleSheetUrls.length > 0) {
     log.info(`Component stylesheet linked into DSD: ${componentStyleSheetUrls.join(', ')}`);

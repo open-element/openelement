@@ -68,6 +68,7 @@ import {
   type GeneratedElementPlatformProperty,
   type GeneratedElementSite,
 } from './contract.ts';
+import { collectStaticClassCandidates } from '../generated-leaf/generate.ts';
 
 /** The emitter's result: the leaf contract plus the exact appended tail. */
 export interface GeneratedElementModule extends GeneratedLeafModule {
@@ -404,7 +405,25 @@ export function generateElementModule(
   // M09-2e / #1803: derived from the authored sidecar by the lane admission,
   // never from a host fact. An unstyled module passes nothing, so its bytes
   // stay exactly the pre-slice output.
-  const styleLinkPrefix = options.styleLinkPrefix === true;
+  //
+  // P-3 (2026-11-21): a shadow module whose ONLY styling is utility classes
+  // declares no `styles`, yet its DSD template still needs the build's shared
+  // COMPONENT sheet (the compiler collected those tokens as class candidates).
+  // Without the channel the host producer has no parameter to receive the link
+  // and the shadow tree renders unstyled — measured on the ui-dogfood TSX-only
+  // Tailwind probe. The condition is the module's OWN candidate fact, so a module
+  // with neither declarations nor candidates keeps the pre-slice bytes.
+  const shadowModule = options.root === 'shadow-open' || options.root === 'shadow-closed';
+  // TWO reasons to grow the channel, with DIFFERENT strictness:
+  //  - the sidecar DECLARED `styles` -> the author promised sheets, so a render
+  //    with no URLs is a broken artifact and fails closed (pre-existing rule);
+  //  - the module merely HAS class candidates -> the app may or may not run a
+  //    utility engine, so absent URLs are lawful and the producer renders without
+  //    a link. Making this strict would turn "no utility engine" into a build
+  //    failure for every shadow component.
+  const declaredStyles = options.styleLinkPrefix === true;
+  const utilityChannel = shadowModule && collectStaticClassCandidates(module).length > 0;
+  const styleLinkPrefix = declaredStyles || utilityChannel;
   // 2026-11-20 client style adoption: only the client-only fact (`ssr: false`
   // or `hydrate: 'only'`), read by the SAME lane admission that supplies the
   // declared list. The imports are emitted for a client-only island only — an
@@ -650,7 +669,11 @@ export function generateElementModule(
           // carrier) would otherwise render the shadow host silently unstyled.
           // Fail closed before any seed/serialization work; the per-URL shape
           // stays owned by the canonical marked-link serializer.
-          ...(styleLinkPrefix
+          // ONLY the DECLARED case fails closed. A module that merely has class
+          // candidates takes the channel tolerantly: an app with no utility engine
+          // legitimately passes no URLs, and failing it closed would turn "no
+          // utility engine" into a build error for every shadow component.
+          ...(declaredStyles
             ? [
                 '  if (!Array.isArray(styleLinks) || styleLinks.length === 0) throw new Error("OEIR_LEAF_MISSING_VALUE: styleLinks (the styled generated element received no declared stylesheet URLs; mixed generated-element/entry artifacts or a missing style-link carrier)");',
               ]

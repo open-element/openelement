@@ -161,21 +161,6 @@ export function stripInlineSourceMapComment(code: string): string {
  * paths it cannot anchor. This module stays runtime-neutral: resolving a
  * workspace root from disk is the caller's job.
  */
-/**
- * The SCOPE of a generated element's class candidates: a shadow descriptor root
- * needs the component stylesheet, a light (or absent) root does not.
- *
- * The site fact the transform received is the host's admission decision, and it
- * carries the root the shell will create. Reading it here — rather than assuming
- * light, the pre-P-1 default — is what keeps a shadow generated island's
- * utilities in the sheet that can actually reach them.
- */
-function generatedSiteRootIsShadow(
-  site: { readonly root?: 'light' | 'shadow' } | null | undefined,
-): boolean {
-  return site?.root === 'shadow';
-}
-
 export function stableModuleId(
   file: string,
   root: string | undefined,
@@ -189,6 +174,21 @@ export function stableModuleId(
     if (clean.startsWith(prefix)) return clean.slice(prefix.length);
   }
   return clean;
+}
+
+/**
+ * The SCOPE of a generated element's class candidates: a shadow descriptor root
+ * needs the component stylesheet, a light (or absent) root does not.
+ *
+ * The site fact the transform received is the host's admission decision, and it
+ * carries the root the shell will create. Reading it here — rather than assuming
+ * light, the pre-P-1 default — is what keeps a shadow generated island's
+ * utilities in the sheet that can actually reach them.
+ */
+function generatedSiteRootIsShadow(
+  site: { readonly root?: 'light' | 'shadow' } | null | undefined,
+): boolean {
+  return site?.root === 'shadow';
 }
 
 export interface CompiledElementPluginOptions {

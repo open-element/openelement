@@ -155,6 +155,29 @@ function pageLocalStyleDeclaration(
  * registered here, keyed by the page's OWN tag, and the route's document link
  * fact resolves it from the route module rather than from a JSX reference.
  */
+/**
+ * The descriptor root a page-local GENERATED component declares, or undefined for
+ * a class component.
+ *
+ * Read through the same sidecar reader the island scan uses; undefined keeps the
+ * record a class one, where the root fact comes from the compiled program.
+ */
+function generatedSidecarRoot(
+  source: string,
+  semantics: { readonly defaultCompiledTag?: string; readonly hasGeneratedElementSidecar: boolean },
+): 'light' | 'shadow' | undefined {
+  if (semantics.defaultCompiledTag !== undefined || !semantics.hasGeneratedElementSidecar) {
+    return undefined;
+  }
+  try {
+    const config = readIslandConfig(source);
+    if (config === null) return undefined;
+    return config.root === 'shadow' ? 'shadow' : 'light';
+  } catch {
+    return undefined;
+  }
+}
+
 function pageModuleStyleDeclaration(
   file: string,
   root: string,
@@ -287,11 +310,13 @@ export async function scanStaticComponents(
         semantics.defaultCompiledTag === undefined
           ? generatedHostExportFor(source, file, tagName)
           : undefined;
+      const generatedRoot = generatedSidecarRoot(source, semantics);
       byTag.set(tagName, {
         tagName,
         modulePath,
         compilerInteractionEvents: semantics.compilerInteractionEvents,
         ...(generatedHostExport === undefined ? {} : { generatedHostExport }),
+        ...(generatedRoot === undefined ? {} : { root: generatedRoot }),
       });
       // A page-local GENERATED component's `styles` declaration (P-2, 2026-11-21)
       // rides the SAME build-time carrier an island's does: the declaration is the

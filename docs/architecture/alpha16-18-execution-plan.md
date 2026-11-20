@@ -1396,6 +1396,19 @@ register them for generated islands (shadow scope) before the fixture migrates.
 > instead of the stable id, and looking up the scan's path without normalizing it
 > (the registry held 15 tokens while the declaration answered 0).
 
+> **P-3 (2026-11-21): a TSX-only shadow component's utilities reach its DSD
+> template.** The `router-ui-dogfood` probe declares no `styles` and no `.css`
+> file — its ONLY styling is Tailwind classes — so nothing grew the host
+> producer's `styleLinks` channel and the shadow tree rendered unstyled. Fixed at
+> three layers: the emitter now grows the channel when the module HAS class
+> candidates (TOLERANT: absent URLs render without a link, so an app with no
+> utility engine is never failed closed — only a DECLARED `styles` list keeps the
+> strict refusal); the discovery walk reads a page-local generated component's
+> sidecar identity (it has no island declaration); and the build's utility-tag set
+> unions page-local generated shadow components plus an entry row for a tag with
+> no authored asset. Measured: `router-ui-dogfood` probe renders its DSD template
+> with the shared sheet link and **e2e 120/120 across three engines**.
+
 **Ordering within the one change set (each step is a gate, not a commit):**
 
 1. ~~generated-lane benchmark baseline~~ — **DONE 2026-11-21**:

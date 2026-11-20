@@ -151,9 +151,16 @@ describe('M11 prerequisite — compiler-owned ssrHostExport metadata', () => {
     // The reported string IS the emitted declaration (AST read), and the
     // wrapper is still the M09-2a host producer.
     expect(exportedFunctionNames(emitted.module!)).toContain(emitted.ssrHostExport);
+    // P-3 (2026-11-21): this fixture carries a static `class="card"`, so the
+    // producer grows the declared-stylesheet channel — the shared component
+    // stylesheet can only reach the shadow tree through the DSD template, and a
+    // utility-styled component has no `styles` declaration to trigger it. The
+    // channel is TOLERANT here: absent URLs render without a link, so an app with
+    // no utility engine is not failed closed.
     expect(emitted.module).toContain(
-      `export function ${emitted.ssrHostExport}(props, lightChildren, attributes) {`,
+      `export function ${emitted.ssrHostExport}(props, lightChildren, attributes, styleLinks) {`,
     );
+    expect(emitted.module).not.toContain('OEIR_LEAF_MISSING_VALUE: styleLinks');
     // M11: the emitted producer's third channel is the host attribute wire, and
     // its content props are seeded from the descriptor rows through the shell's
     // canonical conversion — the metadata field itself still never enters text.
@@ -161,15 +168,42 @@ describe('M11 prerequisite — compiler-owned ssrHostExport metadata', () => {
       '  const __oeHostProps = seedGeneratedElementHostProperties(__oeElementDescriptor.properties, props, attributes);',
     );
     expect(emitted.module).toContain('    ...(attributes === undefined ? {} : { attributes }),');
-    // Return-only: the module text is unchanged (leaf prefix plus tail, byte
-    // equality), the metadata field name never enters it, and the map and
-    // placement ledger are still the leaf's reused ones.
-    expect(emitted.module!.startsWith(leaf.module!)).toBe(true);
-    expect(emitted.module!.length).toBe(leaf.module!.length + emitted.tail!.length);
+    // Return-only: the emitted text is the leaf prefix plus the tail, the
+    // metadata field name never enters it, and the map and placement ledger are
+    // still the leaf's reused ones. (P-3 grows the PRODUCER's parameter list, so
+    // the tail is not byte-identical to the pre-P-3 tail for a class-carrying
+    // module — the CANDIDATE-FREE sibling below pins that identity.)
+    // The EMITTER's own leaf (not the bare `generateLeafModule` call above): P-3
+    // passes `claimStyleLinkPrefix` when the channel exists, which legitimately
+    // changes the leaf bytes — the identity that must hold is "module = leaf +
+    // tail", not "module = the unflagged leaf + tail".
+    expect(emitted.leaf).not.toBeNull();
+    expect(emitted.module!.startsWith(emitted.leaf!)).toBe(true);
+    expect(emitted.module!.length).toBe(emitted.leaf!.length + emitted.tail!.length);
     expect(emitted.module).not.toContain('ssrHostExport');
     expect(emitted.tail).not.toContain('ssrHostExport');
     expect(emitted.sourceMap).toEqual(leaf.sourceMap);
     expect(emitted.placements).toEqual(leaf.placements);
+  });
+
+  test('a candidate-free shadow module keeps the pre-P-3 producer bytes', () => {
+    // No static class anywhere: P-3 must not grow the channel, so the producer
+    // keeps its pre-slice 3-parameter shape.
+    const PLAIN = `${SHADOW_SIDECAR}
+function Card() {
+  return <div><slot></slot></div>;
+}
+export default Card;
+`;
+    const emitted = generateElementModule(frontModule(PLAIN), SITE, {
+      rootComponent: 'Card',
+      root: 'shadow-open',
+    });
+    expect(emitted.diagnostics).toEqual([]);
+    expect(emitted.module).toContain(
+      `export function ${emitted.ssrHostExport}(props, lightChildren, attributes) {`,
+    );
+    expect(emitted.module).not.toContain('styleLinks');
   });
 
   test('a hostless emitter call reports null and stays byte-identical to the leaf', () => {

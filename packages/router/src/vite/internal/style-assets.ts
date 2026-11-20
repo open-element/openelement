@@ -95,6 +95,7 @@ import {
 import { buildError, ClientBuildErrorCode } from '../../internal/error-codes.ts';
 import { scopeLightRootCss } from './light-css-scope.ts';
 import { islandStyleDeclarations } from './island-style-declarations.ts';
+import { readIslandConfig } from './ssg/island-scanner.ts';
 import { dirname as posixDirname, relative as posixRelative } from 'pathe';
 import { owningPackageName, packageNameAt } from './package-identity.ts';
 
@@ -792,7 +793,13 @@ async function discoverServerRenderedModules(
     // fact exactly when the declared root is a shadow root. Registered here (and
     // not by the server function path below, which would call the same module a
     // light page) because the declaration is the authoritative site fact.
-    const generatedSite = generatedSites.get(file);
+    // A PAGE-LOCAL generated component (P-2) has no island declaration: its
+    // identity is the sidecar's own `tag`, and its scope is the sidecar's `root`.
+    // Reading it here is what puts such a component's utilities in the shared
+    // component sheet — measured on `router-ui-dogfood`'s TSX-only Tailwind probe,
+    // whose shadow tree was unstyled until this branch registered it.
+    const declared = generatedSites.get(file) ?? pageLocalGeneratedSite(source);
+    const generatedSite = declared;
     if (generatedSite !== undefined) {
       let generated: ReturnType<typeof compileGeneratedElementIfAdmitted> = null;
       try {
@@ -1031,6 +1038,30 @@ async function emitServerRenderedEdges(
  * the graph path and the server-rendered discovery pass — so there is still one
  * emitter, one hash, one dedup map and one manifest.
  */
+/**
+ * The site fact a PAGE-LOCAL generated component declares from its own sidecar,
+ * or undefined when the module is not one.
+ *
+ * A page-local component is neither an island (no islands-dir path) nor a route
+ * (its host is a nested tag), so the sidecar's `tag` is the only identity and
+ * its `root` the only scope. A malformed sidecar is the transform's diagnostic to
+ * report — this reader returns undefined and lets the module take the class /
+ * server-component / artifact path unchanged.
+ */
+function pageLocalGeneratedSite(
+  source: string,
+): { tagName: string; root: 'light' | 'shadow' } | undefined {
+  if (!source.includes('defineIslandConfig')) return undefined;
+  let config: ReturnType<typeof readIslandConfig>;
+  try {
+    config = readIslandConfig(source);
+  } catch {
+    return undefined;
+  }
+  if (config === null || config.tag === undefined) return undefined;
+  return { tagName: config.tag, root: config.root === 'shadow' ? 'shadow' : 'light' };
+}
+
 async function emitStyleAsset(
   context: StyleAssetEmitContext,
   request: RegisteredStyleRequest,

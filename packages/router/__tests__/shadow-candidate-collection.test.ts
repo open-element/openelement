@@ -97,16 +97,31 @@ test('a package island resolves through the app root’s own resolution', async 
     'the resolved package module is registered (an authoritative entry, even when empty)',
   ).toBe(0);
 
-  // (2) A class-authored component in the same app root DOES contribute its
-  // statically admitted candidates through the same entry point.
+  // (2) A class-authored component DOES contribute its statically admitted
+  // candidates through the same entry point. The fixture's own components no
+  // longer exercise this: `shadow-tailwind-probe` rides the GENERATED lane now
+  // (2026-11-21 closeout) and the remaining ui-dogfood components carry no static
+  // class token at all. The scratch component is the same shape the class lane
+  // compiles, so the row still pins "the class producer contributes".
+  const classRoot = await scratchRoot({
+    'app/components/class-probe.tsx': `import { element, OpenElement } from '@openelement/element';
+
+@element('class-probe', { root: 'shadow-open' })
+export default class ClassProbe extends OpenElement {
+  render() {
+    return <p class="p-4 rounded-lg">probe</p>;
+  }
+}
+`,
+  });
   const localCandidates = createClassCandidateRegistry();
   const contributed = await collectShadowClassCandidates({
-    root: fixtureRoot,
+    root: classRoot,
     candidates: localCandidates,
-    modules: [{ path: 'app/components/shadow-tailwind-probe.tsx' }],
+    modules: [{ path: 'app/components/class-probe.tsx' }],
   });
   expect(contributed, 'a class-authored component contributes its candidates').toBe(1);
-  expect(localCandidates.all().length).toBeGreaterThan(0);
+  expect(localCandidates.all()).toEqual(['p-4', 'rounded-lg']);
 });
 
 test('a specifier that does not resolve is skipped, not fatal', async () => {

@@ -1393,13 +1393,30 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
     };
     setClientIslandUtilityTags(
       ctx,
-      new Set(
-        islandStyleDeclarations()
+      new Set([
+        ...islandStyleDeclarations()
           .filter(
             (declaration) => declaration.root === 'shadow' && moduleHasCandidates(declaration),
           )
           .map((declaration) => declaration.tagName),
-      ),
+        // A page-local GENERATED shadow component (P-2) has no island declaration:
+        // its `styles` may be empty (TSX-only Tailwind), so the class-candidate
+        // registry is the only fact that says "this shadow tree's utilities live in
+        // the shared component sheet". Without this row such a component ships an
+        // unstyled shadow root — measured on `router-ui-dogfood`'s tailwind probe.
+        ...(ctx.phase1.staticComponents ?? [])
+          .filter(
+            (component) =>
+              component.root === 'shadow' &&
+              // `modulePath` is the SSR entry's project-relative `/app/...` spelling;
+              // the registry is keyed by the compiler's stable id, so the probe's own
+              // anchor is applied through the same function the registration used.
+              shadowCandidateRegistry.forModule(
+                stableModuleId(resolve(root, `.${component.modulePath}`), root),
+              ).length > 0,
+          )
+          .map((component) => component.tagName),
+      ]),
     );
 
     // The component stylesheet (alpha15 S lane): a discovered shadow-candidate

@@ -82,6 +82,18 @@ export function islandStyleEntryLinks(
         : [...urls];
     entries.push([tag, links]);
   }
+  // A shadow component whose ONLY styling is utility classes has no authored
+  // asset to appear in `assets` (P-2, 2026-11-21 — measured on the TSX-only
+  // Tailwind probe). Its DSD template still needs the shared component sheet, so
+  // the tag's entry is created here instead of being dropped for lack of an
+  // authored URL.
+  if (utilitySheetUrls.length > 0) {
+    const emitted = new Set(entries.map(([tag]) => tag));
+    for (const tag of utilityRequiredTags) {
+      if (!shadowTags.has(tag) || emitted.has(tag)) continue;
+      entries.push([tag, [...utilitySheetUrls]]);
+    }
+  }
   return entries;
 }
 

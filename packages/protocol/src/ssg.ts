@@ -230,6 +230,14 @@ export interface StaticComponentDecl {
    * `${X}__ssrHost` convention (ADR-0182 forbids re-deriving it).
    */
   generatedHostExport?: string;
+  /**
+   * The descriptor root a page-local GENERATED component declares (P-2,
+   * 2026-11-21). A shadow root's class candidates need the shared COMPONENT
+   * stylesheet linked inside the DSD template; a light root's belong to the
+   * document sheet. Absent for a class component (its `static styles` scope
+   * carries the same fact).
+   */
+  root?: 'light' | 'shadow';
 }
 
 /** The build-time SSR admission decisions per component tag. */
