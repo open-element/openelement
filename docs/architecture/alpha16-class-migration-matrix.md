@@ -1191,3 +1191,37 @@ Two port-time findings, both real and both now understood:
 Evidence: `site:build` exit 0 (6 steps) — the built pages carry the real pager
 (`data-pager="true"` with `/blog/alpha16-18-a-clearer-direction.zh/` links) and
 the named slots; `www` 34 files / 304 tests; `vp run check` 5/5 PASS.
+
+**2026-11-20 — `app/layout.tsx` ported, measured, and REVERTED: a real capability gap.**
+
+The layout was fully ported (30 `computed` → the lane's intrinsic, 7 property
+rows, `CONVENTION_LAYOUT_TAG` kept as the tag source per D-M1) and it compiled
+(337,775-byte module). `site:build` then failed a consumer assertion that the
+compiler cannot see:
+
+```
+v0.27.0 regression: the layout shell is present and expanded
+  Error: Expected >= 1 DSD template in docs page, got 0
+```
+
+Measured: with the class layout the `/docs` page carries one
+`shadowrootmode="open"` subtree; with the generated layout it carries ZERO, while
+the host tag itself still renders (`<app-layout current-path="/docs" …>` with the
+JSON seed). `open-theme-toggle` / `open-search` are still emitted as tags, but
+their shadow roots are no longer expanded server-side.
+
+So this is **not** a migration problem and not a layout-specific bug: a generated
+LIGHT-root host serializes its own content and does not run the nested composition
+pass over the hosts inside it, so every materialized child island loses its DSD.
+The layout is the site shell — it wraps every page — which makes it the widest
+possible instance of that gap. Reverted: `site:build` exit 0, `www` 34/304.
+
+What the next attempt needs (a capability slice, not an edit):
+
+1. light-root generated host → nested generated/class host expansion in the
+   serializer (the same `renderToStringAtDepth` walk the class path runs);
+2. evidence: `/docs` regains its DSD subtree count, and `open-search` /
+   `open-theme-toggle` keep their shadow roots;
+3. then re-run this same port unchanged — the port itself is proven to compile.
+
+The port is preserved as a patch for that slice to start from.
