@@ -1,12 +1,11 @@
 /** @jsxImportSource @openelement/element */
 /** Private WWW long-form reading shell. */
 
-import { computed, element, OpenElement, property } from '@openelement/element';
+import { computed } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
 import { formatFreshnessDate, readingChromeStrings } from './chrome-strings.ts';
-import type { ReadingMetadata, ReadingNavigation } from './page-contract.ts';
 
 type ReadingTag = { key: string; label: string };
-type CompiledComputed<T> = ReturnType<typeof computed<T>> & T;
 
 /** One row of the reading shell's source-freshness meta line (no rows when absent). */
 interface FreshnessRow {
@@ -16,213 +15,222 @@ interface FreshnessRow {
   label: string;
 }
 
-@element('open-reading-shell')
-export default class OpenReadingShell extends OpenElement {
-  // The shell's authored rules and the shared generated-content treatment
-  // (article prose) live in the linked document stylesheet
-  // (www/site-chrome.css): a function page's render owns no document-style
-  // sink, so the document sheet is the one delivery both the static payload
-  // and the client read. See the site-chrome.css header.
+/**
+ * READING SHELL — generated-element lane (2026-11-20 migration).
+ *
+ * Three facts of the migration are worth the reader's time:
+ *
+ * - `metadata`/`navigation` are `attribute: false` rows, and the lane admits a
+ *   props member only when its type is a NON-GENERIC local mirror
+ *   (`OEIR_GENERATED_ELEMENT_PROPS_TYPE_UNSUPPORTED` refuses an imported or
+ *   `Record<string, unknown>` spelling), so both are mirrored locally below —
+ *   the same shape `open-search`'s `hits` row needed.
+ * - the 21 class `computed` fields are the lane's `computed` intrinsic: derived
+ *   nodes the compiler creates in the retained setup factory (ADR-0183 D-4),
+ *   read as `.value` at their sinks.
+ * - the shared chrome copy is resolved ONCE in setup scope
+ *   (`const chrome = readingChromeStrings(props.locale)`); the derived nodes
+ *   capture it, and the retained factory emits that local in authored order
+ *   (ADR-0183 D-4 ordering), so no derived node reads a binding declared after it.
+ */
 
-  @property({ reflect: true })
-  rail = false;
-  @property({ reflect: true })
-  footer = false;
-  @property({ reflect: true })
-  meta = false;
-  @property({ reflect: false })
-  metadata: ReadingMetadata = { breadcrumb: '', title: '' };
-  @property({ reflect: false })
-  navigation: ReadingNavigation = {};
-  @property({ reflect: false })
-  previous = '';
-  @property({ reflect: false })
-  next = '';
-  @property({ reflect: false })
-  previousLabel = '';
-  @property({ reflect: false })
-  nextLabel = '';
+/** Local mirror of the `attribute: false` metadata row (the lane refuses imports). */
+interface ReadingMetadata {
+  breadcrumb: string;
+  breadcrumbHref?: string;
+  title: string;
+  lede?: string;
+  date?: string;
+  updated?: string;
+  version?: string;
+  accent?: string;
+  tags?: readonly string[];
+}
 
-  // Same base-field redeclaration as open-layout: the compiled @property
-  // shadows OpenElementConfiguration.locale (SSR injection or the `locale`
-  // attribute); tsc's `override` demand is rejected by the compiled grammar.
-  @property({ reflect: false })
-  // @ts-expect-error compiled @property shadows the optional base field
-  locale = 'en';
+/** Local mirror of the `attribute: false` navigation row. */
+interface ReadingNavigation {
+  previous?: { href: string; label: string };
+  next?: { href: string; label: string };
+}
 
-  @property({ reflect: false, attribute: false })
-  breadcrumb = computed(() => this.metadata?.breadcrumb ?? '');
-  @property({ reflect: false, attribute: false })
-  breadcrumbHref = computed(() => this.metadata?.breadcrumbHref ?? '');
-  // Block branches must be fully static (OEC9012), so both breadcrumb forms
-  // stay in the tree and toggle through `hidden` like the pager links below.
-  @property({ reflect: false, attribute: false })
-  hideBreadcrumbLink = computed(() => !this.metadata?.breadcrumbHref);
-  @property({ reflect: false, attribute: false })
-  hideBreadcrumbText = computed(() => !!this.metadata?.breadcrumbHref);
-  @property({ reflect: false, attribute: false })
-  breadcrumbLabel = computed(() => readingChromeStrings(this.locale).breadcrumb);
-  @property({ reflect: false, attribute: false })
-  pageTitle = computed(() => this.metadata?.title ?? '');
-  @property({ reflect: false, attribute: false })
-  accent = computed(() => this.metadata?.accent ?? '');
-  @property({ reflect: false, attribute: false })
-  lede = computed(() => this.metadata?.lede ?? '');
-  // Source-freshness meta row: version mark + machine-derived update date.
-  // The row must not EXIST when there is nothing to show. The previous form
-  // rendered it always and only toggled `hidden`, so non-article pages
-  // (/reference, /roadmap, /errors) shipped a hidden row with dangling
-  // "Applies to  · Updated " text and `<time datetime="">` (WEB-003 F3).
-  // Compiled branches cannot interpolate text (OEC9012), so the row is a
-  // zero-or-one list — the same root fix as open-article-view's fallback: an
-  // empty list emits no element and no text, while article pages keep the
-  // real, visible version+date row.
-  @property({ reflect: false, attribute: false, type: Array })
-  freshnessRows = computed(() =>
-    this.metadata?.version && this.metadata?.updated
+export const openElement = defineIslandConfig({
+  tag: 'open-reading-shell',
+  properties: {
+    rail: { reflect: true, default: false },
+    footer: { reflect: true, default: false },
+    meta: { reflect: true, default: false },
+    metadata: { attribute: false, default: { breadcrumb: '', title: '' } },
+    navigation: { attribute: false, default: {} },
+    previous: { default: '' },
+    next: { default: '' },
+    previousLabel: { default: '' },
+    nextLabel: { default: '' },
+    locale: { default: 'en' },
+  },
+});
+
+function OpenReadingShell(props: {
+  rail: boolean;
+  footer: boolean;
+  meta: boolean;
+  metadata: ReadingMetadata;
+  navigation: ReadingNavigation;
+  previous: string;
+  next: string;
+  previousLabel: string;
+  nextLabel: string;
+  locale: string;
+}) {
+  // The chrome copy depends only on the `locale` row: resolved once here and
+  // captured by the derived nodes below (a module import read directly inside a
+  // tracked slot is a host-unclassified binding, OEC9043).
+  const chrome = readingChromeStrings(props.locale);
+
+  const breadcrumb = computed(() => props.metadata?.breadcrumb ?? '');
+  const breadcrumbHref = computed(() => props.metadata?.breadcrumbHref ?? '');
+  // Block branches must be fully static (OEC9012), so both breadcrumb forms stay
+  // in the tree and toggle through `hidden` like the pager links below.
+  const hideBreadcrumbLink = computed(() => !props.metadata?.breadcrumbHref);
+  const hideBreadcrumbText = computed(() => !!props.metadata?.breadcrumbHref);
+  const breadcrumbLabel = computed(() => chrome.breadcrumb);
+  const pageTitle = computed(() => props.metadata?.title ?? '');
+  const accent = computed(() => props.metadata?.accent ?? '');
+  const lede = computed(() => props.metadata?.lede ?? '');
+  // Source-freshness meta row: version mark + machine-derived update date. The
+  // row must not EXIST when there is nothing to show: the previous form rendered
+  // it always and only toggled `hidden`, so non-article pages shipped a hidden
+  // row with dangling "Applies to  · Updated " text and an empty `<time
+  // datetime>`. Compiled branches cannot interpolate text (OEC9012), so the row
+  // is a zero-or-one list — an empty list emits no element and no text.
+  const freshnessRows = computed((): FreshnessRow[] =>
+    props.metadata?.version && props.metadata?.updated
       ? [
           {
             key: 'freshness',
-            prefix: `${readingChromeStrings(this.locale).appliesTo} ${
-              this.metadata?.version ?? ''
-            }${readingChromeStrings(this.locale).freshnessSeparator}${
-              readingChromeStrings(this.locale).updated
-            } `,
-            updated: this.metadata?.updated ?? '',
-            label: formatFreshnessDate(this.metadata?.updated ?? '', this.locale),
+            prefix: `${chrome.appliesTo} ${props.metadata?.version ?? ''}${chrome.freshnessSeparator}${chrome.updated} `,
+            updated: props.metadata?.updated ?? '',
+            label: formatFreshnessDate(props.metadata?.updated ?? '', props.locale),
           },
         ]
       : [],
-  ) as CompiledComputed<FreshnessRow[]>;
-  @property({ reflect: false, attribute: false })
-  date = computed(() => this.metadata?.date ?? '');
-  @property({ reflect: false, attribute: false, type: Array })
-  tags = computed(() =>
-    (this.metadata?.tags ?? []).map((tag) => ({ key: tag, label: tag })),
-  ) as CompiledComputed<ReadingTag[]>;
-  @property({ reflect: false, attribute: false })
-  previousHref = computed(() => this.navigation?.previous?.href ?? this.previous);
-  @property({ reflect: false, attribute: false })
-  nextHref = computed(() => this.navigation?.next?.href ?? this.next);
-  @property({ reflect: false, attribute: false })
-  previousText = computed(() => this.navigation?.previous?.label ?? this.previousLabel);
-  @property({ reflect: false, attribute: false })
-  nextText = computed(() => this.navigation?.next?.label ?? this.nextLabel);
-  // No route sets the kicker props; fall back to the locale chrome copy so
-  // zh pages never show an English Previous/Next.
-  @property({ reflect: false, attribute: false })
-  previousKicker = computed(() => this.previousLabel || readingChromeStrings(this.locale).previous);
-  @property({ reflect: false, attribute: false })
-  nextKicker = computed(() => this.nextLabel || readingChromeStrings(this.locale).next);
-  @property({ reflect: false, attribute: false })
-  hidePrevious = computed(() => !(this.navigation?.previous?.href ?? this.previous));
-  @property({ reflect: false, attribute: false })
-  hideNext = computed(() => !(this.navigation?.next?.href ?? this.next));
-  @property({ reflect: false, attribute: false })
-  onThisPage = computed(() => readingChromeStrings(this.locale).onThisPage);
-  @property({ reflect: false, attribute: false })
-  pageNavigationLabel = computed(() => readingChromeStrings(this.locale).pageNavigation);
+  );
+  const date = computed(() => props.metadata?.date ?? '');
+  const tags = computed((): ReadingTag[] =>
+    (props.metadata?.tags ?? []).map((tag) => ({ key: tag, label: tag })),
+  );
+  const previousHref = computed(() => props.navigation?.previous?.href ?? props.previous);
+  const nextHref = computed(() => props.navigation?.next?.href ?? props.next);
+  const previousText = computed(() => props.navigation?.previous?.label ?? props.previousLabel);
+  const nextText = computed(() => props.navigation?.next?.label ?? props.nextLabel);
+  // No route sets the kicker props; fall back to the locale chrome copy so zh
+  // pages never show an English Previous/Next.
+  const previousKicker = computed(() => props.previousLabel || chrome.previous);
+  const nextKicker = computed(() => props.nextLabel || chrome.next);
+  const hidePrevious = computed(() => !(props.navigation?.previous?.href ?? props.previous));
+  const hideNext = computed(() => !(props.navigation?.next?.href ?? props.next));
+  const onThisPage = computed(() => chrome.onThisPage);
+  const pageNavigationLabel = computed(() => chrome.pageNavigation);
 
-  render() {
-    return (
-      <div class='shell'>
-        <article class='main min-w-0 leading-[1.7]'>
-          <span id='start' tabindex='-1'></span>
-          <header class='meta mb-7 border-b border-border pb-5'>
-            <slot name='meta'>
-              <div>
-                <nav
-                  class='m-0 mb-4 flex flex-wrap items-baseline gap-2 font-mono text-(length:--text-xs) font-extrabold tracking-[0.1em] text-muted-foreground uppercase print:hidden!'
-                  aria-label={this.breadcrumbLabel}
-                >
-                  <a
-                    class='text-inherit no-underline hover:text-primary hover:underline'
-                    href={this.breadcrumbHref}
-                    hidden={this.hideBreadcrumbLink}
-                  >
-                    {this.breadcrumb}
-                  </a>
-                  <span hidden={this.hideBreadcrumbText}>{this.breadcrumb}</span>
-                  <span aria-hidden='true'>{'/'}</span>
-                  <span class='text-primary' aria-current='page'>
-                    {this.pageTitle}
-                  </span>
-                </nav>
-                <h1
-                  class='m-0 font-sans text-(length:--text-2xl) leading-[1.05] font-extrabold tracking-[-0.035em] break-words text-foreground text-balance min-[901px]:text-[clamp(2.1rem,4.6vw,3.4rem)]'
-                  data-pagefind-meta='title'
-                >
-                  {this.pageTitle}
-                  <span class='block font-serif text-[calc(1em*1.08)] font-normal italic tracking-[-0.01em] text-primary'>
-                    {this.accent}
-                  </span>
-                </h1>
-                <p class='mt-4 mb-0 max-w-[640px] leading-[1.65] text-muted-foreground min-[901px]:text-[clamp(var(--text-base),1.4vw,var(--text-xl))]'>
-                  {this.lede}
-                </p>
-                {this.freshnessRows.map((row) => (
-                  <p
-                    key={row.key}
-                    class='mt-3 mb-0 font-mono text-(length:--text-xs) text-muted-foreground'
-                  >
-                    <span>{row.prefix}</span>
-                    <time datetime={row.updated}>{row.label}</time>
-                  </p>
-                ))}
-                <p class='mt-4 mb-0 flex flex-wrap gap-2 font-mono text-(length:--text-xs) text-muted-foreground'>
-                  <time>{this.date}</time>
-                  {this.tags.map((tag) => (
-                    <span class='rounded-md border border-border px-2 py-1' key={tag.key}>
-                      {tag.label}
-                    </span>
-                  ))}
-                </p>
-              </div>
-            </slot>
-          </header>
-          <slot></slot>
-          <footer class='footer mt-10 border-t border-border pt-5'>
-            <slot name='footer'>
+  return (
+    <div class='shell'>
+      <article class='main min-w-0 leading-[1.7]'>
+        <span id='start' tabindex='-1'></span>
+        <header class='meta mb-7 border-b border-border pb-5'>
+          <slot name='meta'>
+            <div>
               <nav
-                class='grid grid-cols-1 gap-4 min-[901px]:grid-cols-2 print:hidden!'
-                aria-label={this.pageNavigationLabel}
-                data-pager
+                class='m-0 mb-4 flex flex-wrap items-baseline gap-2 font-mono text-(length:--text-xs) font-extrabold tracking-[0.1em] text-muted-foreground uppercase print:hidden!'
+                aria-label={breadcrumbLabel.value}
               >
                 <a
-                  class='block rounded-lg border border-border px-5 py-4 text-foreground no-underline hover:border-primary'
-                  href={this.previousHref}
-                  hidden={this.hidePrevious}
+                  class='text-inherit no-underline hover:text-primary hover:underline'
+                  href={breadcrumbHref.value}
+                  hidden={hideBreadcrumbLink.value}
                 >
-                  <span class='mb-1 block font-mono text-(length:--text-xs) tracking-[0.08em] text-muted-foreground uppercase'>
-                    ← {this.previousKicker}
-                  </span>
-                  <span class='block font-bold'>{this.previousText}</span>
+                  {breadcrumb.value}
                 </a>
-                <a
-                  class='block rounded-lg border border-border px-5 py-4 text-foreground no-underline hover:border-primary min-[901px]:col-start-2 min-[901px]:text-end'
-                  href={this.nextHref}
-                  hidden={this.hideNext}
-                >
-                  <span class='mb-1 block font-mono text-(length:--text-xs) tracking-[0.08em] text-muted-foreground uppercase'>
-                    {this.nextKicker} →
-                  </span>
-                  <span class='block font-bold'>{this.nextText}</span>
-                </a>
+                <span hidden={hideBreadcrumbText.value}>{breadcrumb.value}</span>
+                <span aria-hidden='true'>{'/'}</span>
+                <span class='text-primary' aria-current='page'>
+                  {pageTitle.value}
+                </span>
               </nav>
-            </slot>
-          </footer>
-        </article>
-        <aside
-          class='rail static mt-6 self-start min-[901px]:sticky min-[901px]:top-[calc(var(--nav-height)+1.5rem)] min-[901px]:mt-0 print:hidden!'
-          aria-label={this.onThisPage}
-          data-pagefind-ignore
-        >
-          <p class='mt-0 mb-3 hidden font-mono text-(length:--text-xs) font-extrabold tracking-[0.14em] text-muted-foreground uppercase min-[901px]:block'>
-            {this.onThisPage}
-          </p>
-          <slot name='rail'></slot>
-        </aside>
-      </div>
-    );
-  }
+              <h1
+                class='m-0 font-sans text-(length:--text-2xl) leading-[1.05] font-extrabold tracking-[-0.035em] break-words text-foreground text-balance min-[901px]:text-[clamp(2.1rem,4.6vw,3.4rem)]'
+                data-pagefind-meta='title'
+              >
+                {pageTitle.value}
+                <span class='block font-serif text-[calc(1em*1.08)] font-normal italic tracking-[-0.01em] text-primary'>
+                  {accent.value}
+                </span>
+              </h1>
+              <p class='mt-4 mb-0 max-w-[640px] leading-[1.65] text-muted-foreground min-[901px]:text-[clamp(var(--text-base),1.4vw,var(--text-xl))]'>
+                {lede.value}
+              </p>
+              {freshnessRows.value.map((row) => (
+                <p
+                  key={row.key}
+                  class='mt-3 mb-0 font-mono text-(length:--text-xs) text-muted-foreground'
+                >
+                  <span>{row.prefix}</span>
+                  <time datetime={row.updated}>{row.label}</time>
+                </p>
+              ))}
+              <p class='mt-4 mb-0 flex flex-wrap gap-2 font-mono text-(length:--text-xs) text-muted-foreground'>
+                <time>{date.value}</time>
+                {tags.value.map((tag) => (
+                  <span class='rounded-md border border-border px-2 py-1' key={tag.key}>
+                    {tag.label}
+                  </span>
+                ))}
+              </p>
+            </div>
+          </slot>
+        </header>
+        <slot></slot>
+        <footer class='footer mt-10 border-t border-border pt-5'>
+          <slot name='footer'>
+            <nav
+              class='grid grid-cols-1 gap-4 min-[901px]:grid-cols-2 print:hidden!'
+              aria-label={pageNavigationLabel.value}
+              data-pager
+            >
+              <a
+                class='block rounded-lg border border-border px-5 py-4 text-foreground no-underline hover:border-primary'
+                href={previousHref.value}
+                hidden={hidePrevious.value}
+              >
+                <span class='mb-1 block font-mono text-(length:--text-xs) tracking-[0.08em] text-muted-foreground uppercase'>
+                  ← {previousKicker.value}
+                </span>
+                <span class='block font-bold'>{previousText.value}</span>
+              </a>
+              <a
+                class='block rounded-lg border border-border px-5 py-4 text-foreground no-underline hover:border-primary min-[901px]:col-start-2 min-[901px]:text-end'
+                href={nextHref.value}
+                hidden={hideNext.value}
+              >
+                <span class='mb-1 block font-mono text-(length:--text-xs) tracking-[0.08em] text-muted-foreground uppercase'>
+                  {nextKicker.value} →
+                </span>
+                <span class='block font-bold'>{nextText.value}</span>
+              </a>
+            </nav>
+          </slot>
+        </footer>
+      </article>
+      <aside
+        class='rail static mt-6 self-start min-[901px]:sticky min-[901px]:top-[calc(var(--nav-height)+1.5rem)] min-[901px]:mt-0 print:hidden!'
+        aria-label={onThisPage.value}
+        data-pagefind-ignore
+      >
+        <p class='mt-0 mb-3 hidden font-mono text-(length:--text-xs) font-extrabold tracking-[0.14em] text-muted-foreground uppercase min-[901px]:block'>
+          {onThisPage.value}
+        </p>
+        <slot name='rail'></slot>
+      </aside>
+    </div>
+  );
 }
+
+export default OpenReadingShell;

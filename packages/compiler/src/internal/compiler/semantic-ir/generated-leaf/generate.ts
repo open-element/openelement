@@ -7444,6 +7444,15 @@ function emitDynamicSsrNodes(
 function ssrReachableLocalResourceNames(
   component: FunctionModelComponent,
   records: ReadonlyMap<string, LoweredExpressionRecord>,
+  /**
+   * ADR-0183 D-4: records the producer evaluates OUTSIDE the JSX tree — the
+   * `signal`/`computed` derivations it creates inline. A setup local those
+   * bodies read (a shared chrome-copy snapshot, a formatter input) is
+   * server-reachable exactly as one the JSX reads is; without these seeds the
+   * producer emitted the derivation and dropped the local it captures, which is
+   * a runtime `undefined` at SSG.
+   */
+  extraSeeds: readonly LoweredExpressionRecord[] = [],
 ): ReadonlySet<string> {
   const localRecords = new Map<string, LoweredExpressionRecord>();
   for (const resource of component.resources) {
@@ -7519,6 +7528,7 @@ function ssrReachableLocalResourceNames(
     if (node.kind === 'insertion-site') walkRecipe(node.recipeId);
   };
   walkNodes(component.roots);
+  for (const record of extraSeeds) usedRecords.add(record);
 
   // Transitive closure over the local initializers the server output reads.
   const reachable = new Set<string>();
@@ -7578,7 +7588,20 @@ function emitDynamicSsrFunction(
   // Only locals the server output actually (transitively) evaluates are
   // declared. A client-only handler/ref helper must not make `__ssr` request a
   // callable it never reads; surviving locals keep their authored order.
-  const reachableLocalResources = ssrReachableLocalResourceNames(component, records);
+  // ADR-0183 D-4: the derived nodes' own bodies are evaluated here too, so the
+  // reachability closure is seeded with them.
+  const reachableLocalResources = ssrReachableLocalResourceNames(
+    component,
+    records,
+    (elementRootBinding ? component.resources : [])
+      .filter(
+        (resource) =>
+          (resource.kind === 'signal' || resource.kind === 'computed') &&
+          resource.expression !== null,
+      )
+      .map((resource) => records.get(resource.expression!.id))
+      .filter((record): record is LoweredExpressionRecord => record !== undefined),
+  );
   for (const resource of component.resources) {
     if (!IDENTIFIER_PATTERN.test(resource.name) || resource.name.startsWith(INTERNAL_PREFIX)) {
       continue;

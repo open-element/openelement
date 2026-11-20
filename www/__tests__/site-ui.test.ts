@@ -31,10 +31,12 @@ function descriptorRows(code: string): Array<{
   return rows;
 }
 
-const siteModules = [
-  ['open-reading-shell', '../app/site-ui/open-reading-shell.tsx'],
-  ['open-article-view', '../app/site-ui/open-article-view.tsx'],
-] as const;
+// The class-lane roster shrinks as rows migrate (2026-11-20): a migrated module
+// compiles through the generated lane instead, and its own test below asserts
+// the function-component shape. `open-reading-shell` and
+// `open-standards-visual` left this list; `open-article-view` still blocks on
+// the D-M5 body decision.
+const siteModules = [['open-article-view', '../app/site-ui/open-article-view.tsx']] as const;
 
 for (const [tagName, path] of siteModules) {
   test(`site UI owns compiled ${tagName}`, async () => {
@@ -221,4 +223,32 @@ test('open-page-rail keeps its view compiler-owned and its browser state externa
     attribute: 'locale',
     type: 'string',
   });
+});
+
+test('open-reading-shell is a generated component with all 21 derived nodes', async () => {
+  const url = new URL('../app/site-ui/open-reading-shell.tsx', import.meta.url);
+  const source = await readFile(url, 'utf8');
+  // Generated lane (2026-11-20): the class's 21 `computed` fields are the lane's
+  // `computed` intrinsic — derived nodes the compiler creates in the retained
+  // setup factory, never declared property rows.
+  expect(source).not.toContain('extends OpenElement');
+  expect(source).toContain("tag: 'open-reading-shell'");
+  expect(source.match(/const \w+ = computed\(/g)?.length).toEqual(21);
+  // The two `attribute: false` rows are local mirrors: the lane refuses an
+  // imported or generic props member type.
+  expect(source).toContain('interface ReadingMetadata');
+  expect(source).toContain('interface ReadingNavigation');
+  const compiled = compileGeneratedElementIfAdmitted(source, url.pathname, {
+    site: { tag: 'open-reading-shell' },
+  });
+  expect(compiled).not.toBeNull();
+  expect(compiled!.code).not.toContain('name: "breadcrumb"');
+  // The retained factory emits the captured chrome copy BEFORE the nodes read it.
+  const factory = compiled!.code.slice(compiled!.code.indexOf('function __oe_rootInstance'));
+  const localIndex = factory.indexOf('const chrome =');
+  const firstDerived = factory.indexOf('= computed(');
+  expect(localIndex).toBeGreaterThan(-1);
+  expect(localIndex).toBeLessThan(firstDerived);
+  // The named slots survive the lane switch.
+  expect(compiled!.code).toContain('slot');
 });

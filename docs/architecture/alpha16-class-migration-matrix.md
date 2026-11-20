@@ -1166,3 +1166,28 @@ in `generated-host-props-seeding.test.ts` pins all three encodings.
 With the three defects now fixed (module-helper snapshot classification, authored
 declaration order, bare-boolean seed), the `open-reading-shell` port has no known
 blocker left. It is the first task of the next batch.
+
+**2026-11-20 — `open-reading-shell` MIGRATED (21 derived nodes).**
+
+The shell is off the class lane. Shape: function component + sidecar
+(`tag: 'open-reading-shell'`, shadow root, 9 property rows including the two
+`attribute: false` local mirrors), the 21 class `computed` fields became the
+lane's `computed` intrinsic, and the shared chrome copy is resolved once in setup
+scope and captured by them.
+
+Two port-time findings, both real and both now understood:
+
+1. **The SSR producer dropped a captured setup local.** The producer's local
+   reachability walked only the JSX roots, so a local the derived nodes capture
+   was declared in the retained factory but never in `__ssr` — a runtime
+   `Cannot read properties of undefined (reading 'value')` at SSG. The closure is
+   now seeded with the root's binding resources, so a local they read is
+   reachable exactly like one the JSX reads.
+2. **A derived node is a component-local const, not a prop.** Reads are
+   `pageTitle.value`, not `props.pageTitle.value`. Getting this wrong is silent in
+   the compiler and only surfaces as a broken build (`undefined.value`), so the
+   mechanical port was corrected against the emitted factory rather than by eye.
+
+Evidence: `site:build` exit 0 (6 steps) — the built pages carry the real pager
+(`data-pager="true"` with `/blog/alpha16-18-a-clearer-direction.zh/` links) and
+the named slots; `www` 34 files / 304 tests; `vp run check` 5/5 PASS.
