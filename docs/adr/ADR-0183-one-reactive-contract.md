@@ -169,3 +169,24 @@ consumer of the generated lane beyond the suites above.
 
 Still open from the order: D-4 (`computed` lowering), the D-6 `propDeps`
 measurement, and the migrations that wait on both.
+
+### D-4 status after D-5 (measured, 2026-11-20)
+
+`computed` is **admitted and lowered** already: `GENERATED_ELEMENT_IMPORT_CLASSIFIER`
+classifies it as a core factory (`generated-element/contract.ts:269,282`) and the
+function frontend lowers the body as a `derived` expression
+(`semantic-core/function-frontend.ts:1243-1245`). With D-5 landed, a computed
+closed over `props` now tracks correctly — the 2026-11-18 staleness premise is
+gone.
+
+What still blocks it is the **binding source**, not computed itself: a computed
+(like a `signal`) is a host binding the generated root must resolve, and the
+root refuses with `OEIR_GENERATED_ELEMENT_UNBOUND_BINDING` because the shell's
+`createBindings` remains allocation-only / fixture-only. So D-4's remaining work
+is one slice: give the generated root a production bindings source (the retained
+setup factory producing the bindings record, signals and computeds included) and
+let the shell consume it.
+
+`packages/compiler/__tests__/semantic-ir/generated-element.computed-boundary.test.ts`
+pins the exact current refusal, so the slice starts from a measured fact and its
+flip from "refused with this identity" to "emitted and tracked" is the evidence.
