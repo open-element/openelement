@@ -1281,3 +1281,50 @@ What this section changes:
 - **The dated records stay as written (amend-never-rewrite).** `16b-MN`, the progress ledger, `README.md` and the shim rows that name "Alpha17" are historical wording; the capability inventory, this plan and the closeout report are the current view.
 
 This section creates no milestone exit, no release qualification, no public-API freeze and no P5 evidence. It records a scope decision.
+
+### 19.11 Owner approval 2026-11-21: the class-lane deletion is authorized as ONE complete change set
+
+Verbatim scope selection by the owner: **"全部批准：一个完整变更集"** — approve all
+three breaking decisions and land the deletion as one change set.
+
+Authorized decisions (they were owner/release items, not code moves):
+
+1. **Public API.** Delete `OpenElement` / `ErrorBoundary` from the public surface
+   and delete the class render path in `public-runtime.ts`. This is a breaking
+   change; the interface snapshot must be regenerated in the same change set and
+   the CHANGELOG entry must name it.
+2. **ABI / third-party class admission.** Delete the Part Program artifact and
+   `COMPILED_MODULE_ABI_VERSION`'s class half, and stop admitting third-party
+   class modules. The two fixtures whose SUBJECT is a foreign class
+   (`third-party-web-components`, `web-component-interop`) are RETAINED as
+   foreign-WC qualification, not as class-lane qualification: they must keep
+   passing against whatever public surface remains.
+3. **Benchmark.** Build the generated lane's own benchmark baseline BEFORE
+   deleting `benchmarks/micro/oe-table.tsx` (whose subject is the class
+   compiler); the old input is deleted only once the new baseline exists, so the
+   benchmark keeps a subject.
+
+**Scope measured at `1e2bdc289` (LOCAL):** 75 test files author `extends
+OpenElement` (65 of them also carry `@element(`); 9 fixture apps author class
+components (2 retained as foreign-WC subjects); the compiler class entry is
+`internal/compiler/plugin.ts` + `semantic-core` + `semantic-ir`; the element class
+runtime is `internal/compiled/runtime/{kernel,program-kernel,parts,hydrate,
+fresh-dom,blocks,revive,error-boundary,facade-host}.ts` (the shell's P1 closure
+list is the ready-made inventory); the public exports are `OpenElement`,
+`ErrorBoundary` and the class half of `public-runtime.ts`.
+
+**Ordering within the one change set (each step is a gate, not a commit):**
+
+1. generated-lane benchmark baseline (new harness + recorded numbers);
+2. fixture rewrites: `site-light-probe`'s e2e asserts the nesting RULE (ADR-0181
+   2026-11-20), the other six migrate or retire; the two foreign-WC fixtures are
+   re-based on the public WC surface;
+3. delete the 75 class contract test files TOGETHER with the lane they pin;
+4. delete the compiler class entry, Part Program artifact/validator, ABI record
+   and the admission of class modules (router + compiler + element together);
+5. delete `OpenElement`/`ErrorBoundary`/class render path and regenerate the
+   interface snapshot + CHANGELOG;
+6. run the full matrix, `check`, `site:build`, packed starter smoke and the
+   benchmark baseline, and only then record the deletion.
+
+This section is the authorization; no step above is claimed done.

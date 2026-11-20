@@ -332,11 +332,12 @@ retention carrier landed 2026-11-21 (ADR-0181's dated amendment). What remains:
 
 1. **The lane deletion** of §5.1 (compiler entry, artifact, ABI record, render
    path, 82 test files, 8 fixtures, and the benchmark input whose SUBJECT is the
-   class compiler). Re-evaluated 2026-11-20 (migration matrix, same date): **no
-   capability blocker remains** — the mechanical moves are enumerated, but the
-   public-API removal (`OpenElement`/`ErrorBoundary` + the class render path),
-   the third-party admission/ABI decision and the benchmark successor are
-   owner/release decisions inside this closeout, not another milestone's;
+   class compiler). **AUTHORIZED 2026-11-21 by owner direction ("全部批准：一个
+   完整变更集")** — all three breaking decisions (public API, third-party/ABI
+   admission, benchmark successor) are approved, and the ordered execution plan
+   with its measured inventory is plan §19.11. Not yet executed: the plan's six
+   steps are gates inside one change set, and the benchmark baseline must exist
+   before the old input is deleted;
 2. the generated lane's hoisting of a nested light root's sheet into the
    enclosing shadow template: the generated lane does **not** hoist it, so that
    nesting is impossible today and `site-light-probe` stays the only proof of the
