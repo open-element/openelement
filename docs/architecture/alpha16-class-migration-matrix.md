@@ -1064,3 +1064,26 @@ one probe result worth keeping.**
    the D-M4 caller-order row (`blog`/`changelog`/`contributing`/`errors` render it
    from FUNCTION pages already, so the caller side is satisfied) — the remaining
    work is the mechanical 31-row port, not a capability.
+
+**2026-11-20 — the `open-reading-shell` port found (and fixed) a lane defect.**
+
+Porting the shell surfaced a genuine compiler gap, not a migration problem: the
+generated-element lane classified only its own factory specifiers, so any other
+module import stayed `unknown`, and a TRACKED slot (a `computed` body) reading
+one was refused with `OEC9043 [OEIR_UNCLASSIFIED_BINDING]`. The shell's 21
+derived nodes all read `readingChromeStrings`/`formatFreshnessDate` from
+`./chrome-strings.ts`, so the whole row was unmigratable through no fault of its
+own.
+
+Fixed in `generated-element/contract.ts`: `classifyValue` now answers `plain`
+for a non-factory named import (an ordinary module value carries no reactive
+source, so nothing can go stale by reading it in a derived body), while the two
+factory specifiers keep their factory classification and their result stays a
+signal. Guard: `generated-element.local-import.test.ts` (both halves).
+
+The shell port itself is **not** in this batch: it was reverted to keep the tree
+green while the classifier fix landed. Re-running it needs one more thing this
+batch did NOT establish — whether a setup-scope snapshot of a module import
+(`const chrome = readingChromeStrings(props.locale)`) is admitted after the
+classifier change, since a direct `props.locale` read inside each derived node is
+the pre-classifier shape. That is the next measurable step, not a design gap.

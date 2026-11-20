@@ -275,7 +275,18 @@ export const GENERATED_ELEMENT_IMPORT_CLASSIFIER: ImportClassifier = {
     if (importedName === 'useContext') return 'factory';
     return 'value';
   },
-  classifyValue: () => undefined,
+  classifyValue: (specifier, importedName) => {
+    // A module import that is not one of the lane's factory specifiers is an
+    // ORDINARY value: a function, a constant, a locale table. It carries no
+    // reactive source, so a TRACKED slot reading it needs no subscription and
+    // cannot go stale — which is why the value kind is `plain` rather than
+    // left unclassified. Without this the lane refused any derived value that
+    // read a shared module helper (`OEC9043 [OEIR_UNCLASSIFIED_BINDING]`),
+    // which is the shape every site module with shared chrome copy has.
+    if (importedName === null) return undefined;
+    if (FACTORY_SPECIFIERS.has(specifier)) return undefined;
+    return 'plain';
+  },
   classifyCall: (specifier, importedName) => {
     if (!FACTORY_SPECIFIERS.has(specifier)) return undefined;
     if (importedName === 'signal') return { call: 'signal' };
