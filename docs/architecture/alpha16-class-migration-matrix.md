@@ -1820,3 +1820,78 @@ under `packages/*/__tests__` that author `@element` classes test the class lane
 ITSELF. They are the lane's contract tests, so they retire in the same commit that
 deletes the lane — deleting them first would remove the only thing pinning the
 behavior being removed.
+
+## M10 — retirement evidence, per surface (measured 2026-11-20, LOCAL)
+
+M10's contract is "legacy-consumer migration and retirement evidence, **per area**:
+browser runtime, server runtime, build/SSG, ABI/module contract, public API".
+This is that record. Every number below is a measurement on the built artifacts of
+this worktree at `3b85282a5`, not an inference — and the two rows that came back
+NEGATIVE (a surface still carrying legacy code) are recorded as negatives, because
+that is what makes the other three rows worth anything.
+
+### Surface 1 — Browser runtime: RETIRED FROM EVERY BUILT ARTIFACT
+
+Symbol probes over the two shipped client bundles (`apps/saas/dist/client/islands/`
+and `www/dist/client/assets/`), choosing symbols that only the class lane defines:
+
+| symbol | saas client | www client |
+| --- | --- | --- |
+| `installAccessors` (the facade's accessor install) | **0** | **0** |
+| `createFacadePropertyState` (the class property state) | **0** | **0** |
+| `validatePartProgram` (the artifact validator) | **0** | **0** |
+| `PART_PROGRAM_VERSION` | **0** | **0** |
+| `createElementKernel` (the program executor) | **0** | **0** |
+
+The `__partProgram` string that DOES appear in a saas client chunk is a JSDoc line
+in the error-code table (`/** `__partProgram.tag` does not match … */`), not code —
+and `www/dist/reference/index.html`'s three occurrences are the generated API
+reference *documenting* the ABI. **No built artifact executes the class lane on the
+client.**
+
+### Surface 2 — Server runtime: NOT retired — one legacy path still ships
+
+Same probe over `apps/saas/dist/server/{entry,index}.js`:
+
+| symbol | entry | index |
+| --- | --- | --- |
+| `installAccessors` | 0 | 0 |
+| `createElementKernel` | 0 | 0 |
+| **`validatePartProgram`** | **3** | 0 |
+
+**Negative result, recorded.** `validatePartProgram` and its IR normalizer ship in
+the server entry because `public-runtime.ts` keeps the class render path
+(`renderToString` over a `componentClass`) in the same module as the generated
+light-root path, so the bundler cannot drop the validator. No server-rendered page
+in either app uses it. Closing this row needs the class render path deleted from
+`public-runtime.ts` — i.e. it is gated on the lane deletion itself, and it is the
+concrete reason that deletion is not cosmetic.
+
+### Surface 3 — Build/SSG: RETIRED FROM THE PRODUCT GRAPH
+
+The class lane's dispatch is conditional on a module carrying `@element`. Authored
+`@element` / `extends OpenElement` count across every shipped source root —
+`www/app`, `apps/saas/app`, `packages/ui/src`, `packages/create/templates` — is
+**0** for all four. So the lane is dispatched and never selected in a product
+build, and `site:build` (6 steps) + the saas build both complete without it.
+
+### Surface 4 — ABI/module contract: the PART PROGRAM ABI is still promised
+
+`COMPILED_MODULE_ABI_VERSION = 2` (`packages/protocol/src/part-program.ts:38`) is
+still exported and still documents `__partProgram` among the statics a compiled
+module carries. This is deliberate and is NOT a defect yet: the class lane still
+accepts third-party class modules and the `third-party-web-components` fixture
+exercises one. It becomes a defect the moment the lane is deleted, so the
+retirement order must flip the ABI record in the same commit.
+
+### Surface 5 — Public API: unchanged, and that is the remaining gate
+
+`packages/element/src/public-surface.ts` still exports `OpenElement` and
+`ErrorBoundary`, and the package `exports` map still publishes `.`, `./authoring`,
+`./server`, `./jsx-runtime` and the rest. `useHost`, `signal`, `computed`, `ref`,
+`onConnect`/`onDispose`/`onError`/`onPropertyChange`, `provideContext`/`useContext`
+all ride the same root surface.
+
+**This is the honest bottom line for M10: three of five surfaces are retired with
+evidence, one is negative and gated on lane deletion, and one is intentionally
+unchanged until that deletion flips it.** The matrix does not claim M10 closed.
