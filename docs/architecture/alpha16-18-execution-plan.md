@@ -1421,6 +1421,20 @@ register them for generated islands (shadow scope) before the fixture migrates.
 > page-local site fact). Their page components were not migrated in this line, and
 > this is recorded as the reason rather than left implicit.
 >
+> **P-5 (2026-11-21, measured boundary): island state does not survive a morph on
+> the generated lane.** Migrating `router-request-time`'s two simplest islands
+> (`live-counter`, `visible-probe`) builds clean and keeps 109/114 e2e rows, but
+> the five rows that pin state continuity across a morph go RED — "island state
+> survives a list prepend", "rows keep order and island state through a reverse",
+> "PRG morph preserves island state", "enhanced submit morphs the PRG target",
+> "a morph instantiates nested DSD templates recursively". Baseline at HEAD is
+> **114 passed**. The class lane re-uses the SAME element instance across a morph
+> (its property state rides the instance); the generated lane re-runs the setup,
+> so a signal resets. That is a capability gap, not a migration defect, and it is
+> out of this line's scope — **the two islands are reverted** and the fixture stays
+> class-authored. Deleting the class lane therefore also OWES a morph-continuity
+> contract for generated islands, which this plan does not claim.
+>
 **Ordering within the one change set (each step is a gate, not a commit):**
 
 1. ~~generated-lane benchmark baseline~~ — **DONE 2026-11-21**:
