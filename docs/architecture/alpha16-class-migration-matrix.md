@@ -1949,3 +1949,48 @@ that "looks internal" is still an ABI when the emitted code is the caller.
 one-SHA consumer-form evidence bundle, and the row-for-row status move in the
 `16b-MN` / capability-inventory / ADR-0182 records. This record does **not** claim
 `16b-EB` delivered.
+
+**2026-11-20 — `site-light-probe` port ATTEMPTED and reverted: it measures a capability the generated lane does not have yet.**
+
+`site-light-probe` was the recommended first fixture because #1800 changed its
+subject. The port was written, built and run. It produced a **precise, useful
+negative**, so it is recorded here instead of being quietly dropped.
+
+**What was ported.** `app/islands/light-probe-card.tsx` (the smallest component,
+`root: 'light'`) from an `@element` class with `static styles` to a generated
+function component with the sidecar `styles` channel. It builds clean and its
+sheet is emitted with the right `@scope` wrapper
+(`@scope (light-probe-card) { … }`, asset `65bb223ce049.css`).
+
+**What broke.** The fixture's strongest row is *"a light root inside a shadow
+template is declared, and styled, in THAT tree"*: `probe-shadow-card` is a
+shadow-root island whose DSD template contains a nested `<light-probe-card
+class='nested-light-card'>`, and the assertion is that the computed colour of
+`.probe-shared` **inside that shadow tree** is the card's green. Under the port it
+was `rgb(0, 0, 0)`; under the class version the SAME e2e suite passes **25/25**.
+
+**The mechanism, measured on the two builds' `dist/index.html`.** The shadow
+template must declare the NESTED light root's sheet as a leading marked link:
+
+| build | links inside `<probe-shadow-card>`'s template |
+| --- | --- |
+| class (green) | `090d40bae191`, **`65bb223ce049`** (the nested card's sheet), `d94222edbb02` |
+| generated (red) | `090d40bae191`, `d94222edbb02` |
+
+The generated lane declares the shadow host's OWN sheets in its template but not
+a nested LIGHT root's, so the sheet stays a document resource and a document
+stylesheet never matches content inside a shadow tree — exactly the defect
+`nested-light-style-delivery.test.ts` documents for the class lane (the class
+serializer walks the nested host and hoists the child's link into the parent's
+template).
+
+**So this is a capability gap, not a migration defect**, and it is now named:
+*the generated lane's nested-light-root sheet hoisting into an enclosing shadow
+template.* It has no owner and no slice; it is a candidate for Alpha17 alongside
+the client-side shadow adoption item. Until it exists, a generated light root may
+not be nested inside a shadow template, and this fixture is the only proof of that
+restriction — which is a good reason to keep it on the class lane for now rather
+than force the port.
+
+Disposition unchanged: `site-light-probe` MIGRATES LATER, now with the exact
+blocker named instead of a category.
