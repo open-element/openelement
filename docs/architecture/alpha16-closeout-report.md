@@ -24,7 +24,7 @@ carries none.
 | --- | --- |
 | branch | `feat/alpha16-retirement` |
 | source version | `1.0.0-alpha.16` (bumped this line through the one-knob tool) |
-| closeout commit | `e3a6bcc02` and later on the same branch |
+| closeout commit | `5cc0930e7` (the evidence table below is taken there) |
 | `git status --porcelain` | empty |
 
 Provenance for every record below: **`LOCAL`
@@ -72,11 +72,11 @@ worth remembering (see §5).
 ## 3. Evidence record
 
 All rows: provenance **`LOCAL .agents/worktrees/alpha16-retirement`**, commit
-`a69b52705` unless stated, status clean.
+`5cc0930e7`, status clean (`git status --porcelain` empty).
 
 | # | command | result |
 | --- | --- | --- |
-| 1 | `vp run --no-cache --fail-if-no-match --filter @openelement/element test` | **1055 passed (1055)**, 135 files |
+| 1 | `vp run --no-cache --fail-if-no-match --filter @openelement/element test` | **1058 passed (1058)**, 136 files |
 | 2 | `vp run --no-cache --fail-if-no-match --filter @openelement/compiler test` | **1404 passed (1404)**, 101 files |
 | 3 | `vp run --no-cache --fail-if-no-match --filter @openelement/router test` | **1880 passed (1880)**, 167 files |
 | 4 | `vp run --no-cache --fail-if-no-match --filter @openelement/www test` | **304 passed (304)**, 34 files |
@@ -85,7 +85,9 @@ All rows: provenance **`LOCAL .agents/worktrees/alpha16-retirement`**, commit
 | 7 | `vp run --no-cache --fail-if-no-match --filter @openelement/ui test` | **80 passed (80)** |
 | 8 | `vp run --no-cache --fail-if-no-match check` | **`gate ok: 5 step(s)`** |
 | 9 | `vp run --no-cache --fail-if-no-match site:build` | **`gate ok: 6 step(s)`** |
-| 10 | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot` | `Public interface snapshot matches (6 packages)` |
+| 10 | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot` | `Public interface snapshot matches (6 packages).` |
+| 11 | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo docs-index:check` | `current view is generated, links resolve (46 active document(s), 8 historical record(s), 15 archive/removal entr(ies))` |
+| 12 | `playwright test --config e2e/playwright.config.ts --project=chromium` in `tests/fixtures/site-light-probe` | **25 passed**, on the CLASS version of the fixture (see §5.1 — the generated port is reverted and its gap named) |
 
 `@openelement/protocol` has no `test` task (it declares no scripts); it is covered
 by the compiler/router suites that consume it.
@@ -124,9 +126,14 @@ two things still consume them:
    behavior being removed.
 2. `tests/fixtures` — **10 fixture apps** still author classes. Two are RETAINED
    deliberately (`third-party-web-components`, `web-component-interop`: a foreign
-   class IS the subject under test). The other eight MIGRATE LATER, with
-   `site-light-probe` first because its subject (#1800 light-root CSS delivery)
-   just moved lane and its proof should move with it.
+   class IS the subject under test). The other eight MIGRATE LATER, and one of
+   them now has its blocker named rather than categorised: `site-light-probe` was
+   PORTED, built and run, and produced a capability gap instead of a migration —
+   the generated lane does not hoist a NESTED light root's sheet into an enclosing
+   shadow template, so a generated light root cannot be nested inside a shadow
+   tree today. The port is reverted, the fixture's e2e is green on the class
+   version (25/25), and the gap is recorded with its both-builds measurement in
+   the migration matrix.
 
 **Condition:** lane deletion is one change set covering the compiler entry, the
 Part Program artifact and its ABI record, the class render path in
