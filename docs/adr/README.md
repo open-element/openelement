@@ -73,3 +73,4 @@ there (`git show 3b5c7a9a^:docs/audit/2026-07-27-application-loop-framework-rese
 - [ADR-0180-function-component-lifecycle-intrinsics.md](./ADR-0180-function-component-lifecycle-intrinsics.md)
 - [ADR-0181-generated-element-ssr-and-retention.md](./ADR-0181-generated-element-ssr-and-retention.md)
 - [ADR-0182-function-component-capability-api.md](./ADR-0182-function-component-capability-api.md) — AMENDED: 2026-11-20 remediation amendments — approved carrier (execution-plan §18), the two public subpaths, the open-button/open-input migration records, the JSON seed identity/wire, the dropdown Correction 3 correction, `useHost` FUTURE/OWED, the `provideContext` accepted ambiguity, the `16b-EB` delivery truth and the client-JS SLO ratification
+- [ADR-0183-one-reactive-contract.md](./ADR-0183-one-reactive-contract.md)

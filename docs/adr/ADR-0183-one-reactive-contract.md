@@ -1,0 +1,127 @@
+# ADR-0183: One reactive contract for the generated lane — one engine, one subscription wiring, one lifecycle scope, one derived-state contract
+
+- Status: **ACCEPTED** (owner direction 2026-11-20, in-session; implementation pending)
+- Date: 2026-11-20
+- Owner direction: 2026-11-20 — "一个引擎、一个订阅接线、一个生命周期范围、一个衍生状态合同"; the same session directed that a P6/P8 defect of this class is fixed at the architecture level rather than patched, and that the props duplication recorded in §Context is a bug to be fixed with priority.
+- Amends: nothing. It records a decision about mechanisms that already ship, and a defect the repository's own gates failed to catch.
+- Related: ADR-0173, ADR-0174, ADR-0180, ADR-0181, ADR-0182, ADR-0163 (seams), [the design constitution](../architecture/design-principles.md), [the M04 runtime-primitive record](../architecture/alpha16-18-progress.md), [the M09-0 shell record](../architecture/m09-generated-element-shell.md)
+
+## Context
+
+### 1. The generated lane's reactive machinery is currently in pieces
+
+Four artefacts exist, and they do not share one contract:
+
+| # | Artefact | Owner today | What it does |
+| --- | --- | --- | --- |
+| 1 | Signal engine | `packages/element/src/internal/signal/preact-engine.ts` (`createPreactEngine`) | The only engine: `@preact/signals-core` behind the internal `SignalEngine` seam (`signal` / `computed` / `effect` / `batch` / `untracked`). |
+| 2 | Subscription wiring | `packages/element/src/internal/compiled/runtime/bindings.ts` (`bindSignalWrites`, `guardUpdate`) + the compiler's emitted `bindSignalWrites(...)` calls | Per-slot refresh closures subscribed to **named** signals; props reads are wired through `host.propDeps`. |
+| 3 | Lifecycle scope | `packages/element/src/internal/compiled/lifetime-scope.ts` + `runtime/instance-ledger.ts` | `instance` → `connection` → `projection`; subscriptions released with the owning scope. |
+| 4 | Derived state | **two implementations, one dead** — see §2 | — |
+
+### 2. The defect: two props mechanisms, and the correct one has no production caller
+
+| Primitive | Introduced | Shape | Production callers |
+| --- | --- | --- | --- |
+| `createTrackedProps` (`packages/element/src/internal/compiled/runtime/props.ts:57`) | **2026-11-09**, commit `a82ef5957` (M04, PR #1735) | Per-read getters over **one version signal**; `replace(next)` swaps the backing record. A read inside an effect **tracks** that signal. | **zero** (only `runtime.ts` re-export + tests) |
+| `createState`'s props record (`packages/element/src/internal/compiled/generated-element/shell.ts:1451-1470`) | **2026-11-13**, commit `735749b1c` (M09-0, PR #1768) | Per-read getters over a **plain `Map`** plus a separate `propsChanged` **counter** signal, bumped by `bumpProps` (`:1504-1506`) | every generated element (production) |
+
+The shell's getters read `values.get(name)` — a `Map`, not a signal. Nothing a getter reads is trackable, which is why a component-authored `computed` closed over `props` would compute once and then serve a stale value forever. That is the entire technical content of the 2026-11-18 ruling "no `computed` support in the generated lane; inline instead" ([`16b-migration-note.md` §"2026-11-18 ruling"](../architecture/16b-migration-note.md)). **The 2026-11-18 ruling is a consequence of this duplication, not an independent design choice.**
+
+The duplication is not a stylistic preference. Measured consequences:
+
+- `props` is a **second source of truth** (P6) for "what are this instance's props", one of them unreachable by the reactive engine.
+- The seam registry does not register this channel at all. `docs/architecture/seams.md` names the generated-element shell as "the ONE owner of the per-read props record and the shell-owned `propsChanged` signal" — a sentence that **legitimises the fork** by declaring one implementation the owner, while the M04 primitive goes unmentioned (P8).
+- `createTrackedProps` is dead code that still ships in the public internal surface (`packages/element/src/internal/compiled/runtime.ts:160`, and the public-interface snapshot lists it).
+- The capability inventory records "derived values — **DELIBERATELY ABSENT**" (`alpha16-capability-inventory.md`), which states the symptom as a principle.
+- The `propDeps` channel (31 references across the compiler and the shell) exists **only** to compensate for getters that do not track. It would be unnecessary if props were signal-backed.
+
+### 3. Why the gates did not catch it
+
+Recorded here because the fix must include the gate, not only the code:
+
+1. **The seam row was written from the implementation's point of view.** `seams:check` validates that a row has one owner, a direction, crossing artefacts, a guard test and the missing/unreadable clause — all true for the row above. Nothing in the repository can ask "is there a second implementation of this same concept?", because the registry is a list of rows, not a search over the mechanism space.
+2. **No consumer-form test spanned the two implementations.** The M09-0 suite proves the shell's props record behaves (21 tests, cross-reconnect retention included). Nothing asserted that the shell's props record *is* the M04 primitive, so 21 correct tests on a forked implementation read as a green signal.
+3. **"Do not import the runtime barrel" was read as "do not reuse runtime primitives."** The M09-0 commit narrative says the shell must not import `facade-host.ts`, `runtime-program.ts`, the kernel, the runtime barrel or the Part Program executor — a P1/bundle-size rule about the **executor**. But the shell in fact imports four sibling modules from the same directory (`../runtime/recipe.ts`, `../runtime/values.ts`, `../runtime/context.ts`, `../runtime/instance-ledger.ts`), so importing `../runtime/props.ts` was never forbidden by the rule. The forbidden thing was one barrel, and the boundary was generalised by habit.
+4. **Slices land in different PRs, so nobody owns the sum.** M04 (runtime primitives) and M09-0 (element shell) are four days and one milestone apart; each PR was reviewed against its own goal, and no artefact in the repository asks "which existing primitive does this replace".
+
+## Decision
+
+**D-1. One engine.** `@preact/signals-core` behind `SignalEngine` is the only reactive engine in the framework. No second engine, no framework-private tracker, no DOM-diffing layer. `computed` and `effect` come from the same engine the signals come from.
+
+**D-2. One subscription wiring.** `bindSignalWrites` / `guardUpdate` (the `runtime/bindings.ts` seam) is the only place a slot, a derived node or an author effect subscribes to a signal, and every subscription is released by the owning lifecycle scope. A mechanism that needs a *second* invalidation channel (a counter, a manual dirty flag, a hand-rolled listener) is a defect against this record.
+
+**D-3. One lifecycle scope.** `instance` → `connection` → `projection` (`lifetime-scope.ts` + `instance-ledger.ts`) is the only lifetime hierarchy. Any derived node, subscription or retained record binds to one of those scopes; nothing reactive is element-lifetime by accident.
+
+**D-4. One derived-state contract.** Derived state is authored as `const x = computed(() => expr)` and has one semantics across the lane:
+
+- subject to the same binding-provenance admission as the lifecycle intrinsics (a top-level `computed(...)` in the component setup, canonical named import, aliases followed);
+- erased by the compiler into an **instance-retained derived node** over the same engine, never a runtime dispatcher and never a hook-order slot;
+- lazy, and cut by `Object.is` equality (`@preact/signals-core` semantics) so an equal recomputation does not propagate;
+- read-only; assigning to it is a compiled diagnostic, not a runtime error;
+- released with the owning scope; a reconnect re-creates it with the new connection, the retained instance keeps what the instance owns;
+- **one evaluation per render on the server** (SSR builds no reactive graph and caches nothing across requests, matching the existing per-request setup evaluation);
+- declaration-order and cycle errors fail closed at the authored span, exactly like the lifecycle intrinsics' placement verdicts.
+
+**D-5. Props have one owner: `runtime/props.ts`, with tracked reads.** The shell's props record becomes the M04 primitive's record:
+
+- the record's getters read **one version signal**;
+- the version signal is the *only* props invalidation channel — the hand-written `propsChanged` counter and `bumpProps` are deleted, not aliased;
+- the shell keeps what is genuinely element-specific (declaration defaults, attribute conversion/reflection, pre-upgrade reconciliation, JSON seed apply). Those write through the primitive; they do not own a second record;
+- `createTrackedProps` gains the per-key write the element shell needs (a whole-record `replace` alone cannot express `el.value = x`), and that per-key write is the one public write path for both callers;
+- a consumer-form test asserts the shell's props record **is** the primitive's record (same invalidation channel, same per-read getter semantics), not merely that it behaves like one.
+
+**D-6. `propDeps` is re-evaluated for deletion.** It is the compensation for untrackable props. After D-5, the compiler may emit direct dependency wiring; whether `propDeps` is removed from the emitted ABI is decided by the D-5 evidence, not by preference, and its removal is a separate, byte-pinned slice.
+
+**D-7. The gate that failed is extended.** Three guards are added by the implementation:
+
+1. a seam row for the reactive props channel naming `runtime/props.ts` as the single owner, with the shell as a consumer;
+2. a consumer-form test at the seam boundary (D-5's last bullet);
+3. a repo-level reuse check: a new runtime primitive that duplicates an existing one must be caught. The cheap, checkable form: the seam registry gains the reactive channel rows (props, subscription, lifetime, derived state) so a future slice that adds a fourth invalidation channel has to delete or amend a row rather than quietly add code.
+
+## P7 — the four questions
+
+1. **Can the platform do this?** Partly, and the direction is the right one: TC39's signals proposal is the platform catching up to this mechanism, which is exactly why the contract is stated as a *deletable* layer over one engine (§Retirement). Nothing here re-implements a platform feature the platform already ships.
+2. **Can the cost be paid at compile time?** Yes, and the decision keeps it there: dependency collection, placement verdicts and the derived-node emission are compile-time work; the runtime receives one signal-backed props record, one subscription seam and engine-native derived nodes. No new scheduler, no new graph data structure, no runtime dependency-tracking protocol.
+3. **If it is runtime, does it read as platform code and honour the server contract?** The runtime pieces are the existing ones (`signal`, `computed`, `effect`, `AbortSignal` scopes). The server-side rule is explicit: SSR evaluates each derived value once per render and builds no graph, so the server contract is unchanged.
+4. **Nearest prior art, and is the difference deliberate?** Solid (`createMemo`), Svelte (`$derived`), Vue (`computed`) — all one engine with compile-time wiring and engine-native derived nodes; our difference is that the *dependency set is known to the compiler* and is emitted rather than discovered, and that derived state is authored as a compiler-erased intrinsic rather than a hook call. The contrast being avoided is a second, hand-rolled invalidation channel (the counter), which no mature framework ships.
+
+## Consequences
+
+- `computed` becomes implementable without a new mechanism: the compiler already collects each expression's dependency set, and the props record will be trackable after D-5.
+- `open-reading-shell` (21 computed) and `open-article-view` (6 computed) can be migrated on the generated lane instead of being blocked, and `www/app/layout.tsx` (30 computed) stops being a special case.
+- The 2026-11-18 "no `computed`; inline instead" ruling is superseded by this record for the generated lane. Its text stays in the migration note as history (amend-never-rewrite); the migration note gains a dated later reading pointing here.
+- Byte impact is measured, not assumed: the props getter gains one signal read; the counter and `bumpProps` disappear; the emitted `bindSignalWrites` lines are unchanged until D-6. The net is expected to be small and is recorded per slice.
+- `createTrackedProps` stops being dead code (it becomes the one props primitive) or is replaced by a single equivalent in the same file — either way it has exactly one implementation and real callers.
+- The 31 `propDeps` references become a measurable, removable surface after D-5 (D-6).
+
+## Implementation order (evidence-gated, each slice its own commit)
+
+1. **D-5 first** (it is the root): per-key write on the primitive; shell switches to it; delete the counter and `bumpProps`; seam row + consumer-form test; byte pins updated with a written reason.
+2. **D-4 next**: `computed` intrinsic — lowering, placement verdicts, SSR-once rule, equality cut, lifecycle release, negatives (cycle, declaration order, assignment, placement outside setup).
+3. **D-6 evaluation**: measure whether `propDeps` can be removed; if yes, a byte-pinned slice; if no, record the measured reason.
+4. **Then the migrations** that were blocked: `open-reading-shell`, `open-article-view`, `layout.tsx`, and the remaining class modules.
+
+No slice may land a compatibility shim that keeps both props mechanisms alive.
+
+## Retirement condition (P5)
+
+```
+RETIRE the computed intrinsic WHEN the platform (TC39 signals) supplies the same
+  derived-value semantics in browsers this project targets AND every shipped
+  component's derived values can be expressed with the platform form ;
+  VERIFY gate:source AND gate:release GREEN AT one SHA ; RECORD 16b-MN +
+  public-interface-snapshot ; OWNER single owner
+RETIRE the createTrackedProps wrapper WHEN the platform signal is the props
+  backing directly AND both callers (leaf/recipe and the element shell) read it
+  without a wrapper ; VERIFY gate:source GREEN AT one SHA ; RECORD the seam row
+  deletion ; OWNER single owner
+```
+
+## What this record does not do
+
+- It does not implement anything. Implementation is sliced above and each slice carries its own evidence.
+- It does not change any public export, protocol type or ABI in this record; the snapshot changes (if any) land with the slices that cause them.
+- It does not decide `propDeps` removal (D-6 is measurement-gated) and does not authorise a compatibility shim.
+- It does not claim any milestone, gate, exit or release.
+- It does not re-argue the 2026-11-18 ruling's *intent*; it records that the ruling's premise (untrackable props) is the defect being removed.
