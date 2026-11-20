@@ -58,6 +58,9 @@ What replaced it, and the tests that pin each:
 | --- | --- | --- |
 | retained instances (incl. depth ≥ 2) | cross-ledger transaction (ADR-0181 2026-11-21 amendment) | Chromium `R8`/`R10`/`R11`; ledger 40 rows; artifact depth-2 site counts |
 | pre-hydration replay | neutral replay hook published by the capture install | packed starter `#942` + third-party rows (3 engines); `pre-upgrade-retention.test.ts` hook row |
+| generated shadow class candidates (P-1/P-1b/P-1c) | model walk → `classCandidates` → discovery registers them → shared component sheet linked into the DSD template; dev compiles the SHADOW view and re-registers before serving | `router-unocss-probe` 15/15 (3 engines, computed styles) + `dev-unocss` 8/8 |
+| page-local generated components (P-2) | static scan declares tag + host producer; SSG registers the host PAIR; the component's `styles` rides the island carrier | `router-base-path` 9/9 (3 engines) |
+| a generated light page's own sheet (P-2b) | the page module's sidecar declaration, `scopeTag: null` (unscoped), seeded into the route's document links | `router-base-path` 9/9 (3 engines, JS-disabled computed-style row) |
 | derived state | `computed()` intrinsic (ADR-0183 D-4, option B) | `app/layout.tsx` carries 30; `generated-element.*` suites |
 | host access | `useHost()` | `generated-element.use-host.test.ts` (6 rows) |
 | refs | `ref(cb?)` over the existing `ref` channel | ADR-0182 amendment |

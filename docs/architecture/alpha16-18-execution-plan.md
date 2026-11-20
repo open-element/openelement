@@ -1411,9 +1411,14 @@ register them for generated islands (shadow scope) before the fixture migrates.
    aliases `data` (the spelling the generated text Parts write);
 2. fixture rewrites: `site-light-probe`'s e2e asserts the nesting RULE (ADR-0181
    2026-11-20), the other six migrate or retire; the two foreign-WC fixtures are
-   re-based on the public WC surface. **One fixture is DONE (2026-11-21)**:
+   re-based on the public WC surface. **Three fixtures are DONE (2026-11-21)**:
    `router-static-only`'s two class pages became in-module server function pages
-   and their component files are deleted (build + both router suites green).
+   and their component files are deleted (build + both router suites green);
+   `router-unocss-probe`'s shadow island AND its light page are both generated now
+   (the page declares its sheet, delivered unscoped; e2e **15/15 on three
+   engines**, dev channel 8/8); and `router-base-path`'s page plus both nested
+   components are generated, with its streamed route still class-authored (the
+   stream channel is Alpha18's).
    **A hard blocker is now decided**: `renderIntent.stream` (deferred-field
    streamed pages) is a Class-page-only channel today — the authoring surface
    refuses it on a function page and the build refuses it on a generated element

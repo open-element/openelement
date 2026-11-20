@@ -1,14 +1,12 @@
-/* The page's irreducible authored rules: the host box (a shadow-tree element's
-   `:host` display), the two role-derived surfaces, and the one descendant
-   selector the utility set does not reach. Everything else is a utility on the
-   page element. */
-:host {
+/* The page's irreducible authored rules. A generated LIGHT page owns no host
+   element — its markup IS the document content — so these are delivered
+   UNSCOPED into the document sheet (the `:host` box has no subject here and is
+   gone; the panel's own selector carries the box). Everything else is a utility
+   on the page's markup. */
+.probe-page {
   display: block;
-  background: var(--color-background);
-}
-
-.host-panel {
   min-height: 100vh;
+  background: var(--color-background);
 }
 
 .host-panel :is(h1, p) {
