@@ -1333,6 +1333,28 @@ class ScopeResolver {
         return;
       }
       if (answer.kind === 'unanswered') {
+        // `unanswered` means "module-bound, but this callee is not one of the
+        // host's factories". When the host DOES classify the callee as an
+        // ordinary value (`plain`), the call is an ordinary call and its result
+        // is an ordinary value — `unknown` would refuse every local snapshot of
+        // a shared module helper (`const chrome = readingChromeStrings(props.locale)`),
+        // which is exactly the shape a derived node then reads.
+        const callee = unwrapExpression(value.expression);
+        if (ts.isIdentifier(callee)) {
+          const target = this.lookupAuthored(this.scopeAt(callee.getStart(this.sf)), callee.text);
+          const calleeValue =
+            target?.importInfo == null
+              ? undefined
+              : this.options.importClassifier?.classifyValue(
+                  target.importInfo.specifier,
+                  target.importInfo.importedName,
+                );
+          if (calleeValue === 'plain') {
+            binding.value = 'plain';
+            binding.classifiedBy = 'host-classifier';
+            return;
+          }
+        }
         binding.value = 'unknown';
         binding.classifiedBy = 'unresolved';
         return;

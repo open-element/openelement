@@ -8282,8 +8282,23 @@ function emitComponent(
     // ADR-0183 D-4: the binding resources are created ONCE per element (this
     // factory runs once per retained instance) and returned in the record the
     // shell keeps as `bindings`, so mount/claim resolve them through their
-    // existing `host.bindings[name]` prologue. Declaration order is the authored
-    // order, so a computed may read a signal declared above it.
+    // existing `host.bindings[name]` prologue.
+    //
+    // A binding resource and a setup local share ONE authored declaration
+    // order: a derived node may read a local snapshot declared above it
+    // (`const chrome = strings(props.locale); const label = computed(() => chrome.x)`),
+    // which is the shape every site module with shared copy has. Emitting all
+    // resources first would put `const label = computed(...)` above the
+    // `const chrome = ...` it captures — a TDZ at runtime that no diagnostic
+    // would catch. The merge is by authored `span.start`, which is the same
+    // order the frontend lowered them in.
+    type FactoryDecl = {
+      readonly name: string;
+      /** Authored position key: the lane's spans are 1-based line + column. */
+      readonly order: number;
+      readonly emit: () => void;
+    };
+    const factoryDecls: FactoryDecl[] = [];
     for (const resource of rootBindingResources) {
       const record = recordFor(setupState, resource.expression!, records);
       if (record === null || !declareReads(setupState, record)) {
@@ -8298,19 +8313,33 @@ function emitComponent(
           placements: [],
         };
       }
-      pushParts(
-        setupState,
-        [
-          resource.kind === 'computed'
-            ? `const ${resource.name} = computed(`
-            : `const ${resource.name} = signal((`,
-          { record },
-          resource.kind === 'computed' ? ');' : '));',
-        ],
-        resource.span,
-      );
+      factoryDecls.push({
+        name: resource.name,
+        order: resource.span.line * 100_000 + resource.span.column,
+        emit: () => {
+          pushParts(
+            setupState,
+            [
+              resource.kind === 'computed'
+                ? `const ${resource.name} = computed(`
+                : `const ${resource.name} = signal((`,
+              { record },
+              resource.kind === 'computed' ? ');' : '));',
+            ],
+            resource.span,
+          );
+        },
+      });
     }
-    for (const line of localLines) emitSetupBinding(setupState, line);
+    for (const line of localLines) {
+      factoryDecls.push({
+        name: line.name,
+        order: line.span.line * 100_000 + line.span.column,
+        emit: () => emitSetupBinding(setupState, line),
+      });
+    }
+    factoryDecls.sort((left, right) => left.order - right.order);
+    for (const declaration of factoryDecls) declaration.emit();
     // `16b-LC` option 1a: the connect callbacks are RECORDED, not replayed
     // here. The root mount/claim prologue replays them on the per-connection
     // scope, so "setup runs once" and "the callback runs on every connection"
@@ -8404,10 +8433,7 @@ function emitComponent(
         hook.span,
       );
     }
-    const recordFields = [
-      ...rootBindingResources.map((resource) => resource.name),
-      ...localLines.map((line) => line.name),
-    ];
+    const recordFields = factoryDecls.map((declaration) => declaration.name);
     if (componentUsesContextIntrinsic(component)) {
       recordFields.push(GENERATED_CONTEXT_SCOPE_RECORD);
     }
