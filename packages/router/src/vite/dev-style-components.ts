@@ -40,8 +40,13 @@ import type { Plugin, ViteDevServer } from 'vite';
 import { createLogger } from '@openelement/element';
 import { collectShadowClassCandidates } from './internal/collect-shadow-candidates.ts';
 import { STYLE_LINKS_VIRTUAL_ID } from './internal/element-style-links.ts';
-import { islandStyleDeclarations } from './internal/island-style-declarations.ts';
+import {
+  islandStyleDeclarationFor,
+  islandStyleDeclarations,
+} from './internal/island-style-declarations.ts';
 import { devAuthoredIslandStyleUrls } from './internal/style-assets.ts';
+import { compileGeneratedElementIfAdmitted } from '@openelement/compiler';
+import { readFileSync } from 'node:fs';
 import type { DevStyleSession } from './internal/dev-style-session.ts';
 import { reportRecoveryFailure } from './internal/build-diagnostics.ts';
 import { devClientModulePath } from './internal/dev-client-path.ts';
@@ -99,6 +104,34 @@ function devSheetAdapterModule(url: string): string {
   ].join('\n');
 }
 
+/**
+ * Whether a generated shadow island declares any static class token at all.
+ *
+ * The dev DSD's link list must not depend on WHEN the candidate registry was
+ * filled: the SSR pass and the transform race, so a link list built before the
+ * registration would drop a sheet that exists. The authored module decides, and
+ * the sheet endpoint re-compiles from the live registry on every request — so
+ * this only answers "does this host need the component sheet at all?".
+ */
+function generatedIslandHasClasses(
+  moduleId: string,
+  root: string,
+  state: OpenPluginState,
+): boolean {
+  if (state.classCandidates.forModule(moduleId).length > 0) return true;
+  try {
+    const source = readFileSync(moduleId, 'utf8');
+    const declaration = islandStyleDeclarationFor(moduleId);
+    if (declaration === undefined) return false;
+    const compiled = compileGeneratedElementIfAdmitted(source, moduleId, {
+      site: { tag: declaration.tagName },
+    });
+    return compiled !== null && compiled.classCandidates.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export function devStyleComponentsPlugin(state: OpenPluginState, session: DevStyleSession): Plugin {
   let root = process.cwd();
   let base = '/';
@@ -108,12 +141,34 @@ export function devStyleComponentsPlugin(state: OpenPluginState, session: DevSty
   const currentCss = async (): Promise<string> => {
     const provider = session.current()?.provider;
     if (provider === undefined) return '';
+    // Registration is the transform's job, but a sheet request can arrive before
+    // the module holding the declaring component has been transformed (a DSD
+    // link is fetched as soon as the document parses). Answering from a partial
+    // registry would serve an empty sheet under a URL the browser keeps — so a
+    // declared SHADOW island with no registered tokens is registered here first,
+    // through the SAME collector the watcher and the build use (one writer, no
+    // second parser).
+    for (const declaration of islandStyleDeclarations()) {
+      if (declaration.root !== 'shadow') continue;
+      await collectShadowClassCandidates({
+        root,
+        modules: [{ path: declaration.moduleId }],
+        candidates: state.classCandidates,
+      });
+    }
     // Always compile for the CURRENT candidate set and the CURRENT generator,
     // never from a cache: the served URL is stable by design (see the URL's
     // note), so the response is the only place the compiled sheet can be
     // fresh — including after the engine's configuration has been rebuilt.
     return await provider.compileComponents({
-      candidates: state.classCandidates.all(),
+      // The SHADOW view, not `all()`. The component stylesheet exists for shadow
+      // roots; a light root's classes are the document sheet's business, and the
+      // build already compiles from `allShadow()`-equivalent facts (its discovery
+      // pass registers a class module's shadow-ness and a generated island's
+      // declared root). Dev used `all()` and so compiled a sheet that carried the
+      // PAGE's utilities too — which is why a migrated shadow island's own
+      // utilities went missing when its tokens were registered as shadow-only.
+      candidates: state.classCandidates.allShadow(),
       sources: new Map(),
     });
   };
@@ -299,7 +354,30 @@ export function devStyleComponentsPlugin(state: OpenPluginState, session: DevSty
           .filter((declaration) => declaration.root === 'shadow')
           .map(
             (declaration) =>
-              [declaration.tagName, [...devAuthoredIslandStyleUrls(base, declaration)]] as const,
+              [
+                declaration.tagName,
+                [
+                  ...devAuthoredIslandStyleUrls(base, declaration),
+                  // P-1c (2026-11-21): a GENERATED shadow island's class tokens
+                  // compile into the one shared component sheet, and its DSD
+                  // template must declare that endpoint beside its authored
+                  // assets. The class lane gets this for free (its `static
+                  // styles` and its utility fact both point at that sheet); the
+                  // generated lane has no class static, so the candidate
+                  // registry is the fact that says "this host needs it". Build
+                  // and dev must agree — a component styled in one and not the
+                  // other is the drift KR-4 forbids.
+                  // Always for a generated shadow island: its tokens compile into
+                  // the shared sheet whenever it declares any class at all, and the
+                  // registry may not have been filled yet when this module loads
+                  // (the SSR pass fills it). Asking the DECLARATION keeps the link
+                  // list independent of registration order; the sheet endpoint
+                  // compiles from the current facts on every request.
+                  ...(generatedIslandHasClasses(declaration.moduleId, root, state)
+                    ? [devComponentSheetUrl(base, engine())]
+                    : []),
+                ],
+              ] as const,
           );
         if (devIslandStyles.length === 0) {
           return [

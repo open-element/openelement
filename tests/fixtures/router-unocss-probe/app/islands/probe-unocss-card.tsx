@@ -1,34 +1,29 @@
 /**
- * The shadow-root half of the UnoCSS probe.
+ * The shadow-root half of the UnoCSS probe — a GENERATED function island
+ * (2026-11-21 closeout: class → generated lane).
  *
- * Its control surface is authored as `tailwind4`-dialect utilities on the host
- * element's shadow tree; the compiler collects those static tokens, and the
- * build's COMPONENT sheet compiles them through UnoCSS and delivers one shared
- * `CSSStyleSheet` the shadow root adopts. Nothing in this module knows which
- * engine compiled it — the class strings are the whole contract.
- *
- * The rules that stay in CSS are the host-attribute-scoped branches, exactly
- * as the UI package justifies them (CUSTOMIZATION.md → "Why the residue is
- * CSS"): a utility spelling exists for each, and the authored rule is smaller
- * and more legible.
+ * Its control surface is authored as `tailwind4`-dialect utilities on the
+ * component's markup; the compiler collects those static tokens (the lane's
+ * `classCandidates`), the BUILD's shared component sheet and the DEV component
+ * endpoint both compile them through UnoCSS, and the DSD template links that
+ * sheet beside the authored `styles` assets — so the shadow root adopts both, in
+ * dev and in a build alike. Nothing in this module knows which engine compiled
+ * it: the class strings are the whole contract.
  */
-import '@openelement/element';
-import { element, OpenElement } from '@openelement/element';
 import { defineIslandConfig } from '@openelement/router';
-import cardStyles from './probe-shadow-card.css';
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true });
+export const openElement = defineIslandConfig({
+  hydrate: 'load',
+  ssr: true,
+  root: 'shadow',
+  styles: ['./probe-shadow-card.css'],
+});
 
-@element('probe-unocss-card', { root: 'shadow-open' })
-export default class ProbeUnocssCard extends OpenElement {
-  static override styles = [cardStyles];
-
-  render() {
-    return (
-      <article class="card inline-flex items-center gap-2 rounded-lg bg-primary/14 px-3 py-2 text-foreground font-semibold">
-        <span class="probe-marker size-4">◆</span>
-        <span>The shadow control compiles through UnoCSS.</span>
-      </article>
-    );
-  }
+export default function ProbeUnocssCard() {
+  return (
+    <article class="card inline-flex items-center gap-2 rounded-lg bg-primary/14 px-3 py-2 text-foreground font-semibold">
+      <span class="probe-marker size-4">◆</span>
+      <span>The shadow control compiles through UnoCSS.</span>
+    </article>
+  );
 }

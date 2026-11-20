@@ -1346,17 +1346,17 @@ register them for generated islands (shadow scope) before the fixture migrates.
 > author nested components inside pages.
 >
 > **P-1 status 2026-11-21: DELIVERED for the BUILD (collection + DSD linkage).**
-> **P-1c (dev channel) remains OWED**: the dev server's component sheet is
-> compiled from a candidate set the dev registry fills through
-> `collectShadowClassCandidates`, whose generated branch registers with the
-> compiler's STABLE id while the dev sheet reads `allShadow()`, so the tokens do
-> arrive — but the fixture's dev DSD test still fails on the SHEET CONTENT
-> (`/\.gap-2\s*\{/` missing), which means the dev provider compiles from a
-> different candidate view than the build's. Measured: reverting the fixture to
-> the class island restores 8/8, so this is a real dev gap, not a flaky row. The
-> fixture stays on the class lane until P-1c lands: dev and build must agree
-> (KR-4), and a fixture that is green in one and red in the other would pin the
-> wrong contract. —
+> **P-1c (dev channel) is also DELIVERED (2026-11-21).** Four dev-side facts had
+> to be fixed for dev and build to agree: the dev transform registered "none" for
+> a generated module (now registers the lane's own `classCandidates`, scoped by
+> the site fact's root); the site resolver now carries that root (read from the
+> island's OWN declaration, so a shadow island's tokens can be classified as
+> shadow facts); the dev component sheet compiles from the SHADOW view instead of
+> `all()`; and a sheet request now re-registers every declared shadow island
+> before compiling, because a browser fetches the DSD link as soon as it parses —
+> before the declaring module's transform — and the empty sheet would be kept
+> under a stable URL. Measured: `dev-unocss` 8/8 with the MIGRATED generated
+> island, and the fixture's build e2e still **15/15 on three engines**. —
 > `generateLeafModule` returns `classCandidates` (a model walk over roots and
 > recipe targets, static `class` transcripts only, sorted/deduped),
 > `GeneratedElementModule` / `CompiledGeneratedElement` carry it, the generator's

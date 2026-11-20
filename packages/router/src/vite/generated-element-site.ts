@@ -53,6 +53,7 @@ import { createRequire } from 'node:module';
 import { normalizeSeparators, transformIslandSource } from '@openelement/element/build-utils';
 import { stableModuleId, type GeneratedElementSite } from '@openelement/compiler';
 import type { IslandDecl } from '@openelement/protocol/ssg';
+import { islandStyleDeclarationFor } from './internal/island-style-declarations.ts';
 
 /** One island module's registration site, or null when the module is not one. */
 export type GeneratedElementSiteResolver = (moduleId: string) => GeneratedElementSite | null;
@@ -170,6 +171,14 @@ export function createGeneratedElementSiteResolver(
       filePath: moduleId,
     });
     const island = islands[0];
-    return island === undefined ? null : { tag: island.tagName };
+    if (island === undefined) return null;
+    // The ROOT comes from the island's own style declaration (the same fact the
+    // DSD link list reads). Only a shadow declaration is stated here: absent
+    // keeps the pre-P-1 light assumption, so a module with no declaration is
+    // admitted exactly as before.
+    const declaration = islandStyleDeclarationFor(moduleId);
+    return declaration === undefined
+      ? { tag: island.tagName }
+      : { tag: island.tagName, root: declaration.root === 'shadow' ? 'shadow' : 'light' };
   };
 }

@@ -93,6 +93,19 @@ export const GENERATED_ELEMENT_SHELL_SPECIFIER =
 export interface GeneratedElementSite {
   /** The custom-element tag the host's island pipeline will register. */
   readonly tag: string;
+  /**
+   * The descriptor root the host will create, when the host already knows it
+   * (P-1, 2026-11-21). The router resolves this from the island's OWN
+   * declaration — the same fact the DSD link list and the shell's `root` come
+   * from — so a shadow generated island's statically admitted class tokens can
+   * be registered as SHADOW candidates (the component stylesheet) rather than
+   * light ones (the document sheet, which a shadow root never sees).
+   *
+   * Optional and defaulting to the pre-P-1 answer (`light`): a host that does
+   * not know the root keeps today's behaviour, and the compiler never infers it
+   * from the sidecar here — the host owns the site fact.
+   */
+  readonly root?: 'light' | 'shadow';
 }
 
 /** Host hook for the site fact; returning null keeps the lane inert. */

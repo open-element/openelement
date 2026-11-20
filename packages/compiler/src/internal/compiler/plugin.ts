@@ -161,6 +161,21 @@ export function stripInlineSourceMapComment(code: string): string {
  * paths it cannot anchor. This module stays runtime-neutral: resolving a
  * workspace root from disk is the caller's job.
  */
+/**
+ * The SCOPE of a generated element's class candidates: a shadow descriptor root
+ * needs the component stylesheet, a light (or absent) root does not.
+ *
+ * The site fact the transform received is the host's admission decision, and it
+ * carries the root the shell will create. Reading it here — rather than assuming
+ * light, the pre-P-1 default — is what keeps a shadow generated island's
+ * utilities in the sheet that can actually reach them.
+ */
+function generatedSiteRootIsShadow(
+  site: { readonly root?: 'light' | 'shadow' } | null | undefined,
+): boolean {
+  return site?.root === 'shadow';
+}
+
 export function stableModuleId(
   file: string,
   root: string | undefined,
@@ -394,13 +409,20 @@ function createCompiledElementPlugin(options: CompiledElementPluginOptions = {})
               shadow: false,
             });
           } else if (generated !== null) {
-            // A generated Native Custom Element is light-root only
-            // (M09-1b's production site passes `light`; a shadow root needs
-            // M09-2a's scan key). Its classes are document-DOM facts, and the
-            // function frontend carries no class-token collector yet, so the
-            // authoritative fact for this lane is "none" (registering the
-            // artifact branch's `shadow: true` here would be wrong).
-            options.candidates.register(id, [], { shadow: false });
+            // A generated Native Custom Element (P-1, 2026-11-21). The lane now
+            // collects its static class tokens, and the SCOPE is the descriptor
+            // root: a shadow root's classes need the component stylesheet, a
+            // light root's are document-DOM facts. Before P-1 this branch
+            // registered "none" because the frontend carried no collector — that
+            // is why a migrated shadow island painted unstyled.
+            options.candidates.register(id, generated.classCandidates, {
+              // The transform's site fact is optional (a host may not ask), and
+              // "no fact" means the lane kept its pre-P-1 light assumption.
+              shadow:
+                options.generatedElementSite === undefined
+                  ? false
+                  : generatedSiteRootIsShadow(options.generatedElementSite(moduleId)),
+            });
           } else {
             // An already-compiled artifact (a shipped package module): its
             // candidates were proven at pack time and travel in the module

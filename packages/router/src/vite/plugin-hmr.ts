@@ -193,11 +193,16 @@ export function createCompilerHooks(
             shadow: false,
           });
         } else if (generatedResult !== null) {
-          // A generated Native Custom Element is light-root only (M09-1b's
-          // production site passes `light`): its classes are document-DOM
-          // facts, and the function frontend carries no class-token collector
-          // yet, so the authoritative fact is "none".
-          state.classCandidates.register(id, [], { shadow: false });
+          // A generated Native Custom Element (P-1 / P-1c, 2026-11-21). The lane
+          // now collects its static class tokens and the host's site fact names
+          // the descriptor root, so the scope is a real fact: a shadow root's
+          // classes belong to the component stylesheet, a light root's to the
+          // document sheet. Before this the dev host registered "none" — which is
+          // why a migrated shadow island's dev sheet compiled empty while the
+          // build stayed correct.
+          state.classCandidates.register(id, generatedResult.classCandidates, {
+            shadow: site?.root === 'shadow',
+          });
         } else {
           // A shipped artifact module carries its candidates (S5-B): the dev
           // binding registers the packed form exactly as the build binding.

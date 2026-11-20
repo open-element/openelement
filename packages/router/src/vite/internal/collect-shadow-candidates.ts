@@ -142,6 +142,33 @@ export async function collectShadowClassCandidates(
       continue;
     }
     if (compiled === null) {
+      // The GENERATED-element lane comes FIRST (P-1, 2026-11-21). A generated
+      // island is also an exported JSX-returning function, so the server
+      // component lane below would claim it as a LIGHT page component and
+      // register its tokens in the wrong scope — measured: the fixture's shadow
+      // island registered 15 tokens as light and the shadow sheet compiled empty.
+      // The island declaration is the authoritative site fact (tag + root), so a
+      // module that has one is compiled through the lane it actually ships
+      // through, and only a module WITHOUT one can be a server function page.
+      const declaration = islandStyleDeclarationFor(file);
+      if (declaration !== undefined) {
+        let generated: ReturnType<typeof compileGeneratedElementIfAdmitted> = null;
+        try {
+          generated = compileGeneratedElementIfAdmitted(source, file, {
+            site: { tag: declaration.tagName },
+          });
+        } catch {
+          // The authoritative compile reports diagnostics; see the module header.
+          continue;
+        }
+        if (generated !== null) {
+          options.candidates.register(file, generated.classCandidates, {
+            shadow: declaration.root === 'shadow',
+          });
+          if (generated.classCandidates.length > 0) contributed += 1;
+          continue;
+        }
+      }
       // The server function component lane (alpha15): a route module carrying
       // an exported JSX-returning function. Its classes are LIGHT facts (no
       // element class, no shadow root) — the same registry, the same
@@ -164,29 +191,6 @@ export async function collectShadowClassCandidates(
         const tokens = serverCompiled.classCandidates ?? [];
         options.candidates.register(file, tokens, { shadow: false });
         if (tokens.length > 0) contributed += 1;
-        continue;
-      }
-      // The generated-element lane (P-1, 2026-11-21): a module carrying the
-      // function component + island policy sidecar contributes its static class
-      // tokens. The DEV channel re-registers one changed file through this
-      // function, so without this branch an edited generated island's sheet goes
-      // stale — the same defect C the class lane's registration closes.
-      const declaration = islandStyleDeclarationFor(file);
-      let generatedCompiled: ReturnType<typeof compileGeneratedElementIfAdmitted> = null;
-      if (declaration !== undefined) {
-        try {
-          generatedCompiled = compileGeneratedElementIfAdmitted(source, file, {
-            site: { tag: declaration.tagName },
-          });
-        } catch {
-          continue;
-        }
-      }
-      if (generatedCompiled !== null && generatedCompiled.classCandidates.length > 0) {
-        options.candidates.register(file, generatedCompiled.classCandidates, {
-          shadow: declaration!.root === 'shadow',
-        });
-        contributed += 1;
         continue;
       }
       if (registerArtifactCandidates(source, file, options.candidates)) contributed += 1;
