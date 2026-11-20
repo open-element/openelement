@@ -1219,22 +1219,20 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
     );
   }
   const styles = config.styles === undefined ? undefined : validateIslandStyles(config.styles);
-  if (styles !== undefined && config.root === 'shadow') {
-    // A shadow-root generated island has no style carrier in this slice: the
-    // DSD style-link channel is the later M09-2e slice, and emitting an asset
-    // nothing can reach would be a silent loss dressed up as delivery. Fail
-    // closed here (the static island scan repeats the same refusal at build
-    // time from the authored sidecar, where the lane/root fact is known).
-    // Adoption ownership: GH issue #1800 (Alpha17).
-    throw authoringError(
-      IslandErrorCode.DESCRIPTOR_SHAPE,
-      `${ERROR_PREFIX} defineIslandConfig() styles is not deliverable on a shadow-root island. ` +
-        'The DSD style-link carrier for a shadow root is not wired yet (M09-2e owed) and the ' +
-        'generated-element style adoption slice is GH issue #1800 (Alpha17), so the declared ' +
-        "sheets would be silently lost. Set root: 'light' or remove styles — the field is " +
-        'admitted only on a light-root generated-element island.',
-    );
-  }
+  // A shadow-root island's declared sheets are DELIVERABLE: the compiler emits the
+  // typed `styleLinks` channel on the host producer and `serializeGeneratedElementHtml`
+  // declares the canonical marked `<link>` prefix INSIDE the DSD template
+  // (M09-2e / #1803). An earlier revision of this face refused the combination
+  // with "the carrier is not wired yet", which the build-time admission
+  // (`island-scanner.ts`, `producer` → root `shadow`) already contradicted — two
+  // faces reading one fact differently. The carrier is the later fact, so this
+  // face admits it and keeps only the shape validation above.
+  //
+  // The one case that stays refused is OWED TO THE BUILD, not to this face: a
+  // shadow-root island whose leaf emits NO host producer has no DSD template to
+  // declare the sheet in. The authoring face cannot see the lane, so the scan
+  // owns that coded refusal (`ISLAND_STYLES_SHADOW_UNWIRED_CODE`) where the
+  // producer identity is known.
   if (config.properties !== undefined) validateIslandProperties(config.properties);
   if (config.tag !== undefined && !isValidTagName(config.tag)) {
     // The same platform predicate the generated lane's sidecar read applies:

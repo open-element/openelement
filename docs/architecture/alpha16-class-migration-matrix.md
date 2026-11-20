@@ -1438,3 +1438,45 @@ Remaining class-lane surface after this round: `www/app/site-ui/open-article-vie
 (D-M5), the 27 generator-owned `www/app/components/article-routes/*` (D-M5 + one
 generator edit), `benchmarks/micro/oe-table.tsx` (benchmark disposition), the
 class-lane templates in `packages/create/templates`, and the fixtures.
+
+**2026-11-20 — the shadow style carrier exists; the authoring face said otherwise. Fixed.**
+
+Migrating the starter's `my-counter` island found a genuine **two-faces-one-fact**
+defect, of exactly the kind the design constitution forbids:
+
+| face | what it said about `styles` on a SHADOW-root generated island |
+| --- | --- |
+| the build scan (`island-scanner.ts`) | **admitted** for a `producer` island — "the carried sheet is declared INSIDE the host's DSD template as the canonical marked `<link>` prefix (M09-2e / #1803)" |
+| `defineIslandConfig` (`authoring.ts`) | **refused** — "the DSD style-link carrier for a shadow root is not wired yet (M09-2e owed)" |
+
+The carrier is real: a compiled shadow island with sidecar `styles` emits
+`__ssrHost(props, lightChildren, attributes, styleLinks)` and
+`serializeGeneratedElementHtml` writes the marked link prefix into the template.
+So the authoring refusal was STALE, and a module that declared the combination
+would have been refused at evaluation while the build happily compiled it.
+
+Fixed: the authoring face now admits `styles` with `root: 'shadow'` and keeps only
+the shape validation. The one case that stays refused stays where the fact lives —
+the BUILD, which is the only face that knows whether the leaf emitted a host
+producer (`ISLAND_STYLES_SHADOW_UNWIRED_CODE`).
+
+**`packages/create/templates/app/islands/my-counter.tsx.tmpl` MIGRATED**: function
+component, sidecar `defineIslandConfig({ hydrate: 'idle', ssr: true, dsd: true,
+root: 'shadow', styles: ['./my-counter.css'] })`, `count` is the lane's `signal`
+intrinsic, handlers write it directly, and the sheet rides the sidecar instead of a
+class `static styles`.
+
+**Still blocked in the templates area, per file** (measured, not guessed):
+
+- `page-home` / `page-about` / `page-404` / `layout` are LIGHT roots with a
+  `static styles` box rule. A light-root generated island's declared sheets are
+  emitted as an asset and recorded in the client manifest
+  (`island-style-declarations.ts`), but the document-level application is not
+  wired (`GH #1800`) — migrating them would silently drop `:host{display:block}`.
+- `live-timer` is `ssr: false`, so it has no DSD template for the sheet and its
+  shadow root is created client-side by the shell, which does not adopt
+  stylesheets. It needs the client-side shadow style-adoption slice.
+
+Evidence: `@openelement/create` 3 files / 68 tests; router 167 / 1880 (the
+`island-styles` refusal row is replaced by an admission row that names why);
+compiler 101 / 1404; `vp run check` 5/5 PASS.

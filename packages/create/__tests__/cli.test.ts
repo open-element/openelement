@@ -446,7 +446,6 @@ test('starter pages are compiled elements with light roots and shared chrome', (
     'app/components/page-about.tsx',
     'app/components/page-404.tsx',
     'app/layout.tsx',
-    'app/islands/my-counter.tsx',
     'app/islands/live-timer.tsx',
   ]) {
     const source = readTemplate(path);
@@ -468,17 +467,35 @@ test('starter pages are compiled elements with light roots and shared chrome', (
     expect(source.includes('customElements.define'), path).toBeFalsy();
     expect(source.includes('registerSignal'), path).toBeFalsy();
   }
+  // `my-counter` left this list on 2026-11-20: it is a generated-lane FUNCTION
+  // island, so it carries no `@element` class at all. Its own shape (the
+  // sidecar policy, the `signal` state, the sidecar `styles` carrier) is pinned
+  // by the island test above; here it only has to stay free of the retired
+  // authoring APIs.
+  const counterSource = readTemplate('app/islands/my-counter.tsx');
+  expect(counterSource.includes('@element(')).toBeFalsy();
+  expect(counterSource.includes('extends OpenElement')).toBeFalsy();
+  expect(counterSource.includes('defineElement')).toBeFalsy();
+  expect(counterSource.includes('registerSignal')).toBeFalsy();
+
   expect(readTemplate('gitignore.tmpl').includes('dist/')).toBeTruthy();
 });
 
 test('starter islands are single-module compiled classes with declared strategies', () => {
   const counter = readTemplate('app/islands/my-counter.tsx');
   // The delivery policy stays in the statically scanned defineIslandConfig
-  // export; state is a compiled @property and events are method Parts.
+  // export; the component is a FUNCTION on the generated lane, so state is the
+  // lane's `signal` intrinsic and the handlers write it directly (2026-11-20).
   expect(counter.includes('hydrate: "idle"'), counter).toBeTruthy();
   expect(counter.includes('defineIslandConfig'), counter).toBeTruthy();
-  expect(counter.includes('count = 0'), counter).toBeTruthy();
-  expect(counter.includes('onClick={this.increment}'), counter).toBeTruthy();
+  expect(counter.includes('const count = signal(0)'), counter).toBeTruthy();
+  expect(counter.includes('onClick={() => count.value--}'), counter).toBeTruthy();
+  expect(counter.includes('{count.value}'), counter).toBeTruthy();
+  // The sheet rides the sidecar's DSD style-link carrier (M09-2e / #1803) — the
+  // shadow template declares it as a marked <link>, so there is no class
+  // `static styles` import to keep in sync.
+  expect(counter.includes('styles: ["./my-counter.css"]'), counter).toBeTruthy();
+  expect(counter.includes('static override styles'), counter).toBeFalsy();
   // Compiled text Parts replace the renderer-owned hydration markers; starter
   // code never hand-authors protocol attributes.
   expect(counter.includes('data-signal'), counter).toBeFalsy();

@@ -232,21 +232,20 @@ for (const [label, value, fragment] of MALFORMED_STYLES) {
   });
 }
 
-test('defineIslandConfig: refuses styles on a shadow-root island and names the missing carrier', () => {
-  expectAuthoringError(
-    () => defineIslandConfig({ root: 'shadow', styles: ['./card.css'] }),
-    IslandErrorCode.DESCRIPTOR_SHAPE,
-    'not deliverable on a shadow-root island',
-  );
-  let caught: unknown;
-  try {
-    defineIslandConfig({ root: 'shadow', styles: ['./card.css'] });
-  } catch (error) {
-    caught = error;
-  }
-  const message = (caught as Error).message;
-  expect(message).toContain('M09-2e');
-  expect(message).toContain('#1800');
+test('defineIslandConfig: ADMITS styles on a shadow-root island (carrier exists)', () => {
+  // The DSD carrier is implemented: the compiler emits the typed `styleLinks`
+  // channel on the host producer and the serializer declares the canonical
+  // marked `<link>` prefix inside the template (M09-2e / #1803). This face used
+  // to refuse the combination as "not wired yet", which the build-time
+  // admission (`island-scanner.ts`, `producer` → root `shadow`) contradicted —
+  // two faces reading one fact differently. The carrier is the later fact, so
+  // the authoring face admits it.
+  //
+  // The one case that stays refused belongs to the BUILD, not here: a
+  // shadow-root island whose leaf emits no host producer has no template to
+  // declare the sheet in, and only the scan knows the producer identity.
+  const config = defineIslandConfig({ root: 'shadow', styles: ['./card.css'] });
+  expect(config.styles).toEqual(['./card.css']);
 });
 
 // ── Static island scan (`readIslandConfig`) ───────────────────────────────
