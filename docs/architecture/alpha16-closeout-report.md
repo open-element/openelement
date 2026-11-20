@@ -24,7 +24,7 @@ carries none.
 | --- | --- |
 | branch | `feat/alpha16-retirement` |
 | source version | `1.0.0-alpha.16` (bumped this line through the one-knob tool) |
-| closeout commit | `12fc5b8fe` (the evidence table below is taken there) |
+| closeout commit | `5b3246cf3` (the evidence table below is taken there) |
 | `git status --porcelain` | empty |
 
 Provenance for every record below: **`LOCAL`
@@ -72,7 +72,8 @@ worth remembering (see §5).
 ## 3. Evidence record
 
 All rows: provenance **`LOCAL .agents/worktrees/alpha16-retirement`**, commit
-`12fc5b8fe`, status clean (`git status --porcelain` empty).
+`5b3246cf3`, status clean (`git status --porcelain` empty), every commit pushed to
+the fork's `feat/alpha16-retirement`.
 
 | # | command | result |
 | --- | --- | --- |
