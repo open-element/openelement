@@ -955,3 +955,303 @@ and none is a blocker this section waives:
 This section records the decisions above under that form and nothing more: it
 creates no version, tag, publication or public-API freeze, no release
 qualification and no milestone exit.
+
+## 19. Dated amendment 2026-11-20 (owner-approved Alpha16 closeout decisions)
+
+This section is the plan-level record of the owner's 2026-11-20 Alpha16
+closeout decisions — the D1–D12 register the session's plan-amendment record
+carries. It follows the amend-never-rewrite form of §13–§18: every earlier
+section stays as written and this is the later reading. It introduces **no new
+milestone and no new slice label** (§14.4:525-527 stays in force), moves no
+verdict, and creates no version, tag, publication, public-API freeze, release
+qualification, milestone exit or P5 evidence of its own. It supersedes the
+2026-11-18 generated-lane `computed` ruling (§19.1), reverses the §18.3
+`16b-EB` SSR-fallback deferral (§19.2), expands the §13.2 obligations and
+re-decides the §13.3/§14.2 residue (§19.3), records the class-retirement scope
+the release depends on (§19.4), restates the evidence floor (§19.5), and keeps
+the Alpha17 boundary (§19.6).
+
+### Authorization record (delegated, in-session — 2026-11-20)
+
+The owner's direction for this closeout, quoted from the 2026-11-20 session
+record, is: "所有涉及的任务在 Alpha16 范围内一次解决，不要狗皮膏药式打补丁，遵守设计哲学"
+— every task in scope is resolved inside Alpha16 in one pass, no patchwork
+plaster, and the design philosophy is obeyed. The authorization is the same
+delegation §18 records under §18.7: owner-approved 2026-11-20, delegated
+in-session, recorded by the takeover team under that delegation. This section is
+**not a personal written signature**; every "owner-approved 2026-11-20" below
+means the §18.7 delegation, and a record that requires the owner's own line (a
+§13.5 P5 sign-off on a final-SHA matrix, a release authorization) is not
+satisfied by it.
+
+### 19.1 Supersedes the 2026-11-18 ruling: the generated lane gains a `computed` intrinsic (option B)
+
+The 2026-11-18 ruling — "no `computed` support in the generated lane; inline at
+the sinks" — was a consequence of the generated lane's props record not being
+signal-backed, not an independent design decision. It is **superseded** by the
+owner decision of 2026-11-20: model completeness outranks the minimum-mechanism
+count, and the generated lane introduces a `computed` intrinsic (option B).
+
+- **Design carrier.** ADR-0183
+  (`docs/adr/ADR-0183-one-reactive-contract.md`) records the
+  one-reactive-contract decision and its D-4 derived-state contract:
+  `const x = computed(() => expr)` is a compiler-erased intrinsic admitted by
+  the same binding provenance as the lifecycle intrinsics, lowered to an
+  instance-retained derived node over the existing `@preact/signals-core` engine
+  (already in the runtime bundle, not a new dependency): lazy, cut by
+  `Object.is`, read-only, released with the owning scope, fail-closed on
+  cycle/declaration-order/placement errors, and evaluated once per render on the
+  server with no reactive graph. The record's own `Status:` line is the
+  authority for its acceptance state; this section creates no acceptance.
+- **Not a delivered capability.** The decision is a direction. Until ADR-0183's
+  implementation slices land with their own consumer-form, byte, SSR/claim and
+  migration evidence, `computed` may not be claimed implemented, and no matrix
+  row may be marked migrated on the strength of this section
+  (design-principles, "Accepted direction versus shipped capability").
+- **No second mechanism.** The intrinsic is not a second rendering model, and
+  inline-only is no longer the lane's derived-state model. Inlining a read at a
+  sink remains a lawful local shape only where the compiler proves it is not a
+  derived tracked value.
+- **Registry and migration evidence.** The matrix's D-M2 row is superseded by
+  this section; the matrix must carry the later reading as a superseded row plus
+  the row naming the intrinsic, not a rewrite of the 2026-11-18 text.
+  `open-reading-shell` (21 computed) and `open-article-view` (6 computed) are
+  the named behavioural-equivalence rows for the intrinsic; `www/app/layout.tsx`
+  (30 computed) stops being a special case once the same decision reaches it.
+  The 16b-MN's 2026-11-18 section stays as written and gains a dated later
+  reading pointing at ADR-0183 (amend-never-rewrite).
+
+### 19.2 Supersedes §18.3: the `16b-EB` SSR fallback is implemented in Alpha16b, not carried to Alpha17
+
+§18.3:819-851 deferred the `16b-EB` SSR fallback to Alpha17 as a named carry
+and, for that capability only, superseded the §13.2:386-387 sentence "no
+Alpha17-first implementation is permitted for any of them". The owner reversed
+that deferral on 2026-11-20: the SSR fallback is implemented **inside Alpha16b**.
+The deferred status and the §13.2-preamble supersession above are history; the
+§18.3 text stays as written, the §13.2 preamble reads unchanged for `16b-EB`
+again, and the row is an Alpha16b obligation — not a §13.3 exception and not an
+Alpha17 carry.
+
+The four satisfaction conditions §18.3:830-844 enumerated still apply, with the
+contract's owner moved from Alpha17 to the `16b-EB` slice inside Alpha16b:
+
+1. the `__ssr` fallback contract for a failing descendant producer — the bytes
+   emitted for the boundary, how the failure stays observable, and the
+   guarantee that a producer throw owned by the boundary no longer fails the
+   whole render — is defined inside Alpha16b, with the D-18b boundary reset
+   policy decided in the same record;
+2. the client claim adopts those fallback bytes under the unchanged claim and
+   identity rules (a new identity needs its own record);
+3. consumer-form evidence at one SHA: the fallback bytes for a failing
+   producer, claim parity over them, the no-silent-swallow row, and the two
+   Alpha16 capture points unchanged;
+4. the `16b-MN` `16b-EB` row and the capability inventory's `16b-EB` row move
+   row-for-row from deferred to delivered, and ADR-0182's EB amendment records
+   the same truth.
+
+Until all four hold, the row is an open obligation and is not a delivered
+capability. The two capture points already delivered (§18.3) remain part of the
+delivery, and the no-silent-swallow row is unchanged.
+
+### 19.3 The §13.2 obligations, read after 2026-11-20
+
+**`16b-LC` — the five named items are implemented inside Alpha16b.** Depth ≥ 2
+retention, placement inside recipe/list bodies, non-retained targets, pre-DOM
+timing and the connection-scope helper parameters are implemented in Alpha16b.
+This supersedes the "Still owed" reading in ADR-0181:73-74 and in the `16b-LC`
+PARTIAL/Owed lists of the 16b-MN (16b-MN:131-134, 16b-MN:329) and of the
+capability inventory. The final form is recorded by a dated ADR-0180 amendment
+plus the slice's consumer-form evidence; until that record lands, the older
+status text stays as written and is read against this section.
+
+**`16b-REF` — `useHost` and component `ref` are implemented in Alpha16b.** The
+owner decision is to implement both inside Alpha16b. That supersedes ADR-0182's
+2026-11-20 "`useHost` is FUTURE/OWED" amendment (ADR-0182:1044-1056) and its
+D-18b-5 "Component `ref` is FUTURE" (ADR-0182:111-114). A **dated ADR-0182
+amendment** must record the later decision before implementation claims
+delivery; the FUTURE text stays as written (amend-never-rewrite). The delivery
+needs its own consumer-form rows, the public-interface delta and regenerated
+snapshot, a written P5 retirement condition, and the row-for-row `16b-MN` /
+capability-inventory updates.
+
+**`trustedHtml` and non-JSON-encodable seeds — permanently excluded, not
+deferred.** No server→client channel is built for `trustedHtml` or for a
+non-JSON-encodable property value. This is a **permanent exclusion** — not an
+Alpha17 carry and not a §13.3/§14.1 exception: the `trustedHtml` brand is
+`WeakSet` object identity and cannot be rebuilt from bytes, and a raw-markup
+transport is refused on principle. A dated ADR-0182 amendment records the reason
+and the boundary. §14.2's retained `array/object/trustedHtml` row is read with
+this exclusion: the property-only, in-process value model stays; what is
+excluded is a server→client crossing. The in-tree consumer that motivated the
+question — `open-article-view`'s article body — is handled by the owner-directed
+build-time structured body (the matrix's D-M5): the body stops being a runtime
+string, and that design is owed as its own ADR amendment before any file claims
+it.
+
+**CEM for generated elements and the form validity policy — re-decided inside
+Alpha16.** The 2026-11-20 decision removes the "carry to Alpha17" reading from
+both: where an Alpha16 consumer or a packed/release need exists, the capability
+is implemented inside Alpha16; otherwise it is recorded as a **permanent product
+boundary** with the owner decision and the affected parties, and it is not
+booked as a deferral. §14.2 keeps both as retained obligations and is unchanged;
+this clause fixes their disposition rule, not a waiver. Neither row may be
+claimed delivered from this section alone.
+
+**The §13.3/§14.2 non-primitive conversion rows.** The array/object channel
+shipped as the JSON seed (D-17c); the `trustedHtml`/non-JSON crossing is the
+permanent exclusion above. No new attribute carrier or raw-markup channel is
+admitted.
+
+### 19.4 Class-retirement scope is the whole tree, not only the packages
+
+The class authoring frontend and the serialized Part Program v2 protocol retire
+from **every** production path in the tree, not only from `packages/*`:
+
+- `www/app`: the convention layout, the hand-written `site-ui` modules the
+  matrix measures, and the generator-owned article-route bindings (one
+  generator edit plus regeneration is the unit of work, not one edit per
+  generated file);
+- `apps/saas`: the 13 class modules the matrix records (12 page classes and the
+  layout shell);
+- `packages/create/templates`: the shipped starter — a new app must not be born
+  on a retired lane;
+- `tests/fixtures`: the three-way disposition the matrix §7.2 records —
+  **migrate** (fixtures that prove a capability), **retire with the code**
+  (fixtures that pin the deleted frontend/executor/protocol) and **keep as the
+  pinned negative** (the fixture that must fail to compile after retirement);
+- `docs/**` and `www/content/**`: doc rewrite alongside the row-for-row
+  `16b-MN` entries;
+- `packages/{element,compiler,router,protocol}`: the class frontend, the Part
+  Program v2 emitter/`__partProgram` emission and the C07–C11 runtime
+  `__partProgram` reads. The C07–C11 rows become **build-time facts** (the
+  matrix §8 rows), not deletions of the version check.
+
+**What retirement does not mean.** The server-private rendering structure, the
+SSR serializer, streaming data, DSD, claim markers and the security sinks stay
+(§2:134-135), and `COMPILED_MODULE_ABI_VERSION` plus the compatible-shape
+validation stay (§12:328-329). The retention is the build-identity check, not
+the serialized Part Program.
+
+**Carrier.** `docs/architecture/alpha16-class-migration-matrix.md` is the
+tracked per-file class→function matrix §15.1 requires: one row per file at a
+recorded SHA, the ONE design decision each row needs, and a final disposition.
+It is the carrier, not a signature — it creates no §13.5 evidence, and P5 stays
+unclaimable until the owner signs.
+
+### 19.5 The evidence floor does not move
+
+- Every claim this section authorizes carries the four-part record of §13.6 and
+  the evidence baseline: measured commit, clean status, exact command, exact
+  result, provenance. No number is written into a carrier before it was measured
+  at the cited SHA.
+- The matrix is the §15.1 per-file matrix carrier; it is not a P5 sign-off and
+  satisfies no §13.5 row by itself.
+- P5 still needs the tracked capability inventory, the final-SHA matrix, the
+  migration note with its `16b-MN` rows, **and the owner's personal signature**.
+  The 2026-11-20 delegation does not sign for the owner (§18.7).
+- M12, M13, M10 and M14 keep their original §2/§18.2 records: recorded evidence
+  is not a declared exit, and the consolidation PR §18.6 item 3 names remains
+  the carrier for that consolidation.
+- Every PR in this closeout states its P1–P8 compliance (or a named, accepted
+  deviation) and declares the absence of patch-style compatibility; a reviewer
+  rejects a change that adds a second mechanism or a compatibility adapter.
+
+### 19.6 The Alpha17 boundary is unchanged
+
+Alpha17 still owns Full TSX productization, precompiled distribution (the
+platform-boundary bundle), repository organisation, byte convergence and the
+frozen cross-module ABI. This section does not move any of that work into
+Alpha16: it moves only capability implementations the release obligations
+already require onto the Alpha16b side of the line. §13.4 stays in force —
+Alpha17 never becomes the first home of a §13.2 obligation — and the Alpha17 plan
+change the owner recorded (source-form first, no internal ABI freeze in this
+batch) is recorded, not implemented here; it needs its own Alpha17 plan
+amendment after the Alpha16 closeout.
+
+### 19.7 Record form (owner-approved 2026-11-20, delegated session)
+
+| Field | Value |
+| --- | --- |
+| Authorization | owner-approved 2026-11-20, delegated in-session closeout session (the §18.7 delegation) |
+| Authority quoted | "所有涉及的任务在 Alpha16 范围内一次解决，不要狗皮膏药式打补丁，遵守设计哲学" (2026-11-20 session), and the session's D1–D12 decision register |
+| Recorder | the takeover team — recorded as "carried out by the agent team under owner delegation" |
+| Signature status | no personal written signature is recorded or implied; every "owner-approved 2026-11-20" in this plan means the §18.7 delegation |
+| Downstream carriers | the class-migration matrix (the superseded D-M2 row, plus the row naming the `computed` intrinsic); ADR-0183 (the one reactive contract and its D-4 derived-state contract); the dated ADR-0182 amendment (`useHost`, component `ref`, the `trustedHtml`/non-JSON exclusion); the dated ADR-0180/ADR-0181 amendments (`16b-LC` final form, `16b-EB` fallback contract); the `16b-MN` row-for-row entries; the capability inventory; the progress ledger. Each must carry the same dated wording; none creates an exit or release claim by itself |
+| Not created | no version, tag, publication, public-API freeze, release qualification, milestone exit or P5 evidence |
+
+### 19.8 The reactive contract is one contract, and two props mechanisms is a defect to fix (ADR-0183)
+
+This section records a **defect**, not a feature request, and it is a release
+obligation of Alpha16b because the deferred capability (§19.1) cannot be built
+correctly on top of it.
+
+The measured state at `cd7e9e065`:
+
+- `packages/element/src/internal/compiled/runtime/props.ts:57`
+  (`createTrackedProps`, landed 2026-11-09 in `a82ef5957`, M04) builds per-read
+  props getters over **one version signal**, so a read inside an effect tracks;
+  it has **zero production callers**.
+- `packages/element/src/internal/compiled/generated-element/shell.ts:1451-1470`
+  (`createState`, landed 2026-11-13 in `735749b1c`, M09-0) builds per-read
+  getters over a **plain `Map`** plus a separate `propsChanged` counter bumped
+  by `bumpProps`; every generated element uses it.
+
+The shell's getters read a `Map`, so nothing they read is trackable — which is
+the entire technical premise of the 2026-11-18 ruling "the generated lane gains
+no `computed`; inline instead". That ruling is therefore read as a consequence
+of the duplication, superseded by §19.1; its text stays as history.
+
+**Decision.** The generated lane has exactly one reactive contract
+([ADR-0183](../adr/ADR-0183-one-reactive-contract.md)): one engine
+(`@preact/signals-core` behind the `SignalEngine` seam), one subscription
+wiring (`bindSignalWrites`/`guardUpdate`, released by the owning scope), one
+lifetime hierarchy (`instance` → `connection` → `projection`), and one
+derived-state contract (the `computed` intrinsic of §19.1). `runtime/props.ts`
+is the **one owner** of the props record; the element shell keeps only its
+element-specific write paths (declaration defaults, attribute conversion and
+reflection, pre-upgrade reconciliation, JSON seed apply) and writes through that
+one record. The `propsChanged` counter and `bumpProps` are **deleted, not
+aliased**.
+
+**Order inside Alpha16b.** Props unification first; the `computed` intrinsic
+second; the `propDeps` channel re-evaluated by measurement third (it exists only
+to compensate for untrackable props, so its removal is an evidence question, not
+a preference); the migrations that §19.1 unblocks (`open-reading-shell`,
+`open-article-view`, the convention layout, the remaining `site-ui` rows) last.
+
+**Gate.** The seam registry gains the reactive-channel rows (props,
+subscription, lifetime, derived state), each with one owner and a consumer-form
+test, and the registry's own rule states that introducing a second invalidation
+channel for a concept requires deleting or amending its row. A slice may not
+keep both props mechanisms alive behind a compatibility shim.
+
+**Why the gates missed it (recorded with the fix).** The seams row named the
+shell "the ONE owner of the per-read props record and the shell-owned
+`propsChanged` signal" — every `seams:check` clause was satisfied while the fork
+lived outside the registry; no consumer-form test spanned the two
+implementations; the M09-0 rule "do not import the runtime barrel" (a bundle/P1
+rule about the executor) was generalised by habit into "do not reuse runtime
+primitives", although the shell already imports four sibling modules from the
+same directory; and M04/M09-0 landed in different PRs, so no artefact asked
+which existing primitive the new code replaced.
+
+### 19.9 A function page declares its component in its own route module
+
+Measured: `pageComponentName` is set only when `definePage`'s first argument is
+a plain identifier naming an exported server function component **that this
+module declares** (`packages/compiler/src/internal/compiler/semantic-core/module-analysis.ts:612,660-684`,
+`serverComponents.has(firstArgument.text)`). `apps/saas/app/routes/index.tsx`
+currently imports its component (`import HomePage from
+'../components/page-home.tsx'`) and therefore classifies as `class-page`, which
+resolves a registered compiled class. The production precedent for the lawful
+shape is `www/app/routes/404.tsx`: the component is declared in the route module.
+
+**Decision.** Migrating a class page to the function lane means: declare the
+component function in the route module, keep `definePage(Component, { … })`
+options unchanged, leave loader/action/route-logic untouched, and delete the
+former `components/page-*.tsx` file (or reduce it to a pure helper module with
+no JSX). No admission branch is added for cross-module imported page
+components: that would be a new capability, with its own record, not a migration
+step.
+
+This section records the decisions above under that form and nothing more.
