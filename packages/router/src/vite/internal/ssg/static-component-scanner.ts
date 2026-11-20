@@ -1,4 +1,5 @@
 /** Discover compiled static components reachable from local route imports. */
+import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, relative, resolve } from 'pathe';
 import type { RouteEntry } from '../../framework.ts';
@@ -146,6 +147,50 @@ function pageLocalStyleDeclaration(
   };
 }
 
+/**
+ * The style declaration a PAGE module carries (P-2b), or undefined.
+ *
+ * A generated light page's sheet is a document resource, and the page has no
+ * islands-dir entry and no static-component record — so its declaration is
+ * registered here, keyed by the page's OWN tag, and the route's document link
+ * fact resolves it from the route module rather than from a JSX reference.
+ */
+function pageModuleStyleDeclaration(
+  file: string,
+  root: string,
+): IslandStyleDeclaration | undefined {
+  let source: string;
+  try {
+    source = readFileSync(file, 'utf8');
+  } catch {
+    return undefined;
+  }
+  if (!source.includes('defineIslandConfig')) return undefined;
+  let config: ReturnType<typeof readIslandConfig>;
+  try {
+    config = readIslandConfig(source);
+  } catch {
+    return undefined;
+  }
+  if (config === null || config.styles === undefined || config.styles.length === 0)
+    return undefined;
+  // The page's tag: its sidecar's own `tag` when it pins one (a route module has
+  // no islands-dir path to derive from), otherwise the scan's route tag.
+  if (config.tag === undefined) return undefined;
+  return {
+    tagName: config.tag,
+    root: 'light',
+    // A PAGE owns no host element: its markup is the document content, so its
+    // declared sheet is delivered UNSCOPED. Scoping it to a tag that never
+    // appears would compile rules that match nothing.
+    scopeTag: null,
+    moduleId: file,
+    filePath: file,
+    islandsDir: root,
+    specifiers: config.styles,
+  };
+}
+
 export async function scanStaticComponents(
   options: ScanStaticComponentsOptions,
 ): Promise<StaticComponentScanResult> {
@@ -177,6 +222,17 @@ export async function scanStaticComponents(
 
   for (const file of walk.files) {
     if (!inside(root, file)) continue;
+    // A PAGE MODULE that declares its own sheets (P-2b, 2026-11-21). A generated
+    // light page owns a root box rule exactly like a class page's `:host`, but
+    // it is neither an island nor a static component, so nothing registered its
+    // declaration and the sheet reached no document. The declaration rides the
+    // same carrier keyed by the PAGE's own tag; the route link fact resolves it
+    // (see `deriveRouteDocumentStyleLinks`).
+    if (inside(routeRoot, file) && !inside(islandRoot, file)) {
+      const pageDeclaration = pageModuleStyleDeclaration(file, root);
+      if (pageDeclaration !== undefined) styleDeclarations.push(pageDeclaration);
+      continue;
+    }
     let source: string;
     try {
       source = await readFile(file, 'utf8');

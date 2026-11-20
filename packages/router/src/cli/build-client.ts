@@ -1305,7 +1305,11 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
         const key = styleRequestModuleId(
           declaration.moduleId,
           specifier,
-          declaration.root === 'shadow' ? undefined : declaration.tagName,
+          declaration.root === 'shadow'
+            ? undefined
+            : declaration.scopeTag === null
+              ? undefined
+              : (declaration.scopeTag ?? declaration.tagName),
         );
         const emitted = ctx.clientStyleAssetFiles.get(key);
         if (emitted === undefined) {

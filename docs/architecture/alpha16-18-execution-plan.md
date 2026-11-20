@@ -1353,12 +1353,16 @@ register them for generated islands (shadow scope) before the fixture migrates.
 > head) and card (DSD template with its marked `<link>`) both render, build green,
 > **e2e 9/9 on chromium, firefox and webkit**.
 >
-> **P-2b remains OWED**: the fixture's PAGE stays a class page. A generated
-> LIGHT function page does not report its declared sheet into the document sink
-> the way a class page's `documentStyles` does, so converting the page loses a
-> head link (measured: 1 link instead of 2, the e2e row failing on both marked-link
-> rows). That is the last blocker for `router-base-path`, `router-ui-dogfood` and
-> `router-request-time`, all of which author styled light pages.
+> **P-2b is DELIVERED too (2026-11-21).** A generated LIGHT function page now
+> DECLARES its own sheet and gets it in the original head: the static scan reads a
+> page module's sidecar and registers an `IslandStyleDeclaration` whose
+> `scopeTag` is `null` (a page owns no host element, so its rules must be
+> delivered UNSCOPED — the tag-scoped form compiled a `@scope (subpage-home)`
+> block that matched nothing), and the route's document link list is seeded from
+> that declaration. Measured on `router-base-path` with the page CONVERTED to the
+> generated lane: three marked links in the head (page, nested light component,
+> nested shadow component), build green, **e2e 9/9 on chromium, firefox and
+> webkit**, including the JavaScript-disabled computed-style row.
 >
 > **P-1 status 2026-11-21: DELIVERED for the BUILD (collection + DSD linkage).**
 > **P-1c (dev channel) is also DELIVERED (2026-11-21).** Four dev-side facts had

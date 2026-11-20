@@ -284,6 +284,25 @@ async function deriveRouteDocumentStyleLinks(input: {
         'fails instead.',
     );
   }
+  // A page module's OWN declared sheets (P-2b): resolved here from the carrier the
+  // static scan filled, keyed by the page's tag, and reported per ROUTE because
+  // that is where the document link list is consumed.
+  const pageModuleStyleUrls = new Map<string, readonly string[]>();
+  const pageTags = new Map<string, string>();
+  const routeRoot = resolve(input.root, input.routesDir);
+  for (const route of input.routes) {
+    if (route.type !== 'page' || route.special) continue;
+    pageTags.set(resolve(routeRoot, route.filePath), route.path);
+  }
+  for (const declaration of declarations) {
+    // The declaration's `filePath` is the module's absolute id (a page module has
+    // no islands-relative path), while a route is spelled project-relative. Both
+    // are the same file, so the join normalizes through `resolve`.
+    const routePath = pageTags.get(resolve(declaration.filePath));
+    if (routePath === undefined) continue;
+    const urls = clientIslandStyleAssets(input.ctx).get(declaration.tagName);
+    if (urls !== undefined) pageModuleStyleUrls.set(routePath, urls);
+  }
   const result = await buildRouteDocumentStyleLinks({
     root: input.root,
     routes: input.routes,
@@ -291,6 +310,7 @@ async function deriveRouteDocumentStyleLinks(input: {
     resolve: input.resolve,
     lightIslandTags: tags.light,
     islandStyleUrls: clientIslandStyleAssets(input.ctx),
+    ...(pageModuleStyleUrls.size === 0 ? {} : { pageModuleStyleUrls }),
   });
   for (const note of result.notes) {
     const envelope = {

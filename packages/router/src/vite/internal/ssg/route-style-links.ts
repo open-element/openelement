@@ -139,6 +139,15 @@ export interface BuildRouteDocumentStyleLinksInput {
    * plain JSX reference to an unrelated custom element contributes nothing.
    */
   lightIslandTags: ReadonlySet<string>;
+  /**
+   * Route path -> the sheets a PAGE MODULE declares for itself (P-2b, 2026-11-21).
+   *
+   * A generated light page's own box rule is not an island's sheet, and no JSX
+   * reference can carry it: the page module IS the root. The build registers that
+   * declaration under the page's tag, so this map is the resolved form and the
+   * route's link list starts from it instead of from a reference walk.
+   */
+  pageModuleStyleUrls?: ReadonlyMap<string, readonly string[]>;
   /** Delivered tag → emitted, base-joined stylesheet URLs from Phase 2. */
   islandStyleUrls: ReadonlyMap<string, readonly string[]>;
   /** The walk's module bound (production default when omitted). */
@@ -217,9 +226,15 @@ export async function buildRouteDocumentStyleLinks(
   for (const route of pageRoutes) {
     const seed = resolve(routeRoot, route.filePath);
     const tags = referencedLightTags(seed, edges, referencedTags, input.lightIslandTags);
-    if (tags.length === 0) continue;
+    const pageModuleUrls = input.pageModuleStyleUrls?.get(route.path) ?? [];
+    if (tags.length === 0 && pageModuleUrls.length === 0) continue;
     const urls: string[] = [];
     const seen = new Set<string>();
+    for (const url of input.pageModuleStyleUrls?.get(route.path) ?? []) {
+      if (seen.has(url)) continue;
+      seen.add(url);
+      urls.push(url);
+    }
     for (const tag of tags) {
       const tagUrls = input.islandStyleUrls.get(tag);
       if (tagUrls === undefined || tagUrls.length === 0) {

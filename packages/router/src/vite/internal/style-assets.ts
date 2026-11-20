@@ -914,7 +914,11 @@ function registerDeclaredIslandStyleEdges(): Map<string, RegisteredStyleRequest>
     registerStyleEdges(
       declaration.moduleId,
       declaration.specifiers,
-      declaration.root === 'shadow' ? undefined : declaration.tagName,
+      declaration.root === 'shadow'
+        ? undefined
+        : declaration.scopeTag === null
+          ? undefined
+          : (declaration.scopeTag ?? declaration.tagName),
     );
     for (const request of styleRequestsForImporter(declaration.moduleId)) {
       edges.set(request.moduleId, request);

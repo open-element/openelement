@@ -76,6 +76,20 @@ export interface IslandStyleDeclaration {
   readonly islandsDir: string;
   /** The authored relative `.css` specifiers, validated, in authored order. */
   readonly specifiers: readonly string[];
+  /**
+   * The `@scope` identity these sheets are projected under, or `null` for a
+   * DOCUMENT-WIDE sheet (P-2b, 2026-11-21).
+   *
+   * A light-root COMPONENT's rules are scoped to its host tag so they cannot leak
+   * past the element. A PAGE has no host element at all — its markup IS the
+   * document content — so a page module's declared sheet must be delivered
+   * unscoped; scoping it to a tag that never appears would compile rules that
+   * match nothing (measured: the base-path page's own `@scope (subpage-home)`
+   * block left every rule inert).
+   *
+   * Absent keeps the tag rule below, so every island record is unchanged.
+   */
+  readonly scopeTag?: string | null;
 }
 
 /** moduleId → declaration. Module ids are unique per island module. */
