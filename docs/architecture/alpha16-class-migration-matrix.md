@@ -1105,3 +1105,41 @@ import admitted?) and this round answered it, twice:
 Pinned by `generated-element.declaration-order.test.ts`. The shell port is
 therefore mechanically unblocked; it is not in this batch, and the next one runs
 it with these fixes in place.
+
+**2026-11-20 — the shell port hit a THIRD blocker and was reverted again.**
+
+With both earlier defects fixed, the port compiled and the descriptor rows came
+out right (`rail`/`footer`/`meta` as `boolean` + `reflect: true` + `default:
+false`), but `site:build` failed at SSG on the only dynamic route:
+
+```
+[openElement] renderRoute failed for /blog/:slug: CompiledProgramValidationError:
+[compiled-program] hostAttributes: OEIR_LEAF_UNSEEDABLE_PROPERTY: rail is a
+boolean whose false value cannot be expressed as an attribute while its declared
+default renders as presence-true; the claim would re-read the default.
+```
+
+Reproduction: `vp run --no-cache --fail-if-no-match --filter @openelement/www build`
+(or root `site:build`). The caller is `www/app/routes/blog/[slug].tsx:81`, which
+writes the row as a BARE attribute (`<open-reading-shell meta rail footer …>`),
+i.e. the wire value is presence-`true` while the row's declared default is
+`false`.
+
+What is established and what is not: the rule (`shell.ts:463-478`) compares
+`convertToAttribute(seeded)` against `convertToAttribute(primitiveRowFallback)`
+and fails closed when the seeded value has no presence form and diverges from the
+default. A direct probe of the seeder with `{ rail: true }` and the pair
+`['rail','']` returns `rail: true` and throws NOTHING, so the throwing path is
+NOT the two-argument shape the probe exercises — the remaining difference is the
+route's real argument shape (the emitted `<Name>__ssrHost` fold), which this round
+did not isolate.
+
+Decision: revert, keep the tree green (`site:build` exit 0, `www` 34/304), and
+record the exact error + reproduction. Isolating the shape is the first task of
+the next attempt — with the two compiler defects already fixed, the remaining work
+is one argument-shape investigation, not a capability gap.
+
+Also measured this round (kept): the rescan of the class-lane blocker itself is
+unaffected — `open-reading-shell` still declares `rail`/`footer`/`meta` as bare
+`reflect` booleans defaulting to `false`, so whichever lane it migrates to, the
+presence-`true` wire must be admitted there.
