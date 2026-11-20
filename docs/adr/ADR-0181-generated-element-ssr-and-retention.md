@@ -310,9 +310,10 @@ lane will not hoist a nested light-root sheet into an enclosing shadow template.
   does not reproduce it.
 - **Evidence.** `tests/fixtures/site-light-probe`'s generated port was built and
   run; it measured the missing delivery and was reverted (the class version's e2e
-  is green, 25/25). Product code has **0** instances of the nesting
-  (`grep` over `www/app`, `apps/saas/app`, `packages/ui/src`,
-  `packages/create/templates`).
+  is green, 25/25). The handoff's §6 measurement records **0** product-code
+  instances of the nesting across `www/app`, `apps/saas/app`, `packages/ui/src`
+  and `packages/create/templates`; this rule section cites that measurement
+  rather than re-running it.
 - **Fixture consequence.** `site-light-probe`'s e2e row is to be rewritten to
   assert the RULE (the composition is authored as `<slot>` or a shadow child),
   and only then can that fixture migrate. That rewrite belongs to the lane
