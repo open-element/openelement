@@ -383,7 +383,16 @@ export function seedGeneratedElementHostProperties<P extends object = Record<str
         configurable: false,
         get: () => {
           const value = supplied[property.name];
-          return value === undefined && primitiveFallback !== undefined ? primitiveFallback : value;
+          if (value === undefined && primitiveFallback !== undefined) return primitiveFallback;
+          // The canonical BARE-ATTRIBUTE encoding: a JSX `<host rail>` lowers to
+          // `"rail": ""`, and on the wire attribute presence means true. The
+          // class-lane server coercion spells this rule once
+          // (`public-runtime.ts` `coerceServerProp`), and this fold is the
+          // generated lane's version of the same fact — a boolean row given the
+          // empty string must read `true`, or the pair below would serialize
+          // `false` against a presence-true wire and fail closed as unseedable.
+          if (property.type === 'boolean' && value === '') return true;
+          return value;
         },
       });
       continue;

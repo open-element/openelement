@@ -109,6 +109,31 @@ describe('generated host seed → canonical host attributes', () => {
     expect(seeded[KEY]).toBeUndefined();
   });
 
+  test('a bare boolean attribute reads true in the seeded record (M11-2 wire rule)', () => {
+    // JSX `<host flag>` lowers to `flag: ""`, and attribute presence means true.
+    // The class-lane server coercion spells that rule once
+    // (`public-runtime.ts` `coerceServerProp`); this fold is its generated-lane
+    // counterpart. Without it the row resolved to `false` against a
+    // presence-true wire and the projection threw OEIR_LEAF_UNSEEDABLE_PROPERTY —
+    // measured while porting `open-reading-shell`, whose caller writes
+    // `<open-reading-shell meta rail footer …>`.
+    const seeded = seed([{ name: 'flag', attribute: 'flag', type: 'boolean', default: false }], {
+      flag: '',
+    });
+    expect(seeded.flag).toBe(true);
+    expect(seeded[KEY]).toEqual([['flag', '']]);
+    // The other encodings keep their meaning.
+    expect(
+      seed([{ name: 'flag', attribute: 'flag', type: 'boolean', default: false }], { flag: true })
+        .flag,
+    ).toBe(true);
+    expect(
+      seed([{ name: 'flag', attribute: 'flag', type: 'boolean', default: false }], { flag: false })[
+        KEY
+      ],
+    ).toBeUndefined();
+  });
+
   test('property-only primitives stay a recorded boundary (no attribute pair)', () => {
     // ADR-0181 A5 does not claim attribute:false seed parity; the supplied
     // value stays content-only and the claim re-reads the declared default.
