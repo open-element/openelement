@@ -273,3 +273,28 @@ rather than a new function parameter threaded through both producers.
 With that scoping plus the call-site `rootInstance ?? null`, the compiler suite
 should return to green with the new capability. The measurement above is why the
 next attempt should start from the saved patch instead of from zero.
+
+### D-4 landed (2026-11-20)
+
+The first attempt's open edit is closed: the SSR inline rule is scoped to the
+element root through an `elementRootBinding` field on the shared `EmitState`
+(set by `emitSsrFunction`, which already receives the root marker), so a hostless
+leaf module keeps its consumer-supplied bindings record and its exact bytes.
+
+Delivered behaviour, measured: a component-authored `computed` (or `signal`) in
+an ELEMENT ROOT is created by the retained setup factory, returned in its record,
+resolved by the unchanged `host.bindings[name]` prologue in mount and claim, and
+created again per render by the SSR producer (no server-side graph). The emitted
+header takes `signal`/`computed` from the narrow `leaf-runtime` entry via the
+optional-import predicates, so the P1 import boundary is unchanged.
+
+The eight lane tests that pinned the old "no binding source" refusal now pin the
+new contract (root resource provided by the factory; hostless leaf still records
+the binding demand for its consumer), and
+`generated-element.computed-boundary.test.ts` asserts the factory, the record,
+the mount/claim prologue and the SSR per-render copy.
+
+Evidence: compiler 96 files / 1387 tests passed; element 133 / 1043; `vp run
+check` 5/5 PASS; `interface:snapshot` regenerated (`leaf-runtime` publishes the
+two factories). Next in the order: D-6 (`propDeps`) measurement, then the
+migrations this unblocks.

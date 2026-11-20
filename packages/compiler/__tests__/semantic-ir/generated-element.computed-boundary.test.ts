@@ -18,9 +18,7 @@
  * the flip is the evidence.
  */
 import { expect, test } from 'vitest';
-import { CompiledElementError } from '../../src/internal/compiler/semantic-core/compiler-diagnostics.ts';
 import { compileGeneratedElementIfAdmitted } from '../../src/internal/compiler/semantic-ir/generated-element/compile.ts';
-import { GENERATED_ELEMENT_DIAGNOSTIC } from '../../src/internal/compiler/semantic-ir/generated-element/contract.ts';
 
 const FILE = '/proj/src/islands/computed-probe.tsx';
 const SITE = { tag: 'x-computed-probe' };
@@ -35,16 +33,16 @@ const SOURCE =
   '}\n' +
   'export default Probe;\n';
 
-test('ADR-0183 D-4: a component-authored computed is admitted, but the root still has no binding source', () => {
-  let thrown: unknown;
-  try {
-    compileGeneratedElementIfAdmitted(SOURCE, FILE, { site: SITE });
-  } catch (error) {
-    thrown = error;
-  }
-  expect(thrown).toBeInstanceOf(CompiledElementError);
-  const codes = (thrown as CompiledElementError).diagnostics.map((diagnostic) => diagnostic.code);
-  // The refusal is the MISSING BINDING SOURCE, not a grammar refusal: the
-  // computed itself parses and lowers, and its name reaches the binding set.
-  expect(codes).toContain(GENERATED_ELEMENT_DIAGNOSTIC.UNBOUND_BINDING);
+test('ADR-0183 D-4: a component-authored computed is created by the retained root factory', () => {
+  const compiled = compileGeneratedElementIfAdmitted(SOURCE, FILE, { site: SITE });
+  expect(compiled).not.toBeNull();
+  const code = compiled!.code;
+  // The factory is the module's production bindings source: it creates the
+  // derived node (props are a tracked channel after D-5) and returns it.
+  expect(code).toContain('const doubled = computed(');
+  expect(code).toMatch(/return \{[^}]*doubled/);
+  // mount/claim read it through the existing binding prologue, unchanged.
+  expect(code).toContain('__oe_requireBinding("doubled")');
+  // SSR creates its own per-render copy: the server builds no reactive graph.
+  expect(code).toMatch(/function Probe__ssr[\s\S]*const doubled = computed\(/);
 });

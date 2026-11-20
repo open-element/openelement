@@ -598,7 +598,7 @@ describe('16b-REF node handle — emitted artifact contract (Node)', () => {
     expect((handleOnly as OpenElementError).code).toBe(FacadeErrorCode.JSX_OUTSIDE_COMPILER);
   });
 
-  test('R16 the notification may read setup locals but not a host binding', () => {
+  test('R16 the notification may read setup locals and a ROOT signal resource (ADR-0183 D-4)', () => {
     // Admitted: the notification reads a setup local (a closure capture).
     const localRead =
       SIDECAR +
@@ -627,12 +627,12 @@ describe('16b-REF node handle — emitted artifact contract (Node)', () => {
       '}\n' +
       'export default HostBinding;\n';
     const fact = site('ref-host-binding');
-    let thrown: unknown;
-    try {
-      compileGeneratedElementIfAdmitted(hostBinding, fact.file, { site: fact.site });
-    } catch (error) {
-      thrown = error;
-    }
-    expect(codes(thrown)).toContain('OEIR_GENERATED_ELEMENT_UNBOUND_BINDING');
+    // ADR-0183 D-4: the root factory creates `count` and returns it, so the ref
+    // notification can capture it like any other setup value.
+    const compiled = compileGeneratedElementIfAdmitted(hostBinding, fact.file, {
+      site: fact.site,
+    });
+    expect(compiled).not.toBeNull();
+    expect(compiled!.code).toContain('const count = signal((');
   });
 });

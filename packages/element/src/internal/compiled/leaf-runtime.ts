@@ -38,6 +38,13 @@ export {
 // The escaping pair lives in the shared core (one HTML-escape contract with
 // the server serializer); `escapeText` is its text-node half.
 export { escapeAttrValue } from '../core/html-escape.ts';
+// ADR-0183 D-4: the ONE reactive entry. A generated module creates the root's
+// `signal`/`computed` resources in its retained setup factory and its SSR
+// producer creates the same resources per render, so the emitted code needs both
+// factories from THIS closed entry — importing them from the package root would
+// drag the root's side effects (the executor installs) into an island chunk,
+// which is the P1 property this entry exists to keep.
+export { computed, signal } from '../signal/framework.ts';
 export { escapeText } from './escape-text.ts';
 
 // Marker protocol: the wire the SSR and claim paths must agree on.

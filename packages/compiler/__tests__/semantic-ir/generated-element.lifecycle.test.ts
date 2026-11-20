@@ -619,12 +619,13 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
       '}\n' +
       'export default SignalHook;\n';
     const fact = site('lifecycle-signal');
-    try {
-      compileGeneratedElementIfAdmitted(signalHook, fact.file, { site: fact.site });
-      throw new Error('expected the generated element lane to refuse a host binding');
-    } catch (error) {
-      expect(codes(error)).toContain(GENERATED_ELEMENT_DIAGNOSTIC.UNBOUND_BINDING);
-    }
+    // ADR-0183 D-4: a ROOT `signal` resource is created by the retained factory
+    // and returned in its record, so a hook reading it is admitted.
+    const signalCompiled = compileGeneratedElementIfAdmitted(signalHook, fact.file, {
+      site: fact.site,
+    });
+    expect(signalCompiled).not.toBeNull();
+    expect(signalCompiled!.code).toContain('const count = signal((');
     // A root setup local that reads a host binding cannot host the factory: the
     // emitter keeps its existing fail-closed binding identity instead of
     // silently dropping the admitted hooks.
@@ -639,14 +640,14 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
       '}\n' +
       'export default LocalHook;\n';
     const localFact = site('lifecycle-local-binding');
-    try {
-      compileGeneratedElementIfAdmitted(localReadsBinding, localFact.file, {
-        site: localFact.site,
-      });
-      throw new Error('expected the generated element lane to refuse the setup shape');
-    } catch (error) {
-      expect(codes(error)).toContain('OEIR_LEAF_UNSUPPORTED_BINDING');
-    }
+    // ADR-0183 D-4: the factory declares `count` before the locals, so a setup
+    // local reading it is a fillable read, not an unbound one.
+    const localCompiled = compileGeneratedElementIfAdmitted(localReadsBinding, localFact.file, {
+      site: localFact.site,
+    });
+    expect(localCompiled).not.toBeNull();
+    expect(localCompiled!.code).toContain('const count = signal((');
+    expect(localCompiled!.code).toContain('const snapshot =');
     // Defensive emitter invariant: a model compiled with the root marker but
     // generated without the root instance option must not drop the hooks.
     const front = frontModuleWithRoot(

@@ -2154,6 +2154,12 @@ export function gateGeneratedElementBindings(
   leaf: GeneratedLeafModule,
 ): readonly IrDiagnostic[] {
   if (leaf.requiredBindings.length === 0) return [];
+  // ADR-0183 D-4: the retained root setup factory IS the production bindings
+  // source when it exists — it creates the root's `signal`/`computed` resources
+  // and returns them in the record the shell keeps as `bindings`. The gate keeps
+  // refusing a module that needs bindings with no factory, which is the shape it
+  // was written for (a binding with no producer in this lane).
+  if (leaf.rootInstanceFactory !== null) return [];
   return [
     {
       severity: 'error',

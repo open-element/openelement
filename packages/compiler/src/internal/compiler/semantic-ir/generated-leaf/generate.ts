@@ -327,6 +327,11 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
   { symbol: 'claimRecipe', predicate: (_body, usesClaimRecipe) => usesClaimRecipe },
   { symbol: 'leafClaimMismatch', predicate: (body) => body.includes('leafClaimMismatch(') },
   { symbol: 'leafRuntimeError', predicate: (body) => body.includes('leafRuntimeError(') },
+  // ADR-0183 D-4: a root-owned binding declared in the retained setup factory
+  // (a `signal`/`computed` resource) and the SSR producer's per-render copy are
+  // the only emitters of these calls.
+  { symbol: 'signal', predicate: (body) => body.includes('= signal((') },
+  { symbol: 'computed', predicate: (body) => body.includes('= computed(') },
   {
     symbol: 'assertElementInHtmlNamespace',
     predicate: (body) => body.includes('assertElementInHtmlNamespace('),
@@ -972,6 +977,12 @@ function importContextOf(component: FunctionModelComponent): ModuleImportContext
 
 interface EmitState {
   readonly component: FunctionModelComponent;
+  /**
+   * ADR-0183 D-4: this SSR body belongs to the ELEMENT ROOT, whose host record
+   * has no bindings channel — so its `signal`/`computed` resources are created
+   * inline per render instead of being read from `host.bindings`.
+   */
+  elementRootBinding?: boolean;
   readonly lines: string[];
   /**
    * Physical generated lines emitted so far in this chunk. `lines` holds one
@@ -7542,11 +7553,14 @@ function emitDynamicSsrFunction(
   records: ReadonlyMap<string, LoweredExpressionRecord>,
   componentByName: ReadonlyMap<string, FunctionModelComponent>,
   slots: SlotAnchors | null,
+  /** ADR-0183 D-4: this body is the element root's producer (see `EmitState`). */
+  elementRootBinding: boolean,
 ): SsrEmission | null {
   const propsName = component.propsParam;
   const projectsChildren = componentProjectsChildren(component);
   const composition = treeHasComposition(component.roots);
   const state = ssrEmitState(component, file, propsName, componentByName, projectsChildren);
+  if (elementRootBinding) state.elementRootBinding = true;
   if (!assertTextBoundaryContext(state, component.roots)) return failedSsr(state);
   const usesContext = componentUsesContextIntrinsic(component);
   // `16b-CTX` SERVER side: the render's owner scope is a PARAMETER of this
@@ -7606,6 +7620,32 @@ function emitDynamicSsrFunction(
       const record = recordFor(state, resource.expression, records);
       if (record === null || !declareReads(state, record)) return failedSsr(state);
       pushParts(state, [`const ${resource.name} = (`, { record }, ');'], resource.span);
+      continue;
+    }
+    // ADR-0183 D-4: the server has no bindings channel and must not acquire one
+    // (a per-render, no-graph contract), so a `signal`/`computed` resource is
+    // CREATED here and the producer reads it as a local. This is what keeps one
+    // component working in both phases instead of only after hydration.
+    if ((resource.kind === 'signal' || resource.kind === 'computed') && state.elementRootBinding) {
+      if (resource.expression === null) {
+        state.hostBindings.add(resource.name);
+        state.requiredBindings.add(resource.name);
+        continue;
+      }
+      const record = recordFor(state, resource.expression, records);
+      if (record === null || !declareReads(state, record)) return failedSsr(state);
+      state.localResources.add(resource.name);
+      pushParts(
+        state,
+        [
+          resource.kind === 'computed'
+            ? `const ${resource.name} = computed(`
+            : `const ${resource.name} = signal((`,
+          { record },
+          resource.kind === 'computed' ? ');' : '));',
+        ],
+        resource.span,
+      );
       continue;
     }
     state.hostBindings.add(resource.name);
@@ -7716,6 +7756,13 @@ function emitSsrFunction(
   records: ReadonlyMap<string, LoweredExpressionRecord>,
   componentByName: ReadonlyMap<string, FunctionModelComponent>,
   lightRoot: boolean,
+  /**
+   * ADR-0183 D-4 compiler-private marker: the ELEMENT ROOT component whose
+   * `signal`/`computed` resources the producer must create per render, because
+   * the element host record has no bindings channel. `null` for a hostless leaf
+   * module, whose consumer supplies the bindings record (unchanged behavior).
+   */
+  rootComponent: string | null,
 ): SsrEmission | null {
   // The gate runs FIRST, on its own emit state: a dynamic slot name must be
   // refused before any byte is emitted, and both producer shapes below share the
@@ -7754,7 +7801,14 @@ function emitSsrFunction(
       placements: [],
     };
   }
-  return emitDynamicSsrFunction(file, component, records, componentByName, slots);
+  return emitDynamicSsrFunction(
+    file,
+    component,
+    records,
+    componentByName,
+    slots,
+    rootComponent !== null && component.name === rootComponent,
+  );
 }
 
 function emitComponent(
@@ -8046,13 +8100,28 @@ function emitComponent(
   // `UNBOUND_BINDING` gate refuses such a module; keeping `rootSetup` false
   // here preserves the pre-change emitted text instead of writing a factory
   // that references a name it never declares.
+  // ADR-0183 D-4: the ROOT's `signal`/`computed` resources are CREATED by the
+  // retained setup factory and returned in its record, so they are the module's
+  // production bindings source rather than a demand on the shell. A read of one
+  // is therefore satisfiable by the factory (it is a sibling declaration).
+  const rootBindingResources =
+    rootInstance === component.name
+      ? component.resources.filter(
+          (resource) =>
+            (resource.kind === 'signal' || resource.kind === 'computed') &&
+            resource.expression !== null,
+        )
+      : [];
+  const rootBindingNames = new Set(rootBindingResources.map((resource) => resource.name));
   const setupReadsHostBinding = localLines.some((line) =>
     (line.record?.reads ?? []).some(
       (read) =>
-        state.hostBindings.has(read.name) ||
-        state.hostBindings.has(read.binding.name) ||
-        state.requiredBindings.has(read.name) ||
-        state.requiredBindings.has(read.binding.name),
+        !rootBindingNames.has(read.name) &&
+        !rootBindingNames.has(read.binding.name) &&
+        (state.hostBindings.has(read.name) ||
+          state.hostBindings.has(read.binding.name) ||
+          state.requiredBindings.has(read.name) ||
+          state.requiredBindings.has(read.binding.name)),
     ),
   );
   // `16b-CTX`: a provider is element-lifetime setup work exactly like a hook, so
@@ -8062,7 +8131,7 @@ function emitComponent(
   const hooksOnRoot = rootInstance === component.name && admittedHooks.length > 0;
   const rootSetup =
     rootInstance === component.name &&
-    (localLines.length > 0 || hooksOnRoot || providersOnRoot) &&
+    (localLines.length > 0 || hooksOnRoot || providersOnRoot || rootBindingResources.length > 0) &&
     !setupReadsHostBinding;
   // A component ALIASES the retained record only when the record can satisfy
   // every read the body needs. That is: it has setup locals, or it uses a context
@@ -8149,6 +8218,14 @@ function emitComponent(
       };
     }
     const setupReadsProps =
+      // ADR-0183 D-4: a binding resource's initializer/derivation evaluates
+      // INSIDE this factory, so a props read there needs the same alias a setup
+      // local's read does.
+      rootBindingResources.some((resource) =>
+        (records.get(resource.expression?.id ?? '')?.reads ?? []).some(
+          (read) => read.name === 'props' || read.binding.name === 'props',
+        ),
+      ) ||
       localLines.some((line) =>
         (line.record?.reads ?? []).some(
           (read) => read.name === 'props' || read.binding.name === 'props',
@@ -8202,6 +8279,37 @@ function emitComponent(
     // the element anchor itself, so its provider also covers every depth-1 child.
     emitContextScopeDeclaration(setupState, component, false);
     emitContextProviders(setupState, component.contextProviders, records);
+    // ADR-0183 D-4: the binding resources are created ONCE per element (this
+    // factory runs once per retained instance) and returned in the record the
+    // shell keeps as `bindings`, so mount/claim resolve them through their
+    // existing `host.bindings[name]` prologue. Declaration order is the authored
+    // order, so a computed may read a signal declared above it.
+    for (const resource of rootBindingResources) {
+      const record = recordFor(setupState, resource.expression!, records);
+      if (record === null || !declareReads(setupState, record)) {
+        return {
+          lines: [],
+          diagnostics: state.diagnostics,
+          requiredBindings: [],
+          requiredProps: [],
+          requiresPropsChanged: false,
+          rootInstanceFactory: null,
+          segments: [],
+          placements: [],
+        };
+      }
+      pushParts(
+        setupState,
+        [
+          resource.kind === 'computed'
+            ? `const ${resource.name} = computed(`
+            : `const ${resource.name} = signal((`,
+          { record },
+          resource.kind === 'computed' ? ');' : '));',
+        ],
+        resource.span,
+      );
+    }
     for (const line of localLines) emitSetupBinding(setupState, line);
     // `16b-LC` option 1a: the connect callbacks are RECORDED, not replayed
     // here. The root mount/claim prologue replays them on the per-connection
@@ -8296,7 +8404,10 @@ function emitComponent(
         hook.span,
       );
     }
-    const recordFields = localLines.map((line) => line.name);
+    const recordFields = [
+      ...rootBindingResources.map((resource) => resource.name),
+      ...localLines.map((line) => line.name),
+    ];
     if (componentUsesContextIntrinsic(component)) {
       recordFields.push(GENERATED_CONTEXT_SCOPE_RECORD);
     }
@@ -8720,7 +8831,15 @@ function emitComponent(
   const ssr =
     claim === null
       ? null
-      : emitSsrFunction(file, component, rootDirectory, records, componentByName, lightRoot);
+      : emitSsrFunction(
+          file,
+          component,
+          rootDirectory,
+          records,
+          componentByName,
+          lightRoot,
+          rootInstance ?? null,
+        );
   if (ssr !== null && ssr.diagnostics.length > 0) {
     return {
       lines: [],

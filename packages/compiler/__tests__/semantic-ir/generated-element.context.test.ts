@@ -753,7 +753,7 @@ describe('16b-CTX context intrinsics — emitted artifact contract (Node)', () =
     }
   });
 
-  test('C15 a provider whose thunk reads a host binding is refused by the existing binding gate', () => {
+  test('C15 a provider whose thunk reads a ROOT signal resource is admitted (ADR-0183 D-4)', () => {
     // The retained setup scope has no bindings channel, so a thunk reading a
     // `signal` keeps the lane's existing `UNBOUND_BINDING` identity.
     const source =
@@ -766,8 +766,9 @@ describe('16b-CTX context intrinsics — emitted artifact contract (Node)', () =
       '  return <p>{props.seed}</p>;\n' +
       '}\n' +
       'export default Root;\n';
-    const thrown = attempt(source, 'ctx-host-binding');
-    expect(codes(thrown)).toContain('OEIR_GENERATED_ELEMENT_UNBOUND_BINDING');
+    const code = compileIsland('ctx-host-binding-admitted', source);
+    expect(code).toContain('const count = signal((');
+    expect(code).toMatch(/return \{[^}]*count/);
   });
 
   // ── server render: the value the bytes carry ──────────────────────────────

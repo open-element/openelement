@@ -23,9 +23,17 @@ import { build } from 'vite';
 import { compileFunctionModule } from '../../../src/internal/compiler/semantic-core/function-frontend.ts';
 import { generateLeafModule } from '../../../src/internal/compiler/semantic-ir/generated-leaf/generate.ts';
 import * as compiledRuntime from '../../../../element/src/internal/compiled/runtime.ts';
+// ADR-0183 D-4: a generated module creates its root `signal`/`computed`
+// resources through the same narrow entry the emitted import names, so the
+// injected runtime must carry the two factories.
+import * as signalFramework from '../../../../element/src/internal/signal/framework.ts';
 import { ELEMENT_CLASSIFIER as CLASSIFIER, REPO_ROOT } from './element-classifier.ts';
 
-const RUNTIME = { ...compiledRuntime };
+const RUNTIME = {
+  ...compiledRuntime,
+  signal: signalFramework.signal,
+  computed: signalFramework.computed,
+};
 const SSR_EXPORT = /^export function ([\w$]+)\(/gm;
 const RUNTIME_IMPORT = /^import \{([^}]+)\} from [^;]+;$/m;
 

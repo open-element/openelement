@@ -89,7 +89,7 @@ describe('generated-element static imports', () => {
     expect(module).not.toContain('./unused.ts');
   });
 
-  test('a reactive resource keeps the host-binding refusal', () => {
+  test('a reactive resource is created by the retained root factory (ADR-0183 D-4)', () => {
     const file = 'app/islands/import-probe.tsx';
     const source =
       SIDECAR +
@@ -100,16 +100,15 @@ describe('generated-element static imports', () => {
       '  return <button part="toggle">ok</button>;\n' +
       '}\n' +
       'export default Probe;\n';
-    let caught: unknown;
-    try {
-      compileGeneratedElementIfAdmitted(source, file, { site: { tag: 'import-probe' } });
-    } catch (error) {
-      caught = error;
-    }
-    expect(caught).toBeInstanceOf(Error);
-    const diagnostics = (caught as { diagnostics?: Array<{ code: string }> }).diagnostics ?? [];
-    expect(diagnostics.map((diagnostic) => diagnostic.code)).toContain(
-      'OEIR_GENERATED_ELEMENT_UNBOUND_BINDING',
-    );
+    const compiled = compileGeneratedElementIfAdmitted(source, file, {
+      site: { tag: 'import-probe' },
+    });
+    expect(compiled).not.toBeNull();
+    // The resource is a factory-created binding now: declared in the retained
+    // setup factory and returned in the record the shell keeps as `bindings`.
+    expect(compiled!.code).toContain('const theme = signal((');
+    expect(compiled!.code).toContain('return { theme };');
+    // The P1 boundary holds: the factories come from the narrow runtime entry.
+    expect(compiled!.code).toContain('from "@openelement/element/internal/compiled/leaf-runtime"');
   });
 });
