@@ -1231,3 +1231,48 @@ one. Recorded here so a later reader removes it deliberately.
 Superseded count: ADR-0182's "not counted in the delivered experience-edition
 surface" line no longer applies to `useHost`; `16b-MN` and the capability
 inventory must read this amendment as the later status.
+
+## Amendment (2026-11-20): `trustedHtml` and non-JSON seeds — PERMANENT exclusion
+
+Append-only status record. Owner-approved 2026-11-20 (delegated in-session
+remediation authorization; execution-plan §19.4). This is the dated amendment
+§19.4 requires, and it settles the question rather than deferring it.
+
+**The decision.** No server→client channel is built for a `trustedHtml` value, and
+none for a property value that is not JSON-encodable. This is a **permanent
+exclusion** — not an Alpha17 carry, and **not** a §13.3/§14.1 exception that a
+later slice may lift.
+
+**Why it is permanent, in two sentences.** The `trustedHtml` brand is `WeakSet`
+object identity: a byte stream on the wire cannot reconstruct it, so any transport
+would either drop the brand (a raw-markup channel — refused on principle) or
+invent a second brand-issuing constructor (a second trust root). A non-JSON value
+has no faithful wire form at all, and a lossy one would make the claimed state
+quietly differ from the server's — which is the exact divergence D-18c exists to
+prevent.
+
+**What the code already does (measured, not aspirational).**
+
+| site | behaviour |
+| --- | --- |
+| `generated-element/shell.ts:541-554` | a supplied property-only row that fails `JSON.stringify` (or serializes to `undefined`) throws `OEIR_LEAF_UNSEEDABLE_PROPERTY` with the JSON reason — it never silently degrades to the declared default |
+| `generated-element/shell.ts:340-348` | the seeder's contract names the exclusion: `trustedHtml` stays out because a brand cannot be reconstructed from JSON and promoting a plain string back to it would be a raw-markup channel |
+| `generated-prop-seed-hardening.test.ts:59-70` | the row set carries a real `trustedHtml` row as an excluded-row CONTROL, so the test fails if a later change starts seeding it |
+| `generated-prop-seed-hardening.test.ts:309-330` | the cyclic-array and `undefined`-serializing rows pin the two refusal shapes |
+
+**What stays, and what does not.** The property-only, in-process value model stays:
+a `trustedHtml` row is still declarable, still defaults, and still renders — the
+exclusion is about the server→client CROSSING, not about the value's existence.
+`§14.2`'s retained `array/object/trustedHtml` row is read with this exclusion.
+
+**The in-tree consumer that motivated it.** `open-article-view`'s article body was
+the component that made the question concrete. It is handled by the owner-directed
+build-time structured body (class-migration matrix D-M5): the body stops being a
+runtime string crossing and becomes a build-time fact. **That design is owed as
+its own amendment before any file claims it**, and this record does not
+pre-approve it — it only removes the "we could just seed it" alternative from the
+table permanently.
+
+**P5 note.** A permanent exclusion adds no capability to inventory and retires
+nothing; it must still be listed in the closeout's exclusion section so a reader
+does not mistake absence for an unfinished item.
