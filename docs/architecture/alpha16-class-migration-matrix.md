@@ -1225,3 +1225,62 @@ What the next attempt needs (a capability slice, not an edit):
 3. then re-run this same port unchanged — the port itself is proven to compile.
 
 The port is preserved as a patch for that slice to start from.
+
+**2026-11-20 — nested light-root expansion, scoped to exact seam points.**
+
+The layout gap (previous entry) and the `apps/saas/app/layout.tsx` port both hit
+the same missing capability, and the reading is now complete enough to name the
+sites instead of hunting them.
+
+**Measurements**
+
+| fact | value |
+| --- | --- |
+| `renderNestedElement` occurrences in the generated-leaf generator | **0** |
+| the class lane's nested seam | `serializer/serialize-program.ts:389` (`if (node.tag.includes('-') && seams.renderNestedElement)`) |
+| how a light-root generated host's content is finalized | `generated-element/shell.ts:647` — `lightSsrProducer` calls the emitted `__ssr(props, undefined)` and returns `{ content, hostAttributes, seedRows }` |
+| how a nested host reaches the pair table | `public-runtime.ts:1201` `registeredGeneratedHostRenderer(nested.tag)` (nested) / `:1039` (root) |
+| class-lane nested props | `public-runtime.ts:1255-1280`: the parent's `nested.properties` + boolean presence coercion |
+
+**Diagnosis (one sentence).** A generated light-root host's `__ssr` is a STRING
+BUILDER that never consults the render's nested-expansion seam, so every host
+inside its markup stays an unexpanded tag; the class lane expands because its
+serializer walks `renderNestedElement` for every `*-*` tag.
+
+**The slice, in seam order** (each item is a distinct site, not a redesign):
+
+1. **carry the seam into the producer call.** `lightSsrProducer`
+   (`shell.ts:598-651`) calls `__ssr(props, undefined)`; it must call
+   `__ssr(props, host)` with a host object exposing the render's nested
+   expander, the same shape `public-runtime.ts:1039/1201` already builds. The
+   host record is currently passed as literal `undefined` — that is the whole
+   server-side reason no expansion can happen.
+2. **emit one call per dash-tag element.** In `emitDynamicSsrNodes`'s
+   `element` branch (`generate.ts:7327-7425`), a tag matching
+   `/[a-z][a-z0-9]*-/` currently pushes literal `"<tag"`/`">"`/`"</tag>"`
+   strings. It must instead route through the host's expander and fall back to
+   the literal bytes when the expander answers `undefined` (exactly the class
+   lane's own `rendered !== undefined ? rendered : open+content+close` fallback).
+3. **keep the fallback byte-identical.** A tag that is not admitted, or a module
+   rendered with no host, must produce today's bytes — this is the property that
+   makes the slice safe to land: the expansion is additive, and a regression in
+   admission shows up as "no DSD", never as wrong markup.
+4. **close the static path too.** `staticSsrNode` (`generate.ts:6696`) returns
+   `null` for any node it cannot render statically, which is what makes a
+   component with a nested host fall to the dynamic producer — that part is
+   already correct and needs no change.
+
+**Acceptance for the slice**
+
+- `open-theme-toggle` / `open-search` inside a generated light-root host regain
+  `shadowrootmode` (the `/docs` DSD count returns to 1 with the ported layout);
+- the `apps/saas` layout builds and renders its slot;
+- `v0.27.0-regression` and `build-output` suites stay green;
+- byte-identity: every existing generated-light-host page's output is unchanged
+  (they contain no admitted dash-tag children, so the fallback path is the one
+  taken).
+
+Not started this round: it is a serializer-shape slice (compiler emitter + shell
+seam + admission plumbing), and starting it half-way would leave a producer that
+emits expander calls nothing answers. Recorded here so the next attempt opens on
+seam 1 instead of re-deriving the map.
