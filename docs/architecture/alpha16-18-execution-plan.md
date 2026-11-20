@@ -1315,7 +1315,17 @@ list is the ready-made inventory); the public exports are `OpenElement`,
 
 **Ordering within the one change set (each step is a gate, not a commit):**
 
-1. generated-lane benchmark baseline (new harness + recorded numbers);
+1. ~~generated-lane benchmark baseline~~ — **DONE 2026-11-21**:
+   `benchmarks/micro/generated-table.ts` compiles a function component through the
+   generated lane, evaluates the REAL emitted bytes with the leaf runtime, and
+   measures the same keyed-table work against the shared counting DOM;
+   `generated-table.test.ts` asserts deterministic counts (1k keyed rows mount;
+   an array replacement reuses every entry — zero insertions — and rewrites both
+   text slots per entry, 2000 writes; keyed swap moves ids 1↔998; one removal
+   removes exactly one node). Two counting-DOM gaps were fixed on the way and are
+   part of the baseline's honesty: `insertBefore(node, null)` and
+   `insertBefore(node, node)` now follow the DOM spec, and `FText.nodeValue`
+   aliases `data` (the spelling the generated text Parts write);
 2. fixture rewrites: `site-light-probe`'s e2e asserts the nesting RULE (ADR-0181
    2026-11-20), the other six migrate or retire; the two foreign-WC fixtures are
    re-based on the public WC surface;
