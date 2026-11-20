@@ -65,6 +65,45 @@ test('app/layout.tsx is the compiled shell convention (no island declaration)', 
   ).toEqual(REPOSITORY_URL);
 });
 
+test('open-section-frame is a page-local generated component with its slots preserved', async () => {
+  const url = new URL('../app/site-ui/open-section-frame.tsx', import.meta.url);
+  const source = await readFile(url, 'utf8');
+  // `app/site-ui/` is neither the islands directory (whose tag is the file path's
+  // convention) nor a package (whose tag is its manifest declaration), so the
+  // sidecar's authored `tag` is this module's ONLY tag source
+  // (declared-element-tags.ts). The root stays LIGHT: the class lane rendered it
+  // in the document tree and www/site-chrome.css selects
+  // `open-section-frame > section` there.
+  expect(source).toContain("root: 'light'");
+  expect(source).toContain("tag: 'open-section-frame'");
+  expect(source).not.toContain('extends OpenElement');
+  const result = compileGeneratedElementIfAdmitted(source, url.pathname, {
+    site: { tag: 'open-section-frame' },
+  });
+  expect(
+    result,
+    'open-section-frame must be admitted by the generated-element lane',
+  ).not.toBeNull();
+  expect(result!.component).toEqual('OpenSectionFrame');
+  expect(String(result?.diagnostics ?? '')).not.toContain('OEC');
+  // No property rows at all: the index line, heading and body arrive through the
+  // `index`/`title`/`copy` named slots plus the default slot, so there is no
+  // reactive surface to bind.
+  expect(descriptorRows(result!.code)).toEqual([]);
+  // A light root's children ARE its region, so the producer writes one anchor
+  // pair per declared slot — that is what lets the light serializer substitute
+  // the caller's children without pattern-matching markup (slot-anchors.ts).
+  expect(result!.code.match(/slotAnchorMarker\(/g)?.length).toBe(8);
+  for (const anchor of [
+    'slotAnchorMarker(0, "index")',
+    'slotAnchorMarker(1, "title")',
+    'slotAnchorMarker(2, "copy")',
+    'slotAnchorMarker(3, "")',
+  ]) {
+    expect(result!.code).toContain(anchor);
+  }
+});
+
 test('open-page-rail keeps its view compiler-owned on the generated lane', async () => {
   const url = new URL('../app/islands/open-page-rail.tsx', import.meta.url);
   const source = await readFile(url, 'utf8');
