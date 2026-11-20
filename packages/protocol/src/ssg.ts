@@ -219,6 +219,17 @@ export interface StaticComponentDecl {
   modulePath: string;
   /** Compiler-owned interaction events; empty means no inferred browser entry. */
   compilerInteractionEvents: string[];
+  /**
+   * The compiler-emitted SSR host producer export (`<Name>__ssrHost`) when this
+   * static component belongs to the GENERATED lane, or absent for a class.
+   *
+   * Same fact, same rule as {@linkcode LayoutDecl.generatedHostExport}: a
+   * generated component carries no Part Program, so a class-only registration
+   * fails every render with PROGRAM_MISSING. The entry therefore registers the
+   * generated host PAIR. The name is the compiler's return value, never a
+   * `${X}__ssrHost` convention (ADR-0182 forbids re-deriving it).
+   */
+  generatedHostExport?: string;
 }
 
 /** The build-time SSR admission decisions per component tag. */

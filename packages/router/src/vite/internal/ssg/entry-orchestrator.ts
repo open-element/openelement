@@ -267,6 +267,13 @@ export function renderEntry(desc: EntryDescriptor): string {
         component.modulePath,
       )};`,
     );
+    if (component.generatedHostExport !== undefined) {
+      lines.push(
+        `import { ${component.generatedHostExport} as __statichost_${component.varName} } from ${quoteGeneratedJavaScriptValue(
+          component.modulePath,
+        )};`,
+      );
+    }
   }
   lines.push('');
 
@@ -425,7 +432,15 @@ export function renderEntry(desc: EntryDescriptor): string {
   lines.push('  methodNotAllowed: __methodNotAllowed,');
   lines.push('  actionBodyLimit: __actionBodyLimit,');
   lines.push('  registerSsrComponent: __registerSsrComponent,');
-  if (generatedHostExports.size > 0) lines.push('  registerSsrIsland: __registerSsrIsland,');
+  // A static component or a generated layout also needs the pair channel: the
+  // factory binding is a union of every consumer, never the island map alone.
+  if (
+    generatedHostExports.size > 0 ||
+    desc.staticComponents.some((component) => component.generatedHostExport !== undefined) ||
+    [...layoutModules.values()].some((layout) => layout.hostExport !== undefined)
+  ) {
+    lines.push('  registerSsrIsland: __registerSsrIsland,');
+  }
   lines.push('  clientScriptDescriptors: __clientScriptDescriptors,');
   lines.push('  locales: __locales,');
   lines.push('  getDefaultLocale: __getDefaultLocale,');
@@ -487,10 +502,16 @@ export function renderEntry(desc: EntryDescriptor): string {
       );
     }
     for (const component of staticComponentModules) {
+      // A GENERATED page-local component is registered as the host PAIR (P-2):
+      // it carries no Part Program, so a class-only registration fails every
+      // render with PROGRAM_MISSING. The same channel an island and a generated
+      // layout use, with the compiler-returned export name.
+      const register =
+        component.generatedHostExport === undefined
+          ? `__registerSsrComponent(${quoteGeneratedJavaScriptValue(component.tagName)}, ${component.varName}.default)`
+          : `__registerSsrIsland(${quoteGeneratedJavaScriptValue(component.tagName)}, ${component.varName}.default, __statichost_${component.varName})`;
       lines.push(
-        `try { __registerSsrComponent(${quoteGeneratedJavaScriptValue(
-          component.tagName,
-        )}, ${component.varName}.default); } catch (err) { console.error('[ssg] Failed to register static component <${component.tagName}>:', err); throw err; }`,
+        `try { ${register}; } catch (err) { console.error('[ssg] Failed to register static component <${component.tagName}>:', err); throw err; }`,
       );
     }
     lines.push('');

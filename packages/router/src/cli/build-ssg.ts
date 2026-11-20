@@ -33,7 +33,10 @@ import {
   clientIslandStyleAssets,
   clientIslandUtilityTags,
 } from '../vite/internal/island-style-build-assets.ts';
-import { islandStyleDeclarations } from '../vite/internal/island-style-declarations.ts';
+import {
+  islandStyleDeclarations,
+  registerIslandStyleDeclaration,
+} from '../vite/internal/island-style-declarations.ts';
 import {
   buildRouteDocumentStyleLinks,
   deliveredIslandStyleTags,
@@ -478,6 +481,14 @@ async function buildSSG(
   const ssgIslandMeta: Record<string, Partial<IslandDecl>> = Object.keys(islandMeta).length > 0
     ? islandMeta
     : await scanIslandMeta(islandsRoot, ssgIslandFiles, root);
+  // The SSG host may run its OWN island scan (the standalone `build` path passes no
+  // pre-scanned meta), and that scan RESETS the style-declaration carrier — so the
+  // PAGE-LOCAL generated components' declarations (P-2) are put back AFTER it. They
+  // have no islands-dir entry for that scan to rediscover, so the reset would
+  // otherwise drop a page-local component's sheet silently.
+  for (const declaration of ctx.phase1.pageLocalStyleDeclarations ?? []) {
+    registerIslandStyleDeclaration(declaration);
+  }
   // Per-route document stylesheet links for generated LIGHT-root islands
   // (Alpha16 retained stylesheet delivery): ONE module walk + in-memory closure,
   // derived before the descriptor so the entry's literal data channel is never

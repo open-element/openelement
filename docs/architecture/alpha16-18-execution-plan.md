@@ -1330,20 +1330,35 @@ again, 5/5) and the gap is recorded here as deletion prerequisite **P-1**:
 `compileGeneratedElementIfAdmitted` must carry them, and the candidate pass must
 register them for generated islands (shadow scope) before the fixture migrates.
 
-> **A SECOND prerequisite surfaced while migrating the NEXT fixture: P-2.** The
-> `router-base-path` nested shadow island (`subpage-card`, imported as a
-> side-effect module by its LIGHT parent page rather than being an islands-dir
-> entry) renders as an EMPTY host once it moves to the generated lane: the build
-> succeeds, the page ships, and the element never gets its DSD template. Its
-> sheet also disappears from both deliveries. The class lane renders it because
-> the class compiler emits an SSR constructor for every module the page graph
-> imports; the generated lane's page-side admission only covers declared island
-> sites. That fixture was reverted (its e2e is green again, 9/9) and the gap is
-> recorded here: **a generated component nested inside a generated LIGHT page
-> needs an alternative admission path (a page-local component site, or a
-> documented rule that nested components must be islands).** It blocks migrating
-> `router-base-path`, `router-ui-dogfood` and `router-request-time`, all of which
-> author nested components inside pages.
+> **A SECOND prerequisite surfaced while migrating the NEXT fixture: P-2 — now
+> DELIVERED 2026-11-21.** `router-base-path`'s nested components (a generated
+> LIGHT note and a generated SHADOW card, imported by the page) rendered as EMPTY
+> hosts: the class lane emits a constructor for every module the page graph
+> imports, while the generated lane's page-side admission only covered declared
+> island sites. Three facts were missing and are now in place:
+>
+> 1. a page-local generated component's tags are DISCOVERED (the static-component
+>    scanner declares them from the sidecar) and its **host producer** is
+>    resolved through the same `resolveGeneratedElementHost` the island path uses,
+>    so `StaticComponentDecl` carries `generatedHostExport`;
+> 2. the SSG entry **registers that pair** (`registerSsrIsland`) instead of a bare
+>    class — a generated component has no Part Program, so the class-only form
+>    failed every render with PROGRAM_MISSING;
+> 3. its `styles` declaration rides the SAME build-time carrier an island's does,
+>    held in `ctx.phase1.pageLocalStyleDeclarations` and re-registered after every
+>    place that owns the carrier's reset (the island scan owns it, and a
+>    page-local component has no islands-dir entry to be rediscovered from).
+>
+> Measured: the fixture's nested generated note (`data-oe-light`, its sheet in the
+> head) and card (DSD template with its marked `<link>`) both render, build green,
+> **e2e 9/9 on chromium, firefox and webkit**.
+>
+> **P-2b remains OWED**: the fixture's PAGE stays a class page. A generated
+> LIGHT function page does not report its declared sheet into the document sink
+> the way a class page's `documentStyles` does, so converting the page loses a
+> head link (measured: 1 link instead of 2, the e2e row failing on both marked-link
+> rows). That is the last blocker for `router-base-path`, `router-ui-dogfood` and
+> `router-request-time`, all of which author styled light pages.
 >
 > **P-1 status 2026-11-21: DELIVERED for the BUILD (collection + DSD linkage).**
 > **P-1c (dev channel) is also DELIVERED (2026-11-21).** Four dev-side facts had

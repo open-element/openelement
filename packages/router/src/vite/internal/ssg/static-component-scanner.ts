@@ -7,6 +7,8 @@ import { normalizeSeparators } from '@openelement/element/build-utils';
 import { analyzeModuleSemantics } from '@openelement/compiler';
 import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
 import { readIslandConfig } from './island-scanner.ts';
+import type { IslandStyleDeclaration } from '../island-style-declarations.ts';
+import { resolveGeneratedElementHost } from './generated-element-host-metadata.ts';
 import {
   walkModuleGraph,
   type ModuleWalkDiagnostic,
@@ -57,6 +59,14 @@ export interface StaticComponentScanResult {
   /** The compiled static components the walk reached, sorted by tag name. */
   readonly declarations: StaticComponentDecl[];
   /**
+   * The page-local GENERATED components' declared sheets (P-2). The island scan
+   * resets the build's style-declaration carrier — it owns that carrier's
+   * authority for ISLANDS — so these records must be handed back to the caller
+   * and re-registered after that reset, or a page-local component's sheet would
+   * be dropped by an unrelated scan.
+   */
+  readonly styleDeclarations: IslandStyleDeclaration[];
+  /**
    * The walk's reported exclusions: its own per-module diagnostics, plus one
    * graph-level bound record when the walk stopped at `maxModules`.
    */
@@ -72,6 +82,70 @@ export interface StaticComponentScanResult {
  * package's components are admitted through its manifest, not through this
  * scan.
  */
+/**
+ * The compiler-owned host producer for a page-local GENERATED component, or
+ * undefined when the lane emits none (a light/absent root, or a module the lane
+ * declines).
+ *
+ * Read through the SAME `resolveGeneratedElementHost` the island scan uses, so a
+ * page-local component and an island cannot disagree about which export is the
+ * host. A refusal is not thrown here: this scanner must not abort route
+ * discovery for the whole app, and the transform remains the authoritative
+ * reporter of the authored diagnostic.
+ */
+function generatedHostExportFor(source: string, file: string, tagName: string): string | undefined {
+  const identity = resolveGeneratedElementHost({
+    source,
+    moduleId: file,
+    filePath: file,
+    root: undefined,
+    site: { tag: tagName },
+  });
+  return identity.kind === 'producer' ? identity.ssrHostExport : undefined;
+}
+
+/**
+ * Register a page-local generated component's declared sheets with the build's
+ * style-declaration carrier (P-2).
+ *
+ * The carrier is keyed by MODULE ID and consumed by the client build's style-edge
+ * discovery, which is why a page-local component can use it exactly like an
+ * island: the declaration is the demand fact, the emitted asset is the answer.
+ * The declaration is skipped for a class component (whose sheets already travel
+ * through `static styles` imports) and for a malformed sidecar (the transform is
+ * the authoritative reporter of that diagnostic).
+ */
+function pageLocalStyleDeclaration(
+  source: string,
+  file: string,
+  root: string,
+  tagName: string,
+  semantics: { readonly defaultCompiledTag?: string; readonly hasGeneratedElementSidecar: boolean },
+): IslandStyleDeclaration | undefined {
+  if (semantics.defaultCompiledTag !== undefined || !semantics.hasGeneratedElementSidecar) {
+    return undefined;
+  }
+  let config: ReturnType<typeof readIslandConfig>;
+  try {
+    config = readIslandConfig(source);
+  } catch {
+    return;
+  }
+  if (config === null || config.styles === undefined || config.styles.length === 0) {
+    return undefined;
+  }
+  return {
+    tagName,
+    root: config.root === 'shadow' ? 'shadow' : 'light',
+    moduleId: file,
+    // Not islands-relative: a page-local component has no islands-dir path. The
+    // module id is the identity every consumer of this carrier reads.
+    filePath: file,
+    islandsDir: root,
+    specifiers: config.styles,
+  };
+}
+
 export async function scanStaticComponents(
   options: ScanStaticComponentsOptions,
 ): Promise<StaticComponentScanResult> {
@@ -99,6 +173,7 @@ export async function scanStaticComponents(
   }
   notes.push(...walk.diagnostics);
   const byTag = new Map<string, StaticComponentDecl>();
+  const styleDeclarations: IslandStyleDeclaration[] = [];
 
   for (const file of walk.files) {
     if (!inside(root, file)) continue;
@@ -147,16 +222,34 @@ export async function scanStaticComponents(
             `${existing.modulePath} and ${modulePath}.`,
         );
       }
+      // A GENERATED static component's host producer (P-2, 2026-11-21): the same
+      // compiler call the island orchestrator makes, so a page-local generated
+      // component is registered as a host PAIR rather than a bare class. Without
+      // it the render reaches the class path and fails with PROGRAM_MISSING —
+      // measured: a migrated nested component rendered as an EMPTY host.
+      const generatedHostExport =
+        semantics.defaultCompiledTag === undefined
+          ? generatedHostExportFor(source, file, tagName)
+          : undefined;
       byTag.set(tagName, {
         tagName,
         modulePath,
         compilerInteractionEvents: semantics.compilerInteractionEvents,
+        ...(generatedHostExport === undefined ? {} : { generatedHostExport }),
       });
+      // A page-local GENERATED component's `styles` declaration (P-2, 2026-11-21)
+      // rides the SAME build-time carrier an island's does: the declaration is the
+      // demand fact the style-edge registry turns into a content-addressed asset,
+      // and the SSG render reports a light root's sheet to the document sink while
+      // a shadow root's rides its DSD template. Without it a migrated page-local
+      // component ships its markup with no sheet at all.
+      const styleDeclaration = pageLocalStyleDeclaration(source, file, root, tagName, semantics);
+      if (styleDeclaration !== undefined) styleDeclarations.push(styleDeclaration);
     }
   }
 
   const declarations = [...byTag.values()].sort(
     (a, b) => a.tagName.localeCompare(b.tagName) || a.modulePath.localeCompare(b.modulePath),
   );
-  return { declarations, notes };
+  return { declarations, styleDeclarations, notes };
 }

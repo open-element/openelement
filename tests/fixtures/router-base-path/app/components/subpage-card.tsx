@@ -1,16 +1,21 @@
 /**
- * Non-root-base fixture — nested SHADOW component (S-C2/S-12). Its sheet is
- * delivered inside its own DSD template as a marked link (the shadow half of
- * the protocol), unscoped, with the configured base in the href.
+ * Non-root-base fixture — nested SHADOW component (S-C2/S-12).
+ *
+ * Generated lane (2026-11-21 closeout): the sidecar `styles` declaration is the
+ * shadow sheet's one carrier — the compiler turns it into a module-graph import
+ * and the DSD template declares a marked, base-prefixed `<link>` for the emitted
+ * asset.
  */
-import { element, OpenElement } from '@openelement/element';
-import cardStyles from './subpage-card.css';
+import { defineIslandConfig } from '@openelement/router';
 
-@element('subpage-card', { root: 'shadow-open' })
-export default class SubpageCard extends OpenElement {
-  static override styles = [cardStyles];
+export const openElement = defineIslandConfig({
+  // Declared for the same reason as the note's: `app/components/` owns no tag
+  // convention, so the sidecar is the identity source.
+  tag: 'subpage-card',
+  root: 'shadow',
+  styles: ['./subpage-card.css'],
+});
 
-  render() {
-    return <span class='subpage-card'>carded</span>;
-  }
+export default function SubpageCard() {
+  return <span class="subpage-card">carded</span>;
 }

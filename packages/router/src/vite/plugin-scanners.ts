@@ -35,6 +35,7 @@ import {
   buildPackageIslandDecls,
   registerPackageIslandStyleDeclarations,
 } from './internal/ssg/island-scanner.ts';
+import { registerIslandStyleDeclaration } from './internal/island-style-declarations.ts';
 import { resolveIslandDeliveryTags } from './internal/ssg/delivery.ts';
 import type { OpenPluginState } from './plugin-config.ts';
 import type { ModuleWalkResolver } from './internal/module-graph-walk.ts';
@@ -156,6 +157,11 @@ async function scanRoutesAndStaticComponents(state: OpenPluginState): Promise<Ro
     resolve,
   });
   state.ctx.phase1.staticComponents = staticScan.declarations;
+  // The page-local components' declared sheets (P-2). They are RE-registered here
+  // because the island scan resets the carrier later in this same buildStart —
+  // that reset is the island scan's authority over ISLANDS, not over a page-local
+  // component, which has no islands-dir entry to be re-read from.
+  state.ctx.phase1.pageLocalStyleDeclarations = staticScan.styleDeclarations;
   // The discovery walk's boundaries are NOT silent: a partial registry must
   // say so through the same envelope channel as every other scan degradation
   // (#1612) — the machine-readable exit replays it, the log carries the line.
@@ -423,6 +429,11 @@ async function scanIslandsIntoCtx(state: OpenPluginState): Promise<string> {
     state.viteRoot ?? process.cwd(),
   );
   // The island scan reset the style declaration carrier; re-register the
+  // PAGE-LOCAL generated components' declared sheets (P-2) here: they have no
+  // islands-dir entry for the scan to rediscover, so the reset above would
+  // otherwise drop them.
+  registerPageLocalStyleDeclarations(state);
+  // The island scan reset the style declaration carrier; re-register the
   // admitted packages' declared sheets (idempotent, and order-independent with
   // the package scan that may run before or after this one).
   registerPackageIslandStyleDeclarations(
@@ -470,8 +481,26 @@ export async function rescanRoutes(state: OpenPluginState): Promise<void> {
  * from ctx.phase1), and let the configureServer watcher invalidate both
  * virtual entries and full-reload, exactly as for routes.
  */
+
+/**
+ * Re-register the page-local GENERATED components' style declarations (P-2).
+ *
+ * Idempotent, and called after every place that owns the carrier's reset — the
+ * island scan is that owner, and a page-local component has no islands-dir entry
+ * for it to rediscover, so the caller has to put these records back.
+ */
+export function registerPageLocalStyleDeclarations(state: OpenPluginState): void {
+  for (const declaration of state.ctx.phase1.pageLocalStyleDeclarations ?? []) {
+    registerIslandStyleDeclaration(declaration);
+  }
+}
+
 export async function rescanIslands(state: OpenPluginState): Promise<void> {
   await scanIslandsIntoCtx(state);
+  // The island scan resets the style-declaration carrier; re-register the
+  // page-local generated components' declarations (P-2) in the same pass, or a
+  // rescan would silently drop a page-local component's sheet.
+  registerPageLocalStyleDeclarations(state);
   // A rescan re-reads the island sources, so the declared-tag provider must be
   // refreshed in the same pass: an edited sidecar `tag` (or a newly added
   // page-local component the route graph now reaches) has to replace the stale

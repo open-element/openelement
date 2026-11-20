@@ -70,6 +70,13 @@ class Phase1Meta {
    * scan runs; a rescan that finds different declarations replaces it.
    */
   declaredElementTags: ReadonlyMap<string, string> = new Map();
+  /**
+   * Page-local GENERATED components' declared sheets (P-2, 2026-11-21). The
+   * island scan owns the style-declaration carrier's reset, so these records are
+   * held here and re-registered after it — a page-local component has no
+   * islands-dir entry for that scan to rediscover.
+   */
+  pageLocalStyleDeclarations: IslandStyleDeclaration[] = [];
 
   /**
    * The compiler-emitted SSR host producer export for the declared modules that
@@ -381,3 +388,5 @@ export class OpenElementBuildContext {
     });
   }
 }
+
+import type { IslandStyleDeclaration } from './internal/island-style-declarations.ts';
