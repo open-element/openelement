@@ -217,3 +217,36 @@ describe('client-only sheet imports (the module-graph edge the gap lacked)', () 
     expect(String(error.diagnostics[0]!.message)).toContain('client-only');
   });
 });
+
+// ---- deletion prerequisite P-1: static class candidates ----------------
+
+test('P-1: the compiled module carries its admitted STATIC class tokens', () => {
+  const source = `import { defineIslandConfig } from '@openelement/router';
+export const openElement = defineIslandConfig({ root: 'shadow', styles: [] });
+function Card() {
+  return <article class="card inline-flex gap-2"><span class="marker">x</span></article>;
+}
+export default Card;
+`;
+  const compiled = compileGeneratedElementIfAdmitted(source, '/proj/candidates.tsx', {
+    site: { tag: 'oe-candidates' },
+  });
+  expect(compiled).not.toBeNull();
+  expect(compiled!.classCandidates).toEqual(['card', 'gap-2', 'inline-flex', 'marker']);
+});
+
+test('P-1: a dynamic class channel contributes NO candidate (an expression is not a token)', () => {
+  const source = `import { defineIslandConfig } from '@openelement/router';
+import { compute } from './compute.ts';
+export const openElement = defineIslandConfig({ root: 'shadow' });
+function Card() {
+  return <article class="static-token" data-x={compute()}>x</article>;
+}
+export default Card;
+`;
+  const compiled = compileGeneratedElementIfAdmitted(source, '/proj/candidates-dynamic.tsx', {
+    site: { tag: 'oe-candidates-dynamic' },
+  });
+  expect(compiled).not.toBeNull();
+  expect(compiled!.classCandidates).toEqual(['static-token']);
+});

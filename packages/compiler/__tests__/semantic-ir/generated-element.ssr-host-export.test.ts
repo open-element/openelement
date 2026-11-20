@@ -199,14 +199,19 @@ describe('M11 prerequisite — compiler-owned ssrHostExport metadata', () => {
   test('compile propagates the field and returns the emitter module byte-for-byte', () => {
     const compiled = compileGeneratedElementIfAdmitted(SHADOW_ISLAND, FILE, { site: SITE });
     expect(compiled).not.toBeNull();
-    // Additive shape pin: the pre-M11 result keys plus exactly one field.
+    // Additive shape pin: the pre-M11 result keys, the M11 host identity, and the
+    // P-1 class-candidate set — one field per dated contract addition, no more.
     expect(Object.keys(compiled!).sort()).toEqual([
+      'classCandidates',
       'code',
       'component',
       'map',
       'ssrHostExport',
       'tag',
     ]);
+    // The fixture's `<div class="card">` is the one static token: the candidate
+    // set reads the SAME model the bytes come from, which is the point of P-1.
+    expect(compiled!.classCandidates).toEqual(['card']);
     expect(compiled!.tag).toBe('x-card');
     expect(compiled!.component).toBe('Card');
     expect(compiled!.ssrHostExport).toBe('Card__ssrHost');

@@ -253,6 +253,9 @@ function emptyResult(
     requiredBindings: leaf.requiredBindings,
     requiredProps: leaf.requiredProps,
     requiresPropsChanged: leaf.requiresPropsChanged,
+    // A refused module contributes no candidates: the stylesheet must not
+    // compile utilities for markup that never shipped.
+    classCandidates: [],
     diagnostics,
     leaf: null,
     tail: null,
@@ -438,6 +441,7 @@ export function generateElementModule(
       requiredBindings: leaf.requiredBindings,
       requiredProps: leaf.requiredProps,
       requiresPropsChanged: leaf.requiresPropsChanged,
+      classCandidates: leaf.classCandidates,
       diagnostics: leaf.diagnostics,
       leaf: leafText,
       tail: null,
@@ -715,6 +719,7 @@ export function generateElementModule(
     requiredBindings: leaf.requiredBindings,
     requiredProps: leaf.requiredProps,
     requiresPropsChanged: leaf.requiresPropsChanged,
+    classCandidates: leaf.classCandidates,
     diagnostics: [],
     leaf: leafText,
     tail,

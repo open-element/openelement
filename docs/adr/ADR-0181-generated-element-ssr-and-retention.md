@@ -326,6 +326,14 @@ One additive symbol on the same internal subpaths, recorded by the
 | --- | --- | --- |
 | `@openelement/element` `./internal/compiled/runtime` and `./internal/compiled/leaf-runtime` | new export `joinInstancePass(owner, transaction)`; `beginInstancePass(owner)` now RETURNS its `InstanceTransaction` (a call whose result is ignored is unchanged, so the depth-1 emitted text keeps working byte-for-byte). | The emitted child body is the caller: it must join the root attempt's transaction instead of committing its own child pass. Emitted-artifact ABI on ADR-0177's internal subpaths — no stability promise, no public export, and a module with no retained child keeps exactly its previous bytes and graph. |
 
+### Enumerated interface deltas (2026-11-21, P-1 class candidates)
+
+One additive field on the same internal subpath.
+
+| Package / entry | Delta | Necessity and compatibility |
+| --- | --- | --- |
+| `@openelement/compiler` `./internal/compiler/semantic-ir/generated-element/compile` | `CompiledGeneratedElement.classCandidates: readonly string[]` (and the same field on `GeneratedElementModule` / `GeneratedLeafModule`) | The generated lane's STATIC class tokens are what a utility engine compiles a shadow component's stylesheet from; without them a generated shadow component loses its utilities (measured on `router-unocss-probe`). Emitted bytes, map and every existing field are unchanged; refusals carry `[]`. Additive build metadata on an internal subpath — no stability promise. |
+
 ### Written rule (2026-11-20): a light root must not be nested inside a shadow template
 
 This is a RULE, not a capability. No code was built for it, and the generated

@@ -999,6 +999,13 @@ export interface GeneratedLeafModule {
   /** True when the module subscribes to `host.propsChanged` (tracked props). */
   readonly requiresPropsChanged: boolean;
   readonly diagnostics: readonly IrDiagnostic[];
+  /**
+   * The module's admitted STATIC class tokens (deletion prerequisite P-1): the
+   * component stylesheet's candidate set. Empty when every class channel is
+   * dynamic or the module declares none, which is the pre-P-1 answer for the
+   * generated lane and stays byte-neutral.
+   */
+  readonly classCandidates: readonly string[];
 }
 
 /**
@@ -9470,6 +9477,65 @@ function emitAuthoredImport(entry: FunctionModelImport): string {
   }
 }
 
+/**
+ * The module's STATIC class tokens (deletion prerequisite P-1, 2026-11-21).
+ *
+ * A utility engine compiles a component's stylesheet from its admitted class
+ * candidates, and until now only the class lane, the server function lane (which
+ * reuses the class lowering) and packed artifacts produced them. The
+ * generated-element lane produced NONE, so a generated shadow component migrated
+ * off the class lane silently lost its utilities: the authored `.css` still
+ * shipped, the utility classes landed in the document sheet (which a shadow root
+ * cannot reach no matter what).
+ *
+ * The tokens are a MODEL fact, not an emission fact: this walk reads the same
+ * `FunctionModelModule` the generator emits, so the set cannot drift from the
+ * markup. Dynamic `class` channels are deliberately excluded — an authored
+ * expression is not a compile-time candidate, and guessing at one would compile
+ * utilities nobody declared. Duplicates are collapsed and the result is sorted,
+ * so the registry sees a stable fact.
+ */
+export function collectStaticClassCandidates(module: FunctionModelModule): readonly string[] {
+  const tokens = new Set<string>();
+  const visit = (nodes: readonly FunctionModelNode[]): void => {
+    for (const node of nodes) {
+      switch (node.kind) {
+        case 'element': {
+          for (const attribute of node.attributes) {
+            if (attribute.kind !== 'static' || attribute.name !== 'class') continue;
+            for (const token of attribute.value.split(/\s+/)) {
+              if (token.length > 0) tokens.add(token);
+            }
+          }
+          visit(node.children);
+          break;
+        }
+        case 'fragment':
+          visit(node.children);
+          break;
+        case 'component-ref':
+          // A reference's children live in the component's recipe table, not on
+          // the ref; those recipes are walked below.
+          break;
+        case 'condition':
+          visit(node.consequent);
+          visit(node.alternate ?? []);
+          break;
+        case 'list':
+          visit(node.template);
+          break;
+        default:
+          break;
+      }
+    }
+  };
+  for (const component of module.components) {
+    visit(component.roots);
+    for (const recipe of component.recipes) visit([recipe.target]);
+  }
+  return [...tokens].sort();
+}
+
 export function generateLeafModule(
   module: FunctionModelModule,
   options: {
@@ -9518,6 +9584,7 @@ export function generateLeafModule(
       requiredBindings: [],
       requiredProps: [],
       requiresPropsChanged: false,
+      classCandidates: [],
       diagnostics: [
         {
           severity: 'error',
@@ -9547,6 +9614,7 @@ export function generateLeafModule(
       requiredBindings: [],
       requiredProps: [],
       requiresPropsChanged: false,
+      classCandidates: [],
       diagnostics: [cycle],
     };
   }
@@ -9621,6 +9689,8 @@ export function generateLeafModule(
       // No module exists, so no declaration exists: keep the invariant
       // "non-null exactly when the factory was emitted".
       rootInstanceFactory: null,
+      // A refused module contributes no candidates (nothing shipped to style).
+      classCandidates: [],
       requiredBindings: [...requiredBindings].sort(),
       requiredProps: [...requiredProps].sort(),
       requiresPropsChanged,
@@ -9664,6 +9734,7 @@ export function generateLeafModule(
       sourceMap: null,
       placements: [...placements],
       rootInstanceFactory: null,
+      classCandidates: [],
       requiredBindings: [...requiredBindings].sort(),
       requiredProps: [...requiredProps].sort(),
       requiresPropsChanged,
@@ -9701,6 +9772,7 @@ export function generateLeafModule(
     requiredBindings: [...requiredBindings].sort(),
     requiredProps: [...requiredProps].sort(),
     requiresPropsChanged,
+    classCandidates: collectStaticClassCandidates(module),
     diagnostics: [],
   };
 }

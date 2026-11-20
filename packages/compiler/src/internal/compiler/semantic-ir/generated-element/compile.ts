@@ -62,6 +62,12 @@ export interface CompiledGeneratedElement {
    * read; callers must not re-derive the name from the emitted text.
    */
   readonly ssrHostExport: string | null;
+  /**
+   * The module's admitted STATIC class tokens (deletion prerequisite P-1): the
+   * component stylesheet's candidate set, collected from the same function model
+   * the module was emitted from. Empty when every class channel is dynamic.
+   */
+  readonly classCandidates: readonly string[];
 }
 
 function toCompilerDiagnostic(diagnostic: IrDiagnostic): ElementCompilerDiagnostic {
@@ -215,5 +221,6 @@ export function compileGeneratedElementIfAdmitted(
     // Additive build metadata from the emitter's one hostWrapper decision; the
     // module text and map above are unchanged by this field.
     ssrHostExport: emitted.ssrHostExport,
+    classCandidates: emitted.classCandidates,
   };
 }

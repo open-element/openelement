@@ -1313,6 +1313,39 @@ fresh-dom,blocks,revive,error-boundary,facade-host}.ts` (the shell's P1 closure
 list is the ready-made inventory); the public exports are `OpenElement`,
 `ErrorBoundary` and the class half of `public-runtime.ts`.
 
+**A prerequisite discovered by migrating a fixture (2026-11-21, measured).**
+Migrating `router-unocss-probe`'s shadow island to the generated lane made its
+component stylesheet lose the component's utilities: the DSD marked link is
+emitted, but the emitted component sheet contains ONLY the authored CSS, while
+the island's class tokens land in the document sheet (which cannot reach a shadow
+root). Cause: `collect-shadow-candidates.ts` registers class candidates from
+exactly three producers — the class compiler, the server FUNCTION component lane
+(which reuses the class-lane `Lowering`, hence its `classCandidates`), and packed
+artifacts — and the generated-element lane produces none, because the function
+frontend never collects static class tokens. Consequence: **deleting the class
+lane without this would unstyle every generated-lane shadow component compiled by
+a utility engine.** The fixture was reverted to the class island (its e2e is green
+again, 5/5) and the gap is recorded here as deletion prerequisite **P-1**:
+`generateLeafModule` must return the module's static class tokens,
+`compileGeneratedElementIfAdmitted` must carry them, and the candidate pass must
+register them for generated islands (shadow scope) before the fixture migrates.
+
+> **P-1 status 2026-11-21: the collection and registration half is DELIVERED** —
+> `generateLeafModule` returns `classCandidates` (a model walk over roots and
+> recipe targets, static `class` transcripts only, sorted/deduped),
+> `GeneratedElementModule` / `CompiledGeneratedElement` carry it, the generator's
+> refusals return `[]`, and the build's discovery pass registers a declared
+> generated island's candidates with the SHADOW scope its declaration records
+> (the island scan's declaration is the one site fact). Compiler rows: 16 in
+> `generated-element.client-styles.test.ts` (two new: a static-token row and the
+> dynamic-channel exclusion). **The remaining half is P-1b**: the DSD marked link
+> still points at the authored `styles` asset, while the candidate sheet is
+> emitted as a SEPARATE asset — measured on the unocss fixture: the utilities
+> reached `5cdcb99533c6.css`, the template linked `1357ca4d8b1a.css`, and the
+> shadow e2e failed exactly as before. The class lane merges both into ONE
+> component sheet; the generated lane must do the same before the fixture's
+> shadow component can migrate.
+
 **Ordering within the one change set (each step is a gate, not a commit):**
 
 1. ~~generated-lane benchmark baseline~~ — **DONE 2026-11-21**:

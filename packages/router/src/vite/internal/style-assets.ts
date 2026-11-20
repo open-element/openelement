@@ -65,6 +65,7 @@ import {
   analyzeModuleSemantics,
   type ClassCandidateRegistry,
   compileElementModule,
+  compileGeneratedElementIfAdmitted,
   compileServerComponentIfAdmitted,
   readCompiledArtifactStyles,
   getStyleRequest,
@@ -702,6 +703,16 @@ async function discoverServerRenderedModules(
   // this lane: a generated island has no authored `.css` import, and a
   // client-only island is not an SSR entry import at all.
   const declaredEdges = registerDeclaredIslandStyleEdges();
+  // The generated-element lane's class candidates (deletion prerequisite P-1,
+  // 2026-11-21): a generated island's static class tokens are what its COMPONENT
+  // stylesheet compiles utilities from, and until now only the class lane, the
+  // server function lane and packed artifacts fed that set — a generated shadow
+  // component therefore lost its utilities. The island scan's declaration is the
+  // ONE site fact (tag + root) this walk needs to compile the module through the
+  // lane it actually ships through.
+  const generatedSites = new Map(
+    islandStyleDeclarations().map((declaration) => [declaration.moduleId, declaration]),
+  );
   const roots = [...seeds.files];
   for (const specifier of seeds.specifiers) {
     // The island modules the SSR entry imports, resolved exactly as that
@@ -774,6 +785,30 @@ async function discoverServerRenderedModules(
       // understands — relative, `#imports`, alias, package exports.
       registerCandidatesFromCompiled(file, compiled, candidates);
       elementFiles.push(file);
+      continue;
+    }
+    // The generated-element lane: an island module the scan declared carries the
+    // function component + policy sidecar, so its class candidates are a SHADOW
+    // fact exactly when the declared root is a shadow root. Registered here (and
+    // not by the server function path below, which would call the same module a
+    // light page) because the declaration is the authoritative site fact.
+    const generatedSite = generatedSites.get(file);
+    if (generatedSite !== undefined) {
+      let generated: ReturnType<typeof compileGeneratedElementIfAdmitted>;
+      try {
+        generated = compileGeneratedElementIfAdmitted(
+          source,
+          stableModuleId(file, effectiveRoot, workspaceRoot),
+          { site: { tag: generatedSite.tagName } },
+        );
+      } catch {
+        // The authoritative transform reports the authored diagnostic.
+        continue;
+      }
+      candidates.register(file, generated?.classCandidates ?? [], {
+        shadow: generatedSite.root === 'shadow',
+      });
+      if (generated !== null) elementFiles.push(file);
       continue;
     }
     // The server function component lane (alpha15): a route module carrying
