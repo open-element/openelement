@@ -24,8 +24,8 @@ carries none.
 | --- | --- |
 | branch | `feat/alpha16-retirement` |
 | source version | `1.0.0-alpha.16` (bumped this line through the one-knob tool) |
-| measured commit | `823f29f896868aff96d6bb30e09e531e5fe84ea5` (the evidence table below is taken there, clean tree) |
-| delivery commits on this line | `b12d040301910a751b0bb40e75db635e472a9432` (client-only style adoption), `1b05f57c0ec056aa8b9b9f9333c187369a7ed21a` (depth ≥ 2 retained instances) and `823f29f896868aff96d6bb30e09e531e5fe84ea5` (pre-hydration replay) |
+| measured commit | `a7e60af73f5ca1b7993ec521a02d05d5ad64ef15` (the 2026-11-21 evidence session; every row below was run there on a clean tree) |
+| delivery commits on this line | `b12d040301910a751b0bb40e75db635e472a9432` (client-only style adoption), `1b05f57c0ec056aa8b9b9f9333c187369a7ed21a` (depth ≥ 2 retained instances), `823f29f896868aff96d6bb30e09e531e5fe84ea5` (pre-hydration replay), `7041cf140` + `d043503e7` + `7fb28244e` (generated-lane class candidates: collect, link, dev scope), `f3c6b72f8` + `6028f35fd` (page-local generated components; a generated light page's own sheet), `10bbc2d51` (UnoCSS fixture fully generated) and `a7e60af73` (TSX-only shadow utilities) |
 | record anchor | the docs-only record commit(s) that follow the measured commit (this report's own updates); they change no source, so every measured row stands |
 | `git status --porcelain` | empty |
 
@@ -80,13 +80,13 @@ worth remembering (see §5).
 ## 3. Evidence record
 
 All rows: provenance **`LOCAL .agents/worktrees/alpha16-retirement`**, commit
-`823f29f896868aff96d6bb30e09e531e5fe84ea5`, status clean (`git status --porcelain`
+`a7e60af73f5ca1b7993ec521a02d05d5ad64ef15`, status clean (`git status --porcelain`
 empty), every commit pushed to the fork's `feat/alpha16-retirement`.
 
 | # | command | result |
 | --- | --- | --- |
 | 1 | `vp run --no-cache --fail-if-no-match --filter @openelement/element test` | **1064 passed (1064)**, 136 files |
-| 2 | `vp run --no-cache --fail-if-no-match --filter @openelement/compiler test` | **1421 passed (1421)**, 102 files |
+| 2 | `vp run --no-cache --fail-if-no-match --filter @openelement/compiler test` | **1424 passed (1424)**, 102 files |
 | 3 | `vp run --no-cache --fail-if-no-match --filter @openelement/router test` | **1882 passed (1882)**, 167 files |
 | 4 | `vp run --no-cache --fail-if-no-match --filter @openelement/www test` | **304 passed (304)**, 34 files |
 | 5 | `vp run --no-cache --fail-if-no-match --filter @openelement/saas test` | **150 passed (150)**, 20 files |
@@ -103,6 +103,10 @@ empty), every commit pushed to the fork's `feat/alpha16-retirement`.
 | 12b | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo adr-index:check` | `43 record(s), 43/43 entr(ies) resolved, 15 annotated` |
 | 12c | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo shims:check` | `27 shim(s) / 6 retired — every location tracked, every row owned with a retirement condition` |
 | 13 | `pnpm --dir tests/fixtures/site-light-probe run build` + `run e2e` | **25 passed**, on the CLASS version of the fixture (the generated port is reverted and its gap named in §5.1) |
+| 13b | `pnpm --dir tests/fixtures/router-base-path run build` + `run e2e:browsers` | fixture **9 passed** on chromium, firefox and webkit (page + both nested components generated) |
+| 13c | `pnpm --dir tests/fixtures/router-unocss-probe run build` + `run e2e:browsers` | fixture **15 passed** on three engines (engine probe fully generated) |
+| 13d | `pnpm --dir tests/fixtures/router-ui-dogfood run build` + `run e2e:browsers` | fixture **120 passed** on three engines (TSX-only Tailwind shadow probe migrated) |
+| 13e | `pnpm --dir tests/fixtures/router-static-only run build` + `vitest run --project router packages/router/__tests__/static-only-build.test.ts` | build exit 0; **3 passed** |
 | 14 | `pnpm --dir tests/e2e/starter-smoke run setup` + `run test` | packed starter build **exit 0**; Playwright **33 passed (33)** on chromium, firefox and webkit — includes the client-only computed-style row and the `#942`/third-party replay rows that were previously red (§5.6) |
 
 `@openelement/protocol` has no `test` task (it declares no scripts); it is covered

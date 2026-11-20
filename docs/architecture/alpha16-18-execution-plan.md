@@ -1409,6 +1409,18 @@ register them for generated islands (shadow scope) before the fixture migrates.
 > no authored asset. Measured: `router-ui-dogfood` probe renders its DSD template
 > with the shared sheet link and **e2e 120/120 across three engines**.
 
+> **P-4 (2026-11-21, measured boundary): a generated PAGE must resolve to a
+> declared ISLAND.** Converting `router-ui-dogfood`'s `page-dialog` to the
+> generated lane fails at SSR with PROGRAM_MISSING: `classifyPageRoute` resolves a
+> page's component only against the islands directory (`resolveLocalIsland`), so a
+> page-local component used AS the page is classified a class page while the
+> transform compiles it as a generated element — the two lanes disagree about the
+> same module. The page therefore stays class-authored (reverted; build green).
+> Consequence for the remaining fixtures: migrating a PAGE to the generated lane
+> means moving its module into `islands/` (or teaching page classification the
+> page-local site fact). Their page components were not migrated in this line, and
+> this is recorded as the reason rather than left implicit.
+>
 **Ordering within the one change set (each step is a gate, not a commit):**
 
 1. ~~generated-lane benchmark baseline~~ — **DONE 2026-11-21**:
