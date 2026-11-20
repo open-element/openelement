@@ -403,3 +403,19 @@ test('the dev plugin serves the resource-URL adapter, fail-closed', async () => 
   expect(serverAdapter, 'no authored CSS text rides the shim').not.toContain(SHEET);
   expect(serverAdapter).not.toContain('fetch(');
 });
+
+test('the SSR half registers the island style DECLARATIONS, not only the client', () => {
+  // Found by porting a styled `ssr: false` shadow island onto the generated
+  // lane: the island's own `import sheet from './x.css'` resolved in the CLIENT
+  // build (whose discovery pass registers the declarations) but fell through to
+  // Vite's CSS plugin in the SSG build, which has no default export — the whole
+  // build failed with MISSING_EXPORT.
+  //
+  // The registry is process-wide, and the client build ran first in the same
+  // process, so the failure was not a missing registration per se but a missing
+  // BUILD-START: this plugin never gave itself a chance to see the declarations
+  // its own `load` depends on. Registering in `buildStart` makes the SSR half
+  // read the SAME registry the client half wrote.
+  const plugin = serverStyleAssetPlugin();
+  expect(typeof plugin.buildStart, 'the SSR style half must run a buildStart').toBe('function');
+});

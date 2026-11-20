@@ -1051,6 +1051,17 @@ export function serverStyleAssetPlugin(options?: {
   return {
     name: 'open:style-assets-ssr',
     enforce: 'pre',
+    // The generated-island style DECLARATIONS must be registered in this build
+    // too: a package island that a client graph never imported (an `ssr: false`
+    // island is not an SSR entry import) still declares sheets, and the client
+    // build's discovery pass is not this build. Registering here makes the SSR
+    // half read the SAME registry the client half wrote, so an island module
+    // that imports its own declared sheet resolves to the URL-only adapter
+    // instead of falling through to Vite's CSS plugin (which has no default
+    // export and fails the build).
+    buildStart() {
+      registerDeclaredIslandStyleEdges();
+    },
     resolveId: styleEdgeResolveId,
     async load(id) {
       const registryKey = styleAssetRegistryKey(id);

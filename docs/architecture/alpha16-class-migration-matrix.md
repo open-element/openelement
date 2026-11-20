@@ -2022,3 +2022,50 @@ is being retired, and a benchmark of a retired path has no successor by conversi
 
 **Application-wide class-lane surface, final:** the 82 contract test files, the 8
 migratable fixtures, and this benchmark input. Nothing else.
+
+**2026-11-20 — the `ssr: false` style gap: root cause measured, one half fixed, the other designed.**
+
+Following the recorded `site-light-probe` negative, the client-side style gap was
+investigated end to end. The finding is narrower than "the generated lane has no
+client style channel" and it changes the fix.
+
+### Root cause
+
+The generated lane replaced the class lane's `import sheet from './x.css'` +
+`static styles = [sheet]` with a **sidecar string list** `styles: ['./x.css']`.
+That list is a BUILD-TIME declaration: the island scan turns it into an emitted
+asset plus (for SSR) a DSD `<link>`. It produces **no module-graph edge**, so the
+client never receives a sheet object. Measured on an emitted island module:
+`has css import: false`, `styleLinks` present (server-only), descriptor has no
+`styles` key.
+
+### What was fixed (landed)
+
+`serverStyleAssetPlugin` (the SSR build's style half) had **no `buildStart`**, so it
+never registered the island style DECLARATIONS its own `load` depends on. A styled
+island that imports its own declared sheet therefore resolved in the CLIENT build
+(whose discovery pass registers them) and fell through to Vite's CSS plugin in the
+SSG build — which has no default export, so the build died with `MISSING_EXPORT`.
+Registering in `buildStart` makes the SSR half read the same registry the client
+half wrote. Guard: `style-assets.test.ts` asserts the plugin has a `buildStart`.
+
+### What is designed but NOT landed
+
+The full fix needs: (a) the compiler emits a real `import sheet from './x.css'` for
+a **client-only** (`ssr: false`) island's declared sheets, and (b) the shell adopts
+those sheets into the root it creates. Three facts make it small, all verified:
+
+| fact | evidence |
+| --- | --- |
+| the intercept's gate is already open | a sidecar-declared island IS a registered style importer with a resolvable edge (measured directly) |
+| no duplicate asset | `emitStyleAsset` dedups by content-hash filename — one asset whether the edge arrives via the graph or the declaration |
+| no double application | `sheetDeliveredByLink()` already skips adoption when the target's markup declares the same URL |
+
+End-to-end probe result (reverted): with the import present, the client chunk
+carried a real `CSSStyleSheet` **and** the bundler-rewritten `assets/<hash>.css`
+URL, with exactly ONE emitted asset — so the chain works once the import exists.
+
+A `?url`-import alternative was also measured and REJECTED: it builds in all three
+phases but emits a **second** asset (649 vs 650 bytes, identical rules), which is
+exactly the "one resource, two deliveries" outcome the style pipeline exists to
+prevent.
