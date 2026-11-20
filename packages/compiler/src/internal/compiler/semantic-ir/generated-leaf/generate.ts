@@ -612,6 +612,29 @@ function moduleUsesPropertyChange(state: EmitState): boolean {
  * for such a module, so a module that never opts into the env form keeps its
  * exact pre-env bytes (including every hook-free SHA pin).
  */
+/**
+ * True when ANY component in the module declares a `useHost()` accessor
+ * (`16b-REF`).
+ *
+ * The lowering is a field read on the setup host record, so the record must
+ * carry the element. A generated element ROOT gets it unconditionally (the
+ * shell attaches it), but a RETAINED depth-1 hostless child's host literal is
+ * built by the parent and only forwards the fields the child actually reads —
+ * which is why this fact has to be module-wide, exactly like the env-form
+ * lifecycle gate beside it.
+ */
+function moduleUsesHostAccess(state: EmitState): boolean {
+  for (const component of state.componentByName.values()) {
+    if (component.resources.some((resource) => resource.kind === 'host')) return true;
+  }
+  return false;
+}
+
+/** True when `component` itself declares a `useHost()` accessor. */
+function componentUsesHostAccess(component: FunctionModelComponent): boolean {
+  return component.resources.some((resource) => resource.kind === 'host');
+}
+
 function moduleUsesLifecycleEnv(state: EmitState): boolean {
   for (const component of state.componentByName.values()) {
     if (
@@ -631,9 +654,15 @@ function moduleUsesLifecycleEnv(state: EmitState): boolean {
  * so every other module and reference site keeps its exact bytes.
  */
 function childHostElementField(state: EmitState, node: FunctionModelComponentRef): string {
-  if (!moduleUsesLifecycleEnv(state)) return '';
   const child = state.componentByName.get(node.name);
-  if (child === undefined || !child.lifecycle.some((hook) => hook.receivesEnv)) return '';
+  if (child === undefined) return '';
+  // `16b-REF`: a child that reads `useHost()` needs the element field for the
+  // same reason an env-form lifecycle callback does — its retained setup reads
+  // the field off its own host literal.
+  const needsElement =
+    (moduleUsesLifecycleEnv(state) && child.lifecycle.some((hook) => hook.receivesEnv)) ||
+    componentUsesHostAccess(child);
+  if (!needsElement) return '';
   return `, ${HOST_ELEMENT_PROPERTY}: ${state.hostVar}.${HOST_ELEMENT_PROPERTY}, ${STATES_PROPERTY}: ${state.hostVar}.${STATES_PROPERTY}`;
 }
 
@@ -5943,7 +5972,7 @@ interface SetupLocal {
    * is a `16b-REF` NODE HANDLE the factory builds (one object for the whole
    * element lifetime) and the emitted `ref` channel drives.
    */
-  readonly kind: 'local' | 'ref' | 'context';
+  readonly kind: 'local' | 'ref' | 'context' | 'host';
   /**
    * The record the factory evaluates for a `local`. For a `ref` this is the
    * OPTIONAL attach/detach notification callback (the same record the plain
@@ -5974,6 +6003,15 @@ function emitSetupBinding(state: EmitState, local: SetupLocal): void {
   if (local.kind === 'local') {
     if (local.record === null) return;
     pushParts(state, [`const ${local.name} = (`, { record: local.record }, ');'], local.span);
+    return;
+  }
+  if (local.kind === 'host') {
+    // `16b-REF` / `useHost`: the owning element is ALREADY on the retained
+    // setup factory's host record (the shell attaches it for the lifecycle env
+    // form), so the lowering is one field read — no channel, no allocation and
+    // no cleanup. The value never changes for an instance, which is why no
+    // reactivity or lifetime work is needed here.
+    push(state, `const ${local.name} = ${state.hostVar}.${HOST_ELEMENT_PROPERTY};`, local.span);
     return;
   }
   if (local.kind === 'context') {
@@ -6406,6 +6444,14 @@ function emitClaimFunction(
       if (record === null || !declareReads(state, record)) continue;
       state.localResources.add(resource.name);
       localLines.push({ name: resource.name, kind: 'ref', record, span: resource.span });
+      continue;
+    }
+    if (resource.kind === 'host') {
+      // `16b-REF` / `useHost`: no lowered expression and no read classification
+      // — the value is a compiler-owned host-record field, exactly like a ref
+      // handle is a compiler-owned object.
+      state.localResources.add(resource.name);
+      localLines.push({ name: resource.name, kind: 'host', record: null, span: resource.span });
       continue;
     }
     if (resource.kind === 'context') {
@@ -7958,6 +8004,16 @@ function emitComponent(
       localLines.push({ name: resource.name, kind: 'ref', record, span: resource.span });
       continue;
     }
+    if (resource.kind === 'host') {
+      // `16b-REF` / `useHost`: the owning element is a host-record field the
+      // retained factory reads — no lowered expression and no read
+      // classification, and deliberately NOT a host binding (a binding lookup
+      // would demand the name from the module's `bindings` channel, which is a
+      // different thing entirely).
+      state.localResources.add(resource.name);
+      localLines.push({ name: resource.name, kind: 'host', record: null, span: resource.span });
+      continue;
+    }
     if (resource.kind === 'context') {
       // `16b-CTX`: the consumer signal is built by the retained factory, so a
       // reconnect writes into the SAME object. Only the TOKEN expression needs
@@ -8786,9 +8842,10 @@ function emitComponent(
   // Env-form callbacks read the owning element from the host record. The shell
   // attaches it; this literal carries it into the mount/claim host the replay
   // prologues read. Guests: modules without the env form keep today's bytes.
-  const forwardedHostElement = moduleUsesLifecycleEnv(state)
-    ? `, ${HOST_ELEMENT_PROPERTY}: ${INTERNAL_PREFIX}host.${HOST_ELEMENT_PROPERTY}, ${STATES_PROPERTY}: ${INTERNAL_PREFIX}host.${STATES_PROPERTY}`
-    : '';
+  const forwardedHostElement =
+    moduleUsesLifecycleEnv(state) || moduleUsesHostAccess(state)
+      ? `, ${HOST_ELEMENT_PROPERTY}: ${INTERNAL_PREFIX}host.${HOST_ELEMENT_PROPERTY}, ${STATES_PROPERTY}: ${INTERNAL_PREFIX}host.${STATES_PROPERTY}`
+      : '';
   // The change channel rides the same literal for the depth-1 child setup host.
   const forwardedPropertyChange = moduleUsesPropertyChange(state)
     ? `, ${PROPERTY_CHANGE_PROPERTY}: ${INTERNAL_PREFIX}host.${PROPERTY_CHANGE_PROPERTY}`

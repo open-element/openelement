@@ -1349,7 +1349,11 @@ class ScopeResolver {
                   target.importInfo.specifier,
                   target.importInfo.importedName,
                 );
-          if (calleeValue === 'plain') {
+          // A callee the host classified as an ordinary VALUE (`role === 'value'`)
+          // is an ordinary function too: its call result is an ordinary value.
+          // `classifyValue` deliberately answers `undefined` for the lane's own
+          // factory specifiers, so the role is the other half of the same fact.
+          if (calleeValue === 'plain' || target?.role === 'value') {
             binding.value = 'plain';
             binding.classifiedBy = 'host-classifier';
             return;

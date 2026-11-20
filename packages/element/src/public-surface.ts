@@ -133,6 +133,7 @@ export {
   onPropertyChange,
   ref,
   useContext,
+  useHost,
 } from './public-runtime.ts';
 
 // ─── HTML utilities (re-export from core) ────────────────

@@ -195,6 +195,31 @@ export function ref<T extends globalThis.Element = globalThis.Element>(
 }
 
 /**
+ * Compiler-recognized HOST-ACCESS intrinsic (`16b-REF`, `useHost`).
+ *
+ * ```tsx
+ * const host = useHost();
+ * // … host is this instance's owning element (the custom element).
+ * ```
+ *
+ * It exposes the SAME fact the lifecycle/change/error callbacks already receive
+ * as `env.host` — the owning generated element for a root, the nearest enclosing
+ * generated element host for a depth-1 retained hostless child — through the
+ * expression position instead of a callback parameter. There is therefore no new
+ * runtime channel and no second host lookup: the compiler erases the call into a
+ * read of the host-element field the retained setup factory already receives.
+ *
+ * The read is NOT reactive: the element identity never changes for an instance,
+ * so a derived node capturing it can never go stale. That is also why it carries
+ * no lifecycle ownership — it allocates nothing and needs no cleanup.
+ *
+ * Erased by the compiler; calling it at runtime fails closed.
+ */
+export function useHost(): HTMLElement {
+  outsideCompiler('useHost');
+}
+
+/**
  * Compiler-recognized PROVIDER intrinsic (`16b-CTX`): declares that this
  * component provides `context` with the current value of `read` to its subtree.
  *

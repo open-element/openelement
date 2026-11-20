@@ -602,7 +602,7 @@
       },
       "declarations": {
         ".": {
-          "publicShapeSha256": "26444ba2efbc76056e424413888466b2105116e41070180c0a93313ec6b2a363",
+          "publicShapeSha256": "d4407313f0f128b9fc0e729a071a3b1534dc4ca9c6fc76f9b79c4cd08bbb0927",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -703,6 +703,7 @@
             "trustedHtml=value:{call:(html:string)=>{readonly html:string}}",
             "unsafeStreamFrameAttribute=value:(name: string, value: string) => boolean",
             "useContext=value:{call:<T>(context:{readonly defaultValue:T;readonly key:symbol})=>{readonly value:T;subscribe:{call:(fn:{call:(value:T)=>void})=>{call:()=>void}}}}",
+            "useHost=value:{call:()=>HTMLElement}",
             "wrapInDocument=value:{call:(html:string,options:{allowHeadExtrasScripts?:union(false|true|undefined);clientScript?:union(string|undefined);cspNonce?:union(string|undefined);dangerouslyHeadFragments?:union(array(string)|undefined);devScripts?:union(string|undefined);headExtras?:union(string|undefined);lang?:union(string|undefined);links?:union(array({href:string;hreflang?:union(string|undefined);rel:string})|undefined);meta?:union(undefined|{description?:union(string|undefined);tags?:union(array(Record<string, string | number | boolean>)|undefined)});scripts?:union(array({code?:union(string|undefined);src?:union(string|undefined);type?:union(string|undefined)})|undefined);streamBootstrap?:union(string|undefined);structuredData?:union(array(Record<string, unknown>)|undefined);styleLinks?:union(array(string)|undefined);title?:union(string|undefined)})=>string}"
           ]
         },
@@ -734,7 +735,7 @@
           ]
         },
         "./base": {
-          "publicShapeSha256": "26444ba2efbc76056e424413888466b2105116e41070180c0a93313ec6b2a363",
+          "publicShapeSha256": "d4407313f0f128b9fc0e729a071a3b1534dc4ca9c6fc76f9b79c4cd08bbb0927",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -835,6 +836,7 @@
             "trustedHtml=value:{call:(html:string)=>{readonly html:string}}",
             "unsafeStreamFrameAttribute=value:(name: string, value: string) => boolean",
             "useContext=value:{call:<T>(context:{readonly defaultValue:T;readonly key:symbol})=>{readonly value:T;subscribe:{call:(fn:{call:(value:T)=>void})=>{call:()=>void}}}}",
+            "useHost=value:{call:()=>HTMLElement}",
             "wrapInDocument=value:{call:(html:string,options:{allowHeadExtrasScripts?:union(false|true|undefined);clientScript?:union(string|undefined);cspNonce?:union(string|undefined);dangerouslyHeadFragments?:union(array(string)|undefined);devScripts?:union(string|undefined);headExtras?:union(string|undefined);lang?:union(string|undefined);links?:union(array({href:string;hreflang?:union(string|undefined);rel:string})|undefined);meta?:union(undefined|{description?:union(string|undefined);tags?:union(array(Record<string, string | number | boolean>)|undefined)});scripts?:union(array({code?:union(string|undefined);src?:union(string|undefined);type?:union(string|undefined)})|undefined);streamBootstrap?:union(string|undefined);structuredData?:union(array(Record<string, unknown>)|undefined);styleLinks?:union(array(string)|undefined);title?:union(string|undefined)})=>string}"
           ]
         },
@@ -854,7 +856,7 @@
           ]
         },
         "./client-only": {
-          "publicShapeSha256": "26444ba2efbc76056e424413888466b2105116e41070180c0a93313ec6b2a363",
+          "publicShapeSha256": "d4407313f0f128b9fc0e729a071a3b1534dc4ca9c6fc76f9b79c4cd08bbb0927",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -955,6 +957,7 @@
             "trustedHtml=value:{call:(html:string)=>{readonly html:string}}",
             "unsafeStreamFrameAttribute=value:(name: string, value: string) => boolean",
             "useContext=value:{call:<T>(context:{readonly defaultValue:T;readonly key:symbol})=>{readonly value:T;subscribe:{call:(fn:{call:(value:T)=>void})=>{call:()=>void}}}}",
+            "useHost=value:{call:()=>HTMLElement}",
             "wrapInDocument=value:{call:(html:string,options:{allowHeadExtrasScripts?:union(false|true|undefined);clientScript?:union(string|undefined);cspNonce?:union(string|undefined);dangerouslyHeadFragments?:union(array(string)|undefined);devScripts?:union(string|undefined);headExtras?:union(string|undefined);lang?:union(string|undefined);links?:union(array({href:string;hreflang?:union(string|undefined);rel:string})|undefined);meta?:union(undefined|{description?:union(string|undefined);tags?:union(array(Record<string, string | number | boolean>)|undefined)});scripts?:union(array({code?:union(string|undefined);src?:union(string|undefined);type?:union(string|undefined)})|undefined);streamBootstrap?:union(string|undefined);structuredData?:union(array(Record<string, unknown>)|undefined);styleLinks?:union(array(string)|undefined);title?:union(string|undefined)})=>string}"
           ]
         },
@@ -1163,14 +1166,15 @@
           ]
         },
         "./lifecycle": {
-          "publicShapeSha256": "f737fcac7a8977a2c5bbdc0eb98cc76ff4dcf96bd21f76a7b206237b11ce2e25",
+          "publicShapeSha256": "8eb3dd50735d130955a851684abc49feea4659abb0a66cfc6dc97b7e37c9d078",
           "publicSymbols": [
             "onConnect=value:{call:(callback:{call:(env:{readonly host:HTMLElement;readonly signal:AbortSignal;readonly states:CustomStateSet})=>union(void|{call:()=>void})})=>void}",
             "onDispose=value:{call:(callback:{call:(env:{readonly host:HTMLElement;readonly signal:AbortSignal;readonly states:CustomStateSet})=>void})=>void}",
             "onPropertyChange=value:{call:(callback:{call:(event:{readonly host:HTMLElement;readonly name:string;readonly signal:AbortSignal;readonly states:CustomStateSet;readonly value:unknown})=>void})=>void}",
             "provideContext=value:{call:<T>(context:{readonly defaultValue:T;readonly key:symbol},read:{call:()=>T})=>void}",
             "ref=value:{call:<T extends Element =Element>(callback:union(undefined|{call:(element:union(T|null))=>union(void|{call:()=>void})}))=>{call:(element:union(Element|null))=>void;readonly current:union(T|null)}}",
-            "useContext=value:{call:<T>(context:{readonly defaultValue:T;readonly key:symbol})=>{readonly value:T;subscribe:{call:(fn:{call:(value:T)=>void})=>{call:()=>void}}}}"
+            "useContext=value:{call:<T>(context:{readonly defaultValue:T;readonly key:symbol})=>{readonly value:T;subscribe:{call:(fn:{call:(value:T)=>void})=>{call:()=>void}}}}",
+            "useHost=value:{call:()=>HTMLElement}"
           ]
         },
         "./logger": {
@@ -1184,7 +1188,7 @@
           ]
         },
         "./no-blocks": {
-          "publicShapeSha256": "26444ba2efbc76056e424413888466b2105116e41070180c0a93313ec6b2a363",
+          "publicShapeSha256": "d4407313f0f128b9fc0e729a071a3b1534dc4ca9c6fc76f9b79c4cd08bbb0927",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -1285,6 +1289,7 @@
             "trustedHtml=value:{call:(html:string)=>{readonly html:string}}",
             "unsafeStreamFrameAttribute=value:(name: string, value: string) => boolean",
             "useContext=value:{call:<T>(context:{readonly defaultValue:T;readonly key:symbol})=>{readonly value:T;subscribe:{call:(fn:{call:(value:T)=>void})=>{call:()=>void}}}}",
+            "useHost=value:{call:()=>HTMLElement}",
             "wrapInDocument=value:{call:(html:string,options:{allowHeadExtrasScripts?:union(false|true|undefined);clientScript?:union(string|undefined);cspNonce?:union(string|undefined);dangerouslyHeadFragments?:union(array(string)|undefined);devScripts?:union(string|undefined);headExtras?:union(string|undefined);lang?:union(string|undefined);links?:union(array({href:string;hreflang?:union(string|undefined);rel:string})|undefined);meta?:union(undefined|{description?:union(string|undefined);tags?:union(array(Record<string, string | number | boolean>)|undefined)});scripts?:union(array({code?:union(string|undefined);src?:union(string|undefined);type?:union(string|undefined)})|undefined);streamBootstrap?:union(string|undefined);structuredData?:union(array(Record<string, unknown>)|undefined);styleLinks?:union(array(string)|undefined);title?:union(string|undefined)})=>string}"
           ]
         },

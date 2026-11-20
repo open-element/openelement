@@ -1186,3 +1186,48 @@ head's local values. They **stay historical (advisory only)** and are not
 upgraded by this section. The delivery-line evidence for the same claims is this
 section and the per-row records it cites; where the two readings disagree, this
 section's re-recorded values and the cited row records are the later reading.
+
+## Amendment (2026-11-20): `useHost` is IMPLEMENTED in Alpha16b
+
+Append-only status record. Supersedes the amendment above ("`useHost` is
+FUTURE/OWED") without rewriting it — that text stays as the historical reading.
+
+Owner direction (execution-plan §19, `16b-REF`) moved `useHost` from FUTURE into
+Alpha16b. It is now delivered, and this record states exactly what was built so
+the delivery claim has a written shape.
+
+**What it is.** `useHost()` returns the OWNING ELEMENT as a value — the same fact
+the lifecycle / change / error callbacks already receive as `env.host`: the
+generated element for a root, the nearest enclosing generated element host for a
+depth-1 retained hostless child. It is a **compiler-erased intrinsic**, admitted
+by binding provenance (a named import of `useHost` from `@openelement/element` or
+`@openelement/element/lifecycle`), exactly like `ref` and `useContext`.
+
+**What it is not.** Not a runtime channel and not a second host lookup: the
+retained setup factory already receives the element on its host record
+(`__oe_hostElement`), so the lowering is ONE field read. It allocates nothing, so
+it needs no lifetime and no cleanup; and the element identity never changes for an
+instance, so it needs no reactivity — a derived node capturing it cannot go stale.
+
+**Refusals (fail closed, existing `OEC9042` form code):** arguments, type
+arguments, and a reassignable (`let`/`var`) binding. A local function that happens
+to be named `useHost` is not the intrinsic and keeps the ordinary grammar.
+
+**Server side.** The server has no bindings channel and no element (ADR-0181), so
+a component whose *rendered output* depends on the host element is not
+server-renderable. That is a loud, named failure (`OEIR_LEAF_MISSING_VALUE:
+host`), never a silently empty slot — pinned by a test row.
+
+**Public delta:** `useHost` is added to the root entry and to the
+`./lifecycle` subpath. The regenerated public-interface snapshot carries exactly
+two additions (`useHost=value:{call:()=>HTMLElement}` on `.` and `./base`) plus
+the derived shape hash; no other symbol changed.
+
+**P5 retirement condition.** The intrinsic retires if the compiler ever gains a
+general author-visible element accessor with the same fact (e.g. a framework-level
+`this`); it would then be replaced by that spelling rather than kept as a second
+one. Recorded here so a later reader removes it deliberately.
+
+Superseded count: ADR-0182's "not counted in the delivered experience-edition
+surface" line no longer applies to `useHost`; `16b-MN` and the capability
+inventory must read this amendment as the later status.

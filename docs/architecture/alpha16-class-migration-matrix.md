@@ -1284,3 +1284,32 @@ Not started this round: it is a serializer-shape slice (compiler emitter + shell
 seam + admission plumbing), and starting it half-way would leave a producer that
 emits expander calls nothing answers. Recorded here so the next attempt opens on
 seam 1 instead of re-deriving the map.
+
+**2026-11-20 — `useHost` DELIVERED (the objective's `16b-REF` item).**
+
+`useHost` was the one capability in the objective's list that was genuinely
+absent (a grep for `useHost` in `packages/` returned nothing). It is now
+implemented end to end:
+
+| layer | change |
+| --- | --- |
+| element | `useHost()` stand-in in `compile-lifecycle.ts`, re-exported from the root entry and the `./lifecycle` subpath |
+| frontend | recognized by BINDING PROVENANCE (named import from either canonical specifier); refusals: arguments, type arguments, a `let`/`var` binding |
+| generator | ONE host-record field read (`__oe_host.__oe_hostElement`) in the retained setup — no channel, no allocation, no lifetime, no reactivity |
+| forwarding | the module-wide `moduleUsesHostAccess` gate forwards `__oe_hostElement` exactly like the env-form lifecycle gate, so a depth-1 retained child can read it too |
+| public delta | `useHost=value:{call:()=>HTMLElement}` on `.` and `./base`, plus the derived shape hash; no other symbol moved |
+
+**Server side is fail-closed, and that is the recorded contract:** the server has
+no bindings channel and no element (ADR-0181), so a component whose rendered
+output depends on the host element fails loudly with
+`OEIR_LEAF_MISSING_VALUE: host` rather than emitting an empty slot.
+
+Guards: `generated-element.use-host.test.ts` (six rows — the lowering, the
+forwarding gate, byte-identity for a module that never calls it, the three
+refusals, a foreign same-named function staying a plain local, and the
+server-side fail-closed row). ADR-0182 carries the required dated amendment
+("`useHost` is IMPLEMENTED in Alpha16b", superseding the FUTURE/OWED text without
+rewriting it) with the P5 retirement condition.
+
+Verification: compiler 100 files / 1400 tests; element 133 / 1044; interface
+snapshot matches (6 packages); `vp run check` 5/5 PASS.

@@ -46,6 +46,8 @@ test('the subpath exports exactly the compiler-erased intrinsics', () => {
     'provideContext',
     'ref',
     'useContext',
+    // `16b-REF`: the owning element as a value, next to the node-handle factory.
+    'useHost',
   ]);
 });
 
@@ -62,6 +64,7 @@ test('the subpath re-exports the SAME function objects as the root entry', () =>
   // different functions with the same exported name, which is exactly why the
   // identity assertion below is scoped to the names whose meaning is shared.
   expect(lifecycleEntry.useContext).toBe(rootEntry.useContext);
+  expect(lifecycleEntry.useHost).toBe(rootEntry.useHost);
 });
 
 test('calling an intrinsic from the subpath fails closed with the root identity', () => {
@@ -139,6 +142,7 @@ test('the subpath module has no module-scope side effect and no executor path', 
     'provideContext,',
     'ref,',
     'useContext,',
+    'useHost,',
     "} from './internal/core/compile-lifecycle.ts';",
   ]);
   // The dependency is the leaf stand-in module, never the public surface (which
