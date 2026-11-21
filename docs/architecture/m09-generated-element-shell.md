@@ -35,7 +35,7 @@ Four repository files plus this record and its generated views:
 | --- | --- |
 | [`shell.ts`](../../packages/element/src/internal/compiled/generated-element/shell.ts) | The internal Custom Element shell read by the compiler-private descriptor. |
 | [`property-conversion.ts`](../../packages/element/src/internal/core/property-conversion.ts) | The import-free canonical client property-conversion leaf. |
-| [`facade-host.ts`](../../packages/element/src/internal/compiled/facade-host.ts) | Now imports and re-exports the two public helpers from the leaf; no second conversion table. |
+| `facade-host.ts` (**deleted in F16**) | Imported and re-exported the two public helpers from the leaf; no second conversion table. Removed with the class lane — `public-runtime.ts` now imports `internal/core/property-conversion.ts` directly. |
 | [`generated-element.shell.test.ts`](../../packages/compiler/__tests__/semantic-ir/generated-element.shell.test.ts) | The 21 focused conversion, module-graph and Chromium lifecycle tests, including the condition claim/reconnect vertical. |
 
 `docs/architecture/seams.md` gains one row and
@@ -71,7 +71,7 @@ The shell owns only the platform edge:
   table; `facade-host.ts` continues to export `convertFromAttribute` and
   `convertToAttribute` for existing compiled-runtime callers, with identity
   pinned by a test;
-- it does not import `facade-host.ts`, `runtime-program.ts`, the compiled
+- it does not import the (since deleted) `facade-host.ts`, `runtime-program.ts`, the compiled
   kernel, the runtime barrel or the Part Program executor.
 
 ## The 21 focused tests
