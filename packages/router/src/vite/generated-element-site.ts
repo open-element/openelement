@@ -179,6 +179,16 @@ export function createGeneratedElementSiteResolver(
     const declaration = islandStyleDeclarationFor(moduleId);
     return declaration === undefined
       ? { tag: island.tagName }
-      : { tag: island.tagName, root: declaration.root === 'shadow' ? 'shadow' : 'light' };
+      : {
+          tag: island.tagName,
+          // Three states survive to the site fact (F16): a closed root must not
+          // arrive at the compiler spelled as an open one.
+          root:
+            declaration.root === 'closed'
+              ? 'closed'
+              : declaration.root === 'shadow'
+                ? 'shadow'
+                : 'light',
+        };
   };
 }

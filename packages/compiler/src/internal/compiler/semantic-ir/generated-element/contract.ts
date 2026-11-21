@@ -105,7 +105,7 @@ export interface GeneratedElementSite {
    * not know the root keeps today's behaviour, and the compiler never infers it
    * from the sidecar here — the host owns the site fact.
    */
-  readonly root?: 'light' | 'shadow';
+  readonly root?: 'light' | 'shadow' | 'closed';
 }
 
 /** Host hook for the site fact; returning null keeps the lane inert. */

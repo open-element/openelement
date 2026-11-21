@@ -237,7 +237,7 @@ export interface StaticComponentDecl {
    * document sheet. Absent for a class component (its `static styles` scope
    * carries the same fact).
    */
-  root?: 'light' | 'shadow';
+  root?: 'light' | 'shadow' | 'closed';
   /**
    * True when this record is a PAGE COMPONENT (the module a route passes to
    * `definePage`), not a nested component. A page root is rendered by the route

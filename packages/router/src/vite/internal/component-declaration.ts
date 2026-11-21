@@ -30,7 +30,7 @@
 import { readIslandConfig, type StaticIslandConfig } from './ssg/island-scanner.ts';
 
 /** The descriptor root a component declares, as the site fact spells it. */
-export type DeclaredRoot = 'light' | 'shadow';
+export type DeclaredRoot = 'light' | 'shadow' | 'closed';
 
 /** What a module's authored sidecar declares. */
 export interface ComponentDeclaration {
@@ -110,7 +110,16 @@ export function readComponentDeclaration(
     declaration: {
       declared: true,
       tag,
-      root: config.root === 'shadow' ? 'shadow' : config.root === 'light' ? 'light' : undefined,
+      // Three spellings, three states (F16): collapsing `closed` into `shadow`
+      // here would make the compiler emit an OPEN root for an encapsulated one.
+      root:
+        config.root === 'closed'
+          ? 'closed'
+          : config.root === 'shadow'
+            ? 'shadow'
+            : config.root === 'light'
+              ? 'light'
+              : undefined,
       styles: config.styles ?? [],
       config,
     },

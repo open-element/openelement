@@ -111,7 +111,7 @@ export interface LocalIslandMeta {
    * default. Absent when the author pinned none: the compiled program's own
    * root decision stands, and the generated shell applies its `light` default.
    */
-  root?: 'light' | 'shadow';
+  root?: 'light' | 'shadow' | 'closed';
   /**
    * The tag this island's sidecar declares EXPLICITLY (`openElement.tag`), or
    * undefined when it declares none. The generated-element site resolver reads
@@ -317,7 +317,7 @@ export function admittedTailwindDeclarations(
  */
 export interface PackageIslandStyleFact {
   readonly tagName: string;
-  readonly root: 'light' | 'shadow';
+  readonly root: 'light' | 'shadow' | 'closed';
   readonly specifiers: readonly string[];
 }
 
@@ -338,7 +338,14 @@ export function packageIslandStyleDeclarations(
       }
       facts.push({
         tagName: declaration.tagName,
-        root: declaration.openElement?.root === 'shadow' ? 'shadow' : 'light',
+        // Three states, not two (F16): an encapsulated component's declaration
+        // must reach the compiler as `closed`, never as the open default.
+        root:
+          declaration.openElement?.root === 'closed'
+            ? 'closed'
+            : declaration.openElement?.root === 'shadow'
+              ? 'shadow'
+              : 'light',
         specifiers: [...check.styles],
       });
     }
@@ -419,7 +426,7 @@ export function attachPackageIslandHostIdentities(
   declarations: readonly IslandDecl[],
   packageManifests: readonly OpenElementPackageManifest[],
 ): IslandDecl[] {
-  const declaredRoots = new Map<string, 'light' | 'shadow' | undefined>();
+  const declaredRoots = new Map<string, 'light' | 'shadow' | 'closed' | undefined>();
   for (const pkg of packageManifests) {
     for (const declaration of pkg.declarations) {
       declaredRoots.set(
@@ -1047,7 +1054,12 @@ function parseStaticIslandConfig(
       // fails closed on anything else (P8: one sidecar, two readers, one
       // accepted set).
       const value = literalText(raw, 'openElement.root');
-      if (value !== 'light' && value !== 'shadow') {
+      // THREE values (F16). This reader and the runtime authoring surface are the
+      // same fact's two readers (P8), so they must accept the same set: the
+      // authoring face gained `closed` and this one kept refusing it, which made
+      // the scanner read a valid sidecar as an invalid one — the module was then
+      // invisible to every discovery pass while the transform compiled it fine.
+      if (value !== 'light' && value !== 'shadow' && value !== 'closed') {
         throw staticOpenElementError(`openElement.root has unsupported value "${value}"`);
       }
       meta.root = value;

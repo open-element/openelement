@@ -64,7 +64,7 @@ export interface IslandStyleDeclaration {
    * document resource; a shadow root's sheet is declared inside its DSD
    * template by the canonical marked `<link>` prefix.
    */
-  readonly root: 'light' | 'shadow';
+  readonly root: 'light' | 'shadow' | 'closed';
   /**
    * The island module's absolute path as the bundler spells it (the importing
    * side of every style edge). Separator-normalized; queries stripped.

@@ -186,7 +186,7 @@ export function stableModuleId(
  * utilities in the sheet that can actually reach them.
  */
 function generatedSiteRootIsShadow(
-  site: { readonly root?: 'light' | 'shadow' } | null | undefined,
+  site: { readonly root?: 'light' | 'shadow' | 'closed' } | null | undefined,
 ): boolean {
   return site?.root === 'shadow';
 }

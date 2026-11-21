@@ -753,7 +753,7 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
   const descriptor = islandPolicyObjectLiteral(sourceFile);
   if (descriptor === null) return { kind: 'absent' };
   let seenRoot = false;
-  let declaredRoot: 'light' | 'shadow' | null = null;
+  let declaredRoot: 'light' | 'shadow' | 'closed' | null = null;
   let seenSsr = false;
   /**
    * The sidecar's explicit `ssr` boolean, or undefined when it pins none. The
@@ -825,14 +825,18 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
           ),
         };
       }
-      if (initializer.text !== 'light' && initializer.text !== 'shadow') {
+      if (
+        initializer.text !== 'light' &&
+        initializer.text !== 'shadow' &&
+        initializer.text !== 'closed'
+      ) {
         return {
           kind: 'refused',
           diagnostic: rootDiagnostic(
             sourceFile,
             initializer,
             `openElement.root has unsupported value "${initializer.text}"; ` +
-              'use "light" or "shadow"',
+              'use "light", "shadow" or "closed"',
           ),
         };
       }
@@ -1022,8 +1026,18 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
     }
     delegatesFocus = initializer.kind === ts.SyntaxKind.TrueKeyword;
   }
+  // Three root families map one-to-one onto the descriptor's three modes (F16).
+  // Before `closed` was spellable here, every non-light root collapsed to
+  // `shadow-open`, so a component that wanted an encapsulated root could only be
+  // written as a class — the asymmetry the shell never had.
   const root: RootMode | undefined =
-    declaredRoot === null ? undefined : declaredRoot === 'light' ? 'light' : 'shadow-open';
+    declaredRoot === null
+      ? undefined
+      : declaredRoot === 'light'
+        ? 'light'
+        : declaredRoot === 'closed'
+          ? 'shadow-closed'
+          : 'shadow-open';
   if (delegatesFocus && root !== 'shadow-open') {
     return {
       kind: 'refused',

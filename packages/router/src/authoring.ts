@@ -827,7 +827,7 @@ export interface IslandConfig {
    * authored sidecar (D-root-source, 2026-11-13), so the generated element's
    * descriptor carries it without a second declaration.
    */
-  root?: 'light' | 'shadow';
+  root?: 'light' | 'shadow' | 'closed';
   /**
    * Delegate focus to this island's shadow root (`shadowrootdelegatesfocus`
    * in the DSD template, `attachShadow({ delegatesFocus: true })` for a
@@ -1190,12 +1190,22 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
         "Either set hydrate: 'media' or remove the media field — the two must agree.",
     );
   }
-  if (config.root !== undefined && config.root !== 'light' && config.root !== 'shadow') {
+  // `closed` is the third root family (F16): the shell has always resolved
+  // `shadow-closed` (adopting `ElementInternals.shadowRoot` or attaching a closed
+  // root), but the AUTHORING face could not spell it, so a closed component could
+  // only be written as a class. Spelling it here closes that asymmetry; `shadow`
+  // stays the open default and the two remain distinct facts.
+  if (
+    config.root !== undefined &&
+    config.root !== 'light' &&
+    config.root !== 'shadow' &&
+    config.root !== 'closed'
+  ) {
     throw authoringError(
       IslandErrorCode.DESCRIPTOR_SHAPE,
-      `${ERROR_PREFIX} defineIslandConfig() root must be "light" or "shadow". ` +
-        "Write root: 'light' for a component compiled with @element(tag, { root: 'light' }), " +
-        "or root: 'shadow' for the DSD default — the build fails closed when the two disagree.",
+      `${ERROR_PREFIX} defineIslandConfig() root must be "light", "shadow" or "closed". ` +
+        "Write root: 'light' for document content, root: 'shadow' for an open DSD root, " +
+        "or root: 'closed' for an encapsulated one — the build fails closed on any other value.",
     );
   }
   if (config.formAssociated !== undefined && typeof config.formAssociated !== 'boolean') {

@@ -1049,7 +1049,7 @@ async function emitServerRenderedEdges(
  */
 function pageLocalGeneratedSite(
   source: string,
-): { tagName: string; root: 'light' | 'shadow' } | undefined {
+): { tagName: string; root: 'light' | 'shadow' | 'closed' } | undefined {
   const reading = readComponentDeclaration(source);
   if (reading.kind !== 'declared' || reading.declaration.tag === undefined) return undefined;
   return { tagName: reading.declaration.tag, root: reading.declaration.root ?? 'light' };

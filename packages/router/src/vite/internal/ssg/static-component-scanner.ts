@@ -117,7 +117,7 @@ function generatedHostExportFor(source: string, file: string, tagName: string): 
 interface PageLocalDeclaration {
   readonly declaration: ComponentDeclaration;
   readonly styleDeclaration: IslandStyleDeclaration | undefined;
-  readonly root: 'light' | 'shadow';
+  readonly root: 'light' | 'shadow' | 'closed';
 }
 
 /**
@@ -142,7 +142,7 @@ function pageLocalDeclaration(
   const reading = readComponentDeclaration(source, tagName);
   if (reading.kind !== 'declared') return undefined;
   const declaration = reading.declaration;
-  const root: 'light' | 'shadow' = declaration.root ?? 'light';
+  const root: 'light' | 'shadow' | 'closed' = declaration.root ?? 'light';
   return {
     declaration,
     root,
@@ -217,6 +217,31 @@ function pageModuleStyleDeclaration(
  * the same declaration reader every other pass uses; classification owns the
  * verdict, this scan only makes sure the module is walked.
  */
+/**
+ * The local modules one module imports for their side effects.
+ *
+ * Only RELATIVE specifiers resolve here, and only to an existing file: this is a
+ * bounded expansion of the page-component seed set, not a second module walk. A
+ * package specifier's components are admitted through its manifest, and the
+ * transform reports an unresolvable one.
+ */
+function staticImportsOfModule(file: string): readonly string[] {
+  let source: string;
+  try {
+    source = readFileSync(file, 'utf8');
+  } catch {
+    return [];
+  }
+  const found: string[] = [];
+  for (const match of source.matchAll(/^\s*import\s+['"]([^'"]+)['"];?\s*$/gm)) {
+    const specifier = match[1]!;
+    if (!specifier.startsWith('.')) continue;
+    const resolved = resolveFrom(specifier, file);
+    if (resolved !== undefined) found.push(resolved);
+  }
+  return found;
+}
+
 function readPageComponentSpecifier(routeFile: string): { readonly specifier: string } | undefined {
   let source: string;
   try {
@@ -286,6 +311,13 @@ export async function scanStaticComponents(
     // function page, not an imported component: its module is the route module,
     // and re-recording it here would make every such page a static component.
     if (resolved === undefined || resolved === routeFile) continue;
+    // A page component reaches its nested components through SIDE-EFFECT imports
+    // (`import './boundary-closed.tsx'`), which the resolver walk does not follow
+    // as a value edge — and `resolveLocalIsland` below only seeds the route's own
+    // page module. Without this expansion a page's nested components were never
+    // scanned, so a closed-root child got no host-producer record and rendered as
+    // a bare tag (measured on ui-dogfood's /boundaries).
+    for (const nested of staticImportsOfModule(resolved)) pageComponentFiles.add(nested);
     pageComponentFiles.add(resolved);
   }
   for (const file of [...walk.files, ...pageComponentFiles]) {
