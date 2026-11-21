@@ -28,7 +28,6 @@ const PUBLIC_SOURCES = [
   'jsx-dev-runtime.ts',
   'jsx-runtime.ts',
   'logger.ts',
-  'open-element-params.ts',
   'public-contracts.ts',
   'public-runtime.ts',
 ];
