@@ -1409,7 +1409,22 @@ register them for generated islands (shadow scope) before the fixture migrates.
 > no authored asset. Measured: `router-ui-dogfood` probe renders its DSD template
 > with the shared sheet link and **e2e 120/120 across three engines**.
 
-> **P-4 (2026-11-21, measured boundary): a generated PAGE must resolve to a
+> **P-4 is FIXED (2026-11-21, `e8661bad0`) and its follow-on gap is P-6.** The
+> root cause was that four passes read the sidecar themselves: page
+> classification resolved a page's component only against the islands directory,
+> so one module was a class page to the classifier and a generated element to the
+> transform. There is now ONE reader
+> (`vite/internal/component-declaration.ts`) and classification resolves by
+> MODULE IDENTITY from the declared-component map, falling back to the path
+> convention. With that, converting `router-ui-dogfood`'s `/dialog` to the
+> generated lane builds and renders its DSD — but the INNER `<open-dialog>` UI
+> package component stays an unexpanded tag: **a SHADOW-root generated host has no
+> nested-host expansion channel** (the light root's producer receives one; the
+> `__ssrHost` wrapper never does). That is P-6, a capability gap three fixtures'
+> shadow pages would hit, so they stay class-authored and the /dialog fixture is
+> reverted.
+>
+> **Superseded reading (kept as history): a generated PAGE must resolve to a
 > declared ISLAND.** Converting `router-ui-dogfood`'s `page-dialog` to the
 > generated lane fails at SSR with PROGRAM_MISSING: `classifyPageRoute` resolves a
 > page's component only against the islands directory (`resolveLocalIsland`), so a
