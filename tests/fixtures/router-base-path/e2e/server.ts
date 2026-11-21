@@ -15,6 +15,7 @@
  * Usage: node server.ts --port 4181 --dir ../dist --base /sub
  */
 
+import { existsSync } from 'node:fs';
 import { createServer } from 'node:http';
 import process from 'node:process';
 import { join, resolve } from 'node:path';
@@ -33,7 +34,14 @@ const PORT = Number(args.port ?? '4181');
 const ROOT = resolve(process.cwd(), args.dir ?? '../dist');
 const BASE = (args.base ?? '/sub').replace(/\/$/, '');
 
-const serverEntry = await importRequestTimeServer(join(ROOT, 'server/index.js'));
+// A PURE-STATIC build emits no dist/server (F16: the fixture's only request-time
+// route was the streamed page, which retired with the class lane). `undefined`
+// is the adapter's "no request-time server" state, so the fixture serves the
+// prerendered tree and the e2e suite exercises exactly what a static deployment
+// ships.
+const serverEntry = existsSync(join(ROOT, 'server/index.js'))
+  ? await importRequestTimeServer(join(ROOT, 'server/index.js'))
+  : undefined;
 
 createServer((nodeRequest, nodeResponse) => {
   void (async () => {
