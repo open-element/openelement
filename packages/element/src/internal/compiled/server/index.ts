@@ -56,7 +56,7 @@ import { serializeStyleLinks } from '../style-link-tags.ts';
 import { displayValue, itemTemplateFields, itemValue } from '../runtime/program-kernel.ts';
 // The one facade-domain root-mode union, owned by the runtime kernel and
 // re-exported below for the server options surface.
-import type { CompiledRootMode } from '../runtime/kernel.ts';
+
 import { eachItemKey, EachKeyError } from '../each-key.ts';
 // Canonical when-Block condition evaluation (#1372): single source shared
 // with the runtime executors; do not reintroduce a private comparison.
@@ -75,7 +75,16 @@ import {
 
 export type { CompiledProgramHost, CompiledSignalLike } from './shared.ts';
 export { assertCompiledProgram, CompiledProgramValidationError } from './shared.ts';
-export type { CompiledRootMode };
+/**
+ * The root family a serialized tree was claimed into.
+ *
+ * Inlined here when the class runtime's `kernel.ts` was deleted with the class
+ * lane (F16): this module needs the union, not the executor that used to define
+ * it. `'open'`/`'closed'` are the DSD template spellings; the authoring and
+ * descriptor surfaces spell the same three states `'light' | 'shadow' |
+ * 'shadow-closed'`, which is the mapping `RootMode` in the protocol package owns.
+ */
+export type CompiledRootMode = 'light' | 'open' | 'closed';
 
 type CompiledHostAttribute = readonly [name: string, value: unknown];
 
