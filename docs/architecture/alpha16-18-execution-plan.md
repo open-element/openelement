@@ -1424,6 +1424,25 @@ register them for generated islands (shadow scope) before the fixture migrates.
 > shadow pages would hit, so they stay class-authored and the /dialog fixture is
 > reverted.
 >
+> **P-5 IS DISSOLVED — it was a migration mistake, not a capability gap (2026-11-21).**
+> The five red morph rows came from migrating `live-counter` WITHOUT
+> `root: 'shadow'`: the class form was `shadow-open`, the generated form became a
+> LIGHT root, and the morph client's `islandIntact` compares LIGHT-DOM surfaces —
+> so a list prepend legitimately replaced the node and the signal reset. Declaring
+> the same root restores **114/114 and 342/342 across three engines**. Recorded
+> because a recipient-shaped "morph continuity contract" would have been designed
+> for a bug that does not exist.
+>
+> **Ten more islands are migrated (2026-11-21, `956f3ad2d`)**: request-time
+> (styled-badge, probe-panel, decoupled-view, visible-probe), native-framework
+> (note-counter, stream-lit-probe), ui-dogfood (form-probe, page-home,
+> page-tailwind-probe, boundary-light). Builds exit 0; e2e 114 / 53 / 40 — each at
+> or above its baseline. Three blockers are recorded rather than forced: the zag
+> comboboxes need an authored-method capability the generated lane does not have;
+> `boundary-closed` needs a closed-root spelling; and any page containing a nested
+> host that writes an attribute at connect time trips
+> `OE_RUNTIME_STATIC_RANGE_MISMATCH` (present at baseline for `/dialog`).
+>
 > **P-6 is FIXED (2026-11-21).** The parity gap is closed: the shadow host
 > producer now declares `(props, lightChildren, attributes, styleLinks,
 > nestedHost)` — FIXED positions, always all five — and hands the expander to its
