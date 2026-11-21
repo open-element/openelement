@@ -75,10 +75,14 @@ export default Card;
  * channel (`el.value = …`) keeps the component mount-only, so the M08 producer
  * slice has no `__ssr` export for the wrapper to call.
  */
+// A shadow island that lawfully has NO host producer. This used to be a
+// property-channel field, because that channel kept the component mount-only and
+// therefore producerless; F16 admits the channel, so the fixture states the real
+// reason instead — `ssr: false` means there is no server render at all.
 const SHADOW_WITHOUT_SSR_ISLAND = `import { defineIslandConfig } from '@openelement/router';
-export const openElement = defineIslandConfig({ root: 'shadow', properties: { value: { default: '' } }, hydrate: 'idle' });
-function Field(props: { value: string }) {
-  return <input value={props.value} />;
+export const openElement = defineIslandConfig({ root: 'shadow', ssr: false, hydrate: 'only' });
+function Field() {
+  return <input value="x" />;
 }
 export default Field;
 `;
@@ -294,9 +298,10 @@ export default Card;
     expect(compiled!.ssrHostExport).toBeNull();
     expect(compiled!.code).toContain('root: "shadow-open"');
     expect(compiled!.code).not.toContain('__ssrHost');
-    expect(
-      exportedFunctionNames(compiled!.code).filter((name) => name.startsWith('Field__ssr')),
-    ).toEqual([]);
+    // The leaf still emits its `__ssr` body — the leaf does not read the sidecar's
+    // `ssr` fact. What must be absent is the HOST PRODUCER, which is this lane's
+    // whole subject: the emitter decides it, and for a client-only island it
+    // decides no.
     expect(emittedHostExports(compiled!.code)).toEqual([]);
   });
 

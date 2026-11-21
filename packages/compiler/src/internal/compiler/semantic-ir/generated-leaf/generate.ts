@@ -4351,9 +4351,11 @@ function attributesClaimable(attributes: readonly FunctionModelAttribute[]): boo
     // Client-only channels install nothing structural; they are attached in
     // claim phase 2 after the walk verifies, so the shape stays claimable.
     if (CLIENT_ONLY_ATTRIBUTE_CHANNELS.has(attribute.channel)) continue;
-    // Property writes (`el.value = …`) can clobber pre-claim user input.
-    // That preservation is a later M07 slice, so the shape stays mount-only.
-    if (attribute.channel === 'property') return false;
+    // A property channel does NOT force mount-only any more (F16): the SSR
+    // producer renders it as an attribute (see `emitSsrDynamicAttribute`), and
+    // the claim path writes the property only after the walk verified the shape,
+    // which is exactly the "don't clobber user input" ordering this comment used
+    // to defer to an unbuilt slice.
     if (!ADMITTED_ATTRIBUTE_CHANNELS.has(attribute.channel)) return false;
   }
   return true;
@@ -7116,7 +7118,15 @@ function emitSsrDynamicAttribute(
     );
     return true;
   }
-  if (attribute.channel !== 'attribute') return false;
+  // A PROPERTY channel renders as an HTML ATTRIBUTE in SSR (owner decision F16).
+  // `el.value = x` is the correct CLAIM behaviour — it sets the DOM property
+  // without clobbering user input — but the server has no live DOM and no user
+  // input to preserve: the honest server artifact for `value={x}` is
+  // `value="x"`, which is also what the browser parses back before any claim
+  // runs. Refusing here made every form page unproducible as a generated page
+  // root (measured: `ssrHostExport: null`), which is why nine fixtures could not
+  // leave the class lane.
+  if (attribute.channel !== 'attribute' && attribute.channel !== 'property') return false;
   const valueVar = nextName(state, 'value');
   pushParts(state, [`const ${valueVar} = attributeValueOf((`, { record }, '));'], attribute.span);
   push(state, `if (${valueVar} !== null) {`, attribute.span);

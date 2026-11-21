@@ -276,32 +276,42 @@ describe('M08 text boundary — emitted bytes and compiler rules', () => {
     expect(paragraph.childNodes[0]!.nodeValue).toBe('AB');
   });
 
-  test('a pure-mount component emits no inert boundary comments', () => {
+  test('a component whose only dynamic slot is an attribute emits no boundary comments', () => {
+    // This row used `value` to force mount-only, because the property channel was
+    // unadmitted (F16 lifted that). It still proves what it was written for: a
+    // component with no dynamic TEXT needs no `oe:t` pair, and its SSR form is a
+    // complete string with no boundary comments.
     const pure = fixture(
-      'function PureMount(props) { return <div value={props.value}>x</div>; }\n',
+      'function PureMount(props) { return <div title={props.value}>x</div>; }\n',
     );
-    expect(pure.module).not.toContain('function PureMount__claim');
-    expect(pure.module).not.toContain('function PureMount__ssr');
-    expect(pure.module).not.toContain('textSlotMarker');
+    expect(pure.module).toContain('function PureMount__claim');
+    expect(pure.module).toContain('function PureMount__ssr');
     const mounted = mountWithProps(pure.loaded, 'PureMount', { value: 'v' });
-    expect(mounted.html).toBe('<div>x</div>');
+    expect(mounted.html).toBe('<div title="v">x</div>');
     expect(mounted.html).not.toContain('<!--');
   });
 
   test('a pure-mount component with dynamic text carries no unconsumed pair', () => {
-    // The property channel keeps this component mount-only even though the
-    // condition itself is now claimable. Dynamic text still mounts with its
-    // authored value but must not leave an `oe:t` pair that no claim consumes;
-    // the condition pair still carries its new end marker on the mount path.
+    // A condition is claimable now, and so is the property channel (F16), so this
+    // component emits both a claim and a producer. The pair accounting it was
+    // written to check still holds: dynamic text gets its `oe:t` pair, and the
+    // component's output carries no UNCONSUMED pair.
     const pure = fixture(
       'function PureCondition(props) { return <div>{props.ok ? <span>{props.value}</span> : <input value={props.value} />}</div>; }\n',
     );
-    expect(pure.module).not.toContain('function PureCondition__claim');
-    expect(pure.module).not.toContain('function PureCondition__ssr');
-    expect(pure.module).not.toContain('textSlotMarker');
+    expect(pure.module).toContain('function PureCondition__claim');
+    expect(pure.module).toContain('function PureCondition__ssr');
+    // A claimable condition needs its text-slot marker; that is the pair the
+    // dynamic text is recorded against, not an unconsumed one.
     const mounted = mountWithProps(pure.loaded, 'PureCondition', { ok: true, value: 'x' });
-    expect(mounted.html).toBe('<div><!--oe:when--><span>x</span><!--oe:/when--></div>');
-    expect(mounted.html).not.toContain('oe:t');
+    // A CLAIMABLE component records its dynamic text against the `oe:t` pair, so
+    // the marker is present and CONSUMED on the mount path — the pair count is
+    // what this row is about, and it stays one pair per dynamic text.
+    expect(mounted.html).toBe(
+      '<div><!--oe:when--><span><!--oe:t:0-->x<!--oe:/t:0--></span><!--oe:/when--></div>',
+    );
+    // One OPEN and one CLOSE marker: the regex must match both spellings.
+    expect(mounted.html.match(/oe:\/?t:/g)?.length).toBe(2);
   });
 
   test('recipe ordinals restart at 0 and each projected copy has its own pair', () => {

@@ -272,14 +272,18 @@ describe('M08-2 condition — claimability boundaries (mount stays available)', 
     expect(child.module).toContain('function Child__mount');
   });
 
-  test('a property channel in a branch keeps the condition mount-only', () => {
+  test('a property channel in a branch is claimable (F16)', () => {
+    // This row used to pin the opposite: a property channel forced the whole
+    // condition to stay mount-only. The owner admitted the channel — SSR renders
+    // the value as an attribute and claim writes the DOM property — so a branch
+    // containing one now claims and produces like any other admitted shape.
     const property = compile(
       'function C(props) { return <div>{props.ok ? <input value={props.value} /> : null}</div>; }\n',
     );
     expect(property.diagnostics).toEqual([]);
     expect(property.module).not.toBeNull();
-    expect(property.module).not.toContain('function C__claim');
-    expect(property.module).not.toContain('function C__ssr');
+    expect(property.module).toContain('function C__claim');
+    expect(property.module).toContain('function C__ssr');
   });
 
   test('a void element in a branch keeps claim and enters the SSR producer', () => {

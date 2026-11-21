@@ -347,9 +347,11 @@ describe('M08 input SSR → parse → pre-claim user edit → claim (Chromium LO
   test('the Node-produced input SSR bytes are the exact ordered open-tag form', () => {
     expect(FIELD_HTML).toBe(EXPECTED_FIELD_HTML);
     expect(FIELD_HTML).not.toContain('</input>');
-    // The property channel stays unadmitted: no claim and no SSR.
-    expect(FIELD_FIXTURE.module).not.toContain('function PropertyField__claim');
-    expect(FIELD_FIXTURE.module).not.toContain('function PropertyField__ssr');
+    // The property channel is admitted (F16): SSR renders the value as an
+    // attribute and the claim writes the DOM property, which is the ordering the
+    // pre-claim-edit test below depends on.
+    expect(FIELD_FIXTURE.module).toContain('function PropertyField__claim');
+    expect(FIELD_FIXTURE.module).toContain('function PropertyField__ssr');
   });
 
   test('claim preserves live value/focus/selection and the default seed with 0 mutations', async () => {

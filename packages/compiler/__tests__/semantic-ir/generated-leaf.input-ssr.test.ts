@@ -205,10 +205,17 @@ describe('M08 input/void SSR producer — Node contract', () => {
     expect(ssr(LOADED, 'WhitespaceChild')()).toBe('<input id="field">');
   });
 
-  test('the property channel stays unadmitted: no claim and no __ssr', () => {
+  test('the property channel is admitted: SSR renders it as an ATTRIBUTE (F16)', () => {
+    // This row used to pin the opposite: the property channel stayed unadmitted, so
+    // a `value={x}` field had no claim and no `__ssr`. That made every form page
+    // unproducible as a generated page root. The owner lifted the boundary: the
+    // server has no live DOM and no user input to protect, so the honest server
+    // artifact for `value={x}` is `value="x"` — which is also what the browser
+    // parses back before any claim runs. The CLAIM path keeps writing the DOM
+    // property, because that is where preserving pre-claim input matters.
     expect(FIXTURE.module).toContain('function PropertyField__mount');
-    expect(FIXTURE.module).not.toContain('function PropertyField__claim');
-    expect(FIXTURE.module).not.toContain('function PropertyField__ssr');
+    expect(FIXTURE.module).toContain('function PropertyField__claim');
+    expect(FIXTURE.module).toContain('function PropertyField__ssr');
   });
 });
 

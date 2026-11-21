@@ -206,10 +206,10 @@ function generatedModule(): string {
   expect(module).toContain('function Conditional__claim');
   expect(module).toContain('function Conditional__ssr');
   expect(module).toContain('function Toggle__mount');
-  expect(module).not.toContain('function Toggle__claim');
-  // The property channel is mount-only in this slice; pin the exact boundary so
-  // a future partial SSR producer cannot be mistaken for the claim boundary.
-  expect(module).not.toContain('function Toggle__ssr');
+  // The property channel is admitted (F16): this component claims and produces,
+  // and the boundary that used to separate it from `Profile` is gone.
+  expect(module).toContain('function Toggle__claim');
+  expect(module).toContain('function Toggle__ssr');
   return module;
 }
 

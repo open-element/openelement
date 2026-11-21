@@ -177,11 +177,14 @@ function List(props) {
     expect(listedDirectory.module).toContain('document.createElement("b")');
     expect(listedDirectory.module).toContain('document.createElement("i")');
 
-    // Property assignment can overwrite a pre-claim input value. M07a leaves it mount-only.
+    // A property-channel field is CLAIMABLE now (F16): SSR renders the value as an
+    // attribute and claim writes the DOM property after the walk verified the
+    // shape, which is the ordering that protects pre-claim input. The mount
+    // emitter stays as it was.
     const property = generate('function Field(props) { return <input value={props.text} />; }\n');
     expect(property.module).not.toBeNull();
     expect(property.module).toContain('document.createElement("input")');
-    expect(property.module).not.toContain('function Field__claim');
+    expect(property.module).toContain('function Field__claim');
   });
 
   test('nested intrinsic children are modelled and emitted (M03 follow-up)', () => {

@@ -145,26 +145,11 @@ test('mixed text, one child, insertion sites, and excluded parents do not become
   expect(slotted).toContain('document.createElement("p")');
 });
 
-test('a pure-mount tree does not emit unconsumed range markers', () => {
-  const conditional = generate(
-    // The property channel keeps this tree mount-only; the condition branch
-    // structure itself is now claimable, so a claim would otherwise appear.
-    'function C(props) { return <div>{true ? <section><p>a</p><p>b</p></section> : <section><b>x</b><i>y</i></section>}<input value={props.text} /></div>; }\n',
-  );
-  expect(conditional).not.toContain('function C__claim');
-  expect(conditional).not.toContain('emitComment(rangeMarker(');
-  expect(conditional).not.toContain('oe:/r:');
-  expect(conditional).toContain('document.createElement("p")');
-  expect(conditional).toContain('document.createElement("b")');
-
-  const recipe = generate(
-    'function C(props) { const item = <span><b>x</b><i>y</i></span>; return <div><input value={props.text} />{item}</div>; }\n',
-  );
-  expect(recipe).not.toContain('function C__claim');
-  expect(recipe).not.toContain('emitComment(rangeMarker(');
-  expect(recipe).not.toContain('oe:/r:');
-  expect(recipe).toContain('document.createElement("b")');
-});
+// A row here asserted that a MOUNT-ONLY tree emits no unconsumed range markers,
+// forcing mount-only with a property-channel field. F16 admits that channel, so
+// the premise is gone: such a field is claimable and needs its range markers.
+// What the row protected — a claim consuming exactly the markers it emits — is
+// covered by the positive assertions above and by generated-leaf.claim-*.test.ts.
 
 const EXECUTION = `function Pair(props) { return <div><p>same</p><p>same</p></div>; }
 function Roots(props) { return <><p>same</p><p>same</p></>; }

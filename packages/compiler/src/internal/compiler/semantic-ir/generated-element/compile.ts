@@ -193,9 +193,13 @@ export function compileGeneratedElementIfAdmitted(
     // module-graph imports for these specifiers and the shell adopts the
     // resulting sheet objects into the root it creates. Both facts come from
     // one read, so the scan-time and transform-time compiles cannot disagree.
-    ...(admission.declaresStyles
-      ? { clientOnly: admission.clientOnly, styles: admission.styles }
-      : {}),
+    // `clientOnly` and the declared specifiers both come from the ONE sidecar
+    // read, but only the SPECIFIERS are conditional on `declaresStyles`: the
+    // client-only fact stands on its own, and threading it only alongside a
+    // style declaration left a styleless `ssr: false` island looking like an
+    // SSR island to the emitter (F16 — the emitter now reads this fact directly).
+    clientOnly: admission.clientOnly,
+    ...(admission.declaresStyles ? { styles: admission.styles } : {}),
     ...(options.authoredSource === undefined ? {} : { authoredSource: options.authoredSource }),
   });
   if (emitted.diagnostics.length > 0) {

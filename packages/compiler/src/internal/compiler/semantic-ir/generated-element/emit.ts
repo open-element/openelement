@@ -562,8 +562,18 @@ export function generateElementModule(
       ),
     ]);
   }
+  // A CLIENT-ONLY island with NO declared sheet has no server render, so it must
+  // have no host producer — stated here rather than inferred from the leaf's
+  // silence. Inference is how it worked until F16: the leaf declined `__ssr` for a
+  // property channel, which incidentally kept such islands producerless, and
+  // admitting that channel exposed how fragile the dependency was.
+  //
+  // A client-only island that DOES declare sheets keeps the wrapper: its
+  // `styleLinks` channel is the SSR/DSD half of "one asset, one delivery", and the
+  // client row is additive on top of it.
+  const producerlessClientOnly = options.clientOnly === true && clientStyles.length === 0;
   const hostWrapper =
-    templateRoot !== null && exportsSsrFunction(leafText, rootName)
+    !producerlessClientOnly && templateRoot !== null && exportsSsrFunction(leafText, rootName)
       ? { root: templateRoot, name: names.ssrHost }
       : null;
   const propertyEmission = buildPropertyEmission(options.properties ?? []);

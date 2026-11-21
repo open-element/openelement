@@ -190,25 +190,14 @@ describe('client-only sheet imports (the module-graph edge the gap lacked)', () 
     expect(styled).not.toContain('styles: [');
   });
 
-  test('a client-only island without a host producer still gets its sheet edge', () => {
-    // The leaf emits no `<Name>__ssr` for a mount-only shape (a property
-    // channel), so no DSD host wrapper exists. That is irrelevant for a
-    // client-only island: the browser creates the root and the compiler's
-    // import plus the shell adoption is the whole delivery, so the emitter must
-    // NOT depend on `ssrHostExport` here.
-    const source =
-      "import { defineIslandConfig } from '@openelement/router';\n" +
-      "export const openElement = defineIslandConfig({ ssr: false, dsd: false, hydrate: 'only', " +
-      "root: 'shadow', styles: ['./field.css'], properties: { value: { default: '' } } });\n" +
-      'function Field(props: { value: string }) {\n' +
-      '  return <input value={props.value} />;\n' +
-      '}\n' +
-      'export default Field;\n';
-    const code = compile(source);
-    expect(code).toContain('import __oeStyle0 from "./field.css";');
-    expect(code).toContain('styles: [__oeStyle0],');
-    expect(code).not.toContain('Field__ssrHost');
-  });
+  // A row here asserted that a client-only island WITHOUT a host producer still
+  // gets its sheet edge, forcing producerlessness with a property-channel field.
+  // F16 admits that channel, and the emitter now states the producer rule
+  // directly: a client-only island with NO declared sheet has no producer, one
+  // WITH sheets keeps the wrapper for its `styleLinks` channel. Under that rule
+  // the old state — sheets but no producer — is unreachable, so the row is gone
+  // rather than re-pointed at something that cannot exist. The delivery it
+  // protected is covered by the rows above (import + descriptor row + wrapper).
 
   test('the fail-closed half: a client-only island whose declared list reaches the emitter empty', () => {
     // The router scan refuses this authored shape with its own coded error; the
