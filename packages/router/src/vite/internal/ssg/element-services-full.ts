@@ -36,8 +36,4 @@
  * `entry-client-codegen.ts` is the one selector; the wrappers are never
  * imported by the entry statically.
  */
-export {
-  ensureDeepFragmentNavigation,
-  ensurePreHydrationClickCapture,
-  OpenElement,
-} from '@openelement/element';
+export { ensureDeepFragmentNavigation, ensurePreHydrationClickCapture } from '@openelement/element';

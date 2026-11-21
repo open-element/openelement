@@ -402,7 +402,7 @@ interface GenerateClientEntryOptions {
   /**
    * The component stylesheet's adapter module (alpha15 S lane): when present,
    * the entry imports the fetch adapter and registers the sheet globally
-   * (`OpenElement.registerGlobalStyles`) once the element runtime has loaded,
+   * (`themeManager.registerStyles`) once the element runtime has loaded,
    * so every compiled shadow root adopts it through the style scope.
    * Components whose DSD already references the emitted asset keep that
    * declarative link instead — the runtime skips the adopted copy for a
@@ -607,7 +607,10 @@ var __loadElementRuntime = function () {
       // The style scope adopts it on connect; a root whose DSD already carries
       // the declarative link for this asset keeps that link instead — one
       // resource, one delivery.
-      __runtime.OpenElement.registerGlobalStyles([__oeUtilitySheet]);`
+      // The theme manager IS the owner of the shared sheet registry; the deleted
+      // class base only forwarded to it, so the entry calls the owner directly
+      // (F16). One registry, one writer — no new adapter.
+      __runtime.themeManager.registerStyles([__oeUtilitySheet]);`
       }
       return __runtime;
     });

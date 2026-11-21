@@ -11,10 +11,12 @@ import {
   createStreamServerExecutor,
   normalizeHostAttributePairs,
   type StreamOwner,
-  serializeCompiledProgram,
 } from './internal/compiled/server/index.ts';
 import { SSR_REGISTRY_GENERATED_HOSTS } from '@openelement/protocol/registry-markers';
-import { convertToAttribute } from './internal/compiled/facade-host.ts';
+// The NEUTRAL conversion table, not the facade's re-export of it: the facade is
+// the class lane's host and goes away with it, while this function is shared by
+// both lanes' property records (F16 deletion prep).
+import { convertToAttribute } from './internal/core/property-conversion.ts';
 import { sheetResourceUrls } from './internal/compiled/style-links.ts';
 import {
   requestTimeIslandStyleLinks,
@@ -43,10 +45,8 @@ import {
   STREAM_MAX_SEED_PROPERTIES,
 } from '@openelement/protocol/policy';
 import { signal } from './internal/signal/index.ts';
-import { serializeStyleLinks } from './internal/compiled/server/index.ts';
-import { compiledRootKindOf } from './internal/compiled/server/shared.ts';
 import type { NestedHostFallback } from './internal/compiled/runtime/nested-host.ts';
-import type { CompiledProgramHost, CompiledSignalLike } from './internal/compiled/server/index.ts';
+import type { CompiledSignalLike } from './internal/compiled/server/index.ts';
 import { type TrustedHtml, trustedHtmlValue } from './internal/core/security.ts';
 import { substituteSlotAnchors } from './internal/compiled/slot-anchors.ts';
 import { CompiledProgramValidationError } from './internal/compiled/runtime/values.ts';
@@ -1319,249 +1319,10 @@ function renderToStringAtDepth(
     }
     failUncompiled(resolvedClass, typeof input === 'string' ? input : '<unknown>');
   }
-  const tag = program.tag;
-  if (typeof input === 'string' && input !== tag) {
-    throw new OpenElementError(
-      `[openElement] renderToString tag "${input}" does not match the compiled program tag "${tag}".`,
-      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
-    );
-  }
-
-  const props = options.props ?? {};
-  // Computed fields derive from the seeded plain signals — same factories the
-  // client facade runs, so server output and client claim read one value set.
-  const { signals, hostAttrs: seededAttrs } = seedCompiledProperties(resolvedClass, props);
-  const hostAttrs: Array<readonly [string, unknown]> = [
-    ...(options.hostAttrs ?? []),
-    ...seededAttrs,
-  ];
-
-  const mode =
-    program.root.kind === 'light'
-      ? 'light'
-      : program.root.kind === 'shadow-open'
-        ? 'open'
-        : 'closed';
-  const host: CompiledProgramHost = { signals, handlers: {} };
-  const staticStyleCss = collectStaticStyleCss(resolvedClass);
-  // A light root's external sheets are the resources of the TREE its content
-  // lands in (S-C1.2): the document for a document-level component, whose owner
-  // writes them into the head — or the ENCLOSING SHADOW ROOT when an ancestor's
-  // DSD template owns the subtree, where the head link cannot reach them and the
-  // nested render declares them inside that template instead (see
-  // `renderNestedElement`). Either way the component's own subtree carries no
-  // scoped text: `collectStaticStyleCss` already skips every sheet that has a
-  // URL, and the URL-less sheets that remain are the in-memory/dev shims, whose
-  // bytes the build (or the author) already scoped.
-  if (!(mode === 'light' && options.enclosingShadowRoot === true)) {
-    options.documentStyles?.add(documentStyleResourcesOf(resolvedClass, mode));
-  }
-  const admitted = new Set(options.ssrRenderableTags ?? []);
-  /** Serialize this element's program once (re-run by the boundary capture below). */
-  const serializeOnce = (): string =>
-    serializeCompiledProgram(program, host, {
-      mode,
-      hostAttrs,
-      // SSR/CSR parity (#1226): the client kernel passes the compiled
-      // delegatesFocus static to attachShadow; the DSD template must carry the
-      // matching shadowrootdelegatesfocus marker or the claimed shadow root
-      // silently loses focus delegation.
-      dsd: resolvedClass.delegatesFocus === true ? { delegatesFocus: true } : undefined,
-      // The static style TEXT an in-memory (URL-less) sheet carries, verbatim.
-      // Scoping is not applied here: a light root's boundary is written into
-      // its emitted asset at build time, and a sheet without an external
-      // identity is author-provided data this renderer has no mandate to
-      // rewrite (S-C1.2).
-      styleCss: staticStyleCss,
-      styleLinks: declaredStyleLinks(resolvedClass, mode),
-      projectedChildren: options.projectedChildren,
-      // The compiled children channel's shadow-side half: light children a
-      // compiled parent (or a server function page's __ssr call) hands a
-      // shadow-root host ride after the DSD template. The serializer fails
-      // closed if the root is light — projections, not appendages.
-      ...(options.hostChildren === undefined ? {} : { hostChildren: options.hostChildren }),
-      renderNestedElement:
-        admitted.size === 0
-          ? undefined
-          : (nested) => {
-              if (!admitted.has(nested.tag)) return undefined;
-              // M11-2: a generated element class carries no `__partProgram`;
-              // its server artifact is the compiler-emitted `<Name>__ssrHost`
-              // the entry paired with the class through the ONE registry guard.
-              // The pair table is the protocol marker the guard writes; a hit
-              // is dispatched BEFORE the class path, through the SAME helper the
-              // generated page root uses (styleLinks + fail-closed checks
-              // included), with no class read and no program probe.
-              //
-              // STREAM BOUNDARY (OWED, L3 — characterized, not supported):
-              // the deferred/stream executor never reaches this branch — it
-              // structurally refuses `renderNestedElement` (and
-              // projectedChildren/closed roots) at admission
-              // (`createStreamServerExecutor`, pinned by
-              // stream-server-executor.test.ts and the generated-host-nested
-              // stream-boundary test). Generated hosts are synchronous-SSR
-              // only; streaming/deferred DSD for them is explicitly owed to a
-              // later, separately approved slice and this branch claims no
-              // stream support.
-              const generatedHostRenderer = registeredGeneratedHostRenderer(nested.tag);
-              if (generatedHostRenderer !== undefined) {
-                // The ONE host-attribute value algebra is reused: the class
-                // serializer's host writer and this typed pair channel cannot
-                // drift. Presence rides as the canonical empty-string pair.
-                const normalizedAttributes = normalizeHostAttributePairs(nested.attributes);
-                const hostAttributes = normalizedAttributes.attributes.map(
-                  (attribute) => [attribute.name, attribute.bare ? '' : attribute.value] as const,
-                );
-                return renderRegisteredGeneratedHost(
-                  nested.tag,
-                  generatedHostRenderer,
-                  nested.properties,
-                  nested.children,
-                  hostAttributes,
-                  // P-6: the class lane's own nested walk hands the child the SAME
-                  // expander, so a generated shadow host inside a class page expands
-                  // its own components too. One recursion, both parent lanes.
-                  createNestedHostExpander(options, depth + 1),
-                );
-              }
-              const nestedClass =
-                typeof customElements === 'undefined'
-                  ? undefined
-                  : (customElements.get(nested.tag) as CompiledComponentConstructor | undefined);
-              // A LIGHT-root generated element serializes its own children and
-              // has no Part Program and no registry pair, so the nested path
-              // reaches its compiled producer through the class static the
-              // shell installed (the same one the root path uses).
-              const nestedLightSsr = (nestedClass as { __ssr?: unknown } | undefined)?.__ssr;
-              if (nestedClass !== undefined && typeof nestedLightSsr === 'function') {
-                const rendered = (
-                  nestedLightSsr as (input?: unknown, attributes?: unknown) => unknown
-                ).call(nestedClass, nested.properties, nested.attributes);
-                const nestedLight = lightResult(rendered, 'nested light-root', nested.tag);
-                // The nested host's authored children arrive as the parent
-                // serializer's own per-slot groups (`nested.projectedChildren`),
-                // exactly the map the class-lane nested expansion hands a light
-                // child. A generated light host substitutes them into its
-                // anchored slots; a projection naming a slot it does not declare
-                // fails closed inside the serializer.
-                return serializeLightGeneratedHost(
-                  nested.tag,
-                  nestedLight.content,
-                  mergeHostAttributes(
-                    nested.attributes,
-                    nestedLight.hostAttributes,
-                    nestedLight.seedRows,
-                  ),
-                  nested.projectedChildren,
-                );
-              }
-              if (!nestedClass?.__compiledProperties) {
-                throw new OpenElementError(
-                  `[openElement] admitted nested component <${nested.tag}> is not a compiled class ` +
-                    '(it carries no property table); rebuild it through the OpenElement compiler.',
-                  { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
-                );
-              }
-              const nestedProperties = nestedClass.__compiledProperties;
-              const nestedProps: Record<string, unknown> = { ...nested.properties };
-              const propertyAttributes = new Set<string>();
-              for (const record of nestedProperties) {
-                propertyAttributes.add(record.name);
-                if (record.attribute !== null) propertyAttributes.add(record.attribute);
-                if (record.name in nestedProps) continue;
-                const attribute = nested.attributes.find(
-                  ([name]) => name === record.name || name === record.attribute,
-                );
-                // Boolean attributes are true by presence, including the canonical
-                // static JSX encoding `name=""`. Do not feed the empty serialized
-                // value through Boolean("") or the nested host loses its state.
-                if (attribute) {
-                  nestedProps[record.name] =
-                    record.type === 'boolean' ? true : coerceServerProp(record, attribute[1]);
-                }
-              }
-              const passthrough = nested.attributes.filter(
-                ([name]) => !propertyAttributes.has(name),
-              );
-              // C07–C11: ONE reader for the build-time root mode, so no call
-              // site reaches into the execution artifact for it.
-              const nestedMode = compiledRootKindOf(nestedClass);
-              const rendered = renderToStringAtDepth(
-                nested.tag,
-                {
-                  componentClass: nestedClass,
-                  props: nestedProps,
-                  sourceInfo: options.sourceInfo,
-                  ssrRenderableTags: options.ssrRenderableTags,
-                  hostAttrs: passthrough,
-                  projectedChildren: nestedMode === 'light' ? nested.projectedChildren : undefined,
-                  // A nested light-root component's sheets belong to the same
-                  // render's sink as its parent's (S-C1.2) — unless this parent
-                  // is itself a shadow template, in which case the child's
-                  // content lands in a tree the document head cannot reach and
-                  // its links are emitted below.
-                  documentStyles: options.documentStyles,
-                  enclosingShadowRoot: mode !== 'light',
-                },
-                depth + 1,
-              );
-              if (nestedMode === 'light') {
-                // This parent renders into a DSD template, so the child's
-                // content is shadow-tree content: declare its sheets as marked
-                // links INSIDE that template, the one place a stylesheet can
-                // reach it. Same link shape as every other component sheet, so
-                // the client's delivery check recognizes the resource and does
-                // not adopt a second copy.
-                if (mode === 'light') return rendered;
-                const nestedLinks = serializeStyleLinks(sheetResourceUrls(nestedClass.styles));
-                if (nestedLinks === '') return rendered;
-                // LEADING style nodes, not trailing ones: the light root's own
-                // claim tolerates only leading marked style nodes
-                // (`leadingStaticStyleNodeCount`) and fails closed on a trailing
-                // one — the island's activation would die behind its own
-                // delivery node. The serializer's light-root shape already
-                // emits its style nodes before the content, so match it. The
-                // `>` searched for here is the opening tag's terminator: host
-                // attribute values are escaped at emission
-                // (`serializeAttribute`), so no raw `>` can occur before it.
-                const openEnd = rendered.indexOf('>') + 1;
-                return rendered.slice(0, openEnd) + nestedLinks + rendered.slice(openEnd);
-              }
-              const closing = `</${nested.tag}>`;
-              return nested.children === ''
-                ? rendered
-                : rendered.slice(0, -closing.length) + nested.children + closing;
-            },
-    });
-
-  // SSR boundary capture: a subtree evaluation throw (this element's own
-  // serialized derivations, or a nested recursion surfacing from a deeper
-  // non-boundary element) must render the boundary's fallback branch instead
-  // of 500-ing the route. The try wraps THIS element's serialization — the
-  // recursion inside renderNestedElement surfaces here at the nearest
-  // boundary because non-boundary elements rethrow. The repair re-serializes
-  // the same program with the `hasError` signal forced true: a compiled
-  // boundary's fallback is a `when` Block over that signal (the same
-  // dependency the client's publication flips), so the re-run takes the
-  // fallback branch and never re-enters the failed subtree. The signals
-  // record is per-call, so the override cannot leak into sibling renders;
-  // an element without the declared property simply carries an unread
-  // signal. P7 prior art: React SSR error boundaries substitute fallback
-  // UI for a failed subtree; the compiled difference is that the branch is
-  // the program's own Block, not a second renderer.
-  let html: string;
-  try {
-    html = serializeOnce();
-  } catch (error) {
-    if (resolvedClass.isErrorBoundary !== true) throw error;
-    signals.hasError = signal(true);
-    html = serializeOnce();
-  }
-  // Fail-closed boundary capture is observable through the branch taken, not
-  // through a metrics field (alpha15 R.0-3 deleted the RenderOutput shell and
-  // its hardcoded-zero metrics with it): a captured render carries the
-  // fallback branch bytes, an uncaught throw still propagates.
-  return html;
+  // The class lane is deleted: a resolved class that carries a `__partProgram` is
+  // no longer renderable here. Failing with the same coded error the compiler
+  // surface uses keeps a stale artifact from rendering silently.
+  failUncompiled(resolvedClass, typeof input === 'string' ? input : '<unknown>');
 }
 
 /** Server-render one compiled element through canonical Element composition:

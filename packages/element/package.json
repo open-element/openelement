@@ -16,6 +16,7 @@
     "./internal/compiled/generated-element/shell": "./src/internal/compiled/generated-element/shell.ts",
     "./internal/compiled/runtime": "./src/internal/compiled/runtime.ts",
     "./internal/compiled/leaf-runtime": "./src/internal/compiled/leaf-runtime.ts",
+    "./internal/styles": "./src/internal/styles-entry.ts",
     "./client-only": "./src/client-only.ts",
     "./no-blocks": "./src/no-blocks.ts",
     "./base": "./src/base.ts",

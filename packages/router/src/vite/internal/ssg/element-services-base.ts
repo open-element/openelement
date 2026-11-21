@@ -10,5 +10,8 @@
 export {
   ensureDeepFragmentNavigation,
   ensurePreHydrationClickCapture,
-  OpenElement,
 } from '@openelement/element/base';
+// The shared sheet registry the entry registers the compiled component sheet in.
+// It lives on an INTERNAL subpath so the deletion of the class base did not widen
+// the public surface with a symbol authors are not meant to touch (F16).
+export { themeManager } from '@openelement/element/internal/styles';

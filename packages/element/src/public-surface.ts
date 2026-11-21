@@ -15,10 +15,14 @@
  */
 
 // ─── Core exports ───────────────────────────────────────
-
-export { OpenElement } from './open-element.ts';
-
-export { ErrorBoundary } from './error-boundary.ts';
+//
+// `OpenElement` and `ErrorBoundary` were the CLASS lane's public base classes. The
+// lane is deleted (F16): the generated lane's authoring form is a default-exported
+// function component plus a `defineIslandConfig` sidecar, and its author-facing
+// hooks (`onConnect`, `onDispose`, `onError`, `ref`, `useHost`, `useContext`) are
+// the compiler-erased intrinsics re-exported further down this file. There is no
+// replacement base class and no compatibility shim: an app that extended one must
+// move to the generated lane.
 
 export { collectPublicProps } from './public-runtime.ts';
 
