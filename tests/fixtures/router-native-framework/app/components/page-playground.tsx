@@ -8,35 +8,40 @@
  *   deliberately skips GET (form-enhance.ts), so this must navigate natively;
  * - #download-link / #frag-link: plain anchors that must keep browser
  *   behavior on an enhanced page.
+ *
+ * GENERATED lane (F16: class → function). `root: 'shadow'` reproduces the class
+ * lane's `shadow-open`, which these probes depend on: every spec reads the
+ * forms through the page host's shadow root (the continuation suite queries
+ * `playground-page.shadowRoot.querySelector('#plain-form')`), so a light root
+ * would move the probe forms out of the tree the specs query.
  */
-import { element, OpenElement } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
 
-@element('playground-page', { root: 'shadow-open' })
-export default class PlaygroundPage extends OpenElement {
-  render() {
-    return (
-      <main>
-        <h1>playground</h1>
-        <form id='plain-form' method='post' data-open-enhance>
-          <input id='plain-field' name='plain' type='text' value='z' />
-          <button id='plain-submit' type='submit'>Plain enhanced submit</button>
-        </form>
-        <form id='blank-form' method='post' target='_blank' data-open-enhance>
-          <input id='blank-field' name='blank' type='text' value='x' />
-          <button id='blank-submit' type='submit'>New tab submit</button>
-        </form>
-        <form id='cross-form' method='post' action='http://127.0.0.1:4399/sink' data-open-enhance>
-          <input id='cross-field' name='cross' type='text' value='y' />
-          <button id='cross-submit' type='submit'>Cross-origin submit</button>
-        </form>
-        <form id='get-form' method='get' data-open-enhance>
-          <input id='get-q' name='q' type='text' />
-          <button id='get-submit' type='submit'>Search</button>
-        </form>
-        <a id='download-link' href='/notes' download>Download notes</a>
-        <a id='frag-link' href='#frag-target'>Jump to fragment</a>
-        <div id='frag-target'>fragment target</div>
-      </main>
-    );
-  }
+export const openElement = defineIslandConfig({ tag: 'playground-page', root: 'shadow' });
+
+export default function PlaygroundPage() {
+  return (
+    <main>
+      <h1>playground</h1>
+      <form id='plain-form' method='post' data-open-enhance>
+        <input id='plain-field' name='plain' type='text' value='z' />
+        <button id='plain-submit' type='submit'>Plain enhanced submit</button>
+      </form>
+      <form id='blank-form' method='post' target='_blank' data-open-enhance>
+        <input id='blank-field' name='blank' type='text' value='x' />
+        <button id='blank-submit' type='submit'>New tab submit</button>
+      </form>
+      <form id='cross-form' method='post' action='http://127.0.0.1:4399/sink' data-open-enhance>
+        <input id='cross-field' name='cross' type='text' value='y' />
+        <button id='cross-submit' type='submit'>Cross-origin submit</button>
+      </form>
+      <form id='get-form' method='get' data-open-enhance>
+        <input id='get-q' name='q' type='text' />
+        <button id='get-submit' type='submit'>Search</button>
+      </form>
+      <a id='download-link' href='/notes' download>Download notes</a>
+      <a id='frag-link' href='#frag-target'>Jump to fragment</a>
+      <div id='frag-target'>fragment target</div>
+    </main>
+  );
 }

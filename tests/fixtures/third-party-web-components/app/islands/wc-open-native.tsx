@@ -6,15 +6,21 @@
  * The "no framework" control: if the mechanism only worked for library-built
  * hosts, this case would fail while every library case passed, which is
  * exactly the distinction the corpus exists to make.
+ *
+ * GENERATED lane (F16: class → function). `root: 'shadow'` reproduces the class
+ * lane's `shadow-open`: the qualifier reaches the marker through
+ * `wc-native-late-host`'s shadow root and then this element's, so a light root
+ * would move the marker into a light DOM that walk does not read.
  */
 import { defineIslandConfig } from '@openelement/router';
-import { element, OpenElement } from '@openelement/element';
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: false, dsd: false });
+export const openElement = defineIslandConfig({
+  hydrate: 'load',
+  ssr: false,
+  dsd: false,
+  root: 'shadow',
+});
 
-@element('wc-open-native', { root: 'shadow-open' })
-export default class WcOpenNative extends OpenElement {
-  render() {
-    return <span id='open-native-ready'>openElement child inside a native element</span>;
-  }
+export default function WcOpenNative() {
+  return <span id='open-native-ready'>openElement child inside a native element</span>;
 }

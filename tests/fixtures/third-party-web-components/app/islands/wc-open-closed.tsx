@@ -9,15 +9,21 @@
  * page error is raised, every other late host on the same page still
  * activates, and this tag is reported as a documented gap — never silently
  * converted into a pass.
+ *
+ * GENERATED lane (F16: class → function). `root: 'shadow'` (the class lane's
+ * `shadow-open`) is what the tag WOULD be, and the gap is exactly why it never
+ * matters: nothing can reach this element to read either root, and the
+ * qualifier asserts the tag is never registered at all.
  */
 import { defineIslandConfig } from '@openelement/router';
-import { element, OpenElement } from '@openelement/element';
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: false, dsd: false });
+export const openElement = defineIslandConfig({
+  hydrate: 'load',
+  ssr: false,
+  dsd: false,
+  root: 'shadow',
+});
 
-@element('wc-open-closed', { root: 'shadow-open' })
-export default class WcOpenClosed extends OpenElement {
-  render() {
-    return <span id='open-closed-ready'>unreachable: created inside a closed root</span>;
-  }
+export default function WcOpenClosed() {
+  return <span id='open-closed-ready'>unreachable: created inside a closed root</span>;
 }
