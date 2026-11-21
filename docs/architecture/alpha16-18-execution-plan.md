@@ -1424,6 +1424,28 @@ register them for generated islands (shadow scope) before the fixture migrates.
 > shadow pages would hit, so they stay class-authored and the /dialog fixture is
 > reverted.
 >
+> **F16 STATE (2026-11-22, measured).** The class lane's SOURCE is deleted:
+> `public-runtime.ts` lost the program serialization path, six modules are gone
+> (`open-element*`, `error-boundary`, `internal/compiled/facade-host`), and
+> `OpenElement` / `ErrorBoundary` are no longer exported. `root: 'closed'` became
+> authorable on the generated lane (owner decision; four readers had to agree
+> before it worked). Fixtures: `router-base-path` fully migrated (page → islands,
+> stream route retired, 6/6 three engines), `router-ui-dogfood` fully migrated
+> (39/40 e2e; the one red row fails identically before the migration — it is the
+> P-4 static-sibling-range defect). `element` suite is GREEN at 712.
+>
+> **What is NOT done, stated plainly.** (a) `compiler` has 22 red rows in
+> `server-component-composition` + 2 files: they drive the SURVIVING server-function
+> lane through hand-built Part Program hosts, so the composition-projection coverage
+> is real and must be rewritten onto generated fixtures, not deleted. (b) `router`
+> has 23 red files (98 class references) — integration suites that validate build
+> pipelines which STILL EXIST, using class-form fixtures; they need fixture
+> rewrites. (c) MDX lowering still emits class source. (d) 43 page components
+> remain class-authored across `router-request-time` (24), `router-native-framework`
+> (12), `site-light-probe` (6), `router-ui-dogfood` (1, the dropdown page's
+> static-range blocker). The deletion is therefore one change set in PROGRESS, not
+> one that can be landed green today.
+>
 > **P-5 IS DISSOLVED — it was a migration mistake, not a capability gap (2026-11-21).**
 > The five red morph rows came from migrating `live-counter` WITHOUT
 > `root: 'shadow'`: the class form was `shadow-open`, the generated form became a
