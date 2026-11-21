@@ -1,6 +1,8 @@
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
-import { CompiledErrorBoundary } from '../../src/error-boundary.ts';
+// `CompiledErrorBoundary` lives in the internal runtime, not in the deleted
+// public class lane's `error-boundary.ts` (F16).
+import { CompiledErrorBoundary } from '../../src/internal/compiled/runtime/error-boundary.ts';
 import { ElementFormController } from '../../src/open-element-form.ts';
 // The hydration executor is installed by the package entry, not by the kernel
 // (#1416): the kernel resolves it through the claim seam. This file reaches
