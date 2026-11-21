@@ -95,7 +95,7 @@ import {
 import { buildError, ClientBuildErrorCode } from '../../internal/error-codes.ts';
 import { scopeLightRootCss } from './light-css-scope.ts';
 import { islandStyleDeclarations } from './island-style-declarations.ts';
-import { readIslandConfig } from './ssg/island-scanner.ts';
+import { readComponentDeclaration } from './component-declaration.ts';
 import { dirname as posixDirname, relative as posixRelative } from 'pathe';
 import { owningPackageName, packageNameAt } from './package-identity.ts';
 
@@ -1039,27 +1039,20 @@ async function emitServerRenderedEdges(
  * emitter, one hash, one dedup map and one manifest.
  */
 /**
- * The site fact a PAGE-LOCAL generated component declares from its own sidecar,
- * or undefined when the module is not one.
+ * The site fact a PAGE-LOCAL generated component declares, or undefined when the
+ * module is not one.
  *
  * A page-local component is neither an island (no islands-dir path) nor a route
- * (its host is a nested tag), so the sidecar's `tag` is the only identity and
- * its `root` the only scope. A malformed sidecar is the transform's diagnostic to
- * report — this reader returns undefined and lets the module take the class /
- * server-component / artifact path unchanged.
+ * (its host is a nested tag), so its sidecar is its whole identity. ONE reader
+ * answers it (component-declaration.ts), so this walk cannot disagree with the
+ * scans that admit the same module.
  */
 function pageLocalGeneratedSite(
   source: string,
 ): { tagName: string; root: 'light' | 'shadow' } | undefined {
-  if (!source.includes('defineIslandConfig')) return undefined;
-  let config: ReturnType<typeof readIslandConfig>;
-  try {
-    config = readIslandConfig(source);
-  } catch {
-    return undefined;
-  }
-  if (config === null || config.tag === undefined) return undefined;
-  return { tagName: config.tag, root: config.root === 'shadow' ? 'shadow' : 'light' };
+  const reading = readComponentDeclaration(source);
+  if (reading.kind !== 'declared' || reading.declaration.tag === undefined) return undefined;
+  return { tagName: reading.declaration.tag, root: reading.declaration.root ?? 'light' };
 }
 
 async function emitStyleAsset(

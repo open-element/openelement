@@ -472,6 +472,25 @@ export function buildEntryDescriptor(
     islandTagNames,
     islandFiles,
     islandMeta,
+    // P-4 fix: the declared-component map is the AUTHORED answer to "is this
+    // module a component?", which the islands list can only answer by path. Both
+    // are handed in; the classifier prefers the declaration and falls back to
+    // the convention, so a module without a sidecar keeps its old verdict.
+    ...(options.declaredElementTags === undefined
+      ? {}
+      : { declaredTags: options.declaredElementTags }),
+    ...(options.declaredElementHostExports === undefined
+      ? {}
+      : { declaredHostExports: options.declaredElementHostExports }),
+    resolveHostIdentity: (moduleId, tagName) => {
+      const producer = options.declaredElementHostExports?.get(moduleId);
+      // A recorded producer name is the only identity the scan keeps; a module
+      // WITHOUT one is a lawful light lane, which classification refuses for a
+      // page root (no host producer to render). Never guess a kind.
+      return producer === undefined
+        ? { kind: 'light-no-producer', component: tagName }
+        : { kind: 'producer', component: tagName, ssrHostExport: producer };
+    },
   });
 
   // --- Routes ---
@@ -643,9 +662,24 @@ export function buildEntryDescriptor(
     packageManifests,
   );
 
+  // A generated PAGE ROOT must be SSR-admitted even with zero interaction events:
+  // its server artifact is the compiler-emitted host producer, and the route
+  // cannot render without it. The classifier already proved the identity
+  // (`generatedElementPage`), so this set is a FACT, not an inference.
+  const generatedPageRootTags = new Set(
+    pageRoutes
+      .map(
+        (route) =>
+          (route as PageRouteDecl & PageKindCarrier).generatedElementPage?.tagName as
+            | string
+            | undefined,
+      )
+      .filter((tag): tag is string => tag !== undefined),
+  );
   const compilerBehaviorIslands = compilerBehaviorDeclarations(
     options.staticComponents ?? [],
     options.upgradeStrategy,
+    generatedPageRootTags,
   );
   const islandDeclarations: IslandDecl[] = [
     ...localIslands,
@@ -753,8 +787,15 @@ export function buildEntryDescriptor(
     ...(layout.default ? [layout.default.tagName] : []),
     ...Object.values(layout.layouts).flatMap((shell) => (shell ? [shell.tagName] : [])),
   ]);
+  // A PAGE COMPONENT is in BOTH lists by construction: its declaration provides
+  // the SSR admission + host-producer identity, and the route names it as the
+  // page. Filtering it out here left the entry with no `generatedHostExport` for
+  // the tag it must pair — the page then rendered through the class path and
+  // failed with PROGRAM_MISSING (measured on `router-ui-dogfood`'s /dialog).
+  // The reserved set keeps suppressing a genuine duplicate (two modules claiming
+  // one tag); a page component is not a duplicate of itself.
   const staticComponents = (options.staticComponents ?? []).filter(
-    (component) => !reservedTags.has(component.tagName),
+    (component) => component.pageComponent === true || !reservedTags.has(component.tagName),
   );
 
   const descriptor: EntryDescriptor = {

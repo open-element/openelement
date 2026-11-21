@@ -42,7 +42,7 @@ import {
   type ModuleWalkDiagnostic,
   type ModuleWalkResolver,
 } from '../module-graph-walk.ts';
-import { readIslandConfig } from './island-scanner.ts';
+import { readComponentDeclaration } from '../component-declaration.ts';
 import { resolveGeneratedElementHost } from './generated-element-host-metadata.ts';
 
 /** Stable code for a note this pass owns (a malformed sidecar it skipped). */
@@ -145,34 +145,26 @@ export async function scanDeclaredElementTags(
       });
       continue;
     }
-    // Cheap text prefilter before the parser: almost every module has no
-    // island sidecar, and `readIslandConfig` builds a full SourceFile.
-    //
-    // This prefilter is only sound while `readIslandConfig` requires the callee
-    // to be spelled literally `defineIslandConfig` (its
-    // `locateDefineIslandConfigCall` does, and does not follow import aliases).
-    // If that parser ever learns aliases, THIS line must move onto the same
-    // predicate — otherwise an aliased sidecar is skipped here while the
-    // transform admits it, and the module silently loses its tag.
-    if (!source.includes('defineIslandConfig')) continue;
-    let declared: string | undefined;
-    try {
-      declared = readIslandConfig(source)?.tag;
-    } catch (error) {
+    // ONE reader for the authored sidecar (component-declaration.ts): the same
+    // answer the island scan, the static-component scan and the style walk get,
+    // so a module cannot be a component for one pass and a plain module for
+    // another. The reader owns the text prefilter too.
+    const reading = readComponentDeclaration(source);
+    if (reading.kind === 'absent') continue;
+    if (reading.kind === 'invalid') {
       notes.push({
         code: DeclaredElementTagScanCode.SIDECAR_UNREADABLE,
         file,
         message:
-          `the sidecar could not be read (${
-            error instanceof Error ? error.message : String(error)
-          }), so its declared tag is not admitted; the transform reports the authored ` +
-          'diagnostic when it compiles this module',
+          `the sidecar could not be read (${reading.reason}), so its declared tag is not ` +
+          'admitted; the transform reports the authored diagnostic when it compiles this module',
       });
       continue;
     }
-    if (declared === undefined) continue;
+    const declaration = reading.declaration;
+    if (declaration.tag === undefined) continue;
     const moduleId = stableModuleId(file, root, input.workspaceRoot);
-    tags.set(moduleId, declared);
+    tags.set(moduleId, declaration.tag);
     // The generated-host identity is resolved from the SAME source this loop
     // already read, through the SAME compiler entry the island scan uses. A
     // refusal or a lane decline is not this pass's diagnostic to report (the
@@ -181,8 +173,8 @@ export async function scanDeclaredElementTags(
       source,
       moduleId,
       filePath: file,
-      root: readIslandConfig(source)?.root ?? undefined,
-      site: { tag: declared },
+      root: declaration.root,
+      site: { tag: declaration.tag },
     });
     if (identity.kind === 'producer') hostExports.set(moduleId, identity.ssrHostExport);
   }

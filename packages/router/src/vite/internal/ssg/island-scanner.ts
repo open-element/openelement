@@ -574,7 +574,7 @@ function staticOpenElementError(message: string): OpenElementError {
 }
 
 /** Static island metadata literal read from defineIslandConfig(). */
-type StaticIslandConfig = Pick<
+export type StaticIslandConfig = Pick<
   LocalIslandMeta,
   | 'ssr'
   | 'dsd'

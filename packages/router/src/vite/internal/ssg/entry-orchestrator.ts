@@ -123,7 +123,23 @@ export function renderEntry(desc: EntryDescriptor): string {
   const ssrIslands = desc.islands.filter((island) => ssrRenderableTags.has(island.tagName));
   const generatedHostExports = new Map<string, string>();
   for (const island of ssrIslands) {
-    const identity = readGeneratedElementHost(island);
+    // The island META carries the identity for a module the island scan saw. A
+    // page-local component is not in that scan: its identity is the
+    // static-component record's compiler-returned export (P-2/P-4), which is the
+    // SAME fact read through the same resolver at scan time. One pairing channel,
+    // two producers of the fact — never a derived name.
+    const staticProducer = (desc.staticComponents ?? []).find(
+      (component) => component.tagName === island.tagName,
+    )?.generatedHostExport;
+    const identity =
+      readGeneratedElementHost(island) ??
+      (staticProducer === undefined
+        ? undefined
+        : {
+            kind: 'producer' as const,
+            component: island.tagName,
+            ssrHostExport: staticProducer,
+          });
     if (
       identity === undefined ||
       identity.kind === 'lane-declined' ||

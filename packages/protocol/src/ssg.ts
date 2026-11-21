@@ -238,6 +238,13 @@ export interface StaticComponentDecl {
    * carries the same fact).
    */
   root?: 'light' | 'shadow';
+  /**
+   * True when this record is a PAGE COMPONENT (the module a route passes to
+   * `definePage`), not a nested component. A page root is rendered by the route
+   * handler, so the entry must register its host pair even though no JSX
+   * reference to the tag exists anywhere.
+   */
+  pageComponent?: boolean;
 }
 
 /** The build-time SSR admission decisions per component tag. */

@@ -372,6 +372,21 @@ export function findReachableIslandTags(
     islandTagNames: ctx.phase1.islandTagNames ?? [],
     islandFiles: ctx.phase1.islandFiles ?? [],
     islandMeta: ctx.phase1.islandMeta ?? {},
+    // Same declared-component map the entry descriptor uses (P-4 fix): the client
+    // reachability seed must agree with the classifier about which module a page
+    // resolves to, or a generated page's island never joins the client entry.
+    ...(ctx.phase1.declaredElementTags === undefined
+      ? {}
+      : { declaredTags: ctx.phase1.declaredElementTags }),
+    ...(ctx.phase1.declaredElementHostExports === undefined
+      ? {}
+      : { declaredHostExports: ctx.phase1.declaredElementHostExports }),
+    resolveHostIdentity: (moduleId, tagName) => {
+      const producer = ctx.phase1.declaredElementHostExports?.get(moduleId);
+      return producer === undefined
+        ? { kind: 'light-no-producer', component: tagName }
+        : { kind: 'producer', component: tagName, ssrHostExport: producer };
+    },
   });
   for (const route of ctx.phase1.cachedRoutes ?? []) {
     if (route.type !== 'page' || route.special) continue;
