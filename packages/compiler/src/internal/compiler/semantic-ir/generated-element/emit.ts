@@ -69,6 +69,8 @@ import {
   type GeneratedElementSite,
 } from './contract.ts';
 import { collectStaticClassCandidates } from '../generated-leaf/generate.ts';
+// The ONE compiler-private field name for the nested-host expander (P-6).
+import { NESTED_HOST_EXPANDER } from '@openelement/protocol/style-sheet';
 
 /** The emitter's result: the leaf contract plus the exact appended tail. */
 export interface GeneratedElementModule extends GeneratedLeafModule {
@@ -380,6 +382,18 @@ function buildPropertyEmission(
  * The admission gates that read the authored AST live in `site.ts`; this
  * function is the text stage and refuses only emitter invariants.
  */
+/**
+ * The host record a shadow host producer hands its leaf's `__ssr`.
+ *
+ * The leaf already routes every custom-element tag through the ONE `nestedHost`
+ * helper, which reads the expander off this record (`nestedHost.ts`'s
+ * `NESTED_HOST_PROPERTY`). The LIGHT root's producer has always supplied it; the
+ * SHADOW wrapper did not, which is why a shadow page's inner components rendered
+ * as bare tags. This is the record's spelling, kept in one place so the emitted
+ * bytes and the runtime helper can never drift about the field name.
+ */
+const NESTED_HOST_RECORD_ARG = `nestedHost === undefined ? undefined : { "${NESTED_HOST_EXPANDER}": nestedHost }`;
+
 export function generateElementModule(
   module: FunctionModelModule,
   site: GeneratedElementSite | null,
@@ -661,9 +675,20 @@ export function generateElementModule(
       : [
           '',
           '// ---- generated shadow host SSR (M09-2a) ----',
-          styleLinkPrefix
-            ? `export function ${hostWrapper.name}(props, lightChildren, attributes, styleLinks) {`
-            : `export function ${hostWrapper.name}(props, lightChildren, attributes) {`,
+          // P-6 (2026-11-21): the SHADOW host producer receives the SAME nested-host
+          // expander the LIGHT root's producer receives, in the same last position.
+          // Without it a shadow page's inner components stayed unexpanded tags while
+          // the class lane and the light lane both expanded theirs — a parity gap,
+          // not a design boundary. Appended LAST so every existing caller's argument
+          // positions are unchanged.
+          // FIXED PARAMETER POSITIONS (P-6): the producer ALWAYS declares
+          // `(props, lightChildren, attributes, styleLinks, nestedHost)`, even when
+          // this module has no stylesheet channel. An optional parameter that
+          // shifts position with a build fact makes the CALLER'S argument order
+          // depend on the callee's styling — the runtime would hand a function to
+          // `styleLinks` and the leaf would never see its expander. Declaring the
+          // slot always keeps one order for every module.
+          `export function ${hostWrapper.name}(props, lightChildren, attributes, styleLinks, nestedHost) {`,
           // Mixed generated-element/entry artifacts: the new producer requires
           // the declared stylesheet URLs, but an old 3-arg caller (or a missing
           // carrier) would otherwise render the shadow host silently unstyled.
@@ -690,7 +715,7 @@ export function generateElementModule(
                   propertyEmission.usesPropsResolver
                     ? `${names.propsResolver}(${names.descriptor}, ${names.hostPropsVar})`
                     : names.hostPropsVar
-                }, undefined),`,
+                }, ${NESTED_HOST_RECORD_ARG}),`,
                 '    ...(lightChildren === undefined ? {} : { lightChildren }),',
                 `    ...(attributes === undefined && ${HOST_ATTRIBUTES_VAR} === undefined ? {} : { attributes: ${HOST_ATTRIBUTES_VAR} === undefined ? attributes : ${HOST_ATTRIBUTES_VAR} }),`,
                 ...(styleLinkPrefix
@@ -709,7 +734,7 @@ export function generateElementModule(
                   propertyEmission.usesPropsResolver
                     ? `${names.propsResolver}(${names.descriptor}, ${names.hostPropsVar})`
                     : names.hostPropsVar
-                }, undefined),`,
+                }, ${NESTED_HOST_RECORD_ARG}),`,
                 '    ...(lightChildren === undefined ? {} : { lightChildren }),',
                 '    ...(attributes === undefined ? {} : { attributes }),',
                 ...(styleLinkPrefix

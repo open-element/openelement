@@ -158,7 +158,7 @@ describe('M11 prerequisite — compiler-owned ssrHostExport metadata', () => {
     // channel is TOLERANT here: absent URLs render without a link, so an app with
     // no utility engine is not failed closed.
     expect(emitted.module).toContain(
-      `export function ${emitted.ssrHostExport}(props, lightChildren, attributes, styleLinks) {`,
+      `export function ${emitted.ssrHostExport}(props, lightChildren, attributes, styleLinks, nestedHost) {`,
     );
     expect(emitted.module).not.toContain('OEIR_LEAF_MISSING_VALUE: styleLinks');
     // M11: the emitted producer's third channel is the host attribute wire, and
@@ -186,7 +186,7 @@ describe('M11 prerequisite — compiler-owned ssrHostExport metadata', () => {
     expect(emitted.placements).toEqual(leaf.placements);
   });
 
-  test('a candidate-free shadow module keeps the pre-P-3 producer bytes', () => {
+  test('a candidate-free shadow module still declares every producer slot (P-6)', () => {
     // No static class anywhere: P-3 must not grow the channel, so the producer
     // keeps its pre-slice 3-parameter shape.
     const PLAIN = `${SHADOW_SIDECAR}
@@ -201,9 +201,11 @@ export default Card;
     });
     expect(emitted.diagnostics).toEqual([]);
     expect(emitted.module).toContain(
-      `export function ${emitted.ssrHostExport}(props, lightChildren, attributes) {`,
+      `export function ${emitted.ssrHostExport}(props, lightChildren, attributes, styleLinks, nestedHost) {`,
     );
-    expect(emitted.module).not.toContain('styleLinks');
+    // The PARAMETER NAME is present by design (fixed slots). What must be absent is
+    // a USE of it: this module declares no `styles`, so no channel is threaded.
+    expect(emitted.module).not.toContain('{ styleLinks }');
   });
 
   test('a hostless emitter call reports null and stays byte-identical to the leaf', () => {

@@ -30,7 +30,7 @@
       },
       "declarations": {
         ".": {
-          "publicShapeSha256": "1abd2583b49d2cac09a8b6b775cc86bf559ca37117336a0a1871b5baaaa06384",
+          "publicShapeSha256": "9f88d4432c030743910869420a853486edced5b97a4909a397c611fa410525b4",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:{call:(ctx:{env:Env;formData:FormData;params:Record<string, string>;platform:union(Platform|undefined);request:Request;responseHeaders:Headers;route:Route})=>union(Promise<T>|T)}",
@@ -116,6 +116,7 @@
             "MiddlewareDecl=type:{comment?:union(string|undefined);config?:union(undefined|{corsOrigin?:union(array(string)|string|undefined);corsOriginModule?:union(string|undefined);csp?:union(undefined|{nonce?:union(false|true|undefined);policy?:union(string|undefined);reportOnly?:union(false|true|undefined)});warnOnDefaultCors?:union(false|true|undefined)});kind:union(\"cors\"|\"csp\"|\"logger\"|\"requestId\"|\"securityHeaders\")}",
             "MiddlewareScopeDecl=type:{importPath:string;scope:string;varName:string}",
             "ModuleVocabularyDescriptor=type:{readonly exportName:string;readonly kind:union(\"element-registration\"|\"page-definition\");readonly moduleSpecifier:string}",
+            "NESTED_HOST_EXPANDER=value:\"__oe_nestedHost\"",
             "OpenElementAttribute=type:{default?:union(string|undefined);description?:union(string|undefined);fieldName?:union(string|undefined);name:string;reflects?:union(false|true|undefined);type?:union(string|undefined)}",
             "OpenElementBlogOptions=type:{basePath?:union(string|undefined);contentDir?:union(string|undefined)}",
             "OpenElementBuildContextLike=type:{plugins:{blogOptions:union(null|{basePath?:union(string|undefined);contentDir?:union(string|undefined)});headerNav:array({href:string;label:string});i18nOptions:union(null|{defaultLocale:string;index:string=>unknown;locales:array(string)});index:string=>unknown;navSections:array({items:array({label:string;order?:union(number|undefined);path:string});section:string});sitemapOptions:union(Record<string, unknown>|null)};registerPlugin:{call:(name:string,instance:unknown)=>void}}",
@@ -562,8 +563,9 @@
           ]
         },
         "./style-sheet": {
-          "publicShapeSha256": "2eedefa015e06e155584e76b1382530127f1a124a40d533283dd4f5a7aed815f",
+          "publicShapeSha256": "1a3ca06b441c623ef9133924bd9fe4f052c1ef8a267efb5a18d15fd0dc2f9212",
           "publicSymbols": [
+            "NESTED_HOST_EXPANDER=value:\"__oe_nestedHost\"",
             "STYLE_SHEET_LIVE=value:\"__openElementStyleSheetLive\"",
             "STYLE_SHEET_READY=value:\"__openElementStyleReady\"",
             "STYLE_SHEET_URL=value:\"__openElementStyleSheetUrl\"",

@@ -491,6 +491,12 @@ type RegisteredGeneratedHostRenderer = (
   lightChildren: string | undefined,
   attributes: readonly (readonly [string, string])[] | undefined,
   styleLinks?: readonly string[],
+  /**
+   * The render's nested-host expander (P-6). Appended LAST so a producer emitted
+   * before this slice — which declares only the four leading parameters — stays a
+   * valid implementation: the extra argument is simply ignored.
+   */
+  nestedHost?: unknown,
 ) => unknown;
 
 /**
@@ -533,6 +539,114 @@ function registeredGeneratedHostRenderer(tag: string): RegisteredGeneratedHostRe
 }
 
 /**
+ * Build the nested-host expander for ONE render (P-6, 2026-11-21).
+ *
+ * The class lane expands a nested custom-element host because its serializer walks
+ * `renderNestedElement` for every `*-*` tag. A generated element's `__ssr` is a
+ * STRING BUILDER, so it needs an expander handed to it — and EVERY generated
+ * markup producer needs the same one: a light root, a shadow host, and a page
+ * root. This factory is that single implementation; before it the body lived
+ * inline in the light-root branch only, so a shadow page's `<open-dialog>` stayed
+ * a bare tag while both other lanes expanded theirs.
+ *
+ * The expander reuses the SAME nested dispatch the class lane uses — the registry
+ * pair channel, then a light-root class static, then the compiled class — so a
+ * nested host expands identically from either parent lane. The admission set is
+ * the render's own `ssrRenderableTags`; a tag outside it answers `undefined` and
+ * the producer keeps its literal bytes. Returns `undefined` when the render
+ * admits nothing, so a project with no admitted nested tag emits no expander.
+ */
+function createNestedHostExpander(
+  options: InternalRenderToStringOptions,
+  depth: number,
+):
+  | ((request: {
+      readonly tag: string;
+      readonly attributes: ReadonlyArray<readonly [string, string]>;
+      readonly open: string;
+      readonly children: string;
+      readonly fallback: string;
+    }) => string | undefined | NestedHostFallback)
+  | undefined {
+  const admittedNested = new Set(options.ssrRenderableTags ?? []);
+  if (admittedNested.size === 0) return undefined;
+  return (request) => {
+    if (!admittedNested.has(request.tag)) return undefined;
+    // `16b-EB` (execution plan §19.2): a descendant producer that throws is owned
+    // by the enclosing error boundary, so the throw must not fail the whole
+    // render. Catching HERE is what makes the boundary's fallback bytes possible
+    // at all — the producer is the failing phase, and this is the only frame that
+    // both knows the failure and can still emit the boundary's reset output. A
+    // render with NO boundary keeps the pre-`16b-EB` behaviour because this
+    // re-raises when the host supplies no reporter.
+    try {
+      return expandNestedHostOnce(options, depth, request);
+    } catch (error) {
+      if (options.onNestedFailure === undefined) throw error;
+      options.onNestedFailure(error);
+      return request.fallback;
+    }
+  };
+}
+
+/** One expansion attempt: the registry pair, then a light class static, then the class. */
+function expandNestedHostOnce(
+  options: InternalRenderToStringOptions,
+  depth: number,
+  request: {
+    readonly tag: string;
+    readonly attributes: ReadonlyArray<readonly [string, string]>;
+    readonly open: string;
+    readonly children: string;
+    readonly fallback: string;
+  },
+): string | undefined {
+  const nestedGenerated = registeredGeneratedHostRenderer(request.tag);
+  if (nestedGenerated !== undefined) {
+    // RECURSION (P-6): the child's own content is expanded by the SAME factory, so
+    // a generated shadow host nested inside another keeps its inner components —
+    // otherwise the gap would simply move one level down.
+    return renderRegisteredGeneratedHost(
+      request.tag,
+      nestedGenerated,
+      undefined,
+      request.children === '' ? undefined : request.children,
+      request.attributes,
+      createNestedHostExpander(options, depth + 1),
+    );
+  }
+  const nestedClass = (
+    typeof customElements === 'undefined' ? undefined : customElements.get(request.tag)
+  ) as CompiledComponentConstructor | undefined;
+  if (nestedClass === undefined) return undefined;
+  const nestedLightSsr = (nestedClass as { __ssr?: unknown }).__ssr;
+  if (typeof nestedLightSsr === 'function') {
+    const nestedRendered = (
+      nestedLightSsr as (input?: unknown, attributes?: unknown, nestedHost?: unknown) => unknown
+    ).call(
+      nestedClass,
+      undefined,
+      request.attributes,
+      createNestedHostExpander(options, depth + 1),
+    );
+    const nestedLight = lightResult(nestedRendered, 'nested light-root', request.tag);
+    return serializeLightGeneratedHost(
+      request.tag,
+      nestedLight.content,
+      mergeHostAttributes(request.attributes, nestedLight.hostAttributes, nestedLight.seedRows),
+    );
+  }
+  // A class nested host expands through the class serializer, which owns its own
+  // nested walk — so the depth recursion stays the one serializer's, not a second
+  // dispatcher.
+  return renderToStringAtDepth(
+    request.tag,
+    { componentClass: nestedClass, props: {}, ssrRenderableTags: options.ssrRenderableTags },
+    depth + 1,
+  );
+}
+
+/**
  * Render one paired generated host through the ONE typed channel shared by the
  * generated page ROOT path and nested expansion: the compiler-emitted host
  * producer receives the props/lightChildren/attributes plus the per-island
@@ -549,6 +663,13 @@ function renderRegisteredGeneratedHost(
   props: Readonly<Record<string, unknown>> | undefined,
   lightChildren: string | undefined,
   attributes: readonly (readonly [string, string])[] | undefined,
+  /**
+   * The render's nested-host expander (P-6, 2026-11-21). A generated shadow host
+   * is a STRING BUILDER exactly like a light root, so the components inside its
+   * template reach their producer only through this expander. Omitted means no
+   * expansion, which is the pre-P-6 answer for a call site that has none.
+   */
+  nestedHost?: unknown,
 ): string {
   const islandStyleLinks = requestTimeIslandStyleLinks(tag);
   if (islandStyleLinks === null) {
@@ -561,11 +682,18 @@ function renderRegisteredGeneratedHost(
       { code: ErrorCode.SSR_RENDER_ERROR, phase: 'ssr' },
     );
   }
+  // P-6 ARGUMENT ORDER: the producer's parameters are, in order,
+  // (props, lightChildren, attributes, styleLinks?, nestedHost). A producer whose
+  // module declares no stylesheet channel omits `styleLinks`, so the expander must
+  // still travel in the FIFTH position — passing it fourth handed a function to a
+  // parameter the producer treats as a URL list, and the leaf then saw no expander
+  // at all. Both optional slots are therefore always passed, in order.
   const rendered = hostRenderer(
     props ?? {},
     lightChildren,
     attributes,
     islandStyleLinks === undefined ? undefined : islandStyleLinks,
+    nestedHost,
   );
   if (typeof rendered !== 'string') {
     throw new OpenElementError(
@@ -1075,12 +1203,17 @@ function renderToStringAtDepth(
           : normalizeHostAttributePairs(options.hostAttrs).attributes.map(
               (attribute) => [attribute.name, attribute.bare ? '' : attribute.value] as const,
             );
+      // A page ROOT has no enclosing render, so there is nothing above it to
+      // expand INTO it — but its own content still needs an expander for the
+      // components inside its template (P-6). `nestedHostFor` is built below from
+      // the same request-record contract the nested path uses.
       return renderRegisteredGeneratedHost(
         input,
         rootGeneratedHostRenderer,
         options.props,
         options.hostChildren,
         hostAttributes,
+        createNestedHostExpander(options, 0),
       );
     }
   }
@@ -1147,87 +1280,13 @@ function renderToStringAtDepth(
       // class — so a nested host expands identically from either parent lane.
       // The admission set is the render's own `ssrRenderableTags`; a tag outside
       // it answers `undefined` and the producer keeps its literal bytes.
-      const admittedNested = new Set(options.ssrRenderableTags ?? []);
-      const nestedHost =
-        admittedNested.size === 0
-          ? undefined
-          : (request: {
-              readonly tag: string;
-              readonly attributes: ReadonlyArray<readonly [string, string]>;
-              readonly open: string;
-              readonly children: string;
-              readonly fallback: string;
-            }): string | undefined | NestedHostFallback => {
-              if (!admittedNested.has(request.tag)) return undefined;
-              // `16b-EB` (execution plan §19.2): a descendant producer that throws
-              // is owned by the enclosing error boundary, so the throw must not
-              // fail the whole render. Catching HERE is what makes the boundary's
-              // fallback bytes possible at all — the producer is the failing phase,
-              // and this is the only frame that both knows the failure and can still
-              // emit the boundary's reset output. A render with NO boundary keeps
-              // the pre-`16b-EB` behaviour because `nestedHost` re-raises when the
-              // host supplies no reporter.
-              try {
-                return expandNestedHost(request);
-              } catch (error) {
-                // The boundary owns this failure: report it when a boundary is
-                // present, re-raise when it is not (no silent swallow).
-                if (options.onNestedFailure === undefined) throw error;
-                options.onNestedFailure(error);
-                return request.fallback;
-              }
-            };
-      const expandNestedHost = (request: {
-        readonly tag: string;
-        readonly attributes: ReadonlyArray<readonly [string, string]>;
-        readonly open: string;
-        readonly children: string;
-        readonly fallback: string;
-      }): string | undefined => {
-        if (!admittedNested.has(request.tag)) return undefined;
-        const nestedGenerated = registeredGeneratedHostRenderer(request.tag);
-        if (nestedGenerated !== undefined) {
-          return renderRegisteredGeneratedHost(
-            request.tag,
-            nestedGenerated,
-            undefined,
-            request.children === '' ? undefined : request.children,
-            request.attributes,
-          );
-        }
-        const nestedClass = (
-          typeof customElements === 'undefined' ? undefined : customElements.get(request.tag)
-        ) as CompiledComponentConstructor | undefined;
-        if (nestedClass === undefined) return undefined;
-        const nestedLightSsr = (nestedClass as { __ssr?: unknown }).__ssr;
-        if (typeof nestedLightSsr === 'function') {
-          const nestedRendered = (
-            nestedLightSsr as (input?: unknown, attributes?: unknown) => unknown
-          ).call(nestedClass, undefined, request.attributes);
-          const nestedLight = lightResult(nestedRendered, 'nested light-root', request.tag);
-          return serializeLightGeneratedHost(
-            request.tag,
-            nestedLight.content,
-            mergeHostAttributes(
-              request.attributes,
-              nestedLight.hostAttributes,
-              nestedLight.seedRows,
-            ),
-          );
-        }
-        // A class nested host expands through the class serializer, which
-        // owns its own nested walk — so the depth recursion stays the one
-        // serializer's, not a second dispatcher.
-        return renderToStringAtDepth(
-          request.tag,
-          {
-            componentClass: nestedClass,
-            props: {},
-            ssrRenderableTags: options.ssrRenderableTags,
-          },
-          depth + 1,
-        );
-      };
+      // P-6 (2026-11-21): the expander is built by ONE factory shared by every
+      // render entry that produces generated markup — the light root, the shadow
+      // host (page root and nested), and the class lane's own nested walk. It was
+      // inline here only, which is why a shadow page's inner components stayed
+      // unexpanded tags.
+      const nestedHost = createNestedHostExpander(options, depth);
+
       // Pass the host attribute pairs: the class static now folds them through
       // the shell's own seeder/resolver so a declared row gets its server value.
       // Before this, a light-root component with any row threw on `props.x`.
@@ -1359,6 +1418,10 @@ function renderToStringAtDepth(
                   nested.properties,
                   nested.children,
                   hostAttributes,
+                  // P-6: the class lane's own nested walk hands the child the SAME
+                  // expander, so a generated shadow host inside a class page expands
+                  // its own components too. One recursion, both parent lanes.
+                  createNestedHostExpander(options, depth + 1),
                 );
               }
               const nestedClass =

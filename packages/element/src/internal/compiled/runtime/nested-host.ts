@@ -19,6 +19,8 @@
  *   nested markup, and the caller owns the literal fallback.
  */
 
+import { NESTED_HOST_EXPANDER } from '@openelement/protocol/style-sheet';
+
 /** What a nested host needs from the caller's markup, already serialized. */
 export interface NestedHostRequest {
   /** The dash tag, e.g. `open-page-rail`. */
@@ -75,8 +77,13 @@ export function isNestedHostFallback(value: unknown): value is NestedHostFallbac
   return record.kind === 'fallback' && typeof record.html === 'string';
 }
 
-/** The compiler-private host field carrying the expander. */
-export const NESTED_HOST_PROPERTY = '__oe_nestedHost';
+/**
+ * The compiler-private host field carrying the expander.
+ *
+ * The literal lives in `@openelement/protocol` because the COMPILER emits the
+ * host record that carries it (P-6): one spelling, two ends.
+ */
+export const NESTED_HOST_PROPERTY = NESTED_HOST_EXPANDER;
 
 /**
  * Ask the render's host to expand one nested custom-element host, or return the

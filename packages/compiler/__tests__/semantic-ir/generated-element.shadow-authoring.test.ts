@@ -143,14 +143,18 @@ describe('M09-2a generated shadow host producer', () => {
       `import { createGeneratedElementClass, serializeGeneratedElementHtml, seedGeneratedElementHostProperties } from ${JSON.stringify(GENERATED_ELEMENT_SHELL_SPECIFIER)};`,
     );
     expect(tail).toContain('root: "shadow-open"');
-    expect(tail).toContain('export function Profile__ssrHost(props, lightChildren, attributes) {');
+    expect(tail).toContain(
+      'export function Profile__ssrHost(props, lightChildren, attributes, styleLinks, nestedHost) {',
+    );
     // M11: the host producer seeds its content props from the canonical host
     // attribute pairs through the shell's ONE conversion surface.
     expect(tail).toContain(
       '  const __oeHostProps = seedGeneratedElementHostProperties(__oeElementDescriptor.properties, props, attributes);',
     );
     expect(tail).toContain('    root: "open",');
-    expect(tail).toContain('    content: Profile__ssr(__oeHostProps, undefined),');
+    expect(tail).toContain(
+      '    content: Profile__ssr(__oeHostProps, nestedHost === undefined ? undefined : { "__oe_nestedHost": nestedHost }),',
+    );
     expect(tail).toContain('    ...(lightChildren === undefined ? {} : { lightChildren }),');
     expect(tail).toContain('    ...(attributes === undefined ? {} : { attributes }),');
     expect(tail).toContain('tag: "profile-card"');
@@ -197,7 +201,7 @@ describe('M09-2a generated shadow host producer', () => {
     );
     const styled = compileGeneratedElementIfAdmitted(styledSource, FILE, { site: SITE })!;
     expect(styled.code).toContain(
-      'export function Profile__ssrHost(props, lightChildren, attributes, styleLinks) {',
+      'export function Profile__ssrHost(props, lightChildren, attributes, styleLinks, nestedHost) {',
     );
     expect(styled.code).toContain('    ...(styleLinks === undefined ? {} : { styleLinks }),');
     // Mixed generated-element/entry artifacts: an old 3-arg caller (or a missing
@@ -206,7 +210,7 @@ describe('M09-2a generated shadow host producer', () => {
       'if (!Array.isArray(styleLinks) || styleLinks.length === 0) throw new Error("OEIR_LEAF_MISSING_VALUE: styleLinks';
     expect(styled.code).toContain(guard);
     const producerStart = styled.code.indexOf(
-      'export function Profile__ssrHost(props, lightChildren, attributes, styleLinks) {',
+      'export function Profile__ssrHost(props, lightChildren, attributes, styleLinks, nestedHost) {',
     );
     expect(producerStart).toBeGreaterThan(-1);
     const guardStart = styled.code.indexOf('OEIR_LEAF_MISSING_VALUE: styleLinks');
@@ -224,7 +228,7 @@ describe('M09-2a generated shadow host producer', () => {
     // The unstyled module keeps the 3-arg producer, no prefix walk, no guard.
     const unstyled = compileGeneratedElementIfAdmitted(SHADOW, FILE, { site: SITE })!;
     expect(unstyled.code).toContain(
-      'export function Profile__ssrHost(props, lightChildren, attributes) {',
+      'export function Profile__ssrHost(props, lightChildren, attributes, styleLinks, nestedHost) {',
     );
     expect(unstyled.code).not.toContain('data-oe-static-styles');
     expect(unstyled.code).not.toContain('OEIR_LEAF_MISSING_VALUE: styleLinks');
@@ -271,7 +275,7 @@ export default Profile;
     const shadow = compileGeneratedElementIfAdmitted(SHADOW, FILE, { site: SITE });
     expect(shadow).not.toBeNull();
     expect(shadow!.code).toContain(
-      'export function Profile__ssrHost(props, lightChildren, attributes) {',
+      'export function Profile__ssrHost(props, lightChildren, attributes, styleLinks, nestedHost) {',
     );
     expect(shadow!.code).toContain('root: "shadow-open"');
     expect(shadow!.code).toContain('    root: "open",');

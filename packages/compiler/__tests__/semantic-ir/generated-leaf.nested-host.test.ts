@@ -17,6 +17,7 @@ import { expect, test } from 'vitest';
 import { compileFunctionModule } from '../../src/internal/compiler/semantic-core/function-frontend.ts';
 import { generateLeafModule } from '../../src/internal/compiler/semantic-ir/generated-leaf/generate.ts';
 import { GENERATED_ELEMENT_IMPORT_CLASSIFIER as CLASSIFIER } from '../../src/internal/compiler/semantic-ir/generated-element/contract.ts';
+import { compileGeneratedElementIfAdmitted } from '../../src/internal/compiler/semantic-ir/generated-element/compile.ts';
 
 const FILE = '/proj/src/leaf.tsx';
 
@@ -67,4 +68,54 @@ test('the helper is imported only when the module uses it', () => {
   const plain = module(`function Plain(props) { return <p>{props.text}</p>; }
 `);
   expect(plain).not.toMatch(/import \{[^}]*nestedHost/);
+});
+
+/* ------------------------------------------------------------------------- *
+ * P-6 (2026-11-21): the SHADOW host producer must carry the expander.
+ *
+ * The light-root producer received the nested-host expander from the start; the
+ * shadow host producer (`<Name>__ssrHost`) did not, so a shadow page's inner
+ * components stayed unexpanded tags while the class lane and the light lane both
+ * expanded theirs. That is a parity gap, not a design boundary — the class lane's
+ * own shadow pages had always expanded, which is the proof it is required.
+ * ------------------------------------------------------------------------- */
+
+const SHADOW_PAGE = `import { defineIslandConfig } from '@openelement/router';
+export const openElement = defineIslandConfig({ tag: 'p6-page', root: 'shadow' });
+export default function P6Page() {
+  return <main><x-inner label='a'><b>hi</b></x-inner></main>;
+}
+`;
+
+test('P-6: the shadow host producer RECEIVES the nested-host expander', () => {
+  const compiled = compileGeneratedElementIfAdmitted(SHADOW_PAGE, '/proj/src/p6.tsx', {
+    site: { tag: 'p6-page' },
+  });
+  expect(compiled).not.toBeNull();
+  const code = compiled!.code;
+  // The wrapper's LAST parameter is the expander, in the same position the light
+  // root's producer already uses.
+  expect(code).toMatch(/export function P6Page__ssrHost\([^)]*nestedHost\)/);
+  // ...and it reaches the leaf producer as the compiler-private host record field
+  // the runtime's ONE `nestedHost` helper reads.
+  expect(code).toContain(
+    'nestedHost === undefined ? undefined : { "__oe_nestedHost": nestedHost }',
+  );
+});
+
+test('P-6: a shadow module without nested dash tags still gains no call site', () => {
+  const compiled = compileGeneratedElementIfAdmitted(
+    `import { defineIslandConfig } from '@openelement/router';
+export const openElement = defineIslandConfig({ tag: 'p6-plain', root: 'shadow' });
+export default function P6Plain() {
+  return <main><p>no dash tags</p></main>;
+}
+`,
+    '/proj/src/p6-plain.tsx',
+    { site: { tag: 'p6-plain' } },
+  );
+  expect(compiled).not.toBeNull();
+  // The producer still accepts the expander (one uniform ABI), but the leaf emits
+  // no expansion call, so there is nothing to route.
+  expect(compiled!.code).not.toContain('nestedHost(__oe_host');
 });

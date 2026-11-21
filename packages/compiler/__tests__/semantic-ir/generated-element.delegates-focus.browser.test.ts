@@ -206,7 +206,7 @@ describe('M09-2a authored delegatesFocus island (Chromium)', () => {
     expect(compiledCode).toContain('delegatesFocus: true');
     expect(compiledCode).toContain('dsd: { delegatesFocus: true },');
     expect(compiledCode).toContain(
-      'export function ProfileFocus__ssrHost(props, lightChildren, attributes) {',
+      'export function ProfileFocus__ssrHost(props, lightChildren, attributes, styleLinks, nestedHost) {',
     );
   });
 

@@ -1424,6 +1424,27 @@ register them for generated islands (shadow scope) before the fixture migrates.
 > shadow pages would hit, so they stay class-authored and the /dialog fixture is
 > reverted.
 >
+> **P-6 is FIXED (2026-11-21).** The parity gap is closed: the shadow host
+> producer now declares `(props, lightChildren, attributes, styleLinks,
+> nestedHost)` — FIXED positions, always all five — and hands the expander to its
+> leaf through the ONE compiler-private record field
+> (`@openelement/protocol`'s `NESTED_HOST_EXPANDER`). The runtime builds that
+> expander with ONE factory shared by the page root, the light root and the class
+> lane's nested walk, so a generated shadow host nested inside another keeps
+> recursing. Measured: `router-ui-dogfood`'s /dialog is now a GENERATED shadow
+> page and its `<open-dialog>` renders
+> `<template shadowrootmode="open" shadowrootdelegatesfocus>` with its own marked
+> links — **e2e 120/120 on chromium, firefox and webkit** (was 40/40 chromium with
+> the page still class-authored). Two rows in
+> `generated-leaf.nested-host.test.ts` pin the producer signature and the record
+> field.
+>
+> A LAYOUT DEFECT was found and fixed on the way, and it is the interesting part:
+> the producer's parameters were CONDITIONAL (`styleLinks` appeared only for a
+> styled module), so the caller's argument order depended on the callee's styling —
+> the runtime handed a function to `styleLinks` and the leaf never saw its
+> expander. Every emitted producer now declares all five slots.
+>
 > **Superseded reading (kept as history): a generated PAGE must resolve to a
 > declared ISLAND.** Converting `router-ui-dogfood`'s `page-dialog` to the
 > generated lane fails at SSR with PROGRAM_MISSING: `classifyPageRoute` resolves a

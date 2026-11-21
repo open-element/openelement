@@ -62,3 +62,19 @@ export const STYLE_SHEET_URL = '__openElementStyleSheetUrl';
  * interpolates this exact name.
  */
 export const STYLE_SHEET_LIVE = '__openElementStyleSheetLive';
+
+/**
+ * The compiler-private field a render's host record carries the nested-host
+ * expander under (P-6, 2026-11-21).
+ *
+ * A generated component's SSR producer routes every custom-element tag through
+ * the runtime's ONE `nestedHost` helper, which reads the expander off this
+ * record. The LIGHT root's producer has always supplied it; the SHADOW host
+ * producer did not, so a shadow page's inner components stayed bare tags while
+ * the class lane and the light lane both expanded theirs.
+ *
+ * It lives in the protocol for the same reason the sheet keys above do: the
+ * COMPILER emits the record and the RUNTIME reads it, and the compiler must not
+ * depend on an element-internal subpath to spell it. One literal, two ends.
+ */
+export const NESTED_HOST_EXPANDER = '__oe_nestedHost';

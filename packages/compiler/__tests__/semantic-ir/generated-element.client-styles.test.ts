@@ -134,7 +134,9 @@ describe('client-only sheet imports (the module-graph edge the gap lacked)', () 
     // keeps the typed styleLinks channel (the SSR/DSD half), and the client
     // row is additive.
     expect(code).toContain('export function LiveTimer__ssrHost(');
-    expect(code).toContain('styleLinks) {');
+    // P-6: the producer declares every slot in a FIXED order, so the stylesheet
+    // channel's presence is asserted on the parameter list it always carries.
+    expect(code).toContain('attributes, styleLinks, nestedHost) {');
   });
 
   test('the imports stay in authored order', () => {
@@ -169,7 +171,9 @@ describe('client-only sheet imports (the module-graph edge the gap lacked)', () 
     // typed styleLinks channel and the module gains NO import and NO descriptor
     // row (a module-graph copy would be a second delivery the link guard would
     // then have to undo).
-    expect(styled).toContain('LiveTimer__ssrHost(props, lightChildren, attributes, styleLinks)');
+    expect(styled).toContain(
+      'LiveTimer__ssrHost(props, lightChildren, attributes, styleLinks, nestedHost)',
+    );
     expect(styled).not.toContain('styles: [');
     expect(styled).not.toContain('.css";');
   });

@@ -475,7 +475,7 @@ test('the compiler derives the style-link fact from the sidecar, not scan order'
   );
   expect(before).not.toBeNull();
   expect(before!.code).toContain(
-    'export function ProfileCard__ssrHost(props, lightChildren, attributes, styleLinks) {',
+    'export function ProfileCard__ssrHost(props, lightChildren, attributes, styleLinks, nestedHost) {',
   );
 
   await scanProject({ 'app/islands/profile-card.tsx': SHADOW_GENERATED }).then(({ scan }) =>

@@ -417,7 +417,7 @@ describe('emitter rows and default factories', () => {
     const code = compiled!.code;
     expect(code).toContain('resolveGeneratedElementProps');
     expect(code).toContain(
-      'content: C__ssr(resolveGeneratedElementProps(__oeElementDescriptor, __oeHostProps), undefined),',
+      'content: C__ssr(resolveGeneratedElementProps(__oeElementDescriptor, __oeHostProps), nestedHost === undefined ? undefined : { "__oe_nestedHost": nestedHost }),',
     );
     expect(code).toMatch(
       /import \{ [^}]*resolveGeneratedElementProps[^}]* \} from "@openelement\/element\/internal\/compiled\/generated-element\/shell";/,
