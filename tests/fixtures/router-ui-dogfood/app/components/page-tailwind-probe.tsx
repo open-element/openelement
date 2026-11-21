@@ -6,18 +6,21 @@
  * boundary probes), so the whole subtree is server-rendered DSD with no
  * client JavaScript: the probe's utilities must therefore arrive as an
  * external CSS resource referenced from the emitted HTML.
+ *
+ * GENERATED lane (2026-11-21 closeout: class → function). The page keeps the
+ * class lane's `shadow` root: `e2e/shadow-tailwind.spec.ts` locates the probe
+ * as a direct child of the page's shadow tree.
  */
-import { element, OpenElement } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
 import './shadow-tailwind-probe.tsx';
 
-@element('tailwind-probe-page', { root: 'shadow-open' })
-export default class TailwindProbePage extends OpenElement {
-  render() {
-    return (
-      <main>
-        <h1 id='probe-heading'>shadow-native tailwind probe</h1>
-        <oe-tailwind-probe label='probe'></oe-tailwind-probe>
-      </main>
-    );
-  }
+export const openElement = defineIslandConfig({ tag: 'tailwind-probe-page', root: 'shadow' });
+
+export default function TailwindProbePage() {
+  return (
+    <main>
+      <h1 id="probe-heading">shadow-native tailwind probe</h1>
+      <oe-tailwind-probe label="probe"></oe-tailwind-probe>
+    </main>
+  );
 }

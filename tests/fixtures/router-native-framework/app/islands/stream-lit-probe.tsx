@@ -11,29 +11,34 @@
  * renderer), so this paragraph is evidence that island hydration ran, never
  * evidence about shell survival; the shell-survival marker is the page's
  * #shell-marker, which the server-born shell carries.
+ *
+ * GENERATED lane (2026-11-21 Alpha16 closeout). `root: 'shadow'` keeps the class
+ * lane's `shadow-open`: the spec locates the status paragraph THROUGH the page
+ * host's shadow tree (`stream-lit-proof-page #lit-loader #lit-loader-status`),
+ * so a light root would move the paragraph out of the tree it is read from.
  */
+import { onConnect } from '@openelement/element';
 import { defineIslandConfig } from '@openelement/router';
-import { element, OpenElement } from '@openelement/element';
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });
+export const openElement = defineIslandConfig({
+  hydrate: 'load',
+  ssr: true,
+  dsd: true,
+  root: 'shadow',
+});
 
-@element('stream-lit-probe', { root: 'shadow-open' })
-export default class StreamLitProbe extends OpenElement {
-  override onDsdHydrated(): void {
-    this.loadLitPillModule();
-  }
-
-  override onCsrRendered(): void {
-    this.loadLitPillModule();
-  }
-
-  /** Register the Lit pill module exactly once per document, in the browser. */
-  private loadLitPillModule(): void {
-    if (typeof window === 'undefined') return;
+export default function StreamLitProbe() {
+  // The class spellings onDsdHydrated/onCsrRendered split one event (the island
+  // is live) across the claim and fresh-creation paths; onConnect runs after
+  // either, so importing here registers the Lit module exactly once per
+  // document on both paths — ESM module evaluation is the dedupe, not a guard.
+  //
+  // onConnect is a connection hook: the SSR producer serializes the markup
+  // without replaying it, so this import can only run in the browser even
+  // though the server also evaluates this module for its DSD template.
+  onConnect(() => {
     void import('../client/stream-lit-client.ts');
-  }
+  });
 
-  render() {
-    return <p id='lit-loader-status'>lit pill loader armed</p>;
-  }
+  return <p id="lit-loader-status">lit pill loader armed</p>;
 }

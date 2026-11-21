@@ -6,22 +6,28 @@
  * is set from the compiled claim path, so the spec observes real hydration
  * (not just a network prefetch).
  */
-import { element, OpenElement } from '@openelement/element';
+import { onConnect, useHost } from '@openelement/element';
 import { defineIslandConfig } from '@openelement/router';
 
-export const openElement = defineIslandConfig({ hydrate: 'visible', ssr: true, dsd: true });
+export const openElement = defineIslandConfig({
+  hydrate: 'visible',
+  ssr: true,
+  dsd: true,
+  // The class lane declared `shadow-open`, and the spec asserts the island sits
+  // inside the PAGE's shadow root while its own marker is claimed in place; a
+  // light root would move the marker into the page tree.
+  root: 'shadow',
+});
 
-@element('visible-probe', { root: 'shadow-open' })
-export default class VisibleProbe extends OpenElement {
-  protected onDsdHydrated(): void {
-    this.setAttribute('data-hydrated', '1');
-  }
+export default function VisibleProbe() {
+  const host = useHost();
+  // Both class hooks (onDsdHydrated for the claim path, onCsrRendered for the
+  // fresh-creation path) collapse into this one connect callback: the generated
+  // lane runs it after either activation, which is the same moment the class
+  // lane had two spellings for.
+  onConnect(() => {
+    host.setAttribute('data-hydrated', '1');
+  });
 
-  protected onCsrRendered(): void {
-    this.setAttribute('data-hydrated', '1');
-  }
-
-  render() {
-    return <span id='visible-probe-marker'>probe</span>;
-  }
+  return <span id='visible-probe-marker'>probe</span>;
 }
