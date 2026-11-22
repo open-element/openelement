@@ -70,6 +70,25 @@ export interface NestedHostFallback {
   readonly error: unknown;
 }
 
+/**
+ * A nested expansion's resolved stylesheet links, handed to the ENCLOSING render.
+ *
+ * A shadow root's sheets are declared INSIDE its DSD template, and a document-head
+ * link cannot reach content in a shadow tree (audit C). So when a shadow host
+ * expands a nested component, the child's sheets belong in the CHILD's template if
+ * the child is a shadow root — and in the PARENT's template when the child is a
+ * LIGHT root, because a light root owns no template of its own. That second case is
+ * what this channel carries: the expander reports the links it resolved, and the
+ * enclosing producer writes them into the template it is building.
+ *
+ * Empty means "nothing to lift": a shadow child declared its own links in its own
+ * template, and a component with no sheets has none.
+ */
+export interface NestedHostStyleLinks {
+  /** The nested component's own declared sheet URLs, in authored order. */
+  readonly links: readonly string[];
+}
+
 /** True for the boundary-fallback answer (a string is a normal expansion). */
 export function isNestedHostFallback(value: unknown): value is NestedHostFallback {
   if (value === null || typeof value !== 'object') return false;

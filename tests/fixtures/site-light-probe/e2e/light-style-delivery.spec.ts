@@ -35,6 +35,16 @@ import { expect, test } from '@playwright/test';
 const PROBE_TAG = 'open-light-probe';
 const CARD_TAG = 'light-probe-card';
 const PAGE_TAG = 'light-probe-page';
+/**
+ * How to select the page in the DOM.
+ *
+ * The page is a SERVER FUNCTION PAGE (F16): it renders document content with no
+ * host element, so there is no `<light-probe-page>` tag to query. Its root `<main>`
+ * carries the class the class lane put on it, which is the same element the class
+ * form's host WRAPPED — the rules land on the same nodes, which is what these rows
+ * measure.
+ */
+const PAGE_SELECTOR = 'main.light-probe-page';
 const GEN_TAG = 'gen-light-probe';
 
 /** `.probe-shared` in each of the three scopes that declare it. */
@@ -74,16 +84,32 @@ function assetFor(assets: Map<string, string>, tag: string): { href: string; css
   throw new Error(`no emitted stylesheet is scoped to <${tag}>`);
 }
 
+/**
+ * The emitted asset whose bytes belong to the SERVER FUNCTION PAGE `tag`.
+ *
+ * A page without a host element cannot be `@scope`-wrapped, so its asset is found
+ * by its own class selector instead. That is the only difference from
+ * `assetFor`: the delivery contract (one emitted asset, one marked head link) is
+ * identical.
+ */
+function plainAssetFor(assets: Map<string, string>, tag: string): { href: string; css: string } {
+  const selector = `.${tag}`;
+  for (const [href, css] of assets) {
+    if (!css.startsWith('@scope (') && css.includes(selector)) return { href, css };
+  }
+  throw new Error(`no emitted stylesheet carries <${tag}>'s page rules`);
+}
+
 const assets = emittedStyleAssets();
 const probeAsset = assetFor(assets, PROBE_TAG);
 const cardAsset = assetFor(assets, CARD_TAG);
 /**
- * The PAGE component is rendered by the server alone: no island imports it, so
- * before S-C1.4 its sheet had no emitted asset and fell back to a
- * framework-generated inline `<style>` inside the page element. It now travels
- * the same protocol as every other component sheet (#1609).
+ * The PAGE is a server function page (F16): it owns no host element, so its sheet
+ * is a PLAIN document asset rather than an `@scope`-wrapped host sheet. It still
+ * travels the same protocol as every other component sheet (#1609) — one emitted
+ * asset, one marked head link — which is what this fixture exists to prove.
  */
-const pageAsset = assetFor(assets, PAGE_TAG);
+const pageAsset = plainAssetFor(assets, PAGE_TAG);
 /**
  * The generated (function) light-root island has no SSR host producer: the
  * document head is the only delivery that styles it without JS (Alpha16
@@ -148,7 +174,12 @@ test('the build emits content-addressed scoped assets and declares them in the d
     false,
     'no framework inline stylesheet may remain (the server-only fallback is retired)',
   );
-  assert.ok(pageAsset.css.startsWith(`@scope (${PAGE_TAG}) {`));
+  // The PAGE owns no host element any more (F16: it is a server function page), so
+  // its asset cannot be `@scope`-wrapped. The contract this row exists for is
+  // unchanged and is asserted here: one emitted, content-addressed asset carrying
+  // the page's own rules, declared as a marked link in the head — not inlined.
+  assert.ok(pageAsset.css.includes('.light-probe-page'));
+  assert.equal(/<style[^>]*>\s*\.light-probe-page/.test(html), false);
 });
 
 test('no client bundle carries runtime scoping or the retired style sink', () => {
@@ -218,7 +249,7 @@ test('two component types and an unrelated element keep their own rules', async 
   expect(await computedStyle(page, CARD_TAG, '.card-mark', 'color')).not.toBe(PROBE_COUNT_COLOR);
   expect(await computedColor(page, PROBE_TAG, '.probe-count')).toBe(PROBE_COUNT_COLOR);
   // The unrelated document element is NOT inside any component's scope.
-  expect(await computedColor(page, PAGE_TAG, 'p.document-probe')).toBe(DOCUMENT_COLOR);
+  expect(await computedColor(page, PAGE_SELECTOR, 'p.document-probe')).toBe(DOCUMENT_COLOR);
 });
 
 test('upgraded islands create no style node and do not re-deliver the linked sheet', async ({
@@ -393,7 +424,7 @@ test.describe('computed styles without client JavaScript', () => {
 
     expect(await computedColor(page, CARD_TAG, '.probe-shared')).toBe(CARD_COLOR);
     expect(await computedColor(page, PROBE_TAG, '.probe-shared')).toBe(PROBE_COLOR);
-    expect(await computedColor(page, PAGE_TAG, 'p.document-probe')).toBe(DOCUMENT_COLOR);
+    expect(await computedColor(page, PAGE_SELECTOR, 'p.document-probe')).toBe(DOCUMENT_COLOR);
     expect(await computedColor(page, PROBE_TAG, '.probe-count')).toBe(PROBE_COUNT_COLOR);
 
     // The generated light root has no SSR content, but its host box is styled

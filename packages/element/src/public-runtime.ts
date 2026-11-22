@@ -302,6 +302,8 @@ export interface RenderToStringOptions {
    * can never become a silent swallow.
    */
   onNestedFailure?: (error: unknown) => void;
+  /** Sheet URLs a nested LIGHT child lifted into the enclosing template (F16). */
+  nestedStyleSink?: Set<string>;
   /**
    * The render's document stylesheet collection (alpha15 S lane, S-C1.2).
    * Every light-root component serialized in this render reports its external
@@ -570,7 +572,14 @@ function createNestedHostExpander(
   | undefined {
   const admittedNested = new Set(options.ssrRenderableTags ?? []);
   if (admittedNested.size === 0) return undefined;
-  return (request) => {
+  const nestedStyleSink = new Set<string>();
+  const expander = (request: {
+    readonly tag: string;
+    readonly attributes: ReadonlyArray<readonly [string, string]>;
+    readonly open: string;
+    readonly children: string;
+    readonly fallback: string;
+  }): string | undefined | NestedHostFallback => {
     if (!admittedNested.has(request.tag)) return undefined;
     // `16b-EB` (execution plan §19.2): a descendant producer that throws is owned
     // by the enclosing error boundary, so the throw must not fail the whole
@@ -580,13 +589,30 @@ function createNestedHostExpander(
     // render with NO boundary keeps the pre-`16b-EB` behaviour because this
     // re-raises when the host supplies no reporter.
     try {
-      return expandNestedHostOnce(options, depth, request);
+      return expandNestedHostOnce(options, depth, request, nestedStyleSink);
     } catch (error) {
       if (options.onNestedFailure === undefined) throw error;
       options.onNestedFailure(error);
       return request.fallback;
     }
   };
+  // The enclosing producer reads the lifted sheets back off the expander it was
+  // given, so the collector never widens the producer's signature.
+  expander.nestedStyleSink = nestedStyleSink;
+  return expander;
+}
+
+/**
+ * The sheets a nested LIGHT child lifted into the enclosing template (F16).
+ *
+ * The expander is the ONE frame that both expands the child and knows its sheets,
+ * so it carries the collected set. Reading it back here keeps the collector out of
+ * the producer's signature: the producer still receives ONE `styleLinks` list, the
+ * same channel it already had.
+ */
+function liftedNestedStyleLinks(expander: unknown): readonly string[] | undefined {
+  const sink = (expander as { nestedStyleSink?: Set<string> } | undefined)?.nestedStyleSink;
+  return sink === undefined || sink.size === 0 ? undefined : [...sink];
 }
 
 /** One expansion attempt: the registry pair, then a light class static, then the class. */
@@ -600,9 +626,43 @@ function expandNestedHostOnce(
     readonly children: string;
     readonly fallback: string;
   },
+  /**
+   * Where a nested LIGHT child's sheets go (F16): they cannot live in the child,
+   * which has no template, so they are collected for the template being built.
+   */
+  nestedStyleSink: Set<string>,
+): string | undefined {
+  return expandNestedHostInner(options, depth, request, nestedStyleSink);
+}
+
+function expandNestedHostInner(
+  options: InternalRenderToStringOptions,
+  depth: number,
+  request: {
+    readonly tag: string;
+    readonly attributes: ReadonlyArray<readonly [string, string]>;
+    readonly open: string;
+    readonly children: string;
+    readonly fallback: string;
+  },
+  nestedStyleSink: Set<string>,
 ): string | undefined {
   const nestedGenerated = registeredGeneratedHostRenderer(request.tag);
   if (nestedGenerated !== undefined) {
+    // A generated LIGHT root owns no template, so its declared sheets belong to
+    // the ENCLOSING template — the content it emits lands there (F16). A generated
+    // SHADOW host declares its own links inside its own template and lifts nothing.
+    // A LIGHT-root generated child owns no template, so its declared sheets belong
+    // to the ENCLOSING template — that is where its content lands (F16). The
+    // producer's own arity is the fact that distinguishes the two: a shadow host
+    // declares `(props, lightChildren, attributes, styleLinks, nestedHost)` and
+    // writes its links into its own DSD template, while a light root's producer
+    // takes no `styleLinks` slot because it has no template to put them in.
+    if (nestedGenerated.length < 5) {
+      for (const link of requestTimeIslandStyleLinks(request.tag) ?? []) {
+        nestedStyleSink.add(link);
+      }
+    }
     // RECURSION (P-6): the child's own content is expanded by the SAME factory, so
     // a generated shadow host nested inside another keeps its inner components —
     // otherwise the gap would simply move one level down.
@@ -621,6 +681,11 @@ function expandNestedHostOnce(
   if (nestedClass === undefined) return undefined;
   const nestedLightSsr = (nestedClass as { __ssr?: unknown }).__ssr;
   if (typeof nestedLightSsr === 'function') {
+    // A LIGHT-root child owns no template, so its declared sheets cannot be
+    // declared where its content lands — they belong to the ENCLOSING template
+    // (F16, the class lane's `declaredStyleLinks` had this by construction). Report
+    // them upward through the one collector the enclosing producer reads.
+    for (const link of requestTimeIslandStyleLinks(request.tag) ?? []) nestedStyleSink.add(link);
     const nestedRendered = (
       nestedLightSsr as (input?: unknown, attributes?: unknown, nestedHost?: unknown) => unknown
     ).call(
@@ -688,13 +753,16 @@ function renderRegisteredGeneratedHost(
   // still travel in the FIFTH position — passing it fourth handed a function to a
   // parameter the producer treats as a URL list, and the leaf then saw no expander
   // at all. Both optional slots are therefore always passed, in order.
-  const rendered = hostRenderer(
-    props ?? {},
-    lightChildren,
-    attributes,
-    islandStyleLinks === undefined ? undefined : islandStyleLinks,
-    nestedHost,
-  );
+  // The enclosing template also carries the sheets a nested LIGHT child lifted
+  // into it (F16): a light root owns no template, so its content lands HERE and
+  // its rules must be reachable from HERE. `undefined` keeps the pre-existing
+  // bytes for a host that declares and lifts nothing.
+  const lifted = liftedNestedStyleLinks(nestedHost);
+  const styleLinks =
+    islandStyleLinks === undefined && lifted === undefined
+      ? undefined
+      : [...(islandStyleLinks ?? []), ...(lifted ?? [])];
+  const rendered = hostRenderer(props ?? {}, lightChildren, attributes, styleLinks, nestedHost);
   if (typeof rendered !== 'string') {
     throw new OpenElementError(
       `[openElement] admitted generated host <${tag}> produced ` +
