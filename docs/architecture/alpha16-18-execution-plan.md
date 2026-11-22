@@ -1424,6 +1424,24 @@ register them for generated islands (shadow scope) before the fixture migrates.
 > shadow pages would hit, so they stay class-authored and the /dialog fixture is
 > reverted.
 >
+> **DEV VS BUILD STYLE DELIVERY — owner decision (2026-11-22): dev keeps HMR.**
+> The generated lane's BUILD delivery is link-only: an SSR/DSD island's sheet is
+> declared as one marked `<link>` inside its DSD template, and no runtime-adopted
+> copy is created, so the same bytes can never be delivered twice. `site-light-probe`
+> pins that rule.
+>
+> DEV is deliberately DIFFERENT, and the owner chose this explicitly: dev keeps
+> runtime adoption because HMR needs it. A live `CSSStyleSheet` held on `globalThis`
+> is re-filled in place when the sheet re-evaluates, so a CSS-only edit updates
+> computed styles WITHOUT a reload and without swapping the sheet object — every root
+> already holding it re-renders. A `<link>` cannot do that: replacing its href
+> re-parses and re-applies, which flickers and rebuilds the sheet.
+>
+> So the two paths differ in a way that is intentional and recorded:
+> build = one asset, one delivery; dev = one live object, updated in place. The dev
+> adoption rows in `dev-authored-css` are NOT stale class-lane assertions — they pin
+> the HMR contract.
+>
 > **F16 STATE (2026-11-22, measured).** The class lane's SOURCE is deleted:
 > `public-runtime.ts` lost the program serialization path, six modules are gone
 > (`open-element*`, `error-boundary`, `internal/compiled/facade-host`), and
