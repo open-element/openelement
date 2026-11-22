@@ -69,13 +69,22 @@ export function deliveredIslandStyleTags(
  */
 export function islandStyleEntryLinks(
   assets: ReadonlyMap<string, readonly string[]>,
-  shadowTags: ReadonlySet<string>,
+  /**
+   * Every styled generated island's tag — shadow AND light (F16).
+   *
+   * This used to be the SHADOW set only, because the entry seeded these URLs into
+   * DSD templates. A LIGHT child nested inside a shadow tree needs its urls here
+   * too: it owns no template, so its sheets belong to the ENCLOSING template, and
+   * the enclosing producer finds them through this map (the runtime lift channel).
+   * The shadow-only row was the reason a nested light card rendered unstyled.
+   */
+  styledTags: ReadonlySet<string>,
   utilitySheetUrls: readonly string[],
   utilityRequiredTags: ReadonlySet<string>,
 ): Array<[string, readonly string[]]> {
   const entries: Array<[string, readonly string[]]> = [];
   for (const [tag, urls] of assets) {
-    if (!shadowTags.has(tag)) continue;
+    if (!styledTags.has(tag)) continue;
     const links =
       utilityRequiredTags.has(tag) && utilitySheetUrls.length > 0
         ? [...urls, ...utilitySheetUrls]
@@ -90,7 +99,7 @@ export function islandStyleEntryLinks(
   if (utilitySheetUrls.length > 0) {
     const emitted = new Set(entries.map(([tag]) => tag));
     for (const tag of utilityRequiredTags) {
-      if (!shadowTags.has(tag) || emitted.has(tag)) continue;
+      if (!styledTags.has(tag) || emitted.has(tag)) continue;
       entries.push([tag, [...utilitySheetUrls]]);
     }
   }

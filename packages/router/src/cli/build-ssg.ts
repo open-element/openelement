@@ -422,10 +422,12 @@ async function buildSSG(
   const componentStyleSheetUrls = ctx.componentStyleSheet
     ? [`${options.base}client/${ctx.componentStyleSheet.fileName}`]
     : [];
-  // The element style-links channel carries generated SHADOW hosts only: a
-  // light root's sheet rides the per-route document fact, and the Phase 2 map
-  // now records both roots. Filtering here keeps the channel's documented
-  // contract (tag -> shadow DSD URLs) intact.
+  // Every styled generated island, BOTH roots (F16). A shadow host's urls seed its
+  // own DSD template; a LIGHT host's urls are also needed here because a light
+  // child nested inside a shadow tree cannot declare anything itself — its content
+  // lands in the ENCLOSING template, which finds the urls through this map. The
+  // shadow-only filter that used to be here is what left a nested light card
+  // unstyled.
   const styledShadowTags = new Set([
     ...deliveredIslandStyleTags(
       islandStyleDeclarations(),
@@ -434,6 +436,13 @@ async function buildSSG(
         { tags?: readonly string[]; tagNames?: readonly string[] } | undefined
       >,
     ).shadow,
+    ...deliveredIslandStyleTags(
+      islandStyleDeclarations(),
+      ctx.phase1.islandMeta as Record<
+        string,
+        { tags?: readonly string[]; tagNames?: readonly string[] } | undefined
+      >,
+    ).light,
     // A page-local GENERATED shadow component (P-2) has no island declaration —
     // its identity is the sidecar's own tag — but its DSD template is a shadow
     // root that must declare its sheets like any other. Admitted here so the
@@ -441,6 +450,11 @@ async function buildSSG(
     // has one, the shared component sheet when it does not).
     ...(ctx.phase1.staticComponents ?? [])
       .filter((component) => component.root === 'shadow')
+      .map((component) => component.tagName),
+    // ...and its LIGHT page-local counterpart, whose sheet is lifted into whatever
+    // template it is nested in.
+    ...(ctx.phase1.staticComponents ?? [])
+      .filter((component) => component.root === 'light')
       .map((component) => component.tagName),
   ]);
   // A generated shadow host has no emitted class static to carry the class
