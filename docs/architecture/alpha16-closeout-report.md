@@ -199,6 +199,26 @@ first six steps pass (packed sources, pack surface, typecheck of every packed pa
 registry itself answers promptly (so it is not a network outage). The consumer leg needs a
 published alpha.16 or a local-registry override; neither is a source change.
 
+**The MDX routing half, with the exact missing fact written down** (the lowering itself is
+DONE — `mdxToCompiledPageSource` emits a `defineIslandConfig` sidecar plus a function component,
+and `plugin-mdx` is 5/5 including its end-to-end SSR build). What still fails is PAGE
+CLASSIFICATION of an `.mdx` route, and the cause is now precise rather than "needs work":
+
+- `classifyPageModule` no longer adds `class-page` for an MDX fact, which is correct;
+- but the generated-element verdict needs a `resolvedIsland`, and every existing path to one is
+  unusable for MDX: there is no `definePage(...)` argument to resolve, `declaredComponents` is
+  keyed by the transform's stable module id while the MDX module's id is VIRTUAL
+  (`\0open-mdx:<abs>.mdx.tsx`), and `context.islands` holds only islands-dir modules — measured:
+  `island = undefined` for `mdx-page.mdx` with `mdx = true`.
+- Constructing an identity in the classifier instead is NOT acceptable: it would assert a
+  compiler-emitted host producer that was never computed, which is the fail-open the bounded lane
+  exists to prevent.
+
+So the fix is to put the MDX route's island fact where the classifier legitimately reads it —
+i.e. register the lowered module in the island/declared chain at scan time — not to special-case
+the classifier. An attempt that removed the class claim without that registration was reverted:
+it changed nothing and left dead code.
+
 **What is genuinely not delivered** (each waits on its own slice, none on the lane):
 the dev HMR live-sheet injection (the runtime channel exists and is inert because the dev
 entry does not inject it), the MDX lowering (still emits the class shape), and the two zag
