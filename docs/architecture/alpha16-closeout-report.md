@@ -52,6 +52,13 @@ Command (exact):
 `grep -rn "^export default class .* extends OpenElement\|^class .* extends OpenElement\|^export class .* extends OpenElement" www/app apps/saas/app packages/ui/src packages/create/templates --include="*.ts" --include="*.tsx"`
 → **no output**. The same command with `^@element(` → **no output**.
 
+That measurement is about PRODUCT SOURCE ROOTS. Since 2026-11-22 the lane is also
+gone from the TREE: its compiler entry, Part Program writers, ABI record, class render
+path, public exports and its own contract tests are all deleted, and the last consumer
+of the deleted compiler no longer imports it (see §5.1). The measurement above stays
+as it was because it is the evidence the retirement started from, not a description of
+the tree today.
+
 What replaced it, and the tests that pin each:
 
 | capability | carrier | guard |
@@ -70,7 +77,7 @@ What replaced it, and the tests that pin each:
 | nested hosts | expansion to DSD through one runtime call per dash tag | `generated-leaf.nested-host.test.ts`, `nested-host-expansion.test.ts` |
 | light-root CSS | declared sheets reach the render's document sink (#1800) | `generated-light-styles.test.ts` |
 | shadow-root CSS | declared inside the DSD template via the typed `styleLinks` channel | `island-styles.test.ts` (admission row) |
-| client-only shadow CSS | declared sheets emitted as real module-graph imports + adopted by the shell through the class lane's `CompiledStyleScope` (2026-11-20, the last open style capability) | `generated-element.client-styles.test.ts` (12 Node rows), `client-only-styles.test.js` (real-browser computed `:host` style + adoption lifecycle), starter e2e computed-style row |
+| client-only shadow CSS | declared sheets emitted as real module-graph imports + adopted by the shell through the ONE `CompiledStyleScope` that survives in `open-element-styles.ts` (2026-11-20, the last open style capability) | `generated-element.client-styles.test.ts` (12 Node rows), `client-only-styles.test.js` (real-browser computed `:host` style + adoption lifecycle), starter e2e computed-style row |
 
 Page authorship follows execution-plan §19.9 throughout: the page component is an
 **exported server function component declared in its own route module**. That rule
@@ -144,34 +151,34 @@ so it does not change the "one public addition" statement.
 
 This is the section to read before starting any of the remaining work.
 
-### 5.1 The class lane itself is still present
+### 5.1 The class lane is GONE — DELIVERED 2026-11-22 (supersedes the previous text of this section)
 
-The **authoring surface is gone from the product**, but the lane's compiler, Part
-Program artifact, validator and class render path are still in the tree because
-two things still consume them:
+The lane was deleted as one change set, in the order the retired section prescribed:
 
-1. `packages/*/__tests__` — **82 test files** author `@element` classes. They are
-   the lane's own contract tests, so they must be deleted in the same commit that
-   deletes the lane; deleting them first would remove the only thing pinning the
-   behavior being removed.
-2. `tests/fixtures` — **10 fixture apps** still author classes. Two are RETAINED
-   deliberately (`third-party-web-components`, `web-component-interop`: a foreign
-   class IS the subject under test). The other eight MIGRATE LATER, and one of
-   them now has its blocker named rather than categorised: `site-light-probe` was
-   PORTED, built and run, and produced a capability gap instead of a migration —
-   the generated lane does not hoist a NESTED light root's sheet into an enclosing
-   shadow template, so a generated light root cannot be nested inside a shadow
-   tree today. The port is reverted, the fixture's e2e is green on the class
-   version (25/25), and the gap is recorded with its both-builds measurement in
-   the migration matrix.
+| What | Where it went |
+|---|---|
+| the compiler entry (`compileElementProgram`), the Part Program writers (`emit-module`, `emit-program`), the class `static styles` admission (`style-imports`, OEC9029), the class-shape half of `analyze-module` | **deleted** |
+| `COMPILED_MODULE_ABI_VERSION` — zero importers, and its doc block enumerated five statics nothing emits | **deleted**; `PART_PROGRAM_VERSION` stays (the runtime still validates it on revive) |
+| the class render path in `public-runtime.ts` (the whole `__partProgram` serialization) and the six class modules (`open-element*`, `error-boundary`, `facade-host`) | **deleted** |
+| `OpenElement` / `ErrorBoundary` public exports | **deleted** (no base class, no shim) |
+| the lane's own contract tests | **deleted**; the ones that only needed a surviving symbol were retargeted instead |
+| the eight fixtures | **migrated** to the generated lane; each kept its tag, root, properties/styles and JSX bytes |
+| `benchmarks/micro/oe-table.tsx` | **migrated**, not retired — compiler throughput outlived the lane, so the benchmark now drives the generated lane's `__ssr`/`recipe`/`claim` |
 
-**Condition:** lane deletion is one change set covering the compiler entry, the
-Part Program artifact and its ABI record, the class render path in
-`public-runtime.ts`, those 82 test files, the eight fixtures, and
-`benchmarks/micro/oe-table.tsx` — that last one is a benchmark INPUT whose subject
-IS the class compiler, so it retires with the lane instead of migrating (measured:
-green, `pnpm run bench` 1 file / 2 tests). Until that happens, the server-runtime
-and ABI rows of §4 stay open.
+Two rows the retired text called blockers were **not** real gaps, and that is worth
+keeping: **P-5** (island state across a morph) was a migration mistake — the port
+omitted `root: 'shadow'`, so the island became a light root and the morph client
+correctly replaced it; declaring the same root restored 114/114 and 342/342 on three
+engines. And the **nested light root's sheet** DOES hoist: the enclosing producer
+reads the lifted URLs off the expander, and the failure was an ordering bug of mine —
+the sink was read before the expansion filled it.
+
+**What is genuinely not delivered** (each waits on its own slice, none on the lane):
+the dev HMR live-sheet injection (the channel exists and is inert), the
+`__partProgram`-shaped rows of `server-component-composition` (20) which drive a
+SURVIVING lane through hand-built hosts, the MDX lowering (still emits the class
+shape), and the two zag islands plus one `<textarea>` page that need an authored-method
+and an RCDATA capability the lane never had.
 
 ### 5.2 `16b-EB` — all four §19.2 conditions DELIVERED; the row stays PARTIAL by design
 
