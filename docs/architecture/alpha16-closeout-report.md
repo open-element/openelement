@@ -173,6 +173,16 @@ engines. And the **nested light root's sheet** DOES hoist: the enclosing produce
 reads the lifted URLs off the expander, and the failure was an ordering bug of mine —
 the sink was read before the expansion filled it.
 
+**A second environmental limit, recorded because it invalidates a naive comparison.** The
+Playwright browser cache (`~/Library/Caches/ms-playwright`) is EMPTY in this checkout, so
+every browser-backed router suite fails at `browserType.launch: Executable doesn't exist`.
+Measured on a clean tree at `922fa23aa`: router reports **47** failures, of which **16** are
+that launch error; the same commit reported **31** earlier in the session while the browser
+was still present. `31 + 16 = 47`, i.e. the difference is exactly the browser-backed rows and
+not a code change — so a router count taken in this environment is only comparable to another
+count taken under the same browser availability. Non-browser suites (element, compiler, saas,
+benchmarks, `check`) are unaffected and remain the trustworthy signal.
+
 **One gate cannot be run in this checkout, and the reason is environmental.** `gate:packed`'s
 first six steps pass (packed sources, pack surface, typecheck of every packed package), then
 `consumer:packaged` dies installing the tarballs: `@openelement/ui` depends on
