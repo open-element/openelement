@@ -195,21 +195,25 @@ export function mdxToCompiledPageSource(
   }
   if (!tag) failMdx(filePath, 'could not derive a custom-element tag from the file path');
 
-  const className = pascalCase(tag);
+  const componentName = pascalCase(tag);
+  // The GENERATED lane (Alpha16 retired the class lane). The sidecar pins the tag
+  // the route scanner derives from this same path, so registration and compilation
+  // cannot disagree; `root: 'shadow'` is the generated spelling of the class form's
+  // `shadow-open` and is required for a page ROOT — classification needs the
+  // compiler-emitted DSD host producer, and a light root has none.
   return [
-    "import { element, OpenElement } from '@openelement/element';",
+    // Explicit pragma: the lowered module is JSX and the fixture build may not carry
+    // the host's automatic-runtime config for a VIRTUAL module id.
+    '/** @jsxImportSource @openelement/element */',
+    "import { defineIslandConfig } from '@openelement/router';",
     '',
-    `// Static MDX pages render with the same page contract as compiled pages:`,
-    `// page content lives in the host's DSD shadow root.`,
-    `@element('${tag}', { root: 'shadow-open' })`,
-    `export default class ${className} extends OpenElement {`,
-    '  render() {',
-    '    return (',
-    '      <main>',
-    `        ${body}`,
-    '      </main>',
-    '    );',
-    '  }',
+    `export const openElement = defineIslandConfig({ tag: '${tag}', root: 'shadow' });`,
+    `export default function ${componentName}() {`,
+    '  return (',
+    '    <main>',
+    `      ${body}`,
+    '    </main>',
+    '  );',
     '}',
     '',
   ].join('\n');
