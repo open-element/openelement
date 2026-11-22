@@ -572,7 +572,14 @@ function createNestedHostExpander(
   | undefined {
   const admittedNested = new Set(options.ssrRenderableTags ?? []);
   if (admittedNested.size === 0) return undefined;
+  // A nested LIGHT child owns no template, so its sheets belong to the enclosing
+  // one — and the enclosing producer reads them while it BUILDS its string, which
+  // is before any expansion runs. The URLs are therefore pre-collected here from
+  // the same admission set: a tag in the sink is a tag this render can expand.
   const nestedStyleSink = new Set<string>();
+  for (const nestedTag of admittedNested) {
+    for (const link of requestTimeIslandStyleLinks(nestedTag) ?? []) nestedStyleSink.add(link);
+  }
   const expander = (request: {
     readonly tag: string;
     readonly attributes: ReadonlyArray<readonly [string, string]>;
@@ -757,6 +764,11 @@ function renderRegisteredGeneratedHost(
   // into it (F16): a light root owns no template, so its content lands HERE and
   // its rules must be reachable from HERE. `undefined` keeps the pre-existing
   // bytes for a host that declares and lifts nothing.
+  // The enclosing producer needs the lifted URLs BEFORE it runs: a producer is a
+  // string builder, so its `styleLinks` are read while the template is written and
+  // cannot be amended afterwards (F16). The expander therefore pre-fills its sink
+  // from the tags it admits, which is a fact it has at construction time — see
+  // `createNestedHostExpander`.
   const lifted = liftedNestedStyleLinks(nestedHost);
   const styleLinks =
     islandStyleLinks === undefined && lifted === undefined
