@@ -2615,12 +2615,21 @@ function rootFor(element: HTMLElement, state: ElementState): HTMLElement | Shado
  * the same root without a bookkeeping copy. Disconnect removes a shadow root's
  * adopted sheets only — a document's are shared per component type and stay.
  */
-function adoptClientStyles(state: ElementState, root: HTMLElement | ShadowRoot): void {
+function adoptClientStyles(
+  state: ElementState,
+  root: HTMLElement | ShadowRoot,
+  constructor: unknown,
+): void {
   // A dev live sheet is adopted even into an ADOPTED (DSD) root: that is the whole
   // point of the field — dev must re-fill the same sheet object in place for HMR,
   // which a `<link>` delivered sheet cannot do. Build never sets it, so the
   // link-only rule is unchanged there.
-  const devLive = state.descriptor.devLiveStyles;
+  //
+  // It is read off the CONSTRUCTOR, not the descriptor: the descriptor is a
+  // module-local constant the dev entry cannot reach, while the class it defines is
+  // a global the entry can annotate right after `customElements.define`.
+  const devLive = (constructor as { __oeDevLiveStyles?: readonly StyleSheetLike[] } | undefined)
+    ?.__oeDevLiveStyles;
   if (devLive !== undefined && devLive.length > 0) {
     state.styleScope.connect(root, [...devLive]);
     return;
@@ -2708,7 +2717,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         // declared sheets have a target. The scope is element-lifetime and
         // idempotent; the catch below releases it on a failed connect and
         // `disconnectedCallback` removes a shadow root's adoption.
-        adoptClientStyles(state, parent);
+        adoptClientStyles(state, parent, this.constructor);
         // Publish the reconciled initial value/validity/state once the root (and
         // the shared internals record used by closed discovery) is resolved.
         syncFormAll(state);
