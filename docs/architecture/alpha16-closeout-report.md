@@ -147,6 +147,29 @@ shape from the 2026-11-20 client style slice: the generated-element shell's
 subpath — no stability promise, no new export, omitted keeps the pre-slice shape —
 so it does not change the "one public addition" statement.
 
+## 4b. F16 status against the objective's six gates (2026-11-23)
+
+The objective names six gates. Five are delivered; the sixth is run and recorded but cannot
+report green because of items that are not this retirement.
+
+| gate | state |
+|---|---|
+| 1. generated-lane benchmark baseline | **delivered** — `benchmarks/micro` drives the generated lane; two measurement changes are pinned with their cause (2000 vs 100 text writes on a partial update; 2 vs 1 nodes disposed per removed row) |
+| 2. remaining fixtures migrated or retired | **delivered** — `router-base-path`, `router-ui-dogfood`, `router-request-time`, `router-native-framework`, `site-light-probe`, both foreign-WC fixtures. Three files stay class-authored with recorded capability reasons (2 zag islands need authored methods; 1 page needs `<textarea>` RCDATA) |
+| 3. the lane's contract tests deleted | **delivered** — the class-grammar suites are gone; each file that only needed a surviving symbol was retargeted instead, and each deletion carries its reason |
+| 4. compiler class entry / Part Program / ABI / third-party admission | **delivered** — `compile.ts`, `emit-module`, `emit-program`, `style-imports`, the class half of `analyze-module`, the transform's class branch, and `COMPILED_MODULE_ABI_VERSION` are gone; no file in the repo imports the class compiler |
+| 5. public exports + class render path + snapshot + CHANGELOG | **delivered** — `OpenElement`/`ErrorBoundary` deleted with no shim, the `__partProgram` render path removed, the interface snapshot and www API reference regenerated, and the CHANGELOG headline rewritten to say the lane is DELETED and to name what that costs |
+| 6. full matrix + check + site:build + packed starter + benchmark | **run and recorded, not green** — `check` 5/5, element 608 green, compiler 1314 passed with 2 browser rows, www site build exit 0, benchmarks 4/4; `gate:packed` passes its first six steps and stops at `consumer:packaged` because alpha.16 is unpublished; router is 1805 passed / 31 failed, all in the dev style channel |
+
+**P-5 was never a capability gap** and the record says so in two places: the port omitted
+`root: 'shadow'`, which turned the island into a light root, and the morph client — correctly —
+replaced it. Declaring the same root restored 114/114 and 342/342 on three engines.
+
+**What remains is not the retirement.** The 31 router failures are one dev-style block (see
+§5) plus two known single rows; the three class-authored fixtures need capabilities the lane
+never had; and the packed-consumer leg needs a published version. None of them is a piece of
+the class lane.
+
 ## 5. What was NOT delivered, and the condition each waits on
 
 This is the section to read before starting any of the remaining work.
@@ -214,6 +237,32 @@ The four links, in the order they had to fall, because each one hid the next:
    record it are filesystem walks);
 4. no site resolver could spell the virtual id, so the transform never compiled the
    module and the entry asked for a host export nothing emitted.
+
+**DEV STYLES — the last block (26 of the 31 remaining router failures).** Where it stands,
+precisely, so the next attempt starts from the facts rather than from scratch:
+
+*The runtime half is DONE.* `GeneratedElementDescriptor.devLiveStyles` exists,
+`adoptClientStyles` adopts it even into an adopted DSD root, and the shell reads it off the
+CLASS (the descriptor is a module-local constant the dev entry cannot reach). Build keeps
+link-only delivery and never takes that path.
+
+*What is missing is the dev entry's injection.* Nothing writes `__oeDevLiveStyles` onto a
+registered class, so the channel is inert. An earlier attempt generated
+`import __oeLiveN from ' oe-style-asset:<b64>.js'` lines into the dev style-links module and
+404'd even after `resolveId` was taught to answer that graph id — which says the id is being
+requested through the browser's module graph and needs a dev-server middleware answer, not a
+plugin hook. That attempt was reverted rather than left half-wired.
+
+*Also still open in this block, and separable:*
+- the dev derivation of `routeDocumentStyleLinks` does not yet join a PAGE MODULE's own sheet
+  (P-2b) to its route, so a generated light page's own stylesheet reaches no dev document;
+- `dev-tailwind`'s two document/DSD assertions want the shared component sheet link, which the
+  `documentSheetUrls` list computes but the page-markup assertions do not see.
+
+Measured baseline for the whole block, at this commit: `dev-authored-css` 6/21,
+`dev-tailwind` 5/12, `dev-nonroot-base` 8/12, `router-browser` (4), `request-time-parity` and
+`island-styles` 1 each — 31 router failures in total, and **every one of them is in this dev
+style channel or is a single known row**.
 
 **What is genuinely not delivered** (each waits on its own slice, none on the lane):
 the dev HMR live-sheet injection (the runtime channel exists and is inert because the dev
