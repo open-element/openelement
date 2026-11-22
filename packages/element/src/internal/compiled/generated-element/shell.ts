@@ -808,6 +808,23 @@ export interface GeneratedElementDescriptor<P extends object = Record<string, un
    */
   readonly styles?: readonly StyleSheetLike[];
   /**
+   * DEV-ONLY live sheets for an SSR/DSD island (owner decision, 2026-11-22).
+   *
+   * `styles` above is deliberately absent for an SSR island: its sheet IS the
+   * marked `<link>` in its template, and `sheetDeliveredByLink()` keeps that one
+   * delivery. But dev needs something a `<link>` cannot give it — HMR. A live
+   * `CSSStyleSheet` held on `globalThis` is re-filled IN PLACE when the sheet
+   * re-evaluates, so a CSS-only edit updates computed styles with no reload and no
+   * flicker, and every root already holding that object re-renders. Replacing a
+   * `<link>` href would re-parse and rebuild instead.
+   *
+   * So the two deliveries differ ON PURPOSE: build is one asset, one delivery; dev
+   * is one live object, updated in place. A field rather than a mode flag keeps the
+   * difference visible at the adoption site, and it is never emitted by the
+   * compiler — the dev client entry injects it at runtime.
+   */
+  devLiveStyles?: readonly StyleSheetLike[];
+  /**
    * The light-root SSR producer the compiler emits as `<Name>__ssr()`: a
    * parameterless function returning the content HTML the mount would build.
    *
@@ -941,6 +958,12 @@ interface NormalizedDescriptor {
    * SSR/DSD descriptor.
    */
   readonly styles: readonly StyleSheetLike[];
+  /**
+   * DEV-ONLY live sheets, carried through normalization untouched (see
+   * {@link GeneratedElementDescriptor.devLiveStyles}). Never emitted by the
+   * compiler; the dev client entry injects it.
+   */
+  readonly devLiveStyles?: readonly StyleSheetLike[];
   readonly createRecipe: (
     owner: LifetimeScope,
     host: GeneratedElementHost<Record<string, unknown>>,
@@ -1487,6 +1510,7 @@ function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Normalized
     properties,
     byAttribute,
     styles,
+    ...(descriptor.devLiveStyles === undefined ? {} : { devLiveStyles: descriptor.devLiveStyles }),
     createRecipe: descriptor.createRecipe as NormalizedDescriptor['createRecipe'],
     ...(descriptor.ssrProducer === undefined ? {} : { ssrProducer: descriptor.ssrProducer }),
     ...(descriptor.createInstance === undefined
@@ -2592,6 +2616,15 @@ function rootFor(element: HTMLElement, state: ElementState): HTMLElement | Shado
  * adopted sheets only — a document's are shared per component type and stay.
  */
 function adoptClientStyles(state: ElementState, root: HTMLElement | ShadowRoot): void {
+  // A dev live sheet is adopted even into an ADOPTED (DSD) root: that is the whole
+  // point of the field — dev must re-fill the same sheet object in place for HMR,
+  // which a `<link>` delivered sheet cannot do. Build never sets it, so the
+  // link-only rule is unchanged there.
+  const devLive = state.descriptor.devLiveStyles;
+  if (devLive !== undefined && devLive.length > 0) {
+    state.styleScope.connect(root, [...devLive]);
+    return;
+  }
   const styles = state.descriptor.styles;
   if (styles.length === 0) return;
   if (state.rootKind !== 'light' && !state.rootCreatedByShell) return;
