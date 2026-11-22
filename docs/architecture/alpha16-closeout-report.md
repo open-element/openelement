@@ -194,11 +194,17 @@ registry itself answers promptly (so it is not a network outage). The consumer l
 published alpha.16 or a local-registry override; neither is a source change.
 
 **What is genuinely not delivered** (each waits on its own slice, none on the lane):
-the dev HMR live-sheet injection (the channel exists and is inert), the
-`__partProgram`-shaped rows of `server-component-composition` (20) which drive a
-SURVIVING lane through hand-built hosts, the MDX lowering (still emits the class
-shape), and the two zag islands plus one `<textarea>` page that need an authored-method
-and an RCDATA capability the lane never had.
+the dev HMR live-sheet injection (the runtime channel exists and is inert because the dev
+entry does not inject it), the MDX lowering (still emits the class shape), and the two zag
+islands plus one `<textarea>` page that need an authored-method and an RCDATA capability
+the lane never had.
+
+**Closed since the first draft of this section:** `server-component-composition`'s 20 red
+rows were NOT a lane defect — its hosts were hand-built Part Program objects. They are real
+generated components now and the suite is 21/21, which is what finally took the compiler
+project to ZERO non-browser failures (1059 passed; the only reds are `browserType.launch`
+against an empty Playwright cache). The one row deleted rather than re-pointed is the
+class-lane parity comparison, for the reason its own comment gives.
 
 ### 5.2 `16b-EB` — all four §19.2 conditions DELIVERED; the row stays PARTIAL by design
 
