@@ -173,6 +173,16 @@ engines. And the **nested light root's sheet** DOES hoist: the enclosing produce
 reads the lifted URLs off the expander, and the failure was an ordering bug of mine —
 the sink was read before the expansion filled it.
 
+**One gate cannot be run in this checkout, and the reason is environmental.** `gate:packed`'s
+first six steps pass (packed sources, pack surface, typecheck of every packed package), then
+`consumer:packaged` dies installing the tarballs: `@openelement/ui` depends on
+`@openelement/*@1.0.0-alpha.16`, and that version is **not published to the registry**, so
+`npm install` retries until its 300s timeout. Verified rather than assumed — installing the
+`protocol` tarball alone succeeds in 211ms, installing the `ui` tarball alone fails with
+`notarget No matching version found for @openelement/protocol@1.0.0-alpha.16`, and the
+registry itself answers promptly (so it is not a network outage). The consumer leg needs a
+published alpha.16 or a local-registry override; neither is a source change.
+
 **What is genuinely not delivered** (each waits on its own slice, none on the lane):
 the dev HMR live-sheet injection (the channel exists and is inert), the
 `__partProgram`-shaped rows of `server-component-composition` (20) which drive a
