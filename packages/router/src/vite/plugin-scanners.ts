@@ -36,6 +36,14 @@ import {
   registerPackageIslandStyleDeclarations,
 } from './internal/ssg/island-scanner.ts';
 import { registerIslandStyleDeclaration } from './internal/island-style-declarations.ts';
+import { islandStyleDeclarations } from './internal/island-style-declarations.ts';
+import {
+  buildRouteDocumentStyleLinks,
+  deliveredIslandStyleTags,
+  routeDocumentStyleLinks,
+  setRouteDocumentStyleLinks,
+} from './internal/ssg/route-style-links.ts';
+import { devAuthoredIslandStyleUrls } from './internal/style-assets.ts';
 import { resolveIslandDeliveryTags } from './internal/ssg/delivery.ts';
 import type { OpenPluginState } from './plugin-config.ts';
 import type { ModuleWalkResolver } from './internal/module-graph-walk.ts';
@@ -96,6 +104,9 @@ function buildDescriptor(
     // Same source as the SSG descriptor: the dev/SSR entry must resolve
     // locales identically or dev and build disagree about `/zh/...` paths.
     i18n: state.ctx.plugins.i18nOptions ?? undefined,
+    // The dev route -> document stylesheet fact, derived in the async scan phase
+    // through the SAME carrier and builder the build uses (F16).
+    routeDocumentStyleLinks: routeDocumentStyleLinks(state.ctx),
   });
 }
 
@@ -506,7 +517,53 @@ export async function rescanIslands(state: OpenPluginState): Promise<void> {
   // page-local component the route graph now reaches) has to replace the stale
   // map, exactly as `islandMeta` is replaced.
   await scanDeclaredTagsInto(state, state.ctx.phase1.cachedRoutes || []);
+  await deriveDevRouteDocumentStyleLinks(state);
   syncEntryDescriptor(state, state.ctx.phase1.cachedRoutes || []);
+}
+
+/**
+ * The route -> document stylesheet fact for the DEV server (F16).
+ *
+ * The build derives this from Phase 2's emitted assets. Dev has no emitted assets,
+ * so it derives the same fact from the AUTHORED-CSS endpoint instead — the same
+ * `devAuthoredStyleUrl` the dev island channel publishes. Both paths feed ONE
+ * carrier (`setRouteDocumentStyleLinks`) and ONE consumer (the entry's
+ * `__documentStyles`), so dev and build cannot disagree about which sheets a page
+ * declares; only the URL spelling differs, which is the whole point of dev.
+ *
+ * Without this, a light-root generated island's sheet was computed and published
+ * into the island map but never reached the document head — the card rendered
+ * unstyled in dev while the build styled it.
+ */
+async function deriveDevRouteDocumentStyleLinks(state: OpenPluginState): Promise<void> {
+  const declarations = islandStyleDeclarations();
+  if (declarations.length === 0) return;
+  const islandMeta = state.ctx.phase1.islandMeta as Record<
+    string,
+    { tags?: readonly string[]; tagNames?: readonly string[] } | undefined
+  >;
+  const tags = deliveredIslandStyleTags(declarations, islandMeta);
+  if (tags.light.size === 0) return;
+  const base = state.ctx.phase3.base ?? '/';
+  const islandStyleUrls = new Map<string, readonly string[]>();
+  for (const declaration of declarations) {
+    if (declaration.root === 'shadow') continue;
+    const urls = devAuthoredIslandStyleUrls(base, declaration);
+    if (urls.length === 0) continue;
+    islandStyleUrls.set(declaration.tagName, urls);
+  }
+  if (islandStyleUrls.size === 0) return;
+  const result = await buildRouteDocumentStyleLinks({
+    root: state.viteRoot ?? process.cwd(),
+    routes: state.ctx.phase1.cachedRoutes || [],
+    routesDir: state.resolvedOptions.routesDir!,
+    // Phase 1 always installs the resolver before the first scan; the guard keeps
+    // the type honest instead of asserting it.
+    resolve: state.resolveModule as NonNullable<typeof state.resolveModule>,
+    lightIslandTags: tags.light,
+    islandStyleUrls,
+  });
+  setRouteDocumentStyleLinks(state.ctx, result.links);
 }
 
 /**
@@ -818,6 +875,7 @@ export function createBuildStartHook(state: OpenPluginState): Pick<Plugin, 'buil
         // admission plan come from the same object. The returned code string
         // is discarded — the call populates entryDescriptor, which
         // virtualEntryPlugin.load() renders from.
+        await deriveDevRouteDocumentStyleLinks(state);
         syncEntryDescriptor(state, routes);
         const pageCount = routes.filter((r) => r.type === 'page' && !r.special).length;
         const apiCount = routes.filter((r) => r.type === 'api' && !r.special).length;
