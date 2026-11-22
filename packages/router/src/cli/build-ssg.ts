@@ -754,6 +754,8 @@ async function buildSSG(
             // (alpha16 tag-source slice): the SSR half must lower the very
             // modules the client half compiled, so the source order is shared.
             ctx.phase1.declaredElementTags,
+            // An .mdx route's tag derives from its route-relative path.
+            routesDir,
           ),
         }),
         // serves the server half of the style edge protocol — the

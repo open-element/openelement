@@ -79,6 +79,28 @@ export type ComponentDeclarationReading =
  * same rule, or an aliased sidecar is skipped here while the transform admits it
  * and the module silently loses its identity.
  */
+/**
+ * The real `.mdx` path behind one MDX virtual module id, or undefined for anything else.
+ *
+ * `plugin-mdx` remaps every `.mdx` route to `\0open-mdx:<abs>.mdx.tsx` so the
+ * generated-element transform and oxc's TS stripping apply. That id is not a path any
+ * filesystem convention can anchor, so every consumer that needs the route's tag must
+ * recognise it explicitly. The prefix/suffix live HERE, next to the one declaration
+ * reader, because the resolver and the lowering must agree on the spelling and neither
+ * may own a second copy — keep in sync with `plugin-mdx.ts`.
+ */
+const MDX_VIRTUAL_PREFIX = '\0open-mdx:';
+const MDX_VIRTUAL_SUFFIX = '.tsx';
+
+/** The real `.mdx` file path behind one MDX virtual module id, or undefined. */
+export function mdxVirtualSourcePath(moduleId: string): string | undefined {
+  if (!moduleId.startsWith(MDX_VIRTUAL_PREFIX) || !moduleId.endsWith(MDX_VIRTUAL_SUFFIX)) {
+    return undefined;
+  }
+  const inner = moduleId.slice(MDX_VIRTUAL_PREFIX.length, -MDX_VIRTUAL_SUFFIX.length);
+  return inner.endsWith('.mdx') ? inner : inner;
+}
+
 export function mayDeclareComponent(source: string): boolean {
   return source.includes('defineIslandConfig');
 }

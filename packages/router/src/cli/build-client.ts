@@ -1068,6 +1068,9 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
           // under `app/site-ui/` has no convention of its own, so its own
           // sidecar `tag` is the only thing that admits it to the lane.
           ctx.phase1.declaredElementTags,
+          // An .mdx route's tag derives from its route-relative path; the resolver
+          // is the only place that can answer its virtual module id.
+          ctx.phase3.routesDir || 'app/routes',
         ),
       }),
       // intercepts the compiled modules' authored `.css` imports before

@@ -82,6 +82,9 @@ export function createCompilerHooks(
     // the map — reading it per call keeps the dev transform on the current
     // facts instead of a snapshot taken before the first scan.
     () => state.ctx.phase1.declaredElementTags,
+    // An .mdx route's tag derives from its route-relative path, so the dev host
+    // needs the same directory the lowering gets.
+    state.resolvedOptions.routesDir,
   );
 
   // A generated module's emitted text IS the shape: any edit re-evaluates the

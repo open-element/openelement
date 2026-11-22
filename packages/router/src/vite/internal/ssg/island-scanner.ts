@@ -1447,6 +1447,8 @@ export async function scanIslandMeta(
   resetIslandStyleDeclarations();
   // One resolver per scan, over the same root the island loop reads: the
   // generated host site fact is the transform's own admission identity.
+  // No routes dir: this scanner walks the ISLANDS directory, and an `.mdx` route is not
+  // one of its inputs — the build/dev resolvers answer that virtual id.
   const generatedElementSite = createGeneratedElementSiteResolver(normalizeSeparators(islandsDir));
 
   for (const filePath of islandFiles) {

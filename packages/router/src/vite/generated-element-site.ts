@@ -50,7 +50,13 @@
  */
 
 import { createRequire } from 'node:module';
-import { normalizeSeparators, transformIslandSource } from '@openelement/element/build-utils';
+import {
+  normalizeSeparators,
+  pathToTagName,
+  transformIslandSource,
+} from '@openelement/element/build-utils';
+import { basename, relative, resolve } from 'pathe';
+import { mdxVirtualSourcePath } from './internal/component-declaration.ts';
 import { stableModuleId, type GeneratedElementSite } from '@openelement/compiler';
 import type { IslandDecl } from '@openelement/protocol/ssg';
 import { islandStyleDeclarationFor } from './internal/island-style-declarations.ts';
@@ -147,16 +153,53 @@ export type PackageIslandSiteFacts =
  * `root: 'shadow'` reaches the lane without a host fact and a stale host scan
  * cannot override it.
  */
+/**
+ * The tag an MDX route compiles under: derived from its route-relative path.
+ *
+ * The SAME derivation `plugin-mdx-lower.ts` performs, and it must be: the lowering pins
+ * this tag in the sidecar it emits, and the compiler writes `site.tag` into the emitted
+ * descriptor. Two derivations that disagreed would register the class under one tag and
+ * render it under another.
+ */
+function mdxRouteTag(sourcePath: string, routesDir: string | undefined): string | undefined {
+  const posix = sourcePath.replaceAll('\\', '/');
+  const relativePath =
+    routesDir === undefined ? posix : relative(resolve(process.cwd(), routesDir), posix);
+  const derived = relativePath.startsWith('..')
+    ? pathToTagName(basename(posix))
+    : pathToTagName(normalizeSeparators(relativePath));
+  return derived === '' ? undefined : derived;
+}
+
 export function createGeneratedElementSiteResolver(
   islandsDir: string,
   packageSites?: PackageIslandSiteFacts,
   declaredSites?: PackageIslandSiteFacts,
+  /**
+   * The routes directory, needed for ONE case: an `.mdx` route's virtual module id.
+   *
+   * Its tag derives from the route-RELATIVE path — the same rule the lowering applies —
+   * and this resolver has no other way to spell it: the id is virtual, so no filesystem
+   * convention can anchor it.
+   */
+  routesDir?: string,
 ): GeneratedElementSiteResolver {
   const normalizedIslandsDir = normalizeSeparators(islandsDir);
   const readPackageSites = typeof packageSites === 'function' ? packageSites : () => packageSites;
   const readDeclaredSites =
     typeof declaredSites === 'function' ? declaredSites : () => declaredSites;
   return (moduleId: string) => {
+    // An `.mdx` route is remapped to a virtual id before any transform sees it, so
+    // none of the path sources below can answer for it: the islands convention needs
+    // the module to live under `islandsDir`, and the declared-tag map is keyed by a
+    // stable module id this resolver cannot recompute. Answering here is what lets the
+    // generated transform ADMIT the lowered module, without which the SSR entry asked
+    // for `<Name>__ssrHost` that the module never exported.
+    const mdxSource = mdxVirtualSourcePath(moduleId);
+    if (mdxSource !== undefined) {
+      const mdxTag = mdxRouteTag(mdxSource, routesDir);
+      return mdxTag === undefined ? null : { tag: mdxTag };
+    }
     const packageTag = readPackageSites()?.get(moduleId);
     if (packageTag !== undefined) return { tag: packageTag };
     const declaredTag = readDeclaredSites()?.get(moduleId);
