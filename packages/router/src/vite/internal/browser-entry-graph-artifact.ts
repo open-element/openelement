@@ -117,12 +117,23 @@ const VIRTUAL_HELPER_ROOTS: readonly string[] = ['\0vite/', '\0rolldown/'];
 const STYLE_SCOPE_TAG = /^[a-z][a-z0-9._-]*$/u;
 
 /**
- * The P1 gate: the generic executor's six **entry** modules, element-package
+ * The P1 gate: the generic executor's **entry** modules, element-package
  * relative, in the reviewed order. These are the call-surface modules a
  * production browser entry must load to execute a Part Program in the browser
- * (fresh mount, hydration, and the kernel that drives them). Matched by exact
- * identity only — a same-named module outside the resolved element package
- * root is NOT an executor entry.
+ * (the program normalizer every path starts at, fresh mount, hydration, and the
+ * kernel that drives them). Matched by exact identity only — a same-named
+ * module outside the resolved element package root is NOT an executor entry.
+ *
+ * FOUR, NOT SIX (F16 class-lane retirement). `facade-host.ts` and `runtime/kernel.ts`
+ * were the class lane's own call surfaces — the facade that turned
+ * `__compiledProperties`/`__partProgram` statics into live element behaviour,
+ * and the claim/resume kernel that drove them — and both were deleted with the
+ * lane (`5ff82e101`, `5275a66b2`). Naming them here kept the gate permanently
+ * one-half decorative: two of its six ids could never appear in any graph, so
+ * the digest pinned a claim the tree could no longer fail. The survivors are
+ * the executor proper, and they cover every way a browser graph can reach it —
+ * measured: a graph importing the element root entry loads all four, while the
+ * sanctioned generated path (leaf runtime + shell) loads none.
  *
  * Changing this table is a reviewed code change with the per-id rationale in
  * the M10-P1 design; the artifact records {@linkcode browserEntryGraphGateListDigest}
@@ -130,11 +141,9 @@ const STYLE_SCOPE_TAG = /^[a-z][a-z0-9._-]*$/u;
  * different claim.
  */
 export const EXECUTOR_ENTRY_RELATIVE_MODULES = [
-  'src/internal/compiled/facade-host.ts',
   'src/internal/compiled/runtime-program.ts',
   'src/internal/compiled/runtime/fresh-dom.ts',
   'src/internal/compiled/runtime/hydrate.ts',
-  'src/internal/compiled/runtime/kernel.ts',
   'src/internal/compiled/runtime/program-kernel.ts',
 ] as const;
 

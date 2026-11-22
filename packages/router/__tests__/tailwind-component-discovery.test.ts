@@ -54,14 +54,17 @@ async function write(path: string, content: string): Promise<void> {
 
 /** One shadow component whose entire styling is a single arbitrary utility. */
 function cardSource(tagName: string, padding: string): string {
+  const className = tagName.replace(/(^|-)([a-z])/g, (_, __, c: string) => c.toUpperCase());
   return [
-    "import { element, OpenElement } from '@openelement/element';",
+    "import { defineIslandConfig } from '@openelement/router';",
     '',
-    `@element('${tagName}', { root: 'shadow-open' })`,
-    `export default class ${tagName.replace(/(^|-)([a-z])/g, (_, __, c: string) => c.toUpperCase())} extends OpenElement {`,
-    '  render() {',
-    `    return <div class="p-[${padding}px]">${tagName}</div>;`,
-    '  }',
+    // `app/components/` is outside the islands directory, so no path convention
+    // derives this module's tag: the sidecar declares it. `root: 'shadow'` keeps
+    // the utility classes in the SHADOW component sheet this suite measures.
+    `export const openElement = defineIslandConfig({ tag: '${tagName}', root: 'shadow' });`,
+    '',
+    `export default function ${className}() {`,
+    `  return <div class="p-[${padding}px]">${tagName}</div>;`,
     '}',
     '',
   ].join('\n');
@@ -117,32 +120,27 @@ async function buildFixture(): Promise<string> {
     join(appDir, 'app', 'components', 'relative-card.tsx'),
     cardSource('oe-relative-card', '17'),
   );
-  await write(
-    join(appDir, 'app', 'components', 'proof-page.tsx'),
-    [
-      "import { element, OpenElement } from '@openelement/element';",
-      "import '#components/alias-card.tsx';",
-      "import './relative-card.tsx';",
-      '',
-      "@element('proof-page', { root: 'light' })",
-      'export default class ProofPage extends OpenElement {',
-      '  render() {',
-      '    return (',
-      '      <div>',
-      '        <oe-alias-card></oe-alias-card>',
-      '        <oe-relative-card></oe-relative-card>',
-      '      </div>',
-      '    );',
-      '  }',
-      '}',
-      '',
-    ].join('\n'),
-  );
+  // The page is a SERVER FUNCTION PAGE and declares the two reachability forms
+  // itself: a generated LIGHT element cannot be a page ROOT (classification
+  // needs the compiler-emitted DSD host producer, which only a shadow root
+  // has), and this fixture's whole subject is the IMPORT FORM that must reach
+  // the candidate inventory. The page renders in the document tree either way,
+  // so it still contributes no shadow component sheet of its own.
   await write(
     join(appDir, 'app', 'routes', 'index.tsx'),
     [
       "import { definePage } from '@openelement/router';",
-      "import ProofPage from '../components/proof-page.tsx';",
+      "import '#components/alias-card.tsx';",
+      "import '../components/relative-card.tsx';",
+      '',
+      'export function ProofPage() {',
+      '  return (',
+      '    <div>',
+      '      <oe-alias-card></oe-alias-card>',
+      '      <oe-relative-card></oe-relative-card>',
+      '    </div>',
+      '  );',
+      '}',
       '',
       "export default definePage(ProofPage, { renderIntent: { mode: 'static' } });",
       '',

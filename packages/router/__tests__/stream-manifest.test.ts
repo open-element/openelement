@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os';
 import { expect, test } from 'vitest';
 import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { dirname, join } from 'node:path';
-import ts from 'typescript';
 import { createStreamShellExecutor } from '@openelement/element';
 import { compileElementProgram } from '@openelement/compiler';
 import { buildEntryDescriptor } from '../src/vite/internal/ssg/entry-descriptor.ts';
@@ -70,23 +69,18 @@ test('stream manifest binds two loader fields to independent compiled Part owner
       ),
     ).toEqual(true);
     expect((await scanRoutes(dir, '', { root: dirname(dir) }))[0].streamManifest).toEqual(manifest);
-    const emittedTs = compileElementProgram(page, 'components/page.tsx').code.replaceAll(
-      "'@openelement/element'",
-      JSON.stringify(new URL('../../element/src/index.ts', import.meta.url).href),
-    );
-    const emitted = ts.transpileModule(emittedTs, {
-      compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-    }).outputText;
-    const compiledModule = (await import(
-      `data:text/javascript;charset=utf-8,${encodeURIComponent(emitted)}`
-    )) as {
-      default: {
-        __partProgram: ReturnType<typeof compileElementProgram>['program'];
-        __compiledProperties: unknown;
-      };
-    };
-    const runtimeClass = compiledModule.default;
-    const runtimeProgram = runtimeClass.__partProgram;
+    // The runtime program is the compiler's OWN return value, read directly.
+    //
+    // This row used to execute the emitted class module and read its static
+    // `__partProgram`. That transport was the class lane's: the emitted module
+    // imported `OpenElement`, so the fixture's only way to obtain the program was
+    // to evaluate class-lane output. The compiler emits the identical program it
+    // returns (measured: the same sha256 with and without a round-trip through
+    // the emitted literal), and this assertion is about the WIRE PROGRAM the
+    // manifest hashes — not about how an emitted module carries it. Reading the
+    // return value keeps every byte-level assertion below intact.
+    const compiled = compileElementProgram(page, 'components/page.tsx');
+    const runtimeProgram = compiled.program;
     const { sourceMap: _sourceMap, ...wireProgram } = runtimeProgram;
     const digest = await crypto.subtle.digest(
       'SHA-256',
@@ -104,7 +98,7 @@ test('stream manifest binds two loader fields to independent compiled Part owner
     class ChangedPage {}
     Object.assign(ChangedPage, {
       __partProgram: changedProgram,
-      __compiledProperties: runtimeClass.__compiledProperties,
+      __compiledProperties: compiled.program.metadata.properties,
     });
     await assertRejectsIncludes(
       () =>

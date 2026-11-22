@@ -6,15 +6,20 @@
  * attaches the page descriptor (head, route, renderIntent, props/error
  * projectors) to the compiled element class the route module default-exports.
  * The render coverage of the legacy suite (VNode rendering, render-scope data
- * hooks) is replaced by the compiled serializer path — the hand-built
- * compiled class below renders through the public renderToString(), and the
- * request-time fixture (tests/fixtures/router-request-time)
- * covers loader/action data reaching rendered HTML end-to-end.
+ * hooks) is replaced by the compiled serializer path — the class below is built
+ * by the REAL compiler (the generated lane's only authoring form since the
+ * class lane's retirement) and renders through the public renderToString(), and
+ * the request-time fixture (tests/fixtures/router-request-time) covers
+ * loader/action data reaching rendered HTML end-to-end.
  */
 
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
-import { OpenElement, OpenElementError, renderToString } from '@openelement/element';
+import { OpenElementError, renderToString } from '@openelement/element';
+import { compileGeneratedElementIfAdmitted } from '@openelement/compiler';
 import { IslandErrorCode, PageErrorCode } from '../src/internal/error-codes.ts';
 import {
   classifyActionResult,
@@ -29,75 +34,62 @@ import {
 } from '../src/index.ts';
 import * as appSurface from '../src/index.ts';
 
-/** A minimal valid compiled statics set for a static <main> page program. */
-function makeCompiledPageClass(tag: string, text: string): CustomElementConstructor {
-  const program = {
-    version: 2,
-    tag,
-    root: { id: 'root', kind: 'light', nodes: ['e0'] },
-    template: [
-      {
-        k: 'el',
-        id: 'e0',
-        tag: 'main',
-        attrs: [],
-        children: [{ k: 'text', value: text }],
-      },
-    ],
-    parts: [],
-    blocks: [],
-    dependencies: [],
-    locations: [{ id: 'e0', kind: 'element', tag: 'main', path: [0] }],
-    sourceMap: {
-      version: 1,
-      file: 'test.tsx',
-      records: [
-        {
-          id: 'root',
-          kind: 'root',
-          source: {
-            file: 'test.tsx',
-            start: { offset: 0, line: 1, column: 1 },
-            end: { offset: 8, line: 1, column: 9 },
-          },
-        },
-        {
-          id: 'e0',
-          kind: 'element',
-          source: {
-            file: 'test.tsx',
-            start: { offset: 16, line: 2, column: 1 },
-            end: { offset: 24, line: 2, column: 9 },
-          },
-        },
-      ],
-    },
-    metadata: {
-      tag,
-      className: 'TestPage',
-      sourceFile: 'test.tsx',
-      properties: [],
-      observedAttributes: [],
-      cem: {
-        tagName: tag,
-        className: 'TestPage',
-        declaration: { name: 'TestPage', module: 'test.tsx' },
-        attributes: [],
-        members: [],
-      },
-    },
-  };
-  class TestPage extends OpenElement {
-    static __partProgram = program;
-    static __compiledProperties: unknown[] = [];
-    static __elementMetadata = program.metadata;
-    static observedAttributes: string[] = [];
-  }
-  return TestPage as unknown as CustomElementConstructor;
+const REPO_ROOT = join(import.meta.dirname!, '..', '..', '..');
+
+/** Compiled page classes, keyed by tag: one real compile per distinct fixture. */
+const compiledPages = new Map<string, Promise<CustomElementConstructor>>();
+
+/**
+ * A page class as the build produces one: the compiler lowers a generated-lane
+ * module (a function component plus its sidecar) and the emitted module is
+ * EXECUTED here, so `definePage()` receives the class a route module really
+ * default-exports — not a hand-assembled statics bag, which after the class
+ * lane's deletion is a shape no build emits.
+ *
+ * The emitted code is written inside the workspace's `node_modules` because its
+ * bare `@openelement/element/internal/...` imports must resolve the way they do
+ * from any generated artifact; a `data:` module would have no resolver.
+ */
+function makeCompiledPageClass(tag: string, text: string): Promise<CustomElementConstructor> {
+  const cached = compiledPages.get(tag);
+  if (cached !== undefined) return cached;
+  const compiled = (async () => {
+    const source = `
+import { defineIslandConfig } from '@openelement/router';
+
+export const openElement = defineIslandConfig({ tag: '${tag}', root: 'light' });
+
+export default function FixturePage() {
+  return <main>${text}</main>;
+}
+`;
+    const emitted = compileGeneratedElementIfAdmitted(source, `app/components/${tag}.tsx`, {
+      site: { tag },
+    });
+    if (emitted === null || emitted.ssrHostExport !== null) {
+      throw new Error(`the compiler must emit a LIGHT page class for <${tag}>`);
+    }
+    // Inside the workspace `node_modules`, so the emitted module's bare
+    // `@openelement/element/internal/...` imports resolve exactly as they do
+    // from any real generated artifact.
+    const dir = mkdtempSync(join(REPO_ROOT, 'node_modules', '.oe-authoring-page-'));
+    try {
+      const file = join(dir, 'page.mjs');
+      writeFileSync(file, emitted.code, 'utf8');
+      const module = (await import(pathToFileURL(file).href)) as {
+        default: CustomElementConstructor;
+      };
+      return module.default;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  })();
+  compiledPages.set(tag, compiled);
+  return compiled;
 }
 
-test('definePage() attaches the descriptor to the compiled class and returns it', () => {
-  const Page = makeCompiledPageClass('test-page', 'Hello OpenElement');
+test('definePage() attaches the descriptor to the compiled class and returns it', async () => {
+  const Page = await makeCompiledPageClass('test-page', 'Hello OpenElement');
   const props = () => ({});
   const error = () => ({});
   const result = definePage(Page, {
@@ -129,8 +121,8 @@ test('definePage() attaches the descriptor to the compiled class and returns it'
   expect(descriptor.error).toEqual(error);
 });
 
-test('definePage(Class) without a descriptor defaults renderIntent to static', () => {
-  const Page = makeCompiledPageClass('plain-page', 'plain');
+test('definePage(Class) without a descriptor defaults renderIntent to static', async () => {
+  const Page = await makeCompiledPageClass('plain-page', 'plain');
   definePage(Page);
   const descriptor = (Page as unknown as { openElementPage: Record<string, unknown> })
     .openElementPage;
@@ -140,8 +132,8 @@ test('definePage(Class) without a descriptor defaults renderIntent to static', (
   expect(descriptor.error).toEqual(undefined);
 });
 
-test('definePage() validates the opt-in stream.defer authoring shape', () => {
-  const Page = makeCompiledPageClass('stream-authoring-page', 'Hello');
+test('definePage() validates the opt-in stream.defer authoring shape', async () => {
+  const Page = await makeCompiledPageClass('stream-authoring-page', 'Hello');
   definePage(Page, {
     renderIntent: { mode: 'dynamic', stream: { defer: ['first', 'second'] } },
   });
@@ -167,8 +159,8 @@ test('definePage() validates the opt-in stream.defer authoring shape', () => {
   }
 });
 
-test('definePage() descriptor renders through the compiled serializer', () => {
-  const Page = makeCompiledPageClass('rendered-page', 'Hello from definePage');
+test('definePage() descriptor renders through the compiled serializer', async () => {
+  const Page = await makeCompiledPageClass('rendered-page', 'Hello from definePage');
   definePage(Page, { head: { title: 'Rendered' } });
 
   const out = renderToString('rendered-page', { componentClass: Page });
@@ -205,8 +197,8 @@ test('definePage() still requires a function — non-function arguments keep NOT
   );
 });
 
-test('definePage() rejects legacy top-level descriptor fields', () => {
-  const Page = makeCompiledPageClass('legacy-page', 'legacy');
+test('definePage() rejects legacy top-level descriptor fields', async () => {
+  const Page = await makeCompiledPageClass('legacy-page', 'legacy');
   for (const field of ['render', 'title', 'layout', 'styles']) {
     assertThrowsIncludes(
       () => {
@@ -218,8 +210,8 @@ test('definePage() rejects legacy top-level descriptor fields', () => {
   }
 });
 
-test('definePage() rejects non-function projectors', () => {
-  const Page = makeCompiledPageClass('bad-projector-page', 'nope');
+test('definePage() rejects non-function projectors', async () => {
+  const Page = await makeCompiledPageClass('bad-projector-page', 'nope');
   assertThrowsIncludes(
     () => {
       definePage(Page, { props: {} } as never);
@@ -236,11 +228,12 @@ test('definePage() rejects non-function projectors', () => {
   );
 });
 
-test("definePage() rejects the collapsed 'auto' mode and invalid modes (#609)", () => {
+test("definePage() rejects the collapsed 'auto' mode and invalid modes (#609)", async () => {
+  const Page = await makeCompiledPageClass('mode-page', 'nope');
   for (const mode of ['auto', 'dynmaic']) {
     assertThrowsIncludes(
       () => {
-        definePage(makeCompiledPageClass('mode-page', 'nope'), {
+        definePage(Page, {
           renderIntent: { mode: mode as never },
         });
       },
@@ -250,8 +243,8 @@ test("definePage() rejects the collapsed 'auto' mode and invalid modes (#609)", 
   }
 });
 
-test('definePage() admits route.layout (string | false) and rejects other types', () => {
-  const Page = makeCompiledPageClass('layout-page', 'ok');
+test('definePage() admits route.layout (string | false) and rejects other types', async () => {
+  const Page = await makeCompiledPageClass('layout-page', 'ok');
   definePage(Page, { route: { layout: 'post' } });
   definePage(Page, { route: { layout: false } });
   for (const layout of [true, 0, {}, ['post']]) {
@@ -412,6 +405,10 @@ test('defineIslandConfig() bounds media delivery queries', () => {
 test('defineIslandConfig() carries the declared root family', () => {
   expect(defineIslandConfig({ root: 'light' }).root).toEqual('light');
   expect(defineIslandConfig({ root: 'shadow', hydrate: 'load' }).root).toEqual('shadow');
+  // `closed` is the third family (F16): the shell always resolved it, and the
+  // authoring face gained the spelling so a generated component could be
+  // encapsulated without falling back to the class lane for that one fact.
+  expect(defineIslandConfig({ root: 'closed' }).root).toEqual('closed');
   // Declaring nothing stays valid: the compiled program's root is the source
   // of truth, and the field is a declaration next to the delivery policy.
   expect(defineIslandConfig({ hydrate: 'load' }).root).toBeUndefined();
@@ -420,7 +417,9 @@ test('defineIslandConfig() carries the declared root family', () => {
       defineIslandConfig({ root: 'sideways' } as never);
     },
     Error,
-    'root must be "light" or "shadow"',
+    // The message names every ADMITTED family — a refusal that omits one of
+    // them would send the author looking for a spelling that exists.
+    'root must be "light", "shadow" or "closed"',
   );
 });
 
@@ -625,8 +624,8 @@ test('defineIslandConfig() rejects non-canonical island metadata', () => {
  * the code table. The remediation sentence (what to write instead) is part of
  * the contract too: it is what makes the message actionable.
  */
-test('#1413 authoring errors: definePage() failure modes carry codes and remediation', () => {
-  const Page = makeCompiledPageClass('classified-page', 'classified');
+test('#1413 authoring errors: definePage() failure modes carry codes and remediation', async () => {
+  const Page = await makeCompiledPageClass('classified-page', 'classified');
   const cases: Array<[() => unknown, string]> = [
     // The non-function shape keeps NOT_COMPILED_CLASS (the function shape is
     // the alpha15 server function page now — its own admission below).

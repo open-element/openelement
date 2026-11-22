@@ -6,9 +6,14 @@
  * authored `ssr: true` shadow island is compiled by the real compiler lane, the
  * emitted module is imported (executed) to obtain its compiler-owned
  * `<Name>__ssrHost`, the class + producer are paired through the one registry
- * guard, and a REAL class page program (compiled by the class lane in this same
- * test) is rendered through Element's `renderToString` with the generated host
- * as its nested child.
+ * guard, and a REAL page is rendered through Element's `renderToString` with the
+ * generated host as its nested child.
+ *
+ * BOTH halves run the generated lane (F16 deleted the class lane). The page used
+ * to be an `@element` class compiled by `compileElementProgram`; it is now the
+ * fixture's own generated page root, compiled by the SAME lane as the island and
+ * rendered through the registry pair — the page-root path `renderToString`
+ * dispatches on a paired tag string.
  *
  * The facts pinned here:
  *
@@ -16,8 +21,6 @@
  *   semantics): the producer seeds its content props from those canonical
  *   attribute pairs through the shell's canonical conversion — no dynamic-only
  *   fixture, no fabricated seed channel;
- * - the dynamic property channel still wins over the attribute wire when both
- *   exist, exactly like the class nested-expansion path;
  * - host attributes are escaped once by the canonical DSD producer, content is
  *   escaped once by the leaf `__ssr`, and the parent's already-serialized light
  *   children land AFTER `</template>` for native slot distribution;
@@ -31,7 +34,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { fileURLToPath } from 'node:url';
 import { afterAll, expect, test } from 'vitest';
-import { compileElementProgram, compileGeneratedElementIfAdmitted } from '@openelement/compiler';
+import { compileGeneratedElementIfAdmitted } from '@openelement/compiler';
 import { __setRequestTimeStyleSheetUrls, renderToString } from '@openelement/element';
 import {
   SSR_REGISTRY_GENERATED_HOSTS,
@@ -43,6 +46,7 @@ const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const ISLAND_FILE =
   'tests/fixtures/web-component-interop/app/islands/interop-generated-ssr-card.tsx';
 const PAGE_FILE = 'tests/fixtures/web-component-interop/app/components/page-interop-home.tsx';
+const PAGE_TAG = 'index-page';
 const HOST_TAG = 'interop-generated-ssr-card';
 
 type HostRenderer = (
@@ -51,28 +55,6 @@ type HostRenderer = (
   attributes: readonly (readonly [string, string])[] | undefined,
   styleLinks?: readonly string[],
 ) => string;
-
-/** Real class page (class lane) nesting the generated host as its child. */
-const PAGE_SOURCE = `
-import { element, property, OpenElement } from '@openelement/element';
-@element('interop-vertical-page', { root: 'shadow-open' })
-export default class InteropVerticalPage extends OpenElement {
-  @property({ reflect: false }) title = 'dynamic "t" <&>';
-  render() {
-    return (
-      <div id='page'>
-        <interop-generated-ssr-card
-          id='generated-ssr-host'
-          title={this.title}
-          note='<script>alert(1)</script>'
-        >
-          <span slot='x'>light & child</span>
-        </interop-generated-ssr-card>
-      </div>
-    );
-  }
-}
-`;
 
 const tempDirs: string[] = [];
 
@@ -150,34 +132,41 @@ async function withStubRegistry<T>(
   }
 }
 
-function pageProgram(source: string): {
-  readonly program: ReturnType<typeof compileElementProgram>['program'];
-  readonly pageClass: CustomElementConstructor;
-} {
-  const { program } = compileElementProgram(source, '/proj/app/components/page.tsx');
-  const pageClass = Object.assign(class {}, {
-    __partProgram: program,
-    __compiledProperties: program.metadata.properties,
-  }) as unknown as CustomElementConstructor;
-  return { program, pageClass };
+/**
+ * Render one generated page root through the SAME registry pair the island uses.
+ *
+ * A generated page carries no `__partProgram` and no class static: its server
+ * artifact is the compiler-emitted host producer, which `renderToString`
+ * dispatches on the paired TAG STRING before any class probe. Registering the
+ * page is therefore part of rendering it, not a shortcut around it.
+ *
+ * The page declares no `styles`, so the style-link carrier stays untouched here;
+ * the island's own carrier is supplied by `withIslandStyleLink`.
+ */
+async function renderGeneratedPage(
+  guard: ReturnType<typeof installSsrRegistryGuard>,
+  page: { readonly source: string; readonly moduleId: string; readonly tag: string },
+): Promise<string> {
+  const loaded = await loadGeneratedHost({
+    source: page.source,
+    moduleId: page.moduleId,
+    tag: page.tag,
+  });
+  guard.registerIsland(page.tag, loaded.ctor, loaded.producer);
+  return renderToString(page.tag, { ssrRenderableTags: [HOST_TAG] });
 }
 
-/**
- * The REAL fixture class page (the same authored module the fixture ships,
- * compiled by the class lane). Its generated host child carries literal
- * attributes and the slotted light child — the standard SSR shape.
- */
-function realPageProgram(): {
-  readonly program: ReturnType<typeof compileElementProgram>['program'];
-  readonly pageClass: CustomElementConstructor;
+/** The REAL fixture page (a generated page root since F16). */
+function realPageSource(): {
+  readonly source: string;
+  readonly moduleId: string;
+  readonly tag: string;
 } {
-  const source = readFileSync(join(REPO_ROOT, PAGE_FILE), 'utf8');
-  const { program } = compileElementProgram(source, PAGE_FILE);
-  const pageClass = Object.assign(class {}, {
-    __partProgram: program,
-    __compiledProperties: program.metadata.properties,
-  }) as unknown as CustomElementConstructor;
-  return { program, pageClass };
+  return {
+    source: readFileSync(join(REPO_ROOT, PAGE_FILE), 'utf8'),
+    moduleId: PAGE_FILE,
+    tag: PAGE_TAG,
+  };
 }
 
 function hostPair(registry: Record<string, unknown>): {
@@ -186,18 +175,11 @@ function hostPair(registry: Record<string, unknown>): {
   return { table: registry[SSR_REGISTRY_GENERATED_HOSTS] as Map<string, unknown> | undefined };
 }
 
-/**
- * The REAL fixture island declares `styles` on a shadow root, so its emitted
- * producer carries the generated host style-links guard. This harness builds
- * the entry by hand (no generated entry module), so it must feed the SAME
- * request-time style-link channel a production entry feeds from the build: the
- * declared stylesheet URL for the island tag. Nothing is weakened: a missing
- * carrier is still the producer's fail-closed condition.
- */
-function withIslandStyleLink<T>(tag: string, run: () => T): T {
+/** {@link withIslandStyleLink} for a render that has to await a module import. */
+async function withIslandStyleLinkAsync<T>(tag: string, run: () => Promise<T>): Promise<T> {
   __setRequestTimeStyleSheetUrls(null, [[tag, ['/client/assets/generated-host.css']]]);
   try {
-    return run();
+    return await run();
   } finally {
     __setRequestTimeStyleSheetUrls(null);
   }
@@ -205,7 +187,7 @@ function withIslandStyleLink<T>(tag: string, run: () => T): T {
 
 test('literal host attributes render through the real generated shadow vertical', async () => {
   const { ctor, producer } = await loadRealGeneratedHost();
-  await withStubRegistry(({ registry, elements, guard }) => {
+  await withStubRegistry(async ({ registry, elements, guard }) => {
     const calls: Array<Parameters<HostRenderer>> = [];
     const host: HostRenderer = (props, lightChildren, attributes, styleLinks) => {
       calls.push([props, lightChildren, attributes]);
@@ -221,9 +203,11 @@ test('literal host attributes render through the real generated shadow vertical'
     expect(elements.get(HOST_TAG)).toBe(ctor);
     expect(hostPair(registry).table?.get(HOST_TAG)).toBe(host);
 
-    const { pageClass } = realPageProgram();
-    const html = withIslandStyleLink(HOST_TAG, () =>
-      renderToString(pageClass, { ssrRenderableTags: [HOST_TAG] }),
+    // The page is a generated page root: it renders through the SAME registry
+    // pair dispatch the nested host uses, so a generated page and a generated
+    // nested host cannot diverge.
+    const html = await withIslandStyleLinkAsync(HOST_TAG, () =>
+      Promise.resolve(renderGeneratedPage(guard, realPageSource())),
     );
 
     // One owner call, one producer call — no second registration/render path.
@@ -264,27 +248,27 @@ test('literal host attributes render through the real generated shadow vertical'
   });
 });
 
-test('the dynamic property channel wins over the attribute wire, one escaped wire', async () => {
-  const { ctor, producer } = await loadRealGeneratedHost();
-  await withStubRegistry(({ guard }) => {
-    guard.registerIsland(HOST_TAG, ctor, producer);
-    const { pageClass } = pageProgram(PAGE_SOURCE);
-    const html = withIslandStyleLink(HOST_TAG, () =>
-      renderToString(pageClass, { ssrRenderableTags: [HOST_TAG] }),
-    );
-
-    // The dynamic value (declared property default here) is the content source;
-    // the wire attribute is the escaped host attribute, never double-escaped.
-    expect(html).toContain('title="dynamic &quot;t&quot; &lt;&amp;&gt;"');
-    expect(html).toContain('dynamic "t" &lt;&amp;&gt;');
-    expect(html).not.toContain('dynamic "t" <&>');
-    // The literal note still reaches the content through the attribute seed.
-    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
-    expect(html).not.toContain('<script>alert(1)</script>');
-    // Children stay after the template, even with the dynamic channel present.
-    expect(html).toContain('</template><span slot="x">light &amp; child</span>');
-  });
-});
+/*
+ * REMOVED ROW — `the dynamic property channel wins over the attribute wire`.
+ *
+ * That row was a CLASS-LANE property semantic, not a serializer fact: it
+ * constructed a page from an `@element` class whose `@property({ reflect: false })
+ * title` default was `'dynamic "t" <&>'`, then asserted the page's own class
+ * instance state reached the nested host as a DOM PROPERTY, beating the literal
+ * `title` host attribute on the wire.
+ *
+ * The generated lane has no class instance and no `this`: a generated page root
+ * receives its values as `props`, and the only ways a nested generated host can
+ * be given one are (a) a literal attribute in the page's JSX, or (b) a declared
+ * `properties` row on the PAGE plus a typed `props` parameter. Neither shape
+ * reproduces "the same name arrives as both a wire attribute and a live class
+ * property", because the class instance that owned the second channel is gone.
+ *
+ * The row is therefore reported, not rewritten: replacing it with a generated
+ * equivalent would have to invent a fixture whose outcome is decided by the
+ * fixture rather than by the runtime, and the fact it pinned (class-lane
+ * reflection precedence) no longer has a subject.
+ */
 
 test('a supplied undefined primitive uses the island declared default in SSR content', async () => {
   // Reviewer B2 end-to-end: the REAL emitted `<Name>__ssrHost` (primitive-only,

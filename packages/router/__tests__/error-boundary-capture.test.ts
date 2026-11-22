@@ -1,28 +1,36 @@
 /**
- * @openelement/router — client-path ErrorBoundary automatic capture over a
- * REAL dev server + REAL browser (alpha.13 artifact honesty).
+ * @openelement/router — the generated lane's `onError` capture over a REAL dev
+ * server + REAL browser.
  *
- * The element-package suites pin the routing primitives (`_captureError`,
- * the emitted lifecycle wrapper, the setter and kernel sinks) against the
- * facade DOM; this suite boots the real dev pipeline over a fixture of the
- * audit's island shapes and drives them in Chromium:
+ * BREAKING REMOVAL RECORDED HERE: cross-element containment RETIRED with the
+ * class lane's `ErrorBoundary` base class (F16, owner-approved). `ErrorBoundary`
+ * captured DESCENDANT failures and climbed from the failing element to the
+ * nearest boundary ancestor; that was ITS capability, and the generated lane
+ * deliberately does not have it. The replacement is the `onError` intrinsic
+ * (ADR-0182, `16b-EB`), whose handler list is owned by ONE element: it captures
+ * that element's own failures and nothing else. An island can therefore no
+ * longer flip a PARENT island's fallback, and assertions that depended on the
+ * climb — a `<boundary-island>` wrapping a throwing child
+ * `<boom-island>`, `boundary.catchError`, an authored `detonate()` method —
+ * were deleted with the base class rather than kept red or quietly weakened.
+ * What remains, and what this suite pins end to end, is same-element capture.
  *
- *   - /: a boundary island wrapping a child island whose authored
- *     `attributeChangedCallback()` throws — after hydration the test flips
- *     the child's reflected attribute, the compiled lifecycle wrapper routes
- *     the throw to the boundary, and the fallback branch replaces the slot;
- *   - /update: the update-boom shape — a click handler writes a poisoned
- *     payload, the derived computed throws at the write, and the boundary
- *     flips through the signal-graph/update capture paths.
+ * The generated lane has exactly TWO capture points, both inside the one
+ * element (`shell.ts`, the `16b-EB` amendment):
  *
- * Both failure modes are driven POST-hydration, deliberately: the island
- * scheduler defines each island in its own dynamic-import `.then()`, so a
- * child island's connect-time throw can race its boundary island's
- * definition (an un-upgraded boundary host is not yet a boundary for the
- * climb). That upgrade-order window is an island-scheduler characteristic,
- * not a capture-semantics one — the wrapper's routing is pinned here with
- * the boundary guaranteed present, and the element-package suites cover the
- * connect-time throw directly against the facade DOM.
+ *   - `/`: the DOM-LISTENER channel. A click handler throws; the generated
+ *     `guardUpdate(handler, __oe_reportError)` sink routes the throw to the
+ *     island's own `onError`, which flips its fallback branch.
+ *   - /update: the REFRESH-SUBSCRIPTION channel. A click writes a poisoned
+ *     payload; the tracked `computed()` read by a slot throws inside its
+ *     `bindSignalWrites(..., guardUpdate(...))` refresh, and the same handler
+ *     flips the same element's fallback.
+ *
+ * Both are UPDATE-phase failures, and that is not a shortcut: the other capture
+ * point (connect/claim) rolls the element back to its defined post-failure
+ * state — no projection, no listeners — so an element that fails its FIRST
+ * connect has nowhere to render a fallback. A visible fallback is only
+ * meaningful after the element is live, which is what both routes do.
  *
  * Harness shape: the #1582 dev-Tailwind suite (real vite dev server in
  * middleware mode over the generated entry; the cwd stays at the fixture for
@@ -42,112 +50,132 @@ import { openElement } from '../src/vite/app-vite.ts';
 
 const FIXTURE_DIR = join(import.meta.dirname!, '../__test_fixtures__/boundary-capture-dev');
 
-const BOUNDARY_ISLAND = `import { defineIslandConfig } from '@openelement/router';
-import { element, ErrorBoundary, property } from '@openelement/element';
+/**
+ * The DOM-LISTENER capture island: its `#boom` handler throws and the island's
+ * own `onError` flips the fallback branch.
+ *
+ * `onError` is the root-entry export deliberately (the side-effect-free
+ * `lifecycle` subpath does not re-export it), so this fixture imports it from
+ * the package root exactly as an author would.
+ */
+const BOOM_ISLAND = `import { defineIslandConfig } from '@openelement/router';
+import { onError, signal } from '@openelement/element';
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });
+export const openElement = defineIslandConfig({
+  tag: 'boom-island',
+  root: 'shadow',
+  hydrate: 'load',
+  ssr: true,
+  dsd: true,
+});
 
-@element('boundary-island', { root: 'shadow-open' })
-export default class BoundaryIsland extends ErrorBoundary {
-  @property({ reflect: false, attribute: false })
-  hasError = false;
-
-  render() {
-    return <div>{this.hasError ? <p class='fallback'>boundary capture fallback</p> : <slot></slot>}</div>;
-  }
+export default function BoomIsland() {
+  const hasError = signal(false);
+  onError(() => {
+    hasError.value = true;
+  });
+  return (
+    <div class='boundary'>
+      {hasError.value ? (
+        <p class='fallback'>boundary capture fallback</p>
+      ) : (
+        <section class='body'>
+          <p class='safe'>boom-island intended output</p>
+          <button
+            id='boom'
+            type='button'
+            onClick={() => {
+              throw new Error('boom-island exploded in its click handler');
+            }}
+          >
+            detonate
+          </button>
+        </section>
+      )}
+    </div>
+  );
 }
 `;
 
 /**
- * The audit's boom child, retimed to a post-hydration lifecycle throw: the
- * authored attributeChangedCallback throws whenever the label attribute is
- * set to the detonation word. SSR and the first hydration pass keep the safe
- * initial attribute; the TEST flips the attribute after everything upgraded,
- * so the capture runs against a boundary that is guaranteed present.
+ * The REFRESH-SUBSCRIPTION capture island.
+ *
+ * `#poison` writes a payload whose nested object is missing, so the `derived`
+ * computed — tracked by the `#derived` slot — throws when its refresh runs. The
+ * generated `bindSignalWrites(..., guardUpdate(refresh, __oe_reportError))`
+ * routes that throw to the same element's `onError`.
+ *
+ * The cast is what makes an author-written type lie expressible: a generated
+ * component reads its signals as plain values, so "this value is not the shape
+ * the type says" is runtime corruption by construction.
  */
-const BOOM_ISLAND = `import { defineIslandConfig } from '@openelement/router';
-import { element, OpenElement, property } from '@openelement/element';
-
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });
-
-@element('boom-island', { root: 'shadow-open' })
-export default class BoomIsland extends OpenElement {
-  @property({ reflect: false })
-  label = 'boom-island intended output';
-
-  override attributeChangedCallback(
-    name: string,
-    oldValue: string | null,
-    newValue: string | null,
-  ): void {
-    super.attributeChangedCallback(name, oldValue, newValue);
-    if (name === 'label' && newValue === 'detonate') {
-      throw new Error('boom-island exploded in attributeChangedCallback');
-    }
-  }
-
-  render() {
-    return <p>{this.label}</p>;
-  }
-}
-`;
-
 const UPDATE_BOOM_ISLAND = `import { defineIslandConfig } from '@openelement/router';
-import { computed, element, OpenElement, property, type ReadonlySignal } from '@openelement/element';
+import { computed, onError, signal } from '@openelement/element';
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });
+export const openElement = defineIslandConfig({
+  tag: 'update-boom-island',
+  root: 'shadow',
+  hydrate: 'load',
+  ssr: true,
+  dsd: true,
+});
 
-@element('update-boom-island', { root: 'shadow-open' })
-export default class UpdateBoomIsland extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  payload: { nested: { deep: string } } = { nested: { deep: 'initial safe value' } };
+type Payload = { nested: { deep: string } };
 
-  @property({ reflect: false, attribute: false })
-  label = 'detonate';
-
-  @property({ reflect: false, attribute: false, type: String })
-  derived: ReadonlySignal<string> = computed(() => this.payload.nested.deep);
-
-  detonate(): void {
-    this.payload = { nested: null } as unknown as { nested: { deep: string } };
-  }
-
-  render() {
-    return (
-      <div class='update-boom'>
-        <button type='button' onClick={this.detonate}>{this.label}</button>
-        <p id='update-boom-derived'>{this.derived}</p>
-      </div>
-    );
-  }
+export default function UpdateBoomIsland() {
+  const hasError = signal(false);
+  const payload = signal<Payload>({ nested: { deep: 'initial safe value' } });
+  const derived = computed(() => payload.value.nested.deep);
+  onError(() => {
+    hasError.value = true;
+  });
+  return (
+    <div class='update-boom'>
+      {hasError.value ? (
+        <p class='fallback'>boundary capture fallback</p>
+      ) : (
+        <section class='body'>
+          <button
+            id='poison'
+            type='button'
+            onClick={() => {
+              payload.value = { nested: null } as unknown as Payload;
+            }}
+          >
+            poison
+          </button>
+          <p id='derived'>{derived.value}</p>
+        </section>
+      )}
+    </div>
+  );
 }
 `;
 
-const BOUNDARY_PAGE = `import { element, OpenElement } from '@openelement/element';
+/** A generated SHADOW page root: the page's own tree is where `pierce` starts. */
+const BOUNDARY_PAGE = `import { defineIslandConfig } from '@openelement/router';
 
-@element('boundary-capture-page', { root: 'shadow-open' })
-export default class BoundaryCapturePage extends OpenElement {
-  render() {
-    return (
-      <main>
-        <boundary-island><boom-island></boom-island></boundary-island>
-      </main>
-    );
-  }
+export const openElement = defineIslandConfig({ tag: 'boundary-capture-page', root: 'shadow' });
+
+export default function BoundaryCapturePage() {
+  return (
+    <main>
+      <boom-island></boom-island>
+    </main>
+  );
 }
 `;
 
-const UPDATE_PAGE = `import { element, OpenElement } from '@openelement/element';
+const UPDATE_PAGE = `import { defineIslandConfig } from '@openelement/router';
 
-@element('update-capture-page', { root: 'shadow-open' })
-export default class UpdateCapturePage extends OpenElement {
-  render() {
-    return (
-      <main>
-        <boundary-island><update-boom-island></update-boom-island></boundary-island>
-      </main>
-    );
-  }
+export const openElement = defineIslandConfig({ tag: 'update-capture-page', root: 'shadow' });
+
+export default function UpdateCapturePage() {
+  return (
+    <main>
+      <update-boom-island></update-boom-island>
+    </main>
+  );
 }
 `;
 
@@ -172,7 +200,6 @@ function writeFixture(): void {
   rmSync(FIXTURE_DIR, { recursive: true, force: true });
   const dirs = ['app/routes', 'app/components', 'app/islands', 'node_modules/@openelement'];
   for (const dir of dirs) mkdirSync(join(FIXTURE_DIR, dir), { recursive: true });
-  writeFileSync(join(FIXTURE_DIR, 'app/islands/boundary-island.tsx'), BOUNDARY_ISLAND, 'utf8');
   writeFileSync(join(FIXTURE_DIR, 'app/islands/boom-island.tsx'), BOOM_ISLAND, 'utf8');
   writeFileSync(
     join(FIXTURE_DIR, 'app/islands/update-boom-island.tsx'),
@@ -306,7 +333,7 @@ afterAll(async () => {
   rmSync(FIXTURE_DIR, { recursive: true, force: true });
 });
 
-test('an authored lifecycle throw in a child island flips the boundary fallback (client path)', async () => {
+test("a throwing DOM listener flips the element's own fallback (update capture point)", async () => {
   if (handle) await handle.close();
   handle = await bootDev(openElement(OPTIONS));
   const browser = await chromium.launch({ headless: true });
@@ -317,42 +344,47 @@ test('an authored lifecycle throw in a child island flips the boundary fallback 
 
     const response = await page.goto(`${handle.base}/`, { waitUntil: 'domcontentloaded' });
     expect(response?.status()).toEqual(200);
-    // SSR integrity: the boundary's DSD carries the slot branch and the
-    // child island's slotted content is present pre-hydration.
+    // SSR integrity: the element's own body branch is server-rendered, and the
+    // fallback is NOT (it only exists after a captured failure).
     const ssr = await (await fetch(`${handle.base}/`)).text();
     expect(ssr).toContain('boom-island intended output');
+    expect(ssr).not.toContain('boundary capture fallback');
 
-    // Wait for hydration with an UPGRADE-POSITIVE probe: the declarative
-    // shadow root is queryable on an un-upgraded host too (the DSD template
-    // exists pre-upgrade), so shadowRoot checks alone are vacuous. A base
-    // class method only exists once the boundary's custom-element definition
-    // took the host.
+    // Upgrade-positive probe. The generated lane has no base-class method to
+    // look for, and the DSD template is queryable pre-upgrade — so the probe is
+    // an authored CLICK HANDLER's effect plus the element's own definition
+    // having taken the host (`customElements.get` returning a constructor the
+    // element is an instance of is the upgrade fact; the shadow root alone is
+    // not).
     await page.waitForFunction(
       new Function(`
         ${PIERCE_HELPER}
-        const boundary = pierce('boundary-island');
-        return !!boundary && typeof boundary.catchError === 'function';
+        const island = pierce('boom-island');
+        const ctor = customElements.get('boom-island');
+        return !!island && typeof ctor === 'function' && island instanceof ctor
+          && !!island.shadowRoot && island.shadowRoot.querySelector('#boom') !== null;
       `) as () => boolean,
       undefined,
       { timeout: 20_000, polling: 100 },
     );
 
-    // Detonate the authored attributeChangedCallback throw (post-hydration,
-    // boundary guaranteed present). The compiled lifecycle wrapper routes it.
+    // Detonate: the handler throws inside `guardUpdate(handler, sink)`, which
+    // routes it to this element's own onError.
     await page.evaluate(
       new Function(`
         ${PIERCE_HELPER}
-        const boom = pierce('boom-island');
-        if (!boom) throw new Error('boom-island not found');
-        boom.setAttribute('label', 'detonate');
+        const island = pierce('boom-island');
+        const button = island && island.shadowRoot ? island.shadowRoot.querySelector('#boom') : null;
+        if (!button) throw new Error('boom button not found');
+        button.click();
       `) as () => void,
     );
 
     await page.waitForFunction(
       new Function(`
         ${PIERCE_HELPER}
-        const boundary = pierce('boundary-island');
-        return !!boundary && !!boundary.shadowRoot && boundary.shadowRoot.querySelector('.fallback') !== null;
+        const island = pierce('boom-island');
+        return !!island && !!island.shadowRoot && island.shadowRoot.querySelector('.fallback') !== null;
       `) as () => boolean,
       undefined,
       { timeout: 20_000, polling: 100 },
@@ -362,24 +394,24 @@ test('an authored lifecycle throw in a child island flips the boundary fallback 
         (await page.evaluate(
           new Function(`
             ${PIERCE_HELPER}
-            const boundary = pierce('boundary-island');
-            const fallback = boundary && boundary.shadowRoot ? boundary.shadowRoot.querySelector('.fallback') : null;
+            const island = pierce('boom-island');
+            const fallback = island && island.shadowRoot ? island.shadowRoot.querySelector('.fallback') : null;
             return fallback ? fallback.textContent : '';
           `) as () => string,
         )) ?? ''
       ).trim(),
-      'the compiled hasError branch swapped the fallback in',
+      "the captured throw swapped the element's own fallback in",
     ).toEqual('boundary capture fallback');
     expect(
       pageErrors.filter((message) => !isHarnessNoise(message)),
-      'the lifecycle throw is captured, never uncaught',
+      'the listener throw is captured by the element, never uncaught',
     ).toEqual([]);
   } finally {
     await browser.close();
   }
 }, 60_000);
 
-test('a detonated derived evaluation flips the boundary after a real click (update path)', async () => {
+test("a throwing refresh subscription flips the element's own fallback after a real click", async () => {
   if (handle) await handle.close();
   handle = await bootDev(openElement(OPTIONS));
   const browser = await chromium.launch({ headless: true });
@@ -390,22 +422,20 @@ test('a detonated derived evaluation flips the boundary after a real click (upda
 
     const response = await page.goto(`${handle.base}/update`, { waitUntil: 'domcontentloaded' });
     expect(response?.status()).toEqual(200);
-    // The safe initial value rendered (SSR and first hydration evaluation),
-    // and BOTH islands are upgraded — the boundary included: the scheduler
-    // defines each island in its own dynamic-import .then(), so the child can
-    // hydrate first; detonating before the boundary upgraded would test the
-    // scheduler's race, not the capture.
+
+    // Upgrade-positive + claimed-content probe: the safe initial value must be
+    // the CLAIMED server DOM (so the refresh subscription exists to throw
+    // from), and the button must be live.
     const hydrated = await page
       .waitForFunction(
         new Function(`
           ${PIERCE_HELPER}
           const island = pierce('update-boom-island');
-          const boundary = pierce('boundary-island');
-          // Upgrade-positive probes (methods exist only post-definition),
-          // then the claimed content.
-          return !!island && typeof island.detonate === 'function'
-            && !!island.shadowRoot && (island.shadowRoot.textContent || '').includes('initial safe value')
-            && !!boundary && typeof boundary.catchError === 'function';
+          const ctor = customElements.get('update-boom-island');
+          return !!island && typeof ctor === 'function' && island instanceof ctor
+            && !!island.shadowRoot
+            && (island.shadowRoot.textContent || '').includes('initial safe value')
+            && island.shadowRoot.querySelector('#poison') !== null;
         `) as () => boolean,
         undefined,
         { timeout: 20_000, polling: 100 },
@@ -413,33 +443,33 @@ test('a detonated derived evaluation flips the boundary after a real click (upda
       .catch(() => null);
     expect(
       hydrated !== null || pageErrors.some((message) => !isHarnessNoise(message)),
-      `the update island must hydrate with its safe value; page errors: ${pageErrors.join(' | ')}`,
+      `the island must hydrate with its safe value; page errors: ${pageErrors.join(' | ')}`,
     ).toEqual(true);
 
     await page.evaluate(
       new Function(`
         ${PIERCE_HELPER}
         const island = pierce('update-boom-island');
-        const button = island && island.shadowRoot ? island.shadowRoot.querySelector('button') : null;
-        if (!button) throw new Error('detonate button not found');
+        const button = island && island.shadowRoot ? island.shadowRoot.querySelector('#poison') : null;
+        if (!button) throw new Error('poison button not found');
         button.click();
       `) as () => void,
     );
 
-    // The poisoned write makes the derived computed throw; the capture paths
-    // (setter + kernel update sink) route it to the enclosing boundary.
+    // The poisoned write makes the derived computed throw inside the tracked
+    // slot's refresh, whose `guardUpdate(refresh, sink)` routes it to onError.
     await page.waitForFunction(
       new Function(`
         ${PIERCE_HELPER}
-        const boundary = pierce('boundary-island');
-        return !!boundary && !!boundary.shadowRoot && boundary.shadowRoot.querySelector('.fallback') !== null;
+        const island = pierce('update-boom-island');
+        return !!island && !!island.shadowRoot && island.shadowRoot.querySelector('.fallback') !== null;
       `) as () => boolean,
       undefined,
       { timeout: 20_000, polling: 100 },
     );
     expect(
       pageErrors.filter((message) => !isHarnessNoise(message)),
-      'the detonation error is captured, never uncaught',
+      'the refresh throw is captured by the element, never uncaught',
     ).toEqual([]);
   } finally {
     await browser.close();

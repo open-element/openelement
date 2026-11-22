@@ -334,14 +334,19 @@ export function devStyleComponentsPlugin(state: OpenPluginState, session: DevSty
       // `text/css` response (see the middleware above). A CSS-typed module id
       // would make Vite wrap the sheet in its dev style-injector, which writes
       // a <style> node at runtime — exactly what this lane forbids.
+      if (current === undefined) return null;
       if (id === current.provider.componentSheetSpecifier) return adapterId;
       if (id === STYLE_LINKS_VIRTUAL_ID) return styleLinksId;
       return null;
     },
 
     load(id) {
-      const current = session.current();
-      if (current === undefined) return null;
+      // No `session.current()` read here: the style-links module does NOT depend on
+      // the configured style provider —
+      // it answers "which declared sheets do these islands have", and an island's
+      // `styles` declaration is authored regardless. Requiring a provider here made
+      // every declared sheet vanish in a fixture with no style engine, and the
+      // renderer then failed closed on `OEIR_LEAF_MISSING_VALUE: styleLinks` (F16).
       if (id === styleLinksId) {
         // M09-2e / #1803: a generated SHADOW island's declared sheets are
         // declared inside its DSD template. Dev has no emitted asset, so the
@@ -350,35 +355,39 @@ export function devStyleComponentsPlugin(state: OpenPluginState, session: DevSty
         // CSS processing, a stable dev URL per edge. The renderer therefore
         // gets real URLs in dev instead of the explicit `null` it fails closed
         // on.
-        const devIslandStyles = islandStyleDeclarations()
-          .filter((declaration) => declaration.root === 'shadow')
-          .map(
-            (declaration) =>
+        // BOTH roots (F16). A shadow host's urls seed its own DSD template; a LIGHT
+        // host's urls are needed here because a light child nested inside a shadow
+        // tree cannot declare anything itself — its content lands in the ENCLOSING
+        // template, which resolves the urls through this map. Filtering to shadow
+        // was why a light-root generated island got no dev URL at all: no document
+        // link, no adoption, unstyled in dev only (the build path delivered it).
+        const devIslandStyles = islandStyleDeclarations().map(
+          (declaration) =>
+            [
+              declaration.tagName,
               [
-                declaration.tagName,
-                [
-                  ...devAuthoredIslandStyleUrls(base, declaration),
-                  // P-1c (2026-11-21): a GENERATED shadow island's class tokens
-                  // compile into the one shared component sheet, and its DSD
-                  // template must declare that endpoint beside its authored
-                  // assets. The class lane gets this for free (its `static
-                  // styles` and its utility fact both point at that sheet); the
-                  // generated lane has no class static, so the candidate
-                  // registry is the fact that says "this host needs it". Build
-                  // and dev must agree — a component styled in one and not the
-                  // other is the drift KR-4 forbids.
-                  // Always for a generated shadow island: its tokens compile into
-                  // the shared sheet whenever it declares any class at all, and the
-                  // registry may not have been filled yet when this module loads
-                  // (the SSR pass fills it). Asking the DECLARATION keeps the link
-                  // list independent of registration order; the sheet endpoint
-                  // compiles from the current facts on every request.
-                  ...(generatedIslandHasClasses(declaration.moduleId, root, state)
-                    ? [devComponentSheetUrl(base, engine())]
-                    : []),
-                ],
-              ] as const,
-          );
+                ...devAuthoredIslandStyleUrls(base, declaration),
+                // P-1c (2026-11-21): a GENERATED shadow island's class tokens
+                // compile into the one shared component sheet, and its DSD
+                // template must declare that endpoint beside its authored
+                // assets. The class lane gets this for free (its `static
+                // styles` and its utility fact both point at that sheet); the
+                // generated lane has no class static, so the candidate
+                // registry is the fact that says "this host needs it". Build
+                // and dev must agree — a component styled in one and not the
+                // other is the drift KR-4 forbids.
+                // Always for a generated shadow island: its tokens compile into
+                // the shared sheet whenever it declares any class at all, and the
+                // registry may not have been filled yet when this module loads
+                // (the SSR pass fills it). Asking the DECLARATION keeps the link
+                // list independent of registration order; the sheet endpoint
+                // compiles from the current facts on every request.
+                ...(generatedIslandHasClasses(declaration.moduleId, root, state)
+                  ? [devComponentSheetUrl(base, engine())]
+                  : []),
+              ],
+            ] as const,
+        );
         if (devIslandStyles.length === 0) {
           return [
             '// <generated by open:style-components-dev — dev sheet URLs; do not edit>',

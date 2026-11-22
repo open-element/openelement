@@ -175,62 +175,58 @@ async function buildFixture(): Promise<Fixture> {
     [
       '/** Local island of the external-consumer proof fixture. */',
       "import { defineIslandConfig } from '@openelement/router';",
-      "import { element, OpenElement, property } from '@openelement/element';",
+      "import { onConnect } from '@openelement/element';",
       "import { conditionTarget } from '@acme/conditions';",
       "import { flavor } from '@acme/conditions/flavor';",
       "import { sharedTag } from '@shared/tag.ts';",
       '',
-      "export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true, dsd: true });",
+      'export const openElement = defineIslandConfig({',
+      "  tag: 'oe-proof-counter',",
+      "  root: 'shadow',",
+      "  hydrate: 'idle',",
+      '  ssr: true,',
+      '  dsd: true,',
+      "  properties: { proofSource: { attribute: false, default: 'proof-counter-source' } },",
+      '});',
       '',
-      "@element('oe-proof-counter', { root: 'shadow-open' })",
-      'export default class OeProofCounter extends OpenElement {',
-      '  @property({ reflect: false, attribute: false })',
-      "  proofSource = 'proof-counter-source';",
-      '',
-      '  // Plain class code: the compiled render grammar takes literals, so the',
-      '  // imported condition value is observed here, outside the render grammar.',
-      '  connectedCallback(): void {',
-      '    super.connectedCallback();',
-      "    this.setAttribute('data-proof', `${conditionTarget}:${sharedTag}:${flavor}`);",
-      '    // The nested dynamic import itself (B2 gap (a)). Never awaited by the',
-      '    // assertions — its only job is to exist in the emitted island chunk.',
+      'export default function OeProofCounter(props: { proofSource: string }) {',
+      '  // The nested dynamic import itself (B2 gap (a)). Never awaited by the',
+      '  // assertions — its only job is to exist in the emitted island chunk, and',
+      "  // `onConnect` is the generated lane's activation point (it is where the",
+      "  // class lane's `connectedCallback` and both hydration hooks went).",
+      '  onConnect(() => {',
       "    void import('@shared/proof-lazy-gadget.ts');",
-      '  }',
+      '  });',
       '',
-      '  render() {',
-      "    return <span class='source'>{this.proofSource}</span>;",
-      '  }',
+      '  // The imported condition values are observed on a host ATTRIBUTE so the',
+      '  // resolution reaches the emitted terminal bytes. A module-scope statement',
+      '  // is not part of the admitted component grammar: the generated lane lowers',
+      '  // the component body, not arbitrary top-level side effects.',
+      "  return <span class='source' data-proof={`${conditionTarget}:${sharedTag}:${flavor}`}>{props.proofSource}</span>;",
       '}',
       '',
     ].join('\n'),
   );
-  await write(
-    join(appDir, 'app', 'components', 'proof-page.tsx'),
-    [
-      '/** Page component referencing both islands by tag. */',
-      "import { element, OpenElement } from '@openelement/element';",
-      '',
-      "@element('oe-proof-page', { root: 'shadow-open' })",
-      'export default class ProofPage extends OpenElement {',
-      '  render() {',
-      '    return (',
-      "      <div class='proof'>",
-      '        <oe-proof-counter></oe-proof-counter>',
-      "        <open-button variant='primary'>External consumer proof.</open-button>",
-      '      </div>',
-      '    );',
-      '  }',
-      '}',
-      '',
-    ].join('\n'),
-  );
+  // A SERVER FUNCTION PAGE, not a generated page component: the route module
+  // declares the component itself, so nothing in this page's module graph
+  // declares an element sidecar and the page therefore owns no island chunk of
+  // its own. The two components it RENDERS are islands (one local, one from the
+  // admitted package), and they are what the assertions below attribute.
   await write(
     join(appDir, 'app', 'routes', 'index.tsx'),
     [
       "import { definePage } from '@openelement/router';",
-      "import ProofPage from '../components/proof-page.tsx';",
       '',
-      'export default definePage(ProofPage, { renderIntent: { mode: ' + "'static'" + ' } });',
+      'export function ProofPage() {',
+      '  return (',
+      "    <div class='proof'>",
+      '      <oe-proof-counter></oe-proof-counter>',
+      "      <open-button variant='primary'>External consumer proof.</open-button>",
+      '    </div>',
+      '  );',
+      '}',
+      '',
+      "export default definePage(ProofPage, { renderIntent: { mode: 'static' } });",
       '',
     ].join('\n'),
   );
@@ -240,25 +236,13 @@ async function buildFixture(): Promise<Fixture> {
   // descriptor to the class itself, so a shared class would carry whichever
   // descriptor evaluated last.
   await write(
-    join(appDir, 'app', 'components', 'proof-live-page.tsx'),
-    [
-      '/** Dynamic-route page component (own class, own descriptor). */',
-      "import { element, OpenElement } from '@openelement/element';",
-      '',
-      "@element('oe-proof-live-page', { root: 'shadow-open' })",
-      'export default class ProofLivePage extends OpenElement {',
-      '  render() {',
-      "    return <div class='proof-live'>request-time proof</div>;",
-      '  }',
-      '}',
-      '',
-    ].join('\n'),
-  );
-  await write(
     join(appDir, 'app', 'routes', 'proof-live.tsx'),
     [
       "import { definePage } from '@openelement/router';",
-      "import ProofLivePage from '../components/proof-live-page.tsx';",
+      '',
+      'export function ProofLivePage() {',
+      "  return <div class='proof-live'>request-time proof</div>;",
+      '}',
       '',
       'export default definePage(ProofLivePage, {',
       "  renderIntent: { mode: 'dynamic' },",
@@ -270,30 +254,19 @@ async function buildFixture(): Promise<Fixture> {
     ].join('\n'),
   );
 
-  // #1544/B2: a PRERENDERED page with no island at all — the zero-island
-  // half of the runtime-preload projection. Its own page class (definePage
-  // attaches the descriptor to the class), and no island tag anywhere in its
-  // render.
-  await write(
-    join(appDir, 'app', 'components', 'proof-static-page.tsx'),
-    [
-      '/** Static-route page component with no island (its own class). */',
-      "import { element, OpenElement } from '@openelement/element';",
-      '',
-      "@element('oe-proof-static-page', { root: 'shadow-open' })",
-      'export default class ProofStaticPage extends OpenElement {',
-      '  render() {',
-      "    return <div class='proof-static'>zero-island proof</div>;",
-      '  }',
-      '}',
-      '',
-    ].join('\n'),
-  );
+  // #1544/B2: a PRERENDERED page with no island at all — the zero-island half
+  // of the runtime-preload projection. A generated page COMPONENT cannot be
+  // island-free (its declared sidecar tag is an island by construction), so the
+  // honest zero-island form is a server function page: the route module declares
+  // the component, and nothing in the graph declares an element sidecar.
   await write(
     join(appDir, 'app', 'routes', 'proof-static.tsx'),
     [
       "import { definePage } from '@openelement/router';",
-      "import ProofStaticPage from '../components/proof-static-page.tsx';",
+      '',
+      'export function ProofStaticPage() {',
+      "  return <div class='proof-static'>zero-island proof</div>;",
+      '}',
       '',
       "export default definePage(ProofStaticPage, { renderIntent: { mode: 'static' } });",
       '',

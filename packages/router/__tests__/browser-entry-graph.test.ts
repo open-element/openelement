@@ -99,41 +99,89 @@ async function linkRouterPackages(root: string): Promise<void> {
   }
 }
 
-const PAGE_CLASS = `import { element, OpenElement } from '@openelement/element';
+/**
+ * The fixture's page — a SERVER FUNCTION PAGE, so it contributes NO island.
+ *
+ * The class page this replaces was a compiled page CLASS: a route artifact, not
+ * an island. The generated lane has no island-free page COMPONENT (a declared
+ * sidecar makes the module an island by construction), so the same "one island,
+ * one page" fixture shape is spelled as the route module declaring its own
+ * component. That keeps `artifact.islands` measuring the island the suite is
+ * about instead of also counting the page.
+ */
+const PAGE_SOURCE = `import { definePage } from '@openelement/router';
 
-@element('probe-home', { root: 'shadow-open' })
-export default class ProbeHome extends OpenElement {
-  render() {
-    return (
-      <main>
-        <h1>module graph probe</h1>
-        <probe-counter></probe-counter>
-      </main>
-    );
-  }
+export function ProbeHome() {
+  return (
+    <main>
+      <h1>module graph probe</h1>
+      <probe-counter></probe-counter>
+    </main>
+  );
 }
+
+export default definePage(ProbeHome, { head: { title: 'module graph probe' } });
 `;
 
-const ISLAND_CLASS = `import probeStyles from './probe-counter.css';
-import { defineIslandConfig } from '@openelement/router';
-import { element, OpenElement, property } from '@openelement/element';
+/**
+ * The fixture island — VIOLATED BY CONSTRUCTION, through the one door the
+ * generated lane still leaves open.
+ *
+ * The class lane reached the generic Part Program executor because every
+ * compiled class RENDERED through its kernel, so any class island's chunk
+ * closure contained the executor entries. That path is gone: a generated
+ * element mounts through the shell and touches no Part Program. What remains is
+ * the package ROOT barrel — `@openelement/element` is flagged `sideEffects`
+ * (it installs the hydration and Block edges) and re-exports `renderToString`,
+ * so a client module that imports a RUNTIME value from the root drags
+ * `runtime-program.ts` / `runtime/hydrate.ts` / `runtime/program-kernel.ts`
+ * into the island's chunk. That is the documented P1 cost of the root-barrel
+ * error-boundary surface, and the exact class this observer exists to catch.
+ *
+ * The leak rides a plain helper module rather than the component body: the
+ * compiler's tracked-slot classification (correctly) refuses an unclassified
+ * root-barrel binding inside JSX, and a real application reaches the barrel
+ * from ordinary module code.
+ */
+const ISLAND_HELPER = `import { renderToString } from '@openelement/element';
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });
-
-@element('probe-counter', { root: 'shadow-open' })
-export default class ProbeCounter extends OpenElement {
-  static styles = [probeStyles];
-
-  @property({ reflect: false, attribute: false })
-  count = 0;
-
-  render() {
-    return <span id="count">{this.count}</span>;
-  }
-}
+export const helperReachesTheRootBarrel = typeof renderToString;
 `;
 
-/** The real router-CLI fixture: one class island + one class page. */
+/**
+ * The island module, parameterized by its hydration strategy.
+ *
+ * `hydrate: 'only'` (client-only) is what makes the sheet a MODULE-GRAPH edge:
+ * with no server render there is no DSD template to declare the `<link>` in, so
+ * the emitted module carries a real `./probe-counter.css` import and the style
+ * plan turns it into a `\0oe-style-asset:` graph id. An SSR/DSD island's sheet
+ * rides the marked `<link>` inside its template instead, and its chunk carries
+ * no style edge at all — so the strategy is a fixture parameter, not a detail.
+ */
+function islandSource(hydrate: string, ssr: boolean, dsd: boolean): string {
+  return `import { defineIslandConfig } from '@openelement/router';
+import { helperReachesTheRootBarrel } from './probe-helper.ts';
+
+export const openElement = defineIslandConfig({
+  tag: 'probe-counter',
+  root: 'shadow',
+  hydrate: '${hydrate}',
+  ssr: ${ssr},
+  dsd: ${dsd},
+  styles: ['./probe-counter.css'],
+  properties: { count: { attribute: false, default: 0 } },
+});
+
+export default function ProbeCounter(props: { count: number }) {
+  return <span id="count" data-barrel={helperReachesTheRootBarrel}>{props.count}</span>;
+}
+`;
+}
+
+/** T1's island: client-only, so its authored sheet is a client style edge. */
+const ISLAND_CLASS = islandSource('only', false, false);
+
+/** The real router-CLI fixture: one generated island + one generated page. */
 async function makeRouterFixture(): Promise<string> {
   const root = await makeTempRoot();
   await writeFixtureFile(
@@ -150,22 +198,13 @@ async function makeRouterFixture(): Promise<string> {
       '',
     ].join('\n'),
   );
-  await writeFixtureFile(join(root, 'app', 'components', 'probe-home.tsx'), PAGE_CLASS);
+  await writeFixtureFile(join(root, 'app', 'islands', 'probe-helper.ts'), ISLAND_HELPER);
   await writeFixtureFile(join(root, 'app', 'islands', 'probe-counter.tsx'), ISLAND_CLASS);
   await writeFixtureFile(
     join(root, 'app', 'islands', 'probe-counter.css'),
     ':host { display: inline-block; }\n',
   );
-  await writeFixtureFile(
-    join(root, 'app', 'routes', 'index.tsx'),
-    [
-      "import { definePage } from '@openelement/router';",
-      "import ProbeHome from '../components/probe-home.tsx';",
-      '',
-      "export default definePage(ProbeHome, { head: { title: 'module graph probe' } });",
-      '',
-    ].join('\n'),
-  );
+  await writeFixtureFile(join(root, 'app', 'routes', 'index.tsx'), PAGE_SOURCE);
   await linkRouterPackages(root);
   return root;
 }
@@ -429,8 +468,8 @@ test('T1 real router CLI build emits a normalized, VIOLATED browser-entry graph'
     expect(gateIds.has(violation.moduleId), violation.moduleId).toBe(true);
     expect(artifact.chunks.some((chunk) => chunk.file === violation.chunkFile)).toBe(true);
   }
-  // The class island loads the old runtime path: at least one violation is
-  // attributable to the island (its chunk closure contains the runtime chunk).
+  // The island's chunk closure contains the executor chunk: the violation is
+  // attributable to the island, not to an unreachable module.
   expect(
     evaluation.violations.some((violation) => violation.islands.includes('probe-counter')),
     JSON.stringify(evaluation.violations, null, 2),
@@ -519,26 +558,17 @@ test('T2b an SSR-only (hydrate:none) island is not an island-attribution input',
       '',
     ].join('\n'),
   );
-  await writeFixtureFile(join(root, 'app', 'components', 'probe-home.tsx'), PAGE_CLASS);
   await writeFixtureFile(
     join(root, 'app', 'islands', 'probe-counter.tsx'),
-    ISLAND_CLASS.replace("hydrate: 'load'", "hydrate: 'none'"),
+    islandSource('none', true, true),
   );
+  await writeFixtureFile(join(root, 'app', 'islands', 'probe-helper.ts'), ISLAND_HELPER);
   await writeFixtureFile(
     join(root, 'app', 'islands', 'probe-counter.css'),
     ':host { display: inline-block; }\n',
   );
   // The route is the same page as T1; only the island's strategy differs.
-  await writeFixtureFile(
-    join(root, 'app', 'routes', 'index.tsx'),
-    [
-      "import { definePage } from '@openelement/router';",
-      "import ProbeHome from '../components/probe-home.tsx';",
-      '',
-      "export default definePage(ProbeHome, { head: { title: 'ssr-only probe' } });",
-      '',
-    ].join('\n'),
-  );
+  await writeFixtureFile(join(root, 'app', 'routes', 'index.tsx'), PAGE_SOURCE);
   await linkRouterPackages(root);
 
   const build = await runRouterBuild(root);
@@ -608,11 +638,17 @@ test('T2c the writer still fails closed on a strategy-resolved island with no em
 });
 
 test('T3 a parsed-but-unused executor entry is a diagnostic, not a gate failure', async () => {
+  // The re-exported executor entry is a PARSE-ONLY residue: the bundler parses
+  // the module to build its export table and then tree-shakes the binding, so
+  // nothing of it loads. `runtime-program.ts` is the surviving gate-table entry
+  // that still exports a real value (`normalizePartProgram`) — the deleted
+  // facade module cannot carry this fixture, and using a live member of the
+  // frozen table keeps the assertion measuring the same predicate.
   const root = await makeDirectFixture(
     'parsed-only',
     [
       "import { createGeneratedElementClass } from '@openelement/element/internal/compiled/generated-element/shell';",
-      "export { convertToAttribute } from 'oe-facade-host';",
+      "export { normalizePartProgram } from 'oe-executor-entry';",
       'globalThis.__oeBrowserGraphProbe = typeof createGeneratedElementClass;',
       '',
     ].join('\n'),
@@ -621,18 +657,18 @@ test('T3 a parsed-but-unused executor entry is a diagnostic, not a gate failure'
     root,
     plugin: true,
     aliases: {
-      'oe-facade-host': join(ELEMENT_ROOT, 'src', 'internal', 'compiled', 'facade-host.ts'),
+      'oe-executor-entry': join(ELEMENT_ROOT, 'src', 'internal', 'compiled', 'runtime-program.ts'),
     },
   });
   const source = build.assets.get(GRAPH_ASSET);
   expect(source).toBeDefined();
   const artifact = readGraphArtifact(source!, 'T3');
-  const facadeHost = 'packages/element/src/internal/compiled/facade-host.ts';
+  const executorEntry = 'packages/element/src/internal/compiled/runtime-program.ts';
 
-  expect(artifact.parsedModuleIds).toContain(facadeHost);
+  expect(artifact.parsedModuleIds).toContain(executorEntry);
   const evaluation = evaluateBrowserEntryGraphArtifact(artifact);
   expect(evaluation.verdict, JSON.stringify(evaluation, null, 2)).toBe('MET');
-  expect(evaluation.parsedOnlyExecutorResidues).toContain(facadeHost);
+  expect(evaluation.parsedOnlyExecutorResidues).toContain(executorEntry);
 
   const artifactPath = join(root, 'parsed-only.json');
   await writeFile(artifactPath, source!, 'utf8');
@@ -649,10 +685,10 @@ test('T3 a parsed-but-unused executor entry is a diagnostic, not a gate failure'
   expect(checked.stdout).toContain('MET');
   // The parsed-only residue is diagnostic detail: it lives in the --report
   // artifact, never on the one-line stdout.
-  expect(checked.stdout).not.toContain(facadeHost);
+  expect(checked.stdout).not.toContain(executorEntry);
   const reportText = await readFile(reportPath, 'utf8');
   expect(reportText).toContain('parsed-only executor residues');
-  expect(reportText).toContain(facadeHost);
+  expect(reportText).toContain(executorEntry);
 });
 
 test('T4 exact identity: a foreign same-named module is not the element executor entry', async () => {
@@ -688,8 +724,8 @@ test('T4 exact identity: a foreign same-named module is not the element executor
     ...evaluation.diagnostics.leafSurface,
   ];
   expect(reported).not.toContain(foreignId);
-  // The real element facade-host is not in this graph at all.
-  expect(loadedIds).not.toContain('packages/element/src/internal/compiled/facade-host.ts');
+  // The real executor entry is not in this graph at all.
+  expect(loadedIds).not.toContain('packages/element/src/internal/compiled/runtime-program.ts');
 });
 
 test('T5 forged/derived artifacts fail closed: UNPROVEN exit 2, never a green claim', async () => {
@@ -949,14 +985,18 @@ test('T7 determinism: two observer builds emit byte-identical artifacts', async 
 });
 
 test('the frozen executor-entry table names existing modules and keeps its digest pinned', () => {
-  expect(EXECUTOR_ENTRY_RELATIVE_MODULES).toHaveLength(6);
-  expect(new Set(EXECUTOR_ENTRY_RELATIVE_MODULES).size).toBe(6);
+  // Four, not six: `facade-host.ts` and `runtime/kernel.ts` were the class lane's
+  // own call surfaces and were deleted with the lane, so the gate now names the
+  // executor proper. The loop below is the assertion that made the stale naming
+  // visible — every id must still resolve on disk.
+  expect(EXECUTOR_ENTRY_RELATIVE_MODULES).toHaveLength(4);
+  expect(new Set(EXECUTOR_ENTRY_RELATIVE_MODULES).size).toBe(4);
   for (const modulePath of EXECUTOR_ENTRY_RELATIVE_MODULES) {
     expect(existsSync(join(ELEMENT_ROOT, modulePath)), modulePath).toBe(true);
   }
   // A reviewed change to the table changes this literal in the same commit.
   expect(browserEntryGraphGateListDigest()).toBe(
-    'sha256:626686d67c13c6708f7faec4a53862a43a268d61b2aedf445f7a4cc34d268ba7',
+    'sha256:db632836f1e28bbfd8f4b5c876bb4d8c1eceffe4ccdd25a90bff44c8548631b2',
   );
 });
 

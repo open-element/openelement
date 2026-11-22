@@ -770,10 +770,15 @@ function renderRegisteredGeneratedHost(
   // from the tags it admits, which is a fact it has at construction time — see
   // `createNestedHostExpander`.
   const lifted = liftedNestedStyleLinks(nestedHost);
+  // DEDUPE, and it is load-bearing (F16): the lift is pre-filled from every admitted
+  // tag, which includes THIS host — so the host's own sheet arrives twice and the DSD
+  // template would declare the same marked link twice, violating the shipped
+  // "exactly one marked stylesheet link per template" contract. A sheet is one
+  // resource; the link list is a SET of resources, not a log of who asked.
   const styleLinks =
     islandStyleLinks === undefined && lifted === undefined
       ? undefined
-      : [...(islandStyleLinks ?? []), ...(lifted ?? [])];
+      : [...new Set([...(islandStyleLinks ?? []), ...(lifted ?? [])])];
   const rendered = hostRenderer(props ?? {}, lightChildren, attributes, styleLinks, nestedHost);
   if (typeof rendered !== 'string') {
     throw new OpenElementError(

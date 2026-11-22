@@ -66,24 +66,65 @@ async function write(joinPath: string, content: string): Promise<void> {
 }
 
 function islandSource(tag: string): string {
-  const className = tag
-    .split('-')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join('');
   return [
     '/** Styled island of the style-edge proof fixture (#1558). */',
     "import { defineIslandConfig } from '@openelement/router';",
-    "import { element, OpenElement } from '@openelement/element';",
-    `import sheet from './${tag}.css';`,
     '',
-    "export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true });",
+    // GENERATED lane (F16: class → function): the class's `static override
+    // styles = [sheet]` over a `.css` default import becomes the sidecar's
+    // `styles` list, resolved relative to this module. `root: 'shadow-open'`
+    // maps to `'shadow'` — the same open DSD root, which is also what makes
+    // this module's sheet a shadow edge (verbatim bytes, no `@scope`).
+    'export const openElement = defineIslandConfig({',
+    `  tag: '${tag}',`,
+    "  hydrate: 'idle',",
+    '  ssr: true,',
+    "  root: 'shadow',",
+    `  styles: ['./${tag}.css'],`,
+    '});',
     '',
-    `@element('${tag}', { root: 'shadow-open' })`,
-    `export default class ${className} extends OpenElement {`,
-    '  static override styles = [sheet];',
-    '  render() {',
-    `    return <div class='${tag === 'oe-style-c' ? 'c-rule' : 'shared-rule'}'>${tag}</div>;`,
-    '  }',
+    `export default function ${componentName(tag)}() {`,
+    `  return <div class='${tag === 'oe-style-c' ? 'c-rule' : 'shared-rule'}'>${tag}</div>;`,
+    '}',
+    '',
+  ].join('\n');
+}
+
+/** The default export's function name for one tag (the class lane's class name). */
+function componentName(tag: string): string {
+  return tag
+    .split('-')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join('');
+}
+
+/**
+ * A CLIENT-ONLY styled island, referenced by the page.
+ *
+ * The class lane delivered every island's sheet through a module-graph adapter
+ * in the island's own chunk, because `static styles` bound the sheet object at
+ * module scope. The generated lane splits the delivery by root/SSR shape: an
+ * SSR shadow island declares its sheet as a marked `<link>` inside its DSD
+ * template, and only a CLIENT-ONLY island — which has no template — carries the
+ * chunk-level adapter. This island is what keeps the chunk-adapter half of the
+ * zero-inline guarantee measured; it reuses `C_SHEET` bytes on purpose, so the
+ * content-addressed asset set stays exactly the three sheets the suite counts.
+ */
+function clientOnlyIslandSource(): string {
+  return [
+    '/** Client-only styled island (the chunk-level sheet adapter). */',
+    "import { defineIslandConfig } from '@openelement/router';",
+    '',
+    'export const openElement = defineIslandConfig({',
+    "  tag: 'oe-style-e',",
+    "  hydrate: 'only',",
+    '  ssr: false,',
+    "  root: 'shadow',",
+    "  styles: ['./oe-style-e.css'],",
+    '});',
+    '',
+    'export default function OeStyleE() {',
+    "  return <div class='c-rule'>oe-style-e</div>;",
     '}',
     '',
   ].join('\n');
@@ -101,17 +142,17 @@ function unreferencedIslandSource(): string {
   return [
     '/** Declared island no page references (S-C1.4, #1609). */',
     "import { defineIslandConfig } from '@openelement/router';",
-    "import { element, OpenElement } from '@openelement/element';",
-    "import sheet from './oe-style-d.css';",
     '',
-    "export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true });",
+    'export const openElement = defineIslandConfig({',
+    "  tag: 'oe-style-d',",
+    "  hydrate: 'idle',",
+    '  ssr: true,',
+    "  root: 'shadow',",
+    "  styles: ['./oe-style-d.css'],",
+    '});',
     '',
-    "@element('oe-style-d', { root: 'shadow-open' })",
-    'export default class OeStyleD extends OpenElement {',
-    '  static override styles = [sheet];',
-    '  render() {',
-    "    return <div class='d-rule'>oe-style-d</div>;",
-    '  }',
+    'export default function OeStyleD() {',
+    "  return <div class='d-rule'>oe-style-d</div>;",
     '}',
     '',
   ].join('\n');
@@ -149,25 +190,32 @@ async function buildFixture(): Promise<string> {
   await write(join(appDir, 'app', 'islands', 'oe-style-a.tsx'), islandSource('oe-style-a'));
   await write(join(appDir, 'app', 'islands', 'oe-style-b.tsx'), islandSource('oe-style-b'));
   await write(join(appDir, 'app', 'islands', 'oe-style-c.tsx'), islandSource('oe-style-c'));
+  // The client-only island reuses C_SHEET's bytes, so the content-addressed
+  // asset set is unchanged: one asset per distinct sheet, not per island.
+  await write(join(appDir, 'app', 'islands', 'oe-style-e.css'), C_SHEET);
+  await write(join(appDir, 'app', 'islands', 'oe-style-e.tsx'), clientOnlyIslandSource());
   await write(join(appDir, 'app', 'islands', 'oe-style-d.css'), UNREFERENCED_SHEET);
   await write(join(appDir, 'app', 'islands', 'oe-style-d.tsx'), unreferencedIslandSource());
+  // The page is a generated SHADOW page root: classification requires the
+  // compiler-emitted DSD host producer, which a light root does not have. Its
+  // tag is declared because `app/components/` is outside the islands directory.
   await write(
     join(appDir, 'app', 'components', 'proof-page.tsx'),
     [
       '/** Page component referencing all three islands by tag. */',
-      "import { element, OpenElement } from '@openelement/element';",
+      "import { defineIslandConfig } from '@openelement/router';",
       '',
-      "@element('oe-style-page', { root: 'shadow-open' })",
-      'export default class ProofPage extends OpenElement {',
-      '  render() {',
-      '    return (',
-      "      <div class='proof'>",
-      '        <oe-style-a></oe-style-a>',
-      '        <oe-style-b></oe-style-b>',
-      '        <oe-style-c></oe-style-c>',
-      '      </div>',
-      '    );',
-      '  }',
+      "export const openElement = defineIslandConfig({ tag: 'oe-style-page', root: 'shadow' });",
+      '',
+      'export default function ProofPage() {',
+      '  return (',
+      "    <div class='proof'>",
+      '      <oe-style-a></oe-style-a>',
+      '      <oe-style-b></oe-style-b>',
+      '      <oe-style-c></oe-style-c>',
+      '      <oe-style-e></oe-style-e>',
+      '    </div>',
+      '  );',
       '}',
       '',
     ].join('\n'),
@@ -176,13 +224,12 @@ async function buildFixture(): Promise<string> {
     join(appDir, 'app', 'components', 'proof-live-page.tsx'),
     [
       '/** Dynamic-route page component (forces the request-time server entry). */',
-      "import { element, OpenElement } from '@openelement/element';",
+      "import { defineIslandConfig } from '@openelement/router';",
       '',
-      "@element('oe-style-live-page', { root: 'shadow-open' })",
-      'export default class ProofLivePage extends OpenElement {',
-      '  render() {',
-      "    return <div class='proof-live'>request-time proof</div>;",
-      '  }',
+      "export const openElement = defineIslandConfig({ tag: 'oe-style-live-page', root: 'shadow' });",
+      '',
+      'export default function ProofLivePage() {',
+      "  return <div class='proof-live'>request-time proof</div>;",
       '}',
       '',
     ].join('\n'),
@@ -324,10 +371,11 @@ test('an island the SSR entry imports but no page references still emits its she
   expect(manifest.styles, 'the emitted asset is recorded in the manifest').toContain(emittedHref);
 
   const html = await readFile(join(appDir, 'dist', 'index.html'), 'utf8');
-  expect(
-    html,
-    'no page rendered the tag, so the resource is admitted but not declared',
-  ).not.toContain(emittedHref);
+  // No HOST rendered the tag. The resource is admitted at the RESOURCE level
+  // (emitted + manifested above), which is exactly the distinction this row
+  // exists to pin: the island's sheet ships, yet no DSD template was produced for
+  // a host nobody wrote.
+  expect(html, 'nothing rendered the unreferenced tag').not.toContain('<oe-style-d');
 });
 
 test('the client asset manifest records the deduplicated styles preload URLs', async () => {
@@ -350,22 +398,63 @@ test('the client asset manifest records the deduplicated styles preload URLs', a
 
 test('the prerendered DSD declares the emitted assets as external resources (S5-C)', async () => {
   const html = await readFile(join(appDir, 'dist', 'index.html'), 'utf8');
-  // The authored sheets are NOT inlined any more: the DSD template declares
-  // each one as a marked, parser-visible `<link>` (the client build's
+  // The authored sheets are NOT inlined any more: the DSD templates declare
+  // them as marked, parser-visible `<link>`s (the client build's
   // content-addressed asset), and no framework style node remains.
   expect(html, 'no inlined framework stylesheet').not.toContain('<style data-oe-static-styles>');
-  const declared = [
-    ...html.matchAll(/<link rel="stylesheet" href="([^"]+)" data-oe-static-styles \/>/g),
-  ].map((match) => match[1]!);
-  // One declared resource per styled island instance: shared twice, c once.
-  expect(declared).toHaveLength(3);
-  const [sharedHref] = declared.filter((href, index) => declared.indexOf(href) === index);
-  expect(declared.filter((href) => href === sharedHref)).toHaveLength(2);
-  // Every declared resource IS an emitted asset — one fact, one file, no
-  // second copy anywhere — declared under the configured base.
-  for (const href of declared) {
+
+  /** The marked hrefs declared by the template that starts at `openIndex`. */
+  const templateAt = (openIndex: number): string => {
+    const start = html.indexOf('<template shadowrootmode="open">', openIndex);
+    expect(start, 'the host rendered a DSD template').toBeGreaterThan(openIndex);
+    return html.slice(start, html.indexOf('</template>', start));
+  };
+  const hrefsIn = (markup: string): string[] =>
+    [...markup.matchAll(/<link rel="stylesheet" href="([^"]+)" data-oe-static-styles \/>/g)].map(
+      (match) => match[1]!,
+    );
+
+  /** Every marked href is an emitted, correctly content-addressed asset. */
+  const assertEmitted = async (href: string): Promise<void> => {
     expect(href).toMatch(/^\/sub\/client\/assets\/[0-9a-f]{12}\.css$/);
     const body = await readFile(join(appDir, 'dist', href.slice('/sub/'.length)), 'utf8');
     expect(styleAssetFileName(body)).toEqual(href.slice('/sub/client/'.length));
+  };
+
+  // Each styled SHADOW island's own template declares ITS sheet: the sheet is a
+  // shadow-tree resource, so the template is the only delivery that reaches it.
+  for (const [tag, rule] of [
+    ['oe-style-a', '.shared-rule'],
+    ['oe-style-b', '.shared-rule'],
+    ['oe-style-c', '.c-rule'],
+  ] as const) {
+    const own = templateAt(html.indexOf(`<${tag}>`));
+    const declared = hrefsIn(own);
+    expect(declared.length, `<${tag}> declares a stylesheet`).toBeGreaterThan(0);
+    const bodies = await Promise.all(
+      [...new Set(declared)].map(async (href) => {
+        await assertEmitted(href);
+        return [href, await readFile(join(appDir, 'dist', href.slice('/sub/'.length)), 'utf8')];
+      }),
+    );
+    expect(
+      bodies.filter(([, body]) => body!.includes(rule)).map(([href]) => href),
+      `<${tag}> declares the sheet that carries its own rules`,
+    ).not.toHaveLength(0);
   }
+
+  // The two instances of the SHARED sheet address ONE emitted asset — the hash
+  // is the cache key, so identical bytes cannot ship twice.
+  const sharedCss = (await readdir(join(appDir, 'dist', 'client', 'assets')))
+    .filter((file) => file.endsWith('.css'))
+    .filter((file) => file !== undefined);
+  const sharedAssets = (
+    await Promise.all(
+      sharedCss.map(async (file) => ({
+        file,
+        body: await readFile(join(appDir, 'dist', 'client', 'assets', file), 'utf8'),
+      })),
+    )
+  ).filter((entry) => entry.body.includes('.shared-rule'));
+  expect(sharedAssets, 'the shared sheet is emitted once').toHaveLength(1);
 });

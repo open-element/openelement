@@ -78,27 +78,43 @@ async function buildCssOnlyFixture(): Promise<string> {
     ].join('\n'),
   );
   await write(join(appDirPath, 'app', 'theme.css'), '@theme { --color-proof-role: #123456; }\n');
+  // GENERATED lane (F16: class → function). The card is a page-local STATIC
+  // component — no `hydrate`, so it is never delivered to the client. Its tag
+  // must be declared because `app/components/` is outside the islands directory,
+  // and `root: 'shadow'` is what keeps the utility rules in the shadow component
+  // sheet this suite measures.
   await write(
     join(appDirPath, 'app', 'components', 'css-only-card.tsx'),
     [
-      "import { element, OpenElement } from '@openelement/element';",
+      "import { defineIslandConfig } from '@openelement/router';",
       '',
-      "@element('css-only-card', { root: 'shadow-open' })",
-      'export default class CssOnlyCard extends OpenElement {',
-      '  render() {',
-      "    return <div class='p-[13px]'>css only</div>;",
-      '  }',
+      "export const openElement = defineIslandConfig({ tag: 'css-only-card', root: 'shadow' });",
+      '',
+      'export default function CssOnlyCard() {',
+      "  return <div class='p-[13px]'>css only</div>;",
       '}',
       '',
     ].join('\n'),
   );
+  // The page is a SERVER FUNCTION PAGE: its output is document content, so the
+  // app keeps shipping zero client JavaScript while the nested shadow component
+  // still renders its DSD template and declares the component sheet. The lane
+  // admits only an EXPORTED function of this module.
   await write(
     join(appDirPath, 'app', 'routes', 'index.tsx'),
     [
       "import { definePage } from '@openelement/router';",
-      "import CssOnlyCard from '../components/css-only-card.tsx';",
+      "import '../components/css-only-card.tsx';",
       '',
-      "export default definePage(CssOnlyCard, { head: { title: 'CSS-only Tailwind proof' } });",
+      'export function CssOnlyPage() {',
+      '  return (',
+      '    <main>',
+      '      <css-only-card></css-only-card>',
+      '    </main>',
+      '  );',
+      '}',
+      '',
+      "export default definePage(CssOnlyPage, { head: { title: 'CSS-only Tailwind proof' } });",
       '',
     ].join('\n'),
   );

@@ -102,68 +102,81 @@ const LIGHT_CSS = `:host { display: block; }
 }
 `;
 
-const CARD_TSX = `import { element, OpenElement, property } from '@openelement/element';
-import { defineIslandConfig } from '@openelement/router';
-import cardStyles from './probe-card.css';
+/**
+ * GENERATED lane (F16: class → function). The class form was
+ * `@element('probe-card', { root: 'shadow-open' })` with
+ * `static override styles = [cardStyles]`; the sidecar spells `root: 'shadow'`
+ * and carries the sheet as a module-relative specifier, which is the same CSS
+ * module the class imported. The `label` property row keeps
+ * `attribute: false` so the emitted bytes stay attribute-free, and the default
+ * is applied where `this.label` used to be read.
+ *
+ * The CSS MODULE import is GONE: the sidecar's `styles` list is the one
+ * declaration, so nothing else in this fixture asserts on the imported binding.
+ */
+const CARD_TSX = `import { defineIslandConfig } from '@openelement/router';
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });
+export const openElement = defineIslandConfig({
+  tag: 'probe-card',
+  root: 'shadow',
+  styles: ['./probe-card.css'],
+  hydrate: 'load',
+  ssr: true,
+  dsd: true,
+  properties: { label: { attribute: false, default: '' } },
+});
 
-@element('probe-card', { root: 'shadow-open' })
-export default class ProbeCard extends OpenElement {
-  static override styles = [cardStyles];
-
-  @property({ reflect: false })
-  label = '';
-
-  render() {
-    return <article class='probe-card p-4'>{this.label}</article>;
-  }
+export default function ProbeCard(props: { label: string }) {
+  return <article class='probe-card p-4'>{props.label ?? ''}</article>;
 }
 `;
 
-const LIGHT_TSX = `import { element, OpenElement, property } from '@openelement/element';
-import { defineIslandConfig } from '@openelement/router';
-import lightStyles from './probe-light.css';
+const LIGHT_TSX = `import { defineIslandConfig } from '@openelement/router';
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true });
+export const openElement = defineIslandConfig({
+  tag: 'probe-light',
+  root: 'light',
+  styles: ['./probe-light.css'],
+  hydrate: 'load',
+  ssr: true,
+  properties: { label: { attribute: false, default: '' } },
+});
 
-@element('probe-light', { root: 'light' })
-export default class ProbeLight extends OpenElement {
-  static override styles = [lightStyles];
-
-  @property({ reflect: false })
-  label = '';
-
-  render() {
-    return <section class='probe-light m-2'>{this.label}</section>;
-  }
+export default function ProbeLight(props: { label: string }) {
+  return <section class='probe-light m-2'>{props.label ?? ''}</section>;
 }
 `;
 
-const PAGE_TSX = `import { element, OpenElement } from '@openelement/element';
+/**
+ * The page is a SERVER FUNCTION PAGE: it declares the component itself plus a
+ * light sidecar in the route module. A LIGHT generated element can never be a
+ * page ROOT (that classification needs the compiler-emitted DSD host producer,
+ * which only a shadow root has), so the route cannot import a component module
+ * the scanner then refuses to root. Nothing but markup is asserted about this
+ * page, so the server function page form is mechanical here.
+ */
+const PAGE_TSX = `import { defineIslandConfig, definePage } from '@openelement/router';
 
-@element('probe-page', { root: 'light' })
-export default class ProbePage extends OpenElement {
-  render() {
-    return (
-      <main id='probe-page' class='p-6'>
-        <probe-card label='card'></probe-card>
-        <probe-light label='light'></probe-light>
-      </main>
-    );
-  }
+export const openElement = defineIslandConfig({
+  tag: 'probe-page',
+  root: 'light',
+});
+
+export function ProbePage() {
+  return (
+    <main id='probe-page' class='p-6'>
+      <probe-card label='card'></probe-card>
+      <probe-light label='light'></probe-light>
+    </main>
+  );
 }
-`;
-
-const INDEX_ROUTE = `import { definePage } from '@openelement/router';
-import ProbePage from '../components/page-probe.tsx';
 
 export default definePage(ProbePage, { head: { title: 'non-root base probe' } });
 `;
 
 function writeFixture(): void {
   rmSync(FIXTURE_DIR, { recursive: true, force: true });
-  for (const dir of ['app/routes', 'app/components', 'app/islands', 'node_modules/@openelement']) {
+  for (const dir of ['app/routes', 'app/islands', 'node_modules/@openelement']) {
     mkdirSync(join(FIXTURE_DIR, dir), { recursive: true });
   }
   writeFileSync(join(FIXTURE_DIR, 'index.html'), '<html><body></body></html>', 'utf8');
@@ -172,8 +185,9 @@ function writeFixture(): void {
   writeFileSync(join(FIXTURE_DIR, 'app/islands/probe-light.css'), LIGHT_CSS, 'utf8');
   writeFileSync(join(FIXTURE_DIR, 'app/islands/probe-card.tsx'), CARD_TSX, 'utf8');
   writeFileSync(join(FIXTURE_DIR, 'app/islands/probe-light.tsx'), LIGHT_TSX, 'utf8');
-  writeFileSync(join(FIXTURE_DIR, 'app/components/page-probe.tsx'), PAGE_TSX, 'utf8');
-  writeFileSync(join(FIXTURE_DIR, 'app/routes/index.tsx'), INDEX_ROUTE, 'utf8');
+  // The page IS the route module now (see PAGE_TSX): a light page root has to be
+  // a server function page, so there is no separate component module to import.
+  writeFileSync(join(FIXTURE_DIR, 'app/routes/index.tsx'), PAGE_TSX, 'utf8');
   writeFileSync(
     join(FIXTURE_DIR, 'package.json'),
     JSON.stringify({ name: 'dev-nonroot-base-fixture', private: true, type: 'module' }),
