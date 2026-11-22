@@ -258,6 +258,27 @@ export function __h(
  * composition the call is byte-identical to the three-argument form the
  * pre-composition lane emitted.
  */
+/**
+ * The tags this server render may expand as nested hosts (F16).
+ *
+ * A generated element's `__ssr` is a string builder, so a nested host inside its
+ * markup reaches its producer only through the render's nested-host expander. A
+ * CLASS page went through `renderToString` and received that expander from the
+ * caller; a SERVER FUNCTION PAGE's compiled `render` calls `__ssr` directly, and
+ * had no way to pass one — so a light child nested in a shadow tree was never
+ * expanded and its sheets were never lifted into the enclosing template.
+ *
+ * The generated entry injects the set once per process, the same shape as
+ * `__setRequestTimeStyleSheetUrls`. Empty means "nothing to expand", which keeps
+ * a page with no admitted nested tags byte-identical.
+ */
+let ssrRenderableTags: readonly string[] = [];
+
+/** Inject the renderable nested-host tags for this server process. */
+export function __setSsrRenderableTags(tags: readonly string[] | null | undefined): void {
+  ssrRenderableTags = tags === null || tags === undefined ? [] : [...tags];
+}
+
 export function __ssr(
   tag: string,
   props?: Record<string, unknown>,
@@ -354,5 +375,11 @@ export function __ssr(
       options.hostChildren = trustedHtml(composition.groups.map(([, html]) => html).join(''));
     }
   }
-  return renderToString(tag, options);
+  // The nested-host expander is built from this set INSIDE renderToString, so
+  // forwarding it here is what lets a function page expand the components in its
+  // own markup (F16). Absent tags keep the pre-slice bytes exactly.
+  return renderToString(
+    tag,
+    ssrRenderableTags.length === 0 ? options : { ...options, ssrRenderableTags },
+  );
 }

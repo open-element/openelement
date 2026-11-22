@@ -693,6 +693,11 @@ async function buildSSG(
             componentStyleSheetUrls,
             utilityRequiredTags,
           ),
+          // A server function page's compiled `render` calls `__ssr` directly and
+          // so had no nested-host expander (F16). This is the same admission plan
+          // the server-component compile uses, so a tag expandable there is
+          // expandable at render time — one fact, one list.
+          ssgDescriptor.ssrAdmissionPlan.renderableTags,
         ),
         // MDX route support must mirror the outer plugin list (plugin.ts),
         // otherwise .mdx routes fail Phase 3 parse (the oxc transform treats
