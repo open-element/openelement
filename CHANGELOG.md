@@ -11,14 +11,22 @@ lives in:
 
 ## 1.0.0-alpha.16
 
-**The alpha.16 line: the class lane leaves the product, and the generated lane
-becomes the only way to author.** Every application in this repository —
-`www`, `apps/saas`, the `@openelement/create` starter — now ships function
-components and generated elements; a search for `@element`/`extends OpenElement`
-across all four shipped source roots returns nothing. The class lane's compiler,
-Part Program and runtime are still present for third-party class modules and are
-the next retirement target, and the M10 record states that split per surface
-rather than claiming a retirement that has not happened.
+**The alpha.16 line: the class lane is DELETED, and the generated lane is the only
+way to author.** A search for `@element` / `extends OpenElement` across the product
+source roots, the test suites and the fixture apps returns nothing. The lane's
+compiler entry (`compileElementProgram`), its Part Program writers, its
+`static styles` admission, its ABI record (`COMPILED_MODULE_ABI_VERSION` — no
+importer, and its doc block enumerated five statics nothing emitted), its render path
+in `public-runtime.ts`, its public exports (`OpenElement`, `ErrorBoundary`) and its
+own contract tests are all removed. There is no compatibility base class and no
+adapter: an app that extended one moves to the generated lane.
+
+What that costs, stated plainly rather than deferred: `ErrorBoundary`'s
+cross-element containment is gone (the surviving `onError` intrinsic is
+element-scoped, two capture points, both update-phase), and streaming
+(`renderIntent.stream`) retired with the artifact it deferred against — a later
+release owns its replacement. `PART_PROGRAM_VERSION` stays: the runtime still
+validates the wire format on revive.
 
 - **Authoring — `computed` is a generated-lane intrinsic (ADR-0183, option B).**
   `const x = computed(() => expr)` is a compiler-erased, instance-retained derived
@@ -58,8 +66,11 @@ rather than claiming a retirement that has not happened.
   the layout is a generated element, the counter island uses `signal`, and six
   `app/components/page-*` files are deleted.
 - **Retirement evidence, per surface (M10).** The class lane is provably absent
-  from every built browser bundle; it is still present in the server entry
-  (`validatePartProgram`), and that negative is recorded rather than papered over.
+  from every built browser bundle. What remains in the server entry is NOT the lane:
+  it is `validatePartProgram`, the Part Program WIRE-format validator that the
+  runtime runs on revive, and it outlives the authoring lane that used to produce
+  those artifacts — the distinction is stated because an earlier revision of this
+  line recorded the validator's survival as the lane's.
 - **Re-adjudicated, not deferred (plan §19.3).** CEM covers generated elements
   completely for the shipped package, and form participation is closed: the
   framework mirrors `required → valueMissing` and hands the author the complete
