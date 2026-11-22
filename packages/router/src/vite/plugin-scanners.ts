@@ -406,6 +406,9 @@ async function scanDeclaredTagsInto(
     workspaceRoot: state.workspaceRoot,
     resolve,
     seeds,
+    // An .mdx route's tag derives from its route-relative path, so the scan needs
+    // the same routes dir the lowering gets.
+    routesDir,
   });
   for (const note of scanned.notes) {
     const envelope = {

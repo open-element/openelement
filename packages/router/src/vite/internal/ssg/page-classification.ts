@@ -64,6 +64,7 @@
 
 import ts from 'typescript';
 import { dirname, join, normalize } from 'pathe';
+import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
 import type { IslandDecl } from '@openelement/protocol/ssg';
 import type { RouteEntry } from '../../framework.ts';
 import {
@@ -552,10 +553,11 @@ export function classifyPageModule(
     owners.push('compiled-element decorator (class lane)');
     kinds.add('class-page');
   }
-  if (facts.mdx) {
-    owners.push('MDX lowering (router-generated compiled class)');
-    kinds.add('class-page');
-  }
+  // An MDX route is OWNED BY THE GENERATED LANE (F16): the lowering emits a
+  // `defineIslandConfig` sidecar plus a function component, so the route claims a kind
+  // only through the declared-component resolution below. It used to claim
+  // `class-page` here, which sent an MDX page down the class render path that no
+  // longer exists.
   if (facts.functionPage !== undefined) {
     owners.push(`server function page "${facts.functionPage}" (server component lane)`);
     kinds.add('function-page');
@@ -686,6 +688,33 @@ function generatedPageRefusalReason(laneKind: GeneratedElementHostIdentity['kind
  * with the router-internal coded build errors below (no public catalogue row is
  * added by this slice).
  */
+/**
+ * The declared-component record for a route whose module is the lowered MDX module.
+ *
+ * The scan now registers that module under the VIRTUAL id the transform compiles
+ * under, and the route entry carries the tag, so the lookup is by tag against the one
+ * map that is keyed by module id — the same map every other declared page uses, not a
+ * parallel table for MDX.
+ */
+function findDeclaredComponentForRoute(
+  route: RouteEntry,
+  context: PageClassificationContext,
+): LocalPageIsland | undefined {
+  const declared = context.declaredComponents;
+  if (declared === undefined || declared.size === 0) return undefined;
+  const expectedTag = route.tagName ?? pathToTagName(normalizeSeparators(route.filePath));
+  for (const component of declared.values()) {
+    if (component.tagName !== expectedTag) continue;
+    return {
+      filePath: route.filePath,
+      tagName: component.tagName,
+      generatedLaneKind: component.identity.kind,
+      generatedElementHost: component.identity,
+    };
+  }
+  return undefined;
+}
+
 export function classifyPageRoute(
   route: RouteEntry,
   context: PageClassificationContext,
@@ -700,8 +729,12 @@ export function classifyPageRoute(
     return { pageKind: route.functionPage === undefined ? 'class-page' : 'function-page' };
   }
   const facts = carried;
-  const resolvedIsland =
-    facts.pageArgument?.kind === 'import'
+  const resolvedIsland = facts.mdx
+    ? // An MDX route has no `definePage(...)` argument to resolve; its declaration is
+      // keyed by the VIRTUAL module id the transform compiles under, which the
+      // declared-tag scan now writes (it lowers the `.mdx` source itself).
+      findDeclaredComponentForRoute(route, context)
+    : facts.pageArgument?.kind === 'import'
       ? resolveLocalIsland(facts.pageArgument.specifier, route.filePath, context)
       : undefined;
   const classification = classifyPageModule(facts, resolvedIsland);

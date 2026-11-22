@@ -43,6 +43,7 @@ import {
   type ModuleWalkResolver,
 } from '../module-graph-walk.ts';
 import { readComponentDeclaration } from '../component-declaration.ts';
+import { mdxToCompiledPageSource } from '../../plugin-mdx-lower.ts';
 import { resolveGeneratedElementHost } from './generated-element-host-metadata.ts';
 
 /** Stable code for a note this pass owns (a malformed sidecar it skipped). */
@@ -65,6 +66,12 @@ export interface ScanDeclaredElementTagsInput {
   readonly resolve: ModuleWalkResolver;
   /** Absolute seed module paths (page routes, islands, layout modules). */
   readonly seeds: Iterable<string>;
+  /**
+   * The routes directory, as the MDX lowering needs it: the tag an `.mdx` route
+   * compiles under derives from its route-RELATIVE path, and this scan is one of the
+   * two places that must spell it identically.
+   */
+  readonly routesDir?: string;
   /**
    * The discovery walk's module bound, forwarded to `walkModuleGraph`; the
    * explicit field exists so a truncated walk is testable.
@@ -104,6 +111,18 @@ function inside(root: string, candidate: string): boolean {
  * `moduleId -> tag` map. Nothing is imported or executed: the walk asks the
  * bundler for edges and the sidecar parser reads literal text.
  */
+/**
+ * The tag an MDX lowering pinned in its own sidecar.
+ *
+ * Read from the LOWERED text rather than re-derived: the lowering's derivation depends
+ * on the routes dir and the process cwd, so a second copy here could disagree with the
+ * module the transform actually compiles — and a page registered under one tag while
+ * rendering under another is exactly the split this scan exists to prevent.
+ */
+function mdxLoweredTag(lowered: string): string | undefined {
+  return /defineIslandConfig\(\{\s*tag:\s*'([^']+)'/.exec(lowered)?.[1];
+}
+
 export async function scanDeclaredElementTags(
   input: ScanDeclaredElementTagsInput,
 ): Promise<ScanDeclaredElementTagsResult> {
@@ -128,10 +147,43 @@ export async function scanDeclaredElementTags(
   const tags = new Map<string, string>();
   const hostExports = new Map<string, string>();
   for (const file of walk.files) {
+    if (!inside(root, file)) continue;
+    // An `.mdx` route is lowered to a generated module before the transform ever
+    // sees it, so its declaration must be admitted from the LOWERED source: the
+    // route file itself is Markdown, and the transform's module id is virtual
+    // (`\0open-mdx:<abs>.mdx.tsx`) — a key no file-system walk can produce. Without
+    // this row an .mdx route had a generated page module but no declared fact, so
+    // page classification fell back to the retired class page and the build failed
+    // with PROGRAM_MISSING.
+    if (file.endsWith('.mdx')) {
+      let mdxSource: string;
+      try {
+        mdxSource = await readFile(file, 'utf8');
+      } catch {
+        continue;
+      }
+      const lowered = mdxToCompiledPageSource(mdxSource, file, input.routesDir);
+      const loweredTag = mdxLoweredTag(lowered);
+      if (loweredTag === undefined) continue;
+      // The VIRTUAL module id, because that is the id the transform compiles under
+      // and therefore the id the classification lookup is keyed by.
+      const virtualId = `${file}.tsx`;
+      const moduleId = stableModuleId(virtualId, root, input.workspaceRoot);
+      tags.set(moduleId, loweredTag);
+      const identity = resolveGeneratedElementHost({
+        source: lowered,
+        moduleId: virtualId,
+        // The lane's extension gate is `.tsx`; the lowered module IS one.
+        filePath: virtualId,
+        root: 'shadow',
+        site: { tag: loweredTag },
+      });
+      hostExports.set(moduleId, identity.kind === 'producer' ? identity.ssrHostExport : '');
+      continue;
+    }
     // The generated lane is a TSX lane (`compileGeneratedElementIfAdmitted`
     // refuses a non-TSX id), and a package module's identity is its manifest.
     if (!file.endsWith('.tsx')) continue;
-    if (!inside(root, file)) continue;
     let source: string;
     try {
       source = await readFile(file, 'utf8');

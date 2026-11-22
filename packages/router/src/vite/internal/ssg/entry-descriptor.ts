@@ -681,11 +681,38 @@ export function buildEntryDescriptor(
     options.upgradeStrategy,
     generatedPageRootTags,
   );
+  // A generated PAGE ROOT that no earlier pass recorded still has to be SSR-admitted:
+  // it renders through its compiler-emitted host producer, exactly like an island. An
+  // `.mdx` route is that case — its module is VIRTUAL, so the island scan and the
+  // static-component scan (both file-system walks) never see it, while the classifier
+  // resolves it from the declared-tag scan that now lowers the source itself. The
+  // classifier's verdict is the fact; this row turns it into the ONE declaration shape
+  // the admission plan reads.
   const islandDeclarations: IslandDecl[] = [
     ...localIslands,
     ...compilerBehaviorIslands,
     ...packageIslandDecls,
   ];
+  const recordedTags = new Set(islandDeclarations.map((island) => island.tagName));
+  const pageRootIslands: IslandDecl[] = pageRoutes.flatMap((route) => {
+    const generated = (route as PageRouteDecl & PageKindCarrier).generatedElementPage;
+    if (generated === undefined || recordedTags.has(generated.tagName)) return [];
+    return [
+      {
+        tagName: generated.tagName,
+        modulePath: (route as { importPath?: string }).importPath ?? `/${route.filePath}`,
+        hydrate: options.upgradeStrategy ?? 'idle',
+        ssr: true,
+        dsd: true,
+        authoring: 'basic-element' as const,
+        source: 'local' as const,
+        reason: 'generated page root (no file-system walk records a virtual module)',
+        generatedElementHost: generated.identity,
+      } as IslandDecl,
+    ];
+  });
+  islandDeclarations.push(...pageRootIslands);
+
   const islands: IslandDecl[] = islandDeclarations.flatMap(expandIslandDeliveryDecl);
   const cemClassifications = options.cemClassifications || [];
   const ssrAdmissionPlan = buildSsrAdmissionPlan(
