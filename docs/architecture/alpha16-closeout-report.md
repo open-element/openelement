@@ -173,6 +173,12 @@ engines. And the **nested light root's sheet** DOES hoist: the enclosing produce
 reads the lifted URLs off the expander, and the failure was an ordering bug of mine —
 the sink was read before the expansion filled it.
 
+**The browser limit is now LIFTED, and the measurement it invalidated is corrected.** The
+Playwright chromium headless shell was installed; with it, router reports **35** failures at
+this commit where the browser-less run reported 47 — so **12** of those were the absent
+browser, not code, and the earlier "47 vs 31" reconciliation was the wrong comparison to make.
+The numbers below that mention browser-less runs are kept only where they describe that state.
+
 **A second environmental limit, recorded because it invalidates a naive comparison.** The
 Playwright browser cache (`~/Library/Caches/ms-playwright`) is EMPTY in this checkout, so
 every browser-backed router suite fails at `browserType.launch: Executable doesn't exist`.
