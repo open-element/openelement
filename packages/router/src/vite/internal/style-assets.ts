@@ -495,7 +495,14 @@ export const clientStyleAssetPlugin: (
   return {
     name: 'open:style-assets',
     enforce: 'pre',
-    resolveId: styleEdgeResolveId,
+    // A style-asset GRAPH id (`\0oe-style-asset:<b64>.js`) is resolved to itself so
+    // its `load` below can answer it. Without this arm the id is an unresolvable
+    // import — measured as a 404 on the dev document as soon as a generated module
+    // imported one directly (the dev live-sheet channel does exactly that).
+    resolveId(source: string, importer?: string) {
+      if (styleAssetRegistryKey(source) !== undefined) return source;
+      return styleEdgeResolveId.call(this, source, importer);
+    },
     async load(id) {
       const registryKey = styleAssetRegistryKey(id);
       if (registryKey === undefined) return null;
