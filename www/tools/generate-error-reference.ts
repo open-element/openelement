@@ -50,12 +50,17 @@ const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
  * every semantic-core module that carries OEC literals (#1473 split compile()
  * into single-duty pipeline stages, so the literals no longer live only in
  * compile.ts and module-analysis.ts).
+ *
+ * Alpha16 removed two entries with the class lane (`compile.ts`, `emit-program.ts`).
+ * Listing a file that no longer exists is not cosmetic: `buildErrorReference()`
+ * records an unreadable source as a FAILURE, so the catalogue silently loses every
+ * code that file declared while the page still renders — a stale reference shipped
+ * as if it were current. The gate now fails loudly on that, which is how this list
+ * was caught.
  */
 const COMPILER_SOURCES = [
   'packages/compiler/src/internal/compiler/semantic-core/analyze-module.ts',
-  'packages/compiler/src/internal/compiler/semantic-core/compile.ts',
   'packages/compiler/src/internal/compiler/semantic-core/compiler-diagnostics.ts',
-  'packages/compiler/src/internal/compiler/semantic-core/emit-program.ts',
   'packages/compiler/src/internal/compiler/semantic-core/lower-program.ts',
   'packages/compiler/src/internal/compiler/semantic-core/module-analysis.ts',
 ];

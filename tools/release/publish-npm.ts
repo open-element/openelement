@@ -30,7 +30,6 @@ import { formatJson } from '@openelement/element/build-utils';
 import { buildDeclarationClosure, packageRootDeclarationIo } from '../lib/declaration-closure.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
 import { createDeterministicTarGz, readTreeEntries } from '../lib/deterministic-tar.ts';
-import { compilePackageElementModules } from '../lib/compiled-pack-staging.ts';
 import {
   assembleVpPackageTree,
   classifyVpPackLog,
@@ -248,7 +247,6 @@ export async function packPackage(
   // OE_PROGRAM_MISSING). The admission contract is unchanged: staging only
   // replaces module contents with the same compiler output a consumer's own
   // build would produce from workspace source.
-  const compiledModules = compilePackageElementModules(pkg.dir);
   // The staged workspace mirrors the pnpm workspace 1:1: every package is
   // staged and symlinked under node_modules/@openelement/, so cross-package
   // declaration emit resolves types from source exactly like the real
@@ -264,15 +262,6 @@ export async function packPackage(
     lock: stagingLock,
   });
   try {
-    if (compiledModules.length > 0) {
-      for (const output of compiledModules) {
-        writeFileSync(`${staged.packDir}/${output.relativePath}`, output.code);
-      }
-      console.log(
-        `[npm] ${pkg.name}: packing staged compiler output for ${compiledModules.length} ` +
-          'compiled element module(s) (#1301).',
-      );
-    }
     await installVpStagingWorkspace(staged, members);
     console.log(`$ vp pack  # cwd=${staged.packDir}`);
     const vpOutput = await runVpPack(staged);

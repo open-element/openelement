@@ -1,24 +1,35 @@
 /**
  * Element browser conformance fixture (#1333): shadow-root event source.
  *
- * Mirrors the `activationProgram({ rootMode: 'shadow-open' })` shape used by
- * the simulated-DOM facade-activation tests (button + text part + click
- * handler), authored in the real compiled grammar so the official compiler
- * lowers it. Consumed only through compileElementModule; never executed
- * uncompiled.
+ * The composed-event suite drives this as a REAL open shadow root (a click
+ * inside the shadow tree must cross the boundary as a composed event and the
+ * host's `count` must reflect). It is authored in the shipped generated lane:
+ * the sidecar pins `root: 'shadow'` and the reflected `count` row, and the
+ * function component renders the button the old fixture's `render()` returned.
+ *
+ * WHY `useHost()`. The click handler must write the element's own `count`
+ * property — that is the platform fact the suite asserts (property write,
+ * reflection to the attribute, and the text binding re-running). A function
+ * component has no `this`, so the write goes through the host element the
+ * generated class owns.
  */
-import { element, OpenElement, property } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
+import { useHost } from '@openelement/element/lifecycle';
 
-@element('wtr-shadow-button', { root: 'shadow-open' })
-export class WtrShadowButton extends OpenElement {
-  @property({ reflect: true })
-  count = 0;
+export const openElement = defineIslandConfig({
+  root: 'shadow',
+  properties: { count: { reflect: true, default: 0 } },
+});
 
-  increment(): void {
-    this.count++;
-  }
-
-  render() {
-    return <button type='button' onClick={this.increment}>Clicks: {this.count}</button>;
-  }
+function WtrShadowButton(props: { count: number }) {
+  // The handler writes the element's own declared `count` row (the platform
+  // fact the suite asserts); the cast names that row on the owning element.
+  const host = useHost() as HTMLElement & { count: number };
+  return (
+    <button type='button' onClick={() => { host.count++; }}>
+      Clicks: {props.count}
+    </button>
+  );
 }
+
+export default WtrShadowButton;

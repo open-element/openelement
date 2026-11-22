@@ -66,8 +66,7 @@ import { tarballPath } from '../lib/npm-tarball.ts';
 import { CREATE_BIN } from './npm-manifest.ts';
 import { PW_PROBE_PIN } from './consumer-packaged-starter.ts';
 import ts from 'typescript';
-import { compileElementModule } from '@openelement/compiler';
-import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
+import { compileGeneratedElementIfAdmitted } from '@openelement/compiler';
 import { CREATE_VERSION } from '../../packages/create/src/version.ts';
 
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
@@ -114,15 +113,18 @@ const STARTER_ISLAND_UTILITY = 'p-2';
 
 const UTILITY_WIDGET_COMPONENT = `/**
  * S-C2/S-13 probe: a shadow-root component whose only styling is Tailwind
- * utility classes (no authored .css file, no static styles).
+ * utility classes (no authored .css file, no declared styles).
+ *
+ * Written in the GENERATED lane (Alpha16 retired the class lane): a sidecar plus a
+ * default-exported function component. The probe's subject is unchanged — a
+ * dependency whose component stylesheet can only come from its own compiled class
+ * candidates travelling through packaging.
  */
-import { element, OpenElement } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
 
-@element('${UTILITY_WIDGET_TAG}', { root: 'shadow-open' })
-export class UtilityWidget extends OpenElement {
-  render() {
-    return <span class='${UTILITY_WIDGET_CANDIDATES.join(' ')}'>utility widget</span>;
-  }
+export const openElement = defineIslandConfig({ tag: '${UTILITY_WIDGET_TAG}', root: 'shadow' });
+export default function UtilityWidget() {
+  return <span class='${UTILITY_WIDGET_CANDIDATES.join(' ')}'>utility widget</span>;
 }
 `;
 
@@ -132,9 +134,13 @@ export class UtilityWidget extends OpenElement {
  * with npm — the appliance installs that tarball, never workspace source.
  */
 async function packUtilityWidget(dir: string): Promise<string> {
-  const compiled = compileElementModule(UTILITY_WIDGET_COMPONENT, 'utility-widget.tsx', {
-    staticSidecars: [ISLAND_ADMISSION],
-  });
+  const compiled = compileGeneratedElementIfAdmitted(
+    UTILITY_WIDGET_COMPONENT,
+    'utility-widget.tsx',
+    {
+      site: { tag: UTILITY_WIDGET_TAG },
+    },
+  );
   if (compiled === null) {
     throw new Error('the utility-widget probe did not compile as an openElement island module');
   }
