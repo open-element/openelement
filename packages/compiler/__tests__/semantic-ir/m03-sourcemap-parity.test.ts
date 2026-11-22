@@ -1,12 +1,17 @@
 /**
- * M03-I-4b — expression-level source-map parity (owner-approved D4 item b).
+ * M03-I-4b — expression-level source maps for the function frontend.
  *
  * The A2 expression registry emits Source Map v3 segments in the shared
  * `EmissionSegment` convention. This harness decodes them through
  * `@jridgewell/trace-mapping` — the repository's established source-map
- * consumer — and asserts the mapping properties M03 parity requires, against
- * the Alpha15 class frontend's map convention. The END-TO-END generated-module
- * map remains M05; A4b claims expression-level parity only.
+ * consumer — and asserts the mapping properties M03 requires. The END-TO-END
+ * generated-module map remains M05; A4b claims expression-level parity only.
+ *
+ * WHY the parity harness is smaller: the Alpha15 class frontend's map was the
+ * reference side of this file, and Alpha16 retired that frontend. What
+ * remains is the function side, which is a standalone assertion (decode every
+ * segment back to the authored position through the real consumer) rather
+ * than a comparison against a map no build can emit any more.
  *
  * Corpus: plain expressions, JSX→recipe-ref substitution (longer generated
  * text), erasure (shorter text), multi-line positions, and the
@@ -19,7 +24,6 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { eachMapping, originalPositionFor, TraceMap } from '@jridgewell/trace-mapping';
 import ts from 'typescript';
-import { compileElementProgram } from '../../src/internal/compiler/semantic-core/compile.ts';
 import {
   createExpressionRegistry,
   type LoweredExpressionRecord,
@@ -256,125 +260,10 @@ describe('M03-I-4b — expression segments decode through @jridgewell/trace-mapp
   });
 });
 
-// ─── Parity against the Alpha15 class-frontend map convention ──────────────
+// ─── Map scope of the surviving frontend ───────────────────────────────────
 
-const CLASS_SOURCE = `import { element, OpenElement, property } from '@openelement/element';
-@element('oe-map-parity')
-export class MapParity extends OpenElement {
-  @property({ reflect: false }) label = 'ready';
-  render() {
-    return <main title={this.label}>{this.label}</main>;
-  }
-}
-`;
-
-const FUNCTION_PARITY_SOURCE = `import { signal } from '@openelement/element';
-function MapParity(props) {
-  const label = signal('ready');
-  return <main title={label.value}>{label.value}</main>;
-}
-`;
-
-describe('M03-I-4b — expression-level parity with the Alpha15 map convention', () => {
-  test('both frontends decode through the same consumer and resolve to the authored dynamic-construct line', () => {
-    // ── Alpha15 class baseline: decode the emitted module map ────────────────
-    const compiled = compileElementProgram(CLASS_SOURCE, FILE);
-    const classMap = new TraceMap(compiled.map as unknown as Parameters<typeof TraceMap>[0]);
-    const classSourceFile = ts.createSourceFile(
-      FILE,
-      CLASS_SOURCE,
-      ts.ScriptTarget.ES2022,
-      true,
-      ts.ScriptKind.TSX,
-    );
-    const classRender = findNode(
-      classSourceFile,
-      (node): node is ts.MethodDeclaration =>
-        ts.isMethodDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === 'render',
-    );
-    // The Alpha15 Part-level map anchors the generated program to the authored
-    // render method (the dynamic construct's authored region); it does not emit
-    // per-expression anchors — that finer granularity is the function frontend's
-    // additive difference, documented below, not a parity break.
-    const classConstructLine = authoredPosition(
-      classSourceFile,
-      classRender.getStart(classSourceFile),
-    ).line;
-    expect(classMap.sources).toEqual([FILE]);
-    const classMappedLines = new Set<number>();
-    eachMapping(classMap, (mapping) => {
-      if (mapping.originalLine !== null) classMappedLines.add(mapping.originalLine);
-    });
-    // The class frontend's Part-level map resolves generated lines to the
-    // authored line of the render construct (it does not emit expression-level
-    // anchors: the dynamic value is evaluated by the Part runtime).
-    expect(classMappedLines.has(classConstructLine)).toBe(true);
-
-    // ── Function frontend: decode the A2 expression segments ─────────────────
-    const sourceFile = ts.createSourceFile(
-      FILE,
-      FUNCTION_PARITY_SOURCE,
-      ts.ScriptTarget.ES2022,
-      true,
-      ts.ScriptKind.TSX,
-    );
-    const module = resolveModule(sourceFile, { components: [], importClassifier: classifier });
-    const registry = createExpressionRegistry({
-      module,
-      recipeReference: () => ({ callee: RECIPE_CALLEE, id: 'r0' }),
-    });
-    const expression = findNode(
-      sourceFile,
-      (node): node is ts.PropertyAccessExpression =>
-        ts.isPropertyAccessExpression(node) && node.expression.getText(sourceFile) === 'label',
-    );
-    const result = registry.lower(expression, 'inline');
-    expect(result.diagnostics).toEqual([]);
-    const builder = new SourceMapSegmentBuilder();
-    for (const segment of result.record!.segments) builder.add(segment);
-    const functionMap = new TraceMap(
-      builder.build(FILE, FUNCTION_PARITY_SOURCE) as unknown as Parameters<typeof TraceMap>[0],
-    );
-    expect(functionMap.sources).toEqual([FILE]);
-    const expressionLine = authoredPosition(sourceFile, expression.getStart(sourceFile)).line;
-    const functionMappedLines = new Set<number>();
-    eachMapping(functionMap, (mapping) => {
-      if (mapping.originalLine !== null) functionMappedLines.add(mapping.originalLine);
-    });
-    expect(functionMappedLines.has(expressionLine)).toBe(true);
-
-    // ── Parity property ─────────────────────────────────────────────────────
-    // Both maps: Source Map v3 through the SAME consumer API, one authored
-    // source, 1-based authored line / 0-based authored column, and every mapped
-    // authored offset is a real authored character (no interpolated positions).
-    for (const [map, source] of [
-      [classMap, CLASS_SOURCE] as const,
-      [functionMap, FUNCTION_PARITY_SOURCE] as const,
-    ]) {
-      eachMapping(map, (mapping) => {
-        if (mapping.originalLine === null || mapping.originalColumn === null) return;
-        const offset = (
-          map === classMap ? classSourceFile : sourceFile
-        ).getPositionOfLineAndCharacter(mapping.originalLine - 1, mapping.originalColumn);
-        expect(source[offset] ?? ' ').not.toBe('\n');
-        expect(offset).toBeGreaterThanOrEqual(0);
-        expect(offset).toBeLessThan(source.length);
-      });
-    }
-    // The function frontend additionally resolves *expression-level* anchors: it
-    // maps every authored expression node start (the M03 requirement), while the
-    // class baseline maps Part-level authored lines only. That difference is the
-    // deliberate design difference, not a parity failure.
-    expect(result.record!.segments.length).toBeGreaterThanOrEqual(1);
-    expect(new Set(result.record!.segments.map((segment) => segment.generatedLine)).size).toBe(1);
-    expect(
-      result.record!.anchors.some(
-        (anchor) => anchor.authoredStart === expression.getStart(sourceFile),
-      ),
-    ).toBe(true);
-  });
-
-  test('A4b asserts expression-level parity only; the end-to-end module map stays M05', () => {
+describe('M03-I-4b — the function frontend emits expression segments, not a module map', () => {
+  test('A4b asserts expression-level segments only; the end-to-end module map stays M05', () => {
     // The function frontend returns a component model + expression sidecar: no
     // emitted module and no module map exists to decode until M05 codegen.
     const result = compileFunctionModule(
@@ -390,7 +279,9 @@ describe('M03-I-4b — expression-level parity with the Alpha15 map convention',
     ]);
     expect(result.module).not.toHaveProperty('code');
     expect(result.module).not.toHaveProperty('map');
-    // The class frontend's composed module map is the Alpha15 side; the
-    // generated function-module map (mount/update/dispose placement) is M05.
+    // The generated function-module map (mount/update/dispose placement) is
+    // M05. The class frontend's composed module map used to be the other side
+    // of a comparison here; that frontend is retired, so the reference side is
+    // gone and the boundary this test pins is stated on its own.
   });
 });

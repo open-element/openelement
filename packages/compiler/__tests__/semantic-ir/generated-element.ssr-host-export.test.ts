@@ -248,6 +248,9 @@ export default Card;
       'map',
       'ssrHostExport',
       'tag',
+      // F16: the blocks-axis fact the router's runtime-shape scan reads now that
+      // `program.blocks` is gone.
+      'usesBlocks',
     ]);
     // The fixture's `<div class="card">` is the one static token: the candidate
     // set reads the SAME model the bytes come from, which is the point of P-1.

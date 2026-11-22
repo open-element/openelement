@@ -89,7 +89,6 @@ import {
   clientStyleAssetPlugin,
   serverRenderedStyleEdgesPlugin,
 } from '../vite/internal/style-assets.ts';
-import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
 import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
 import {
   createServerComponentSourceResolver,
@@ -740,7 +739,6 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
     islandFiles: selectedLocalFiles,
     packageIslandDecls: selectedPackageDecls,
     compilerBehaviorDecls: selectedCompilerBehaviorDecls,
-    staticSidecars: [ISLAND_ADMISSION],
   });
   // The emission half of the same axis: resolve the bare element specifier to
   // the blocks-free entry for the whole client graph.
@@ -1033,7 +1031,6 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
         // Linked workspace packages sit outside the project root; without the
         // workspace anchor their absolute ids would land in the source maps.
         workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
-        staticSidecars: [ISLAND_ADMISSION],
         // This build's own class-candidate registry (defect C): the transform's
         // write path and the discovery pass share exactly this instance, and no
         // other build's facts can reach it.

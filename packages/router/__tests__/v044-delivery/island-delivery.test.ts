@@ -4,14 +4,12 @@ import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { join } from 'node:path';
 import { buildCriticalHeadExtras } from '../../src/vite/internal/ssg/critical-assets.ts';
-import { compiledElementPlugin, compileElementModule } from '@openelement/compiler';
 import { generateClientEntry } from '../../src/vite/internal/ssg/entry-client-codegen.ts';
 import { createIslandScheduler } from '../../src/vite/internal/ssg/island-scheduler.ts';
 import { readIslandConfig } from '../../src/vite/internal/ssg/island-scanner.ts';
 import { buildSsrAdmissionPlan } from '../../src/vite/internal/ssg/entry-descriptor.ts';
 import { OpenElementBuildContext } from '../../src/vite/build-context.ts';
 import { findReachableIslandTags } from '../../src/cli/build-client.ts';
-import { createOpenPlugin } from '../../src/vite/plugin.ts';
 import { compilerBehaviorDeclarations } from '../../src/vite/internal/ssg/client-admission.ts';
 import { buildClientIslandEntries } from '../../src/vite/internal/ssg/client-island-entries.ts';
 
@@ -207,102 +205,30 @@ test('v0.44 SSR admission expands one capability declaration per delivered tag',
   expect(plan.decisions.map((decision) => decision.tagName)).toEqual(['oe-clock', 'oe-calendar']);
 });
 
-test('v0.44 compiler source records pass through the Vite source map', () => {
-  // A10.2 (#1210): the map returned for Vite composition is the core's real
-  // Source Map v3; the program's v1 provenance records ride along only as
-  // supplementary x_openElement metadata.
-  const source = [
-    "import { element, OpenElement, property } from '@openelement/element';",
-    "@element('oe-clock')",
-    'export class Clock extends OpenElement {',
-    '  @property({ reflect: true }) count = 0;',
-    '  render() { return <div>{this.count}</div>; }',
-    '}',
-  ].join('\n');
-  const result = compileElementModule(source, '/src/clock.tsx');
-  expect(result?.map.x_openElement).toEqual(result?.program.sourceMap);
-  expect(result?.map.sources).toEqual(['/src/clock.tsx']);
-  expect(result?.map.sourcesContent).toEqual([source]);
-});
-
-test('v0.44 compiler hook transforms once and classifies HMR shape changes', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'open-element-alpha4-hmr-'));
-  try {
-    const file = join(root, 'counter.tsx');
-    const source = [
-      "import { element, OpenElement, property } from '@openelement/element';",
-      "@element('oe-hmr-counter')",
-      'export class HmrCounter extends OpenElement {',
-      '  @property({ reflect: true }) count = 0;',
-      '  increment() { this.count++; }',
-      '  render() { return <button onClick={this.increment}>{this.count}</button>; }',
-      '}',
-    ].join('\n');
-    await writeFile(file, source);
-
-    const plugins = createOpenPlugin();
-    const core = plugins.find((plugin) => plugin.name === 'open:core');
-    const compiler = compiledElementPlugin();
-    if (!core || typeof core.transform !== 'function') {
-      throw new Error('canonical compiler integration hook was not registered');
-    }
-    const transform = core.transform as unknown as (
-      // Vite's `this.error()` accepts a string or a Rollup error object; the
-      // compiler adapter passes the structured form since #1413.
-      this: { error(error: string | { message: string }): never },
-      code: string,
-      id: string,
-    ) => { code: string; map?: unknown } | null;
-    const transformed = transform.call(
-      {
-        error: (error: string | { message: string }) => {
-          throw new Error(typeof error === 'string' ? error : error.message);
-        },
-      },
-      source,
-      file,
-    );
-    if (!transformed) throw new Error('core compiler hook did not emit code');
-    expect(transformed.code).toContain('__partProgram');
-    expect(
-      (compiler.transform as unknown as (code: string, id: string) => unknown)(
-        transformed.code,
-        file,
-      ),
-    ).toEqual(null);
-
-    const sent: unknown[] = [];
-    const hmr = () => {
-      return {
-        file,
-        modules: [],
-        server: { ws: { send: (message: unknown) => sent.push(message) } },
-      };
-    };
-    if (typeof core.handleHotUpdate !== 'function') throw new Error('HMR hook missing');
-    await writeFile(file, source.replace('this.count++;', 'this.count += 2;'));
-    const compatible = await (core.handleHotUpdate as unknown as (input: unknown) => unknown)(
-      hmr(),
-    );
-    expect(compatible).toEqual([]);
-    expect(sent).toEqual([]);
-
-    await writeFile(
-      file,
-      source.replace(
-        '<button onClick={this.increment}>{this.count}</button>',
-        '<div>{this.count}</div>',
-      ),
-    );
-    const incompatible = await (core.handleHotUpdate as unknown as (input: unknown) => unknown)(
-      hmr(),
-    );
-    expect(incompatible).toEqual([]);
-    expect(sent).toEqual([{ type: 'full-reload' }]);
-  } finally {
-    await rm(root, { recursive: true });
-  }
-});
+/*
+ * REMOVED ROWS — the v0.44 CLASS compiler rows.
+ *
+ * Two rows lived here: "compiler source records pass through the Vite source
+ * map" and "compiler hook transforms once and classifies HMR shape changes".
+ *
+ * Both subjects were the CLASS artifact. The first asserted
+ * `compileElementModule(...).map.x_openElement === program.sourceMap` — the
+ * Part Program's v1 provenance records riding as supplementary map metadata.
+ * The second pinned `__partProgram` in the open:core transform output and an
+ * HMR classification that compared Part Program shapes while ignoring method
+ * bodies. Alpha16 deleted the class lane, so the compiler no longer emits a
+ * `program`, a `__partProgram` banner or the `x_openElement` metadata: neither
+ * row has a producer to observe and a rewrite would be a different test.
+ *
+ * The surviving equivalents are recorded where their lane lives, not repeated
+ * here: the generated lane's map is the leaf map (pinned in
+ * packages/compiler/__tests__/semantic-ir/, including m03-sourcemap-parity and
+ * generated-element.ssr-host-export), and its HMR classification — the emitted
+ * module text IS the shape, so a changed generated module takes the bounded
+ * full-reload path — is already pinned by
+ * packages/router/__tests__/generated-element-site.test.ts ("HMR treats a
+ * changed generated module as a full reload, not a class edit").
+ */
 
 test('v0.44 critical assets serialize deterministic head resources and reject unsafe blocking URLs', () => {
   const result = buildCriticalHeadExtras({

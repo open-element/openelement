@@ -3,16 +3,26 @@
  * integration boundary.
  *
  * The Element compiler lives in @openelement/compiler (the #1557 package split
- * after 1.0 Alpha convergence); the Router-side open:core transform hook stays here until the
- * Router tooling phase. These tests pin the adapter half of the boundary:
+ * after 1.0 Alpha convergence); the Router-side open:core transform hook stays
+ * here until the Router tooling phase. Alpha16 retired the class lane, so the
+ * hook now asks the surviving admission lanes in turn — the generated Native
+ * Custom Element lane (when the host resolved a site fact) and the server
+ * function component lane — and a module neither lane owns passes through
+ * untouched. These tests pin the adapter half of the boundary:
  *   - open:core returns the compiler's real Source Map v3 as its `map` output
- *     and strips the inline map comment from the served code, so the pipeline
- *     carries exactly one map story (the compileElementModule half of this
- *     contract lives in packages/element/__tests__/compiler-source-map-v3.test.ts)
- *   - open:core applies the compiler's two-stage admission gate: a .tsx module
- *     that only mentions `@element(` in strings/comments passes through
- *     untouched (the compiler-side gate contract lives in
- *     packages/element/__tests__/v044-delivery/compiler-gate.test.ts)
+ *     and the served code carries no inline map comment, so the pipeline
+ *     still carries exactly one map story. The class lane that embedded an
+ *     inline map for the boundary to strip is gone; the surviving lane tested
+ *     here is the server function lane, because the generated lane builds its
+ *     map from an authored source the dev transform does not pass.
+ *   - open:core only reaches modules an admission lane owns: a module that
+ *     merely mentions the retired `@element(` marker — here only inside a
+ *     string literal and a comment — is not compiled, because no surviving
+ *     lane owns it.
+ *   - the compiler's refusals reach the host as the ONE structured record
+ *     (`{id, loc, frame, diagnostics}`), never as a pre-joined message, so the
+ *     dev overlay underlines the authored line and a programmatic consumer
+ *     reads the location instead of parsing it back out of a string.
  */
 
 import { expect, test } from 'vitest';
@@ -20,14 +30,15 @@ import { eachMapping, TraceMap } from '@jridgewell/trace-mapping';
 import type { Plugin } from 'vite';
 import { createOpenPlugin } from '../src/vite/plugin.ts';
 
-const FILE = '/project/app/islands/boundary-counter.tsx';
+// A route module owned by the server function lane. The module path is outside
+// the islands directory on purpose: no generated-element site fact can match
+// it, so the transform must answer through the server lane (a generated island
+// would be the other surviving lane, and its map needs a site fact plus an
+// authored source that the dev transform does not supply).
+const FILE = '/project/app/routes/boundary-page.tsx';
 const SOURCE = [
-  "import { element, OpenElement, property } from '@openelement/element';",
-  "@element('oe-boundary-counter')",
-  'export class BoundaryCounter extends OpenElement {',
-  '  @property({ reflect: true }) count = 0;',
-  '  increment(): void { this.count++; }',
-  '  render() { return <button onClick={this.increment}>{this.count}</button>; }',
+  'export function BoundaryPage(props: { title: string }) {',
+  '  return <main title={props.title}>boundary page</main>;',
   '}',
 ].join('\n');
 
@@ -85,15 +96,17 @@ test('open:core hands the real map to Vite without a double map story', () => {
   });
   expect(originalLines.size > 0, 'map must carry segments').toBeTruthy();
   expect(
-    originalLines.has(4),
-    'map must resolve segments to the authored @property line',
+    originalLines.has(2),
+    'map must resolve segments to the authored JSX return line',
   ).toBeTruthy();
 });
 
-test('open:core applies the compiler admission gate to marker mentions', () => {
-  // A decorator application appears only inside a string literal and comments —
-  // the cheap shape prefilter matches, but no real decorator exists, so the
-  // default pipeline passes the module through instead of failing the build.
+test('open:core leaves a module that only mentions the retired @element marker untouched', () => {
+  // A decorator application appears only inside a string literal and comments.
+  // The class grammar that used to read this marker is retired, and the two
+  // surviving lanes both decline the module (no island sidecar, no admitted
+  // function component), so the transform passes it through instead of
+  // failing the build or resurrecting a class compile.
   const mentionOnly = [
     'const docs = "decorate with @element(\'oe-string\') to opt in";',
     "// @element('oe-line-comment') is what a real opt-in looks like",
@@ -106,29 +119,18 @@ test('open:core applies the compiler admission gate to marker mentions', () => {
   ).toEqual(null);
 });
 
-test('open:core compiles an aliased decorator binding the same way as the canonical one', () => {
-  // The Router is the second host of the compiler's admission gate, so the
-  // alias has to survive here too: a prefilter that only knew the literal
-  // `@element(` spelling left this module untouched through open:core while the
-  // semantic layer would have admitted it.
-  const aliased = [
-    "import { element as defineElement, OpenElement, property } from '@openelement/element';",
-    "@defineElement('oe-boundary-alias')",
-    'export class BoundaryAlias extends OpenElement {',
-    '  @property({ reflect: true }) count = 0;',
-    '  render() { return <span>{this.count}</span>; }',
-    '}',
-  ].join('\n');
-  const transformed = coreTransform().call(failingContext(), aliased, FILE) as {
-    code: string;
-    map?: { mappings: string };
-  } | null;
-  expect(transformed, 'open:core must compile what the semantic core admits').not.toEqual(null);
-  expect(transformed!.code).toContain('oe-boundary-alias');
-  expect(transformed!.code).toContain("from '@openelement/element'");
-  // The alias never survives into the emitted module.
-  expect(transformed!.code.includes('defineElement'), transformed!.code).toBe(false);
-});
+// REMOVED ROW — `open:core compiles an aliased decorator binding the same way as
+// the canonical one`.
+//
+// That row pinned the class lane's TWO-STAGE admission: a prefilter matched the
+// decorator-application shape and the semantic core decided binding provenance,
+// so `import { element as defineElement }` had to survive the prefilter or the
+// core would never admit a legal module. Alpha16 deleted the decorator frontend
+// together with `compileElementModule`, so no alias can "reach" a compile any
+// more: there is no decorator admission left for an alias to agree with. The
+// row is reported, not rewritten — its whole subject (decorator binding
+// provenance at the Router host) is gone, and the surviving lanes admit on
+// different evidence (a sidecar plus a site fact, or an exported JSX function).
 
 /** A context that records what `this.error()` was handed, the way Rollup does. */
 function recordingContext(): { error: unknown[]; context: TransformContext } {
@@ -149,13 +151,13 @@ test('open:core reports the compiler’s structured diagnostic, not a bare messa
   // standalone plugin passes `diagnosticPluginError(...)` — `{id, loc, frame,
   // diagnostics}` — and the Router's open:core used to pass `error.message`,
   // which dropped the authored location, the code frame and the diagnostic
-  // codes for every Router dev build.
+  // codes for every Router dev build. The failure below is a real server-lane
+  // refusal: an exported JSX function that is not the lane's single-return
+  // shape (OEC9032).
   const broken = [
-    "import { element, OpenElement } from '@openelement/element';",
-    "@element('oe-boundary-broken')",
-    'export class BoundaryBroken extends OpenElement {',
-    '  render() { return <div>{this.count}</div>; }',
-    '  @property({ reflect: true }) late = 0;',
+    'export function BoundaryBroken() {',
+    '  const late = 1;',
+    '  return <div>{late}</div>;',
     '}',
   ].join('\n');
   const { error, context } = recordingContext();

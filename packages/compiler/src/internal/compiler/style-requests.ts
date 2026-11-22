@@ -138,20 +138,6 @@ export function styleRequestModuleId(
 }
 
 /**
- * The light-root scope tag of a compiled Part Program — undefined for a
- * shadow-root program, whose sheets ship exactly as authored (they already
- * have a boundary). One reader for the fact, shared by both host bindings of
- * the compiled-element transform (the build plugin and the dev/HMR plugin)
- * and by the compiled-artifact read.
- */
-export function lightRootScopeTag(program: unknown): string | undefined {
-  const candidate = program as { tag?: unknown; root?: { kind?: unknown } } | null | undefined;
-  const tag = candidate?.tag;
-  if (typeof tag !== 'string' || tag === '') return undefined;
-  return candidate?.root?.kind === 'light' ? tag : undefined;
-}
-
-/**
  * The sheet file's absolute path for one authored edge: the importing
  * module's directory joined with the authored specifier. Relative specifiers
  * only (the compiler refuses bare ones), so the join is total. Parent

@@ -55,7 +55,6 @@ import {
 import { safeReadDir, safeReadFile, safeStat } from './route-scanner-fs.ts';
 import { analyzeModuleSemantics } from '@openelement/compiler';
 import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
-import { scanStreamManifest } from './stream-manifest.ts';
 import type { StreamRouteManifest } from '@openelement/protocol/ssg';
 import {
   buildPageModuleFacts,
@@ -366,14 +365,13 @@ export async function scanRoutes(
               compiledElement: semantics.compiledElementDecorator,
               functionPage: semantics.pageComponentName,
             });
-            streamManifest = await scanStreamManifest(
-              routePath,
-              fullPath,
-              source,
-              params,
-              options.root,
-              options.workspaceRoot,
-            );
+            // Streaming RETIRED with the class lane (owner decision, 2026-11-22).
+            // `renderIntent.stream` was a compiled-Part-Program channel: a function
+            // page has no program to defer against, and a generated page is refused
+            // by the bounded-lane check. The scanner no longer looks for it, so a
+            // route that still declares `stream` is refused by the lanes rather than
+            // carrying an artifact nothing can serve. Alpha18 owns the replacement.
+            streamManifest = undefined;
             // .mdx routes never carry a tagName export either — the entry
             // wraps their function component itself (#954), like definePage.
             if (tagName === undefined && !isDefinePage && !fullPath.endsWith('.mdx')) {

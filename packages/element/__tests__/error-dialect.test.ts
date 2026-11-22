@@ -286,11 +286,26 @@ test('#1386: the compiled program grammar raises catchable codes per failure fam
 });
 
 test('#1386: the compiler reports a failed compile as one catchable code', async () => {
-  const { CompiledElementError, compileElementProgram } =
-    await import('../../../packages/compiler/src/internal/compiler/semantic-core/compile.ts');
+  // The class lane's `compileElementProgram` is retired (Alpha16 closeout), so
+  // this row reads the SURVIVING server function component lane: it fails
+  // closed through the same `CompiledElementError`/`CompilerDiagnosticError`
+  // base, which is the dialect contract under test here — the entry point is
+  // incidental, the single catchable compiler error is not.
+  const { CompiledElementError } =
+    await import('../../../packages/compiler/src/internal/compiler/semantic-core/compiler-diagnostics.ts');
+  const { compileServerComponentModule } =
+    await import('../../../packages/compiler/src/internal/compiler/semantic-core/server-component.ts');
   let thrown: unknown;
   try {
-    compileElementProgram('const notAClass = 1;', '/app/components/broken.tsx');
+    // A spread attribute is refused by the shared lowering walk (OEC9011):
+    // any authored compile failure must surface as the one compiler error.
+    compileServerComponentModule(
+      `
+export function Broken() {
+  return <div {...{ id: 'x' }}>bad</div>;
+}`,
+      '/app/components/broken.tsx',
+    );
   } catch (error) {
     thrown = error;
   }

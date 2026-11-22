@@ -64,28 +64,22 @@ import type { Plugin, ViteDevServer } from 'vite';
 import {
   analyzeModuleSemantics,
   type ClassCandidateRegistry,
-  compileElementModule,
   compileGeneratedElementIfAdmitted,
   compileServerComponentIfAdmitted,
   readCompiledArtifactStyles,
   getStyleRequest,
   hasStyleImporter,
-  lightRootScopeTag,
   type RegisteredStyleRequest,
   registerStyleEdges,
   stableModuleId,
   styleRequestModuleId,
   styleRequestsForImporter,
 } from '@openelement/compiler';
-import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
 import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
 import { createServerComponentSourceResolver } from './server-component-host.ts';
 import type { IslandStyleDeclaration } from './island-style-declarations.ts';
 import { walkModuleGraph } from './module-graph-walk.ts';
-import {
-  registerArtifactCandidates,
-  registerCandidatesFromCompiled,
-} from './collect-shadow-candidates.ts';
+import { registerArtifactCandidates } from './collect-shadow-candidates.ts';
 import { findBuildWorkspaceRootOrUndefined } from '../workspace-alias.ts';
 import {
   STYLE_SHEET_LIVE,
@@ -705,19 +699,19 @@ async function discoverServerRenderedModules(
 ): Promise<Map<string, RegisteredStyleRequest>> {
   // The generated-island style declarations (GH issue #1800): the island scan
   // is their ONE producer, and this pass is the ONE consumer that turns a
-  // declaration into a registered style edge in the SAME registry the class
-  // lane's authored `.css` imports ride. They are registered before the walk
-  // because the declaration — not the module graph — is the demand fact for
-  // this lane: a generated island has no authored `.css` import, and a
-  // client-only island is not an SSR entry import at all.
+  // declaration into a registered style edge in the SAME registry every other
+  // authored edge rides. They are registered before the walk because the
+  // declaration — not the module graph — is the demand fact for this lane: a
+  // generated island has no authored `.css` import, and a client-only island is
+  // not an SSR entry import at all.
   const declaredEdges = registerDeclaredIslandStyleEdges();
   // The generated-element lane's class candidates (deletion prerequisite P-1,
   // 2026-11-21): a generated island's static class tokens are what its COMPONENT
-  // stylesheet compiles utilities from, and until now only the class lane, the
-  // server function lane and packed artifacts fed that set — a generated shadow
-  // component therefore lost its utilities. The island scan's declaration is the
-  // ONE site fact (tag + root) this walk needs to compile the module through the
-  // lane it actually ships through.
+  // stylesheet compiles utilities from, and only the server function lane and
+  // packed artifacts also feed that set — a generated shadow component that the
+  // walk did not register here therefore lost its utilities. The island scan's
+  // declaration is the ONE site fact (tag + root) this walk needs to compile the
+  // module through the lane it actually ships through.
   const generatedSites = new Map(
     islandStyleDeclarations().map((declaration) => [declaration.moduleId, declaration]),
   );
@@ -777,24 +771,6 @@ async function discoverServerRenderedModules(
     // the graph drops its entry, so an edited or deleted file cannot leave
     // stale tokens in the next compile.
     sources?.set(file, source);
-    let compiled;
-    try {
-      compiled = compileElementModule(source, stableModuleId(file, effectiveRoot, workspaceRoot), {
-        staticSidecars: [ISLAND_ADMISSION],
-      });
-    } catch {
-      continue;
-    }
-    if (compiled !== null) {
-      registerStyleEdges(file, compiled.styleRequests ?? [], lightRootScopeTag(compiled.program));
-      // The same compile carries the module's statically admitted class
-      // candidates (defect B): the component stylesheet consumes them, and this
-      // walk is the discovery that covers every specifier form the bundler
-      // understands — relative, `#imports`, alias, package exports.
-      registerCandidatesFromCompiled(file, compiled, candidates);
-      elementFiles.push(file);
-      continue;
-    }
     // The generated-element lane: an island module the scan declared carries the
     // function component + policy sidecar, so its class candidates are a SHADOW
     // fact exactly when the declared root is a shadow root. Registered here (and
@@ -818,10 +794,9 @@ async function discoverServerRenderedModules(
         continue;
       }
       if (generated !== null) {
-        // KEY = the compiler's stable module id, exactly like the class lane's
-        // registration below. The P-1b lookup normalizes the island
-        // declaration's absolute path through the SAME function, so the two
-        // spellings converge on one key; registering the raw absolute path
+        // KEY = the compiler's stable module id. The P-1b lookup normalizes the
+        // island declaration's absolute path through the SAME function, so the
+        // two spellings converge on one key; registering the raw absolute path
         // registered a fact no lookup could find (measured: 15 tokens in the
         // registry, 0 for the declaration's module).
         candidates.register(
@@ -832,9 +807,10 @@ async function discoverServerRenderedModules(
         elementFiles.push(file);
         continue;
       }
-      // A class module can also carry a style declaration. Falling through —
-      // never `continue` — keeps this branch from stealing a class module's
-      // candidates: the class compile below is its authoritative producer.
+      // Falling through — never `continue` — because a declaration the lane
+      // DECLINED (a default export that is not a JSX-returning function, a
+      // non-TSX id) still leaves the module to the server function lane and the
+      // artifact read below, which register their own facts.
     }
     // The server function component lane (alpha15): a route module carrying
     // an exported JSX-returning function compiles into `__h`/`__t`/`__ssr`
@@ -911,16 +887,16 @@ async function discoverServerRenderedModules(
  * compiler's style-edge registry, and return the registered requests so the
  * emission half serves them through the build's ONE emission state.
  *
- * Resolution is the class lane's: the specifier is joined against the island
- * module's directory by the compiler's ONE key derivation
- * (`styleRequestModuleId`). A LIGHT-root island's tag rides as the scope tag, so
- * the emitted asset is the same native `@scope (<tag>)` projection a light-root
- * class component's authored sheet gets; a SHADOW-root island's edge carries NO
- * scope tag (the shadow boundary is the isolation), which is the registry's
- * existing shadow-root edge shape — the authored bytes ship verbatim and are
- * declared inside the DSD template (M09-2e / #1803). The island scan already
- * validated the specifier shape, the lane and the root; this pass adds no second
- * validation and no second style pipeline.
+ * Resolution is the compiler's ONE key derivation: the specifier is joined
+ * against the island module's directory by `styleRequestModuleId`. A LIGHT-root
+ * island's tag rides as the scope tag, so the emitted asset is the same native
+ * `@scope (<tag>)` projection a light-root component's authored sheet gets; a
+ * SHADOW-root island's edge carries NO scope tag (the shadow boundary is the
+ * isolation), which is the registry's existing shadow-root edge shape — the
+ * authored bytes ship verbatim and are declared inside the DSD template
+ * (M09-2e / #1803). The island scan already validated the specifier shape, the
+ * lane and the root; this pass adds no second validation and no second style
+ * pipeline.
  */
 function registerDeclaredIslandStyleEdges(): Map<string, RegisteredStyleRequest> {
   const edges = new Map<string, RegisteredStyleRequest>();
@@ -1234,19 +1210,18 @@ export function serverStyleAssetPlugin(options?: {
  * Dev-only index: resource digest → the style edge's registry key.
  *
  * The endpoint needs the mapping the URL cannot carry. It is filled by the
- * adapter module's own `load()` (class-lane edges) AND by the generated-island
- * declarations (`devAuthoredIslandStyleUrls`), because a declared shadow sheet
- * has no authored `.css` import whose adapter would register it — the DSD
- * template declares the URL directly. Module-scoped on purpose: the server half
- * and the entry's virtual module are different plugin instances of the same dev
- * server.
+ * adapter module's own `load()` AND by the generated-island declarations
+ * (`devAuthoredIslandStyleUrls`), because a declared shadow sheet has no
+ * authored `.css` import whose adapter would register it — the DSD template
+ * declares the URL directly. Module-scoped on purpose: the server half and the
+ * entry's virtual module are different plugin instances of the same dev server.
  */
 const devAuthoredResourceEdges = new Map<string, string>();
 
 /**
  * The dev URLs of one generated island's declared sheets. Registers the edges in
- * the SAME compiler registry the class lane rides and records the digest index
- * the dev endpoint reads, so a shadow island's DSD `<link>` resolves in dev
+ * the SAME compiler registry the build's edge readers use and records the digest
+ * index the dev endpoint reads, so a shadow island's DSD `<link>` resolves in dev
  * exactly as it does in a build.
  */
 export function devAuthoredIslandStyleUrls(

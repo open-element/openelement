@@ -26,6 +26,7 @@ import type {
   RouteEntry,
 } from '../vite/framework.ts';
 import type { EntryDescriptor, IslandDecl, StaticComponentDecl } from '@openelement/protocol/ssg';
+import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
 import type { OpenElementBuildContext } from '../vite/build-context.ts';
 import { elementStyleLinksPlugin } from '../vite/internal/element-style-links.ts';
 import { findBuildWorkspaceRootOrUndefined } from '../vite/workspace-alias.ts';
@@ -74,7 +75,6 @@ import {
   collectPackageIslandModuleSites,
   createGeneratedElementSiteResolver,
 } from '../vite/generated-element-site.ts';
-import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
 import { serverStyleAssetPlugin } from '../vite/internal/style-assets.ts';
 import {
   createServerComponentSourceResolver,
@@ -720,7 +720,6 @@ async function buildSSG(
           workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
           // Route/island sources carry the island delivery policy statement;
           // the compiler admits it only through the injected descriptor.
-          staticSidecars: [ISLAND_ADMISSION],
           resolveServerComponentModule: createServerComponentSourceResolver({
             root,
             workspaceRoot: findBuildWorkspaceRootOrUndefined(root),

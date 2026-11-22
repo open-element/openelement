@@ -1,25 +1,10 @@
 /**
  * @openelement/element — open:compiled-element v1 plugin (#1160).
  *
- * Vite integration boundary for the TSX-to-Part Program compiler.
- * The hook activates for .tsx modules that opt into the compiled model
- * with a canonically bound `@element(...)` decorator application on a class
- * declaration (#1209: the decorator identifier must resolve to a runtime
- * named import of `element` from '@openelement/element'; a bare or same-name
- * spelling never admits the module); everything else passes through
- * untouched. Admission is two-staged: a cheap prefilter (a supported module id
- * whose source contains the decorator's '@' character) keeps plain modules off
- * the AST path, then the semantic core's binding analysis decides — a module
- * that merely mentions the marker inside a string literal or comment, or spells
- * it through a foreign binding, is not
- * compiled. The prefilter is a SUPERSET of what the core admits and of what it
- * rejects: a spelling the core would reject must reach it to fail closed.
- * A module whose decorator provenance is unsupported or ambiguous
- * (type-only import, namespace access, conflicting bindings, re-export) is
- * routed to the compiler so the build fails closed with a source-located
- * OEC9027 diagnostic; other unsupported grammar in a genuinely decorated
- * module fails through this.error() with a source-located OEC9xx diagnostic —
- * there is no runtime fallback.
+ * Vite integration boundary for the generated Native Custom Element and
+ * server function component lanes. Both are ADMISSION bridges with their own
+ * predicate, so this transform asks each lane in turn and a module no lane
+ * owns passes through untouched.
  *
  * The hook also ADOPTS this compiler's own emitted artifacts (a package's
  * shipped module): there is nothing left to compile, but the module's `.css`
@@ -28,20 +13,11 @@
  * recovers exactly those edges (compiled-artifact-style-requests.ts) so the
  * packed and workspace-source forms of one package admit identically.
  *
- * Internal Part Program v2 pipeline: not part of the public adapter API.
+ * Internal generated-lane pipeline: not part of the public adapter API.
  */
 
 import type { Plugin } from 'vite';
-import {
-  CompiledElementError,
-  compileElementProgram,
-  type CompileElementResult,
-} from './semantic-core/compile.ts';
-import {
-  analyzeModuleSemantics,
-  type SemanticCoreOptions,
-  type StaticSidecarDescriptor,
-} from './semantic-core/module-analysis.ts';
+import { CompiledElementError } from './semantic-core/compiler-diagnostics.ts';
 import { compileServerComponentIfAdmitted } from './semantic-core/server-component.ts';
 import { compileGeneratedElementIfAdmitted } from './semantic-ir/generated-element/compile.ts';
 import type { GeneratedElementSite } from './semantic-ir/generated-element/contract.ts';
@@ -52,98 +28,8 @@ import {
 import { typeCheckEmittedModule } from './semantic-core/type-check.ts';
 import { compiledArtifactClassCandidates } from './compiled-artifact-class-candidates.ts';
 import { readCompiledArtifactStyles } from './compiled-artifact-style-requests.ts';
-import {
-  lightRootScopeTag,
-  registerStyleRequest,
-  styleRequestFile,
-  styleRequestModuleId,
-} from './style-requests.ts';
+import { registerStyleRequest, styleRequestFile, styleRequestModuleId } from './style-requests.ts';
 import { type ClassCandidateRegistry } from './tailwind-candidates.ts';
-
-/**
- * The cheap first stage — NOT a recognizer.
- *
- * It answers one question: could this module be a compiled element module? The
- * one grammar-independent fact every authored form shares is the '@' character
- * of its decorator application. Every spelling of the authored form contains
- * it — `@element(...)`, an aliased binding (`import { element as
- * defineElement }` with `@defineElement(...)`), a Unicode alias
- * (`import { element as 元件 }` with `@元件(...)`) — and so does every spelling
- * the semantic layer REJECTS but must still see in order to fail closed with
- * its provenance diagnostic (the namespace form, OEC9027). JavaScript lexing
- * makes any finer shape un-modelable in a prefilter: identifiers are not ASCII
- * (Unicode aliases are legal), and the lexer skips comments, so a block comment
- * between the decorator name and its argument list is a legal decorator
- * application no identifier-shaped regex admits.
- *
- * The stages this replaced modeled the decorator-application SHAPE — a literal
- * `@element(` substring, then an ASCII-identifier-plus-whitespace regex — and
- * therefore answered "does this module spell the decorator this way?" instead
- * of "could this module be a compiled element module?", narrowing the CONTRACT
- * rather than the AST path: legal spellings the semantic core admits never
- * reached the layer that admits them. Admission has exactly one authority; a
- * prefilter may only decide whether a module is worth parsing. A false positive
- * here (any '@' in a string literal, comment, or import specifier) costs one
- * parse and nothing else; a false negative hides a legal module from its only
- * admission authority.
- */
-const SUPPORTED_MODULE_ID = /\.tsx(?:\?|$)/;
-
-/**
- * Cheap first stage only — NOT a recognizer. The match keeps plain modules off
- * the AST path and may false-positive (any '@' — inside a string literal,
- * comment, or import specifier — matches); binding provenance and admission
- * are decided exclusively by the semantic core.
- */
-export function isCompiledElementModule(code: string, id: string): boolean {
-  return SUPPORTED_MODULE_ID.test(id) && code.includes('@');
-}
-
-/**
- * Precise second stage behind the prefilter: a canonically bound
- * `@element(...)` decorator application on a class declaration (provenance
- * decided by the semantic core's intrinsic-binding model). Modules that only
- * mention the marker in a string literal or comment, or spell it through a
- * foreign/local binding, do not reach the compiler.
- */
-export function hasElementDecoratorApplication(code: string, id: string): boolean {
-  return analyzeModuleSemantics(code, id).compiledElementDecorator;
-}
-
-/**
- * Compile one opted-in module without binding the caller to Vite. The core
- * adapter hook and the inline SSR/client builds all use this same function,
- * which prevents duplicate compiler implementations from drifting. Returns
- * null for modules without a canonically bound @element decorator
- * application, so marker-mentioning and foreign-binding modules pass through
- * untouched. Modules whose @element spelling carries unsupported or ambiguous
- * provenance are compiled anyway so the compiler boundary fails closed with
- * the OEC9027 provenance diagnostic. `options.staticSidecars` admits
- * host-declared sidecar policy statements; the default core admits none.
- */
-export function compileElementModule(
-  code: string,
-  id: string,
-  options: SemanticCoreOptions = {},
-): CompileElementResult | null {
-  if (!isCompiledElementModule(code, id)) return null;
-  const facts = analyzeModuleSemantics(code, id);
-  if (!facts.compiledElementDecorator && facts.unsupportedElementDecorator === undefined) {
-    return null;
-  }
-  return compileElementProgram(code, id, options);
-}
-
-/**
- * Strip the inline map comment from a compiled module at the Vite boundary.
- * The core artifact embeds its real Source Map v3 inline for standalone
- * consumers; the Vite transform returns that same map as its `map` output so
- * Vite composes it with the rest of the pipeline — leaving the comment in the
- * served code would create a second, conflicting map story (#1210).
- */
-export function stripInlineSourceMapComment(code: string): string {
-  return code.replace(/\n\/\/# sourceMappingURL=data:application\/json;base64,[^\n]*(?=\n?$)/, '');
-}
 
 /**
  * Compile-time source identity for a module: absolute Vite ids are converted
@@ -209,13 +95,6 @@ export interface CompiledElementPluginOptions {
   typeCheckEmitted?: boolean;
   /** Specifier → candidate files map used when `typeCheckEmitted` is on. */
   resolutionPaths?: Record<string, string[]>;
-  /**
-   * Static-sidecar descriptors the host application admits into the compiled
-   * module grammar (e.g. its island delivery policy factory). The default
-   * core knows none: without an injected descriptor a module carrying a
-   * sidecar policy statement fails closed with OEC9008.
-   */
-  staticSidecars?: readonly StaticSidecarDescriptor[];
   /**
    * The class-candidate registry this plugin instance writes its compiled
    * modules' statically admitted class tokens into (alpha15 S lane). The
@@ -292,9 +171,9 @@ export function registerStyleEdges(
 /**
  * The `open:compiled-element` Vite plugin: runs at `enforce: 'pre'` so the
  * compiler sees authored TSX before Vite's own TS/JSX lowering, compiles every
- * module with a canonically bound `@element` decorator, and leaves all other
- * modules untouched. `workspaceRoot` anchors generated source-map ids for
- * linked workspace packages.
+ * module one of the two admission lanes owns, and leaves all other modules
+ * untouched. `workspaceRoot` anchors generated source-map ids for linked
+ * workspace packages.
  *
  * The generated-element site option is a host capability (M09-1b): hosts that
  * resolve islands before the compiler transform supply the tag fact; hosts
@@ -314,39 +193,33 @@ function createCompiledElementPlugin(options: CompiledElementPluginOptions = {})
     },
     // The compiler owns the whole TSX module and must see the authored source:
     // enforce 'pre' so this hook runs before Vite's builtin TS/JSX lowering
-    // (which would rewrite render() into runtime _jsx() calls the compiler
-    // rightly rejects).
+    // (which would rewrite JSX into runtime _jsx() calls no lane admits).
     enforce: 'pre',
 
     transform(code, id) {
       try {
         const moduleId = stableModuleId(id, viteRoot, workspaceRoot);
-        const compiled = compileElementModule(code, moduleId, {
-          staticSidecars: options.staticSidecars,
-        });
-        // The generated Native Custom Element lane (M09-1) sits between the
-        // class lane and the server function lane: the class lane owns every
-        // decorated module, and a module the generated lane admits is not a
-        // server component. A host without a site fact (a standalone build)
-        // keeps this lane inert; the router passes its island closure (M09-1b).
+        // The generated Native Custom Element lane (M09-1) runs first: a
+        // module it admits is a generated component, never a server component.
+        // A host without a site fact (a standalone build) keeps this lane
+        // inert; the router passes its island closure (M09-1b).
         const generated =
-          compiled === null && options.generatedElementSite !== undefined
+          options.generatedElementSite !== undefined
             ? compileGeneratedElementIfAdmitted(code, moduleId, {
                 site: options.generatedElementSite(moduleId),
               })
             : null;
-        // The server function component lane (alpha15): the class lane
-        // declined (no compiled-element decorator), so the module may still
-        // be a server function page/component — an exported JSX-returning
-        // function the compiler lowers into __h/__t/__ssr constructors. The
-        // class candidates a function module proves are LIGHT-root facts
-        // (no element class, no shadow root). Style edges are honestly
-        // SKIPPED: a function page owns no element class to hang the DSD
+        // The server function component lane (alpha15) answers for what the
+        // generated lane declined: an exported JSX-returning function the
+        // compiler lowers into __h/__t/__ssr constructors. The class
+        // candidates a function module proves are LIGHT-root facts (no
+        // element class, no shadow root). Style edges are honestly
+        // SKIPPED: a function page owns no element to hang the DSD
         // `<link>` on, and a registered edge with no consumer would emit an
         // orphan CSS asset (the demand-shape discipline the style pipeline
         // documents).
         const serverCompiled =
-          compiled === null && generated === null
+          generated === null
             ? compileServerComponentIfAdmitted(code, moduleId, {
                 ...(options.resolveServerComponentModule === undefined
                   ? {}
@@ -368,41 +241,27 @@ function createCompiledElementPlugin(options: CompiledElementPluginOptions = {})
         // form is admitted identically to the workspace-source form (#1558/
         // KR-10). This transform stays the registry's one writer.
         const artifact =
-          compiled || generated || serverCompiled
-            ? undefined
-            : readCompiledArtifactStyles(code, id);
-        const styleRequests = compiled?.styleRequests ?? artifact?.requests;
-        // The compiled module's `.css` edges travel to the intercepting host
+          generated || serverCompiled ? undefined : readCompiledArtifactStyles(code, id);
+        // The adopted artifact's `.css` edges travel to the intercepting host
         // plugin through the style-edge registry — keyed by the id the
         // bundler's resolver lands on for the authored import. The compiler
         // never writes files or reads sheet bytes; the host build owns the
         // emitted artifacts from here.
-        if (styleRequests !== undefined) {
-          registerStyleEdges(
-            id,
-            styleRequests,
-            compiled ? lightRootScopeTag(compiled.program) : artifact?.scopeTag,
-          );
+        if (artifact !== undefined) {
+          registerStyleEdges(id, artifact.requests, artifact.scopeTag);
         }
-        // The compiled component's statically admitted class tokens (alpha15 S
-        // lane) travel through the candidate registry: the host build hands
-        // them to the OFFICIAL Tailwind compiler as explicit candidates and
-        // emits the generated CSS as an external stylesheet asset. The
-        // compiler attaches no Tailwind semantics to them (opaque strings).
+        // A component's statically admitted class tokens (alpha15 S lane)
+        // travel through the candidate registry: the host build hands them to
+        // the OFFICIAL Tailwind compiler as explicit candidates and emits the
+        // generated CSS as an external stylesheet asset. The compiler attaches
+        // no Tailwind semantics to them (opaque strings).
         //
         // The registration is AUTHORITATIVE for the module, including "none":
         // a module re-transformed to carry no static class token drops its
         // previous facts, so an edit that deleted every class cannot leave a
         // stale candidate in the next stylesheet (defect C).
         if (options.candidates !== undefined) {
-          if (compiled !== null) {
-            options.candidates.register(id, compiled.classCandidates ?? [], {
-              // The root scope is part of the fact: only a shadow-root
-              // component's classes need the component stylesheet — light-root
-              // classes live in document DOM and the document entry covers them.
-              shadow: compiled.program.root.kind !== 'light',
-            });
-          } else if (serverCompiled !== null) {
+          if (serverCompiled !== null) {
             // A server function component has no element class and no root —
             // its output is document DOM, so its classes are LIGHT facts.
             options.candidates.register(id, serverCompiled.classCandidates ?? [], {
@@ -466,41 +325,7 @@ function createCompiledElementPlugin(options: CompiledElementPluginOptions = {})
         // The edge registration above is the whole job for an adopted
         // artifact: it ships as its own emitted module, nothing to compile or
         // type-check here.
-        if (!compiled) return null;
-        if (options.typeCheckEmitted) {
-          const diagnostics = typeCheckEmittedModule(compiled.code, moduleId, {
-            paths: options.resolutionPaths,
-          });
-          const first = diagnostics[0];
-          if (first) {
-            // The emitted module is the compiler's own output, so a diagnostic
-            // here is a compiler defect rather than an authoring error. The
-            // message says which it is, and the first diagnostic supplies the
-            // location the build overlay underlines.
-            this.error({
-              id,
-              // 1-based, the same base diagnosticPluginError reports — one loc shape.
-              loc: { file: id, line: first.line, column: first.character },
-              message:
-                `[open:compiled-element] the compiler emitted a module that does not ` +
-                `type-check (${diagnostics.length} diagnostic(s); TS${first.code}: ` +
-                `${first.message}). This is a compiler defect — report it with the authored ` +
-                'module that triggered it.',
-            });
-          }
-        }
-        // Hand the transform's real map to the bundler as its `map` output
-        // instead of relying on the inline map comment. Vite 8.0's rolldown
-        // read that comment back; rolldown 1.1 (Vite 8.1) no longer does, so
-        // the authored source (e.g. the consumer's counter.tsx) disappeared
-        // from the emitted bundle's source map — caught by the packed Element
-        // consumer's "authored source map must survive" assertion. The map is
-        // already on CompileElementResult; this is the #1210 contract the
-        // strip helper was written for.
-        return {
-          code: stripInlineSourceMapComment(compiled.code),
-          map: compiled.map,
-        };
+        return null;
       } catch (error) {
         if (error instanceof CompiledElementError) {
           // #1413: hand the build the structured diagnostic record

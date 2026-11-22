@@ -12,7 +12,7 @@
 import { expect, test } from 'vitest';
 import {
   CompiledElementError,
-  compileElementProgram,
+  compileGeneratedElementIfAdmitted,
   recordCompilerDiagnostics,
 } from '@openelement/compiler';
 import {
@@ -33,17 +33,24 @@ import {
 const FILE = '/proj/app/components/oe-probe.tsx';
 
 function compiledFailingModule(): CompiledElementError {
+  // The envelope walk only needs A real structured compiler refusal: an OEC code
+  // and an authored location. Alpha16 retired the class lane that used to
+  // produce it, so the fixture is built through the surviving generated lane —
+  // a sidecar-admitted island with a spread attribute, which the lane refuses
+  // with OEC9042 — and the assertions below still pin the envelope seam rather
+  // than any class-grammar diagnostic that no longer exists.
   const source = [
-    "import { element, OpenElement, property } from '@openelement/element';",
-    "@element('oe-probe', { root: 'light' })",
-    'export class Probe extends OpenElement {',
-    '  @property({ reflect: false })\n  count = Math.max(1, 2);',
-    '  render() { return <div>probe</div>; }',
+    "import { defineIslandConfig } from '@openelement/router';",
+    "export const openElement = defineIslandConfig({ hydrate: 'idle', tag: 'oe-probe' });",
+    'function Probe() {',
+    '  const rest = {};',
+    '  return <div {...rest}>probe</div>;',
     '}',
+    'export default Probe;',
     '',
   ].join('\n');
   try {
-    compileElementProgram(source, FILE);
+    compileGeneratedElementIfAdmitted(source, FILE, { site: { tag: 'oe-probe' } });
   } catch (error) {
     if (error instanceof CompiledElementError) return error;
     throw error;

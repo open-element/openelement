@@ -15,13 +15,15 @@
  * ".../open-button.css"`), because a workspace build compiled the `.tsx`
  * source and never needed the artifact path.
  *
- * The accepted shape is the ONE style authoring grammar
- * (semantic-core/style-imports.ts): a relative `.css` default import arrayed
- * in the class's `static styles`. The extraction here is deliberately the
- * PERMISSIVE read of that shape: it claims exactly the relative `.css`
- * default imports arrayed as plain bindings, and leaves every other member of
- * a `static styles` array untouched. Artifacts compiled before #1558
- * (legacy inline sheets that referenced a `StyleSheet` built in a plain
+ * The accepted shape is the `.css` default-import-arrayed-in-`static styles`
+ * form the retired class grammar admitted: a relative `.css` default import
+ * claimed by a `static styles` member. This read outlives that grammar
+ * deliberately — artifacts already shipped in the packed form carry it, and a
+ * packed consumer has no authored source to recompile. The extraction is
+ * deliberately PERMISSIVE about that shape: it claims exactly the relative
+ * `.css` default imports arrayed as plain bindings, and leaves every other
+ * member of a `static styles` array untouched. Artifacts compiled before
+ * #1558 (legacy inline sheets that referenced a `StyleSheet` built in a plain
  * module) therefore keep riding the old path unchanged — a strict admission
  * here would break every previously-published package for no protocol gain.
  *
@@ -183,9 +185,9 @@ export function readCompiledArtifactStyles(
   visit(sf);
 
   // Every collected sheet import must have been claimed by a `static styles`
-  // array — the ONE style authoring grammar (style-imports.ts). An unclaimed
-  // sheet import means the module is not this grammar's shape, and a partial
-  // adoption would leave the intercept to fail closed on the remaining edge.
+  // array. An unclaimed sheet import means the module is not this shape, and a
+  // partial adoption would leave the intercept to fail closed on the remaining
+  // edge.
   if (!shapeFollowed || claimed.size !== sheetBindings.size) return undefined;
   if (edges.length === 0) return undefined;
   const scopeTag = programScopeTag(program);

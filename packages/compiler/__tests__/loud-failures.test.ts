@@ -6,10 +6,13 @@
 
 import { describe, expect, test } from 'vitest';
 import { forbiddenSinkReason } from '@openelement/protocol/forbidden-sinks';
-import {
-  CompiledElementError,
-  compileElementProgram,
-} from '../src/internal/compiler/semantic-core/compile.ts';
+// The CL-10 row below is the only row that touched the retired class compile
+// entry; its subject (the compile boundary reports EVERY syntax diagnostic
+// through the one error carrier) is a property of the shared parse/diagnostics
+// adapter, so it is asserted against the surviving throwing entry instead. The
+// carrier itself moved to compiler-diagnostics.ts with that entry's retirement.
+import { CompiledElementError } from '../src/internal/compiler/semantic-core/compiler-diagnostics.ts';
+import { compileServerComponentModule } from '../src/internal/compiler/semantic-core/server-component.ts';
 import { analyzeModuleSemantics } from '../src/internal/compiler/semantic-core/module-analysis.ts';
 import { styleRequestFile } from '../src/internal/compiler/style-requests.ts';
 
@@ -18,7 +21,12 @@ describe('CL-10: syntax failure reports every diagnostic, not just the first', (
     const source = 'const a = ;\nconst b = ;\n';
     let caught: CompiledElementError | undefined;
     try {
-      compileElementProgram(source, '/proj/src/broken.tsx');
+      // Only the PARSE stage is under test, and it runs before admission on
+      // every compile entry: the server entry is the surviving one that throws
+      // (the function frontend answers the same syntax diagnostics in its
+      // result instead of throwing), so the accumulation contract is pinned
+      // here without re-introducing a class-lane fixture.
+      compileServerComponentModule(source, '/proj/src/broken.tsx');
     } catch (error) {
       caught = error as CompiledElementError;
     }

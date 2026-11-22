@@ -1,11 +1,12 @@
 /**
  * The compiler hooks of the open build plugin (issue #1473 extraction).
  *
- * `transform` compiles @element modules during the build and adopts this
- * compiler's own emitted artifacts (a package's shipped module) for their
- * style edges; `handleHotUpdate` decides between ordinary module HMR and a
- * full reload by comparing Part Program shapes. The per-plugin-instance shape
- * map stays an instance-local closure, so no program can leak between Vite
+ * `transform` runs the generated Native Custom Element lane and the server
+ * function lane over the authored module, and adopts this compiler's own
+ * emitted artifacts (a package's shipped module) for their style edges;
+ * `handleHotUpdate` decides between ordinary module HMR and a full reload by
+ * comparing the emitted generated-module text. The per-plugin-instance shape
+ * map stays an instance-local closure, so no shape can leak between Vite
  * builds.
  */
 
@@ -14,21 +15,17 @@ import type { Plugin } from 'vite';
 import {
   CompiledElementError,
   compiledArtifactClassCandidates,
-  compileElementModule,
   compileGeneratedElementIfAdmitted,
   compileServerComponentIfAdmitted,
   diagnosticPluginError,
-  lightRootScopeTag,
   readCompiledArtifactStyles,
   recordCompilerDiagnostics,
   registerStyleRequest,
   stableModuleId,
-  stripInlineSourceMapComment,
   styleEdgesForFile,
   styleRequestFile,
   styleRequestModuleId,
 } from '@openelement/compiler';
-import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
 import {
   collectPackageIslandModuleSites,
   createGeneratedElementSiteResolver,
@@ -43,19 +40,17 @@ import type { OpenPluginState } from './plugin-config.ts';
 
 /**
  * Create the `transform`/`handleHotUpdate` hooks of `open:core` over the
- * shared plugin state. The compiled-program shape map is per-plugin-instance
- * state: it distinguishes a compatible behavior edit from a Part Program
- * shape edit during HMR, and no module-global cache may leak a program
- * between Vite builds.
+ * shared plugin state. The generated-module shape map is per-plugin-instance
+ * state: it distinguishes an ordinary module HMR from a changed class
+ * construction, and no module-global cache may leak a shape between Vite
+ * builds.
  */
 export function createCompilerHooks(
   state: OpenPluginState,
 ): Pick<Plugin, 'transform' | 'handleHotUpdate'> {
-  // The shape excludes the program sourceMap: source offsets shift on ANY
-  // edit (including behavior-only method-body edits), so comparing them
-  // would force a full reload for every keystroke instead of only for
-  // template/Part/Block shape changes.
-  const compiledProgramShapes = new Map<string, string>();
+  // The emitted text is the shape: source maps and authored offsets shift on
+  // ANY edit, so the map holds the module's generated text only.
+  const generatedModuleShapes = new Map<string, string>();
   // One site closure per plugin instance (one dev server), built from the
   // resolved islands dir — the same invariant the island transform plugin
   // captures. The generated lane needs the tag the island pipeline will
@@ -89,53 +84,36 @@ export function createCompilerHooks(
     () => state.ctx.phase1.declaredElementTags,
   );
 
-  const programShape = (program: unknown): string => {
-    const { sourceMap: _sourceMap, ...shape } = program as Record<string, unknown>;
-    return JSON.stringify(shape);
-  };
-
-  // A generated module has no Part Program to compare. Its emitted text IS the
-  // shape: any edit re-evaluates the class construction and the appended tail,
-  // and an already-upgraded element keeps the constructor it was defined with,
-  // so a changed generated module takes the bounded full-reload path instead of
-  // being mistaken for a class module's method-body edit (M09-1b).
+  // A generated module's emitted text IS the shape: any edit re-evaluates the
+  // class construction and the appended tail, and an already-upgraded element
+  // keeps the constructor it was defined with, so a changed generated module
+  // takes the bounded full-reload path (M09-1b).
   const generatedShape = (code: string): string => JSON.stringify({ generatedElement: code });
 
   return {
     transform(code, id) {
       try {
         const moduleId = stableModuleId(id, state.viteRoot, state.workspaceRoot);
-        const result = compileElementModule(
-          code,
-          moduleId,
-          // The island delivery policy statement is admitted only through
-          // the injected descriptor; the dev style-asset plugin
-          // (open:style-assets-dev) serves the `.css` edges the compile
-          // registers.
-          { staticSidecars: [ISLAND_ADMISSION] },
-        );
-        // The generated Native Custom Element lane (M09-1b): when the class
-        // lane declined and the host resolved an island tag for this module,
-        // the lane emits the generated class instead of leaving the island's
-        // function default export to throw at `customElements.define`.
+        // The generated Native Custom Element lane (M09-1b): when the host
+        // resolved an island tag for this module, the lane emits the generated
+        // class instead of leaving the island's function default export to throw
+        // at `customElements.define`. The site closure is the host's admission
+        // decision and the only one the lane has.
         const site = generatedElementSite(moduleId);
         const generatedResult =
-          result === null && site !== null
-            ? compileGeneratedElementIfAdmitted(code, moduleId, { site })
-            : null;
-        // The server function component lane (alpha15): when the class lane
-        // and the generated lane declined, a route module carrying an exported
-        // JSX-returning function compiles into `__h`/`__t`/`__ssr`
-        // constructors. Nested composition resolves through the host resolver
-        // (the compiler never reads the filesystem); the tags the render can
-        // expand — renderable islands plus static compiled components — route
-        // nested hosts through `__ssr`.
+          site === null ? null : compileGeneratedElementIfAdmitted(code, moduleId, { site });
+        // The server function component lane (alpha15): when the generated lane
+        // declined, a route module carrying an exported JSX-returning function
+        // compiles into `__h`/`__t`/`__ssr` constructors. Nested composition
+        // resolves through the host resolver (the compiler never reads the
+        // filesystem); the tags the render can expand — renderable islands plus
+        // static compiled components — route nested hosts through `__ssr`.
         const serverComponentResolver = createServerComponentSourceResolver({
           root: state.viteRoot ?? process.cwd(),
           workspaceRoot: state.workspaceRoot,
         });
         const serverResult =
-          result === null && generatedResult === null
+          generatedResult === null
             ? compileServerComponentIfAdmitted(code, moduleId, {
                 resolveModule: (specifier) =>
                   serverComponentResolver(specifier, moduleId) ?? undefined,
@@ -149,19 +127,21 @@ export function createCompilerHooks(
         // authored grammar left to compile, but its `.css` imports are the
         // same style edges — recovered through the artifact read so dev admits
         // the packed form exactly as the build does (#1558/KR-10).
-        const artifact = result || serverResult ? undefined : readCompiledArtifactStyles(code, id);
-        const styleRequests = result?.styleRequests ?? artifact?.requests;
-        // the compiled-element transform is the style-edge
-        // registry's one writer — this hook is that transform's dev host
-        // binding (element's compiledElementPlugin is the build binding),
-        // so the registration travels with it; the dev plugin's intercept
-        // answers from this registry.
-        if (styleRequests !== undefined) {
+        const artifact =
+          generatedResult || serverResult ? undefined : readCompiledArtifactStyles(code, id);
+        // This hook is the style-edge registry's dev writer (element's
+        // compiledElementPlugin is the build binding), so the registration
+        // travels with it; the dev plugin's intercept answers from this
+        // registry. Generated and server function modules own no authored `.css`
+        // import: a generated island's declared sheets are registered from its
+        // island declaration (`devAuthoredIslandStyleUrls`), and a server
+        // function page has no element class to hang a DSD `<link>` on.
+        if (artifact !== undefined) {
           // The component's root scope is part of every edge (alpha15 S lane,
           // S-C1.2): a light-root sheet leaves the build wrapped in
           // `@scope (<tag>)`, and dev scopes the served adapter identically.
-          const scopeTag = result ? lightRootScopeTag(result.program) : artifact?.scopeTag;
-          for (const specifier of styleRequests) {
+          const scopeTag = artifact.scopeTag;
+          for (const specifier of artifact.requests) {
             registerStyleRequest({
               moduleId: styleRequestModuleId(id, specifier, scopeTag),
               importer: id,
@@ -180,28 +160,22 @@ export function createCompilerHooks(
         // leaving a stale candidate in the served sheet (defect C). The
         // registry belongs to this plugin instance (one dev server), so a
         // second project in the same process never inherits these facts.
-        if (result !== null) {
-          state.classCandidates.register(id, result.classCandidates ?? [], {
-            // Only shadow-root classes need the component stylesheet; light
-            // classes live in document DOM and the document entry covers them.
-            shadow: result.program.root.kind !== 'light',
+        if (generatedResult !== null) {
+          // A generated Native Custom Element (P-1 / P-1c, 2026-11-21). The lane
+          // collects its static class tokens and the host's site fact names the
+          // descriptor root, so the scope is a real fact: a shadow root's classes
+          // belong to the component stylesheet, a light root's to the document
+          // sheet. Before this the dev host registered "none" — which is why a
+          // migrated shadow island's dev sheet compiled empty while the build
+          // stayed correct.
+          state.classCandidates.register(id, generatedResult.classCandidates, {
+            shadow: site?.root === 'shadow',
           });
         } else if (serverResult !== null) {
           // A server function component has no element class and no root —
           // its output is document DOM, so its classes are LIGHT facts.
           state.classCandidates.register(id, serverResult.classCandidates ?? [], {
             shadow: false,
-          });
-        } else if (generatedResult !== null) {
-          // A generated Native Custom Element (P-1 / P-1c, 2026-11-21). The lane
-          // now collects its static class tokens and the host's site fact names
-          // the descriptor root, so the scope is a real fact: a shadow root's
-          // classes belong to the component stylesheet, a light root's to the
-          // document sheet. Before this the dev host registered "none" — which is
-          // why a migrated shadow island's dev sheet compiled empty while the
-          // build stayed correct.
-          state.classCandidates.register(id, generatedResult.classCandidates, {
-            shadow: site?.root === 'shadow',
           });
         } else {
           // A shipped artifact module carries its candidates (S5-B): the dev
@@ -220,17 +194,7 @@ export function createCompilerHooks(
         }
         // The edge registration is the whole job for an adopted artifact:
         // it ships as its own module, nothing to compile or hand back.
-        if (!result) return null;
-        const key = id.split('?', 1)[0];
-        compiledProgramShapes.set(key, programShape(result.program));
-        // The semantic core emits the real Source Map v3 (#1210): return it as
-        // this hook's `map` output so Vite composes it downstream, and strip
-        // the inline comment the standalone artifact carries so the served
-        // module has exactly one map story.
-        return {
-          code: stripInlineSourceMapComment(result.code),
-          map: result.map,
-        };
+        return null;
       } catch (error) {
         // The SAME projection the standalone compiler plugin reports through
         // (#1413): a structured `{id, loc, frame, diagnostics}` record, so the
@@ -250,12 +214,12 @@ export function createCompilerHooks(
     },
 
     async handleHotUpdate(hmr) {
-      // A sheet file edit moves the RESOURCE's bytes; it does not change the
-      // Part Program shape and must not reload the page (S-C1.3). The edge's
-      // adapter is re-evaluated: its hot-accept refetches the dev resource and
-      // `replace()`s the same live sheet object, so every root that holds it
-      // re-renders. The server half is invalidated too, so the next document
-      // render declares the same resource with the new bytes behind it.
+      // A sheet file edit moves the RESOURCE's bytes; it does not change a
+      // module's generated shape and must not reload the page (S-C1.3). The
+      // edge's adapter is re-evaluated: its hot-accept refetches the dev
+      // resource and `replace()`s the same live sheet object, so every root that
+      // holds it re-renders. The server half is invalidated too, so the next
+      // document render declares the same resource with the new bytes behind it.
       if (/\.css$/.test(hmr.file) && styleEdgesForFile(hmr.file).length > 0) {
         for (const edge of styleEdgesForFile(hmr.file)) {
           const graphId = styleAssetGraphId(edge.moduleId);
@@ -290,37 +254,29 @@ export function createCompilerHooks(
       try {
         source = await readFile(hmr.file, 'utf8');
       } catch {
-        compiledProgramShapes.delete(hmr.file);
+        generatedModuleShapes.delete(hmr.file);
         return;
       }
       try {
         const moduleId = stableModuleId(hmr.file, state.viteRoot, state.workspaceRoot);
-        const result = compileElementModule(
-          source,
-          moduleId,
-          // Same admission as the transform.
-          { staticSidecars: [ISLAND_ADMISSION] },
-        );
         // The generated lane is part of the dev transform (M09-1b), so the HMR
-        // comparison must see the same module. A generated module never rides
-        // the class-shape map: the emitted text is its shape, because a changed
-        // class construction is unsafe to patch in place.
-        const site = result === null ? generatedElementSite(moduleId) : null;
+        // comparison must see the same module: its emitted text is its shape,
+        // because a changed class construction is unsafe to patch in place.
+        const site = generatedElementSite(moduleId);
         const generatedResult =
           site === null ? null : compileGeneratedElementIfAdmitted(source, moduleId, { site });
-        if (!result && !generatedResult) {
-          compiledProgramShapes.delete(hmr.file);
+        if (generatedResult === null) {
+          generatedModuleShapes.delete(hmr.file);
           return;
         }
-        const nextShape =
-          result !== null ? programShape(result.program) : generatedShape(generatedResult!.code);
-        const previousShape = compiledProgramShapes.get(hmr.file);
-        compiledProgramShapes.set(hmr.file, nextShape);
+        const nextShape = generatedShape(generatedResult.code);
+        const previousShape = generatedModuleShapes.get(hmr.file);
+        generatedModuleShapes.set(hmr.file, nextShape);
         if (previousShape !== undefined && previousShape !== nextShape) {
-          // A changed static tree or Part/Block instruction — or any changed
-          // generated class — cannot be safely patched in place. Full reload is
-          // the bounded fail-closed path; same-program method/initializer edits
-          // retain the element module's live state through ordinary Vite HMR.
+          // Any changed generated class cannot be safely patched in place. Full
+          // reload is the bounded fail-closed path; an edit inside the same
+          // emitted text shape retains the element module's live state through
+          // ordinary Vite HMR.
           hmr.server.ws.send({ type: 'full-reload' });
           return [];
         }
@@ -328,7 +284,7 @@ export function createCompilerHooks(
       } catch {
         // The next normal transform reports the source-located compiler error.
         // Do not keep a stale compiled module alive after an invalid edit.
-        compiledProgramShapes.delete(hmr.file);
+        generatedModuleShapes.delete(hmr.file);
         hmr.server.ws.send({ type: 'full-reload' });
         return [];
       }

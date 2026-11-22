@@ -10,10 +10,9 @@
  * generated host as its nested child.
  *
  * BOTH halves run the generated lane (F16 deleted the class lane). The page used
- * to be an `@element` class compiled by `compileElementProgram`; it is now the
- * fixture's own generated page root, compiled by the SAME lane as the island and
- * rendered through the registry pair — the page-root path `renderToString`
- * dispatches on a paired tag string.
+ * to be an `@element` class; it is now the fixture's own generated page root,
+ * compiled by the SAME lane as the island and rendered through the registry
+ * pair — the page-root path `renderToString` dispatches on a paired tag string.
  *
  * The facts pinned here:
  *
@@ -135,8 +134,8 @@ async function withStubRegistry<T>(
 /**
  * Render one generated page root through the SAME registry pair the island uses.
  *
- * A generated page carries no `__partProgram` and no class static: its server
- * artifact is the compiler-emitted host producer, which `renderToString`
+ * A generated page carries no compiled class artifact and no class static: its
+ * server artifact is the compiler-emitted host producer, which `renderToString`
  * dispatches on the paired TAG STRING before any class probe. Registering the
  * page is therefore part of rendering it, not a shortcut around it.
  *

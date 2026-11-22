@@ -27,8 +27,9 @@ export interface ModuleSemanticFacts {
    * default import, conflicting duplicate bindings, or a relative-module
    * re-export). Never set for clearly foreign bindings (third-party packages,
    * local declarations, bare/global spellings) — those modules are simply not
-   * OpenElement modules. The plugin gate compiles such modules so the
-   * compiler boundary fails closed with the OEC9027 provenance diagnostic.
+   * OpenElement modules. No lane compiles such a module any more, so the fact
+   * survives as REFUSAL EVIDENCE: both admission bridges answer null for it
+   * instead of compiling a class grammar that no longer has an entry point.
    */
   unsupportedElementDecorator?: string;
   exportedTagName?: string;
@@ -163,20 +164,6 @@ export interface ModuleSemanticsOptions {
  * like any other unrecognized import.
  */
 const CORE_VOCABULARY: readonly ModuleVocabularyDescriptor[] = [];
-
-/**
- * Intrinsics that exist only at compile time: the compiler erases the
- * decorator applications they power, and the runtime packages export no such
- * bindings, so the generated module must not keep importing them.
- */
-const COMPILE_TIME_ONLY_IMPORTS: Readonly<Record<string, readonly string[]>> = {
-  '@openelement/element': ['element', 'property'],
-};
-
-/** True when `imported` from `module` is a compile-time-only intrinsic binding. */
-export function isCompileTimeOnlyImport(module: string, imported: string): boolean {
-  return COMPILE_TIME_ONLY_IMPORTS[module]?.includes(imported) ?? false;
-}
 
 interface ImportBinding {
   form: 'named' | 'namespace' | 'default';
@@ -705,9 +692,11 @@ export function analyzeModuleSemantics(
       }
       const resolution = imports.resolveIntrinsic(decorator.expression.expression, 'element');
       if (!resolution.canonical) {
-        // Unsupported/ambiguous provenance surfaces so the plugin gate can
-        // route the module to the compiler, which fails closed (OEC9027);
-        // clearly foreign bindings stay silent pass-throughs.
+        // Unsupported/ambiguous provenance is still recorded: with the class
+        // lane gone, the fact's only consumer is the opposite decision — a
+        // module spelling the marker must not fall through to a function lane
+        // that would compile half of a class grammar. Clearly foreign bindings
+        // stay silent pass-throughs.
         if (resolution.unsupported && unsupportedElementDecorator === undefined) {
           unsupportedElementDecorator = resolution.unsupported;
         }

@@ -35,7 +35,10 @@ const REPO_ROOT = join(import.meta.dirname!, '..', '..', '..');
 const ROUTER_CLI = join(REPO_ROOT, 'packages', 'router', 'src', 'cli', 'cli.ts');
 
 /** The authored line the broken `@property` default sits on (1-based). */
-const BROKEN_LINE = 8;
+// The line the generated-lane refusal lands on (1-based, the `return` carrying the
+// spread). Alpha16 retired the class grammar whose OEC9020 this fixture used to
+// trigger, so the same envelope seam is proven with a surviving refusal instead.
+const BROKEN_LINE = 7;
 
 interface Fixture {
   appDir: string;
@@ -80,24 +83,29 @@ async function buildFixture(): Promise<Fixture> {
       '',
     ].join('\n'),
   );
-  // The authored mistake (#1612's failing fixture): a property default that
-  // is not a serializable literal — OEC9020, on the line BROKEN_LINE pins.
+  // The authored mistake: a spread attribute, which the GENERATED lane refuses with
+  // OEC9042 on the line BROKEN_LINE pins. The subject of this suite is the consumer
+  // ENVELOPE (one JSON document, machine-readable codes, authored locations), not
+  // any particular grammar, so it rides whichever lane still produces a coded
+  // refusal with a location — the class grammar that used to answer OEC9020 retired
+  // with the class lane in Alpha16.
+  //
+  // The broken module is an ISLAND the route imports, not the page component: a
+  // module that cannot compile cannot be classified as a page either, and the route
+  // scan would fail first with ROUTE_SCAN_ERROR — hiding the compiler refusal this
+  // suite exists to observe.
   await write(
     join(appDir, 'app', 'components', 'broken-page.tsx'),
     [
       '/** The consumer diagnostics fixture: fails the build on purpose. */',
-      "import { element, OpenElement, property } from '@openelement/element';",
+      "import { defineIslandConfig } from '@openelement/router';",
       '',
-      "@element('oe-consumer-broken', { root: 'light' })",
-      'export default class BrokenPage extends OpenElement {',
-      '  // line 7',
-      '  @property({ reflect: false })',
-      '  count = Math.max(1, 2);',
-      '',
-      '  render() {',
-      '    return <div>consumer diagnostics</div>;',
-      '  }',
+      "export const openElement = defineIslandConfig({ tag: 'oe-consumer-broken', root: 'shadow' });",
+      'function BrokenProbe() {',
+      '  const rest = {};',
+      '  return <div {...rest}>consumer diagnostics</div>;',
       '}',
+      'export default BrokenProbe;',
       '',
     ].join('\n'),
   );
@@ -105,9 +113,17 @@ async function buildFixture(): Promise<Fixture> {
     join(appDir, 'app', 'routes', 'index.tsx'),
     [
       "import { definePage } from '@openelement/router';",
-      "import BrokenPage from '../components/broken-page.tsx';",
+      "import BrokenProbe from '../components/broken-page.tsx';",
       '',
-      'export default definePage(BrokenPage, { renderIntent: { mode: ' + "'static'" + ' } });',
+      'function Home() {',
+      '  return (',
+      '    <main>',
+      '      <BrokenProbe />',
+      '    </main>',
+      '  );',
+      '}',
+      '',
+      "export default definePage(Home, { renderIntent: { mode: 'static' } });",
       '',
     ].join('\n'),
   );
@@ -160,12 +176,12 @@ test('the consumer app’s failing build answers with the machine-readable envel
   // Every code the failure produced, in one aggregate.
   const codes = report.diagnostics.map((diagnostic) => diagnostic.code);
   expect(codes, `codes: ${codes.join(', ')}`).toContain('OE_COMPILER_DIAGNOSTICS');
-  expect(codes, `codes: ${codes.join(', ')}`).toContain('OEC9020');
+  expect(codes, `codes: ${codes.join(', ')}`).toContain('OEC9042');
 
   // The authored record keeps its source location: the authored file, the
   // authored line — the envelope round-trips the compiler's structured data,
   // not a re-parsed display string.
-  const authored = report.diagnostics.find((diagnostic) => diagnostic.code === 'OEC9020');
+  const authored = report.diagnostics.find((diagnostic) => diagnostic.code === 'OEC9042');
   expect(authored?.file?.endsWith('broken-page.tsx'), authored?.file).toBe(true);
   expect(authored?.line).toEqual(BROKEN_LINE);
   expect(authored?.severity).toEqual('error');
@@ -178,5 +194,5 @@ test('the same run’s stderr carried one parseable report line', () => {
   expect(reportFromStream, 'stderr carried a diagnostics report line').toBeTruthy();
   expect(reportFromStream?.format).toEqual(DIAGNOSTIC_REPORT_FORMAT);
   expect(reportFromStream?.ok).toEqual(false);
-  expect(reportFromStream?.diagnostics.map((diagnostic) => diagnostic.code)).toContain('OEC9020');
+  expect(reportFromStream?.diagnostics.map((diagnostic) => diagnostic.code)).toContain('OEC9042');
 });

@@ -97,30 +97,26 @@ test('a package island resolves through the app root’s own resolution', async 
     'the resolved package module is registered (an authoritative entry, even when empty)',
   ).toBe(0);
 
-  // (2) A class-authored component DOES contribute its statically admitted
-  // candidates through the same entry point. The fixture's own components no
-  // longer exercise this: `shadow-tailwind-probe` rides the GENERATED lane now
-  // (2026-11-21 closeout) and the remaining ui-dogfood components carry no static
-  // class token at all. The scratch component is the same shape the class lane
-  // compiles, so the row still pins "the class producer contributes".
-  const classRoot = await scratchRoot({
-    'app/components/class-probe.tsx': `import { element, OpenElement } from '@openelement/element';
+  // (2) A GENERATED component contributes its statically admitted candidates
+  // through the same entry point. The class lane that used to own this row retired
+  // in Alpha16, and `collectShadowClassCandidates` now reads the generated lane, so
+  // the fixture is a sidecar-admitted island — the only shape a component can take.
+  const generatedRoot = await scratchRoot({
+    'app/components/generated-probe.tsx': `import { defineIslandConfig } from '@openelement/router';
 
-@element('class-probe', { root: 'shadow-open' })
-export default class ClassProbe extends OpenElement {
-  render() {
-    return <p class="p-4 rounded-lg">probe</p>;
-  }
+export const openElement = defineIslandConfig({ tag: 'generated-probe', root: 'shadow' });
+export default function GeneratedProbe() {
+  return <p class="p-4 rounded-lg">probe</p>;
 }
 `,
   });
   const localCandidates = createClassCandidateRegistry();
   const contributed = await collectShadowClassCandidates({
-    root: classRoot,
+    root: generatedRoot,
     candidates: localCandidates,
-    modules: [{ path: 'app/components/class-probe.tsx' }],
+    modules: [{ path: 'app/components/generated-probe.tsx' }],
   });
-  expect(contributed, 'a class-authored component contributes its candidates').toBe(1);
+  expect(contributed, 'a generated component contributes its candidates').toBe(1);
   expect(localCandidates.all()).toEqual(['p-4', 'rounded-lg']);
 });
 
