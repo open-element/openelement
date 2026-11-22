@@ -261,16 +261,9 @@ export function __h(
 /**
  * The tags this server render may expand as nested hosts (F16).
  *
- * A generated element's `__ssr` is a string builder, so a nested host inside its
- * markup reaches its producer only through the render's nested-host expander. A
- * CLASS page went through `renderToString` and received that expander from the
- * caller; a SERVER FUNCTION PAGE's compiled `render` calls `__ssr` directly, and
- * had no way to pass one — so a light child nested in a shadow tree was never
- * expanded and its sheets were never lifted into the enclosing template.
- *
  * The generated entry injects the set once per process, the same shape as
- * `__setRequestTimeStyleSheetUrls`. Empty means "nothing to expand", which keeps
- * a page with no admitted nested tags byte-identical.
+ * `__setRequestTimeStyleSheetUrls`. Empty means "nothing to expand", which keeps a
+ * page with no admitted nested tags byte-identical.
  */
 let ssrRenderableTags: readonly string[] = [];
 
@@ -279,6 +272,15 @@ export function __setSsrRenderableTags(tags: readonly string[] | null | undefine
   ssrRenderableTags = tags === null || tags === undefined ? [] : [...tags];
 }
 
+/**
+ * Serialize one admitted component's server markup.
+ *
+ * A generated element's producer is a string builder, so a nested host inside its
+ * markup reaches its own producer only through the render's nested-host expander. A
+ * class page used to receive that expander from `renderToString`; a SERVER FUNCTION
+ * PAGE's compiled `render` calls this function directly, so the expander travels
+ * through the module-level set above instead (F16).
+ */
 export function __ssr(
   tag: string,
   props?: Record<string, unknown>,

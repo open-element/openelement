@@ -22,21 +22,6 @@ export { VOID_TAGS };
 /** The Part Program IR version this package defines (currently v2). */
 export const PART_PROGRAM_VERSION = 2 as const;
 
-/**
- * Version of the compiled-module ABI: the statics a generated module carries
- * (`__partProgram`, `__compiledProperties`, `__elementMetadata`,
- * `__observedAttributes`, `__computedFields`) and the runtime facade binds.
- * Bump when the generated-module contract changes shape; generated artifacts
- * stamp both this and PART_PROGRAM_VERSION so consumers can tell format drift
- * from release drift.
- *
- * v2: platform lifecycle callback bodies are emitted inside a
- * boundary-capture wrapper calling the base class's `_captureError` — a
- * generated module now requires a runtime facade carrying that protected
- * method (the v1 shape emitted the bodies verbatim).
- */
-export const COMPILED_MODULE_ABI_VERSION = 2 as const;
-
 /** How the compiled component attaches its root: light DOM or a shadow root. */
 export type RootMode = 'light' | 'shadow-open' | 'shadow-closed';
 
