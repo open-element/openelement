@@ -27,11 +27,14 @@ import type { OpenElementBuildContext } from './build-context.ts';
 
 import { generateClientEntry, islandsMightUseBlocks } from './internal/ssg/index.ts';
 import { resolveElementServicesRuntimeModule } from './internal/ssg/entry-client-codegen.ts';
+import type { DevLiveStyleSheetGroup } from './internal/ssg/entry-client-codegen.ts';
 import { buildClientIslandEntries } from './internal/ssg/client-island-entries.ts';
 import { VIRTUAL_RUNTIME_SPECIFIERS } from './internal/ssg/entry-generators.ts';
 import { DEFAULT_ISLANDS_DIR } from './internal/paths.ts';
 import { compilerBehaviorDeclarations } from './internal/ssg/client-admission.ts';
 import { runtimeModulePath } from './internal/runtime-module-path.ts';
+import { islandStyleDeclarations } from './internal/island-style-declarations.ts';
+import { devAuthoredIslandStyleGraphIds } from './internal/style-assets.ts';
 import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
 import type { DevStyleSession } from './internal/dev-style-session.ts';
 
@@ -116,6 +119,30 @@ export function devRuntimePrebundleInclude(root: string): string[] {
 
 // Runtime module paths resolve through the shared runtimeModulePath helper
 // (internal/runtime-module-path.ts).
+
+/**
+ * The dev live-sheet groups the generated client entry must carry (F16).
+ *
+ * Each admitted generated island's declared sheets are delivered TWO ways in
+ * dev: the SSR document's declarative `<link>` (first paint, no-JS, dev
+ * resource endpoint) and a realm-held `CSSStyleSheet` the element adopts. The
+ * adopted object is the copy a CSS-only edit re-fills in place (the link's
+ * browser cache never moves), so the dev entry must hold it and attach it to
+ * the island's constructor — the one seam that reaches an ADOPTED DSD root even
+ * though `customElements.define` has already upgraded it.
+ *
+ * The graph ids are the SAME registry keys the SSR links are built from
+ * (`devAuthoredIslandStyleGraphIds` shares the key loop with
+ * `devAuthoredIslandStyleUrls`), and the dev style plugin answers them with the
+ * live adapter module. Build never computes this list: the built entry is
+ * byte-pinned and its sheets are content-addressed assets, not live resources.
+ */
+function devLiveStyleSheetGroups(): DevLiveStyleSheetGroup[] {
+  return islandStyleDeclarations().flatMap((declaration) => {
+    const graphIds = devAuthoredIslandStyleGraphIds(declaration);
+    return graphIds.length === 0 ? [] : [{ tagName: declaration.tagName, graphIds }];
+  });
+}
 
 export function devIslandClientPlugin(
   options: FrameworkOptions,
@@ -220,6 +247,7 @@ export function devIslandClientPlugin(
         ),
         staticSidecars: [ISLAND_ADMISSION],
       });
+      const devLiveStyleSheets = devLiveStyleSheetGroups();
       return generateClientEntry(islandEntries, {
         enhancedForms,
         // alpha15 S lane (S5-A), provider-generalized by the closeout: the
@@ -228,6 +256,10 @@ export function devIslandClientPlugin(
         // selected provider rather than hardcoded to one engine.
         ...(utilitySheet === undefined ? {} : { utilitySheet }),
         ...(mightUseBlocks ? {} : { includeBlocksRuntime: false }),
+        // F16 dev live-sheet channel: emitted ONLY when an admitted generated
+        // island declares sheets, and only in dev — the build entry never
+        // receives this option and must stay byte-identical.
+        ...(devLiveStyleSheets.length === 0 ? {} : { devLiveStyleSheets }),
       });
     },
   };

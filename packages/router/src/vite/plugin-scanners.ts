@@ -547,7 +547,15 @@ async function deriveDevRouteDocumentStyleLinks(state: OpenPluginState): Promise
   >;
   const tags = deliveredIslandStyleTags(declarations, islandMeta);
   if (tags.light.size === 0) return;
-  const base = state.ctx.phase3.base ?? '/';
+  // The base the DEV document's links must carry. Dev never populates
+  // `ctx.phase3` (that carrier is the BUILD's emitted-asset phase), so reading
+  // it first meant `?? '/'` won under a configured non-root base and every
+  // authored link was declared base-less — the dev server serves the resource
+  // at `<base>/.openElement/...` while the markup named `/.openElement/...`.
+  // The RESOLVED Vite config is the live, authoritative spelling of the base
+  // (the dev style plugins already read `config.base` in `configResolved`);
+  // phase3 stays as the fallback for a caller with no resolved config.
+  const base = state.resolvedConfig?.base ?? state.ctx.phase3.base ?? '/';
   const islandStyleUrls = new Map<string, readonly string[]>();
   for (const declaration of declarations) {
     if (declaration.root === 'shadow') continue;

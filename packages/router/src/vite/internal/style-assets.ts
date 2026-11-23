@@ -1219,37 +1219,62 @@ export function serverStyleAssetPlugin(options?: {
 const devAuthoredResourceEdges = new Map<string, string>();
 
 /**
- * The dev URLs of one generated island's declared sheets. Registers the edges in
- * the SAME compiler registry the build's edge readers use and records the digest
- * index the dev endpoint reads, so a shadow island's DSD `<link>` resolves in dev
- * exactly as it does in a build.
+ * The registry KEYS of one generated island's declared sheets — the ONE
+ * derivation of a declared edge's identity on the dev channel (F16).
+ *
+ * Registers the edges in the SAME compiler registry the build's edge readers
+ * use. The load-bearing reason this is a shared helper: a declared `<link>`'s
+ * URL ({@linkcode devAuthoredIslandStyleUrls}) and the live sheet's graph id
+ * ({@linkcode devAuthoredIslandStyleGraphIds}) are two delivery forms of ONE
+ * edge, so they must be the same key loop. Deriving the key twice was how an
+ * href and an adapter module could name different edges.
  */
-export function devAuthoredIslandStyleUrls(
-  base: string,
-  declaration: IslandStyleDeclaration,
-): readonly string[] {
+export function devAuthoredIslandStyleKeys(declaration: IslandStyleDeclaration): readonly string[] {
   registerStyleEdges(
     declaration.moduleId,
     declaration.specifiers,
     declaration.root === 'shadow' ? undefined : declaration.tagName,
   );
-  const urls: string[] = [];
-  for (const specifier of declaration.specifiers) {
-    // Join by the registry KEY the registration above used, not by importer
-    // attribution: a shadow sheet shared with a class island's authored import
-    // carries one registry entry (keyed by the sheet file) under whichever
-    // importer registered last, so the per-importer request list would drop
-    // the shared sheet from this island's declared dev links.
-    const key = styleRequestModuleId(
+  // Join by the registry KEY the registration above used, not by importer
+  // attribution: a shadow sheet shared with a class island's authored import
+  // carries one registry entry (keyed by the sheet file) under whichever
+  // importer registered last, so the per-importer request list would drop
+  // the shared sheet from this island's declared dev links.
+  return declaration.specifiers.map((specifier) =>
+    styleRequestModuleId(
       declaration.moduleId,
       specifier,
       declaration.root === 'shadow' ? undefined : declaration.tagName,
-    );
-    const url = devAuthoredStyleUrl(base, key);
+    ),
+  );
+}
+
+/**
+ * The dev URLs of one generated island's declared sheets, recorded in the
+ * digest index the dev endpoint reads, so a shadow island's DSD `<link>`
+ * resolves in dev exactly as it does in a build.
+ */
+export function devAuthoredIslandStyleUrls(
+  base: string,
+  declaration: IslandStyleDeclaration,
+): readonly string[] {
+  return devAuthoredIslandStyleKeys(declaration).map((key) => {
     devAuthoredResourceEdges.set(devStyleDigest(key), key);
-    urls.push(url);
-  }
-  return urls;
+    return devAuthoredStyleUrl(base, key);
+  });
+}
+
+/**
+ * The dev graph ids of one generated island's declared sheets (F16): the
+ * adapter modules the dev client entry imports to hold each edge's LIVE sheet
+ * object (the one an HMR edit re-fills). Same key loop as the URLs above, so
+ * the live sheet and the declarative `<link>` can never disagree about which
+ * edge they deliver.
+ */
+export function devAuthoredIslandStyleGraphIds(
+  declaration: IslandStyleDeclaration,
+): readonly string[] {
+  return devAuthoredIslandStyleKeys(declaration).map(styleAssetGraphId);
 }
 
 export function devStyleAssetPlugin(): Plugin {
@@ -1263,7 +1288,18 @@ export function devStyleAssetPlugin(): Plugin {
     configResolved(config) {
       base = config.base ?? '/';
     },
-    resolveId: styleEdgeResolveId,
+    // A style-asset GRAPH id (`\0oe-style-asset:<b64>.js`) is resolved to itself
+    // so the `load` below can answer it — the same arm the client build's plugin
+    // carries. Dev is a DIFFERENT plugin instance and had only the `.css`-edge
+    // arm: the generated dev entry imports the live sheet's graph id directly
+    // (the F16 dev live-sheet channel), and without this arm that import is an
+    // unresolvable bare specifier. The id is a module-graph id in BOTH halves,
+    // so the answer belongs in the dev plugin's resolve/load hooks — not in a
+    // dev-server middleware.
+    resolveId(source: string, importer?: string) {
+      if (styleAssetRegistryKey(source) !== undefined) return source;
+      return styleEdgeResolveId.call(this, source, importer);
+    },
     load(id) {
       const registryKey = styleAssetRegistryKey(id);
       if (registryKey === undefined) return null;

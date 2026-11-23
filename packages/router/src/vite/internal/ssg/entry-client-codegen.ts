@@ -35,6 +35,7 @@ function islandImportFactory(
   tagName: string,
   exportName?: string,
   generatedLane = false,
+  attachDevLiveStyles = false,
 ): string {
   const nameLiteral = exportName ? quoteGeneratedJavaScriptValue(exportName) : 'undefined';
   const tagLiteral = quoteGeneratedJavaScriptValue(tagName);
@@ -47,7 +48,15 @@ function islandImportFactory(
       WORKSPACE_ROOT,
     )} did not export a constructor for ${tagName}`,
   );
-  const define = `var _name = ${nameLiteral}; var Ctor = _name ? mod[_name] : mod.default; if (typeof Ctor !== 'function') throw new Error(${errorLiteral}); if (!customElements.get(${tagLiteral})) customElements.define(${tagLiteral}, Ctor); return mod;`;
+  // The define line is assembled from two fixed spellings, never from a
+  // conditional inside one template: the build entry's bytes are pinned, so the
+  // F16 dev attachment may add characters only when the dev channel asked for
+  // it. `__oeAttachDevLiveStyles` sets the live sheet objects on the
+  // constructor BEFORE `customElements.define` upgrades a host, which is the
+  // only window in which the shell's connect can adopt them.
+  const define = attachDevLiveStyles
+    ? `var _name = ${nameLiteral}; var Ctor = _name ? mod[_name] : mod.default; if (typeof Ctor !== 'function') throw new Error(${errorLiteral}); if (!customElements.get(${tagLiteral})) { __oeAttachDevLiveStyles(Ctor, ${tagLiteral}); customElements.define(${tagLiteral}, Ctor); } return mod;`
+    : `var _name = ${nameLiteral}; var Ctor = _name ? mod[_name] : mod.default; if (typeof Ctor !== 'function') throw new Error(${errorLiteral}); if (!customElements.get(${tagLiteral})) customElements.define(${tagLiteral}, Ctor); return mod;`;
   if (generatedLane) {
     // M11-3: a generated Native Custom Element island owns its mount/claim
     // through the compiler-emitted shell; the legacy executor runtime is not a
@@ -166,7 +175,11 @@ function activationGroupKey(entry: NormalizedClientIsland): string {
   }`;
 }
 
-function sharedActivationFactory(group: ActivationGroup, index: number): string {
+function sharedActivationFactory(
+  group: ActivationGroup,
+  index: number,
+  devLiveTags?: ReadonlySet<string>,
+): string {
   const promise = `__activation${index}Promise`;
   const factory = `__activation${index}`;
   const generatedLane = group.entries.every((entry) => entry.generatedLane === true);
@@ -201,10 +214,20 @@ function sharedActivationFactory(group: ActivationGroup, index: number): string 
     );
     lines.push(`    var ${ctor} = ${value};`);
     lines.push(`    if (typeof ${ctor} !== 'function') throw new Error(${errorLiteral});`);
+    // F16 dev live-sheet attachment: same two-spelling rule as the single-tag
+    // factory — the build emission (no dev groups) keeps the exact pinned
+    // bytes, and the dev-only variant attaches the live sheet objects to the
+    // constructor immediately before the element is defined.
     lines.push(
-      `    if (!customElements.get(${quoteGeneratedJavaScriptValue(
-        entry.tagName,
-      )})) customElements.define(${quoteGeneratedJavaScriptValue(entry.tagName)}, ${ctor});`,
+      devLiveTags?.has(entry.tagName) === true
+        ? `    if (!customElements.get(${quoteGeneratedJavaScriptValue(
+            entry.tagName,
+          )})) { __oeAttachDevLiveStyles(${ctor}, ${quoteGeneratedJavaScriptValue(
+            entry.tagName,
+          )}); customElements.define(${quoteGeneratedJavaScriptValue(entry.tagName)}, ${ctor}); }`
+        : `    if (!customElements.get(${quoteGeneratedJavaScriptValue(
+            entry.tagName,
+          )})) customElements.define(${quoteGeneratedJavaScriptValue(entry.tagName)}, ${ctor});`,
     );
   });
   lines.push('    return mod;');
@@ -373,6 +396,24 @@ export function resolveElementServicesRuntimeModule(id: string): string | null {
   }
 }
 
+/**
+ * One generated island's dev live sheets (F16), as the dev client entry
+ * receives them: the island's delivery tag and the style-asset graph ids of its
+ * declared edges. Dev is the only caller — a build's sheets are emitted,
+ * content-addressed assets delivered by a declarative `<link>`, never a live
+ * object an edit re-fills.
+ */
+export interface DevLiveStyleSheetGroup {
+  /** The island's delivery tag — the `customElements.define` name it annotates. */
+  readonly tagName: string;
+  /**
+   * The style-edge graph ids, in authored order. The dev style plugin answers
+   * each with its live adapter module (a realm-held `CSSStyleSheet` that an HMR
+   * re-evaluation `replace()`s in place).
+   */
+  readonly graphIds: readonly string[];
+}
+
 interface GenerateClientEntryOptions {
   /**
    * True when any page route carries data-open-enhance (#569): emit the form
@@ -409,6 +450,22 @@ interface GenerateClientEntryOptions {
    * link-delivered root, so one resource has one delivery.
    */
   utilitySheet?: string;
+  /**
+   * Dev-only live style sheets (F16). When present, the entry imports each
+   * edge's live adapter module and attaches the sheet objects to the island
+   * constructor under `__oeDevLiveStyles` immediately before
+   * `customElements.define` — the generated shell reads that field off the
+   * CONSTRUCTOR (the descriptor is module-local and unreachable from the dev
+   * entry) and adopts the objects into a DSD root, so a CSS-only edit can
+   * re-fill the sheet the root holds.
+   *
+   * ABSENT IN EVERY BUILD EMISSION, and the emission must be byte-identical
+   * when it is absent: the built entry's bytes are pinned by ABI hash
+   * (entry-client-codegen/generated-lane.test.ts) and every added line here is
+   * gated on this option. Build sheets are content-addressed assets delivered
+   * by a declarative link; there is no live object to attach.
+   */
+  devLiveStyleSheets?: readonly DevLiveStyleSheetGroup[];
 }
 
 /**
@@ -485,6 +542,61 @@ export function generateClientEntry(
   // #1548: the blocks axis defaults to installed; only the scan's proof of
   // absence drops the builders (see includeBlocksRuntime above).
   const includeBlocksRuntime = options.includeBlocksRuntime !== false;
+
+  // ── F16 dev live-sheet channel ────────────────────────────────────────────
+  // Dev-only AND caller-gated. When the caller supplies no groups (every build
+  // emission), every string below is empty and the entry is byte-identical.
+  // Groups for tags this page does not admit are dropped BEFORE any import is
+  // emitted: an unusable sheet must not cost a module request.
+  const devLiveGroups = (options.devLiveStyleSheets ?? []).filter(
+    (group) =>
+      group.graphIds.length > 0 &&
+      admittedIslands.some((island) => island.tagName === group.tagName),
+  );
+  const devLiveTags = new Set(devLiveGroups.map((group) => group.tagName));
+  const devLiveGraphIds = [...new Set(devLiveGroups.flatMap((group) => group.graphIds))];
+  const devLiveImportNames = new Map(
+    devLiveGraphIds.map((graphId, index) => [graphId, `__oeDevSheet${index}`]),
+  );
+  const devLiveImports =
+    devLiveGraphIds.length === 0
+      ? ''
+      : devLiveGraphIds
+          .map(
+            (graphId) =>
+              `import ${devLiveImportNames.get(graphId)} from ${quoteGeneratedJavaScriptValue(
+                graphId,
+              )};\n`,
+          )
+          .join('');
+  // The attachment runs from inside each island factory, immediately before
+  // `customElements.define` upgrades a host. `__oeDevLiveStyles` is keyed by
+  // tag so one import can serve several tags of one module, and the helper is
+  // the ONLY writer of the constructor field the generated shell reads
+  // (shell.ts `adoptClientStyles`).
+  const devLiveMapAndHelper =
+    devLiveGraphIds.length === 0
+      ? ''
+      : `// F16 dev live-sheet channel: the sheet objects behind these imports are the
+// copies a CSS-only edit re-fills in place. Attached to the constructor before
+// the tag is defined, so the shell's connect adopts them into the root — even
+// an adopted DSD root whose template already declares the same edge as a link.
+var __oeDevLiveStyles = {
+${devLiveGroups
+  .map(
+    (group) =>
+      `  ${quoteGeneratedJavaScriptValue(group.tagName)}: [${group.graphIds
+        .map((graphId) => devLiveImportNames.get(graphId))
+        .join(', ')}]`,
+  )
+  .join(',\n')}
+};
+var __oeAttachDevLiveStyles = function (Ctor, tag) {
+  var __oeStyles = __oeDevLiveStyles[tag];
+  if (__oeStyles !== undefined) Ctor.__oeDevLiveStyles = __oeStyles;
+};
+`;
+
   const groupsByKey = new Map<string, ActivationGroup>();
   for (const entry of admittedIslands) {
     const key = activationGroupKey(entry);
@@ -497,7 +609,9 @@ export function generateClientEntry(
   const groupFactories = new Map<ActivationGroup, string>();
   groups.forEach((group, index) => {
     if (group.entries.length > 1) {
-      activationLines.push(sharedActivationFactory(group, index));
+      activationLines.push(
+        sharedActivationFactory(group, index, devLiveTags.size === 0 ? undefined : devLiveTags),
+      );
       groupFactories.set(group, `__activation${index}`);
     }
   });
@@ -512,6 +626,7 @@ export function generateClientEntry(
           entry.tagName,
           entry.exportName,
           entry.generatedLane === true,
+          devLiveTags.has(entry.tagName),
         )
       }`;
     })
@@ -679,13 +794,13 @@ ${styleImport}${
       ? ''
       : `import __oeUtilitySheet from ${quoteGeneratedJavaScriptValue(utilitySheetSpecifier)};
 `
-  }${importsBlock}
+  }${devLiveImports}${importsBlock}
 
 var __map = {
 ${islandMap}
 };
 var __tags = [${tags}];
-${documentServicesInstall}${
+${devLiveMapAndHelper}${documentServicesInstall}${
     // The call below is safe only because `runtimeLoader` — the definition of
     // `__loadElementRuntime` — is emitted above in importsBlock. The 88bda88bf
     // regression class was a shared block calling a binding that one emission
