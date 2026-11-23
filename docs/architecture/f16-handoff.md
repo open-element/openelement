@@ -190,3 +190,39 @@ Suggested split:
 Rules this work learned the hard way: push after every substantive commit (41 commits
 once sat unpushed for 38 hours); state local-vs-remote sync in every report; and when
 the same approach fails twice, change the approach instead of trying it a third time.
+
+## 8. Closeout log (2026-11-23 session)
+
+Pushed on `feat/alpha16-retirement` (all pre-push gates passed each time):
+
+| commit | what |
+| --- | --- |
+| `bd6662693` | six stale zh mirrors + the alpha16-18 dispatch fence synced; `check-content-examples` zero diagnostics, exit 0 |
+| `5fa9b8384` | dev live-sheet channel: the graph-id arm on the DEV style plugin (not middleware), client-entry imports and the constructor attach; dev-authored-css 21/21, dev-nonroot-base 5/5 |
+| `d669f2ce5` | dev component-sheet linking for a class-only shadow island + page-module route links; dev-tailwind 12/12 |
+
+Measured after `d669f2ce5`: browser rows 13/13 on chromium, firefox and webkit;
+dev-authored-css 21/21, dev-nonroot-base 5/5, dev-tailwind 12/12. The "~27"
+in §4.2 counted 12 rows that were only a missing-browser launch; the real
+code-level count was 14, all green now. §4.2's middleware premise was wrong:
+the 404 was an SSR module failing an unresolvable import, and the `/@id/` 200
+came from the transform pipeline — the fix belongs in the dev plugin's
+resolve/load hooks.
+
+`<textarea>` RCDATA (§4.4) is recorded as an explicit breaking removal, not
+implemented: `m08-text-boundary.md` §4 amendment + capability inventory. The
+fixture's edit page migrated to the `value` property channel.
+
+**Newly discovered and NOT done — needs a decision.** Admitting the
+`router-native-framework` fixture's four typed `definePage<Data>(…)` routes
+(the page-component scanner regex cannot match a type argument, so those pages
+have no host producer and the build fails) turns them into a *silent* wipe:
+their `attribute: false` props have no SSR→claim seed (ADR-0181 A5), so the
+claim re-reads the declared defaults. Measured: fixture typecheck + build green,
+but **24/132 e2e rows fail**, none on the edit page (`#build-count` goes
+`build-count=2`→`0`, `#note-title` is cleared, the 422 error branch is gone).
+The admission is therefore NOT committed; the fixture build stays red at `/`
+(`OE_PROGRAM_MISSING`). The fix direction is to extend the existing
+`data-oe-prop-seed` JSON channel to property-only primitives (it already
+carries non-primitives) and amend ADR-0181 A5 — an owner decision.
+`router-request-time` has the same typed-`definePage` defect at four sites.
