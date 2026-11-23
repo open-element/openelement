@@ -347,6 +347,18 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
     symbol: 'assertStaticAttributeSeed',
     predicate: (body) => body.includes('assertStaticAttributeSeed('),
   },
+  // alpha16 nested-expansion, claim half: a dash tag's seed is checked through
+  // the host-aware assertion (runtime-only child attributes are not the parent's
+  // seed), and a childless host's expanded light interior is consumed opaquely
+  // instead of walked.
+  {
+    symbol: 'assertNestedHostStaticAttributeSeed',
+    predicate: (body) => body.includes('assertNestedHostStaticAttributeSeed('),
+  },
+  {
+    symbol: 'isExpandedLightRootHost',
+    predicate: (body) => body.includes('isExpandedLightRootHost('),
+  },
   { symbol: 'emitComment', predicate: (body) => body.includes('emitComment(') },
   { symbol: 'escapeAttrValue', predicate: (body) => body.includes('escapeAttrValue(') },
   { symbol: 'escapeText', predicate: (body) => body.includes('escapeText(') },
@@ -3907,10 +3919,27 @@ function directoryParentAllowed(tag: string): boolean {
   return TAG_PATTERN.test(tag) && !DIRECTORY_EXCLUDED_TAGS.has(tag);
 }
 
-/** A fully static element tree: no dynamic slots, sites, or excluded tags. */
+/**
+ * A dash tag is a nested custom-element host (the same test the SSR producer
+ * already applies at its dash-tag branch). A host's content is not this
+ * component's template: the render's expander owns it and injects children no
+ * authored declaration describes, so the host cannot be a static-sibling range
+ * MEMBER either — the parent's directory would then bracket a subtree whose
+ * markers and children belong to the nested host's own claim.
+ */
+function isNestedHostTag(tag: string): boolean {
+  return tag.includes('-');
+}
+
+/**
+ * A fully static element tree: no dynamic slots, sites, excluded tags, or
+ * nested custom-element hosts (see {@linkcode isNestedHostTag}: their expanded
+ * interior is another claim's region).
+ */
 function isStaticDirectoryElement(node: FunctionModelNode): boolean {
   if (node.kind !== 'element') return false;
   if (!directoryParentAllowed(node.tag)) return false;
+  if (isNestedHostTag(node.tag)) return false;
   for (const attribute of node.attributes) {
     if (attribute.kind !== 'static' || !ATTRIBUTE_PATTERN.test(attribute.name)) return false;
   }
@@ -4645,6 +4674,14 @@ function emitClaimStaticAttributeSeed(
   attributes: readonly FunctionModelAttribute[],
   where: string,
   anchor?: SpanLike,
+  /**
+   * A nested custom-element (dash-tag) host carries runtime-managed attributes
+   * the parent template never authored (the server light-root ownership marker,
+   * the child's theme mirror and JSON prop seed). The claim routes those
+   * through the host-aware runtime assertion so the ONE runtime-only attribute
+   * fact decides the exemption; an intrinsic element keeps the strict rule.
+   */
+  nestedHost = false,
 ): void {
   const staticAttrs = attributes.filter((attribute) => attribute.kind === 'static');
   const dynamicNames = attributes
@@ -4665,10 +4702,13 @@ function emitClaimStaticAttributeSeed(
     })
     .join(', ');
   const skip = `[${dynamicNames.map((name) => JSON.stringify(name)).join(', ')}]`;
+  const assertion = nestedHost
+    ? 'assertNestedHostStaticAttributeSeed'
+    : 'assertStaticAttributeSeed';
   state.usesLeafClaimMismatch = true;
   push(
     state,
-    `assertStaticAttributeSeed(${elementVar}, [${declared}], ${JSON.stringify(where)}, ${skip}${originArgs(anchor)});`,
+    `${assertion}(${elementVar}, [${declared}], ${JSON.stringify(where)}, ${skip}${originArgs(anchor)});`,
   );
 }
 
@@ -5643,6 +5683,12 @@ function emitClaimInto(
     }
     if (node.kind === 'element') {
       const name = nextName(state, 'el');
+      // alpha16 nested-expansion: a dash tag is a NESTED custom-element host,
+      // exactly as in the SSR producer. Its tag carries runtime-managed
+      // attributes the parent never authored, and when the render expanded a
+      // LIGHT-root child its children are that child's region — so both facts
+      // route through the host-aware runtime predicates below.
+      const isNestedHost = node.tag.includes('-');
       emitClaimTake(state, cursor, name, here, node.span);
       emitClaimMismatch(
         state,
@@ -5661,7 +5707,7 @@ function emitClaimInto(
       } else {
         emitClaimHtmlNamespace(state, name, here, node.span);
       }
-      emitClaimStaticAttributeSeed(state, name, node.attributes, here, node.span);
+      emitClaimStaticAttributeSeed(state, name, node.attributes, here, node.span, isNestedHost);
       for (const attribute of node.attributes) {
         if (attribute.kind === 'static') continue;
         if (attribute.kind === 'dynamic' && CONSUMED_ATTRIBUTE_CHANNELS.has(attribute.channel)) {
@@ -5693,7 +5739,21 @@ function emitClaimInto(
         ? staticElementDirectory(node.children)
         : null;
       if (ranges !== null) emitClaimedDirectory(state, name, ranges);
-      else {
+      else if (isNestedHost && node.children.length === 0) {
+        // A childless nested host's interior is NOT the parent's to claim:
+        //   - an expanded LIGHT-root child wrote its content as this element's
+        //     children (`data-oe-light` is the ownership marker), so the child's
+        //     own element claim consumes them and the parent must treat the
+        //     interior as opaque;
+        //   - with no marker the host owns no light region, so the strict empty
+        //     child check stays: a foreign node injected there is still drift.
+        emitClaimMismatch(
+          state,
+          `!isExpandedLightRootHost(${name}) && ${name}.firstChild !== null`,
+          `extra node at ${here}`,
+          node.span,
+        );
+      } else {
         const childCursor = nextName(state, 'cursor');
         push(state, `const ${childCursor} = { node: ${name}.firstChild };`);
         const saved = state.claimCursorShared ? nextName(state, 'savedCursor') : null;
