@@ -217,6 +217,29 @@ async function defineEveryIsland(page: Page): Promise<void> {
   );
 }
 
+/**
+ * Wait until a PAGE ROOT has finished its claim.
+ *
+ * A page root is an idle-strategy generated host: its SSR markup carries the
+ * `data-oe-prop-seed` transport attribute and the claim consumes it on connect.
+ * A row that MUTATES the page's claimed shadow tree (remove / re-append an
+ * island, clear an activated root) must do so on a fully claimed page, otherwise
+ * the mutation races the idle claim and the claim then legitimately reports the
+ * position it expected (`OEIR_LEAF_CLAIM_MISMATCH: expected element … at
+ * /0/2/0`) — a property of mutating server markup before it is adopted, not of
+ * the row's subject.
+ */
+async function waitForPageClaim(page: Page, tag: string): Promise<void> {
+  await page.waitForFunction(
+    (pageTag: string) => {
+      const host = document.querySelector(pageTag);
+      return host !== null && !host.hasAttribute('data-oe-prop-seed');
+    },
+    tag,
+    { timeout: GATE_TIMEOUT_MS },
+  );
+}
+
 /** The init-script record `installRecorder` publishes on the page. */
 function readRecorder(page: Page): Promise<Kr2Record> {
   return page.evaluate(() => (globalThis as unknown as { __kr2: Kr2Record }).__kr2);
@@ -646,6 +669,7 @@ test('Q1-A: a disconnected light island leaves no late style write', async ({ pa
 
   await page.goto('/combobox', { waitUntil: 'domcontentloaded' });
   await defineEveryIsland(page);
+  await waitForPageClaim(page, 'combobox-page');
 
   const recorder = await readRecorder(page);
   expect(
@@ -1009,6 +1033,9 @@ test('Q1-D: a resumed island reconciles a value written while disconnected', asy
     undefined,
     { timeout: GATE_TIMEOUT_MS },
   );
+  // The row mutates the page's claimed shadow tree below: wait for the page
+  // root's own claim so the mutation cannot race it.
+  await waitForPageClaim(page, 'decoupled-page');
 
   // Driven BEFORE the transition: a live attribute write must reach the DOM
   // (this also proves the island activated before the move). The attribute is
@@ -1445,6 +1472,7 @@ test('Q1-B/B1: an externally cleared activated root fails closed instead of rest
 
   await page.goto('/combobox', { waitUntil: 'load' });
   await defineEveryIsland(page);
+  await waitForPageClaim(page, 'combobox-page');
 
   const cleared = await page.evaluate(() => {
     const frame = document.querySelector('combobox-page')?.shadowRoot;

@@ -5,8 +5,28 @@
  * request (not prerendered), that islands hydrate on request-time pages
  * exactly like on static pages, and that static routes are untouched.
  */
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
+/**
+ * Wait until a page root has finished its claim.
+ *
+ * A page root is an idle-strategy generated host: its SSR markup carries the
+ * `data-oe-prop-seed` transport attribute and the claim consumes it on connect.
+ * A row that TYPES INTO a claimed form must do so after the claim, otherwise the
+ * claim restores the server state over the typed value and the submit sends the
+ * wrong body (measured: `#message` filled before the claim → the 422 branch
+ * instead of the PRG navigation, so `waitForURL` times out).
+ */
+async function waitForPageClaim(page: Page, tag: string): Promise<void> {
+  await page.waitForFunction(
+    (pageTag: string) => {
+      const host = document.querySelector(pageTag);
+      return host !== null && !host.hasAttribute('data-oe-prop-seed');
+    },
+    tag,
+    { timeout: 10_000 },
+  );
+}
 test.describe('request-time rendering', () => {
   test('GET /live renders loader data per request', async ({ request }) => {
     const first = await request.get('/live?x=42');
@@ -459,6 +479,7 @@ test.describe('morph continuity hardening (ADR-0121, 0.42.0-alpha.5)', () => {
 
   test('back after an enhanced PRG reloads the restored URL (#545)', async ({ page }) => {
     await page.goto('/form');
+    await waitForPageClaim(page, 'form-page');
     await page.fill('#message', 'history-check');
     await page.click('#submit');
     await page.waitForURL('**/form?echoed=history-check');
@@ -606,6 +627,7 @@ test.describe('round-2 morph client fixes (0.42.0-alpha.6)', () => {
     page,
   }) => {
     await page.goto('/form');
+    await waitForPageClaim(page, 'form-page');
     await page.fill('#message', 'nav-guard');
     await page.click('#submit');
     await page.waitForURL('**/form?echoed=nav-guard');
