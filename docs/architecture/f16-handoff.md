@@ -213,16 +213,30 @@ resolve/load hooks.
 implemented: `m08-text-boundary.md` §4 amendment + capability inventory. The
 fixture's edit page migrated to the `value` property channel.
 
-**Newly discovered and NOT done — needs a decision.** Admitting the
-`router-native-framework` fixture's four typed `definePage<Data>(…)` routes
-(the page-component scanner regex cannot match a type argument, so those pages
-have no host producer and the build fails) turns them into a *silent* wipe:
-their `attribute: false` props have no SSR→claim seed (ADR-0181 A5), so the
-claim re-reads the declared defaults. Measured: fixture typecheck + build green,
-but **24/132 e2e rows fail**, none on the edit page (`#build-count` goes
-`build-count=2`→`0`, `#note-title` is cleared, the 422 error branch is gone).
-The admission is therefore NOT committed; the fixture build stays red at `/`
-(`OE_PROGRAM_MISSING`). The fix direction is to extend the existing
-`data-oe-prop-seed` JSON channel to property-only primitives (it already
-carries non-primitives) and amend ADR-0181 A5 — an owner decision.
+**Page-root prop seed — DONE (owner-approved 2026-11-23).** The discovery that
+blocked the fixture gate was that a client-claimed page root silently wiped its
+SSR content: `attribute: false` primitives had no SSR→claim wire (ADR-0181 A5),
+so `#build-count` went `build-count=2`→`0`, `#note-title` was cleared and the
+422 error branch disappeared. The owner approved extending the existing
+`data-oe-prop-seed` JSON channel (which already carried non-primitives) to
+supplied property-only primitives; ADR-0181 carries the dated A5 amendment and
+`generated-host-props-seeding.test.ts` pins the new contract. The
+`router-native-framework` fixture's four typed `definePage<Data>(…)` routes are
+now admitted with a bare call (the loader/props/head annotations keep the
+typing), and the edit route's projector names the declared rows
+(`titleText`/`bodyText`). Measured: fixture typecheck PASS, build PASS, e2e
+**125/132** (was 108/132 with the build red), edit page `/notes/:id/edit`
+prefilled on all three engines with JavaScript on (`#title` "Seed note one",
+`#body` "The first seeded note body.") and textarea-empty with JavaScript off —
+the no-JS RCDATA prefill removal stands.
+
+**Remaining fixture e2e — 7 rows, not root-caused.** All are morph/enhance
+preservation rows that the admission exposed and the seed did not fix:
+`dx02-morph-preserve.spec.ts:112` (a `data-open-preserve` subtree is updated by
+the morph) and `:171` (the textarea node is replaced instead of reused) on all
+three engines, plus `enhance-guards.spec.ts:85` on chromium only. They need
+their own diagnosis; the seed attribute is transport and is consumed on connect
+(measured absent from the live host before the morph), so it is not obviously
+the cause.
+
 `router-request-time` has the same typed-`definePage` defect at four sites.

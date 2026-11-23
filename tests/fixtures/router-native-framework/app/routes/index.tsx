@@ -18,7 +18,11 @@ export function loader(): HomeData {
   return { noteCount: noteStore.count() };
 }
 
-export default definePage<HomeData>(HomePage, {
+// The page-component scanner (packages/router/src/vite/internal/ssg/
+// static-component-scanner.ts) matches a BARE identifier call: a type argument
+// makes `definePage<Data>(Component, …)` unmatchable, so keep this call
+// unparameterised and annotate the props/head seam instead.
+export default definePage(HomePage, {
   // #1326: a static head object still works; the canonical is emitted at SSG
   // time into the prerendered HTML.
   head: {

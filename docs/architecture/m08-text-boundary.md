@@ -164,21 +164,32 @@ not client-delivered — a typed `definePage<…>(…)` call never matches the
 page-component scanner regex at `static-component-scanner.ts:252` — so its
 claim path could never run.
 
-The disposition is recorded with its measured consequence, and the page's
-admission is staged behind the property-seed boundary below rather than claimed
-as delivered. SSR emits an inert `value` attribute — the HTML parser ignores
-`value` on `<textarea>` and takes the initial value from child text — so with
-JavaScript disabled the textarea is empty while the input still pre-fills from
-its SSR attribute. Admitting the page (dropping the call-site type argument, so
-the scanner regex matches) additionally makes it client-delivered
+The disposition is recorded with its measured consequence, and the page is now
+ADMITTED rather than staged: the four typed `definePage<Data>(…)` routes in the
+`router-native-framework` fixture dropped their call-site type arguments (the
+loader/props/head annotations keep the typing), so the page-component scanner
+matches and each page gets its host producer; the edit route's props projector
+also names the component's declared rows (`titleText`/`bodyText`, not the class
+lane's `title`/`body`), which the projection requires.
+
+SSR emits an inert `value` attribute — the HTML parser ignores `value` on
+`<textarea>` and takes the initial value from child text — so with JavaScript
+disabled the textarea is empty while the input still pre-fills from its SSR
+attribute. **That no-JS textarea pre-fill removal stands.** With JavaScript
+enabled the page root is client-delivered and claimed
 (`dist/client/.vite/oe-browser-entry-graph.json` carries `notes-id-edit`,
-`strategy: idle`), and in that staged run the claim really ran: the
-`attribute: false` rows have no SSR→claim seed (ADR-0181 A5), so the claim
-re-read the declared defaults, the textarea stayed empty and the SSR-prefilled
-title was cleared on connect. The edit form's prefill is therefore removed in
-both modes — the capability is removed, not deferred to JavaScript — and the
-admission itself is not committed here because it flips the page into a silent
-content wipe until the seed boundary is decided.
+`strategy: idle`), and the client-side pre-fill is DELIVERED through the
+textarea `value` property channel: the property-only `attribute: false` rows now
+cross SSR→claim on the one JSON `data-oe-prop-seed` host attribute (ADR-0181 A5
+amendment, 2026-11-23; `generated-host-props-seeding.test.ts`), so the claim
+rehydrates the loader values before setup instead of re-reading the declared
+defaults. Measured on the BUILT fixture on chromium, firefox and webkit:
+`/notes/:id/edit` on the seeded note reports `#title` = "Seed note one" and
+`#body` = "The first seeded note body." with JavaScript ON, and `#title` =
+"Seed note one" / `#body` = "" with JavaScript OFF (the `#body` SSR `value`
+attribute is present but inert in both modes). The RCDATA refusal is unchanged;
+the only capability change is that the no-JS pre-fill is gone while the JS
+pre-fill rides the property channel.
 
 ## 5. Old `__h` wire is incompatible
 

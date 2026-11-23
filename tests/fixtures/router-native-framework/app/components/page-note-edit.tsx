@@ -11,22 +11,24 @@
  * BREAKING (F16, recorded not softened): the class lane pre-filled the textarea
  * with RCDATA TEXT (`<textarea>{body}</textarea>`); the generated lane refuses
  * that shape (`OEIR_LEAF_UNSUPPORTED_TEXT_CONTEXT` — RCDATA parses the claim
- * anchor as literal text). The body now travels on the `value` PROPERTY
- * channel. Measured consequence (fixture build + all three engines):
- *   - SSR emits an inert `value="…"` attribute: the HTML parser ignores
- *     `value` on textarea and takes the initial value from child text, so with
- *     JavaScript disabled the textarea renders EMPTY (the input's SSR `value`
- *     attribute still prefills the title).
- *   - If the route is admitted (staged: dropping its call-site type argument),
- *     the page root is client-delivered and claimed. `attribute: false`
- *     primitives have NO SSR→claim wire (ADR-0181 A5: the claim re-reads the
- *     declared default), so the claim seeds
- *     `{ titleText: '', bodyText: '', hasError: 0 }` and writes `.value`: the
- *     textarea stays EMPTY and the SSR-prefilled title is CLEARED on connect.
- * The edit form is therefore pre-filled in NEITHER mode; the pre-fill
- * capability is removed, not deferred to JavaScript. The route's admission is
- * staged behind the page-root property-seed decision, because admitting it
- * without a seed would make that wipe silent.
+ * anchor as literal text) and that refusal is unchanged. The body travels on the
+ * `value` PROPERTY channel instead. Measured consequence on the BUILT fixture,
+ * chromium / firefox / webkit:
+ *   - JavaScript OFF: SSR emits an inert `value="…"` attribute — the HTML parser
+ *     ignores `value` on textarea and takes the initial value from child text —
+ *     so `#body` renders EMPTY, while `#title` still pre-fills from its SSR
+ *     `value` attribute. The no-JS textarea pre-fill is REMOVED.
+ *   - JavaScript ON: the route is admitted (the bare `definePage(...)` call
+ *     matches the page-component scanner) and the page root is claimed. The
+ *     property-only rows now cross SSR→claim on the JSON `data-oe-prop-seed`
+ *     channel (ADR-0181 A5 amendment, 2026-11-23), so the claim rehydrates
+ *     `titleText`/`bodyText` BEFORE setup instead of re-reading the declared
+ *     defaults. Measured on all three engines: `#title` = "Seed note one",
+ *     `#body` = "The first seeded note body.". The client-side pre-fill is
+ *     DELIVERED through the property channel, not removed.
+ * The route's props projector must name the DECLARED rows (`titleText`,
+ * `bodyText`); the class lane's `title` / `body` keys are silently ignored by the
+ * projection and were renamed when the route was admitted.
  */
 import { defineIslandConfig } from '@openelement/router';
 

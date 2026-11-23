@@ -39,9 +39,13 @@ test.describe('SSR and native claim', () => {
     request,
   }) => {
     // The wire format: the page host carries a DSD template with both rows and
-    // the island's own DSD subtree — no client JS is needed to render.
+    // the island's own DSD subtree — no client JS is needed to render. The host
+    // tag may also carry compiler-owned host attributes (the JSON prop seed,
+    // `data-oe-prop-seed`), which the claim consumes and removes; they are
+    // transport, not authored surface, so the RCDATA/DSD bytes are asserted
+    // with the attribute tail allowed.
     const html = await (await request.get('/notes')).text();
-    expect(html).toContain('<notes-index><template shadowrootmode="open">');
+    expect(html).toMatch(/<notes-index[^>]*><template shadowrootmode="open">/);
     expect(html).toContain('Seed note one');
     expect(html).toContain('Seed note two');
     expect(html).toContain('<note-counter><template shadowrootmode="open">');

@@ -27,7 +27,9 @@ export function loader(ctx: {
   return { note };
 }
 
-export default definePage<DetailData>(NoteDetailPage, {
+// Bare call on purpose: the page-component scanner cannot match a type
+// argument; the loader/head/props typing lives on the annotations below.
+export default definePage(NoteDetailPage, {
   renderIntent: { mode: 'dynamic' },
   // #1326: page meaning resolves per render from the request-scoped context —
   // the title comes from loader data; canonical/alternates come from params.

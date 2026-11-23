@@ -59,14 +59,21 @@ export function action(ctx: {
   throw redirect(`/notes/${id}?updated=1`);
 }
 
-export default definePage<EditData>(NoteEditPage, {
+// Bare call on purpose: the page-component scanner cannot match a type
+// argument; the loader/props typing lives on the annotations below.
+export default definePage(NoteEditPage, {
   renderIntent: { mode: 'dynamic' },
   head: { title: 'app-flow-native fixture — edit note' },
   props(context: PagePropsContext<EditData>) {
     const actionData = context.actionData as EditActionData | undefined;
+    // The names are the COMPONENT's declared rows (`titleText`/`bodyText`), not
+    // the loader's `title`/`body`: the generated page root projects this object
+    // onto declared properties, so a mismatched key is silently ignored and the
+    // claim seeds the declared default (the 64da479a0 rename left the old keys
+    // here while the route was still unadmitted).
     return {
-      title: actionData?.title ?? context.data?.note.title ?? '',
-      body: context.data?.note.body ?? '',
+      titleText: actionData?.title ?? context.data?.note.title ?? '',
+      bodyText: context.data?.note.body ?? '',
       errorText: actionData?.error ?? '',
       hasError: actionData?.error ? 1 : 0,
     };
