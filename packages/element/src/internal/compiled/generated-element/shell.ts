@@ -2837,11 +2837,20 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         // the region exists and its handlers are installed. A click that landed
         // before an idle generated island hydrated was captured by the
         // document-level capture the generated entry installs; replaying here is
-        // what makes it reach the live tree exactly once (the registry's
-        // first-activation cutoff keeps a reconnect from re-handling it). The
-        // chained hook IS the registry's own function object, so this is one
-        // implementation, not a second one.
-        replayPreUpgradeCaptures(this);
+        // what makes it reach the live tree exactly once. The chained hook IS the
+        // registry's own function object, so this is one implementation, not a
+        // second one.
+        //
+        // FIRST activation only (`!hadInstance`), which is the class facade's
+        // own `!activation.resumed` rule. A reconnect disproves nothing about
+        // timing, so it must not replay: it re-arms listeners over DOM that is
+        // already live, and this element's own generated activation may have won
+        // the race against the entry's element-runtime load, in which case the
+        // reconnect IS the registry's first replay pass — a click already handled
+        // by the live handler is then delivered a second time (measured: a 422
+        // morph's moved island incremented one extra time). A first connect is
+        // the only pass whose capture bucket is still undelivered.
+        if (!hadInstance) replayPreUpgradeCaptures(this);
       } catch (error) {
         state.connection = null;
         state.projection = null;
