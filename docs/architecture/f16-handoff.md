@@ -371,3 +371,51 @@ per resource, and the nested input is styled (padding 8px 12px, radius 6px).
 fixture typecheck + build PASS, `request-time-parity` 29/29, fixture e2e
 342/342. The kr2 harness now asserts a clean error surface in every row (the
 GAP-2 filter is retired), so a claim regression cannot be swallowed.
+
+## 12. Fifth closeout pass — the element-browser suite is green
+
+`browser:test` was still red on the deleted class lane: six suites failed to
+import. The seventh red row (`overlay-contract`'s pointer light-dismiss) was a
+contaminated false red — the `<vite-error-overlay>` from those import failures
+intercepted the pointer; it passes clean once the imports resolve and needed no
+change.
+
+**One suite is retired with its subject.** `stream-hydrate-order.test.js` pinned
+the client-side ordering of an early stream frame against pre-upgrade property
+writes through `internal/compiled/stream-state.ts`, a file that went with the
+class kernel (`5275a66b2`). Streamed-page authoring itself was removed with the
+class lane by owner direction 2026-11-21 (capability inventory; Alpha18 owns the
+replacement carrier), so the file is deleted. Its two rows are not replaced: the
+generated lane has no stream-claim channel to order.
+
+**Five suites now import the generated artifacts' HOST CLASS export**
+(`ProgramCounterElement`, `WtrShadowButtonElement`, `WtrFieldElement`) — the
+authoring function names they imported never existed in the generated lane. Every
+row is kept except where the class lane's own mechanics were the subject:
+
+- `form-platform` row 7 asserted that the class lane's inherited
+  `formStateRestoreCallback` was a no-op (a kernel hook this component never
+  registered). The generated shell implements the channel itself, so the row pins
+  the measured contract instead: a string state restores the declared `value` row
+  (prop sink included, validity re-synced), a null/File/FormData state is
+  ignored, and `formResetCallback` still restores the default.
+- `compiled-lifecycle` row 3 (keyed distant swap) pins the generated `each`
+  reconciler's measured mechanics: entry node identity is preserved and the
+  nested probe's lifecycle stays balanced (exactly one disconnect and one
+  reconnect), but the backward reconciler re-inserts every entry between the swap
+  point and the end anchor (measured: 1994 `insertBefore` calls, 997 of 1000
+  entries), so a stationary entry's subtree is detached and re-attached — focus
+  inside the list does not survive a distant swap. The class lane moved only the
+  two swapped entries. Recorded as a measured difference, not papered over: a
+  focus-preserving reconcile is a runtime change.
+
+**Measured.** `browser:test` 7 files / 38 tests green, 0 failed suites, no
+`vite-error-overlay` in the log; `browser:compile` exit 0; `check` 5/5.
+`browser:negative` is **5/6 and needs an out-of-scope fix**: the `launch-sentinel`
+proof's collection matcher (`output.includes('sentinel.test.js')`) can no longer
+pass — vitest 5.0.5's default reporter omits the path line for a passing file
+when stdout is piped (reproduced standalone against a scratch suite, with and
+without `NO_COLOR`/`CI`; the tool spawns piped by construction). The other five
+proofs, including `browser-launch-failure`, pass. `--reporter=verbose` prints the
+file line and test name, so adding it to that one case's args fixes the proof;
+`__wtr__/tools/negative-proofs.ts` was outside this pass's write scope.

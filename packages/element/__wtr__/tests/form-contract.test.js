@@ -17,10 +17,10 @@
  * during this suite; see README.)
  */
 import { assert } from 'chai';
-import { WtrField } from '../generated/wtr-field.ts';
+import { WtrFieldElement } from '../generated/wtr-field.ts';
 import { formDataForSubmitter, typeInto } from './helpers.js';
 
-customElements.define('wtr-field', WtrField);
+customElements.define('wtr-field', WtrFieldElement);
 await customElements.whenDefined('wtr-field');
 
 function setup() {
