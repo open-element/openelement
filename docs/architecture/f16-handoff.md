@@ -342,3 +342,32 @@ page). Not papered over with retries.
 
 `live.spec.ts` flake (`:605`, and `:460` under full-suite load) is pre-existing
 and passes standalone.
+
+## 11. Fourth closeout pass — the fixture is green
+
+**`tests/fixtures/router-request-time` e2e: 342/342 on chromium, firefox and
+webkit.** The section-10 flake is fixed, correctly this time: the rows were
+mutating (or typing into) a page root whose idle claim had not finished, so the
+claim either restored the server state over the typed value or reported the
+position it expected. Each mutating row now waits for its own page root's claim
+first — the signal is the claim's own transport (the SSR host carries
+`data-oe-prop-seed`; the claim consumes it), applied only to the rows that
+mutate, with no assertion changed. Measured: the three kr2 rows 8/8 consecutive
+runs, the two live rows 5/5, then the full suite 342/342.
+
+**A nested light island's sheets now reach the page template.** The emitter
+forwarded the runtime `styleLinks` channel only when the page module itself
+declared styles, so a page that declares none dropped the links the runtime had
+already lifted from a nested LIGHT child — and a document-head sheet cannot cross
+a shadow boundary, so the island rendered unstyled. The wrapper now forwards the
+channel unconditionally (the declared case keeps its fail-closed guard; a module
+with no links emits the same bytes), and the claim skips the leading canonical
+marked-`<link data-oe-static-styles>` run as a TEMPLATE fact (the M07b directory
+consumer skips it only under a ShadowRoot, so its fast path survives). Measured
+on /combobox: the page template carries exactly the child's sheet, one request
+per resource, and the nested input is styled (padding 8px 12px, radius 6px).
+
+**Final measured state.** element 618/618, compiler 1335/1335, router 1873/1873,
+fixture typecheck + build PASS, `request-time-parity` 29/29, fixture e2e
+342/342. The kr2 harness now asserts a clean error surface in every row (the
+GAP-2 filter is retired), so a claim regression cannot be swallowed.
