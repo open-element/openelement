@@ -481,3 +481,50 @@ a build composing no open:mdx plugin gets its `.mdx` rows reported
 (OE_DECLARED_TAG_MDX_PLUGIN_NOT_COMPOSED), never lowered by a silent import.
 Measured: the pack probe is clean again and router is 1876/1876 with the
 guard at three rows.
+
+## 15. Fifth closeout pass — the packed gate runs its never-run cells (F16)
+
+**gate:packed's original blocker is gone.** The unpublished-version `notarget`
+died with the npm resolution seal: both bare-install legs (starter, ui-app) now
+write a scratch manifest whose dependencies AND overrides pin every retained
+@openelement/* name to its own file: tarball (the pnpm cells already sealed
+via consumerPnpmOverridesYaml; the npm cells had no carrier — the specs ride
+the manifest because npm rejects an override for a directly-installed argv
+name, EOVERRIDE). The install budgets grew for real networks (a hermetic
+cold-cache tree measured 5–20+ minutes at 75–250KB/s registry throughput on
+2026-11-24; budget 5→20 min, per-fetch 30s→300s) and the scratch caches share
+one content-addressed root (`openelement-packed-consumer-npm-cache-v1`), the
+shape CI uses.
+
+**Measured at HEAD f44f912b2** — the gate's first five steps pass (generate,
+typecheck, pack, publint+attw artifacts, pack-surface), and the starter leg
+runs its FULL consumer lifecycle for the first time in this PR's history:
+install → scaffold → typecheck → test → dev server → SSG build → start →
+**browser matrix chromium+firefox+webkit** → router bin fail-closed guidance,
+all green. Getting there surfaced and fixed one real product defect and one
+harness defect:
+
+1. **`marked` is an optional peer, again** — the declared-tag scan's STATIC
+   import of the mdx lowering made every consumer resolve `marked` at config
+   load; the packed starter's dev cell measured it. The scan now consumes the
+   slot the open:mdx plugin publishes (plugin-mdx-scan-hook.ts, the
+   pre-upgrade-replay-hook shape; see §14's amendment for the rolldown
+   runtime materialization that the first fix shape caused in the pack).
+2. **The agent-round cell is stale, not the artifact** — the round breaks the
+   app with a class-authored component (`@element` + `extends OpenElement` +
+   an inline sheet string in `static styles`) and expects `OEC9029`, the
+   class compiler's #1558 refusal. Both the grammar and the diagnostic died
+   with the class lane this PR deletes; the packed build now answers with two
+   UNKNOWN-coded vite-level resolution errors for the nonexistent export. The
+   round needs the same re-authoring the kr2 harness got: a break authored in
+   the generated lane (a refused sidecar style shape) against an existing
+   coded refusal, with the repair recipe the current docs page resolves.
+   `consumer:packaged` therefore still stops at 6/13 steps — by
+   characterization, not by mystery: everything downstream (ui-app leg,
+   app/router/element/ui/unocss legs, fixture smoke) has NEVER executed in
+   any session and may hold more of the same.
+
+**Also measured this pass:** a stale-tarball freshness race (batch E's commit
+landed mid-gate; the guard refused correctly — never commit during a gate
+run), and one flaky pack-pipeline leak reproducible on demand (the F16
+static-edge shape; the bisect pack against reverted sources is clean).
