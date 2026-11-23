@@ -243,4 +243,43 @@ still gets every tag), and `syncAttrs` never writes a consumed seed attribute ba
 onto the live host. An entry with no page root keeps its previous bytes (ABI pin
 passes).
 
-`router-request-time` has the same typed-`definePage` defect at four sites.
+## 9. Second closeout pass (2026-11-23, later)
+
+Pushed on `feat/alpha16-retirement` (`52a868883`, `6cb71bc23`).
+
+**Two compiler rows and one router row — fixed, stale premises not regressions.**
+`generated-element.shell.test.ts` had a row importing the deleted
+`facade-host.ts` (removed with the class lane in `5ff82e101`) and a row whose
+fixture had been claimable since `d97a85c5a`, so it measured a claim mismatch
+instead of the fail-closed contract; the latter now uses a real mount-only
+component (a condition nested in a branch) and pins 3 connects / 3
+`OE_RUNTIME_LEAF_CLAIM_UNAVAILABLE` throws so it cannot go vacuous again.
+`island-styles.test.ts` had the same `d97a85c5a` staleness; its fixture is
+replaced with a proven `missing-producer` shape (nested condition) and keeps the
+same coded refusal. Compiler **1316/1316**, island-styles **37/37**.
+
+**`router-request-time` is off the class lane entirely.** Both zag islands are
+generated function components with `defineIslandConfig` sidecars; the retired
+authored methods (`demoSetControlledValue` / `demoSnapshot`) become declared
+rows (`controlledValue` write-to-drive, `machineSnapshot` written back), so the
+spec asserts the same machine facts through the property API. The four typed
+`definePage<Data>` calls are bare, `page-items` declares its props table (it was
+blocking `/items`), and three specs carry the generated lane's measured wire
+forms instead of the class lane's. tsc PASS, build PASS,
+`request-time-parity` **29/29** (it could not even run before).
+
+**fixture e2e is NOT green: 308 passed / 34 failed, 12 unique rows** (all three
+engines unless noted), all on subjects this session did not migrate — they were
+unobservable before because the fixture could not build. Measured with nothing
+else running: the fixture's `dist` is shared with `request-time-parity.test.ts`,
+which rebuilds it, so a concurrent router-suite run contaminates this number
+(measured once as 35/307 that way).
+
+| rows | mechanism (measured) |
+| --- | --- |
+| `zag-combobox.spec.ts:349` (3 engines) | **real regression vs the class lane**: a SAME-TURN disconnect/reconnect cannot re-claim a retained region whose markup is a PURE STATIC directory. The M07b static-sibling-range consumer keeps a permanent per-parent ordinal tombstone (`static-sibling-ranges.ts:505,546`, set `:585-587`; `rollbackProvisional` only rolls back an incomplete attempt) while the shell re-claims on reconnect (`shell.ts: regionState === 'present'`). The class lane had no tombstone. Fixing it changes a pinned contract: `a completed directory claim stays consumed after dispose` (+ `F: dispose modes stay first-wins`) assert permanence, including after `dispose(false)`. **Needs an owner decision.** |
+| `generated-page.spec.ts:96`, `:120` (2 engines) | **real defect**: a generated shadow host's DSD template carries the UNION of every island sheet (measured 7 `data-oe-static-styles` links inside `generated-page-card`'s template), not its own 1. The build's per-tag map is correct (`dist/server/entry.js` maps the tag to one href), so the union is assembled on the render side (`__documentStyles.links` is the document accumulator handed to every `__ssr` as `styleLinks`). |
+| `kr2-diagnostic.spec.ts` 8 rows (24 instances) | the spec asserts the RETIRED class-lane style adapter/diagnostics (a held `fetch` adapter, `STYLE_SHEET_READY`, class-runtime error prose); the generated lane delivers sheets as `<link>` and reports `OEIR_*` identities. Re-authoring, not a code fix. |
+| `live.spec.ts:185` (chromium only) | a 422 morph adds one extra increment to the live counter (`count=3` → `4` after the morph); pre-existing morph/replay behaviour, reproduced standalone. |
+
+`router-request-time`'s typed-`definePage` defect is now fixed.
