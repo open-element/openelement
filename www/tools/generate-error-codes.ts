@@ -36,8 +36,48 @@ const ERROR_CODES_PAGE = 'www/app/routes/errors.tsx';
 /** The route that projects the generated inventory onto the page. */
 const ERROR_CODES_ROUTE = 'www/app/routes/errors.tsx';
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
-/** The single declaration site of the runtime ErrorCode constants. */
-const RUNTIME_CODES_SOURCE = 'packages/protocol/src/errors.ts';
+/**
+ * The declaration sites of the runtime-coded error constants. Every exported
+ * const object in these files whose values are `OE_*` string literals joins
+ * the catalogue — the page's own promise is "every `OEC####` / `OE_*`
+ * diagnostic code", so a family declared here cannot ship unlisted (the
+ * packed agent round's docs lookup depends on exactly that: the router's
+ * `IslandErrorCode.OE_ISLAND_DESCRIPTOR_SHAPE` must resolve on /errors).
+ */
+const RUNTIME_CODE_SOURCES: ReadonlyArray<{
+  readonly source: string;
+  readonly constNames: ReadonlySet<string>;
+}> = [
+  {
+    source: 'packages/protocol/src/errors.ts',
+    constNames: new Set([
+      'ErrorCode',
+      'ProgramErrorCode',
+      'EachKeyErrorCode',
+      'RuntimeErrorCode',
+      'KernelErrorCode',
+      'ContextErrorCode',
+      'StyleErrorCode',
+      'ClaimErrorCode',
+      'ServerErrorCode',
+      'CompilerErrorCode',
+    ]),
+  },
+  {
+    source: 'packages/router/src/internal/error-codes.ts',
+    constNames: new Set([
+      'PageErrorCode',
+      'IslandErrorCode',
+      'ServeErrorCode',
+      'AdapterErrorCode',
+      'DeliveryErrorCode',
+      'IslandEntryErrorCode',
+      'DescriptorErrorCode',
+      'SsgRenderErrorCode',
+      'PackageIslandErrorCode',
+    ]),
+  },
+];
 
 export interface CodeOccurrence {
   path: string;
@@ -173,20 +213,25 @@ function collectCodes(
   visit(source);
 }
 
-/** The runtime ErrorCode const object: name, value and its leading JSDoc. */
-function collectRuntimeCodes(text: string, path: string, failures: string[]): RuntimeCode[] {
+/** The runtime-coded const objects: name, value and their leading JSDoc. */
+function collectRuntimeCodes(
+  text: string,
+  path: string,
+  constNames: ReadonlySet<string>,
+  failures: string[],
+): RuntimeCode[] {
   const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const codes: RuntimeCode[] = [];
   const visit = (node: ts.Node): void => {
     if (
       ts.isVariableDeclaration(node) &&
       ts.isIdentifier(node.name) &&
-      node.name.text === 'ErrorCode' &&
+      constNames.has(node.name.text) &&
       node.initializer
     ) {
       const initializer = unwrapExpression(node.initializer);
       if (!ts.isObjectLiteralExpression(initializer)) {
-        failures.push(`${path}: ErrorCode is not an object literal`);
+        failures.push(`${path}: ${node.name.text} is not an object literal`);
       } else {
         for (const property of initializer.properties) {
           if (!ts.isPropertyAssignment(property) || !ts.isIdentifier(property.name)) continue;
@@ -196,7 +241,7 @@ function collectRuntimeCodes(text: string, path: string, failures: string[]): Ru
               ? initializer.text
               : '';
           if (value === '') {
-            failures.push(`${path}: ErrorCode.${property.name.text} has no static value`);
+            failures.push(`${path}: ${node.name.text}.${property.name.text} has no static value`);
             continue;
           }
           const summary = ts
@@ -280,16 +325,31 @@ export async function buildErrorCodes(): Promise<ErrorCodesBuild> {
     failures.push('no OEC diagnostic codes found in the retained packages');
   }
 
-  const runtimeSource = join(repoRoot, RUNTIME_CODES_SOURCE);
-  let runtimeText: string;
-  try {
-    runtimeText = await readFile(runtimeSource, 'utf8');
-  } catch (cause) {
-    throw new Error(`runtime code source ${RUNTIME_CODES_SOURCE} is missing`, { cause });
+  const runtime: RuntimeCode[] = [];
+  const seenRuntimeValues = new Set<string>();
+  for (const site of RUNTIME_CODE_SOURCES) {
+    const absolute = join(repoRoot, site.source);
+    let text: string;
+    try {
+      text = await readFile(absolute, 'utf8');
+    } catch (cause) {
+      throw new Error(`runtime code source ${site.source} is missing`, { cause });
+    }
+    const collected = collectRuntimeCodes(text, site.source, site.constNames, failures);
+    if (collected.length === 0) {
+      failures.push(`${site.source} declares none of its expected error-code constants`);
+    }
+    for (const code of collected) {
+      if (seenRuntimeValues.has(code.value)) {
+        failures.push(`${site.source} declares a duplicate runtime code value ${code.value}`);
+        continue;
+      }
+      seenRuntimeValues.add(code.value);
+      runtime.push(code);
+    }
   }
-  const runtime = collectRuntimeCodes(runtimeText, RUNTIME_CODES_SOURCE, failures);
   if (runtime.length === 0) {
-    failures.push(`${RUNTIME_CODES_SOURCE} declares no ErrorCode constants`);
+    failures.push('the runtime code sources declare no error-code constants');
   }
 
   await checkPageIsProjection(diagnostics, failures);
@@ -358,7 +418,8 @@ export function renderErrorCodesModule(build: ErrorCodesBuild): string {
   return (
     '// Auto-generated by www/tools/generate-error-codes.ts (#1414) — do not edit\n' +
     '// Source of truth: the OEC code literals in packages/<name>/src and the\n' +
-    '// ErrorCode constants in packages/protocol/src/errors.ts.\n' +
+    '// error-code const objects in packages/protocol/src/errors.ts and\n' +
+    '// packages/router/src/internal/error-codes.ts.\n' +
     '// Regenerate with `pnpm --filter @openelement/www run generate:error-codes`; the file is\n' +
     '// untracked and rebuilt before test/site:build.\n' +
     `export const errorCodes = ${formatJson(payload).trimEnd()} as const;\n`

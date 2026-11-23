@@ -51,6 +51,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -322,6 +323,91 @@ async function runStarterBrowserMatrix(starter: string): Promise<void> {
 // convention, npm-manifest.ts): this module must be importable — for the
 // PW_PROBE_PIN anchor test — without executing the whole packed-consumer
 // walkthrough as a side effect.
+
+/**
+ * The agent round's docs origin when no explicit override is set: the
+ * CANDIDATE'S OWN docs build, served locally. The round's positive assertion
+ * is unchanged — the /errors page must document the failure code — but the
+ * page it resolves on is the one THIS release ships, not the currently
+ * deployed site (which is one release behind by construction). An explicit
+ * `OPENELEMENT_AGENT_DOCS_ORIGIN` still points the round at any other origin
+ * (a staged site, a mirror) without changing the assertion.
+ */
+const DOCS_SITE_TIMEOUT_MS = 6 * 60_000;
+
+async function buildCandidateDocsSite(): Promise<string> {
+  const dist = join(repoRoot, 'www/dist');
+  const built = await new Promise<boolean>((settled) => {
+    const child = spawn('pnpm', ['run', 'site:build'], {
+      cwd: repoRoot,
+      stdio: ['ignore', 'ignore', 'inherit'],
+      detached: false,
+    });
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM');
+      settled(false);
+    }, DOCS_SITE_TIMEOUT_MS);
+    child.addListener('exit', (code) => {
+      clearTimeout(timer);
+      settled(code === 0);
+    });
+  });
+  if (!built || !existsSync(join(dist, 'errors/index.html'))) {
+    throw new Error(
+      'the candidate docs build did not produce www/dist/errors — the agent round needs the ' +
+        '/errors page this release ships. Run `pnpm run site:build` at the repository root to see ' +
+        'the failure.',
+    );
+  }
+  return dist;
+}
+
+/** Serve one directory over 127.0.0.1 with the .html/.css/.js/.json map. */
+async function serveDocsMirror(dist: string): Promise<{ server: Server; origin: string }> {
+  const types: Record<string, string> = {
+    '.html': 'text/html; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.js': 'text/javascript; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.svg': 'image/svg+xml',
+    '.txt': 'text/plain; charset=utf-8',
+  };
+  const server = createServer((request, response) => {
+    void (async () => {
+      const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+      const pathname = decodeURIComponent(url.pathname);
+      const candidates = [
+        join(dist, pathname),
+        join(dist, pathname, 'index.html'),
+        join(dist, `${pathname}.html`),
+      ];
+      for (const candidate of candidates) {
+        if (!candidate.startsWith(dist) || !existsSync(candidate)) continue;
+        try {
+          const bytes = await readFile(candidate);
+          const type =
+            types[candidate.slice(candidate.lastIndexOf('.'))] ?? 'application/octet-stream';
+          response.writeHead(200, { 'content-type': type });
+          response.end(bytes);
+          return;
+        } catch {
+          // fall through to the next candidate
+        }
+      }
+      response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      response.end('not found');
+    })();
+  });
+  await new Promise<void>((ready) => {
+    server.listen(0, '127.0.0.1', () => ready());
+  });
+  const address = server.address();
+  if (address === null || typeof address === 'string') {
+    server.close();
+    throw new Error('the docs mirror failed to bind a loopback port');
+  }
+  return { server, origin: `http://127.0.0.1:${address.port}` };
+}
 async function main(): Promise<void> {
   const tmp = await mkdtemp(join(tmpdir(), 'openelement-packaged-starter-'));
   try {
@@ -876,18 +962,37 @@ async function main(): Promise<void> {
       join(starter, 'node_modules'),
       'Packed consumer',
     );
-    const agentRound = await runAgentWorkflowRound({
-      appDir: starter,
-      run: (command, args, label) => {
-        console.log(`Agent-workflow round: ${label}`);
-        return runConsumer(command, [...args], starter, {
-          timeoutMs: BUILD_TIMEOUT_MS,
-          env: npmEnv,
-        });
-      },
-      docsOrigin: process.env.OPENELEMENT_AGENT_DOCS_ORIGIN,
-      docsWhenUnreachable: process.env.OPENELEMENT_AGENT_ROUND_OFFLINE === '1' ? 'skip' : 'fail',
-    });
+    // The docs origin: the candidate's own docs build by default (served on
+    // loopback), or the explicit env override for a staged/mirrored origin.
+    const docsEnv = process.env.OPENELEMENT_AGENT_DOCS_ORIGIN;
+    let docsOrigin = docsEnv;
+    let docsServer: Server | undefined;
+    if (docsOrigin === undefined) {
+      const dist = await buildCandidateDocsSite();
+      const mirror = await serveDocsMirror(dist);
+      docsServer = mirror.server;
+      docsOrigin = mirror.origin;
+      console.log(
+        `Agent-workflow docs mirror: serving the candidate's own docs build at ${docsOrigin}`,
+      );
+    }
+    let agentRound;
+    try {
+      agentRound = await runAgentWorkflowRound({
+        appDir: starter,
+        run: (command, args, label) => {
+          console.log(`Agent-workflow round: ${label}`);
+          return runConsumer(command, [...args], starter, {
+            timeoutMs: BUILD_TIMEOUT_MS,
+            env: npmEnv,
+          });
+        },
+        docsOrigin,
+        docsWhenUnreachable: process.env.OPENELEMENT_AGENT_ROUND_OFFLINE === '1' ? 'skip' : 'fail',
+      });
+    } finally {
+      if (docsServer !== undefined) docsServer.close();
+    }
     console.log(
       `Packed agent-workflow round passed: ${agentRound.failureCode} surfaced through the ` +
         `envelope, the fix was derived from public artifacts, docs=${agentRound.docs.status}` +

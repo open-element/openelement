@@ -538,3 +538,47 @@ harness defect:
 landed mid-gate; the guard refused correctly — never commit during a gate
 run), and one flaky pack-pipeline leak reproducible on demand (the F16
 static-edge shape; the bisect pack against reverted sources is clean).
+
+## 16. Sixth closeout pass — the packed starter leg is green end to end
+
+The remaining acceptance items landed (2026-11-24, second night):
+
+1. **checkLedeBudget carries its evidence** (`31bdd8250`): the report call
+   passed its arguments shifted one slot left, so an over-budget lede printed
+   `undefined` for its message. All eight arguments now land in their slots;
+   the test row pins message, value and line.
+2. **The capability inventory's restore-channel row** (`2b35c6748`) records
+   the generated shell's `formStateRestoreCallback` semantics (a string state
+   writes through the declared value row), and the morph-continuity OWED row
+   is struck through with its disproof + the four real defect fixes that
+   closed it.
+3. **Keyed lists move minimally** (`1b0bc9577`): the emitted `__oe_eachSync`
+   tail hands placement to ONE leaf-runtime helper (`reconcileEachEntries`),
+   whose LIS rule leaves the stable chain untouched — a distant swap moves
+   exactly the swapped entries (bench `swapInsertions` 2, matching the
+   retained runtime's #1455 pin), and the browser row's class-lane assertions
+   (focus preserved) are restored and green. Router 1876/1876, element
+   624/624, compiler 1335/1335 with all 31 browser-harness runtime surfaces
+   carrying the new export.
+4. **The agent round is on the generated lane and the starter leg is green
+   for the first time in the PR's history.** The round's break is the
+   sidecar `styles` inline string (refused `OE_ISLAND_DESCRIPTOR_SHAPE`);
+   the fix writes a real `.css` and arrays the specifier; the docs step
+   resolves the code on the CANDIDATE'S OWN docs build (the leg builds
+   www/dist and serves it on loopback as the round's mirror origin — an
+   explicit env override still points elsewhere). Getting there surfaced
+   and fixed a real catalogue defect: `/errors` documented only the 18 OEC
+   codes and 3 runtime constants, silently omitting every OTHER coded
+   family (10 protocol const objects + 9 router const objects — 91 runtime
+   codes now listed; the round's docs lookup was the detector).
+5. **The ui-app leg (second half of `consumer:packaged`) runs its
+   never-executed cells**: the scaffold ships no `app/components`, so the
+   appliance creates it; and the UI-lab page template is re-authored on the
+   generated lane (sidecar `root: 'shadow'`) — the class-authored template
+   died with the lane. The leg now advances through install, the counter
+   utility edit, dev boot, and page render (200, hosts present), and stops
+   at the package-island sheet delivery probe: the `/ui-lab` dev render
+   carries no `data-oe-static-styles` marked link. That is the one open
+   cell — package components' sheets through a generated shadow PAGE host in
+   dev — recorded here for the next pass, alongside the five consumer legs
+   (app/router/element/ui/unocss + fixture smoke) that have never executed.

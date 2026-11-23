@@ -252,7 +252,7 @@ const UI_LAB_COMPONENT = `/**
  * supposed to deliver — styled here with NO application Tailwind
  * configuration, on the strength of the packages' own declarations.
  */
-import { element, OpenElement } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
 import '@openelement/ui/open-button';
 import '@openelement/ui/open-input';
 import '@openelement/ui/open-theme-toggle';
@@ -261,35 +261,37 @@ import '@openelement/ui/open-dialog';
 import '@openelement/ui/open-dropdown';
 import '@acme/utility-widget/utility-widget';
 
-@element('ui-lab', { root: 'light' })
-export default class UiLab extends OpenElement {
-  render() {
-    return (
-      <div class='ui-lab ${LIGHT_ROOT_UTILITY}'>
-        <h1>Packed UI appliance</h1>
-        <open-button variant='primary'>packed button</open-button>
-        <open-input label='Packed input' placeholder='type here'></open-input>
-        <open-theme-toggle></open-theme-toggle>
-        <open-dialog>
-          <span slot='label'>packed dialog</span>
-          <p>dialog body from the packed tarball</p>
-        </open-dialog>
-        <open-dropdown>
-          {/* The trigger is the CONSUMER's element: the component wraps its
-              slot in a presentational span and takes the keyboard affordance
-              from what the consumer puts there. A non-focusable span made this
-              appliance under-exercise the component — the behaviour rows below
-              could not reach the trigger at all. */}
-          <button slot='trigger' type='button'>packed dropdown</button>
-          <p>dropdown content from the packed tarball</p>
-        </open-dropdown>
-        <open-code-block>
-          <pre><code>const packed = true;</code></pre>
-        </open-code-block>
-        <utility-widget></utility-widget>
-      </div>
-    );
-  }
+export const openElement = defineIslandConfig({
+  tag: 'ui-lab',
+  root: 'shadow',
+});
+
+export default function UiLab() {
+  return (
+    <div class='ui-lab ${LIGHT_ROOT_UTILITY}'>
+      <h1>Packed UI appliance</h1>
+      <open-button variant='primary'>packed button</open-button>
+      <open-input label='Packed input' placeholder='type here'></open-input>
+      <open-theme-toggle></open-theme-toggle>
+      <open-dialog>
+        <span slot='label'>packed dialog</span>
+        <p>dialog body from the packed tarball</p>
+      </open-dialog>
+      <open-dropdown>
+        {/* The trigger is the CONSUMER's element: the component wraps its
+            slot in a presentational span and takes the keyboard affordance
+            from what the consumer puts there. A non-focusable span made this
+            appliance under-exercise the component — the behaviour rows below
+            could not reach the trigger at all. */}
+        <button slot='trigger' type='button'>packed dropdown</button>
+        <p>dropdown content from the packed tarball</p>
+      </open-dropdown>
+      <open-code-block>
+        <pre><code>const packed = true;</code></pre>
+      </open-code-block>
+      <utility-widget></utility-widget>
+    </div>
+  );
 }
 `;
 
@@ -1355,6 +1357,10 @@ async function main(): Promise<void> {
       ),
     );
 
+    // The scaffold ships no app/components directory (its structure is
+    // head/islands/layout/routes/styles), so the appliance creates the
+    // directory its UI lab lives in before writing the pair.
+    await mkdir(join(starter, 'app', 'components'), { recursive: true });
     await writeFile(join(starter, 'app', 'components', 'ui-lab.tsx'), UI_LAB_COMPONENT);
     await writeFile(join(starter, 'app', 'routes', 'ui-lab.tsx'), UI_LAB_ROUTE);
 
