@@ -421,11 +421,23 @@ test.describe('zag combobox spike (#1149)', () => {
       const hostEl = document
         .querySelector('combobox-page')!
         .shadowRoot!.querySelector('zag-combobox[machine-id="shadow-b"]') as unknown as {
-        demoSetControlledValue(value: string): void;
-        demoSnapshot(): { value: string[]; valueAsString: string; inputValue: string };
+        controlledValue: string;
+        machineSnapshot: string;
       };
-      hostEl.demoSetControlledValue('mango');
-      return hostEl.demoSnapshot();
+      // The class lane's authored `demoSetControlledValue()` / `demoSnapshot()`
+      // instance methods are retired with the class export (ADR-0182: the
+      // generated lane has no authored-method capability). The island's DECLARED
+      // property rows are its whole host API, so the same machine-state facts are
+      // driven and read through them: writing `controlledValue` commits the
+      // declared row, whose change channel calls machine.updateProps (the class
+      // method's body), and `machineSnapshot` is the row the machine writes back
+      // on every publish (the class method's return value, JSON-encoded).
+      hostEl.controlledValue = 'mango';
+      return JSON.parse(hostEl.machineSnapshot) as {
+        value: string[];
+        valueAsString: string;
+        inputValue: string;
+      };
     });
     // Controlled props reached the machine.
     expect(snapshot).toEqual({

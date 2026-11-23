@@ -766,11 +766,13 @@ test.describe('morph/enhance robustness (0.42.0-alpha.13, #603-#606)', () => {
     // Live page (injected below): checkbox WITHOUT checked, server-set with
     // value v1. Server response: checkbox WITH checked (it echoed the form
     // data), server-set bumped to v2, message re-rendered with an echo value.
-    // The compiled serializer emits boolean-ish marker attributes quoted
-    // (data-open-enhance=""), so the interception needle carries the quote
-    // form; the morph behavior under assertion is unchanged.
+    // The compiled serializer emits the boolean-ish marker attribute with its
+    // value folded to "true" (measured on the generated lane's SSR:
+    // `<form method="post" data-open-enhance="true">`; the class lane emitted
+    // the bare `data-open-enhance=""`), so the interception needle carries the
+    // current spelling; the morph behavior under assertion is unchanged.
     let intercepted = html.replace(
-      '<form method="post" data-open-enhance="">',
+      '<form method="post" data-open-enhance="true">',
       '<form method="post" data-open-enhance=""><input type="checkbox" id="agree" name="agree" checked><input id="server-set" name="server-set" type="text" value="from-server-v2">',
     );
     expect(intercepted).not.toBe(html);

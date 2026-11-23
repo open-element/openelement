@@ -47,7 +47,14 @@ function assetCarrying(needle: string): { href: string; css: string } {
 test('both server-only sheets are emitted externally, scoped, with resolved assets', () => {
   const page = assetCarrying('.styled-page');
   const badge = assetCarrying('.styled-badge');
-  assert.ok(page.css.startsWith('@scope (styled-page) {'), page.css.slice(0, 60));
+  // The page half is a SERVER FUNCTION PAGE with `root: 'light'`
+  // (app/routes/styled/[id].tsx:18-22): its output IS document content, so its
+  // declared sheet is registered UNSCOPED — the route comment states it, and an
+  // unscoped sheet is what the emitted asset starts with. Scoping it to a tag
+  // that never appears on the page would compile rules that match nothing.
+  assert.ok(page.css.startsWith('.styled-shared{color:#14283c'), page.css.slice(0, 60));
+  assert.equal(page.css.includes('@scope'), false, 'the page sheet is unscoped');
+  // The nested badge is a LIGHT generated island whose sheet is tag-scoped.
   assert.ok(badge.css.startsWith('@scope (styled-badge) {'), badge.css.slice(0, 60));
   expect(new Set([page.href, badge.href]).size, 'two distinct resources').toEqual(2);
 
@@ -78,9 +85,14 @@ test('the request-time response renders the tree and declares both sheets in the
   expect(response.headers.get('content-type') ?? '').toContain('text/html');
   const html = await response.text();
 
-  // Real component tree, not a shell: page, nested badge and the parameter.
-  expect(html).toContain('<styled-page id-text="id=42"');
-  expect(html).toContain('<styled-badge');
+  // Real component tree, not a shell: page content, nested badge and the
+  // parameter. The page half is a SERVER FUNCTION PAGE, so its markup IS the
+  // document content — there is no `<styled-page>` host element and no `id-text`
+  // attribute (the F16 migration replaced the `@element('styled-page')` page
+  // root; see app/routes/styled/[id].tsx:8-22).
+  expect(html).toContain('<main id="styled-page-main" class="styled-page">');
+  expect(html).not.toContain('<styled-page');
+  expect(html).toContain('<styled-badge data-oe-light>');
   expect(html).toContain('id=42');
   expect(html).toContain('styled-badge');
 

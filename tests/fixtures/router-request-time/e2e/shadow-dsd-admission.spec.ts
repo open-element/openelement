@@ -61,8 +61,14 @@ test('the request-time dynamic route serializes the same component identically',
   const html = await response.text();
 
   // The dynamic parameter reached the route's page through loader + typed props.
-  expect(html).toContain('id-text="id=7"');
-  expect(html).toContain('id=7</p>');
+  // `idText` is declared `attribute: false` (app/components/page-panel-dynamic.tsx:20),
+  // so the value crosses SSR→claim through the compiler-owned
+  // `data-oe-prop-seed` JSON channel (ADR-0182 D-18c / ADR-0181 A5 amendment),
+  // not as an `id-text` host attribute — and the rendered value sits in a
+  // generated text slot, whose comment markers bracket it.
+  expect(html).toContain('data-oe-prop-seed="{&quot;idText&quot;:&quot;id=7&quot;}"');
+  expect(html).toContain('<!--oe:t:0-->id=7<!--oe:/t:0-->');
+  expect(html).not.toContain('id-text="id=7"');
 
   const template = panelTemplate(html);
   expect(template).toContain('<template shadowrootmode="open">');

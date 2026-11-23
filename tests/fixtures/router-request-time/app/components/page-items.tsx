@@ -12,14 +12,33 @@
  * GENERATED lane (F16: class → function). The class lane's two `@property` fields
  * become props; `root` stays `shadow` so the page keeps the open DSD root the
  * shadow-walker helpers pierce.
+ *
+ * The sidecar's `properties` table is REQUIRED, not decoration: a generated
+ * root's props parameter must be fully replaced by declared rows. Without it the
+ * lane refuses the module (`OEIR_GENERATED_ELEMENT_UNDECLARED_PROPS`), the scan
+ * records no compiler-owned host producer for it, and page classification then
+ * fails the whole build for /items with `light-no-producer` — the measured
+ * pre-existing break this table fixes. The members are declared REQUIRED with
+ * the initial value in the sidecar default: an optional member is refused
+ * separately (`OEIR_GENERATED_ELEMENT_PROPS_TYPE_UNSUPPORTED` — "the generated
+ * element always supplies a value"). `rows` is a property-only array row, so it
+ * crosses the SSR→claim seam through the `data-oe-prop-seed` JSON channel
+ * (ADR-0182 D-18c / ADR-0181 A5).
  */
 import { defineIslandConfig } from '@openelement/router';
 
-export const openElement = defineIslandConfig({ tag: 'items-page', root: 'shadow' });
+export const openElement = defineIslandConfig({
+  tag: 'items-page',
+  root: 'shadow',
+  properties: {
+    rows: { attribute: false, default: [] },
+    itemsValue: { attribute: false, default: 'a,b' },
+  },
+});
 
 interface ItemsPageProps {
-  rows?: Array<{ id: string; label: string }>;
-  itemsValue?: string;
+  rows: Array<{ id: string; label: string }>;
+  itemsValue: string;
 }
 
 export default function ItemsPage(props: ItemsPageProps) {

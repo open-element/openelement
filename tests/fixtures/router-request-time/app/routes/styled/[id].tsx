@@ -41,7 +41,12 @@ export function StyledPage(props: { idText: string }) {
   );
 }
 
-export default definePage<StyledData>(StyledPage, {
+// Bare call on purpose: the page-component scanner
+// (packages/router/src/vite/internal/ssg/static-component-scanner.ts) matches a
+// BARE identifier call, so `definePage<Data>(Component, …)` is unmatchable and
+// the page root gets no host producer. The loader/props typing lives on the
+// annotations instead.
+export default definePage(StyledPage, {
   renderIntent: { mode: 'dynamic' },
   head: { title: 'request-time fixture — styled' },
   props(context: PagePropsContext<StyledData>) {
