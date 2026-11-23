@@ -283,3 +283,62 @@ which rebuilds it, so a concurrent router-suite run contaminates this number
 | `live.spec.ts:185` (chromium only) | a 422 morph adds one extra increment to the live counter (`count=3` → `4` after the morph); pre-existing morph/replay behaviour, reproduced standalone. |
 
 `router-request-time`'s typed-`definePage` defect is now fixed.
+
+## 10. Third closeout pass (2026-11-23, evening)
+
+Pushed: `ab80a3c20`, `31a86c009`, `e808871ec`, `a5937f9d4`, `21a9c92ca`.
+
+**Four more pre-existing defects fixed, each with its own pinned test.**
+
+1. **A directory claim's tombstones now release on a retained-DOM dispose**
+   (`static-sibling-ranges.ts`). A same-turn disconnect/reconnect of a
+   pure-static-directory generated island could not re-claim: the shell
+   re-claims on reconnect while M07b kept a permanent per-parent ordinal
+   tombstone, so the class lane was green here and the generated lane was not.
+   The tombstone still guards two LIVE owners; a detached dispose keeps it. The
+   claim handle is bypassed in production (the shell disposes the projection
+   owner and the ranges are released by scope cascade), so the claim also
+   registers a scope cleanup that releases only while its start marker is still
+   attached — measured as necessary.
+2. **A shadow host's DSD template links only its own sheets**
+   (`public-runtime.ts`). The nested-host expander pre-filled its style sink from
+   the app-wide admitted-tag set, so every shadow template declared every styled
+   island's sheet (measured: 7 links inside one card whose per-tag map is 1). The
+   sink is now live and starts from the host's own links; a nested LIGHT child
+   appends as it is actually expanded, a nested SHADOW child keeps its own.
+3. **Pre-upgrade replay runs on the first activation only** (`shell.ts`). A 422
+   morph moves an intact island (remove+insert), and the shell replayed on every
+   connect while the registry pins its cutoff on the first pass: an island whose
+   activation won the race against the element-runtime load had its already
+   handled click dispatched a second time (3 increments → 4; measured ~37% on
+   chromium, i.e. a flake, not a deterministic red). The gate is the class
+   facade's own `!activation.resumed` rule.
+4. **A nested generated host is a claim boundary** (`claim-invariants.ts`,
+   `leaf-runtime.ts`, `generate.ts`). Two every-load claim errors: `/decoupled`
+   compared a nested host's authored attribute seed while the live tag also
+   carries `data-oe-light` and the child's own interior ("static attribute seed
+   count is 1, declared 0"); `/combobox`'s page directory claim bracketed a
+   nested light island and rejected its own `oe:r:` markers
+   (`OE_RUNTIME_STATIC_RANGE_MISMATCH`). Dash tags are no longer static
+   directory content at any depth, and a dash tag's seed/opaque interior is
+   asserted host-aware while authored statics stay exact.
+
+**Measured state.** element 618/618, compiler 1330/1330, router 1873/1873, tsc
+clean in all three packages.
+
+**`router-request-time` e2e: 339 passed / 342, and NOT stably green.** The
+kr2 harness was re-authored to the generated lane (six rows; two kept honestly
+red until the claim fixes above landed). The last reds are two rows —
+`kr2-diagnostic.spec.ts:996` (Q1-D) and `:1434` (Q1-B/B1) — that fail
+INTERMITTENTLY on a rotating engine (measured: one full run 3 failed, standalone
+re-runs 36/36, 35/36, 36/36, 35/36, 35/36). Root cause of the residual flake:
+both rows mutate the page root's claimed shadow tree (remove / re-append a
+nested light island) and can race the page root's idle claim; the claim then
+legitimately reports the position it expected
+(`OEIR_LEAF_CLAIM_MISMATCH: expected element 'zag-combobox-light' at /0/2/0`).
+Waiting for the page claim before the mutation was tried and reverted: it turned
+the flake into a different one (the wait signal does not hold on every row's
+page). Not papered over with retries.
+
+`live.spec.ts` flake (`:605`, and `:460` under full-suite load) is pre-existing
+and passes standalone.
