@@ -43,7 +43,7 @@ import {
   type ModuleWalkResolver,
 } from '../module-graph-walk.ts';
 import { readComponentDeclaration } from '../component-declaration.ts';
-import { mdxToCompiledPageSource } from '../../plugin-mdx-lower.ts';
+import { loadLower } from '../../plugin-mdx.ts';
 import { resolveGeneratedElementHost } from './generated-element-host-metadata.ts';
 
 /** Stable code for a note this pass owns (a malformed sidecar it skipped). */
@@ -156,6 +156,12 @@ export async function scanDeclaredElementTags(
     // page classification fell back to the retired class page and the build failed
     // with PROGRAM_MISSING.
     if (file.endsWith('.mdx')) {
+      // The optional-peer contract (plugin-mdx.ts): the lowering module — and
+      // the `marked` peer it imports at top level — resolves only when the
+      // graph actually holds an `.mdx` route. A STATIC import here would put
+      // every consumer on that module at config load and kill marked-less apps
+      // in dev (measured 2026-11-24 in the packed starter's dev cell).
+      const { mdxToCompiledPageSource } = await loadLower();
       let mdxSource: string;
       try {
         mdxSource = await readFile(file, 'utf8');

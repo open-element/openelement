@@ -41,7 +41,15 @@ type LowerModule = typeof import('./plugin-mdx-lower.ts');
 
 let lowerPromise: Promise<LowerModule> | undefined;
 
-function loadLower(): Promise<LowerModule> {
+/**
+ * The ONE loader for the lowering module. Single-flight, and the single owner
+ * of the optional-peer diagnostic: a graph that never meets an `.mdx` route
+ * must never resolve this module — or the `marked` peer it imports at top
+ * level. Every consumer of the lowering (the mdx transform, the declared-tag
+ * scan) goes through here, so no config-load path can pull the peer into a
+ * marked-less app (measured 2026-11-24 in gate:packed's starter dev cell).
+ */
+export function loadLower(): Promise<LowerModule> {
   lowerPromise ??= import('./plugin-mdx-lower.ts').catch((cause: unknown) => {
     if (cause instanceof Error && /marked/.test(cause.message)) {
       throw buildError(

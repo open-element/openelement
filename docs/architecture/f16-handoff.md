@@ -442,3 +442,27 @@ is asserted — array/object values still travel on the runtime's one shared
 
 **Measured.** `vitest run --project tests` 4 files / 12 tests green; the fixture's
 own `typecheck` (`tsc --noEmit -p tsconfig.json`) exit 0; `check` 5/5.
+
+## 14. Acceptance batch F — the packed consumer's dev cell exposed the marked peer
+
+`gate:packed`'s starter leg reached its DEV cell for the first time (installs
+now pass; every earlier session died at the unpublished-version `notarget`
+before this cell could run). The packed consumer's dev server failed at config
+load: `Cannot find package 'marked' imported from
+@openelement/router/src/vite/plugin-mdx-lower.js`.
+
+That broke plugin-mdx.ts's OWN contract — `marked` is an OPTIONAL peer, and
+consumers without MDX pages never resolve it. The breaker was the declared-tag
+scan's STATIC import of the lowering module (declared-element-tags.ts:46), one
+edge away from plugin-scanners.ts, which the vite plugin loads at config time.
+Every consumer — a marked-less scaffold included — resolved the peer.
+
+The scan now goes through plugin-mdx.ts's exported single-flight `loadLower()`
+and awaits it ONLY inside its existing `.mdx` branch, so a graph with no MDX
+route never resolves the lowering module at all; an MDX route without `marked`
+still fails closed with the coded `MdxErrorCode.OPTIONAL_PEER_MISSING`
+diagnostic. A source-scan guard (`mdx-lower-optional-peer-guard.test.ts`) pins
+the class: no non-test module under src may name plugin-mdx-lower.ts in a
+static import/export form (type-only included), and plugin-mdx.ts keeps the
+one dynamic loader. The starter template gains no `marked` dependency — a
+marked-less scaffold is the contract.
