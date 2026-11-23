@@ -33,11 +33,13 @@ This excerpt comes from the current
 [`compiled-element-v2/counter.tsx` fixture](https://github.com/open-element/openelement/blob/main/packages/element/__fixtures__/compiled-element-v2/counter.tsx).
 It retains the property, method and button; styles and the list are omitted.
 The existing button displays `+`, not the count. This excerpt was not separately
-recompiled for this article.
+recompiled for this article. The class authoring API it shows was removed in
+alpha.16, so the excerpt is kept as history and its import is no longer spelled
+out: the import does not resolve in the current release.
 
 ```tsx
-import { element, OpenElement, property } from '@openelement/element';
-
+// Historical excerpt: the class authoring API below was removed in alpha.16.
+// Its import is not spelled out here; it does not resolve in the current release.
 @element('oe-program-counter')
 export class ProgramCounter extends OpenElement {
   @property({ reflect: true })

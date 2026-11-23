@@ -1,12 +1,12 @@
 ---
 title: '错误处理'
-lede: '错误处理保留平台语义，并让 route 失败保持可见。'
+lede: '错误处理保留平台语义，并让路由失败保持可见。'
 order: 80
 ---
 
 ## fail()：返回通道
 
-预期内的 action 失败走返回而不是抛出：`fail(status, data)` 要求 4xx 状态码，产出 `OpenElementActionFailure`。服务器以 `fail()` 的状态码（惯例为 422）应答并重渲染页面、回显已提交的值；页面描述符的 `props` 投影器从上下文的 `actionData` 读取失败，并映射到编译页面属性。`isActionFailure()` 是鸭子类型守卫。增强表单只 morph 200/422 响应：非 422 的 4xx 会退化为整页导航——该路径上失败回显丢失,因此校验失败请保持在 422。
+预期内的 action 失败走返回而不是抛出：`fail(status, data)` 要求 4xx 状态码，产出 `OpenElementActionFailure`。服务器以 `fail()` 的状态码（惯例为 422）应答并重渲染页面、回显已提交的值；页面描述符的 `props` 投影器从上下文的 `actionData` 读取失败，并映射到页面声明的属性上。`isActionFailure()` 是鸭子类型守卫。增强表单只 morph 200/422 响应：非 422 的 4xx 会退化为整页导航——该路径上失败回显丢失,因此校验失败请保持在 422。
 
 ## redirect() 与 notFound()
 
@@ -14,42 +14,46 @@ order: 80
 
 ## error 投影器
 
-`definePage(PageClass, { error })` 声明页面级 error 投影器：它接收被捕获的 `error` 与渲染上下文，返回页面编译属性的错误变体（生成的入口用这些 props 以 500 状态码重渲染页面）；未声明时由通用状态页应答。`notFound()` 与意外的 loader/action 抛出都会落到这里；SPA 链上 throw 会被规整进同一通道，而不是悄悄替换 loader 数据。在程序化 action 通道（`x-openelement-action: true`）上，错误结果以 RFC 9457 Problem Details 应答（`application/problem+json`，字段 `type`/`title`/`status`/`detail`），取代此前的自定义 JSON 封装；该线格式已冻结。
+`definePage(PageComponent, { error })` 声明页面级 error 投影器：它接收被捕获的 `error` 与渲染上下文，返回页面**声明的属性**的错误变体（生成的入口用这些 props 以 500 状态码重渲染页面）；未声明时由通用状态页应答。`notFound()` 与意外的 loader/action 抛出都会落到这里；SPA 链上 throw 会被规整进同一通道，而不是悄悄替换 loader 数据。在程序化 action 通道（`x-openelement-action: true`）上，错误结果以 RFC 9457 Problem Details 应答（`application/problem+json`，字段 `type`/`title`/`status`/`detail`），取代此前的自定义 JSON 封装；该线格式已冻结。
 
 ### app/components/page-post.tsx
 
 ```tsx
-// 由 open:compiled-element transform 编译。
-import { element, OpenElement, property } from '@openelement/element';
+// A page-assembled component: the route owns the data, this module owns the markup.
+import { defineIslandConfig } from '@openelement/router';
 
-@element('post-page', { root: 'shadow-open' })
-export default class PostPage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  title = '';
+export const openElement = defineIslandConfig({
+  tag: 'post-page',
+  // A page root is a shadow root: the compiler's DSD host producer renders it,
+  // so even the error variant is part of the very first response.
+  root: 'shadow',
+  properties: {
+    // One row per projector key, every one attribute-free: the props projector
+    // writes them, and nothing of theirs should reach a host attribute.
+    title: { attribute: false, default: '' },
+    error: { attribute: false, default: '' },
+    status: { attribute: false, default: 0 },
+  },
+});
 
-  @property({ reflect: false, attribute: false })
-  error = '';
-
-  @property({ reflect: false, attribute: false })
-  status = 0;
-
-  render() {
-    return (
-      <main>
-        {this.status
-          ? <h1 data-status={this.status}>Request failed</h1>
-          : (
-            <form method='post' data-open-enhance>
-              <input name='title' value={this.title} />
-              <button type='submit'>Save</button>
-            </form>
-          )}
-        {this.error ? <p role='alert' data-message={this.error}>Please fix the errors above.</p> : <span></span>}
-      </main>
-    );
-  }
+export default function PostPage(props: { title: string; error: string; status: number }) {
+  return (
+    <main>
+      {props.status
+        ? <h1 data-status={props.status}>Request failed</h1>
+        : (
+          <form method='post' data-open-enhance>
+            <input name='title' value={props.title} />
+            <button type='submit'>Save</button>
+          </form>
+        )}
+      {props.error ? <p role='alert' data-message={props.error}>{props.error}</p> : null}
+    </main>
+  );
 }
 ```
+
+条件分支只准入一个 JSX 元素或 `null`，因此上面每个分支都是元素，「没有错误」的情况是 `null` 而不是裸字符串（取值为文本的分支会以 `OEC9042` 失败关闭）。错误变体是同一份编译标记的普通组成部分——没有第二个错误页，也没有运行时 JSX 路径。
 
 ### app/routes/posts/[id].tsx
 
@@ -87,22 +91,63 @@ export function action(ctx: { formData: FormData }): OpenElementActionFailure<Po
 
 export default definePage(PostPage, {
   renderIntent: { mode: 'dynamic' },
-  props({ actionData }) {
+  props({ data, actionData }) {
+    const post = data as { title?: string } | undefined;
     const action = actionData as PostActionData | undefined;
-    return { title: action?.title ?? '', error: action?.error ?? '' };
+    // The projector is the only seam: one object, one key per declared row.
+    return {
+      title: action?.title ?? post?.title ?? '',
+      error: action?.error ?? '',
+    };
   },
-  error(error) {
+  error(err) {
     // notFound() and unexpected throws land on the error projector.
-    return { status: isOpenElementNotFound(error) ? 404 : 500 };
+    return { status: isOpenElementNotFound(err) ? 404 : 500 };
   },
 });
 ```
 
 `redirect()` 也可显式指定状态码（301/302/303/307/308）；其他状态码在调用时即被拒绝。同样的守卫在 SPA 链上可用，但 SPA 的 loader/action 拿到的是 `{ params, searchParams, signal }`（action 另有 `formData`）。
 
+## 在浏览器里：onError intrinsic
+
+上面那些**路由**通道决定服务端如何应答。**组件**通道是分开的，而且窄得多：`onError(cb)`——从 `@openelement/element` import、在组件正文顶层调用的、会被编译器擦除的 intrinsic——是**单个生成元素**的错误边界。
+
+```tsx
+import { onError, useHost } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
+
+export const openElement = defineIslandConfig({
+  tag: 'my-widget',
+  root: 'shadow',
+  hydrate: 'idle',
+  ssr: true,
+});
+
+export default function MyWidget() {
+  const host = useHost();
+
+  onError((env) => {
+    // `env.error` is the thrown value exactly as thrown, never wrapped. This
+    // callback bounds THIS element: a failure inside a child element is not
+    // reported here, because no ancestor boundary intercepts a descendant.
+    host.setAttribute('data-failed', '1');
+    void env.error;
+  });
+
+  return <p>widget</p>;
+}
+```
+
+**如实陈述这条边界：它是元素作用域的。** 当有值从元素自身的工作中逃逸时回调运行——connect/claim 阶段（mount、claim、setup 与 `onConnect` 重放），或更新阶段的写入（被追踪的 slot 刷新，或在编译正文内分派的 DOM 事件处理器）。它**不是**子树边界，也**不**跨元素遏制失败：跨元素遏制随 class 基类一起退役，没有任何包装组件替代它。没有可扩展的 `ErrorBoundary`，也没有可覆写的受保护 `onError` hook——`ErrorBoundary` 根本没有从 `@openelement/element` 导出，因此仍 import 它的模块无法求值。
+
+捕获型处理器只改变错误是否逃逸。connect 阶段的失败仍让元素停留在其既定的失败后状态（无投影、无监听器），之后的重新连接会从头重试；更新阶段的失败保留先前已写入的 DOM，订阅仍然存活。没有注册处理器时，throw 原样上浮。自身抛错的处理器会**替换**原始错误——上浮的就是这个新 throw。
+
+回调是**客户端拥有的**：它被擦除进编译模块，在服务端渲染期间从不运行。SSR 时的生产者 throw 会让渲染失败并落到路由的 error 投影器，与之前完全一样——因此服务端渲染的失败从来不是这个回调的事。
+
 ## 构建期诊断
 
-以上都是运行时通道。编译器另有回答：超出创作语法的模块在构建期失败，并给出带源码位置、携带稳定 `OEC####` 码的诊断——即编译元素边界强制执行的 attribute、Block、装饰器与 provenance 规则。[错误码](/zh/errors) 逐条列出每个码触发的消息与确切的源码调用点，且由诊断本身生成，因此这张表既不会描述构建已经不再产生的码，也不会漏掉仍在产生的码。
+以上都是运行时通道。编译器另有回答：超出创作语法的模块在构建期失败，并给出带源码位置、携带稳定 `OEC####` 码的诊断——即编译组件边界强制执行的 attribute、Block、intrinsic 与 provenance 规则。[错误码](/zh/errors) 逐条列出每个码触发的消息与确切的源码调用点，且由诊断本身生成，因此这张表既不会描述构建已经不再产生的码，也不会漏掉仍在产生的码。
 
 ### 机器可读的诊断信封
 
@@ -111,8 +156,8 @@ export default definePage(PostPage, {
 `openelement build` 按需输出聚合结果，人读输出与退出码不变：
 
 ```sh
-openelement build --diagnostics=json          # stderr 上一行 JSON 报告
-openelement build --diagnostics-file=diagnostics.json   # 同一文档写入文件
+openelement build --diagnostics=json          # one JSON report line on stderr
+openelement build --diagnostics-file=diagnostics.json   # the same document to a file
 ```
 
 构建未产生任何诊断时什么都不写。报告是一个文档：
@@ -130,10 +175,10 @@ openelement build --diagnostics-file=diagnostics.json   # 同一文档写入文�
       "file": "app/components/broken-page.tsx"
     },
     {
-      "code": "OEC9020",
+      "code": "OEC9042",
       "severity": "error",
       "phase": "build",
-      "message": "property defaults must be serializable literals",
+      "message": "spread attributes are outside the admitted grammar",
       "file": "app/components/broken-page.tsx",
       "line": 8,
       "column": 11

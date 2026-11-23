@@ -13,40 +13,45 @@ section: 'Recipes'
 ## 组件
 
 ```tsx
-import { computed, element, OpenElement, property, type ReadonlySignal } from '@openelement/element';
+// app/components/page-contact.tsx — the form's own markup, no client behavior.
+import { computed } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
 
-@element('contact-page')
-export default class ContactPage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  error = '';
+export const openElement = defineIslandConfig({
+  tag: 'contact-page',
+  // The page root is a shadow root: the compiler's DSD host producer renders it,
+  // which is what puts the form in the first response with no script.
+  root: 'shadow',
+  properties: {
+    // One row per projector key. Both values are attribute-free: the projector
+    // is their only channel, so nothing can leak into a host attribute.
+    error: { attribute: false, default: '' },
+    echoed: { attribute: false, default: '' },
+  },
+});
 
-  @property({ reflect: false, attribute: false })
-  echoed = '';
+export default function ContactPage(props: { error: string; echoed: string }) {
+  // Derived, not stored: the flags are projections of the rows, so they can
+  // never disagree with the values they gate.
+  const hideError = computed(() => props.error === '');
+  const hideEcho = computed(() => props.echoed === '');
 
-  @property({ reflect: false, attribute: false })
-  hideError: ReadonlySignal<boolean> = computed(() => this.error === '');
-
-  @property({ reflect: false, attribute: false })
-  hideEcho: ReadonlySignal<boolean> = computed(() => this.echoed === '');
-
-  render() {
-    return (
-      <main>
-        <h1>contact</h1>
-        <form method='post' data-open-enhance>
-          <input name='message' type='text' />
-          <button type='submit'>Send</button>
-          <button type='submit' formaction='?/shout'>Shout</button>
-        </form>
-        <p role='alert' hidden={this.hideError}>{this.error}</p>
-        <p hidden={this.hideEcho}>echo=<span>{this.echoed}</span></p>
-      </main>
-    );
-  }
+  return (
+    <main>
+      <h1>contact</h1>
+      <form method='post' data-open-enhance>
+        <input name='message' type='text' />
+        <button type='submit'>Send</button>
+        <button type='submit' formaction='?/shout'>Shout</button>
+      </form>
+      <p role='alert' hidden={hideError.value}>{props.error}</p>
+      <p hidden={hideEcho.value}>echo=<span>{props.echoed}</span></p>
+    </main>
+  );
 }
 ```
 
-两个消息元素刻意放在任何条件分支之外：分支元素可以绑定属性，但不能插值文本（`OEC9012`——分支只绑定，不执行动作）。这份配方改用 `computed()` 派生布尔属性并切换 `hidden` attribute，因此回显值仍是普通的文本绑定，构建可以通过。
+两个消息元素刻意放在任何条件分支之外。分支只准入一个 JSX 元素或 `null`，而取值为文本的分支——`{props.error ? 'has an error' : null}`——会以 `OEC9042`（"a conditional branch must be JSX or null"）失败关闭。这份配方让两条消息无条件渲染，并为每一行派生一个布尔 `computed()`，改为切换 `hidden` attribute。因此回显值仍是普通的文本插值：它有一个稳定的节点，永远不会成为分支必须重新创建的东西。
 
 ## 路由
 
