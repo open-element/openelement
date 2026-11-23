@@ -770,9 +770,18 @@ test('cold dev start links the document sheet before any warm-up request (D2)', 
   writeFixtureAt(coldStartFixture, 'p-8');
   writeFileSync(join(coldStartFixture, 'app/layout.css'), `:host { display: block; }\n`, 'utf8');
   // GENERATED lane (F16: class → function), keeping the layout convention's
-  // SHADOW root: the class held `root: 'shadow-open'` and `static styles =
-  // [styles]`, so the sidecar pins `root: 'shadow'` and the same sheet, whose
-  // specifier is relative to this module.
+  // SHADOW root.
+  //
+  // `styles` is deliberately ABSENT here (F16 breaking removal, owner-approved
+  // and recorded): the generated lane has NO carrier for a LAYOUT's declared
+  // sheets — the island scan walks only the islands directory, the
+  // static-component scan has no layout handling, and no other pass registers a
+  // layout's `styles` — so the emitted host producer's strict `styleLinks`
+  // channel failed closed with `OEIR_LEAF_MISSING_VALUE: styleLinks` on the
+  // first render. Declaring a sheet here would promise a delivery the dev lane
+  // cannot make; the declaration is removed rather than silently mislinked. The
+  // root stays `shadow` because the ordering defect this row pins (the layout
+  // walk starting buildStart early) is independent of styling.
   writeFileSync(
     join(coldStartFixture, 'app/layout.tsx'),
     `import { defineIslandConfig } from '@openelement/router';
@@ -780,7 +789,6 @@ test('cold dev start links the document sheet before any warm-up request (D2)', 
 export const openElement = defineIslandConfig({
   tag: 'app-layout',
   root: 'shadow',
-  styles: ['./layout.css'],
 });
 
 export default function Layout() {

@@ -11,7 +11,7 @@ import type { Plugin } from 'vite';
 import type { OpenElementPackageManifest, RouteEntry } from './framework.ts';
 import type { IslandDecl } from '@openelement/protocol/ssg';
 import { createLogger, formatError, OpenElementError } from '@openelement/element';
-import { join } from 'pathe';
+import { join, resolve } from 'pathe';
 import { DEFAULT_ISLANDS_DIR, DEFAULT_ROUTES_DIR } from './internal/paths.ts';
 import {
   buildEntryDescriptor,
@@ -430,7 +430,20 @@ async function scanDeclaredTagsInto(
 
 /** Rescan the islands dir into ctx; returns the islands root for later reuse. */
 async function scanIslandsIntoCtx(state: OpenPluginState): Promise<string> {
-  const islandsRoot = join(process.cwd(), state.resolvedOptions.islandsDir || DEFAULT_ISLANDS_DIR);
+  // The islands dir is a convention of the PROJECT root, and the project root is
+  // the RESOLVED Vite config's `root` — not a process cwd that a dev server may
+  // legitimately leave behind (a host that boots a child dev server, a watcher
+  // that restores cwd after startup). A dev island RESCAN used to scan from the
+  // cwd and could therefore report "no islands" for a server whose root is
+  // elsewhere: the rescan then REPLACED the scanned inventory with an empty one,
+  // so every consumer of `islandFiles`/`islandTagNames` (the descriptor, the dev
+  // client map, the component-sheet tagging) lost the app's islands after one
+  // edit. `viteRoot` is the anchor the very same scan already uses for the
+  // compiler identity; the cwd fallback only serves hosts without a config.
+  const islandsRoot = join(
+    state.viteRoot ?? process.cwd(),
+    state.resolvedOptions.islandsDir || DEFAULT_ISLANDS_DIR,
+  );
   const islandFiles = await scanIslands(islandsRoot);
   state.ctx.phase1.islandTagNames = islandFiles.map((f) => fileToTagName(f));
   state.ctx.phase1.islandFiles = islandFiles;
@@ -564,6 +577,32 @@ async function deriveDevRouteDocumentStyleLinks(state: OpenPluginState): Promise
     islandStyleUrls.set(declaration.tagName, urls);
   }
   if (islandStyleUrls.size === 0) return;
+  // A PAGE MODULE's OWN declared sheets (P-2b): the build joins them to the
+  // route path from Phase 2's emitted assets (`build-ssg.ts`'s
+  // `pageModuleStyleUrls`), and the dev document needs the same join or a
+  // generated page's own `:host`/box rule never reaches the head — the tag walk
+  // below cannot find it, because a page has no host element to reference.
+  // Dev has no emitted asset, so the join resolves the SAME declaration's
+  // authored-CSS dev resource URL and keys it by the route the module IS.
+  //
+  // The route spelling is project-relative (`route.filePath`) while a page
+  // module declaration carries the module's absolute id in `filePath` (a page
+  // has no islands-relative path); `resolve` against the SAME project root makes
+  // the two one key, exactly as the build's join does.
+  const routeRoot = resolve(state.viteRoot ?? process.cwd(), state.resolvedOptions.routesDir!);
+  const routePathByPageModule = new Map<string, string>();
+  for (const route of state.ctx.phase1.cachedRoutes || []) {
+    if (route.type !== 'page' || route.special) continue;
+    routePathByPageModule.set(resolve(routeRoot, route.filePath), route.path);
+  }
+  const pageModuleStyleUrls = new Map<string, readonly string[]>();
+  for (const declaration of declarations) {
+    const routePath = routePathByPageModule.get(resolve(declaration.filePath));
+    if (routePath === undefined) continue;
+    const urls = devAuthoredIslandStyleUrls(base, declaration);
+    if (urls.length === 0) continue;
+    pageModuleStyleUrls.set(routePath, urls);
+  }
   const result = await buildRouteDocumentStyleLinks({
     root: state.viteRoot ?? process.cwd(),
     routes: state.ctx.phase1.cachedRoutes || [],
@@ -573,6 +612,10 @@ async function deriveDevRouteDocumentStyleLinks(state: OpenPluginState): Promise
     resolve: state.resolveModule as NonNullable<typeof state.resolveModule>,
     lightIslandTags: tags.light,
     islandStyleUrls,
+    // Only when the app really has one: the helper's absent-map branch is the
+    // "no page-declared sheet" path, so an app without one keeps its exact
+    // previous route facts.
+    ...(pageModuleStyleUrls.size === 0 ? {} : { pageModuleStyleUrls }),
   });
   setRouteDocumentStyleLinks(state.ctx, result.links);
 }

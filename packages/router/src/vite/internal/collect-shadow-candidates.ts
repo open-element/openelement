@@ -50,6 +50,19 @@ export interface CandidateModule {
   readonly path: string;
   /** Resolve `path` as a package specifier from the app root. */
   readonly resolve?: boolean;
+  /**
+   * The caller's convention-derived tag, when the caller knows it (an island's
+   * path tag).
+   *
+   * It is only the declaration reader's FALLBACK identity: a generated island
+   * carries no `tag` in its sidecar (its tag comes from its path), so without
+   * this the reader answers `absent` for the module, it falls through to the
+   * server function lane, and a SHADOW island with TSX-only utilities registers
+   * its tokens as LIGHT facts — the wrong sheet (F16). A page-local component
+   * pins its own tag and needs no fallback; omitting the field keeps every
+   * existing caller's behaviour byte-identical.
+   */
+  readonly tag?: string;
 }
 
 export interface CollectShadowCandidatesOptions {
@@ -140,7 +153,8 @@ export async function collectShadowClassCandidates(
     // authored sheet was skipped entirely, so its tokens never reached the scope
     // that compiles them (F16).
     const declaration = islandStyleDeclarationFor(file);
-    const reading = declaration === undefined ? readComponentDeclaration(source) : undefined;
+    const reading =
+      declaration === undefined ? readComponentDeclaration(source, entry.tag) : undefined;
     const declaredRoot =
       declaration !== undefined
         ? declaration.root
