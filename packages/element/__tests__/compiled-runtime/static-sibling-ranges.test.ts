@@ -623,9 +623,17 @@ test('F: dispose modes stay first-wins, and an activation write is not rolled ba
   suspended.dispose(true);
   expect(ranges[0].element.parentNode).toBe(parent);
   expect(ranges[0].start.parentNode).toBe(parent);
+  // The retained-DOM dispose released ordinal 0 but NOT the live owner's
+  // ordinal 1: re-claiming 0 succeeds in order, a second 0 is still consumed.
+  const reclaimed = claimStaticSiblingRange(directory, 0, host, () => undefined);
+  expect(reclaimed.start).toBe(ranges[0].start);
+  expect(reclaimed.owner).not.toBe(suspended.owner);
   expect(
     capture(() => claimStaticSiblingRange(directory, 0, host, () => undefined)).message,
   ).toContain('consumed:');
+  // Release the re-claim plainly so the host's later detach cannot remove it.
+  reclaimed.dispose(false);
+  expect(ranges[0].element.parentNode).toBe(parent);
 
   host.dispose(true);
   expect(ranges[0].element.parentNode).toBe(parent);
@@ -1375,32 +1383,33 @@ describe('M07-4 bounded mismatch recovery', () => {
     ).toContain('consumed:');
   });
 
-  test('a completed directory claim stays consumed after dispose', () => {
+  test('a retained-DOM dispose releases a completed directory claim for a re-claim', () => {
     const { parent, ranges, directory } = openPair();
     const host = new LifetimeScope();
     const first = claimStaticSiblingRange(directory, 0, host, () => undefined);
     const second = claimStaticSiblingRange(directory, 1, host, () => undefined);
     first.dispose(false);
     second.dispose(false);
+    // The retained-DOM dispose keeps the markers and releases the tombstones.
     expect(ranges[0].element.parentNode).toBe(parent);
     expect(ranges[1].element.parentNode).toBe(parent);
+    expect(ranges[0].start.parentNode).toBe(parent);
     expect(first.owner.disposed).toBe(true);
     expect(second.owner.disposed).toBe(true);
-    const again = capture(() =>
+    const againFirst = claimStaticSiblingRange(directory, 0, new LifetimeScope(), () => undefined);
+    expect(againFirst.start).toBe(ranges[0].start);
+    const againSecond = claimStaticSiblingRange(directory, 1, new LifetimeScope(), () => undefined);
+    expect(againSecond.start).toBe(ranges[1].start);
+    // The guard against two LIVE owners is untouched: the re-claimed ordinals
+    // are committed again and a third claim of ordinal 0 refuses.
+    const duplicate = capture(() =>
       claimStaticSiblingRange(directory, 0, new LifetimeScope(), () => undefined),
     );
-    expect(again.code).toBe(RuntimeErrorCode.STATIC_RANGE_MISMATCH);
-    expect(again.message).toContain('consumed:');
-    const byHandle = capture(() =>
-      claimStaticSiblingRange(
-        directory,
-        { start: asNode(ranges[1].start) },
-        new LifetimeScope(),
-        () => undefined,
-      ),
-    );
-    expect(byHandle.message).toContain('consumed:');
+    expect(duplicate.code).toBe(RuntimeErrorCode.STATIC_RANGE_MISMATCH);
+    expect(duplicate.message).toContain('consumed:');
+  });
 
+  test('a detach dispose keeps a completed directory claim consumed', () => {
     const removed = openPair();
     const claimed = claimStaticSiblingRange(
       removed.directory,
@@ -1418,10 +1427,66 @@ describe('M07-4 bounded mismatch recovery', () => {
     rest.dispose(true);
     expect(removed.ranges[0].element.parentNode).toBeNull();
     expect(removed.ranges[1].start.parentNode).toBeNull();
+    // The markers are gone, so `consumed:` is the honest refusal: the tombstone
+    // is kept.
     const afterDetach = capture(() =>
       claimStaticSiblingRange(removed.directory, 0, new LifetimeScope(), () => undefined),
     );
+    expect(afterDetach.code).toBe(RuntimeErrorCode.STATIC_RANGE_MISMATCH);
     expect(afterDetach.message).toContain('consumed:');
+    const byHandle = capture(() =>
+      claimStaticSiblingRange(
+        removed.directory,
+        { start: asNode(removed.ranges[1].start) },
+        new LifetimeScope(),
+        () => undefined,
+      ),
+    );
+    expect(byHandle.message).toContain('consumed:');
+  });
+
+  test('a retained-DOM dispose from the connection owner lets a reconnect re-claim in order', () => {
+    const { parent, ranges, directory } = openPair();
+    // The connection owner is what the shell disposes plain on disconnect
+    // (shell.ts `projection?.dispose(false)`): the range owners are its
+    // children, so this is the production cascade, not a claim-handle call.
+    const connection = new LifetimeScope();
+    const first = claimStaticSiblingRange(directory, 0, connection, () => undefined);
+    const second = claimStaticSiblingRange(directory, 1, connection, () => undefined);
+    connection.dispose(false);
+    expect(first.owner.disposed).toBe(true);
+    expect(second.owner.disposed).toBe(true);
+    for (const range of ranges) {
+      expect(range.start.parentNode).toBe(parent);
+      expect(range.element.parentNode).toBe(parent);
+      expect(range.end.parentNode).toBe(parent);
+    }
+
+    // Reconnect: the generated claim re-opens the same parent and claims every
+    // range in order against the retained markers.
+    const reopened = openStaticSiblingDirectory(
+      asParent(parent),
+      [paragraph('same'), paragraph('same')],
+      'fixtures/Ranges.tsx',
+    );
+    const reconnected = new LifetimeScope();
+    const againFirst = claimStaticSiblingRange(reopened, 0, reconnected, () => undefined);
+    const againSecond = claimStaticSiblingRange(reopened, 1, reconnected, () => undefined);
+    expect(againFirst.start).toBe(ranges[0].start);
+    expect(againSecond.start).toBe(ranges[1].start);
+
+    // The guard against two LIVE owners is untouched: the re-claimed ordinals
+    // are committed again and a third claim of ordinal 0 refuses.
+    const duplicate = capture(() =>
+      claimStaticSiblingRange(reopened, 0, new LifetimeScope(), () => undefined),
+    );
+    expect(duplicate.message).toContain('consumed:');
+
+    // A second retained dispose releases again, so the region is still
+    // claimable after another disconnect.
+    reconnected.dispose(false);
+    const third = claimStaticSiblingRange(reopened, 0, new LifetimeScope(), () => undefined);
+    expect(third.start).toBe(ranges[0].start);
   });
 
   test('an unfinished reservation stays exclusive, and recovery can reserve again', () => {
