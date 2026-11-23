@@ -43,29 +43,31 @@ WinterCG-pure; deployment support is limited to the runtimes and Nitro
 targets actually covered by the release qualification matrix (the Node and
 Workers fixtures), not every runtime that can load ESM.
 
-> The 1.0 baseline uses compiled element classes for page authoring. Route Mode
-> stays independently consumable without Element; Framework Mode installs
-> Element alongside Router.
+> The 1.0 baseline authors pages as default-exported function components beside
+> a `defineIslandConfig` sidecar; the compiler lowers the pair into a Native
+> Custom Element. Route Mode stays independently consumable without Element;
+> Framework Mode installs Element alongside Router.
 
-Use the package root in route, island, and component modules. A route module
-default-exports the compiled page class wrapped in `definePage()`:
+Use the package root in route, island, and component modules. A page component
+default-exports its function beside the sidecar, and the route module wraps it
+in `definePage()`:
 
 ```tsx
-// app/components/page-home.tsx — compiled by the open:compiled-element transform
-import { element, OpenElement, property } from '@openelement/element';
+// app/components/page-home.tsx — lowered by the generated-element transform
+import { defineIslandConfig } from '@openelement/router';
 
-@element('home-page', { root: 'shadow-open' })
-export default class HomePage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  heading = '';
+export const openElement = defineIslandConfig({
+  tag: 'home-page',
+  root: 'shadow',
+  properties: { heading: { attribute: false } },
+});
 
-  render() {
-    return (
-      <main>
-        <h1>{this.heading}</h1>
-      </main>
-    );
-  }
+export default function HomePage(props: { heading: string }) {
+  return (
+    <main>
+      <h1>{props.heading}</h1>
+    </main>
+  );
 }
 ```
 
@@ -198,14 +200,16 @@ import { createRouteMiddleware } from '@openelement/router/http';
 import { defineIslandConfig, definePage } from '@openelement/router';
 ```
 
-- `definePage(CompiledPageClass, { route?, head?, renderIntent?, props?, error? })`
-  attaches the page descriptor to a compiled page element class. The class
-  owns the render program; the descriptor carries metadata plus the optional
-  `props`/`error` projectors (pure context → props mappings) — there is no
-  render function field and no render-scope data hooks.
-- `defineIslandConfig({ ssr, dsd, hydrate })` defines static island metadata
-  for adapter scanning; the island itself is a single-module compiled
-  `@element` class.
+- `definePage(PageComponent, { route?, head?, renderIntent?, props?, error? })`
+  attaches the page descriptor to a page component (a default-exported function
+  component beside its `defineIslandConfig` sidecar, or a server function page's
+  own component). The component owns the render program; the descriptor carries
+  metadata plus the optional `props`/`error` projectors (pure context → props
+  mappings) — there is no render function field and no render-scope data hooks.
+- `defineIslandConfig({ tag, root, properties, ssr, dsd, hydrate })` declares
+  the component's element facts for compiler admission and adapter scanning: the
+  custom-element tag, its root, the declared property table, and the optional
+  island delivery policy.
 - `fail(status, data)` / `redirect(location)` / `notFound(message)` implement
   the action protocol; `isActionFailure()` is the duck-typed guard.
 
@@ -223,8 +227,8 @@ interfaces, including Queue, KV, Service Binding, and Rate Limit objects. Write
 response metadata only through `responseHeaders`, which the generated server
 merges into its final `Response`.
 
-`OpenElement` remains the runtime primitive in `@openelement/element`, but application
-authors should start from this package.
+The runtime primitive is the compiler-emitted Native Custom Element, whose runtime
+surface lives in `@openelement/element`; application authors start from this package.
 
 Build configuration is owned by this package's tooling subpaths; generated
 projects import the `openElement()` facade from `@openelement/router/vite` and

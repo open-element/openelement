@@ -57,14 +57,16 @@ function readFixture(file: string): string {
 }
 
 test('declines class-authored modules and leaves the class branch byte-identical', () => {
-  // The subject is an INLINE class-authored module, not a file under src/:
+  // The subject is an INLINE class-authored fixture, not a file under src/:
   // every shipped component migrated to the generated lane (open-button and
   // open-input were the last two), so the repository no longer contains a
-  // class-authored component to point at. The class branch itself is still
-  // live and still shared, and this is the module that proves it.
+  // class-authored component to point at. The generator's legacy class branch
+  // reads the authored shape by text (`@element` plus `extends OpenElement`),
+  // and this is the source that proves it still declines the generated lane and
+  // keeps the class-branch declaration shape. It is not an authoring example:
+  // the public surface has no class base since the class lane was deleted, so
+  // the fixture imports nothing.
   const classSource = [
-    "import { element, OpenElement } from '@openelement/element';",
-    '',
     "@element('open-button', { root: 'shadow-open' })",
     'export class XLegacy extends OpenElement {',
     '  render(): unknown {',

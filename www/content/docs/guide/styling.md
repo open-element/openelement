@@ -1,6 +1,6 @@
 ---
 title: 'Styling'
-lede: 'A shadow root renders inside a custom element as declarative shadow DOM, out of a global stylesheet’s reach. A light root has no boundary at all, so the build scopes its sheet instead.'
+lede: 'A shadow root renders as declarative shadow DOM, out of a global stylesheet’s reach. A light root has no boundary, so the build scopes its sheet.'
 order: 5
 ---
 
