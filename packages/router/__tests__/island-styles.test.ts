@@ -373,18 +373,37 @@ test('scan: a shadow-root generated island without a host producer still fails c
   // A shadow-root function island with a shape the leaf generator cannot turn
   // into a claimable host producer: the identity is `missing-producer`, so no
   // template exists to declare the sheet in and the build must refuse.
-  // A shadow root whose declared property channel keeps the component
-  // mount-only: the compiler admits the module but emits no `<Name>__ssr`, so
-  // there is no host producer to append and no template to declare the sheet in.
+  //
+  // The shape is the generator's own branch-template rule: a condition branch
+  // may only carry shapes that were already claimable, so a NESTED condition
+  // inside a branch keeps the whole component mount-only
+  // (`generated-leaf/generate.ts:4409`, the condition case's `insideTemplate`
+  // gate). The compiler admits the module, but the leaf emits no `<Name>__ssr`,
+  // so the emitter's `hostWrapper` decision appends no `<Name>__ssrHost`
+  // (`generated-element/emit.ts:208` `exportsSsrFunction` → `:586`), and the
+  // scan's identity is `missing-producer`
+  // (`generated-element-host-metadata.ts:263`), refused at
+  // `island-scanner.ts:1347`.
+  //
+  // REPLACED FIXTURE (2026-11-23): this row used to use a `value={props.value}`
+  // property channel, which was `missing-producer` only while that channel
+  // forced mount-only (at the row's introduction, cd7e9e065). F16 (d97a85c5a)
+  // intentionally admits the property channel — it renders as an HTML attribute
+  // in SSR (`generate.ts:7129`) and `attributesClaimable` no longer declines it
+  // (`generate.ts:4359`) — so that fixture now resolves to `producer` and the
+  // scan admits it. The nested-condition shape is still outside the claim
+  // slice, so the refusal stays pinned by a real missing-producer identity.
   const missingProducer = `import { defineIslandConfig } from '@openelement/router';
+import { signal } from '@openelement/element';
 export const openElement = defineIslandConfig({
   root: 'shadow',
   hydrate: 'idle',
   styles: ['./profile-card.css'],
-  properties: { value: { default: '' } },
 });
-function Field(props: { value: string }) {
-  return <input value={props.value} />;
+function Field() {
+  const outer = signal(true);
+  const inner = signal(false);
+  return <div>{outer.value ? <span>{inner.value ? <i>inner</i> : null}</span> : null}</div>;
 }
 export default Field;
 `;
