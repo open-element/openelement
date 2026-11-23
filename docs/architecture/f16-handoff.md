@@ -466,3 +466,18 @@ the class: no non-test module under src may name plugin-mdx-lower.ts in a
 static import/export form (type-only included), and plugin-mdx.ts keeps the
 one dynamic loader. The starter template gains no `marked` dependency — a
 marked-less scaffold is the contract.
+
+**Amendment (2026-11-24, later the same night): the slot, not the export.**
+The exported `loadLower` carried its own defect: the scan's static plugin-mdx
+import was the FIRST edge into that module from the bundled ./vite graph, and
+rolldown materialized its chunk-loading runtime into the packed artifact
+(`src/_virtual/_rolldown/runtime.js` — the artifact check fails closed on its
+`node:*` import; the bisect pack against the pre-change sources is clean).
+The scan now consumes the ONE slot the open:mdx plugin publishes at factory
+time (`plugin-mdx-scan-hook.ts`, the pre-upgrade-replay-hook shape: a
+zero-import registry whose functions ARE the registry's); `loadLower` stays
+private to plugin-mdx's graph with the coded OPTIONAL_PEER_MISSING diagnostic;
+a build composing no open:mdx plugin gets its `.mdx` rows reported
+(OE_DECLARED_TAG_MDX_PLUGIN_NOT_COMPOSED), never lowered by a silent import.
+Measured: the pack probe is clean again and router is 1876/1876 with the
+guard at three rows.

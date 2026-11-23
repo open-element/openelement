@@ -55,13 +55,28 @@ test('no module statically imports the mdx lowering — the marked peer stays op
   ).toEqual([]);
 });
 
-test('plugin-mdx.ts owns the one dynamic loader with the coded peer diagnostic', async () => {
+test('plugin-mdx.ts owns the one dynamic loader and publishes the scan slot', () => {
   const source = readFileSync(join(SRC_DIR, 'vite/plugin-mdx.ts'), 'utf8');
-  expect(source).toMatch(/export function loadLower\(\)/);
+  // The one dynamic import (kept private to plugin-mdx's graph).
   expect(source).toMatch(/import\('\.\/plugin-mdx-lower\.ts'\)/);
   expect(source).toContain('OPTIONAL_PEER_MISSING');
-  const mod = await import('../src/vite/plugin-mdx.ts');
-  expect(typeof mod.loadLower, 'the exported loader exists for every lowering consumer').toBe(
-    'function',
-  );
+  // The scan reaches the lowering ONLY through the published slot.
+  expect(source).toContain('publishMdxScanLowering');
+});
+
+test('the scan hook is a zero-import registry and the scan has no plugin-mdx edge', () => {
+  const hook = readFileSync(join(SRC_DIR, 'vite/plugin-mdx-scan-hook.ts'), 'utf8');
+  expect(
+    hook.match(/^\s*import\s/m),
+    'the slot module imports nothing (the pre-upgrade-replay-hook shape)',
+  ).toBeNull();
+  const scan = readFileSync(join(SRC_DIR, 'vite/internal/ssg/declared-element-tags.ts'), 'utf8');
+  expect(scan).toContain("from '../../plugin-mdx-scan-hook.ts'");
+  expect(
+    scan.match(/from '[^']*\/plugin-mdx\.ts'/),
+    'a static scan → plugin-mdx edge puts the in-package dynamic import on the bundled ./vite graph (rolldown ships its chunk runtime in the artifact — measured 2026-11-24)',
+  ).toBeNull();
+  // Both module kinds are exported for runtime consumers of the slot.
+  expect(hook).toContain('export function publishMdxScanLowering');
+  expect(hook).toContain('export function mdxScanLowering');
 });

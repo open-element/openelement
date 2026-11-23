@@ -43,7 +43,7 @@ import {
   type ModuleWalkResolver,
 } from '../module-graph-walk.ts';
 import { readComponentDeclaration } from '../component-declaration.ts';
-import { loadLower } from '../../plugin-mdx.ts';
+import { mdxScanLowering } from '../../plugin-mdx-scan-hook.ts';
 import { resolveGeneratedElementHost } from './generated-element-host-metadata.ts';
 
 /** Stable code for a note this pass owns (a malformed sidecar it skipped). */
@@ -52,6 +52,11 @@ export const DeclaredElementTagScanCode = {
   SIDECAR_UNREADABLE: 'OE_DECLARED_TAG_SIDECAR_UNREADABLE',
   /** The discovery walk stopped at its module bound (a partial map). */
   MODULE_BOUND_EXCEEDED: 'OE_DECLARED_TAG_MODULE_BOUND_EXCEEDED',
+  /**
+   * An `.mdx` route exists but no open:mdx plugin was composed, so the scan
+   * has no published lowering to read its declared tag from.
+   */
+  MDX_PLUGIN_NOT_COMPOSED: 'OE_DECLARED_TAG_MDX_PLUGIN_NOT_COMPOSED',
 } as const;
 
 export interface ScanDeclaredElementTagsInput {
@@ -156,19 +161,33 @@ export async function scanDeclaredElementTags(
     // page classification fell back to the retired class page and the build failed
     // with PROGRAM_MISSING.
     if (file.endsWith('.mdx')) {
-      // The optional-peer contract (plugin-mdx.ts): the lowering module — and
-      // the `marked` peer it imports at top level — resolves only when the
-      // graph actually holds an `.mdx` route. A STATIC import here would put
-      // every consumer on that module at config load and kill marked-less apps
-      // in dev (measured 2026-11-24 in the packed starter's dev cell).
-      const { mdxToCompiledPageSource } = await loadLower();
+      // The optional-peer contract (plugin-mdx.ts): the lowering — and the
+      // `marked` peer it imports at top level — is reached ONLY through the
+      // slot the open:mdx plugin publishes. A STATIC import of the lowering
+      // module would resolve `marked` for every consumer at config load
+      // (measured 2026-11-24 in the packed starter's dev cell), and a static
+      // edge to plugin-mdx's loader would put the in-package dynamic import
+      // on the bundled ./vite graph and ship rolldown's chunk runtime in the
+      // artifact (measured the same night). No plugin composed: report the
+      // row and record no tag — an honest no-op, never a silent drop.
+      const lower = mdxScanLowering();
+      if (lower === undefined) {
+        notes.push({
+          code: DeclaredElementTagScanCode.MDX_PLUGIN_NOT_COMPOSED,
+          file,
+          message:
+            'the .mdx route needs the open:mdx plugin (mdxPlugin()) composed to lower its ' +
+            'declared tag; the scan reports it and records no tag.',
+        });
+        continue;
+      }
       let mdxSource: string;
       try {
         mdxSource = await readFile(file, 'utf8');
       } catch {
         continue;
       }
-      const lowered = mdxToCompiledPageSource(mdxSource, file, input.routesDir);
+      const lowered = await lower(mdxSource, file, input.routesDir);
       const loweredTag = mdxLoweredTag(lowered);
       if (loweredTag === undefined) continue;
       // The VIRTUAL module id, because that is the id the transform compiles under
