@@ -225,18 +225,22 @@ supplied property-only primitives; ADR-0181 carries the dated A5 amendment and
 now admitted with a bare call (the loader/props/head annotations keep the
 typing), and the edit route's projector names the declared rows
 (`titleText`/`bodyText`). Measured: fixture typecheck PASS, build PASS, e2e
-**125/132** (was 108/132 with the build red), edit page `/notes/:id/edit`
+**132/132** (was 108/132 with the build red), edit page `/notes/:id/edit`
 prefilled on all three engines with JavaScript on (`#title` "Seed note one",
 `#body` "The first seeded note body.") and textarea-empty with JavaScript off —
 the no-JS RCDATA prefill removal stands.
 
-**Remaining fixture e2e — 7 rows, not root-caused.** All are morph/enhance
-preservation rows that the admission exposed and the seed did not fix:
-`dx02-morph-preserve.spec.ts:112` (a `data-open-preserve` subtree is updated by
-the morph) and `:171` (the textarea node is replaced instead of reused) on all
-three engines, plus `enhance-guards.spec.ts:85` on chromium only. They need
-their own diagnosis; the seed attribute is transport and is consumed on connect
-(measured absent from the live host before the morph), so it is not obviously
-the cause.
+**Fixture e2e — GREEN, 132/132 on chromium, firefox and webkit.** The 7 rows
+that remained after the seed fix were morph preservation rows, and the cause was
+the admission itself: the morph client's island-survival tag list is emitted from
+every admitted island, so a page root landed in it. A page root's real content is
+its DSD shadow tree, so that branch either freezes it (light DOM only) or replaces
+it — and it always looks "changed" once the claim has consumed the
+`data-oe-prop-seed` transport attribute. The fix is two-part and pinned by unit
+tests: the client entry emits a separate `__morphTags` list without page roots
+(`PAGE_ROOT_ADMISSION_REASON` in `client-admission.ts`; the pre-hydration capture
+still gets every tag), and `syncAttrs` never writes a consumed seed attribute back
+onto the live host. An entry with no page root keeps its previous bytes (ABI pin
+passes).
 
 `router-request-time` has the same typed-`definePage` defect at four sites.

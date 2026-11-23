@@ -225,3 +225,30 @@ test('morph: the light-DOM pass never inserts an inert DSD template into a live 
   // child (instantiateDsd's querySelectorAll does not match the node itself).
   expect(instantiated.filter(isDsdTemplate).length).toEqual(0);
 });
+
+test('morph: a consumed prop seed is never written back onto the live host', () => {
+  const { align, doc, incomingQueue } = makeHarness();
+  // No tags: the page host takes the page-level DSD branch (in place), which is
+  // where syncAttrs runs and could resurrect the claim's consumed transport
+  // attribute.
+  const host = el('page-x');
+  const liveShadow = new FakeNode();
+  liveShadow.appendChild(el('p', text('v1')));
+  host.shadowRoot = liveShadow;
+  doc.body.appendChild(host);
+
+  const incomingHost = el('page-x', shadowTemplate(el('p', text('v2'))));
+  incomingHost.setAttribute('data-oe-prop-seed', '{"titleText":"seed"}');
+  incomingHost.setAttribute('data-mode', 'ready');
+  incomingQueue.push({ title: '', body: el('body', incomingHost) });
+
+  expect(align.morphDocument('<html></html>', null, null)).toEqual(true);
+
+  expect(
+    host.hasAttribute('data-oe-prop-seed'),
+    'a value the claim already consumed is not written back by the morph',
+  ).toEqual(false);
+  expect(host.getAttribute('data-mode'), 'ordinary attributes still sync').toEqual('ready');
+  const shadowText = (liveShadow.childNodes[0] as FakeElement).childNodes[0] as FakeText;
+  expect(shadowText.data, 'the page shadow tree still morphs in place').toEqual('v2');
+});
