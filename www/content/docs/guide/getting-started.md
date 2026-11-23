@@ -78,35 +78,27 @@ my-app/
 
 The site also writes `README.md`, an `AGENTS.md` agent pointer and `.gitignore`, and initializes a git repository unless the target already lives inside one.
 
-One URL is one file: `app/routes/hello.tsx` answers `/hello`. The markup does not live in the route file — it belongs to a compiled element under `app/components/` (or directly in the route for a small server function page), the shared chrome lives once in `app/layout.tsx`, and only `app/islands/` opts code into client delivery. [Core Concepts](/guide/core-concepts) explains the model behind those files; [Routing and Data](/guide/routing-and-data) covers the route contract.
+One URL is one file: `app/routes/hello.tsx` answers `/hello`. For a page that is mostly static text, the route module declares the component itself and wraps it in `definePage`; a page whose markup belongs in its own component module under `app/components/` imports that component instead. The shared chrome lives once in `app/layout.tsx`, and only `app/islands/` opts code into client delivery. [Core Concepts](/guide/core-concepts) explains the model behind those files; [Routing and Data](/guide/routing-and-data) covers the route contract.
 
 ## Build a page
 
-A new URL needs two files: the route module and the compiled element that owns its markup.
-
-`app/components/page-hello.tsx`:
-
-```tsx
-import { element, OpenElement } from '@openelement/element';
-
-@element('hello-page', { root: 'light' })
-export default class HelloPage extends OpenElement {
-  render() {
-    return (
-      <main>
-        <h1>Hello from a page</h1>
-        <p>This markup is server-rendered HTML, with no client JavaScript.</p>
-      </main>
-    );
-  }
-}
-```
+A new URL is one file. A page that renders static text with no client behavior is a **server function page**: the route module exports the component itself and wraps it with `definePage`.
 
 `app/routes/hello.tsx`:
 
-```ts
+```tsx
 import { definePage } from '@openelement/router';
-import HelloPage from '../components/page-hello.tsx';
+
+export const loader = async () => ({ title: 'Hello from a page' });
+
+export function HelloPage(props: { title: string }) {
+  return (
+    <main>
+      <h1>{props.title}</h1>
+      <p>This markup is server-rendered HTML, with no client JavaScript.</p>
+    </main>
+  );
+}
 
 export default definePage(HelloPage, {
   head: {
@@ -116,53 +108,62 @@ export default definePage(HelloPage, {
 });
 ```
 
-The route is a binding: the class owns the markup, the route module hands it to `definePage` with the page's head metadata, and the file name owns the URL. The dev server picks both files up without a restart.
+The component is the module's own exported function, passed to `definePage` by identifier, and the file name owns the URL. The compiler lowers it into a generative HTML constructor, so the page is server-only by construction: it produces no Part Program, no property machinery and never reaches the client, which is why this page ships no JavaScript of its own. The dev server picks the file up without a restart.
 
 Expected result: opening `http://localhost:5173/hello` shows the heading. Open the page source (or `curl -s http://localhost:5173/hello | grep -o 'Hello from a page'`) and the heading is in the HTML the server sent — it is not injected by script. The route itself adds no island, so this page ships no client module of its own.
 
 ## Add a Custom Element
 
-A second compiled module is an ordinary Custom Element: declare it with `@element`, give it a `@property`, and host it by tag.
+A second module is an ordinary Custom Element: a function component beside a `defineIslandConfig` sidecar that pins its tag, its root and its properties.
 
 `app/components/my-badge.tsx`:
 
 ```tsx
-import { element, OpenElement, property } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
 
-@element('my-badge', { root: 'light' })
-export default class MyBadge extends OpenElement {
-  @property({ reflect: false })
-  label = 'new';
+export const openElement = defineIslandConfig({
+  tag: 'my-badge',
+  // A light root renders into the document, so the page's own styles reach the
+  // badge's children with no shadow boundary in the way.
+  root: 'light',
+  // Page-scope: the server renders this component and the browser never
+  // upgrades it, so no chunk for it exists.
+  hydrate: 'none',
+  ssr: true,
+  properties: { label: { default: 'new' } },
+});
 
-  render() {
-    return <span class="badge">{this.label}</span>;
-  }
+export default function MyBadge(props: { label: string }) {
+  return <span class='badge'>{props.label}</span>;
 }
 ```
 
-Host it in the page you already have — `app/components/page-hello.tsx` becomes:
+Host it in the page you already have — `app/routes/hello.tsx` becomes:
 
 ```tsx
-import { element, OpenElement } from '@openelement/element';
-import './my-badge.tsx';
+import { definePage } from '@openelement/router';
+// The side-effect import registers the tag on the route import chain, which is
+// how the build learns the page reaches this component.
+import '../components/my-badge.tsx';
 
-@element('hello-page', { root: 'light' })
-export default class HelloPage extends OpenElement {
-  render() {
-    return (
-      <main>
-        <h1>Hello from a page</h1>
-        <p>This markup is server-rendered HTML, with no client JavaScript.</p>
-        <my-badge label="hello"></my-badge>
-      </main>
-    );
-  }
+export const loader = async () => ({ title: 'Hello from a page' });
+
+export function HelloPage(props: { title: string }) {
+  return (
+    <main>
+      <h1>{props.title}</h1>
+      <p>This markup is server-rendered HTML, with no client JavaScript.</p>
+      <my-badge label='hello'></my-badge>
+    </main>
+  );
 }
+
+export default definePage(HelloPage, { head: { title: 'Hello — my-app' } });
 ```
 
-Two rules make that work: the page module imports the badge module (`import './my-badge.tsx'`), so the route import chain reaches it and the build registers its tag; and the literal `label="hello"` on the host seeds the badge's `@property` during the server render.
+Two rules make that work: the page module imports the badge module (`import '../components/my-badge.tsx'`), so the route import chain reaches it and the build registers its tag; and the literal `label='hello'` on the host seeds the declared property during the server render.
 
-Expected result: `/hello` now contains the badge's server-rendered markup — `<my-badge>` with a `<span class="badge">hello</span>` inside. Because the badge is a page-scope component and not an island, no client module for it ships: the browser never upgrades it, and the markup is the artifact. Anything that must react in the browser takes the island form instead — see [Islands and SSR](/guide/islands-and-ssr).
+Expected result: `/hello` now contains the badge's server-rendered markup — `<my-badge>` with a `<span class="badge">hello</span>` inside. Because the badge declares `hydrate: 'none'`, no client module for it ships: the browser never upgrades it, and the markup is the artifact. Anything that must react in the browser takes an island delivery strategy instead — see [Islands and SSR](/guide/islands-and-ssr).
 
 ## Build and deploy
 
@@ -203,7 +204,7 @@ The scaffold ships one form, Tailwind-ON: a preset-wired `vite.config.ts`, the `
 
 ## Using element as a library
 
-The scaffold is optional. A project that wants only the component runtime adds two packages — the runtime its compiled components load, and the compiler that turns TSX into the Part Program at build time:
+The scaffold is optional. A project that wants only the component runtime adds two packages — the runtime its compiled components load, and the compiler that turns TSX into a generated custom element at build time:
 
 ```bash
 npm install @openelement/element
@@ -212,6 +213,6 @@ npm install -D @openelement/compiler
 
 Both lines are required. `@openelement/element` depends on `@openelement/protocol` and the signals core, and on nothing else — it does **not** bring the compiler, so a project that stops after the first line has the runtime but cannot build a component. The compiler is the build-time half and belongs in `devDependencies`; it is what the Vite seam below is imported from.
 
-- **Vite projects** mount the compiler through the package's Vite seam: `import { element } from '@openelement/compiler/vite'` and add `element()` to `plugins`. The plugin compiles each component's TSX `render()` into the Part Program at build time. Any host that runs the plugin — the Router's Vite build, or a bare Vite project — is enough; the compiler is not part of the runtime.
-- **Other bundlers** drive the same compiler programmatically through `@openelement/compiler` — the TSX-to-Part-Program core the Vite plugin itself calls — and wire its output into their own pipeline.
-- **The output is standard Custom Elements.** A compiled component is a plain class you register with `customElements.define`, so the emitted bundle loads in any page or framework with no runtime to vendor and no compiler to run: consuming an already-compiled bundle is a `<script type="module">` in plain HTML and needs neither package. That consumer path is verified on every release: the packed-artifact qualification builds a component with the `@openelement/element` and `@openelement/compiler` tarballs in a project with no Router and no scaffold, then loads the resulting bundle from a separate plain-HTML page in three browsers (`tools/release/consumer-packaged-element.ts`).
+- **Vite projects** mount the compiler through the package's Vite seam: `import { element } from '@openelement/compiler/vite'` and add `element()` to `plugins`. The plugin compiles each component module — the function component and its sidecar — into a Native Custom Element at build time. Any host that runs the plugin — the Router's Vite build, or a bare Vite project — is enough; the compiler is not part of the runtime.
+- **Other bundlers** drive the same compiler programmatically through `@openelement/compiler` — the TSX-to-element core the Vite plugin itself calls — and wire its output into their own pipeline.
+- **The output is standard Custom Elements.** A compiled component is a plain constructor the module registers as its default export, so the emitted bundle loads in any page or framework with no runtime to vendor and no compiler to run: consuming an already-compiled bundle is a `<script type="module">` in plain HTML and needs neither package. That consumer path is verified on every release: the packed-artifact qualification builds a component with the `@openelement/element` and `@openelement/compiler` tarballs in a project with no Router and no scaffold, then loads the resulting bundle from a separate plain-HTML page in three browsers (`tools/release/consumer-packaged-element.ts`).

@@ -138,34 +138,22 @@ export const blogCollection: CollectionOptions = {
 ### app/routes/blog/[slug].tsx — usage pattern
 
 ```tsx
-// app/components/page-blog-post.tsx — compiled by the open:compiled-element transform
-import { element, OpenElement, property, trustedHtml, type TrustedHtml } from '@openelement/element';
-
-@element('blog-post-page', { root: 'shadow-open' })
-export default class BlogPostPage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  title = '';
-
-  @property({ type: Object, reflect: false, attribute: false })
-  html: TrustedHtml = trustedHtml('');
-
-  render() {
-    return (
-      <main>
-        <h1>{this.title}</h1>
-        {/* post.html is markdown authored in this repo — explicit trust boundary */}
-        <article class='post-body' innerHTML={this.html} trustedHtml></article>
-      </main>
-    );
-  }
-}
-```
-
-```ts
 // app/routes/blog/[slug].tsx — the route module the scanner discovers
 import { definePage, notFound } from '@openelement/router';
 import { getPostBySlug, posts } from '#generated/blog-data';
-import BlogPostPage from '../../components/page-blog-post.tsx';
+import { type TrustedHtml } from '@openelement/element';
+
+// The page is one module with no client behavior, so the server function form
+// carries it: the browser never receives this function.
+export function BlogPostPage(props: { title: string; html: TrustedHtml }) {
+  return (
+    <main>
+      <h1>{props.title}</h1>
+      {/* post.html is markdown authored in this repo — explicit trust boundary */}
+      <article class='post-body' innerHTML={props.html} trustedHtml></article>
+    </main>
+  );
+}
 
 export function getStaticPaths(): Array<Record<string, string>> {
   return posts.map((post) => ({ slug: post.slug }));

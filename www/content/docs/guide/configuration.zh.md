@@ -6,7 +6,7 @@ order: 70
 
 ## openPipeline()
 
-精简的 Vite 插件入口，在 `vite.config.ts` 中配置：`openPipeline({ routes: { dir }, island: { dir, upgradeStrategy }, output: { outDir }, viewTransition, headExtras })`。默认值：routes 为 `app/routes`，islands 为 `app/islands`，`viewTransition` 开启。`headExtras` 是开发者可信输入，以 `trustedHtml` 信任级别原样透传——框架不做消毒。`script` 标签直接拒绝（脚本请走 `inject.scripts`），`style` 块不得携带可执行 CSS；其余内容（含 `base` 与 `meta http-equiv`）由片段作者负责。
+精简的 Vite 插件入口，在 `vite.config.ts` 中配置：`openPipeline({ routes: { dir }, island: { dir, upgradeStrategy }, output: { outDir }, viewTransition, headExtras })`。默认值：routes 为 `app/routes`，islands 为 `app/islands`，`viewTransition` 开启。`headExtras` 是开发者可信输入，以 `trustedHtml` 信任级别原样透传——框架不做消毒。`<script>` 标签直接拒绝（脚本请走 `inject.scripts`），`<style>` 块不得携带可执行 CSS；其余内容（含 `base` 与 `meta http-equiv`）由片段作者负责。
 
 ### vite.config.ts
 
@@ -138,34 +138,22 @@ export const blogCollection: CollectionOptions = {
 ### app/routes/blog/[slug].tsx —— 使用模式
 
 ```tsx
-// app/components/page-blog-post.tsx —— 由 open:compiled-element transform 编译
-import { element, OpenElement, property, trustedHtml, type TrustedHtml } from '@openelement/element';
-
-@element('blog-post-page', { root: 'shadow-open' })
-export default class BlogPostPage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  title = '';
-
-  @property({ type: Object, reflect: false, attribute: false })
-  html: TrustedHtml = trustedHtml('');
-
-  render() {
-    return (
-      <main>
-        <h1>{this.title}</h1>
-        {/* post.html is markdown authored in this repo — explicit trust boundary */}
-        <article class='post-body' innerHTML={this.html} trustedHtml></article>
-      </main>
-    );
-  }
-}
-```
-
-```ts
 // app/routes/blog/[slug].tsx —— scanner 发现的路由模块
 import { definePage, notFound } from '@openelement/router';
 import { getPostBySlug, posts } from '#generated/blog-data';
-import BlogPostPage from '../../components/page-blog-post.tsx';
+import { type TrustedHtml } from '@openelement/element';
+
+// 这个页面是一个没有客户端行为的模块，因此由服务端函数形态承载它：
+// 浏览器永远收不到这个函数。
+export function BlogPostPage(props: { title: string; html: TrustedHtml }) {
+  return (
+    <main>
+      <h1>{props.title}</h1>
+      {/* post.html is markdown authored in this repo — explicit trust boundary */}
+      <article class='post-body' innerHTML={props.html} trustedHtml></article>
+    </main>
+  );
+}
 
 export function getStaticPaths(): Array<Record<string, string>> {
   return posts.map((post) => ({ slug: post.slug }));

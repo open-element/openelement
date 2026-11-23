@@ -83,16 +83,14 @@ export { ERROR_PREFIX, reportError, setErrorTelemetryHook } from './public-runti
 export { computed, effect, signal } from './public-runtime.ts';
 export type { ReadonlySignal, Signal } from './public-runtime.ts';
 
-/**
- * @experimental Compile-time-only decorator intrinsics (#1209): the compiler
- * admits these by binding provenance (a runtime named import from this
- * module) and erases them from generated code — they carry no runtime
- * semantics and are not a second recognizer. When a module is evaluated
- * WITHOUT the compiler (unit tests, config evaluation), these are inert
- * no-op decorators so module evaluation and class definition stay safe.
- * May move to a dedicated authoring subpath at the B1.2 surface freeze.
- */
-export { element, property } from './public-runtime.ts';
+// `element` and `property` were the CLASS lane's decorators. They survived as inert
+// no-ops "so module evaluation and class definition stay safe" — but with the lane
+// deleted nothing defines a class for them to decorate, and NO lane compiles a
+// decorated module (both the generated and the server entry decline it). Keeping an
+// exported decorator whose only effect is to make an uncompilable module evaluate is
+// the opposite of failing closed: the module looks accepted and then renders nothing.
+//
+// Deleted with no replacement. `defineIslandConfig` is the authoring form.
 
 /**
  * @experimental Compile-time-only lifecycle/change intrinsics (`16b-LC` plus

@@ -22,6 +22,7 @@ export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = 
     'internal/compiled/generated-element/shell': 'src/internal/compiled/generated-element/shell.ts',
     'internal/compiled/leaf-runtime': 'src/internal/compiled/leaf-runtime.ts',
     'internal/compiled/runtime': 'src/internal/compiled/runtime.ts',
+    'internal/styles': 'src/internal/styles-entry.ts',
     'jsx-dev-runtime': 'src/jsx-dev-runtime.ts',
     'jsx-runtime': 'src/jsx-runtime.ts',
     lifecycle: 'src/lifecycle.ts',

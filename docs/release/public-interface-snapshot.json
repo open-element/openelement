@@ -603,7 +603,7 @@
       },
       "declarations": {
         ".": {
-          "publicShapeSha256": "6a2526573286bd94cbb9488818fbb566792801b64fe8a9fd4ca34661dc95d0a2",
+          "publicShapeSha256": "9b8cc7a00d8b7856f8124df4b7bb24cf75ceec899f86c2ba9c935a1145f7f086",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -677,7 +677,6 @@
             "deepGetElementById=value:{call:(id:string,root:union(Document|ShadowRoot))=>union(HTMLElement|null)}",
             "documentStreamParts=value:{call:(options:{allowHeadExtrasScripts?:union(false|true|undefined);clientScript?:union(string|undefined);cspNonce?:union(string|undefined);dangerouslyHeadFragments?:union(array(string)|undefined);devScripts?:union(string|undefined);headExtras?:union(string|undefined);lang?:union(string|undefined);links?:union(array({href:string;hreflang?:union(string|undefined);rel:string})|undefined);meta?:union(undefined|{description?:union(string|undefined);tags?:union(array(Record<string, string | number | boolean>)|undefined)});scripts?:union(array({code?:union(string|undefined);src?:union(string|undefined);type?:union(string|undefined)})|undefined);streamBootstrap?:union(string|undefined);structuredData?:union(array(Record<string, unknown>)|undefined);styleLinks?:union(array(string)|undefined);title?:union(string|undefined)})=>{prefix:string;suffix:string}}",
             "effect=value:{call:(fn:{call:()=>union(Unsubscribe|void)})=>Unsubscribe}",
-            "element=value:{call:(_tag:string,_options:union(undefined|{delegatesFocus?:union(false|true|undefined);formAssociated?:union(false|true|undefined);root?:union(\"light\"|\"shadow-closed\"|\"shadow-open\"|undefined)}))=>{call:(target:unknown,context:unknown)=>void}}",
             "ensureDeepFragmentNavigation=value:{call:(options:{enabled?:union(false|true|undefined)})=>void}",
             "ensurePreHydrationClickCapture=value:{call:(root:union(EventTarget|undefined),pendingTags:union(array(string)|undefined))=>void}",
             "escapeAttr=value:{call:(value:string)=>string}",
@@ -691,7 +690,6 @@
             "onDispose=value:{call:(callback:{call:(env:{readonly host:HTMLElement;readonly signal:AbortSignal;readonly states:CustomStateSet})=>void})=>void}",
             "onError=value:{call:(callback:{call:(env:{readonly error:unknown;readonly host:HTMLElement;readonly signal:AbortSignal;readonly states:CustomStateSet})=>void})=>void}",
             "onPropertyChange=value:{call:(callback:{call:(event:{readonly host:HTMLElement;readonly name:string;readonly signal:AbortSignal;readonly states:CustomStateSet;readonly value:unknown})=>void})=>void}",
-            "property=value:{call:(_options:{attribute?:union(false|string|undefined);converter?:unknown;reflect:union(false|true);type?:unknown})=>{call:(target:unknown,context:unknown)=>void}}",
             "provideContext=value:{call:<T>(host:HTMLElement,context:{readonly defaultValue:T;readonly key:symbol},value:T)=>Unsubscribe}",
             "ref=value:{call:<T extends Element =Element>(callback:union(undefined|{call:(element:union(T|null))=>union(void|{call:()=>void})}))=>{call:(element:union(Element|null))=>void;readonly current:union(T|null)}}",
             "releaseConsumedContext=value:{call:(signalValue:SignalLike<unknown>)=>void}",
@@ -734,7 +732,7 @@
           ]
         },
         "./base": {
-          "publicShapeSha256": "6a2526573286bd94cbb9488818fbb566792801b64fe8a9fd4ca34661dc95d0a2",
+          "publicShapeSha256": "9b8cc7a00d8b7856f8124df4b7bb24cf75ceec899f86c2ba9c935a1145f7f086",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -808,7 +806,6 @@
             "deepGetElementById=value:{call:(id:string,root:union(Document|ShadowRoot))=>union(HTMLElement|null)}",
             "documentStreamParts=value:{call:(options:{allowHeadExtrasScripts?:union(false|true|undefined);clientScript?:union(string|undefined);cspNonce?:union(string|undefined);dangerouslyHeadFragments?:union(array(string)|undefined);devScripts?:union(string|undefined);headExtras?:union(string|undefined);lang?:union(string|undefined);links?:union(array({href:string;hreflang?:union(string|undefined);rel:string})|undefined);meta?:union(undefined|{description?:union(string|undefined);tags?:union(array(Record<string, string | number | boolean>)|undefined)});scripts?:union(array({code?:union(string|undefined);src?:union(string|undefined);type?:union(string|undefined)})|undefined);streamBootstrap?:union(string|undefined);structuredData?:union(array(Record<string, unknown>)|undefined);styleLinks?:union(array(string)|undefined);title?:union(string|undefined)})=>{prefix:string;suffix:string}}",
             "effect=value:{call:(fn:{call:()=>union(Unsubscribe|void)})=>Unsubscribe}",
-            "element=value:{call:(_tag:string,_options:union(undefined|{delegatesFocus?:union(false|true|undefined);formAssociated?:union(false|true|undefined);root?:union(\"light\"|\"shadow-closed\"|\"shadow-open\"|undefined)}))=>{call:(target:unknown,context:unknown)=>void}}",
             "ensureDeepFragmentNavigation=value:{call:(options:{enabled?:union(false|true|undefined)})=>void}",
             "ensurePreHydrationClickCapture=value:{call:(root:union(EventTarget|undefined),pendingTags:union(array(string)|undefined))=>void}",
             "escapeAttr=value:{call:(value:string)=>string}",
@@ -822,7 +819,6 @@
             "onDispose=value:{call:(callback:{call:(env:{readonly host:HTMLElement;readonly signal:AbortSignal;readonly states:CustomStateSet})=>void})=>void}",
             "onError=value:{call:(callback:{call:(env:{readonly error:unknown;readonly host:HTMLElement;readonly signal:AbortSignal;readonly states:CustomStateSet})=>void})=>void}",
             "onPropertyChange=value:{call:(callback:{call:(event:{readonly host:HTMLElement;readonly name:string;readonly signal:AbortSignal;readonly states:CustomStateSet;readonly value:unknown})=>void})=>void}",
-            "property=value:{call:(_options:{attribute?:union(false|string|undefined);converter?:unknown;reflect:union(false|true);type?:unknown})=>{call:(target:unknown,context:unknown)=>void}}",
             "provideContext=value:{call:<T>(host:HTMLElement,context:{readonly defaultValue:T;readonly key:symbol},value:T)=>Unsubscribe}",
             "ref=value:{call:<T extends Element =Element>(callback:union(undefined|{call:(element:union(T|null))=>union(void|{call:()=>void})}))=>{call:(element:union(Element|null))=>void;readonly current:union(T|null)}}",
             "releaseConsumedContext=value:{call:(signalValue:SignalLike<unknown>)=>void}",
@@ -853,7 +849,7 @@
           ]
         },
         "./client-only": {
-          "publicShapeSha256": "6a2526573286bd94cbb9488818fbb566792801b64fe8a9fd4ca34661dc95d0a2",
+          "publicShapeSha256": "9b8cc7a00d8b7856f8124df4b7bb24cf75ceec899f86c2ba9c935a1145f7f086",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -927,7 +923,6 @@
             "deepGetElementById=value:{call:(id:string,root:union(Document|ShadowRoot))=>union(HTMLElement|null)}",
             "documentStreamParts=value:{call:(options:{allowHeadExtrasScripts?:union(false|true|undefined);clientScript?:union(string|undefined);cspNonce?:union(string|undefined);dangerouslyHeadFragments?:union(array(string)|undefined);devScripts?:union(string|undefined);headExtras?:union(string|undefined);lang?:union(string|undefined);links?:union(array({href:string;hreflang?:union(string|undefined);rel:string})|undefined);meta?:union(undefined|{description?:union(string|undefined);tags?:union(array(Record<string, string | number | boolean>)|undefined)});scripts?:union(array({code?:union(string|undefined);src?:union(string|undefined);type?:union(string|undefined)})|undefined);streamBootstrap?:union(string|undefined);structuredData?:union(array(Record<string, unknown>)|undefined);styleLinks?:union(array(string)|undefined);title?:union(string|undefined)})=>{prefix:string;suffix:string}}",
             "effect=value:{call:(fn:{call:()=>union(Unsubscribe|void)})=>Unsubscribe}",
-            "element=value:{call:(_tag:string,_options:union(undefined|{delegatesFocus?:union(false|true|undefined);formAssociated?:union(false|true|undefined);root?:union(\"light\"|\"shadow-closed\"|\"shadow-open\"|undefined)}))=>{call:(target:unknown,context:unknown)=>void}}",
             "ensureDeepFragmentNavigation=value:{call:(options:{enabled?:union(false|true|undefined)})=>void}",
             "ensurePreHydrationClickCapture=value:{call:(root:union(EventTarget|undefined),pendingTags:union(array(string)|undefined))=>void}",
             "escapeAttr=value:{call:(value:string)=>string}",
@@ -941,7 +936,6 @@
             "onDispose=value:{call:(callback:{call:(env:{readonly host:HTMLElement;readonly signal:AbortSignal;readonly states:CustomStateSet})=>void})=>void}",
             "onError=value:{call:(callback:{call:(env:{readonly error:unknown;readonly host:HTMLElement;readonly signal:AbortSignal;readonly states:CustomStateSet})=>void})=>void}",
             "onPropertyChange=value:{call:(callback:{call:(event:{readonly host:HTMLElement;readonly name:string;readonly signal:AbortSignal;readonly states:CustomStateSet;readonly value:unknown})=>void})=>void}",
-            "property=value:{call:(_options:{attribute?:union(false|string|undefined);converter?:unknown;reflect:union(false|true);type?:unknown})=>{call:(target:unknown,context:unknown)=>void}}",
             "provideContext=value:{call:<T>(host:HTMLElement,context:{readonly defaultValue:T;readonly key:symbol},value:T)=>Unsubscribe}",
             "ref=value:{call:<T extends Element =Element>(callback:union(undefined|{call:(element:union(T|null))=>union(void|{call:()=>void})}))=>{call:(element:union(Element|null))=>void;readonly current:union(T|null)}}",
             "releaseConsumedContext=value:{call:(signalValue:SignalLike<unknown>)=>void}",
@@ -1192,7 +1186,7 @@
           ]
         },
         "./no-blocks": {
-          "publicShapeSha256": "6a2526573286bd94cbb9488818fbb566792801b64fe8a9fd4ca34661dc95d0a2",
+          "publicShapeSha256": "9b8cc7a00d8b7856f8124df4b7bb24cf75ceec899f86c2ba9c935a1145f7f086",
           "publicSymbols": [
             "ACTION_FETCH_HEADER=value:\"x-openelement-action\"",
             "Action=type:Action<T, Env, Platform, Route>",
@@ -1266,7 +1260,6 @@
             "deepGetElementById=value:{call:(id:string,root:union(Document|ShadowRoot))=>union(HTMLElement|null)}",
             "documentStreamParts=value:{call:(options:{allowHeadExtrasScripts?:union(false|true|undefined);clientScript?:union(string|undefined);cspNonce?:union(string|undefined);dangerouslyHeadFragments?:union(array(string)|undefined);devScripts?:union(string|undefined);headExtras?:union(string|undefined);lang?:union(string|undefined);links?:union(array({href:string;hreflang?:union(string|undefined);rel:string})|undefined);meta?:union(undefined|{description?:union(string|undefined);tags?:union(array(Record<string, string | number | boolean>)|undefined)});scripts?:union(array({code?:union(string|undefined);src?:union(string|undefined);type?:union(string|undefined)})|undefined);streamBootstrap?:union(string|undefined);structuredData?:union(array(Record<string, unknown>)|undefined);styleLinks?:union(array(string)|undefined);title?:union(string|undefined)})=>{prefix:string;suffix:string}}",
             "effect=value:{call:(fn:{call:()=>union(Unsubscribe|void)})=>Unsubscribe}",
-            "element=value:{call:(_tag:string,_options:union(undefined|{delegatesFocus?:union(false|true|undefined);formAssociated?:union(false|true|undefined);root?:union(\"light\"|\"shadow-closed\"|\"shadow-open\"|undefined)}))=>{call:(target:unknown,context:unknown)=>void}}",
             "ensureDeepFragmentNavigation=value:{call:(options:{enabled?:union(false|true|undefined)})=>void}",
             "ensurePreHydrationClickCapture=value:{call:(root:union(EventTarget|undefined),pendingTags:union(array(string)|undefined))=>void}",
             "escapeAttr=value:{call:(value:string)=>string}",
@@ -1280,7 +1273,6 @@
             "onDispose=value:{call:(callback:{call:(env:{readonly host:HTMLElement;readonly signal:AbortSignal;readonly states:CustomStateSet})=>void})=>void}",
             "onError=value:{call:(callback:{call:(env:{readonly error:unknown;readonly host:HTMLElement;readonly signal:AbortSignal;readonly states:CustomStateSet})=>void})=>void}",
             "onPropertyChange=value:{call:(callback:{call:(event:{readonly host:HTMLElement;readonly name:string;readonly signal:AbortSignal;readonly states:CustomStateSet;readonly value:unknown})=>void})=>void}",
-            "property=value:{call:(_options:{attribute?:union(false|string|undefined);converter?:unknown;reflect:union(false|true);type?:unknown})=>{call:(target:unknown,context:unknown)=>void}}",
             "provideContext=value:{call:<T>(host:HTMLElement,context:{readonly defaultValue:T;readonly key:symbol},value:T)=>Unsubscribe}",
             "ref=value:{call:<T extends Element =Element>(callback:union(undefined|{call:(element:union(T|null))=>union(void|{call:()=>void})}))=>{call:(element:union(Element|null))=>void;readonly current:union(T|null)}}",
             "releaseConsumedContext=value:{call:(signalValue:SignalLike<unknown>)=>void}",

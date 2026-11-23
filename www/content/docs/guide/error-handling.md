@@ -6,7 +6,7 @@ order: 80
 
 ## fail(): the return channel
 
-Expected action failures return, never throw: `fail(status, data)` requires a 4xx status and produces an `OpenElementActionFailure`. The server answers with the `fail()` status (conventionally 422), the page re-rendered and the submitted values echoed; the page descriptor's `props` projector reads the failure from its context's `actionData` and maps it onto the compiled page properties. `isActionFailure()` is the duck-typed guard. Enhanced forms morph only 200/422 responses: a non-422 4xx fails over to a full navigation — the failure echo is lost on that path, so keep validation failures at 422.
+Expected action failures return, never throw: `fail(status, data)` requires a 4xx status and produces an `OpenElementActionFailure`. The server answers with the `fail()` status (conventionally 422), the page re-rendered and the submitted values echoed; the page descriptor's `props` projector reads the failure from its context's `actionData` and maps it onto the page's declared properties. `isActionFailure()` is the duck-typed guard. Enhanced forms morph only 200/422 responses: a non-422 4xx fails over to a full navigation — the failure echo is lost on that path, so keep validation failures at 422.
 
 ## redirect() and notFound()
 
@@ -14,42 +14,46 @@ Control flow throws: `redirect(location, status)` throws `OpenElementRedirect` �
 
 ## The error projector
 
-`definePage(PageClass, { error })` declares the page-level error projector: it receives the caught `error` plus the render context and returns the error variant of the page's compiled properties (the generated entry re-renders the page with those props and status 500); without it the generic status page answers. `notFound()` and unexpected loader/action throws land here; on the SPA chain a throw is normalized into the same channel instead of silently replacing loader data. On the programmatic action channel (`x-openelement-action: true`), error outcomes answer RFC 9457 Problem Details (`application/problem+json` with `type`/`title`/`status`/`detail`) instead of a bespoke JSON envelope; this wire shape is frozen.
+`definePage(PageComponent, { error })` declares the page-level error projector: it receives the caught `error` plus the render context and returns the error variant of the page's declared properties (the generated entry re-renders the page with those props and status 500); without it the generic status page answers. `notFound()` and unexpected loader/action throws land here; on the SPA chain a throw is normalized into the same channel instead of silently replacing loader data. On the programmatic action channel (`x-openelement-action: true`), error outcomes answer RFC 9457 Problem Details (`application/problem+json` with `type`/`title`/`status`/`detail`) instead of a bespoke JSON envelope; this wire shape is frozen.
 
 ### app/components/page-post.tsx
 
 ```tsx
-// Compiled by the open:compiled-element transform.
-import { element, OpenElement, property } from '@openelement/element';
+// A page-assembled component: the route owns the data, this module owns the markup.
+import { defineIslandConfig } from '@openelement/router';
 
-@element('post-page', { root: 'shadow-open' })
-export default class PostPage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  title = '';
+export const openElement = defineIslandConfig({
+  tag: 'post-page',
+  // A page root is a shadow root: the compiler's DSD host producer renders it,
+  // so even the error variant is part of the very first response.
+  root: 'shadow',
+  properties: {
+    // One row per projector key, every one attribute-free: the props projector
+    // writes them, and nothing of theirs should reach a host attribute.
+    title: { attribute: false, default: '' },
+    error: { attribute: false, default: '' },
+    status: { attribute: false, default: 0 },
+  },
+});
 
-  @property({ reflect: false, attribute: false })
-  error = '';
-
-  @property({ reflect: false, attribute: false })
-  status = 0;
-
-  render() {
-    return (
-      <main>
-        {this.status
-          ? <h1 data-status={this.status}>Request failed</h1>
-          : (
-            <form method='post' data-open-enhance>
-              <input name='title' value={this.title} />
-              <button type='submit'>Save</button>
-            </form>
-          )}
-        {this.error ? <p role='alert' data-message={this.error}>Please fix the errors above.</p> : <span></span>}
-      </main>
-    );
-  }
+export default function PostPage(props: { title: string; error: string; status: number }) {
+  return (
+    <main>
+      {props.status
+        ? <h1 data-status={props.status}>Request failed</h1>
+        : (
+          <form method='post' data-open-enhance>
+            <input name='title' value={props.title} />
+            <button type='submit'>Save</button>
+          </form>
+        )}
+      {props.error ? <p role='alert' data-message={props.error}>{props.error}</p> : null}
+    </main>
+  );
 }
 ```
+
+A conditional branch admits a JSX element or `null`, which is why each branch above is an element and the "no error" case is `null` rather than a bare string (a text-valued branch fails closed with `OEC9042`). The error variant is an ordinary part of the same compiled markup — there is no second error page and no runtime JSX path.
 
 ### app/routes/posts/[id].tsx
 
@@ -87,22 +91,63 @@ export function action(ctx: { formData: FormData }): OpenElementActionFailure<Po
 
 export default definePage(PostPage, {
   renderIntent: { mode: 'dynamic' },
-  props({ actionData }) {
+  props({ data, actionData }) {
+    const post = data as { title?: string } | undefined;
     const action = actionData as PostActionData | undefined;
-    return { title: action?.title ?? '', error: action?.error ?? '' };
+    // The projector is the only seam: one object, one key per declared row.
+    return {
+      title: action?.title ?? post?.title ?? '',
+      error: action?.error ?? '',
+    };
   },
-  error(error) {
+  error(err) {
     // notFound() and unexpected throws land on the error projector.
-    return { status: isOpenElementNotFound(error) ? 404 : 500 };
+    return { status: isOpenElementNotFound(err) ? 404 : 500 };
   },
 });
 ```
 
 `redirect()` also takes an explicit status (301/302/303/307/308); any other status is rejected at call time. The same guards work on the SPA chain, but SPA loaders/actions receive `{ params, searchParams, signal }` (plus `formData` for actions).
 
+## In the browser: the onError intrinsic
+
+The **route** channels above decide what the server answers. The **component** channel is separate and much narrower: `onError(cb)` — a compiler-erased intrinsic imported from `@openelement/element` and called at the top level of a component body — is the error boundary of **one generated element**.
+
+```tsx
+import { onError, useHost } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
+
+export const openElement = defineIslandConfig({
+  tag: 'my-widget',
+  root: 'shadow',
+  hydrate: 'idle',
+  ssr: true,
+});
+
+export default function MyWidget() {
+  const host = useHost();
+
+  onError((env) => {
+    // `env.error` is the thrown value exactly as thrown, never wrapped. This
+    // callback bounds THIS element: a failure inside a child element is not
+    // reported here, because no ancestor boundary intercepts a descendant.
+    host.setAttribute('data-failed', '1');
+    void env.error;
+  });
+
+  return <p>widget</p>;
+}
+```
+
+**State the boundary honestly: it is element-scoped.** The callback runs when a value escapes the element's own work — the connect/claim pass (mount, claim, setup and the `onConnect` replay), or an update-phase write (a tracked slot refresh, or a DOM event handler dispatched inside the compiled body). It is **not** a subtree boundary and it does **not** contain failures across elements: cross-element containment retired with the class base, and no wrapper component replaces it. There is no `ErrorBoundary` to extend and no protected `onError` hook to override — `ErrorBoundary` is not exported from `@openelement/element` at all, so a module still importing it does not evaluate.
+
+A catching handler changes only whether the error escapes. A connect-phase failure still leaves the element in its defined post-failure state (no projection, no listeners), and a later reconnect retries from scratch; an update-phase failure leaves the previously written DOM in place with the subscription still live. With no registered handler, the throw surfaces unchanged. A handler that itself throws **replaces** the original error — that new throw is what surfaces.
+
+The callback is **client-owned**: it is erased into the compiled module and never runs during a server render. A producer throw at SSR fails the render and reaches the route's error projector, exactly as before — so a server-rendered failure is never this callback's business.
+
 ## Build-time diagnostics
 
-Everything above is the runtime channel. The compiler answers separately: a module outside the authoring grammar fails the build with a source-located diagnostic carrying a stable `OEC####` code — the attribute, Block, decorator and provenance rules the compiled element boundary enforces. [Error codes](/errors) lists every code with the message it raises and the exact source call sites, generated from the diagnostics themselves, so the table cannot describe a code the build no longer produces or omit one it does.
+Everything above is the runtime channel. The compiler answers separately: a module outside the authoring grammar fails the build with a source-located diagnostic carrying a stable `OEC####` code — the attribute, Block, intrinsic and provenance rules the compiled component boundary enforces. [Error codes](/errors) lists every code with the message it raises and the exact source call sites, generated from the diagnostics themselves, so the table cannot describe a code the build no longer produces or omit one it does.
 
 ### The machine-readable envelope
 
@@ -130,10 +175,10 @@ A build that produced no diagnostics writes nothing at all. The report is one do
       "file": "app/components/broken-page.tsx"
     },
     {
-      "code": "OEC9020",
+      "code": "OEC9042",
       "severity": "error",
       "phase": "build",
-      "message": "property defaults must be serializable literals",
+      "message": "spread attributes are outside the admitted grammar",
       "file": "app/components/broken-page.tsx",
       "line": 8,
       "column": 11

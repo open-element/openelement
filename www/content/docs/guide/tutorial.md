@@ -62,7 +62,7 @@ my-app/
   openelement.config.ts  framework options (tokens, head, shell conventions)
   vite.config.ts    Vite configuration; the plugin call takes no arguments
   app/routes/       one file per URL
-  app/components/   page elements and their style sheets
+  app/components/   page-scope components and their style sheets
   app/islands/      modules that opt into client delivery
   public/           static assets, copied into dist/ as-is
 ```
@@ -71,32 +71,20 @@ my-app/
 
 ## Step 2: Add your first page
 
-A URL is a file: `app/routes/hello.tsx` answers `/hello`. The markup belongs to a compiled element under `app/components/`, so create both files.
-
-`app/components/page-hello.tsx`:
+A URL is a file: `app/routes/hello.tsx` answers `/hello`. A page whose markup is static text needs only that one file — the route module exports a component and wraps it with `definePage`.
 
 ```tsx
-// Compiled by the open:compiled-element transform at build time.
-import { element, OpenElement } from '@openelement/element';
-
-@element('hello-page', { root: 'light' })
-export default class HelloPage extends OpenElement {
-  render() {
-    return (
-      <main>
-        <h1>Hello from a page</h1>
-        <p>This markup is server-rendered HTML, with no client JavaScript.</p>
-      </main>
-    );
-  }
-}
-```
-
-`app/routes/hello.tsx`:
-
-```ts
+// app/routes/hello.tsx
 import { definePage } from '@openelement/router';
-import HelloPage from '../components/page-hello.tsx';
+
+export function HelloPage() {
+  return (
+    <main>
+      <h1>Hello from a page</h1>
+      <p>This markup is server-rendered HTML, with no client JavaScript.</p>
+    </main>
+  );
+}
 
 export default definePage(HelloPage, {
   head: {
@@ -106,12 +94,12 @@ export default definePage(HelloPage, {
 });
 ```
 
-Two things about that route module are worth knowing now:
+Two things about that module are worth knowing now:
 
-- It is a *binding*. The class owns the markup; the route module hands it to `definePage` together with the page's head metadata.
+- It is a *server function page*: the compiler lowers the exported function into a generative HTML constructor, so the page renders on the server by construction — no Part Program and no property machinery, and the browser never receives the function.
 - `definePage` accepts only `route`, `head`, `renderIntent`, `props` and `error`. There is no `render()` field, and no `route.path` — the file name owns the URL.
 
-Expected result: the dev server picks the new files up with no restart. Open http://localhost:5173/hello, or check the response:
+Expected result: the dev server picks the new file up with no restart. Open http://localhost:5173/hello, or check the response:
 
 ```bash
 curl -s http://localhost:5173/hello | grep -o 'Hello from a page'
@@ -130,105 +118,70 @@ An island is a module in `app/islands/`. That directory *is* the registration su
 `app/islands/hello-counter.tsx`:
 
 ```tsx
+import { signal } from '@openelement/element';
 import { defineIslandConfig } from '@openelement/router';
-import { element, OpenElement, property } from '@openelement/element';
 
-export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true, dsd: true });
+export const openElement = defineIslandConfig({
+  tag: 'hello-counter',
+  // A shadow root is what makes the counter's markup a DSD template the browser
+  // parses before any script runs.
+  root: 'shadow',
+  hydrate: 'idle',
+  ssr: true,
+  dsd: true,
+});
 
-@element('hello-counter', { root: 'shadow-open' })
-export default class HelloCounter extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  count = 0;
+export default function HelloCounter() {
+  // The count is a signal, so the text and the two buttons read one source and
+  // only the slots that read it refresh.
+  const count = signal(0);
 
-  decrement(): void {
-    this.count--;
-  }
-
-  increment(): void {
-    this.count++;
-  }
-
-  render() {
-    return (
-      <div class='counter-row'>
-        <button type='button' onClick={this.decrement}>-</button>
-        <span id='count'>{this.count}</span>
-        <button type='button' onClick={this.increment}>+</button>
-      </div>
-    );
-  }
+  return (
+    <div class='counter-row'>
+      <button type='button' onClick={() => { count.value = count.value - 1; }}>-</button>
+      <span id='count'>{count.value}</span>
+      <button type='button' onClick={() => { count.value = count.value + 1; }}>+</button>
+    </div>
+  );
 }
 ```
 
-Now host it from the page you already have. `app/components/page-hello.tsx` becomes:
+Now host it from the page you already have. `app/routes/hello.tsx` becomes:
 
 ```tsx
-import { element, OpenElement } from '@openelement/element';
+import { definePage } from '@openelement/router';
+// The side-effect import is how the build learns this page reaches the island.
+import '../islands/hello-counter.tsx';
 
-@element('hello-page', { root: 'light' })
-export default class HelloPage extends OpenElement {
-  render() {
-    return (
-      <main>
-        <h1>Hello from a page</h1>
-        <p>This markup is server-rendered HTML, with no client JavaScript.</p>
-        <section class='demo'>
-          <p>The server sent this counter's markup; the browser upgrades it on idle.</p>
-          <hello-counter></hello-counter>
-        </section>
-      </main>
-    );
-  }
+export function HelloPage() {
+  return (
+    <main>
+      <h1>Hello from a page</h1>
+      <p>This markup is server-rendered HTML, with no client JavaScript.</p>
+      <section class='demo'>
+        <p>The server sent this counter's markup; the browser upgrades it on idle.</p>
+        <hello-counter></hello-counter>
+      </section>
+    </main>
+  );
 }
+
+export default definePage(HelloPage, { head: { title: 'Hello — my-app' } });
 ```
 
 Expected result — reload http://localhost:5173/hello:
 
-- Before any JavaScript runs, the response already contains the counter's markup with `0` in it: the island rendered on the server through the same compiled class.
-- Click `+` and `-` and the number changes. `hydrate: 'idle'` told the browser to fetch the island's chunk once the page settled, upgrade the element, and bind the handlers the compiled template declared.
+- Before any JavaScript runs, the response already contains the counter's markup with `0` in it: the island rendered on the server through the same compiled component.
+- Click `+` and `-` and the number changes. `hydrate: 'idle'` told the browser to fetch the island's chunk once the page settled, upgrade the element, and bind the handlers the compiled component declared.
 - An island no route references is never delivered — the build derives reachable tags from your route sources, so a module parked in `app/islands/` adds no JavaScript to any page.
 
 ## Step 4: Add a form action
 
-A route module can also export `action`. Create the page, then the route that owns the form.
-
-`app/components/page-notes.tsx`:
+A route module can also export `action`. The form itself is plain HTML, so the notes page needs no client behavior and stays a server function page.
 
 ```tsx
-import { element, OpenElement, property } from '@openelement/element';
-
-@element('notes-page', { root: 'light' })
-export default class NotesPage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  note = '';
-
-  @property({ reflect: false, attribute: false })
-  error = '';
-
-  @property({ reflect: false, attribute: false })
-  saved = '';
-
-  render() {
-    return (
-      <main>
-        <h1>Notes</h1>
-        <form method='post' data-open-enhance>
-          <input name='note' type='text' value={this.note} placeholder='Write a note' />
-          <button type='submit'>Save</button>
-        </form>
-        <p id='error'>{this.error}</p>
-        <p id='saved'>{this.saved}</p>
-      </main>
-    );
-  }
-}
-```
-
-`app/routes/notes.tsx`:
-
-```ts
-import { definePage, fail, type OpenElementActionFailure, redirect } from '@openelement/router';
-import NotesPage from '../components/page-notes.tsx';
+// app/routes/notes.tsx
+import { definePage, fail, redirect, type OpenElementActionFailure } from '@openelement/router';
 
 interface NotesActionData {
   error?: string;
@@ -241,6 +194,20 @@ export function action(ctx: { formData: FormData }): OpenElementActionFailure<No
     return fail(422, { error: 'a note is required', note });
   }
   throw redirect(`/notes?saved=${encodeURIComponent(note)}`);
+}
+
+export function NotesPage(props: { note: string; error: string; saved: string }) {
+  return (
+    <main>
+      <h1>Notes</h1>
+      <form method='post' data-open-enhance>
+        <input name='note' type='text' value={props.note} placeholder='Write a note' />
+        <button type='submit'>Save</button>
+      </form>
+      <p id='error'>{props.error}</p>
+      <p id='saved'>{props.saved}</p>
+    </main>
+  );
 }
 
 export default definePage(NotesPage, {
@@ -263,7 +230,7 @@ What each part does:
 - The form is plain HTML and works without JavaScript. That submission runs `action` on the server; `fail(422, …)` re-renders the same page with the message and the value the user typed.
 - `redirect()` answers `303` to a GET URL — post/redirect/get, so reloading the result does not re-post the form.
 - `renderIntent: { mode: 'dynamic' }` is deliberate here: the GET reads `?saved=` from the request and must run per request. A page whose GET does not need the request can stay `'static'` and still export an action; only the POST is then handled at request time.
-- `props` is the only seam between request scope and the compiled markup. It returns one object, and each key sets the matching `@property` on the page element.
+- `props` is the only seam between request scope and the compiled markup. It returns one object, and each key sets the matching declared property of the page component.
 
 Expected result: `data-open-enhance` submits the form by `fetch` and morphs the returned document into place, so the page does not reload. To see the protocol itself, post to the action directly:
 
@@ -358,6 +325,6 @@ You now have a project, a page, an island, a form action, and a build you can de
 
 ## See also
 
-- [Core Concepts](/guide/core-concepts) — the element model behind `@element` and `@property`.
+- [Core Concepts](/guide/core-concepts) — the component model behind the sidecar and its properties.
 - [Styling](/guide/styling) — where page styles live and what crosses a shadow boundary.
 - [Testing](/guide/testing) — the checks worth running against a build.
