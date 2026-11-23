@@ -8,9 +8,13 @@
  * round-trip evidence (Chromium, compiler lane) depends on:
  *
  * - array/object/trustedHtml rows are property-only (`attribute: false` -> the
- *   emitted descriptor has no attribute channel for them);
- * - the emitted host producer keeps the M11 host-producer ABI and folds only
- *   the in-process props record (no JSON/attribute seed for these rows);
+ *   emitted descriptor carries no per-row attribute channel);
+ * - the emitted host producer keeps the current host-producer ABI, seeds the
+ *   in-process props fold, and resolves the property-only rows through the
+ *   shell's props resolver. Array/object rows still travel on the runtime's one
+ *   shared `data-oe-prop-seed` JSON document (ADR-0181 A5 amendment / D-18c);
+ *   that is the seeder's transport, not a per-row attribute channel, and a
+ *   `trustedHtml` brand is still unseeded;
  * - the client shell receives the property rows (the only channel a client
  *   mount/update/claim can use).
  *
@@ -27,7 +31,7 @@ const fixtureRoot = new URL('./', import.meta.url);
 const probeFile = 'probes/generated-props-card.tsx';
 const tag = 'generated-props-card';
 
-test('the non-primitive probe compiles property-only rows with no attribute seed channel', async () => {
+test('the non-primitive probe compiles property-only rows with no per-row attribute channel', async () => {
   const source = await readFile(fileURLToPath(new URL(probeFile, fixtureRoot)), 'utf8');
   const compiled = compileGeneratedElementIfAdmitted(source, probeFile, { site: { tag } });
   expect(compiled).not.toBeNull();
@@ -41,12 +45,20 @@ test('the non-primitive probe compiles property-only rows with no attribute seed
     expect(code).toContain(`name: "${name}"`);
     expect(code).toMatch(new RegExp(`name: "${name}",\\s*attribute: null,\\s*type: "`));
   }
-  // The host-producer ABI is unchanged (in-process props fold only; the
-  // attribute pairs channel is the primitive/literal one and cannot carry these
-  // rows because their descriptor attribute is null).
-  expect(code).toContain('function InteropPropsCard__ssrHost(props, lightChildren, attributes)');
+  // The host producer keeps the current ABI: the in-process props fold, then
+  // the shell resolver for the property-only rows (fresh defaults + the
+  // trustedHtml brand). The attribute-pair channel is the primitive/literal one
+  // and cannot carry these rows because their descriptor attribute is null.
+  expect(code).toContain(
+    'function InteropPropsCard__ssrHost(props, lightChildren, attributes, styleLinks, nestedHost)',
+  );
   expect(code).toContain('seedGeneratedElementHostProperties');
-  // No JSON transport/attribute name is invented for the property-only rows.
+  expect(code).toContain(
+    'content: InteropPropsCard__ssr(resolveGeneratedElementProps(__oeElementDescriptor, __oeHostProps)',
+  );
+  // No PER-ROW JSON transport or attribute name is invented for the property-only
+  // rows (array/object still ride the runtime's one shared data-oe-prop-seed JSON
+  // document; that is the seeder's channel, not an emitted per-row one).
   expect(code).not.toContain('JSON.stringify(props');
   expect(code).not.toContain('data-events');
   expect(code).not.toContain('data-model');

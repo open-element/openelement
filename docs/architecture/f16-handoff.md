@@ -419,3 +419,26 @@ without `NO_COLOR`/`CI`; the tool spawns piped by construction). The other five
 proofs, including `browser-launch-failure`, pass. `--reporter=verbose` prints the
 file line and test name, so adding it to that one case's args fixes the proof;
 `__wtr__/tools/negative-proofs.ts` was outside this pass's write scope.
+
+## 13. Acceptance batch E — web-component-interop unit rows
+
+The fixture's three unit files were re-authored against the surviving generated
+lane (`compileGeneratedElementIfAdmitted`). No row was retired: every subject
+still exists, and no fixture source, vitest config or runtime package changed.
+
+Five rows pinned stale premises, not deleted capabilities. The host producer's
+current ABI is `(props, lightChildren, attributes, styleLinks, nestedHost)` — the
+trailing `nestedHost` is the nested light-child composition seam. A styleless
+`ssr: false` island is now explicitly PRODUCERLESS (`ssrHostExport === null`, no
+`__ssrHost` wrapper), so the two client-only rows pin that absence instead of a
+producer the entry never pairs. `page-interop-home.tsx` is a generated function
+page since `1cd7ba7b5`, so its compile row drives the generated lane and pins the
+literal host attributes and light child as the emitted nested-host attribute
+pairs and kid pushes. The non-primitive probe keeps its property-only rows: their
+descriptor attribute is still `null`, and only the absence of a PER-ROW channel
+is asserted — array/object values still travel on the runtime's one shared
+`data-oe-prop-seed` JSON document (ADR-0181 A5 amendment / D-18c), and
+`trustedHtml` stays unseeded.
+
+**Measured.** `vitest run --project tests` 4 files / 12 tests green; the fixture's
+own `typecheck` (`tsc --noEmit -p tsconfig.json`) exit 0; `check` 5/5.
