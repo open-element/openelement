@@ -75,7 +75,12 @@ async function readJson<T = unknown>(path: string | URL): Promise<T> {
 
 const repoRoot = resolve(import.meta.dirname!, '../..');
 const BUILD_TIMEOUT_MS = 10 * 60_000;
-const NPM_INSTALL_TIMEOUT_MS = 5 * 60_000;
+// A harness budget, never an assertion: a hermetic cold-cache install must be
+// able to download the full external tree (vite, typescript, hono). Measured
+// 2026-11-23 at ~75KB/s registry throughput, that tree needs >5 minutes, so the
+// budget is sized for constrained networks instead of misreading slowness as
+// breakage.
+const NPM_INSTALL_TIMEOUT_MS = 20 * 60_000;
 const BROWSER_TIMEOUT_MS = 2 * 60_000;
 
 // ─── The dependency-only utility probe (S-C2/S-13) ──────────────────────────
@@ -1128,7 +1133,16 @@ async function runUtilityBrowserMatrix(starter: string, baseUrl: string): Promis
 async function main(): Promise<void> {
   const tmp = await mkdtemp(join(tmpdir(), 'openelement-packaged-ui-app-'));
   try {
-    const npmEnv = { NPM_CONFIG_CACHE: join(tmp, '.npm-cache') };
+    // One shared, content-addressed cache across legs and runs: a cold-cache
+    // hermetic install is this gate's slowest cell on a constrained network
+    // (measured 2026-11-24: the ~60MB external tree at 75-250KB/s needs 5-20+
+    // minutes per leg, and the gate runs several). Sharing keeps every property
+    // the gate actually asserts — the consumer never resolves into the
+    // repository and installs the six packed tarballs from their file: specs —
+    // while a warm re-run costs seconds (the same shape CI caches use).
+    const npmEnv = {
+      NPM_CONFIG_CACHE: join(tmpdir(), 'openelement-packed-consumer-npm-cache-v1'),
+    };
     const workspacePackages = await readPackages();
     const tarballFor = (name: string): string => {
       const pkg = workspacePackages.find((candidate) => candidate.name === name);
@@ -1148,16 +1162,38 @@ async function main(): Promise<void> {
     const routerTarball = tarballFor('@openelement/router');
     const elementTarball = tarballFor('@openelement/element');
 
+    // The npm half of the hermetic seal, mirroring the pnpm carrier this leg
+    // writes into the appliance below (consumerPnpmOverridesYaml). npm resolves
+    // a tarball's inter-package edges (e.g. @openelement/ui ->
+    // @openelement/element@1.0.0-alpha.16) as registry specs: argv tarballs
+    // join the root only after the nested ranges resolve, so the unpublished
+    // exact version queries registry.npmjs.org and the install dies at
+    // ETARGET/notarget. Sealing every retained name to its own packed tarball
+    // in a scratch manifest's dependencies AND overrides keeps every
+    // resolution path on these tarballs — before the publish, where the
+    // registry has no such version, and after it, where a published copy would
+    // otherwise mix into the packed proof. The specs live in the manifest
+    // rather than argv because npm rejects an override for a directly-installed
+    // argv name (EOVERRIDE).
+    const pinnedTarballs = Object.fromEntries(
+      RETAINED_PACKAGE_NAMES.map((name) => [name, `file:${tarballFor(name)}`]),
+    );
+    await writeFile(
+      join(tmp, 'package.json'),
+      `${JSON.stringify(
+        {
+          name: 'openelement-packed-ui-app-consumer',
+          private: true,
+          dependencies: pinnedTarballs,
+          overrides: pinnedTarballs,
+        },
+        null,
+        2,
+      )}\n`,
+    );
     const install = await runConsumer(
       'npm',
-      [
-        'install',
-        '--ignore-scripts',
-        '--no-audit',
-        '--no-fund',
-        '--fetch-timeout=30000',
-        ...tarballs,
-      ],
+      ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--fetch-timeout=300000'],
       tmp,
       { timeoutMs: NPM_INSTALL_TIMEOUT_MS, env: npmEnv },
     );

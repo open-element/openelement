@@ -91,7 +91,12 @@ const repoRoot = resolve(import.meta.dirname!, '../..');
 // Generous ceiling for the starter's real SSG build (vite + nitro); a hung
 // packed adapter must fail the tool instead of stalling CI forever.
 const BUILD_TIMEOUT_MS = 10 * 60_000;
-const NPM_INSTALL_TIMEOUT_MS = 5 * 60_000;
+// A harness budget, never an assertion: a hermetic cold-cache install must be
+// able to download the full external tree (vite, typescript, hono). Measured
+// 2026-11-23 at ~75KB/s registry throughput, that tree needs >5 minutes, so the
+// budget is sized for constrained networks instead of misreading slowness as
+// breakage.
+const NPM_INSTALL_TIMEOUT_MS = 20 * 60_000;
 const BROWSER_TIMEOUT_MS = 5 * 60_000;
 // One browser per probe invocation so every starter x browser pair is an
 // individually identifiable PASS/FAIL unit in the gate output.
@@ -320,7 +325,16 @@ async function runStarterBrowserMatrix(starter: string): Promise<void> {
 async function main(): Promise<void> {
   const tmp = await mkdtemp(join(tmpdir(), 'openelement-packaged-starter-'));
   try {
-    const npmEnv = { NPM_CONFIG_CACHE: join(tmp, '.npm-cache') };
+    // One shared, content-addressed cache across legs and runs: a cold-cache
+    // hermetic install is this gate's slowest cell on a constrained network
+    // (measured 2026-11-24: the ~60MB external tree at 75-250KB/s needs 5-20+
+    // minutes per leg, and the gate runs several). Sharing keeps every property
+    // the gate actually asserts — the consumer never resolves into the
+    // repository and installs the six packed tarballs from their file: specs —
+    // while a warm re-run costs seconds (the same shape CI caches use).
+    const npmEnv = {
+      NPM_CONFIG_CACHE: join(tmpdir(), 'openelement-packed-consumer-npm-cache-v1'),
+    };
     // Cover the canonical retained package line (#828) with the shared tarball
     // naming helper (#793) so a new package cannot escape the smoke.
     const workspacePackages = await readPackages();
@@ -341,16 +355,38 @@ async function main(): Promise<void> {
     }
     await assertPackedTarballsFresh(tarballs);
 
+    // The npm half of the hermetic seal, mirroring the pnpm carrier written
+    // into the starter below (consumerPnpmOverridesYaml). npm resolves a
+    // tarball's inter-package edges (e.g. @openelement/router ->
+    // @openelement/compiler@1.0.0-alpha.16) as registry specs: argv tarballs
+    // join the root only after the nested ranges resolve, so the unpublished
+    // exact version queries registry.npmjs.org and the install dies at
+    // ETARGET/notarget. Sealing every retained name to its own packed tarball
+    // in a scratch manifest's dependencies AND overrides keeps every
+    // resolution path on these tarballs — before the publish, where the
+    // registry has no such version, and after it, where a published copy would
+    // otherwise mix into the packed proof. The specs live in the manifest
+    // rather than argv because npm rejects an override for a directly-installed
+    // argv name (EOVERRIDE).
+    const pinnedTarballs = Object.fromEntries(
+      RETAINED_PACKAGE_NAMES.map((name) => [name, `file:${tarballFor(name)}`]),
+    );
+    await writeFile(
+      join(tmp, 'package.json'),
+      `${JSON.stringify(
+        {
+          name: 'openelement-packed-starter-consumer',
+          private: true,
+          dependencies: pinnedTarballs,
+          overrides: pinnedTarballs,
+        },
+        null,
+        2,
+      )}\n`,
+    );
     const install = await runConsumer(
       'npm',
-      [
-        'install',
-        '--ignore-scripts',
-        '--no-audit',
-        '--no-fund',
-        '--fetch-timeout=30000',
-        ...tarballs,
-      ],
+      ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--fetch-timeout=300000'],
       tmp,
       { timeoutMs: NPM_INSTALL_TIMEOUT_MS, env: npmEnv },
     );
