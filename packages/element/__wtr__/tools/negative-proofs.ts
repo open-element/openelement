@@ -304,7 +304,7 @@ const CASES: CaseDef[] = [
         `import { expect, test } from 'vitest';\ntest('${SENTINEL_TEST}', () => { expect(1).toBe(1); });\n`,
       );
     },
-    args: (dir) => ['run', '--project', 'element-browser', join(dir, 'sentinel.test.js')],
+    args: (dir) => ['run', '--project', 'element-browser', '--reporter=verbose', join(dir, 'sentinel.test.js')],
     expect: ({ code, output }) => {
       const reasons: string[] = [];
       if (code !== 0) {
@@ -313,10 +313,10 @@ const CASES: CaseDef[] = [
       if (output.includes(NO_FILES_SIGNATURE)) {
         reasons.push('scratch suite never collected ("No test files found") — proof is vacuous');
       }
-      // vitest's default reporter lists PASSING suites by file path only
-      // (failing test names appear in failure details; passing ones do not),
-      // so the sentinel's collection evidence is its file line plus the
-      // 1-passed counts — not the test name.
+      // vitest 5.0.5's default reporter omits a PASSING file's path line when
+      // stdout is piped (this tool always spawns piped), so the sentinel runs
+      // under --reporter=verbose and its collection evidence is the file line
+      // plus the test name — alongside the 1-passed counts.
       if (!output.includes('sentinel.test.js')) {
         reasons.push('the sentinel file is absent from the report — it never ran');
       }
