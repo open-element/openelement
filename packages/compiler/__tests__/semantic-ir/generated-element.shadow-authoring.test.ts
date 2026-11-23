@@ -271,6 +271,28 @@ export default Profile;
     expect(plain.code).toContain('...(attributes === undefined ? {} : { attributes }),');
   });
 
+  test('a property-only primitive row makes the producer consume the ONE seed (A5)', () => {
+    // ADR-0181 A5 amendment (2026-11-23): a supplied `attribute: false` primitive
+    // has no attribute pair of its own, so the JSON seed is its ONLY host wire.
+    // Without this gate the emitted wrapper called the seeder and IGNORED the
+    // pair set, so the seed never reached the tag and the claim kept the default.
+    const sidecar =
+      "import { defineIslandConfig } from '@openelement/router';\n" +
+      "export const openElement = defineIslandConfig({ root: 'shadow', " +
+      "properties: { inner: { attribute: false, default: 'prop-only' } } });\n";
+    const body = `
+function Profile(props: { inner: string }) {
+  return <p>{props.inner}</p>;
+}
+export default Profile;
+`;
+    const code = compileGeneratedElementIfAdmitted(`${sidecar}${body}`, FILE, { site: SITE })!.code;
+    expect(code).toContain('const __oeHostAttrs = __oeHostProps.__oeHostAttributes;');
+    expect(code).toContain('attributes: __oeHostAttrs === undefined ? attributes : __oeHostAttrs');
+    // No per-row attribute is invented for the property-only row.
+    expect(code).not.toContain('attribute: "inner"');
+  });
+
   test('the lane reads the authored sidecar and emits the wrapper only for shadow', () => {
     const shadow = compileGeneratedElementIfAdmitted(SHADOW, FILE, { site: SITE });
     expect(shadow).not.toBeNull();

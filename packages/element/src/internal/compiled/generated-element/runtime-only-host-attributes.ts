@@ -42,16 +42,21 @@ import { DATA_OE_LIGHT } from '@openelement/protocol/part-program';
 import { THEME_ATTRIBUTE } from '../../../open-element-theme.ts';
 
 /**
- * The host attribute carrying the JSON seed for NON-PRIMITIVE declared rows
- * (ADR-0182 D-18c / M11-3). A declared `array`/`object` row has no attribute
- * wire, so before this channel the server rendered the row's DEFAULT while a
- * supplied value existed only on the client — the content a visitor saw and
- * the state the component upgraded into were different facts.
+ * The host attribute carrying the JSON seed for declared rows with NO attribute
+ * wire: the non-primitive `array`/`object` rows (ADR-0182 D-18c / M11-3) and,
+ * since the 2026-11-23 ADR-0181 A5 amendment, the property-only primitives
+ * (`attribute: null`). A row in that family has no attribute name to carry it,
+ * so before this channel the server rendered a value while the claim re-read the
+ * declared default — the content a visitor saw and the state the component
+ * upgraded into were different facts (for a page root, the claim silently wiped
+ * the SSR content).
  *
  * Shape: `{"<rowName>": <json value>, …}`. Only JSON-encodable rows are
  * carried; `trustedHtml` is excluded on purpose (a brand cannot be
  * reconstructed from JSON, and promoting a plain string back to it would be a
- * raw-markup channel — D-18c records that as a separate decision).
+ * raw-markup channel — D-18c records that as a separate decision). An
+ * ATTRIBUTE-BACKED primitive is excluded too: its declared attribute pair
+ * already is the SSR→claim wire, and one row must not ride two wires.
  *
  * The shell parses the payload, validates every name against the descriptor's
  * JSON-seedable rows, and writes the values BEFORE setup. An unparseable

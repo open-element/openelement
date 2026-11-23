@@ -359,3 +359,67 @@ lane will not hoist a nested light-root sheet into an enclosing shadow template.
   assert the RULE (the composition is authored as `<slot>` or a shadow child),
   and only then can that fixture migrate. That rewrite belongs to the lane
   deletion's change set, not to a capability slice.
+
+## Amendment (2026-11-23): property-only primitives join the SSR→claim prop seed (A5)
+
+This is a later reading in the amend-never-rewrite form; it rewrites no decision
+above and creates no milestone, P5 or release claim. It records the owner-approved
+extension of the one value algebra in A5, which had left `attribute: false` seed
+parity unclaimed (the non-primitive half was delivered separately by ADR-0182
+D-18c; this amendment covers the primitive half).
+
+- **What changed.** A supplied `attribute: false` row of type `string` / `number` /
+  `boolean` (a "property-only primitive") now travels server→client on the SAME
+  single host attribute `data-oe-prop-seed` that D-18c already uses for supplied
+  `array` / `object` rows. The emitted host producer's seeder
+  (`seedGeneratedElementHostProperties`) writes it into that one JSON document; the
+  shell's claim (`applyGeneratedPropSeed`, which already runs from
+  `connectedCallback` BEFORE `createRecipe`) parses it and writes the values through
+  the canonical property write guard, so the claim body reads the resolved props the
+  server rendered with. The emitted SSR mode stays ONE host attribute: no per-row
+  attribute is invented, and an attribute-backed primitive keeps its declared
+  attribute pair only (one row, one wire — the M11-2 projection is unchanged).
+- **Why.** Before this rule the claim re-read the declared defaults for those rows
+  and silently wiped the SSR content. Measured on the typed `definePage<Data>` page
+  roots: `#build-count` went `build-count=2` → `0`, `#note-title` was cleared and the
+  422 error branch disappeared — 24/132 e2e rows failed (recorded in the F16
+  handoff §4.5 and §8). The failure is silent: the page is correct until the claim
+  runs, which is exactly the defect class this seed channel exists to remove.
+- **Rules preserved.** The producer reads the supplied value ONCE from an own DATA
+  property; a supplied accessor is never executed and still gets no seed; a supplied
+  `undefined` is not a value. A value the JSON wire cannot carry faithfully (a
+  function, a symbol, a bigint, a cyclic graph) fails the producer closed with
+  `OEIR_LEAF_UNSEEDABLE_PROPERTY`. A seed the descriptor cannot explain (unparseable
+  JSON, a non-object, an unknown row name, or a name that is an attribute-backed
+  primitive / a `trustedHtml` brand) still fails the claim closed with
+  `OEIR_SHELL_PROP_SEED_MISMATCH`. A bare JSX boolean lowers to `""` and is seeded
+  as the `true` fact the content fold rendered (attribute presence). A supplied
+  value EQUAL to the declared default still seeds: the payload mirrors the caller's
+  supplied set exactly (the D-18c rule), and the claim writes the value it would
+  otherwise have re-read.
+- **What remains unseeded (not claimed).** (1) a property-only primitive supplied
+  through an ACCESSOR — the producer deliberately does not run it, so the claim
+  keeps the declared default; this pre-amendment behaviour is now the only remaining
+  divergence for that authoring shape and is recorded, not fixed. (2) A
+  `trustedHtml` row — a brand cannot be reconstructed from JSON (D-18c remains the
+  decision). (3) An attribute-backed primitive — its attribute pair already is the
+  wire. (4) A supplied value the JSON wire cannot carry FAILS CLOSED instead of
+  travelling. An attribute-backed `boolean false` against a presence-default `true`
+  keeps its existing `OEIR_LEAF_UNSEEDABLE_PROPERTY` refusal unchanged.
+- **Emitted-artifact consequence.** A shadow host wrapper whose descriptor has a
+  property-only primitive row now consumes the seeder's `__oeHostAttributes` pair
+  set (it previously called the seeder and ignored the pairs); a light root needed
+  no emitter change because its producer already folds the same seeder. No symbol
+  is added, renamed or removed; the wire name, the seeder signature and the
+  compiler-private `__oeHostAttributes` / `__oePropSeedRows` keys are unchanged, so
+  there is no interface delta and no snapshot change.
+- **Evidence (LOCAL, Node).** `packages/element/__tests__/compiled-server/`
+  `generated-host-props-seeding.test.ts` (producer projection, a real claim round
+  trip through the facade DOM — the light-root `renderToString` host markup parsed
+  and upgraded — plus attribute-backed unaffected, omitted row keeps its default,
+  accessor never executed and non-JSON-encodable value fails closed),
+  `generated-prop-seed-hardening.test.ts` (hostile payload and claim fail-closed)
+  and `generated-host-seed-hydrate.test.ts` (the runtime-only attribute
+  exemption); the compiler emitter rows pin the host-producer gate
+  (`generated-element.shadow-authoring.test.ts`). The fixture admission that
+  measured the wipe is NOT part of this amendment.

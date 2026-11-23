@@ -364,12 +364,13 @@ interface LightSsrResult {
   readonly content: string;
   readonly hostAttributes: readonly (readonly [string, string])[] | undefined;
   /**
-   * The declared rows whose ONLY host wire is the JSON seed (`array`/`object`).
-   * The shell owns that set; the light writer only needs the names. A caller
-   * pair addressed to one of them has no attribute channel — the descriptor
-   * refuses one and `observedAttributes` never observes it — so the writer must
-   * not spell it as text. Absent for the string shape (an older emitted module),
-   * which keeps the pre-existing bytes.
+   * The declared rows whose ONLY host wire is the JSON seed (`array`/`object`
+   * rows, and since the 2026-11-23 ADR-0181 A5 amendment the property-only
+   * primitives). The shell owns that set; the light writer only needs the names.
+   * A caller pair addressed to one of them has no attribute channel — the
+   * descriptor refuses one and `observedAttributes` never observes it — so the
+   * writer must not spell it as text. Absent for the string shape (an older
+   * emitted module), which keeps the pre-existing bytes.
    */
   readonly seedRows?: readonly string[];
 }
@@ -398,16 +399,18 @@ function lightResult(rendered: unknown, lane: string, tag: string): LightSsrResu
  * emitted only by the seeder.
  *
  * `seedRows` names the rows the JSON seed ALREADY carries — the seeder's own
- * verdict, never re-derived here. A declared `array`/`object` row is
- * property-only: the descriptor refuses an attribute for it and
- * `observedAttributes` never observes one, so a pair naming it is not a second
- * spelling of the row. Leaving it on the tag is worse than redundant — the host
- * writer normalizes pairs through the class lane's value algebra, which is
- * `String()` for anything that is not `class`/`style`, so an array arrives as
- * `items="[object Object],…"`. Both sides are dropped for those names, and the
- * value travels on `data-oe-prop-seed` alone (the ONE channel
- * `applyGeneratedPropSeed` reads). Primitive rows and static attributes keep
- * their bytes; a row the seed does not carry is untouched.
+ * verdict, never re-derived here. Such a row is property-only: the descriptor
+ * refuses an attribute for it and `observedAttributes` never observes one, so a
+ * pair naming it is not a second spelling of the row. Leaving it on the tag is
+ * worse than redundant — the host writer normalizes pairs through the class
+ * lane's value algebra, which is `String()` for anything that is not
+ * `class`/`style`, so an array arrives as `items="[object Object],…"`. Both
+ * sides are dropped for those names, and the value travels on
+ * `data-oe-prop-seed` alone (the ONE channel `applyGeneratedPropSeed` reads).
+ * The family is every JSON-seedable `array`/`object` row plus, since the
+ * 2026-11-23 ADR-0181 A5 amendment, the property-only primitives. Primitive
+ * rows with an attribute channel and static attributes keep their bytes; a row
+ * the seed does not carry is untouched.
  */
 function mergeHostAttributes(
   authored: readonly (readonly [name: string, value: unknown])[] | undefined,

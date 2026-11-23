@@ -302,10 +302,15 @@ interface PropertyEmission {
   readonly hasAttributeRows: boolean;
   /**
    * The host producer must consume the seeder's merged attribute pairs, which
-   * happens for TWO reasons: the descriptor has an attribute-backed row, OR it
-   * has a JSON-seedable non-primitive row (D-18c) whose seed travels as one
-   * shell-owned host attribute. A module with ONLY property-only primitive rows
-   * still emits no attribute seed, keeping those bytes unchanged.
+   * happens for THREE reasons: the descriptor has an attribute-backed row (the
+   * M11-2 canonical projection), a JSON-seedable non-primitive row (D-18c) whose
+   * seed travels as one shell-owned host attribute, or — since the 2026-11-23
+   * ADR-0181 A5 amendment — a PROPERTY-ONLY PRIMITIVE row, which has no attribute
+   * pair of its own and reaches the claim on that same seed. The predicate is the
+   * seeder's own ("any row the JSON seed may carry"), restated here because the
+   * compiler cannot import the shell; a descriptor whose only row is a
+   * property-only `trustedHtml` brand (the one row type the seed excludes) still
+   * emits no attribute seed, keeping those bytes unchanged.
    */
   readonly emitsHostAttributeSeed: boolean;
 }
@@ -366,9 +371,15 @@ function buildPropertyEmission(
     identifiers,
     usesPropsResolver,
     hasAttributeRows: properties.some((property) => property.attribute !== null),
+    // Every declared row reaches the claim on one of the seed's channels (the
+    // canonical attribute projection for an attribute-backed row, and the JSON
+    // seed for an `array`/`object` row or — since the 2026-11-23 ADR-0181 A5
+    // amendment — for a property-only PRIMITIVE row) — EXCEPT an
+    // `attribute: null` `trustedHtml` brand, which the seed structurally
+    // excludes (a brand cannot be rebuilt from JSON). A brand-only descriptor
+    // therefore keeps its pre-amendment bytes with no seeder call.
     emitsHostAttributeSeed: properties.some(
-      (property) =>
-        property.attribute !== null || property.type === 'array' || property.type === 'object',
+      (property) => property.attribute !== null || property.type !== 'trustedHtml',
     ),
   };
 }
