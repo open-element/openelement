@@ -1323,8 +1323,9 @@ export function checkLedeBudget(files: Map<string, string>, corpus: Corpus): Fin
       corpus,
       'lede',
       file,
-      1,
-      file,
+      text,
+      lede.index ?? 0,
+      lede[1]!,
       `lede is ${lede[1]!.length} characters; the meta-description budget is 160`,
     );
   }
