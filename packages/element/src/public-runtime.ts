@@ -543,6 +543,57 @@ function registeredGeneratedHostRenderer(tag: string): RegisteredGeneratedHostRe
 }
 
 /**
+ * The stylesheet URLs a DSD template being BUILT must declare (F16).
+ *
+ * A shadow host's template declares its OWN per-island sheets plus the sheets of
+ * every nested LIGHT child that is actually expanded into it: a light root owns no
+ * template, so its content lands in the enclosing one and a document-head link
+ * cannot reach content inside a shadow tree. A nested SHADOW child declares its
+ * links in ITS OWN template and contributes nothing here.
+ *
+ * The list is LIVE and filled in authored order while the enclosing producer
+ * builds its content. That is the only correct moment: a producer is a STRING
+ * BUILDER, so once it returns, the template bytes are fixed. The compiler-emitted
+ * wrapper evaluates `content:` before it serializes the host, and the nested-host
+ * expander handed to that content appends here as each light child expands — so
+ * `serializeGeneratedElementHtml` reads the complete list.
+ *
+ * PRE-FILLING this sink from the render's admission set is what shipped the F16
+ * union defect: an app-wide admission set says which tags MAY expand, not which
+ * ones ARE in this template, so every shadow template declared every styled island
+ * in the application (`/generated` carried 7 marked links for 1 own sheet).
+ */
+interface NestedStyleLinkSink {
+  /** The live URL list the host producer serializes (own links first). */
+  readonly links: readonly string[];
+  /** How many resources the list carries. */
+  readonly size: number;
+  /** Append declared URLs, deduplicated: a sheet is one resource, one link. */
+  add(urls: readonly string[] | null | undefined): void;
+}
+
+function createNestedStyleLinkSink(): NestedStyleLinkSink {
+  const links: string[] = [];
+  const seen = new Set<string>();
+  return {
+    get links(): readonly string[] {
+      return links;
+    },
+    get size(): number {
+      return links.length;
+    },
+    add(urls: readonly string[] | null | undefined): void {
+      if (urls === null || urls === undefined) return;
+      for (const url of urls) {
+        if (typeof url !== 'string' || url === '' || seen.has(url)) continue;
+        seen.add(url);
+        links.push(url);
+      }
+    },
+  };
+}
+
+/**
  * Build the nested-host expander for ONE render (P-6, 2026-11-21).
  *
  * The class lane expands a nested custom-element host because its serializer walks
@@ -559,10 +610,17 @@ function registeredGeneratedHostRenderer(tag: string): RegisteredGeneratedHostRe
  * the render's own `ssrRenderableTags`; a tag outside it answers `undefined` and
  * the producer keeps its literal bytes. Returns `undefined` when the render
  * admits nothing, so a project with no admitted nested tag emits no expander.
+ *
+ * `sharedStyleSink` carries the enclosing template's live sheet list into a
+ * nested LIGHT child's own content: that content lands in the SAME enclosing
+ * template, so any light descendant it expands must lift into the same list
+ * (`F16` trap: a producer is a string builder, so the list cannot be amended
+ * after it returns). A shadow host's own content starts a fresh sink.
  */
 function createNestedHostExpander(
   options: InternalRenderToStringOptions,
   depth: number,
+  sharedStyleSink?: NestedStyleLinkSink,
 ):
   | ((request: {
       readonly tag: string;
@@ -574,14 +632,7 @@ function createNestedHostExpander(
   | undefined {
   const admittedNested = new Set(options.ssrRenderableTags ?? []);
   if (admittedNested.size === 0) return undefined;
-  // A nested LIGHT child owns no template, so its sheets belong to the enclosing
-  // one — and the enclosing producer reads them while it BUILDS its string, which
-  // is before any expansion runs. The URLs are therefore pre-collected here from
-  // the same admission set: a tag in the sink is a tag this render can expand.
-  const nestedStyleSink = new Set<string>();
-  for (const nestedTag of admittedNested) {
-    for (const link of requestTimeIslandStyleLinks(nestedTag) ?? []) nestedStyleSink.add(link);
-  }
+  const nestedStyleSink = sharedStyleSink ?? createNestedStyleLinkSink();
   const expander = (request: {
     readonly tag: string;
     readonly attributes: ReadonlyArray<readonly [string, string]>;
@@ -607,21 +658,22 @@ function createNestedHostExpander(
   };
   // The enclosing producer reads the lifted sheets back off the expander it was
   // given, so the collector never widens the producer's signature.
-  expander.nestedStyleSink = nestedStyleSink;
+  attachNestedStyleSink(expander, nestedStyleSink);
   return expander;
 }
 
 /**
- * The sheets a nested LIGHT child lifted into the enclosing template (F16).
- *
- * The expander is the ONE frame that both expands the child and knows its sheets,
- * so it carries the collected set. Reading it back here keeps the collector out of
- * the producer's signature: the producer still receives ONE `styleLinks` list, the
- * same channel it already had.
+ * Attach the ONE live sheet list to a render's expander. A host with no expander
+ * (a render that admits no nested tag) has no lift channel and needs none.
  */
-function liftedNestedStyleLinks(expander: unknown): readonly string[] | undefined {
-  const sink = (expander as { nestedStyleSink?: Set<string> } | undefined)?.nestedStyleSink;
-  return sink === undefined || sink.size === 0 ? undefined : [...sink];
+function attachNestedStyleSink(expander: unknown, sink: NestedStyleLinkSink): void {
+  if (expander === null || expander === undefined) return;
+  (expander as { nestedStyleSink?: NestedStyleLinkSink }).nestedStyleSink = sink;
+}
+
+/** The live sink a render's expander carries, or undefined when it has none. */
+function nestedStyleSinkOf(expander: unknown): NestedStyleLinkSink | undefined {
+  return (expander as { nestedStyleSink?: NestedStyleLinkSink } | undefined)?.nestedStyleSink;
 }
 
 /** One expansion attempt: the registry pair, then a light class static, then the class. */
@@ -636,10 +688,11 @@ function expandNestedHostOnce(
     readonly fallback: string;
   },
   /**
-   * Where a nested LIGHT child's sheets go (F16): they cannot live in the child,
-   * which has no template, so they are collected for the template being built.
+   * The enclosing template's live sheet list (F16): a nested LIGHT child's
+   * sheets cannot live in the child, which has no template, so they are
+   * appended to the template being built.
    */
-  nestedStyleSink: Set<string>,
+  nestedStyleSink: NestedStyleLinkSink,
 ): string | undefined {
   return expandNestedHostInner(options, depth, request, nestedStyleSink);
 }
@@ -654,34 +707,35 @@ function expandNestedHostInner(
     readonly children: string;
     readonly fallback: string;
   },
-  nestedStyleSink: Set<string>,
+  nestedStyleSink: NestedStyleLinkSink,
 ): string | undefined {
   const nestedGenerated = registeredGeneratedHostRenderer(request.tag);
   if (nestedGenerated !== undefined) {
-    // A generated LIGHT root owns no template, so its declared sheets belong to
-    // the ENCLOSING template — the content it emits lands there (F16). A generated
-    // SHADOW host declares its own links inside its own template and lifts nothing.
-    // A LIGHT-root generated child owns no template, so its declared sheets belong
-    // to the ENCLOSING template — that is where its content lands (F16). The
-    // producer's own arity is the fact that distinguishes the two: a shadow host
-    // declares `(props, lightChildren, attributes, styleLinks, nestedHost)` and
-    // writes its links into its own DSD template, while a light root's producer
-    // takes no `styleLinks` slot because it has no template to put them in.
-    if (nestedGenerated.length < 5) {
-      for (const link of requestTimeIslandStyleLinks(request.tag) ?? []) {
-        nestedStyleSink.add(link);
-      }
+    // A generated SHADOW host declares its own links inside its own template and
+    // lifts nothing; only a producer with no `styleLinks` slot (a LIGHT root, which
+    // has no template to put them in) contributes to the enclosing one. The
+    // producer's own arity is that fact: a shadow host declares
+    // `(props, lightChildren, attributes, styleLinks, nestedHost)`, a light root
+    // takes no `styleLinks` slot.
+    const liftsIntoEnclosingTemplate = nestedGenerated.length < 5;
+    if (liftsIntoEnclosingTemplate) {
+      nestedStyleSink.add(requestTimeIslandStyleLinks(request.tag));
     }
     // RECURSION (P-6): the child's own content is expanded by the SAME factory, so
     // a generated shadow host nested inside another keeps its inner components —
-    // otherwise the gap would simply move one level down.
+    // otherwise the gap would simply move one level down. A lifted LIGHT child's
+    // own content lands in the SAME enclosing template, so it keeps the sink.
     return renderRegisteredGeneratedHost(
       request.tag,
       nestedGenerated,
       undefined,
       request.children === '' ? undefined : request.children,
       request.attributes,
-      createNestedHostExpander(options, depth + 1),
+      createNestedHostExpander(
+        options,
+        depth + 1,
+        liftsIntoEnclosingTemplate ? nestedStyleSink : undefined,
+      ),
     );
   }
   const nestedClass = (
@@ -692,16 +746,18 @@ function expandNestedHostInner(
   if (typeof nestedLightSsr === 'function') {
     // A LIGHT-root child owns no template, so its declared sheets cannot be
     // declared where its content lands — they belong to the ENCLOSING template
-    // (F16, the class lane's `declaredStyleLinks` had this by construction). Report
-    // them upward through the one collector the enclosing producer reads.
-    for (const link of requestTimeIslandStyleLinks(request.tag) ?? []) nestedStyleSink.add(link);
+    // (F16, the class lane's `declaredStyleLinks` had this by construction). Append
+    // them to the one live list the enclosing producer will read.
+    nestedStyleSink.add(requestTimeIslandStyleLinks(request.tag));
     const nestedRendered = (
       nestedLightSsr as (input?: unknown, attributes?: unknown, nestedHost?: unknown) => unknown
     ).call(
       nestedClass,
       undefined,
       request.attributes,
-      createNestedHostExpander(options, depth + 1),
+      // This light child's content lands in the SAME enclosing template, so its
+      // own nested light descendants lift into the same live list.
+      createNestedHostExpander(options, depth + 1, nestedStyleSink),
     );
     const nestedLight = lightResult(nestedRendered, 'nested light-root', request.tag);
     return serializeLightGeneratedHost(
@@ -762,25 +818,20 @@ function renderRegisteredGeneratedHost(
   // still travel in the FIFTH position — passing it fourth handed a function to a
   // parameter the producer treats as a URL list, and the leaf then saw no expander
   // at all. Both optional slots are therefore always passed, in order.
-  // The enclosing template also carries the sheets a nested LIGHT child lifted
-  // into it (F16): a light root owns no template, so its content lands HERE and
-  // its rules must be reachable from HERE. `undefined` keeps the pre-existing
-  // bytes for a host that declares and lifts nothing.
-  // The enclosing producer needs the lifted URLs BEFORE it runs: a producer is a
-  // string builder, so its `styleLinks` are read while the template is written and
-  // cannot be amended afterwards (F16). The expander therefore pre-fills its sink
-  // from the tags it admits, which is a fact it has at construction time — see
-  // `createNestedHostExpander`.
-  const lifted = liftedNestedStyleLinks(nestedHost);
-  // DEDUPE, and it is load-bearing (F16): the lift is pre-filled from every admitted
-  // tag, which includes THIS host — so the host's own sheet arrives twice and the DSD
-  // template would declare the same marked link twice, violating the shipped
-  // "exactly one marked stylesheet link per template" contract. A sheet is one
-  // resource; the link list is a SET of resources, not a log of who asked.
-  const styleLinks =
-    islandStyleLinks === undefined && lifted === undefined
-      ? undefined
-      : [...new Set([...(islandStyleLinks ?? []), ...(lifted ?? [])])];
+  //
+  // The template's link list starts from THIS host's per-island plan entry and is
+  // then filled LIVE by the expander as a nested LIGHT child is actually expanded
+  // into the content (F16): reading an app-wide union here is the defect, and
+  // reading a pre-filled list is the same defect one level down — a tag the
+  // admission set admits is not necessarily content in this template. The live
+  // list is complete when the DSD leaf serializes because the compiler-emitted
+  // wrapper builds `content:` before it spreads `styleLinks`; the leaf appends
+  // during that build. A render with no expander has no lift channel, so its list
+  // is just its own sheets (`undefined` keeps the pre-existing bytes for a host
+  // that declares none).
+  const sink = nestedStyleSinkOf(nestedHost) ?? createNestedStyleLinkSink();
+  sink.add(islandStyleLinks);
+  const styleLinks = nestedHost === undefined && sink.size === 0 ? undefined : sink.links;
   const rendered = hostRenderer(props ?? {}, lightChildren, attributes, styleLinks, nestedHost);
   if (typeof rendered !== 'string') {
     throw new OpenElementError(
