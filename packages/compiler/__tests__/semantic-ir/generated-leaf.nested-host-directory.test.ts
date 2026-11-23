@@ -446,6 +446,7 @@ beforeAll(async () => {
       `export * from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
       `export * from ${JSON.stringify(join(runtime, 'nested-host.ts'))};`,
       `export { claimRecipe, createRecipe, insertRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
+      `export { reconcileEachEntries } from ${JSON.stringify(join(runtime, 'each-reconcile.ts'))};`,
       `export { claimStaticSiblingRange, openStaticSiblingDirectory } from ${JSON.stringify(join(runtime, 'static-sibling-ranges.ts'))};`,
       `export { escapeText } from ${JSON.stringify(join(elementRoot, 'compiled/escape-text.ts'))};`,
       `export { escapeAttrValue } from ${JSON.stringify(join(elementRoot, 'core/html-escape.ts'))};`,

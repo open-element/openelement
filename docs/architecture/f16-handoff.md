@@ -408,6 +408,16 @@ row is kept except where the class lane's own mechanics were the subject:
   inside the list does not survive a distant swap. The class lane moved only the
   two swapped entries. Recorded as a measured difference, not papered over: a
   focus-preserving reconcile is a runtime change.
+  **FIXED (2026-11-24, dated amendment): the runtime change landed.** The
+  emitted `__oe_eachSync` tail now hands placement to ONE leaf-runtime helper
+  (`reconcileEachEntries`, `runtime/each-reconcile.ts`), whose
+  longest-increasing-subsequence rule leaves the stable chain untouched: a
+  distant swap places exactly the two swapped entries (bench self-check
+  `swapInsertions` 2, matching the retained Part-Program runtime's own #1455
+  pin of 2), same-order is zero operations, and a detached stable entry is
+  still placed. The browser row's class-lane assertions (focus preserved, one
+  connection, zero disconnections) are restored and green; the helper's unit
+  rows pin the contract on the counting DOM.
 
 **Measured.** `browser:test` 7 files / 38 tests green, 0 failed suites, no
 `vite-error-overlay` in the log; `browser:compile` exit 0; `check` 5/5.

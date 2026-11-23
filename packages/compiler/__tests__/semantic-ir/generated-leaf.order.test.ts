@@ -351,6 +351,7 @@ beforeAll(async () => {
     [
       `import { claimRecipe as claimRecipeImpl, createRecipe, insertRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
       `export { createRecipe, insertRecipe };`,
+      `export { reconcileEachEntries } from ${JSON.stringify(join(runtime, 'each-reconcile.ts'))};`,
       `export const claimLog: { parent: unknown; projection: unknown }[] = [];`,
       `export function claimRecipe(owner: unknown, recipe: unknown, parent: unknown) {`,
       `  const projection = claimRecipeImpl(owner as never, recipe as never, parent as never);`,

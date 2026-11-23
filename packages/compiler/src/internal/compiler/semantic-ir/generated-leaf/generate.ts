@@ -330,6 +330,10 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
   // alpha16 nested-expansion: the emitted producer routes every custom-element
   // tag through this ONE helper, which asks the render's host to expand it.
   { symbol: 'nestedHost', predicate: (body) => body.includes('nestedHost(') },
+  // Keyed-list placement (each blocks): the emitted sync tail names this ONE
+  // helper, whose LIS rule leaves the stable chain untouched and moves exactly
+  // the displaced entries.
+  { symbol: 'reconcileEachEntries', predicate: (body) => body.includes('reconcileEachEntries(') },
   // ADR-0183 D-4: a root-owned binding declared in the retained setup factory
   // (a `signal`/`computed` resource) and the SSR producer's per-render copy are
   // the only emitters of these calls.
@@ -1875,8 +1879,11 @@ function emitList(
   state.indent += 1;
   // Keyed placement: the list owns the siblings AFTER the anchor. Find the tail
   // reference (first following sibling that is not a current entry node), then
-  // place the next entries in reverse and move only nodes not already in place.
-  // Unchanged nodes (and a focused element in them) are never re-inserted.
+  // hand the placement to the ONE leaf-runtime helper. Its LIS rule leaves the
+  // stable chain untouched — an unchanged node (and a focused element inside
+  // it) is never re-inserted, and a distant swap moves exactly the swapped
+  // entries, where the inline backward walk re-inserted every entry between
+  // the swap and the tail (measured 997 of 1000, 2026-11-24).
   push(state, `const ${INTERNAL_PREFIX}previousNodes = new Set();`);
   push(
     state,
@@ -1885,41 +1892,18 @@ function emitList(
   if (wire) {
     // The list end is the fixed tail: every entry node belongs before it and a
     // following sibling can never be mistaken for a list node.
-    push(state, `let ${INTERNAL_PREFIX}reference = ${endVar};`);
+    push(state, `const ${INTERNAL_PREFIX}tail = ${endVar};`);
   } else {
-    push(state, `let ${INTERNAL_PREFIX}reference = ${anchorVar}.nextSibling;`);
+    push(state, `let ${INTERNAL_PREFIX}tail = ${anchorVar}.nextSibling;`);
     push(
       state,
-      `while (${INTERNAL_PREFIX}reference !== null && ${INTERNAL_PREFIX}previousNodes.has(${INTERNAL_PREFIX}reference)) ${INTERNAL_PREFIX}reference = ${INTERNAL_PREFIX}reference.nextSibling;`,
+      `while (${INTERNAL_PREFIX}tail !== null && ${INTERNAL_PREFIX}previousNodes.has(${INTERNAL_PREFIX}tail)) ${INTERNAL_PREFIX}tail = ${INTERNAL_PREFIX}tail.nextSibling;`,
     );
   }
   push(
     state,
-    `for (let ${INTERNAL_PREFIX}entryIndex = ${INTERNAL_PREFIX}next.length - 1; ${INTERNAL_PREFIX}entryIndex >= 0; ${INTERNAL_PREFIX}entryIndex--) {`,
+    `reconcileEachEntries(${INTERNAL_PREFIX}next, ${INTERNAL_PREFIX}parent, ${INTERNAL_PREFIX}tail, ${INTERNAL_PREFIX}previous);`,
   );
-  state.indent += 1;
-  push(
-    state,
-    `const ${INTERNAL_PREFIX}entryNodes = ${INTERNAL_PREFIX}next[${INTERNAL_PREFIX}entryIndex].nodes;`,
-  );
-  push(
-    state,
-    `for (let ${INTERNAL_PREFIX}nodeIndex = ${INTERNAL_PREFIX}entryNodes.length - 1; ${INTERNAL_PREFIX}nodeIndex >= 0; ${INTERNAL_PREFIX}nodeIndex--) {`,
-  );
-  state.indent += 1;
-  push(
-    state,
-    `const ${INTERNAL_PREFIX}node = ${INTERNAL_PREFIX}entryNodes[${INTERNAL_PREFIX}nodeIndex];`,
-  );
-  push(
-    state,
-    `if (${INTERNAL_PREFIX}node.parentNode !== ${INTERNAL_PREFIX}parent || ${INTERNAL_PREFIX}node.nextSibling !== ${INTERNAL_PREFIX}reference) ${INTERNAL_PREFIX}parent.insertBefore(${INTERNAL_PREFIX}node, ${INTERNAL_PREFIX}reference);`,
-  );
-  push(state, `${INTERNAL_PREFIX}reference = ${INTERNAL_PREFIX}node;`);
-  state.indent -= 1;
-  push(state, `}`);
-  state.indent -= 1;
-  push(state, `}`);
   state.indent -= 1;
   push(state, `}`);
   push(state, `${entriesVar} = ${INTERNAL_PREFIX}next;`);

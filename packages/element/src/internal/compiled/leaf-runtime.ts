@@ -80,6 +80,13 @@ export {
 
 // Recipes and their projection ownership.
 export { claimRecipe, createRecipe, insertRecipe } from './runtime/recipe.ts';
+// Keyed-list minimal-move placement (each blocks): the emitted `__oe_eachSync`
+// tail calls this ONE helper instead of an inline backward walk, which
+// re-inserted every entry between a distant swap and the list's tail (measured
+// 997 of 1000 entries, 1994 insertBefore calls, stationary focus lost). The
+// LIS rule leaves the stable chain untouched; a distant swap moves exactly
+// the swapped pair.
+export { reconcileEachEntries } from './runtime/each-reconcile.ts';
 // `nestedHost` (alpha16 nested-expansion slice): the emitted SSR producer
 // routes every custom-element (dash) tag through this ONE call, which asks the
 // render's host for the nested expansion and falls back to the literal bytes the

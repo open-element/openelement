@@ -993,7 +993,7 @@
           ]
         },
         "./internal/compiled/leaf-runtime": {
-          "publicShapeSha256": "22b5616c538a804c2951e570b4e0ee8cc82527a00f3b223c5ced3fd17ce5e525",
+          "publicShapeSha256": "663e1087909de731e2ec5029e508fc179e3f623b75b3e2239114ac62588a9e45",
           "publicSymbols": [
             "MARKERS=value:{each:{readonly [MARKER_BRAND]:true;readonly text:string};eachEnd:{readonly [MARKER_BRAND]:true;readonly text:string};when:{readonly [MARKER_BRAND]:true;readonly text:string};whenEnd:{readonly [MARKER_BRAND]:true;readonly text:string}}",
             "assertEachAnchor=value:{call:(node:union(Node|null|undefined),where:string,origin:union(undefined|{readonly column:number;readonly file:string;readonly line:number}))=>void}",
@@ -1035,6 +1035,7 @@
             "parseEntryKeyMarker=value:{call:(value:union(null|string))=>union(null|{readonly token:string})}",
             "rangeMarker=value:{call:(ordinal:number,end:union(false|true))=>{readonly [MARKER_BRAND]:true;readonly text:string}}",
             "readEntryKeyMarker=value:{call:(node:union(Node|null|undefined),where:string,origin:union(undefined|{readonly column:number;readonly file:string;readonly line:number}))=>string}",
+            "reconcileEachEntries=value:{call:(next:array({readonly nodes:array(Node)}),parent:union(Node|null),tail:union(Node|null),previous:array({readonly nodes:array(Node)}))=>void}",
             "releaseChildInstance=value:{call:(owner:{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal},siteKey:string)=>void}",
             "releaseUnderStructuralScope=value:{call:(structuralScope:{active:union(false|true);add:{call:(cleanup:{call:()=>void})=>void};addRangeCleanup:{call:(cleanup:{call:()=>void})=>void};child:{call:()=>recursive(LifetimeScope)};connect:{call:()=>void};dispose:{call:(detachOwnedNodes:union(false|true))=>void};disposed:union(false|true);requestAnimationFrame:{call:(callback:FrameRequestCallback)=>number};setTimeout:{call:(handler:union(Function|string),timeout:union(number|undefined))=>number};signal:AbortSignal})=>void}",
             "removeNodes=value:{call:(nodes:array(Node))=>void}",

@@ -203,13 +203,24 @@ export function runGeneratedTableBenchmark(): GeneratedTableFacts {
     const updateInsertions = doc.counts.insertions;
 
     // Keyed swap: rows 1 and 998 exchange data; the DOM follows the KEYS.
+    // The count is the deterministic contract (#1455's mirror on the generated
+    // lane): a distant swap places EXACTLY the two swapped entries — their
+    // marker and row nodes — and never re-inserts the 997 stationary entries
+    // in between.
+    doc.resetCounts();
     const swapped = rows.value.slice();
     const first = swapped[1]!;
     swapped[1] = swapped[998]!;
     swapped[998] = first;
     rows.value = swapped;
+    const swapInsertions = doc.counts.insertions;
     const cells = rowCells(toHtml(root));
     const swappedIds = [String(cells[2] ?? ''), String(cells[998 * 2] ?? '')] as const;
+    // The FULL order follows the keys — the identity contract #1455 pins on
+    // the retained runtime, asserted row by row, not just at the two named
+    // positions.
+    const swappedOrderIds = cells.filter((_, index) => index % 2 === 0).map(String);
+    const expectedSwappedOrderIds = swapped.map((row) => String(row.id));
 
     // Remove one row: exactly one <tr> leaves the document.
     doc.resetCounts();
@@ -224,7 +235,10 @@ export function runGeneratedTableBenchmark(): GeneratedTableFacts {
       mountTextWrites,
       update10thTextWrites,
       updateInsertions,
+      swapInsertions,
       swappedIds,
+      swappedOrderIds,
+      expectedSwappedOrderIds,
       removeRemovals,
       removeLeftRowCount,
     };

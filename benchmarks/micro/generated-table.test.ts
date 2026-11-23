@@ -34,6 +34,13 @@ test('the generated-lane keyed table: mount, 10th-label update, swap and remove 
   // Keyed movement: row 1 now shows id 998 and row 998 shows id 1.
   expect(facts.swappedIds[0]).toEqual('998');
   expect(facts.swappedIds[1]).toEqual('1');
+  // MEASURED minimal move (#1455's mirror on the generated lane): the distant
+  // swap places EXACTLY the two swapped entries (one insertion per row node,
+  // matching the retained Part-Program runtime's own #1455 pin) and the 997
+  // stationary entries in between are never re-inserted.
+  expect(facts.swapInsertions).toEqual(2);
+  // The whole order follows the KEYS, not just the two named rows.
+  expect(facts.swappedOrderIds).toEqual(facts.expectedSwappedOrderIds);
   // Removing one row removes exactly one node.
   expect(facts.removeRemovals).toEqual(1);
   expect(facts.removeLeftRowCount).toEqual(999);

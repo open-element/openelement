@@ -152,28 +152,27 @@ describe("compiled element lifecycle", () => {
       assert.strictEqual(after[1], before[998]);
       assert.strictEqual(after[998], before[1]);
       assert.strictEqual(after[500], stable);
-      // MEASURED generated-lane behaviour: the compiled `each` reconciler walks
-      // entries backward from the end anchor, so moving the head entry to the
-      // tail re-inserts every entry between them (measured: 1994 insertBefore
-      // calls, i.e. 997 of the 1000 entries). The stationary `li` keeps its
-      // node identity but its subtree is detached and re-attached once, which
-      // is why a browser moves focus to the body here; the class lane's
-      // reconciler moved only the two swapped entries and kept focus.
+      // MINIMAL MOVE — the class lane's own contract (#1455), restored on the
+      // generated lane: the emitted `__oe_eachSync` tail hands placement to the
+      // ONE leaf-runtime helper (`reconcileEachEntries`), whose stable chain is
+      // never re-inserted, so a distant swap places exactly the two swapped
+      // entries, the stationary `li` is never detached, its nested element
+      // never reconnects, and the browser keeps focus where the author put it.
       assert.strictEqual(
         Probe.connections,
-        2,
-        "the re-inserted entry reconnects its nested element exactly once",
+        1,
+        "a stationary entry's nested element is never re-inserted",
       );
       assert.strictEqual(
         Probe.disconnections,
-        1,
-        "…and disconnects it exactly once (no duplicate or lost lifecycle)",
+        0,
+        "…and never disconnects (no duplicate or lost lifecycle)",
       );
       assert.isTrue(probe.isConnected, "the nested element ends connected");
-      assert.notStrictEqual(
+      assert.strictEqual(
         root.activeElement ?? document.activeElement,
         stable,
-        "a re-inserted subtree does not keep focus (measured)",
+        "a distant swap preserves focus inside the list",
       );
     } finally {
       element.remove();
