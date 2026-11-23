@@ -143,9 +143,13 @@ export interface GenerateElementModuleOptions {
   readonly authoredSource?: string;
   /**
    * M09-2e / #1803 compiler-private marker: the authored sidecar declares
-   * `styles`, so this shadow host's DSD template will carry the canonical
-   * marked link prefix. Emits the typed styleLinks channel and the claim prefix
-   * walk; omitted keeps the pre-slice bytes exactly.
+   * `styles` for a SHADOW root. The producer forwards the runtime `styleLinks`
+   * channel for EVERY shadow host since F16 (a nested LIGHT child's sheets are
+   * lifted into the template), so this fact no longer gates the channel. It
+   * keeps the DECLARED case's fail-closed guard — a declared sheet set that
+   * reaches the producer empty is a mixed/partial artifact, not an unstyled
+   * app — and the `styleLinks` name-collision check. Omitted keeps every other
+   * module's emitted bytes and diagnostics exactly as before this slice.
    */
   readonly styleLinkPrefix?: boolean;
   /**
@@ -427,27 +431,30 @@ export function generateElementModule(
     module.components.some((component) => component.name === rootCandidate)
       ? rootCandidate
       : undefined;
+  // The DSD template root this descriptor pins (`null` for a LIGHT/absent root,
+  // which has no template at all). Computed HERE because it now decides the
+  // claim's prefix walk as well as the host wrapper below, and both must read
+  // the same fact.
+  const templateRoot = hostTemplateRoot(options.root);
   // M09-2e / #1803: derived from the authored sidecar by the lane admission,
-  // never from a host fact. An unstyled module passes nothing, so its bytes
-  // stay exactly the pre-slice output.
+  // never from a host fact.
   //
   // P-3 (2026-11-21): a shadow module whose ONLY styling is utility classes
   // declares no `styles`, yet its DSD template still needs the build's shared
   // COMPONENT sheet (the compiler collected those tokens as class candidates).
-  // Without the channel the host producer has no parameter to receive the link
-  // and the shadow tree renders unstyled — measured on the ui-dogfood TSX-only
-  // Tailwind probe. The condition is the module's OWN candidate fact, so a module
-  // with neither declarations nor candidates keeps the pre-slice bytes.
-  const shadowModule = options.root === 'shadow-open' || options.root === 'shadow-closed';
-  // TWO reasons to grow the channel, with DIFFERENT strictness:
-  //  - the sidecar DECLARED `styles` -> the author promised sheets, so a render
-  //    with no URLs is a broken artifact and fails closed (pre-existing rule);
-  //  - the module merely HAS class candidates -> the app may or may not run a
-  //    utility engine, so absent URLs are lawful and the producer renders without
-  //    a link. Making this strict would turn "no utility engine" into a build
-  //    failure for every shadow component.
+  //
+  // F16 nested-light lift: NEITHER fact gates the runtime `styleLinks` forward
+  // any more. The runtime lifts a nested LIGHT island's declared sheets into the
+  // ENCLOSING template while it expands that child, so ANY shadow host's DSD
+  // template can begin with marked links even when this module declares no
+  // styles and carries no candidate token. The wrapper therefore forwards the
+  // channel unconditionally (see the wrapper below); this fact keeps only the
+  // DECLARED case's fail-closed strictness, and the `styleLinks` identifier
+  // collision guard, so no module's diagnostics grow without a declaration.
   const declaredStyles = options.styleLinkPrefix === true;
-  const utilityChannel = shadowModule && collectStaticClassCandidates(module).length > 0;
+  const utilityChannel =
+    (options.root === 'shadow-open' || options.root === 'shadow-closed') &&
+    collectStaticClassCandidates(module).length > 0;
   const styleLinkPrefix = declaredStyles || utilityChannel;
   // 2026-11-20 client style adoption: only the client-only fact (`ssr: false`
   // or `hydrate: 'only'`), read by the SAME lane admission that supplies the
@@ -460,12 +467,18 @@ export function generateElementModule(
   const leaf = generateLeafModule(module, {
     ...(options.authoredSource === undefined ? {} : { authoredSource: options.authoredSource }),
     ...(rootInstanceName === undefined ? {} : { rootInstance: rootInstanceName }),
-    ...(styleLinkPrefix ? { claimStyleLinkPrefix: true } : {}),
+    // F16: the DSD template claim skips a LEADING marked stylesheet-link run —
+    // delivery markup, not claimed content. The template may carry this
+    // module's declared sheets (M09-2e) or — new — a nested LIGHT child's
+    // sheets the runtime lifted into it, so the prefix is a property of the
+    // TEMPLATE, not of this module's own styling declaration. A LIGHT root has
+    // no template, so its claim keeps the pre-slice bytes.
+    ...(templateRoot === null ? {} : { claimStyleLinkPrefix: true }),
     // Slot anchors are a LIGHT-root feature only: a light root's children are
     // projections into its own `<slot>` elements, so its producer must name
     // them. A shadow root distributes its light children through the platform
     // and a hostless module is not a host, so both keep the pre-slice bytes.
-    ...(hostTemplateRoot(options.root) === null ? { lightRoot: true } : {}),
+    ...(templateRoot === null ? { lightRoot: true } : {}),
   });
   const leafText = leaf.module;
   if (leafText === null) {
@@ -556,7 +569,6 @@ export function generateElementModule(
     styleImport: (index: number): string => `__oeStyle${index}`,
   };
   const root = options.root;
-  const templateRoot = hostTemplateRoot(root);
   // The M09-2a host wrapper is appended only for a shadow descriptor whose leaf
   // actually emitted the content-only `<Name>__ssr`. A light root (or an absent
   // root, which the shell defaults to light) appends nothing at all, so the
@@ -709,6 +721,17 @@ export function generateElementModule(
           // depend on the callee's styling — the runtime would hand a function to
           // `styleLinks` and the leaf would never see its expander. Declaring the
           // slot always keeps one order for every module.
+          //
+          // F16 nested-light lift: the channel is FORWARDED for every shadow host,
+          // unconditionally. A nested LIGHT island's declared sheets are lifted
+          // into THIS template by the runtime while it builds `content:` above, so
+          // the list can be non-empty even when this module declares no styles and
+          // carries no class candidate. Gating the forward on this module's own
+          // styling dropped those links (measured on /combobox: the page template
+          // declared none and the light island rendered unstyled inside the page's
+          // shadow tree). The `=== undefined` guard keeps an absent channel out of
+          // the literal, and the canonical serializer writes zero bytes for an
+          // empty list, so a template with no links keeps its exact bytes.
           `export function ${hostWrapper.name}(props, lightChildren, attributes, styleLinks, nestedHost) {`,
           // Mixed generated-element/entry artifacts: the new producer requires
           // the declared stylesheet URLs, but an old 3-arg caller (or a missing
@@ -739,9 +762,7 @@ export function generateElementModule(
                 }, ${NESTED_HOST_RECORD_ARG}),`,
                 '    ...(lightChildren === undefined ? {} : { lightChildren }),',
                 `    ...(attributes === undefined && ${HOST_ATTRIBUTES_VAR} === undefined ? {} : { attributes: ${HOST_ATTRIBUTES_VAR} === undefined ? attributes : ${HOST_ATTRIBUTES_VAR} }),`,
-                ...(styleLinkPrefix
-                  ? ['    ...(styleLinks === undefined ? {} : { styleLinks }),']
-                  : []),
+                '    ...(styleLinks === undefined ? {} : { styleLinks }),',
                 '  });',
                 '}',
               ]
@@ -758,9 +779,7 @@ export function generateElementModule(
                 }, ${NESTED_HOST_RECORD_ARG}),`,
                 '    ...(lightChildren === undefined ? {} : { lightChildren }),',
                 '    ...(attributes === undefined ? {} : { attributes }),',
-                ...(styleLinkPrefix
-                  ? ['    ...(styleLinks === undefined ? {} : { styleLinks }),']
-                  : []),
+                '    ...(styleLinks === undefined ? {} : { styleLinks }),',
                 '  });',
                 '}',
               ]),

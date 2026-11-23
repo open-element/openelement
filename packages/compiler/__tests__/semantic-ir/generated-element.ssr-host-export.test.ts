@@ -190,9 +190,12 @@ describe('M11 prerequisite — compiler-owned ssrHostExport metadata', () => {
     expect(emitted.placements).toEqual(leaf.placements);
   });
 
-  test('a candidate-free shadow module still declares every producer slot (P-6)', () => {
-    // No static class anywhere: P-3 must not grow the channel, so the producer
-    // keeps its pre-slice 3-parameter shape.
+  test('a candidate-free shadow module still declares every producer slot (P-6, F16)', () => {
+    // No static class and no `styles` anywhere: the producer still keeps the
+    // P-6 fixed parameter list, and since F16 it also FORWARDS the channel
+    // unconditionally — a nested LIGHT child's sheets are lifted into this
+    // template at render time, so "this module declares no styles" is not "this
+    // template carries no links".
     const PLAIN = `${SHADOW_SIDECAR}
 function Card() {
   return <div><slot></slot></div>;
@@ -207,9 +210,13 @@ export default Card;
     expect(emitted.module).toContain(
       `export function ${emitted.ssrHostExport}(props, lightChildren, attributes, styleLinks, nestedHost) {`,
     );
-    // The PARAMETER NAME is present by design (fixed slots). What must be absent is
-    // a USE of it: this module declares no `styles`, so no channel is threaded.
-    expect(emitted.module).not.toContain('{ styleLinks }');
+    // The channel is threaded for every shadow host; what stays absent is the
+    // DECLARED-case strictness (no `styles` declaration, so no fail-closed guard).
+    expect(emitted.module).toContain('...(styleLinks === undefined ? {} : { styleLinks }),');
+    expect(emitted.module).not.toContain('OEIR_LEAF_MISSING_VALUE: styleLinks');
+    // No `styles` declaration means no declared-sheet import and no descriptor row.
+    expect(emitted.module).not.toContain('.css";');
+    expect(emitted.module).not.toContain('styles: [');
   });
 
   test('a hostless emitter call reports null and stays byte-identical to the leaf', () => {

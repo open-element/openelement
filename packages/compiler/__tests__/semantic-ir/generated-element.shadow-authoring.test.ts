@@ -192,7 +192,7 @@ describe('M09-2a generated shadow host producer', () => {
     expect(parseDiagnostics(emitted(LIGHT, 'light').module!)).toEqual([]);
   });
 
-  test('a styles sidecar grows the typed styleLinks channel and the claim prefix', () => {
+  test("a styles sidecar grows the fail-closed guard; the channel is every shadow host's (F16)", () => {
     // The fact is read from the SAME authored sidecar the lane already reads for
     // root/focus/props, so no host boolean and no scan-order dependence exists.
     const styledSource = SHADOW.replace(
@@ -225,13 +225,37 @@ describe('M09-2a generated shadow host producer', () => {
     // The claim skips exactly the canonical marked link prefix.
     expect(styled.code).toContain('data-oe-static-styles');
     expect(styled.code).toContain('nodeName === "LINK"');
-    // The unstyled module keeps the 3-arg producer, no prefix walk, no guard.
+    // F16: an UNSTYLED shadow host is no different in these two respects. Its
+    // DSD template can begin with a nested LIGHT child's lifted marked links,
+    // so the producer forwards the runtime channel and the claim skips the
+    // leading run. What the declaration alone adds is the STRICT half: without
+    // a declared sheet set the producer tolerates an absent URL list.
     const unstyled = compileGeneratedElementIfAdmitted(SHADOW, FILE, { site: SITE })!;
     expect(unstyled.code).toContain(
       'export function Profile__ssrHost(props, lightChildren, attributes, styleLinks, nestedHost) {',
     );
-    expect(unstyled.code).not.toContain('data-oe-static-styles');
+    expect(unstyled.code).toContain('...(styleLinks === undefined ? {} : { styleLinks }),');
+    expect(unstyled.code).toContain('data-oe-static-styles');
+    expect(unstyled.code).toContain('nodeName === "LINK"');
     expect(unstyled.code).not.toContain('OEIR_LEAF_MISSING_VALUE: styleLinks');
+  });
+
+  test('the claim prefix walk is a DSD-template fact, not a styling fact (F16)', () => {
+    // A LIGHT root has no template to prefix, so its claim keeps the pre-slice
+    // bytes even when the sidecar declares styles (the next row owns the
+    // byte-identity half).
+    const styledLight = LIGHT.replace(
+      "export const openElement = defineIslandConfig({ root: 'light' });",
+      "export const openElement = defineIslandConfig({ root: 'light', styles: ['./profile-card.css'] });",
+    );
+    const light = compileGeneratedElementIfAdmitted(styledLight, FILE, { site: SITE })!;
+    expect(light.code).not.toContain('data-oe-static-styles');
+    expect(light.code).not.toContain('styleLinks');
+    // ... while EVERY shadow root gets the walk, candidate-free included.
+    const plainShadow = compileGeneratedElementIfAdmitted(SHADOW, FILE, { site: SITE })!;
+    expect(plainShadow.code).toMatch(
+      /let (__oe_claimStart\d+) = __oe_parent\.firstChild;\n {2}while \(\1 !== null && \1\.nodeType === 1 && \1\.nodeName === "LINK" && \1\.hasAttribute\("data-oe-static-styles"\)\) \1 = \1\.nextSibling;/,
+    );
   });
 
   test('a light root keeps its bytes even when the sidecar declares styles', () => {

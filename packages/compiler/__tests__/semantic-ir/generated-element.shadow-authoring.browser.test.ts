@@ -93,6 +93,52 @@ export default StyledCard;
 `;
 
 /**
+ * F16 nested-light lift: an UNSTYLED shadow host whose root is a pure static
+ * SIBLING DIRECTORY (a fragment of two fully static elements). The mount and the
+ * SSR producer wrap each range in `oe:r:` markers, so the claim takes the M07b
+ * directory consumer — the second claim form that must skip a leading marked
+ * stylesheet-link run it does not own.
+ */
+const DIRECTORY_ID = `${ISLANDS_DIR}/directory-card.tsx`;
+const DIRECTORY_SOURCE = `${SIDECAR}
+function DirectoryCard() {
+  return (
+    <>
+      <div id="dir-a">a</div>
+      <div id="dir-b">b</div>
+    </>
+  );
+}
+export default DirectoryCard;
+`;
+
+/**
+ * F16 side effect, pinned: the DECLARED case with the same directory root. It
+ * used to take the general cursor walk (because the claim-prefix flag forced it
+ * off the fast path) while the mount still emitted the `oe:r:` range markers,
+ * so its own claim could not consume its own SSR. With the prefix rule scoped
+ * to the TEMPLATE, the directory consumer owns both the marker parse and the
+ * leading-link skip, and the declared case keeps the fast path.
+ */
+const STYLED_DIRECTORY_ID = `${ISLANDS_DIR}/styled-directory-card.tsx`;
+const STYLED_DIRECTORY_SOURCE = `import { defineIslandConfig } from '@openelement/router';
+export const openElement = defineIslandConfig({
+  hydrate: 'idle',
+  root: 'shadow',
+  styles: ['./styled-directory-card.css'],
+});
+function StyledDirectoryCard() {
+  return (
+    <>
+      <div id="sdir-a">a</div>
+      <div id="sdir-b">b</div>
+    </>
+  );
+}
+export default StyledDirectoryCard;
+`;
+
+/**
  * The refresh island. Its root takes props, which M09-1a's lane refuses
  * (`OEIR_GENERATED_ELEMENT_UNDECLARED_PROPS`); it is emitted through the same
  * emitter so the DSD host bytes and the generated recipe stay the real ones.
@@ -114,6 +160,20 @@ interface PageRuntime {
   createGeneratedElementClass: (descriptor: unknown) => CustomElementConstructor;
   StyledElement: CustomElementConstructor;
   StyledCard__ssrHost: (
+    props: unknown,
+    lightChildren?: string,
+    attributes?: readonly (readonly [string, string])[],
+    styleLinks?: readonly string[],
+  ) => string;
+  DirectoryElement: CustomElementConstructor;
+  DirectoryCard__ssrHost: (
+    props: unknown,
+    lightChildren?: string,
+    attributes?: readonly (readonly [string, string])[],
+    styleLinks?: readonly string[],
+  ) => string;
+  StyledDirectoryElement: CustomElementConstructor;
+  StyledDirectoryCard__ssrHost: (
     props: unknown,
     lightChildren?: string,
     attributes?: readonly (readonly [string, string])[],
@@ -146,17 +206,23 @@ async function buildBundle(
   staticModule: string,
   liveModule: string,
   styledModule: string,
+  directoryModule: string,
+  styledDirectoryModule: string,
 ): Promise<BundleResult> {
   const element = join(REPO_ROOT, 'packages/element/src/internal');
   const runtime = join(element, 'compiled/runtime');
   const leafStatic = join(dir, 'static.js');
   const leafLive = join(dir, 'live.js');
   const leafStyled = join(dir, 'styled.js');
+  const leafDirectory = join(dir, 'directory.js');
+  const leafStyledDirectory = join(dir, 'styled-directory.js');
   const shim = join(dir, 'runtime-shim.ts');
   const entry = join(dir, 'entry.ts');
   writeFileSync(leafStatic, staticModule);
   writeFileSync(leafLive, liveModule);
   writeFileSync(leafStyled, styledModule);
+  writeFileSync(leafDirectory, directoryModule);
+  writeFileSync(leafStyledDirectory, styledDirectoryModule);
   writeFileSync(
     shim,
     [
@@ -180,6 +246,8 @@ async function buildBundle(
       `export { default as GeneratedElement, ProfileCard__ssr, ProfileCard__ssrHost } from './static.js';`,
       `export { LiveCard__ssrHost, createLiveCardRecipe } from './live.js';`,
       `export { default as StyledElement, StyledCard__ssrHost } from './styled.js';`,
+      `export { default as DirectoryElement, DirectoryCard__ssrHost } from './directory.js';`,
+      `export { default as StyledDirectoryElement, StyledDirectoryCard__ssrHost } from './styled-directory.js';`,
       `export { createGeneratedElementClass } from ${JSON.stringify(join(element, 'compiled/generated-element/shell.ts'))};`,
       '',
     ].join('\n'),
@@ -304,7 +372,39 @@ beforeAll(async () => {
   expect(styled!.code).toContain(
     'export function StyledCard__ssrHost(props, lightChildren, attributes, styleLinks, nestedHost) {',
   );
-  bundleFile = (await buildBundle(tempDir, staticCompiled!.code, live.module!, styled!.code)).file;
+
+  // F16: the directory root keeps the claim's fast path even without a
+  // `styles` declaration, and the lifted link is skipped by the directory
+  // consumer. The emitted claim must therefore call the M07b pair, not fall
+  // back to the general walk.
+  const directorySite = siteFor(DIRECTORY_ID);
+  const directory = compileGeneratedElementIfAdmitted(DIRECTORY_SOURCE, DIRECTORY_ID, {
+    site: directorySite,
+  });
+  expect(directory).not.toBeNull();
+  expect(directory!.code).toContain(
+    'export function DirectoryCard__ssrHost(props, lightChildren, attributes, styleLinks, nestedHost) {',
+  );
+  expect(directory!.code).toContain('openStaticSiblingDirectory(');
+  expect(directory!.code).toContain('...(styleLinks === undefined ? {} : { styleLinks }),');
+  const styledDirectory = compileGeneratedElementIfAdmitted(
+    STYLED_DIRECTORY_SOURCE,
+    STYLED_DIRECTORY_ID,
+    { site: siteFor(STYLED_DIRECTORY_ID) },
+  );
+  expect(styledDirectory).not.toBeNull();
+  expect(styledDirectory!.code).toContain('openStaticSiblingDirectory(');
+  expect(styledDirectory!.code).toContain('OEIR_LEAF_MISSING_VALUE: styleLinks');
+  bundleFile = (
+    await buildBundle(
+      tempDir,
+      staticCompiled!.code,
+      live.module!,
+      styled!.code,
+      directory!.code,
+      styledDirectory!.code,
+    )
+  ).file;
   browser = await chromium.launch();
 }, 180_000);
 
@@ -651,6 +751,263 @@ describe('M09-2e styled shadow host DSD link prefix (Chromium)', () => {
       expect((result.valid.value ?? '').match(/<link\b/g)?.length).toBe(1);
     } finally {
       await page.close();
+    }
+  });
+});
+
+/**
+ * F16 nested-light lift — an UNSTYLED shadow host's template prefix
+ * (Chromium).
+ *
+ * The runtime lifts a nested LIGHT island's declared sheets into the enclosing
+ * DSD template while it expands the child. That template can therefore begin
+ * with canonical marked `<link>` nodes even when this module declares no
+ * `styles` and carries no class candidate, so the claim must skip the leading
+ * run as a TEMPLATE fact:
+ *
+ *   - the general cursor walk (single-root templates), and
+ *   - the M07b directory consumer (pure static sibling-directory roots).
+ *
+ * The negatives prove the widened skip is still exact: the run is canonical
+ * marked `<link>` nodes only, and anything else at or past the prefix remains
+ * a structural mismatch (no unrelated mismatch is silenced).
+ */
+describe('F16 an unstyled shadow host skips the lifted link prefix (Chromium)', () => {
+  test('the general walk adopts the content after a lifted link and keeps the link', async () => {
+    const page = await openPage();
+    try {
+      const result = await page.evaluate(async () => {
+        const mod = window.__oeVertical;
+        const probe = (window as unknown as { __oeProbe: { attachShadowCalls: number } }).__oeProbe;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        const observe = (
+          window as unknown as {
+            __oeObserve: (target: Node) => { records: MutationRecord[]; stop: () => void };
+          }
+        ).__oeObserve;
+        customElements.define('profile-card', mod.GeneratedElement);
+        // The page module declares no styles; the link is exactly what the
+        // runtime lifts from a nested LIGHT child (`zag-combobox-light`).
+        const hostHtml = mod.ProfileCard__ssrHost(undefined, undefined, undefined, [
+          '/client/assets/lifted-light.css',
+        ]);
+        const frame = document.createElement('div');
+        frame.setHTMLUnsafe(hostHtml);
+        const host = frame.firstElementChild as HTMLElement;
+        const shadow = host.shadowRoot!;
+        const linkBefore = shadow.querySelector('link')!;
+        const panelBefore = shadow.querySelector('#panel')!;
+        const observer = observe(shadow);
+        document.body.append(frame);
+        await tick();
+        observer.stop();
+        return {
+          hostHtml,
+          firstNode:
+            shadow.firstChild?.nodeType === 1 ? (shadow.firstChild as Element).nodeName : '',
+          firstMarker:
+            shadow.firstChild?.nodeType === 1
+              ? (shadow.firstChild as Element).hasAttribute('data-oe-static-styles')
+              : false,
+          mutations: observer.records.length,
+          links: shadow.querySelectorAll('link').length,
+          linkIdentity: shadow.querySelector('link') === linkBefore,
+          href: linkBefore.getAttribute('href'),
+          rel: linkBefore.getAttribute('rel'),
+          panelIdentity: shadow.querySelector('#panel') === panelBefore,
+          panelCount: shadow.querySelectorAll('#panel').length,
+          panelText: shadow.querySelector('#panel')?.textContent ?? null,
+          attachShadowCalls: probe.attachShadowCalls,
+        };
+      });
+      // The producer wrote the lifted link as the template's first node ...
+      expect(result.hostHtml.startsWith('<profile-card')).toBe(true);
+      expect(result.hostHtml).toContain(
+        '<link rel="stylesheet" href="/client/assets/lifted-light.css" data-oe-static-styles />',
+      );
+      expect((result.hostHtml.match(/<link\b/g) ?? []).length).toBe(1);
+      // ... and the claim adopted the content after it, borrowing the link.
+      expect(result.firstNode).toBe('LINK');
+      expect(result.firstMarker).toBe(true);
+      expect(result.mutations).toBe(0);
+      expect(result.links).toBe(1);
+      expect(result.linkIdentity).toBe(true);
+      expect(result.href).toBe('/client/assets/lifted-light.css');
+      expect(result.rel).toBe('stylesheet');
+      expect(result.panelIdentity).toBe(true);
+      expect(result.panelCount).toBe(1);
+      expect(result.panelText).toBe('hello');
+      expect(result.attachShadowCalls).toBe(0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('the directory claim adopts the ranges after a lifted link', async () => {
+    const page = await openPage();
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    try {
+      const result = await page.evaluate(async () => {
+        const mod = window.__oeVertical;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        const observe = (
+          window as unknown as {
+            __oeObserve: (target: Node) => { records: MutationRecord[]; stop: () => void };
+          }
+        ).__oeObserve;
+        customElements.define('directory-card', mod.DirectoryElement);
+        const hostHtml = mod.DirectoryCard__ssrHost(undefined, undefined, undefined, [
+          '/client/assets/lifted-light.css',
+        ]);
+        const frame = document.createElement('div');
+        frame.setHTMLUnsafe(hostHtml);
+        const host = frame.firstElementChild as HTMLElement;
+        const shadow = host.shadowRoot!;
+        const linkBefore = shadow.querySelector('link')!;
+        const aBefore = shadow.querySelector('#dir-a')!;
+        const bBefore = shadow.querySelector('#dir-b')!;
+        const observer = observe(shadow);
+        document.body.append(frame);
+        await tick();
+        observer.stop();
+        return {
+          hostHtml,
+          mutations: observer.records.length,
+          links: shadow.querySelectorAll('link').length,
+          linkIdentity: shadow.querySelector('link') === linkBefore,
+          aIdentity: shadow.querySelector('#dir-a') === aBefore,
+          bIdentity: shadow.querySelector('#dir-b') === bBefore,
+          aCount: shadow.querySelectorAll('#dir-a').length,
+          bCount: shadow.querySelectorAll('#dir-b').length,
+          text: shadow.textContent ?? null,
+        };
+      });
+      // The SSR path really took the marker-prefixed directory shape...
+      expect(result.hostHtml).toContain('data-oe-static-styles');
+      expect(result.hostHtml).toContain('oe:r:0');
+      expect(result.hostHtml).toContain('oe:r:1');
+      // ... and the directory consumer skipped only the leading link.
+      expect(result.mutations).toBe(0);
+      expect(result.links).toBe(1);
+      expect(result.linkIdentity).toBe(true);
+      expect(result.aIdentity).toBe(true);
+      expect(result.bIdentity).toBe(true);
+      expect(result.aCount).toBe(1);
+      expect(result.bCount).toBe(1);
+      expect(result.text).toBe('ab');
+      expect(errors, `the directory claim must not fail closed (${errors.join(' | ')})`).toEqual(
+        [],
+      );
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('a DECLARED directory host keeps the directory fast path and skips its own link', async () => {
+    const page = await openPage();
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    try {
+      const result = await page.evaluate(async () => {
+        const mod = window.__oeVertical;
+        const tick = (window as unknown as { __oeTick: () => Promise<void> }).__oeTick;
+        const observe = (
+          window as unknown as {
+            __oeObserve: (target: Node) => { records: MutationRecord[]; stop: () => void };
+          }
+        ).__oeObserve;
+        customElements.define('styled-directory-card', mod.StyledDirectoryElement);
+        const hostHtml = mod.StyledDirectoryCard__ssrHost(undefined, undefined, undefined, [
+          '/client/assets/styled-directory.css',
+        ]);
+        const frame = document.createElement('div');
+        frame.setHTMLUnsafe(hostHtml);
+        const host = frame.firstElementChild as HTMLElement;
+        const shadow = host.shadowRoot!;
+        const linkBefore = shadow.querySelector('link')!;
+        const aBefore = shadow.querySelector('#sdir-a')!;
+        const bBefore = shadow.querySelector('#sdir-b')!;
+        const observer = observe(shadow);
+        document.body.append(frame);
+        await tick();
+        observer.stop();
+        return {
+          hostHtml,
+          mutations: observer.records.length,
+          links: shadow.querySelectorAll('link').length,
+          linkIdentity: shadow.querySelector('link') === linkBefore,
+          href: linkBefore.getAttribute('href'),
+          aIdentity: shadow.querySelector('#sdir-a') === aBefore,
+          bIdentity: shadow.querySelector('#sdir-b') === bBefore,
+          text: shadow.textContent ?? null,
+        };
+      });
+      expect(result.hostHtml).toContain(
+        '<link rel="stylesheet" href="/client/assets/styled-directory.css" data-oe-static-styles />',
+      );
+      expect(result.hostHtml).toContain('oe:r:0');
+      expect(result.hostHtml).toContain('oe:r:1');
+      expect(result.mutations).toBe(0);
+      expect(result.links).toBe(1);
+      expect(result.linkIdentity).toBe(true);
+      expect(result.href).toBe('/client/assets/styled-directory.css');
+      expect(result.aIdentity).toBe(true);
+      expect(result.bIdentity).toBe(true);
+      expect(result.text).toBe('ab');
+      expect(errors, `the declared directory claim must not fail (${errors.join(' | ')})`).toEqual(
+        [],
+      );
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('a prefix that is not the canonical marked-link run still fails closed', async () => {
+    for (const [name, mutate] of [
+      // The marker is what makes a leading link borrowed delivery markup; a
+      // plain link is authored content the claim never had.
+      ['unmarked leading link', (html: string) => html.replace(' data-oe-static-styles', '')],
+      // A marked link PAST the prefix is not swallowed: the content walk sees
+      // it where the authored tree ends and reports the extra node.
+      [
+        'marked link after the first element',
+        (html: string) =>
+          html.replace(
+            '<p id="panel">hello</p>',
+            '<p id="panel">hello</p><link rel="stylesheet" href="/client/assets/late.css" data-oe-static-styles />',
+          ),
+      ],
+    ] as const) {
+      const page = await openPage();
+      const errors: string[] = [];
+      page.on('pageerror', (error) => errors.push(error.message));
+      try {
+        const hostHtml = await page.evaluate(() =>
+          window.__oeVertical.ProfileCard__ssrHost(undefined, undefined, undefined, [
+            '/client/assets/lifted-light.css',
+          ]),
+        );
+        const html = mutate(hostHtml);
+        expect(html, `${name}: the fixture mutation must apply`).not.toBe(hostHtml);
+        await page.evaluate(async (mutated: string) => {
+          const mod = window.__oeVertical;
+          customElements.define('profile-card', mod.GeneratedElement);
+          const frame = document.createElement('div');
+          frame.setHTMLUnsafe(mutated);
+          document.body.append(frame);
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }, html);
+        await page.waitForTimeout(50);
+        // Both claim forms report their own identity text: the general walk
+        // says "expected element …"/"extra node", the directory consumer says
+        // "static-seed: interior length …". Either way the row fails closed.
+        expect(errors.join('\n'), `${name}: claim must fail closed`).toMatch(
+          /expected element .* at \/0|mismatch|extra node|interior length/i,
+        );
+      } finally {
+        await page.close();
+      }
     }
   });
 });

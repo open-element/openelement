@@ -55,6 +55,7 @@ import {
   RUNTIME_MESSAGES_ENABLED,
   RuntimeErrorCode,
 } from '@openelement/protocol/errors';
+import { STATIC_STYLES_MARKER } from '@openelement/protocol/part-program';
 import type { LifetimeScope } from '../lifetime-scope.ts';
 import {
   recordOwnerCreated,
@@ -282,6 +283,38 @@ function rejectNestedMarker(node: Node, source: string): void {
 }
 
 /**
+ * The number of LEADING canonical marked stylesheet `<link>` nodes a claim
+ * parent delivers before its authored content (M09-2e / #1803; F16 nested-light
+ * lift).
+ *
+ * A claim parent that is a ShadowRoot is a parser-adopted DSD template. The
+ * runtime prefixes that template with the marked links it owns: the module's
+ * own declared sheets, plus — when a nested LIGHT child is expanded into the
+ * same template — that child's lifted sheets. Those nodes are borrowed
+ * delivery markup, never static-directory content, so the directory parse
+ * starts after the run. The predicate is the emitted claim walk's own
+ * (`nodeName === "LINK"` carrying the marker): a marked `<style>`, an unmarked
+ * `<link>`, or a marked link past the run is NOT prefix and stays the
+ * structural mismatch it always was.
+ *
+ * Scoped to the claim ROOT: an element directory's first child is never a
+ * style link, so no other parent skips anything.
+ */
+function leadingStyleLinkCount(parent: StaticSiblingDirectoryParent): number {
+  if (!isClaimParentShadowRoot(parent)) return 0;
+  const children = parent.childNodes;
+  let count = 0;
+  for (;;) {
+    const node = count < children.length ? childAt(children, count) : null;
+    if (node === null || node.nodeType !== 1) return count;
+    const element = node as Element;
+    if (element.nodeName !== 'LINK') return count;
+    if (!element.hasAttribute(STATIC_STYLES_MARKER)) return count;
+    count += 1;
+  }
+}
+
+/**
  * The parent must be only sibling ranges. Ordinals are strictly increasing.
  * Every ordinal `>= requiredFrom` (the unconsumed suffix) must be present.
  * The start slot must carry the start spelling `oe:r:<n>`; an end marker
@@ -297,7 +330,9 @@ function parseDirectory(
   source: string,
   requiredFrom: number,
 ): ParsedRange[] {
-  const children = childrenOf(parent);
+  const all = childrenOf(parent);
+  const skip = leadingStyleLinkCount(parent);
+  const children = skip === 0 ? all : all.slice(skip);
   const ranges: ParsedRange[] = [];
   let index = 0;
   let previous = -1;

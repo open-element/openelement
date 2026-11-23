@@ -6717,12 +6717,16 @@ function emitClaimFunction(
     push(state, `const ${rootAdoptedVar} = [];`);
   }
   const rootDirectory = staticElementDirectory(component.roots);
-  // M09-2e / #1803: a styled shadow host's DSD template prefixes the claimed
-  // content with canonical marked links, and the static sibling directory
-  // consumer parses the parent from its first child. The styled root claim
-  // therefore uses the general cursor walk (which skips that prefix) instead of
-  // the directory fast path; the admissibility of the shape is unchanged.
-  if (!useShared && rootDirectory !== null && !state.claimStyleLinkPrefix) {
+  // M09-2e / #1803 + F16: a DSD template may PREFIX its claimed content with
+  // canonical marked stylesheet links — this module's own declared sheets, or a
+  // nested LIGHT child's sheets the runtime lifted into the template. Both claim
+  // forms skip exactly that leading run: the general cursor walk below, and the
+  // directory consumer (`openStaticSiblingDirectory`), whose parse starts after
+  // the run when the claim parent is the ShadowRoot. The prefix is a property of
+  // the TEMPLATE, never of this module's styling declaration, so the directory
+  // fast path stays available for every root shape and the admissibility of the
+  // shape is unchanged.
+  if (!useShared && rootDirectory !== null) {
     for (const interior of emitClaimedDirectory(state, CLAIM_PARENT, rootDirectory)) {
       push(state, `${rootAdoptedVar}.push(${interior});`);
     }
@@ -6730,10 +6734,13 @@ function emitClaimFunction(
     emitClaimHtmlNamespace(state, CLAIM_PARENT, '/', component.span);
     const rootCursor = nextName(state, 'cursor');
     if (state.claimStyleLinkPrefix) {
-      // D-claim-prefix (M09-2e / #1803): a shadow host's DSD template declares
-      // its stylesheets as canonical marked `<link>` nodes BEFORE the authored
-      // content. They are borrowed server DOM: the claim adopts the authored
-      // nodes after them and never writes, moves or duplicates a link.
+      // D-claim-prefix (M09-2e / #1803, widened by F16): a DSD template may
+      // declare canonical marked `<link>` nodes BEFORE the authored content —
+      // this module's own sheets, or a nested LIGHT child's lifted sheets. They
+      // are borrowed server DOM: the claim adopts the authored nodes after them
+      // and never writes, moves or duplicates a link. The skip is exactly the
+      // marked-LINK run; an unmarked link, a marked non-link, or a marked link
+      // anywhere past the run stays a structural mismatch.
       const startVar = nextName(state, 'claimStart');
       push(state, `let ${startVar} = ${CLAIM_PARENT}.firstChild;`);
       push(
@@ -9621,13 +9628,15 @@ export function generateLeafModule(
      */
     readonly rootInstance?: string;
     /**
-     * M09-2e / #1803 compiler-private claim-prefix marker: `true` when the
-     * generated-element lane read a `styles` declaration from the same authored
-     * sidecar (shadow root only), so this module's DSD template prefixes its
-     * claimed content with the canonical marked stylesheet links. The ROOT claim
-     * then skips exactly that leading marked <link> prefix — borrowed server
-     * DOM, never deleted, re-written or duplicated. Omitted keeps every byte of
-     * the pre-slice claim unchanged.
+     * M09-2e / #1803 compiler-private claim-prefix marker, widened by F16: `true`
+     * when this module has a DSD template root (every shadow descriptor), so its
+     * claimed content can be prefixed with canonical marked stylesheet links —
+     * its own declared sheets, and a nested LIGHT child's sheets the runtime
+     * lifted into this template. The ROOT claim (either form: the general cursor
+     * walk or the M07b directory consumer) then skips exactly that leading
+     * marked <link> run — borrowed server DOM, never deleted, re-written or
+     * duplicated. A LIGHT root has no template and keeps the pre-slice claim
+     * bytes.
      */
     readonly claimStyleLinkPrefix?: boolean;
     /**
