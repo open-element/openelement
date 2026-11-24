@@ -73,9 +73,25 @@ export function attributeValueOf(value: unknown): string | null {
 
 /** The value an HTML option exposes when its value attribute is absent. */
 export function selectOptionValue(value: unknown): string {
-  return displayValue(value)
-    .replace(/[\t\n\f\r ]+/g, ' ')
-    .replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, '');
+  const text = displayValue(value);
+  const segments: string[] = [];
+  let segmentStart = 0;
+
+  // Scan UTF-16 code units once, recognizing only HTML ASCII whitespace.
+  // Slicing non-whitespace runs and joining them with one space trims both
+  // ends and collapses each run without a regular expression.
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index);
+    const isHtmlAsciiWhitespace =
+      code === 0x09 || code === 0x0a || code === 0x0c || code === 0x0d || code === 0x20;
+    if (!isHtmlAsciiWhitespace) continue;
+
+    if (segmentStart < index) segments.push(text.slice(segmentStart, index));
+    segmentStart = index + 1;
+  }
+
+  if (segmentStart < text.length) segments.push(text.slice(segmentStart));
+  return segments.join(' ');
 }
 
 /** Whether one option is selected by a controlled select value. */
