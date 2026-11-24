@@ -36,9 +36,10 @@ import {
 import { parseDiagnosticReport } from '@openelement/protocol/diagnostics';
 
 const MIGRATION_HINT =
-  'static styles must array the module\'s .css file imports; "`…`" is not an array of sheet ' +
-  "imports — write the sheet to a .css file, import it (`import sheet from './<component>.css'`) " +
-  'and array the binding in static styles; inline sheet strings are retired (#1558)';
+  '[openElement] defineIslandConfig() styles must be an array of relative .css specifiers ' +
+  '(styles: ["./island.css"]). Write styles: [\'./island.css\'] — one or more relative .css ' +
+  'files, resolved against the island module by the build and emitted through the existing ' +
+  'style plan.';
 
 function reportText(options: {
   ok: boolean;
@@ -96,7 +97,7 @@ function docsFetch(page: { status: number; body: string } | 'unreachable'): type
   return respond as unknown as typeof fetch;
 }
 
-const DOCS_PAGE_WITH_CODE = `<html><body><div id="${AGENT_ROUND_CODE}">OEC9029</div></body></html>`;
+const DOCS_PAGE_WITH_CODE = `<html><body><div id="${AGENT_ROUND_CODE}">${AGENT_ROUND_CODE}</div></body></html>`;
 
 /**
  * The packed build CLI's behaviour, faked at the process boundary: the first
@@ -115,7 +116,7 @@ function fakeBuildCli(appDir: string, options: { repaired?: 'clean' | 'fails' | 
     if (calls === 1) {
       await mkdir(join(appDir, '.openElement'), { recursive: true });
       await writeFile(reportPath, reportText({ ok: false }));
-      return { success: false, output: 'build failed: OEC9029' };
+      return { success: false, output: 'build failed: refused style shape' };
     }
     if (options.repaired === 'fails') {
       await mkdir(join(appDir, '.openElement'), { recursive: true });
@@ -149,19 +150,19 @@ test('the round trip completes from the envelope and a resolving docs page', asy
   });
 
   expect(transcript.failureCode).toBe(AGENT_ROUND_CODE);
-  expect(transcript.fixHint).toContain('static styles');
+  expect(transcript.fixHint).toContain('styles');
+  expect(transcript.fixHint).toContain('style plan');
   expect(transcript.docs.status).toBe('resolved');
   expect(transcript.docs.url).toBe(`https://openelement.org/errors#${AGENT_ROUND_CODE}`);
   expect(transcript.brokenBuildFailed).toBe(true);
   expect(transcript.fixedBuildClean).toBe(true);
   expect(transcript.deliveredRule).toContain('index.html');
 
-  // The applied fix is the admitted form: a real sheet, default-imported and
-  // arrayed — and the retired inline string is gone.
+  // The applied fix is the admitted form: a real .css sheet beside the module,
+  // arrayed as the sidecar's styles specifier — and the inline string is gone.
   const component = await readFile(join(appDir, AGENT_PROBE_COMPONENT), 'utf8');
-  expect(component).toContain("import agentProbeCardSheet from './agent-probe-card.css';");
-  expect(component).toContain('static override styles = [agentProbeCardSheet];');
-  expect(component).not.toContain('static override styles = `');
+  expect(component).toContain("styles: ['./agent-probe-card.css']");
+  expect(component).not.toContain('styles: `');
   expect(existsSync(join(appDir, AGENT_PROBE_SHEET))).toBe(true);
   expect(lines.join('\n')).toContain('docs page resolved');
 });
@@ -174,7 +175,10 @@ test('an envelope without the fix hint fails the round', async () => {
     const reportPath = join(appDir, '.openElement', 'agent-round-diagnostics.json');
     await writeFile(
       reportPath,
-      reportText({ ok: false, message: 'static styles is not an array of sheet imports' }),
+      reportText({
+        ok: false,
+        message: 'defineIslandConfig() styles must be an array of .css specifiers',
+      }),
     );
     return result;
   };
@@ -209,7 +213,7 @@ test('a docs page that resolves without the code fails the round', async () => {
       log: () => {},
       fetchImpl: docsFetch({ status: 200, body: '<html><body>no codes here</body></html>' }),
     }),
-  ).rejects.toThrow(/does not document OEC9029/);
+  ).rejects.toThrow(/does not document OE_ISLAND_DESCRIPTOR_SHAPE/);
 });
 
 test('an unreachable docs origin fails by default and is a loud skip when asked', async () => {
@@ -283,8 +287,9 @@ test('the broken write is the refused style-source form', async () => {
   const appDir = await tempApp();
   await breakAppWithRefusedStyleSource(appDir);
   const component = await readFile(join(appDir, AGENT_PROBE_COMPONENT), 'utf8');
-  expect(component).toContain('static override styles = `');
-  expect(component).toContain("@element('agent-probe-card', { root: 'light' })");
+  expect(component).toContain('styles: `');
+  expect(component).toContain("root: 'shadow'");
+  expect(component).toContain('defineIslandConfig({');
   expect(existsSync(join(appDir, 'app/routes/agent-probe.tsx'))).toBe(true);
 });
 
@@ -293,18 +298,20 @@ test('qualifyBrokenBuildFailure rejects a clean report and an unrelated code', (
   expect(() => qualifyBrokenBuildFailure(clean)).toThrow(/built clean/);
 
   const unrelated = parseDiagnosticReport(reportText({ ok: false, code: 'OEC9013' }));
-  expect(() => qualifyBrokenBuildFailure(unrelated)).toThrow(/reported no OEC9029/);
+  expect(() => qualifyBrokenBuildFailure(unrelated)).toThrow(
+    /reported no OE_ISLAND_DESCRIPTOR_SHAPE/,
+  );
 
   const qualified = qualifyBrokenBuildFailure(parseDiagnosticReport(reportText({ ok: false })));
   expect(qualified.diagnostic.code).toBe(AGENT_ROUND_CODE);
-  expect(qualified.fixHint).toContain('#1558');
+  expect(qualified.fixHint).toContain('style plan');
 });
 
 test('the fix hint may ride the envelope hint field instead of the message', () => {
   const report = parseDiagnosticReport(
-    reportText({ ok: false, message: 'static styles is not an array', hint: MIGRATION_HINT }),
+    reportText({ ok: false, message: 'styles must be an array', hint: MIGRATION_HINT }),
   );
-  expect(qualifyBrokenBuildFailure(report).fixHint).toContain('static styles');
+  expect(qualifyBrokenBuildFailure(report).fixHint).toContain('style plan');
 });
 
 test('docs failures name external unavailability separately from a candidate defect', async () => {
@@ -422,7 +429,7 @@ test('a repaired build that still reports the failure code is rejected', async (
       log: () => {},
       fetchImpl: docsFetch({ status: 200, body: DOCS_PAGE_WITH_CODE }),
     }),
-  ).rejects.toThrow(/still reported OEC9029/);
+  ).rejects.toThrow(/still reported OE_ISLAND_DESCRIPTOR_SHAPE/);
 });
 
 test('AgentRoundError keeps its name for gate diagnostics', () => {

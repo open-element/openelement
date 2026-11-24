@@ -46,49 +46,44 @@ function example(code: string, file = 'www/content/docs/guide/fixture.md'): Cont
   return { file, index: serial, lang: 'tsx', code };
 }
 
-/** The D4 shape from the base-SHA form-actions recipe (branch text interpolation). */
-const D4_BRANCH_TEXT = `import { element, OpenElement, property } from '@openelement/element';
+/** The D4 shape (branch text interpolation): the generated lane refuses it. */
+const D4_BRANCH_TEXT = `import { defineIslandConfig } from '@openelement/router';
 
-@element('contact-page')
-export default class ContactPage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  error = '';
+export const openElement = defineIslandConfig({ tag: 'contact-page', root: 'shadow' });
 
-  render() {
-    return (
-      <main>
-        <h1>contact</h1>
-        {this.error ? <p role='alert'>{this.error}</p> : <span></span>}
-      </main>
-    );
-  }
+export default function ContactPage(props: { error: string }) {
+  return (
+    <main>
+      <h1>contact</h1>
+      {props.error ? 'has errors' : 'no errors'}
+    </main>
+  );
 }
 `;
 
 /** The compiled working shape the router fixtures use: static branch text. */
-const STATIC_BRANCH_TEXT = `import { element, OpenElement, property } from '@openelement/element';
+const STATIC_BRANCH_TEXT = `import { defineIslandConfig } from '@openelement/router';
+import { signal } from '@openelement/element';
 
-@element('contact-page')
-export default class ContactPage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  error = '';
+export const openElement = defineIslandConfig({ tag: 'contact-page', root: 'shadow' });
 
-  render() {
-    return (
-      <main>
-        <h1>contact</h1>
-        {this.error ? <p role='alert' data-message={this.error}>Please fix the errors above.</p> : <span></span>}
-      </main>
-    );
-  }
+export default function ContactPage() {
+  const error = signal('');
+
+  return (
+    <main>
+      <h1>contact</h1>
+      {error.value ? <p role='alert'>Please fix the errors above.</p> : <span></span>}
+    </main>
+  );
 }
 `;
 
 test('the D4 branch-text recipe is caught red with the compiler diagnostic', () => {
   const failures = compileExample(example(D4_BRANCH_TEXT));
   expect(failures.length).toBeGreaterThan(0);
-  expect(failures[0]!.message).toContain('OEC9012');
-  expect(failures[0]!.message).toContain('a branch cannot interpolate text');
+  expect(failures[0]!.message).toContain('OEC9042');
+  expect(failures[0]!.message).toContain('a conditional branch must be JSX or null');
   expect(failures[0]!.file).toContain('fixture.md');
 });
 
@@ -98,18 +93,19 @@ test('the working static-branch-text shape compiles clean', () => {
 
 test('an island config sidecar is admitted exactly like the real build', () => {
   const island = `import { defineIslandConfig } from '@openelement/router';
-import { element, OpenElement, property } from '@openelement/element';
+import { signal } from '@openelement/element';
 
-export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true, dsd: true });
+export const openElement = defineIslandConfig({
+  tag: 'hello-counter',
+  hydrate: 'idle',
+  ssr: true,
+  dsd: true,
+});
 
-@element('hello-counter')
-export default class HelloCounter extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  count = 0;
+export default function HelloCounter() {
+  const count = signal(0);
 
-  render() {
-    return <button type='button'>{this.count}</button>;
-  }
+  return <button type='button'>{count.value}</button>;
 }
 `;
   expect(compileExample(example(island))).toEqual([]);
@@ -147,7 +143,7 @@ test('the documented-rejection exclusion matches the absolute paths the content 
 test('compileExamples runs every fence it is given and aggregates the failures', () => {
   const failures = compileExamples([example(D4_BRANCH_TEXT), example(STATIC_BRANCH_TEXT)]);
   expect(failures.length).toBeGreaterThan(0);
-  expect(failures.every((failure) => failure.message.includes('OEC9012'))).toBe(true);
+  expect(failures.every((failure) => failure.message.includes('OEC9042'))).toBe(true);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -258,7 +258,7 @@ test('A6 contract: the router seeds every renderable declaration, page reference
   expect(
     discovery,
     "the walk must register the reached module's authored .css edges for emission",
-  ).toMatch(/registerStyleEdges\(file, compiled\.styleRequests/);
+  ).toMatch(/registerStyleEdges\(file, artifact\.requests, artifact\.scopeTag\)/);
 });
 
 test('A6 anchoring: the written seam contract this disposition rests on', () => {
