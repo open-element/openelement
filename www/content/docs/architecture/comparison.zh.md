@@ -94,7 +94,8 @@ OpenElement × Supabase × Cloudflare 是第一方全栈交付路径，所有权
 | 搜索索引             | 每个语言 38 页（en、zh），76 个 fragment，1.8 MiB |
 
 ```bash
-vp run site:build                         # 先重新生成以下全部内容
+# 先重新生成以下全部内容。
+vp run site:build
 find www/dist -name '*.html' | wc -l        # 78
 grep -c '<loc>' www/dist/sitemap.xml        # 76
 find www/dist -type f -exec wc -c {} + | tail -1   # 合计 13,661,337 B（上表字节总和）

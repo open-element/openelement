@@ -96,7 +96,8 @@ Numbers measured on 2026-11-24 from the docs site's own build (`www/dist`, built
 | Search index           | 38 pages per locale (en, zh), 76 fragments, 1.8 MiB |
 
 ```bash
-vp run site:build                         # regenerate everything below first
+# Regenerate everything below first.
+vp run site:build
 find www/dist -name '*.html' | wc -l        # 78
 grep -c '<loc>' www/dist/sitemap.xml        # 76
 find www/dist -type f -exec wc -c {} + | tail -1   # 13,661,337 B total (the byte sum above)
