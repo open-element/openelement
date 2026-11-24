@@ -28,6 +28,17 @@
  */
 
 import { frameworkError, OpenElementError } from '@openelement/protocol/errors';
+import { DATA_OE_LIGHT } from '@openelement/protocol/part-program';
+// The ONE fact for runtime-managed host attributes (P6/P8). The compiled
+// hydration executor already exempts these names from its drift check; the
+// generated-leaf claim of a nested custom-element host must use the SAME fact,
+// or the C-1 defect class returns as a fourth hand-written list. The leaf is
+// DOM-free (it only names strings), so importing it here cannot pull the shell
+// or the executor into a generated island chunk.
+import {
+  DATA_OE_LIGHT_PROJECTION,
+  GENERATED_RUNTIME_ONLY_ATTRIBUTES,
+} from '../generated-element/runtime-only-host-attributes.ts';
 import { LIST_KEY_UNSUPPORTED } from './list-key.ts';
 import {
   parseEachMarker,
@@ -107,6 +118,22 @@ export function leafRuntimeError(
   return frameworkError(code, locatedDetail(detail, origin), { phase: 'csr' });
 }
 
+/** Internal identity for caller-owned content projected through a light root. */
+const LIGHT_SLOT_PROJECTION_UNSUPPORTED = 'OEIR_LEAF_UNSUPPORTED_LIGHT_SLOT_PROJECTION';
+
+/**
+ * The current generated-light contract gives the child's template and the
+ * caller's authored children different owners. The SSR renderer can place the
+ * bytes correctly, but neither claim path can safely adopt the shared region.
+ */
+function unsupportedLightSlotProjectionClaim(origin?: ClaimOrigin): OpenElementError {
+  return leafRuntimeError(
+    LIGHT_SLOT_PROJECTION_UNSUPPORTED,
+    'caller content under a generated light root cannot be claimed interactively because the projected nodes cross parent and child ownership; use a shadow-root child with native slots or keep this composition non-interactive',
+    origin,
+  );
+}
+
 export function leafClaimMismatch(detail: string, origin?: ClaimOrigin): OpenElementError {
   return new OpenElementError(`${LEAF_CLAIM_MISMATCH}: ${locatedDetail(detail, origin)}`, {
     code: LEAF_CLAIM_MISMATCH,
@@ -171,6 +198,70 @@ export function assertStaticAttributeSeed(
 ): void {
   const reason = staticAttributeSeedMismatch(element, declared, dynamicNames);
   if (reason !== null) throw leafClaimMismatch(`${reason} at ${where}`, origin);
+}
+
+/**
+ * The static attribute seed of a NESTED custom-element host.
+ *
+ * A nested host's live tag carries two families:
+ *
+ *   1. the attributes the PARENT template authored — the parent's static seed and
+ *      its dynamic slots, exactly as for an intrinsic element; and
+ *   2. attributes the CHILD's own runtime/serializer manages: the server's
+ *      light-root ownership marker, the theme broadcaster's mirror (written at the
+ *      child's OWN connect, which under chunked island loading can precede the
+ *      parent's upgrade), and the child's JSON prop seed.
+ *
+ * Family 2 is not server drift and never part of the parent's seed, so the same
+ * check as {@linkcode assertStaticAttributeSeed} runs with those names excluded.
+ * The names are the ONE runtime-only fact
+ * ({@linkcode GENERATED_RUNTIME_ONLY_ATTRIBUTES}) the compiled hydration executor
+ * already consumes; the scoping is identical — it applies only to a
+ * custom-element host, which is why this function exists separately from the
+ * intrinsic-element rule. A name the template itself declares static is NOT
+ * excluded: an authored value keeps the exact check (the runtime-only set names
+ * child state, not an authored row).
+ *
+ * Strictness is unchanged for everything the parent did author: a missing or
+ * reordered static attribute, a wrong value, or an extra NON-runtime attribute
+ * still reports the same `OEIR_LEAF_CLAIM_MISMATCH`.
+ */
+export function assertNestedHostStaticAttributeSeed(
+  element: Element,
+  declared: readonly DeclaredStaticAttribute[],
+  where: string,
+  dynamicNames: readonly string[] = [],
+  origin?: ClaimOrigin,
+): void {
+  const authoredStatic = new Set(declared.map((entry) => entry.name.toLowerCase()));
+  const runtimeOnly = [...GENERATED_RUNTIME_ONLY_ATTRIBUTES].filter(
+    (name) => !authoredStatic.has(name.toLowerCase()),
+  );
+  assertStaticAttributeSeed(element, declared, where, [...dynamicNames, ...runtimeOnly], origin);
+}
+
+/**
+ * True when a nested custom-element host owns its light subtree.
+ *
+ * The server's light-root ownership marker (`data-oe-light`, written by the DSD
+ * serializer for a light-root host) is the ONE fact saying this element's
+ * children are the CHILD element's generated region, not children the parent
+ * template authored: a nested light-root component has no shadow root to hold
+ * its content, so its children land in the parent's tree but belong to the
+ * child's claim. The parent's claim must therefore consume that interior
+ * opaquely (see the generated element claim) instead of walking it.
+ *
+ * The projection marker names an unsupported cross-owner claim. It is checked
+ * here so generated modules keep using the established runtime helper surface;
+ * the same predicate is called by the generated shell and parent claim.
+ * Without the light-root marker there is no child-owned subtree, so a foreign
+ * node inside a non-light host still reaches the parent's strict claim check.
+ */
+export function isExpandedLightRootHost(element: Element): boolean {
+  if (element.hasAttribute(DATA_OE_LIGHT_PROJECTION)) {
+    throw unsupportedLightSlotProjectionClaim();
+  }
+  return element.hasAttribute(DATA_OE_LIGHT);
 }
 
 /**

@@ -32,9 +32,15 @@
  *   and the commit cannot resurrect the released entries;
  * - disposed owner/entry are never reused, and the release paths still clean
  *   their bookkeeping (so a stale structural index cannot evict a newer entry);
- * - nested ledgers: a retained child scope is its own owner, and owner teardown
- *   cleans grandchild resources through the `LifetimeScope` cascade (this
- *   module performs NO cross-ledger sweep, by contract);
+ * - nested ledgers and the cross-ledger transaction (depth >= 2, 2026-11-21): a
+ *   retained child scope is its own owner; a child body that retains its own
+ *   children JOINS the root's transaction (`joinInstancePass`) and never
+ *   commits; the root commits members shallow-first and aborts them
+ *   deepest-first, so an aborted attempt leaves pre-existing entries intact and
+ *   evicts exactly what each pass created; evicting an entry recursively
+ *   releases that scope's ledger; owner teardown closes joined passes and
+ *   releases the whole subtree; a joined pass cannot be ended/aborted on its
+ *   own and a closed token cannot be joined;
  * - end-sweep cleanup errors: every swept scope is disposed, then the first
  *   error surfaces and the pass is already closed;
  * - owner-teardown release (`releaseRetainedChildren`): every entry is released
@@ -42,9 +48,10 @@
  *   no-ops, the first cleanup error surfaces once after every cleanup ran, and
  *   retention on the disposed owner still fails closed.
  *
- * NON-CLAIMS: this is a runtime prerequisite only. Nested retention is not
- * wired by this slice, no compiler/shell/emitter text or descriptor is
- * exercised, and nothing here is 16b-LC / §4.1d / M09 exit evidence.
+ * NON-CLAIMS: this is the runtime half of depth >= 2 retention. The compiler's
+ * eligibility/emission and the browser characterization live in
+ * `generated-element.root-instance.*`; nothing here is M12/M13/M14 or P5
+ * evidence, and no §4.1d subtree contract is claimed.
  */
 
 import { expect, test } from 'vitest';
@@ -55,6 +62,7 @@ import {
   beginInstancePass,
   endInstancePass,
   INSTANCE_LEDGER_DUPLICATE,
+  joinInstancePass,
   INSTANCE_LEDGER_REENTRANT,
   INSTANCE_LEDGER_ROLLBACK,
   INSTANCE_LEDGER_STATE,
@@ -636,8 +644,9 @@ test('nested ledgers: a retained child owns its ledger and teardown cascades res
   endInstancePass(child.scope);
   expect(grandchild.scope.disposed).toBe(false);
 
-  // The parent abort evicts only the child entry; the grandchild ledger is NOT
-  // walked — its resources are released by the LifetimeScope cascade.
+  // The parent abort evicts the child entry and, through the recursive
+  // release, the child's own ledger — so the grandchild's cleanups run exactly
+  // once instead of waiting for a GC/cascade accident.
   abortInstancePass(owner);
   expect(child.scope.disposed).toBe(true);
   expect(childCleanups).toBe(1);
@@ -1065,4 +1074,123 @@ test('releaseRetainedChildren then a disposed owner keeps retention failing clos
     }),
   );
   expect(refused.code).toBe(KernelErrorCode.DISPOSED);
+});
+
+// ---- cross-ledger transaction (depth >= 2, 2026-11-21) --------------------
+
+/** Root pass + joined child pass + one grandchild retained on the child. */
+function committedChain(owner: LifetimeScope) {
+  let childSetups = 0;
+  let grandSetups = 0;
+  let grandCleanups = 0;
+  const token = beginInstancePass(owner);
+  const child = retainChildInstance(owner, 'child', null, () => {
+    childSetups += 1;
+    return { depth: 1 };
+  });
+  joinInstancePass(child.scope, token);
+  const grand = retainChildInstance(child.scope, 'grand', null, (scope) => {
+    grandSetups += 1;
+    scope.add(() => grandCleanups++);
+    return { depth: 2 };
+  });
+  return {
+    token,
+    child,
+    grand,
+    counts: () => ({ childSetups, grandSetups, grandCleanups }),
+  };
+}
+
+test('transaction: a joined child pass commits with the root and reuses its entries', () => {
+  const owner = new LifetimeScope();
+  const first = committedChain(owner);
+  endInstancePass(owner);
+  expect(first.counts()).toEqual({ childSetups: 1, grandSetups: 1, grandCleanups: 0 });
+  expect(first.child.scope.disposed).toBe(false);
+  expect(first.grand.scope.disposed).toBe(false);
+
+  // A reconnect attempt joins again and reuses BOTH entries: setup stays once.
+  const second = committedChain(owner);
+  expect(second.child.scope).toBe(first.child.scope);
+  expect(second.grand.scope).toBe(first.grand.scope);
+  endInstancePass(owner);
+  // The reconnect attempt re-ran NO setup: both records were reused.
+  expect(second.counts()).toEqual({ childSetups: 0, grandSetups: 0, grandCleanups: 0 });
+  expect(first.counts()).toEqual({ childSetups: 1, grandSetups: 1, grandCleanups: 0 });
+  owner.dispose();
+});
+
+test('transaction: parent abort keeps pre-existing child/grandchild and evicts only created entries', () => {
+  const owner = new LifetimeScope();
+  const first = committedChain(owner);
+  endInstancePass(owner);
+
+  const token = beginInstancePass(owner);
+  const child = retainChildInstance(owner, 'child', null, () => ({}));
+  joinInstancePass(child.scope, token);
+  const grand = retainChildInstance(child.scope, 'grand', null, () => ({}));
+  const created = retainChildInstance(child.scope, 'grand-created', null, () => ({}));
+  abortInstancePass(owner);
+
+  // Pre-existing entries survive with their setup records; the entry created by
+  // the aborted attempt is evicted, and the child pass is closed (no sweep).
+  expect(child.scope).toBe(first.child.scope);
+  expect(grand.scope).toBe(first.grand.scope);
+  expect(child.scope.disposed).toBe(false);
+  expect(grand.scope.disposed).toBe(false);
+  expect(created.scope.disposed).toBe(true);
+  expect(thrownBy(() => endInstancePass(owner))).toBeDefined();
+  owner.dispose();
+});
+
+test('transaction: the joined child pass sweeps its own unreached grandchild on root commit', () => {
+  const owner = new LifetimeScope();
+  const first = committedChain(owner);
+  endInstancePass(owner);
+
+  const token = beginInstancePass(owner);
+  const child = retainChildInstance(owner, 'child', null, () => ({}));
+  joinInstancePass(child.scope, token);
+  // The grandchild is structurally absent this attempt: not retained.
+  endInstancePass(owner);
+
+  // The child survives, its own pass swept the grandchild (commit, not abort).
+  expect(child.scope.disposed).toBe(false);
+  expect(first.grand.scope.disposed).toBe(true);
+  expect(first.counts().grandCleanups).toBe(1);
+  owner.dispose();
+});
+
+test('transaction: a joined pass cannot be ended/aborted by the child, and a closed token is refused', () => {
+  const owner = new LifetimeScope();
+  const token = beginInstancePass(owner);
+  const child = retainChildInstance(owner, 'child', null, () => ({}));
+  joinInstancePass(child.scope, token);
+
+  expect(codedFailure(() => endInstancePass(child.scope)).code).toBe(INSTANCE_LEDGER_STATE);
+  expect(codedFailure(() => abortInstancePass(child.scope)).code).toBe(INSTANCE_LEDGER_STATE);
+  expect(codedFailure(() => beginInstancePass(child.scope)).code).toBe(INSTANCE_LEDGER_STATE);
+  endInstancePass(owner);
+
+  // The transaction is closed: a delayed child body must not open a pass.
+  expect(codedFailure(() => joinInstancePass(child.scope, token)).code).toBe(INSTANCE_LEDGER_STATE);
+  owner.dispose();
+});
+
+test('transaction: owner teardown closes the open joined pass and releases the whole subtree', () => {
+  const owner = new LifetimeScope();
+  const chain = committedChain(owner); // not committed: the transaction is open
+  releaseRetainedChildren(owner);
+
+  expect(chain.child.scope.disposed).toBe(true);
+  expect(chain.grand.scope.disposed).toBe(true);
+  expect(chain.counts().grandCleanups).toBe(1);
+  // Idempotent, and the child ledger is gone with the subtree.
+  releaseRetainedChildren(owner);
+  expect(chain.counts().grandCleanups).toBe(1);
+  expect(
+    codedFailure(() => retainChildInstance(chain.child.scope, 'late', null, () => ({}))).code,
+  ).toBe(KernelErrorCode.DISPOSED);
+  owner.dispose();
 });

@@ -50,7 +50,16 @@ export abstract class FNodeBase {
     return node;
   }
 
-  insertBefore(node: FNode, reference: FNode): FNode {
+  /**
+   * DOM-spec shape: a null reference appends, and `insertBefore(node, node)` is
+   * a no-op. The generated keyed list emits exactly these two cases (a move's
+   * captured `nextSibling` can be null, and a node can be asked to stay put), so
+   * the counting DOM must answer them the way the platform does or the fake
+   * measures a different list algorithm than the browser runs.
+   */
+  insertBefore(node: FNode, reference: FNode | null): FNode {
+    if (reference === null) return this.appendChild(node);
+    if ((reference as unknown as FNode) === (node as unknown as FNode)) return node;
     this.detachForMove(node);
     const index = this.childNodes.indexOf(reference);
     if (index < 0) throw new Error('[counting-dom] insertBefore reference is missing');
@@ -94,6 +103,20 @@ export class FText extends FNodeBase {
   set data(value: string) {
     this.#data = value;
     this.ownerDocument.counts.textWrites++;
+  }
+
+  /**
+   * `Node.nodeValue` is the platform's other spelling for a text node's data,
+   * and it is the ONE the generated lane's text Parts write. Without this the
+   * fake DOM would silently measure zero text writes while the real DOM updates
+   * — a baseline measuring a different algorithm (and a rendered-empty HTML).
+   */
+  get nodeValue(): string {
+    return this.#data;
+  }
+
+  set nodeValue(value: string) {
+    this.data = value;
   }
 }
 

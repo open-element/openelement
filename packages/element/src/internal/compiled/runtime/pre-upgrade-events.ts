@@ -20,6 +20,9 @@ import type { CompiledHydrationOptions } from './hydrate.ts';
 // rule leaf-runtime.ts states for `removeNodes`: import the origin, never the
 // re-export.
 import { ClaimErrorCode, raiseFrameworkError } from '@openelement/protocol/errors';
+// The shell's side of the replay contract (see that module's doc): this capture
+// module is the ONLY publisher, and it publishes at install time.
+import { installPreUpgradeReplayHook } from './pre-upgrade-replay-hook.ts';
 
 export interface PreUpgradeEvent {
   readonly target: EventTarget;
@@ -710,6 +713,15 @@ export function ensurePreHydrationClickCapture(
       store: preUpgradePendingRecords,
     }),
     declared,
+  });
+  // Publish the per-root replay pair to the generated shell's neutral hook
+  // (2026-11-21): the shell may not import THIS module, so the capture install is
+  // the one moment the implementation becomes reachable from the shell's side.
+  // No module-scope side effect: a page that never installs the capture carries
+  // no hook, and the shell's calls are honest no-ops.
+  installPreUpgradeReplayHook({
+    replay: (root) => replayPreUpgradeCaptures(root),
+    release: (root) => releasePreUpgradeCapturesFor(root),
   });
 }
 

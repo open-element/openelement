@@ -832,18 +832,40 @@ async function readJson<T = unknown>(path: string | URL): Promise<T> {
   return JSON.parse(await readFile(path, 'utf8')) as T;
 }
 
-// Post-publish smoke surfaces. NODE_RUNTIME_SMOKE_SOURCE covers the plain-Node
-// framework core; VITE_SMOKE_SOURCE proves the `@openelement/router/vite`
-// build entry imports on the same node host (the packed consumers' build
-// cells drive it in-process, this smoke proves the bare-import path).
+// Post-publish smoke surfaces use names that are stable across the published
+// alpha.15 line and the alpha.16 candidate. That keeps one consumer check valid
+// for both registry truth and the local candidate without importing retired
+// class/decorator authoring. The Vite entry has its own smoke below.
+const ELEMENT_RUNTIME_IMPORT =
+  "import { computed, escapeAttr, escapeHtml, HYDRATION_STRATEGIES, isValidTagName, renderToString, signal } from '@openelement/element';";
+
+const ELEMENT_RUNTIME_ASSERTIONS = [
+  "if (![computed, escapeAttr, escapeHtml, isValidTagName, renderToString, signal].every((value) => typeof value === 'function')) throw new Error('expected Element runtime exports');",
+  "if (!Array.isArray(HYDRATION_STRATEGIES) || !HYDRATION_STRATEGIES.includes('load') || !HYDRATION_STRATEGIES.includes('visible')) throw new Error('expected hydration strategies');",
+  'const count = signal(0);',
+  'const doubled = computed(() => count.value * 2);',
+  'count.value = 21;',
+  "if (doubled.value !== 42) throw new Error('computed signal update failed');",
+  "if (escapeHtml('<b>&</b>') !== '&lt;b&gt;&amp;&lt;/b&gt;') throw new Error('HTML escaping failed');",
+  "if (escapeHtml(String.fromCharCode(34, 39)) !== '&quot;&#39;') throw new Error('HTML quote escaping failed');",
+  "if (escapeAttr('a&b\"c') !== 'a&amp;b&quot;c') throw new Error('attribute escaping failed');",
+  "if (!isValidTagName('my-counter') || isValidTagName('invalid') || isValidTagName('xml-counter')) throw new Error('tag validation failed');",
+].join('\n');
+
+export const NODE_ELEMENT_SMOKE_SOURCE = [
+  ELEMENT_RUNTIME_IMPORT,
+  ELEMENT_RUNTIME_ASSERTIONS,
+  "console.log('published Element runtime imports and behavior passed');",
+].join('\n');
+
 export const NODE_RUNTIME_SMOKE_SOURCE = [
-  "import { HYDRATION_STRATEGIES, OpenElement, renderToString, signal } from '@openelement/element';",
+  ELEMENT_RUNTIME_IMPORT,
   "import { defineIslandConfig, definePage } from '@openelement/router';",
-  'for (const value of [OpenElement, renderToString, signal, defineIslandConfig, definePage]) {',
-  "  if (typeof value !== 'function') throw new Error('expected published public function');",
-  '}',
-  "if (!Array.isArray(HYDRATION_STRATEGIES)) throw new Error('expected hydration strategy list');",
-  "console.log('published public runtime imports passed');",
+  ELEMENT_RUNTIME_ASSERTIONS,
+  "if (![defineIslandConfig, definePage].every((value) => typeof value === 'function')) throw new Error('expected published Router exports');",
+  "if (defineIslandConfig({ hydrate: 'only' }).hydrate !== 'only') throw new Error('island config failed');",
+  "if (typeof definePage(() => null) !== 'function') throw new Error('function page definition failed');",
+  "console.log('published Element and Router runtime imports and behavior passed');",
 ].join('\n');
 
 export const VITE_SMOKE_SOURCE = [
@@ -867,30 +889,7 @@ async function run(
   };
 }
 
-const nodeSource = `
-import {
-  computed,
-  escapeAttr,
-  escapeHtml,
-  HYDRATION_STRATEGIES,
-  isValidTagName,
-  OpenElement,
-  signal,
-} from '@openelement/element';
-
-const count = signal(0);
-const doubled = computed(() => count.value * 2);
-count.value = 21;
-
-console.log('doubled:', doubled.value);
-console.log('escapeHtml:', escapeHtml('<b>&"\\'"/></b>'));
-console.log('escapeAttr:', escapeAttr('a"b'));
-console.log('isValidTagName:', isValidTagName('my-counter'), isValidTagName('invalid'));
-console.log('hydration strategies:', HYDRATION_STRATEGIES.join(','));
-console.log('OpenElement is a class:', typeof OpenElement === 'function');
-if (doubled.value !== 42) throw new Error('signal reactivity broken');
-console.log('Smoke test passed!');
-`.trim();
+const nodeSource = NODE_ELEMENT_SMOKE_SOURCE;
 
 async function nodeEsmSmoke(version: string, projectRoot: string, local: boolean): Promise<void> {
   const tmpDir = await mkdtemp(join(tmpdir(), 'openelement-smoke-node-'));
@@ -916,14 +915,27 @@ async function nodeEsmSmoke(version: string, projectRoot: string, local: boolean
     const localDeps = local
       ? {
           '@openelement/element': 'file:./openelement-element.tgz',
+          '@openelement/protocol': 'file:./openelement-protocol.tgz',
           '@preact/signals-core': '^1.12.1',
         }
       : { '@openelement/element': dep };
 
-    await writeFile(
-      `${tmpDir}/package.json`,
-      JSON.stringify({ type: 'module', dependencies: localDeps }, null, 2),
-    );
+    const manifest = {
+      type: 'module',
+      dependencies: localDeps,
+      ...(local
+        ? {
+            // Element's packed manifest pins the matching unpublished
+            // protocol version. Reuse both root file: artifacts for that
+            // transitive edge instead of asking npm for the registry copy.
+            overrides: {
+              '@openelement/element': '$@openelement/element',
+              '@openelement/protocol': '$@openelement/protocol',
+            },
+          }
+        : {}),
+    };
+    await writeFile(`${tmpDir}/package.json`, JSON.stringify(manifest, null, 2));
     if (local) {
       // The pack:dry-run artifact lands next to the package sources; the
       // consumer's file: dep expects it beside the generated package.json.
@@ -934,6 +946,13 @@ async function nodeEsmSmoke(version: string, projectRoot: string, local: boolean
         `openelement-element-${version}.tgz`,
       );
       await copyFile(artifact, `${tmpDir}/openelement-element.tgz`);
+      const protocolArtifact = join(
+        projectRoot,
+        'packages',
+        'protocol',
+        `openelement-protocol-${version}.tgz`,
+      );
+      await copyFile(protocolArtifact, `${tmpDir}/openelement-protocol.tgz`);
     }
     await writeFile(`${tmpDir}/smoke.mjs`, nodeSource);
 

@@ -1,21 +1,16 @@
 /**
  * @openelement/compiler — Element compiler tooling entry (#1160, #1557).
  *
- * Host-side build tooling: the TSX-to-Part Program semantic core (compiler,
- * diagnostics, module analysis, program validation) plus the Vite integration
- * boundary (`compileElementModule` / `compiledElementPlugin`). This subpath is
- * NOT part of the browser/runtime graph — it imports the TypeScript compiler
- * API and (type-only) Vite, and must never be reached from the runtime entry
- * points.
+ * Host-side build tooling: the TSX compiler semantic core (diagnostics, module
+ * analysis, function frontend) plus the Vite integration boundary
+ * (`compiledElementPlugin`). This subpath is NOT part of the browser/runtime
+ * graph — it imports the TypeScript compiler API and (type-only) Vite, and must
+ * never be reached from the runtime entry points.
  */
 export {
   compiledElementPlugin,
   registerStyleEdges,
-  compileElementModule,
-  hasElementDecoratorApplication,
-  isCompiledElementModule,
   stableModuleId,
-  stripInlineSourceMapComment,
 } from './internal/compiler/plugin.ts';
 // The artifact adoption read (#1558/KR-10): the style edges of a shipped
 // compiled module. Host builds whose compiled-element binding is not
@@ -24,20 +19,20 @@ export {
 export { compiledArtifactStyleRequests } from './internal/compiler/compiled-artifact-style-requests.ts';
 export { readCompiledArtifactStyles } from './internal/compiler/compiled-artifact-style-requests.ts';
 export { compiledArtifactClassCandidates } from './internal/compiler/compiled-artifact-class-candidates.ts';
+// The compiler's fail-closed error carrier and its diagnostic record: both
+// lanes throw this one class, and the hosts catch it to project the structured
+// record instead of parsing a joined message.
 export {
   CompiledElementError,
-  compileElementProgram,
-  type CompileElementResult,
   type ElementCompilerDiagnostic,
-} from './internal/compiler/semantic-core/compile.ts';
+} from './internal/compiler/semantic-core/compiler-diagnostics.ts';
 // The server-only TSX function component lane (alpha15): the admission and
-// generative lowering entry — the same lowering walk as the @element class
-// path, emitting `__h`/`__t`/`__ssr` constructor code instead of a Part
-// Program. Discovery facts ride analyzeModuleSemantics
-// (serverFunctionComponents); the host build calls this entry for the modules
-// its graph walk finds. `compileServerComponentIfAdmitted` is the host-side
-// admission bridge: class-lane modules and component-less modules answer
-// null, everything else compiles through the lane.
+// generative lowering entry, emitting `__h`/`__t`/`__ssr` constructor code.
+// Discovery facts ride analyzeModuleSemantics (serverFunctionComponents); the
+// host build calls this entry for the modules its graph walk finds.
+// `compileServerComponentIfAdmitted` is the host-side admission bridge:
+// component-less modules answer null, everything else compiles through the
+// lane.
 export {
   compileServerComponentIfAdmitted,
   compileServerComponentModule,
@@ -48,8 +43,9 @@ export {
 // admission entry a host whose compiler binding is not the Vite plugin (the
 // Router's dev transform, plugin-hmr.ts) calls with its island-derived site
 // fact. It returns null for a module the lane does not own (no site fact, a
-// non-TSX id, or the class lane's grammar) and fails closed with the internal
-// `OEIR_GENERATED_ELEMENT_*` codes when it owns a module it must refuse.
+// non-TSX id, or a module still carrying the retired `@element` decorator
+// facts) and fails closed with the internal `OEIR_GENERATED_ELEMENT_*` codes
+// when it owns a module it must refuse.
 // `GeneratedElementSite` is the host-supplied fact (a tag plus the root mode
 // the shell will adopt); it is a host capability, never author syntax.
 export { compileGeneratedElementIfAdmitted } from './internal/compiler/semantic-ir/generated-element/compile.ts';
@@ -85,7 +81,6 @@ export {
   clearStyleRequests,
   getStyleRequest,
   hasStyleImporter,
-  lightRootScopeTag,
   registerStyleRequest,
   type RegisteredStyleRequest,
   styleEdgesForFile,

@@ -10,5 +10,6 @@
 export {
   ensureDeepFragmentNavigation,
   ensurePreHydrationClickCapture,
-  OpenElement,
 } from '@openelement/element/client-only';
+// See element-services-base.ts: the shared sheet registry, internal subpath.
+export { themeManager } from '@openelement/element/internal/styles';

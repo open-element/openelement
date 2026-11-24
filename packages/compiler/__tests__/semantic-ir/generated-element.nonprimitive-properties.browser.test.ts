@@ -101,6 +101,7 @@ async function buildBundle(dir: string, islandModule: string): Promise<string> {
     shim,
     [
       `export { claimRecipe, createRecipe, insertRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
+      `export { reconcileEachEntries } from ${JSON.stringify(join(runtime, 'each-reconcile.ts'))};`,
       `export { bindSignalWrites, runUntracked } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
       `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
       `export { assertEachAnchor, assertEachEndMarker, assertElementInHtmlNamespace, assertStaticAttributeSeed, assertTextSlotMarker, assertWhenAnchor, assertWhenEndMarker, entrySeedMismatch, isEachEndMarker, isWhenEndMarker, leafClaimMismatch, readEntryKeyMarker } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
@@ -938,9 +939,11 @@ describe('non-primitive property retention on the generated element (Chromium)',
         list: 'update-row',
         title: 'update-title',
       });
-      // NO SEED: no property attributes on the host tag; the claim starts from
-      // the client default (server folded content is shown, but it is not a
-      // transport seed for the client property — ADR-0181 A5).
+      // NO SEED: this call supplies NO props, so the producer has nothing to
+      // carry — no per-row attribute and no `data-oe-prop-seed` on the tag. The
+      // claim starts from the client default. (Since the 2026-11-23 ADR-0181 A5
+      // amendment a SUPPLIED property-only row does seed; this control passes
+      // `undefined` precisely to keep the no-input bytes.)
       expect(result.noSeed.hostAttributeNames).toEqual([]);
       expect(result.noSeed.clientDefault).toBe('seed');
       expect(result.noSeed.claimedList).toBe('default-row');

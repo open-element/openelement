@@ -7,15 +7,21 @@
  * root from compiled output, so the host lands on a different schedule than a
  * Lit or FAST update. `@ionic/core` already pins `@stencil/core` at the same
  * version this fixture builds against, so the compiler costs no extra bytes.
+ *
+ * GENERATED lane (F16: class → function). `root: 'shadow'` reproduces the class
+ * lane's `shadow-open`: the qualifier reads the marker out of this element's own
+ * shadow root after descending `wc-stencil-host`, so a light root would place it
+ * where that walk stops short.
  */
 import { defineIslandConfig } from '@openelement/router';
-import { element, OpenElement } from '@openelement/element';
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: false, dsd: false });
+export const openElement = defineIslandConfig({
+  hydrate: 'load',
+  ssr: false,
+  dsd: false,
+  root: 'shadow',
+});
 
-@element('wc-open-stencil', { root: 'shadow-open' })
-export default class WcOpenStencil extends OpenElement {
-  render() {
-    return <span id='open-stencil-ready'>openElement child inside Stencil</span>;
-  }
+export default function WcOpenStencil() {
+  return <span id='open-stencil-ready'>openElement child inside Stencil</span>;
 }

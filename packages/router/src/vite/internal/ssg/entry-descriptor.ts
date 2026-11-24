@@ -74,6 +74,14 @@ function normalizeLayout(config: LayoutConfig | undefined): ResolvedLayout {
 function buildLayoutPlan(options: {
   layout?: FrameworkOptions['layout'];
   layouts?: FrameworkOptions['layouts'];
+  /**
+   * The declared-tag scan's compiler fact, keyed by stable module id. A
+   * convention layout that is a GENERATED element is identified by its module's
+   * declared tag; this is where its `ssrHostExport` comes from, so the entry can
+   * register the generated host PAIR instead of a bare class.
+   */
+  declaredTags?: ReadonlyMap<string, string>;
+  declaredHostExports?: ReadonlyMap<string, string>;
 }): LayoutPlan {
   const defaultLayout = normalizeLayout(options.layouts?.default ?? options.layout);
   const layouts: Record<string, ResolvedLayout> = {};
@@ -81,7 +89,23 @@ function buildLayoutPlan(options: {
     if (name === 'default' || config === undefined) continue;
     layouts[name] = normalizeLayout(config);
   }
-  return { default: defaultLayout, layouts };
+  // Attach the compiler fact to every layout that is a generated element. The
+  // lookup is by DECLARED TAG (the module's own sidecar identity), never by a
+  // path guess: a layout whose module declares no tag keeps the class path.
+  const byTag = new Map<string, string>();
+  for (const [moduleId, tag] of options.declaredTags ?? []) {
+    const hostExport = options.declaredHostExports?.get(moduleId);
+    if (hostExport !== undefined) byTag.set(tag, hostExport);
+  }
+  const withHost = (layout: ResolvedLayout): ResolvedLayout => {
+    if (layout === false) return layout;
+    const generatedHostExport = byTag.get(layout.tagName);
+    return generatedHostExport === undefined ? layout : { ...layout, generatedHostExport };
+  };
+  const defaultResolved = withHost(defaultLayout);
+  const resolvedLayouts: Record<string, ResolvedLayout> = {};
+  for (const [name, layout] of Object.entries(layouts)) resolvedLayouts[name] = withHost(layout);
+  return { default: defaultResolved, layouts: resolvedLayouts };
 }
 
 export function buildEntryDescriptor(
@@ -121,6 +145,14 @@ export function buildEntryDescriptor(
     layout?: FrameworkOptions['layout'];
     layouts?: FrameworkOptions['layouts'];
     /**
+     * The declared-tag scan's compiler facts (alpha16 layout-pair slice): the
+     * module -> tag map and the module -> compiler-emitted host export map. A
+     * convention layout that is a generated element needs them to be registered
+     * through the host PAIR channel; absent maps keep every class layout's bytes.
+     */
+    declaredElementTags?: ReadonlyMap<string, string>;
+    declaredElementHostExports?: ReadonlyMap<string, string>;
+    /**
      * #1411: emit the default-CORS production advisory into the generated
      * entry. The dev server passes false so a first dev run is warning-free;
      * production builds keep the warning (default true).
@@ -150,7 +182,7 @@ export function buildEntryDescriptor(
   // the entry keeps imports + descriptor data + wiring. It replaces the
   // entry-emitted `new Hono()` and the bridge import.
   imports.push({ from: '@openelement/router/server-runtime', names: ['createGeneratedApp'] });
-  imports.push(...adapter.serverImports(routes.some((route) => route.streamManifest)));
+  imports.push(...adapter.serverImports());
   // #1326: page meaning is resolved through the one Document seam before
   // wrapInDocument serializes it.
   imports.push({
@@ -214,54 +246,15 @@ export function buildEntryDescriptor(
       names: ['actionErrorResponse'],
       alias: '__actionErrorResponse',
     });
-    if (routes.some((route) => route.streamManifest)) {
-      imports.push({
-        from: '@openelement/router/server-runtime',
-        names: ['createStreamHeaderChannel'],
-        alias: '__streamHeaderChannel',
-      });
-      // The streaming pump (#1470 block d): the request scope, the
-      // deferred-field front gate, the bound body builder, and the browser
-      // bootstrap string are the imported runtime module;
-      // the entry keeps the call sites and binds escapeAttr at wiring time.
-      imports.push({
-        from: '@openelement/router/server-runtime',
-        names: ['createStreamRequestScope'],
-        alias: '__streamRequestScope',
-      });
-      imports.push({
-        from: '@openelement/router/server-runtime',
-        names: ['streamFields'],
-        alias: '__streamFields',
-      });
-      imports.push({
-        from: '@openelement/router/server-runtime',
-        names: ['createStreamBody'],
-        alias: '__createStreamBody',
-      });
-      imports.push({
-        from: '@openelement/router/server-runtime',
-        names: ['STREAM_BROWSER_BOOTSTRAP'],
-        alias: '__streamBrowserBootstrap',
-      });
-      // The deferred-shell gate (Amendment 1): the typed runtime
-      // factory the entry binds to its serialized stream manifests and its
-      // createStreamShellExecutor import; the handlers keep the call site.
-      imports.push({
-        from: '@openelement/router/server-runtime',
-        names: ['createStreamPageShell'],
-        alias: '__createStreamPageShellGate',
-      });
-    }
-    // The page-render seam: page tag resolution and the
+    // The page-render seam: the
     // page-definition/route-meta/locale extractors are pure helpers the
     // emitted call sites reference; the runtime binding itself (renderer,
     // props projection, status pages, layout) happens inside the
-    // generated-app factory per the renderer adapter (#1470 block e). The
-    // adapter's startup stream guard is imported under the `__assertStreamRoute`
-    // binding. Same page-handler gate as the channel.
+    // generated-app factory per the renderer adapter (#1470 block e).
+    // The class lane's startup stream guard and its program read retired
+    // with the lane (C09, 2026-11-24): no emitted page kind carries a
+    // stream manifest.
     imports.push(...adapter.runtimeSeam().imports);
-    imports.push(adapter.runtimeSeam().streamGuard);
   }
 
   // Conditional middleware imports (#1560): the built-ins are the
@@ -440,6 +433,25 @@ export function buildEntryDescriptor(
     islandTagNames,
     islandFiles,
     islandMeta,
+    // P-4 fix: the declared-component map is the AUTHORED answer to "is this
+    // module a component?", which the islands list can only answer by path. Both
+    // are handed in; the classifier prefers the declaration and falls back to
+    // the convention, so a module without a sidecar keeps its old verdict.
+    ...(options.declaredElementTags === undefined
+      ? {}
+      : { declaredTags: options.declaredElementTags }),
+    ...(options.declaredElementHostExports === undefined
+      ? {}
+      : { declaredHostExports: options.declaredElementHostExports }),
+    resolveHostIdentity: (moduleId, tagName) => {
+      const producer = options.declaredElementHostExports?.get(moduleId);
+      // A recorded producer name is the only identity the scan keeps; a module
+      // WITHOUT one is a lawful light lane, which classification refuses for a
+      // page root (no host producer to render). Never guess a kind.
+      return producer === undefined
+        ? { kind: 'light-no-producer', component: tagName }
+        : { kind: 'producer', component: tagName, ssrHostExport: producer };
+    },
   });
 
   // --- Routes ---
@@ -522,24 +534,9 @@ export function buildEntryDescriptor(
       };
     })
     .sort((a, b) => b.depth - a.depth);
-  for (const route of pageRoutes) {
-    if (
-      route.streamManifest &&
-      renderers.some(
-        (entry) =>
-          entry.scope === '/' ||
-          route.path === entry.scope ||
-          route.path.startsWith(entry.scope + '/'),
-      )
-    ) {
-      throw buildError(
-        DescriptorErrorCode.STREAM_RENDERER,
-        `[openElement] stream route ${route.path}, field ${
-          route.streamManifest.fields[0].field
-        }: opaque renderer wrapper is not admitted. Keep the field front-gate or disable streaming.`,
-      );
-    }
-  }
+  // The streamed-page renderer/layout refusals retired with the class lane's
+  // stream channel (2026-11-22): the scanner emits no stream manifest, so no
+  // descriptor can carry one. Alpha18 owns the replacement carrier.
 
   const middlewareScopes = specialRoutes
     .filter((r) => r.special === 'middleware')
@@ -611,15 +608,57 @@ export function buildEntryDescriptor(
     packageManifests,
   );
 
+  // A generated PAGE ROOT must be SSR-admitted even with zero interaction events:
+  // its server artifact is the compiler-emitted host producer, and the route
+  // cannot render without it. The classifier already proved the identity
+  // (`generatedElementPage`), so this set is a FACT, not an inference.
+  const generatedPageRootTags = new Set(
+    pageRoutes
+      .map(
+        (route) =>
+          (route as PageRouteDecl & PageKindCarrier).generatedElementPage?.tagName as
+            | string
+            | undefined,
+      )
+      .filter((tag): tag is string => tag !== undefined),
+  );
   const compilerBehaviorIslands = compilerBehaviorDeclarations(
     options.staticComponents ?? [],
     options.upgradeStrategy,
+    generatedPageRootTags,
   );
+  // A generated PAGE ROOT that no earlier pass recorded still has to be SSR-admitted:
+  // it renders through its compiler-emitted host producer, exactly like an island. An
+  // `.mdx` route is that case — its module is VIRTUAL, so the island scan and the
+  // static-component scan (both file-system walks) never see it, while the classifier
+  // resolves it from the declared-tag scan that now lowers the source itself. The
+  // classifier's verdict is the fact; this row turns it into the ONE declaration shape
+  // the admission plan reads.
   const islandDeclarations: IslandDecl[] = [
     ...localIslands,
     ...compilerBehaviorIslands,
     ...packageIslandDecls,
   ];
+  const recordedTags = new Set(islandDeclarations.map((island) => island.tagName));
+  const pageRootIslands: IslandDecl[] = pageRoutes.flatMap((route) => {
+    const generated = (route as PageRouteDecl & PageKindCarrier).generatedElementPage;
+    if (generated === undefined || recordedTags.has(generated.tagName)) return [];
+    return [
+      {
+        tagName: generated.tagName,
+        modulePath: (route as { importPath?: string }).importPath ?? `/${route.filePath}`,
+        hydrate: options.upgradeStrategy ?? 'idle',
+        ssr: true,
+        dsd: true,
+        authoring: 'basic-element' as const,
+        source: 'local' as const,
+        reason: 'generated page root (no file-system walk records a virtual module)',
+        generatedElementHost: generated.identity,
+      } as IslandDecl,
+    ];
+  });
+  islandDeclarations.push(...pageRootIslands);
+
   const islands: IslandDecl[] = islandDeclarations.flatMap(expandIslandDeliveryDecl);
   const cemClassifications = options.cemClassifications || [];
   const ssrAdmissionPlan = buildSsrAdmissionPlan(
@@ -686,6 +725,8 @@ export function buildEntryDescriptor(
   const layout = buildLayoutPlan({
     layout: options.layout,
     layouts: options.layouts,
+    declaredTags: options.declaredElementTags,
+    declaredHostExports: options.declaredElementHostExports,
   });
   // Streaming boundary, project-level by construction: the generated streamed
   // document is flushed in parts and never passes through __renderLayout
@@ -696,31 +737,20 @@ export function buildEntryDescriptor(
   // the whole project instead of admitting a descriptor that would only fail
   // at request time. The generated route guard (entry-codegen.ts) keeps the
   // route-level check for descriptors that reach the runtime by another path.
-  if (
-    pageRoutes.some((route) => route.streamManifest) &&
-    (layout.default !== false || Object.values(layout.layouts).some((shell) => shell !== false))
-  ) {
-    const streamRoutes = pageRoutes
-      .filter((route) => route.streamManifest)
-      .map((route) => `${route.path} (${route.filePath})`)
-      .join(', ');
-    throw buildError(
-      DescriptorErrorCode.STREAM_LAYOUT,
-      '[openElement] streaming requires the compiled layout wrapper to be off for the ' +
-        'whole project: a streamed document is flushed in parts and cannot be wrapped by a layout. ' +
-        'Set openElement({ layout: false }) and remove every layouts entry, or leave streaming ' +
-        'off. A per-route route: { layout: false } cannot satisfy this gate — the build cannot see ' +
-        `a stream route's own layout. Streaming routes: ${streamRoutes}.`,
-    );
-  }
   const reservedTags = new Set([
     ...pageRoutes.map((route) => route.tagName),
     ...islands.map((island) => island.tagName),
     ...(layout.default ? [layout.default.tagName] : []),
     ...Object.values(layout.layouts).flatMap((shell) => (shell ? [shell.tagName] : [])),
   ]);
+  // Keep the compiler's host producer for page components and the generated
+  // hosts discovered through their side-effect imports. Entry rendering uses
+  // this metadata to pair those admitted tags with their server producer.
   const staticComponents = (options.staticComponents ?? []).filter(
-    (component) => !reservedTags.has(component.tagName),
+    (component) =>
+      component.pageComponent === true ||
+      component.pageComponentDependency === true ||
+      !reservedTags.has(component.tagName),
   );
 
   const descriptor: EntryDescriptor = {

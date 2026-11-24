@@ -2,21 +2,22 @@
 // hydrated (`hydrate: 'none'`), so its stylesheet is delivered without shipping
 // client JavaScript for it — while still using the framework's island
 // admission, which is what makes a nested custom element renderable at all.
-import { element, OpenElement } from '@openelement/element';
 import { defineIslandConfig } from '@openelement/router';
-import badgeStyles from './styled-badge.css';
 
-export const openElement = defineIslandConfig({ hydrate: 'none', ssr: true });
+export const openElement = defineIslandConfig({
+  hydrate: 'none',
+  ssr: true,
+  // The class declared this LIGHT, and the /styled/:id sheet assertions read the
+  // native `@scope (styled-badge)` projection of the badge sheet — omitting the
+  // root would deliver the sheet to a shadow tree the page never creates.
+  root: 'light',
+  styles: ['./styled-badge.css'],
+});
 
-@element('styled-badge', { root: 'light' })
-export default class StyledBadge extends OpenElement {
-  static override styles = [badgeStyles];
-
-  render() {
-    return (
-      <div class='styled-badge'>
-        <span class='styled-shared'>badge</span>
-      </div>
-    );
-  }
+export default function StyledBadge() {
+  return (
+    <div class='styled-badge'>
+      <span class='styled-shared'>badge</span>
+    </div>
+  );
 }

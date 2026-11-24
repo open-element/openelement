@@ -87,13 +87,19 @@
  *    there is no global identity-keyed strong registry, no DOM/signal import
  *    and no second reactive engine.
  * 11. Owner-teardown release (`releaseRetainedChildren`): the explicit,
- *    deterministic cleanup for the owner's WHOLE lifetime. It drops the
- *    ledger first (so no cleanup can re-enter it), deindexes every entry,
- *    plain-disposes every retained scope with all cleanups attempted, keeps
+ *    deterministic cleanup for the owner's WHOLE lifetime. It closes a live
+ *    transaction's member passes, drops the ledger (so no cleanup can re-enter
+ *    it), deindexes every entry, plain-disposes every retained scope with all
+ *    cleanups attempted (recursively releasing each scope's own ledger), keeps
  *    the first failure, discards open-pass state and deletes the ledger.
  *    Idempotent, mode-independent, and never inferred from a dispose flag —
  *    an owner that stops being externally reachable is not a cleanup
  *    trigger.
+ * 12. One transaction per attempt (`InstanceTransaction`): the root pass owns
+ *    the token; a retained body that retains children JOINS it instead of
+ *    committing; commit/abort are the root's and close every member pass. A
+ *    token whose root transaction is closed is refused (`STATE`), so a delayed
+ *    child body can never open a pass nobody will commit.
  *
  * ## Eviction cleanup semantics (plain cleanups)
  *
@@ -119,31 +125,49 @@
  * re-entered structure (state resurrection) and keeps its resources alive until
  * the owner is torn down or an explicit release runs.
  *
- * ## Recursive ledgers — exact transaction boundary (documented, not partial)
+ * ## Recursive ledgers and the cross-ledger transaction (depth ≥ 2, 2026-11-21)
  *
  * A retained child's scope is itself an owner, so nesting needs no extra state:
- * the child body brackets its own pass on its own ledger and its grandchild
- * entries live there. Passes never nest on ONE owner; parent and child brackets
- * are INDEPENDENT transactions.
+ * the child body retains its own children on that scope's ledger. What nesting
+ * DID need is one transaction across those ledgers, because a child pass that
+ * committed on its own would sweep/commit inside a parent attempt that may
+ * still abort (the failure mode ADR-0181's original depth-1 boundary named).
  *
- * There is deliberately NO cross-ledger transaction. A parent abort evicts only
- * entries of the parent ledger created in that pass; disposing a retained child
- * scope releases grandchild resources through the `LifetimeScope` cascade, but
- * this module never walks another owner's ledger and keeps no global scope
- * registry, so it cannot and does not sweep it. Convergence after a structure
- * change is transitive only when every retained body runs its own bracket plus
- * the compiler's explicit release calls (future emission). A ledger for an
- * owner that is still externally referenced survives its owner's disposal —
- * WeakMap keys are weak, not self-cleaning bookkeeping — so `retainChildInstance`
- * refuses that owner and the release functions remain the bookkeeping cleanup
- * channel.
+ * The protocol is a TOKEN, not a second registry:
  *
- * Consumption boundary: the DEPTH-1 wiring consumes this module (the root
- * pass bracket, ref-site retention, the six structural/ref release sites, the
- * shell connect abort and the three owner-teardown releases). Depth ≥ 2
- * retention is NOT wired and stays OWED behind the cross-ledger transaction
- * protocol (no child bracket and no second ledger in generated child bodies);
- * that limit is a protocol obligation, not a missing call in this module.
+ * - the ROOT retaining body calls `beginInstancePass(owner)` and keeps the
+ *   returned `InstanceTransaction`; the token is threaded to retained child
+ *   calls as compiler-private generated data (`host.txn`);
+ * - a retained body that itself retains children calls
+ *   `joinInstancePass(ownScope, token)`: it opens a NORMAL pass on its own
+ *   ledger and registers `(owner, pass)` on the token. It NEVER commits and
+ *   never aborts on its own;
+ * - `endInstancePass(rootOwner)` commits the root pass first (its sweep may
+ *   evict a removed child, recursively releasing that child's ledger and any
+ *   grandchild entries), then commits every surviving member shallow-first,
+ *   skipping members whose ledger was released or whose pass no longer matches;
+ * - `abortInstancePass(rootOwner)` aborts members deepest-first, then the root
+ *   pass, so an attempt that never happened leaves pre-existing entries intact
+ *   with their previous structural index and evicts exactly the entries each
+ *   pass created;
+ * - evicting ANY entry first releases that entry scope's own ledger
+ *   (`releaseRetainedChildren(scope)`), so grandchild bookkeeping can never
+ *   outlive its owner and a disposed subtree cannot be resurrected;
+ * - `releaseRetainedChildren(owner)` closes a live transaction's member passes
+ *   before dropping the owner's ledger, so an explicit owner teardown can never
+ *   leave a member pass open on a scope that survives only as a WeakMap key.
+ *
+ * Members are registered shallow-first (the bodies run depth-first), and both
+ * loops skip a member whose ledger no longer exists or whose pass number no
+ * longer matches — the idempotent form of "the subtree was already released".
+ * A joined pass is a normal pass: `createdPass` still distinguishes
+ * created-in-attempt from pre-existing, and no pass is swept by an abort.
+ *
+ * Consumption boundary: the ROOT pass bracket, ref-site retention, the six
+ * structural/ref release sites, the shell connect abort and the three
+ * owner-teardown releases consume this module; depth ≥ 2 adds the token
+ * (`beginInstancePass` return + `joinInstancePass`) and the JOINED child pass,
+ * and no other protocol surface.
  *
  * ## Failure identities
  *
@@ -188,6 +212,22 @@ export interface RetainedChildInstance<T = Readonly<Record<string, unknown>>> {
 }
 
 /**
+ * One mount/claim attempt's cross-ledger transaction token (depth >= 2).
+ *
+ * Created by the ROOT retaining body's `beginInstancePass` and threaded to
+ * retained child calls as compiler-private generated data (`host.txn`). A
+ * retained body that retains its own children calls `joinInstancePass`; it
+ * never commits or aborts. The root's `endInstancePass`/`abortInstancePass`
+ * close every joined pass, shallow-first on commit and deepest-first on abort.
+ */
+export interface InstanceTransaction {
+  /** The root logical instance whose ledger owns this transaction. */
+  readonly rootOwner: LifetimeScope;
+  /** Joined child ledgers, shallow-first (their bodies run depth-first). */
+  readonly members: Array<{ readonly owner: LifetimeScope; readonly pass: number }>;
+}
+
+/**
  * Ledger bookkeeping for one entry. The extra fields are runtime-internal
  * (`owner`/`siteKey` let a structural release find its ledger; `structuralOwner`
  * is the staged index key; `createdPass` is the rollback epoch).
@@ -211,6 +251,14 @@ interface Ledger {
   pass: number;
   marks: Set<string> | null;
   pending: Map<string, LifetimeScope | null> | null;
+  /** The open cross-ledger transaction owned by this (root) pass, if any. */
+  transaction: InstanceTransaction | null;
+  /**
+   * The transaction this ledger's pass JOINED (a retained child that retains
+   * its children), or null. A joined pass is committed/aborted by its root;
+   * `endInstancePass`/`abortInstancePass` on it fail closed.
+   */
+  joined: InstanceTransaction | null;
 }
 
 /** `createdPass` of an entry retained outside any pass. */
@@ -279,6 +327,8 @@ function ledgerFor(owner: LifetimeScope): Ledger {
       pass: NO_PASS,
       marks: null,
       pending: null,
+      transaction: null,
+      joined: null,
     };
     ledgers.set(owner, ledger);
   }
@@ -318,11 +368,22 @@ function dropEntry(ledger: Ledger, entry: LedgerEntry): void {
  * eviction never removes DOM, and a retained scope owns no range cleanup.
  */
 function disposeEntry(entry: LedgerEntry): CleanupFailure {
+  // A retained scope is an OWNER in its own right (depth >= 2): release its
+  // ledger BEFORE disposing the scope, so grandchild bookkeeping never outlives
+  // its owner and a disposed subtree cannot be resurrected by a later retain.
+  // The recursive release is idempotent and plain-disposes its own entries; the
+  // scope disposal below then only cascades scopes still attached.
+  let failure: CleanupFailure = null;
+  try {
+    releaseRetainedChildren(entry.scope);
+  } catch (error) {
+    failure = { error };
+  }
   try {
     entry.scope.dispose(false);
-    return null;
+    return failure;
   } catch (error) {
-    return { error };
+    return failure ?? { error };
   }
 }
 
@@ -508,6 +569,26 @@ export function releaseUnderStructuralScope(structuralScope: LifetimeScope): voi
 export function releaseRetainedChildren(owner: LifetimeScope): void {
   const ledger = ledgers.get(owner);
   if (ledger === undefined) return;
+  // A live transaction's joined passes belong to this owner's attempt. Close
+  // them BEFORE the ledger disappears, so an explicit teardown can never leave
+  // a member pass open on a scope that survives only as a WeakMap key. Abort
+  // (not commit): teardown is destroying the subtree, and abort keeps the
+  // pre-existing member entries for the recursive disposal below.
+  const transaction = ledger.transaction;
+  ledger.transaction = null;
+  // This owner may itself be a joined member being torn down: drop the join
+  // marker so a later root commit/abort skips the released ledger.
+  ledger.joined = null;
+  if (transaction !== null) {
+    for (const member of [...transaction.members].reverse()) {
+      const memberLedger = ledgers.get(member.owner);
+      if (memberLedger === undefined || memberLedger.marks === null) continue;
+      if (memberLedger.pass !== member.pass) continue;
+      memberLedger.joined = null;
+      memberLedger.transaction = null;
+      abortPass(memberLedger);
+    }
+  }
   // Bookkeeping first: remove the ledger before disposing anything, so a
   // cleanup that re-enters this module cannot observe or resurrect half of it.
   ledgers.delete(owner);
@@ -528,8 +609,22 @@ export function releaseRetainedChildren(owner: LifetimeScope): void {
  * Open one mount/claim pass on `owner`'s ledger. A pass never nests on one
  * owner: each generated body brackets its OWN instance scope.
  */
-export function beginInstancePass(owner: LifetimeScope): void {
+/**
+ * Open the ONE cross-ledger transaction of a mount/claim attempt on `owner`'s
+ * ledger (the ROOT retaining body) and return its token.
+ *
+ * The token is compiler-private generated data: a retained body that itself
+ * retains children hands it to `joinInstancePass`; no other reader exists. A
+ * pass never nests on one owner, and an owner that already holds an open
+ * transaction refuses a second begin.
+ */
+export function beginInstancePass(owner: LifetimeScope): InstanceTransaction {
   const ledger = ledgerFor(owner);
+  if (ledger.joined !== null) {
+    failState(
+      'cannot begin an instance pass on a JOINED child ledger: its root transaction owns the pass',
+    );
+  }
   if (ledger.rollingBack) {
     failState(
       'cannot begin an instance pass from a cleanup running inside an aborted instance pass',
@@ -543,19 +638,65 @@ export function beginInstancePass(owner: LifetimeScope): void {
   ledger.pass += 1;
   ledger.marks = new Set();
   ledger.pending = new Map();
+  const transaction: InstanceTransaction = { rootOwner: owner, members: [] };
+  ledger.transaction = transaction;
+  return transaction;
 }
 
 /**
- * Commit one pass: apply staged structural-owner rebinding and sweep every
- * entry the pass did not reach.
+ * Join the root's open transaction from a retained body that retains its own
+ * children: open a NORMAL pass on `owner`'s ledger and register it as a member.
  *
- * The pass state is closed BEFORE the sweep, so a throwing cleanup cannot
- * leave a half-open pass; every swept scope is still disposed (plain) and the
- * first cleanup error surfaces after all of them were attempted.
+ * The child body never commits or aborts. `endInstancePass`/`abortInstancePass`
+ * on the root close every member, so an attempt that never happened cannot
+ * leave a committed child sweep or a half-open child pass behind. A token whose
+ * root transaction is closed (a delayed body call) is refused: joining it would
+ * open a pass nobody owns. Joining twice from one owner in one transaction is a
+ * no-op (the body runs once per owner per attempt; this keeps a defensive
+ * re-entry from opening a second pass).
  */
-export function endInstancePass(owner: LifetimeScope): void {
-  const ledger = ledgers.get(owner);
-  if (ledger === undefined || ledger.marks === null || ledger.pending === null) {
+export function joinInstancePass(owner: LifetimeScope, transaction: InstanceTransaction): void {
+  if (owner.disposed) {
+    failDisposed(
+      'cannot join an instance transaction after the child logical instance was disposed',
+    );
+  }
+  const rootLedger = ledgers.get(transaction.rootOwner);
+  if (rootLedger === undefined || rootLedger.transaction !== transaction) {
+    failState('cannot join an instance transaction that is no longer open on its root instance');
+  }
+  if (transaction.members.some((member) => member.owner === owner)) return;
+  const ledger = ledgerFor(owner);
+  if (ledger.joined !== null) {
+    failState('cannot join two instance transactions from one logical instance');
+  }
+  if (ledger.rollingBack) {
+    failState(
+      'cannot join an instance transaction from a cleanup running inside an aborted instance pass',
+    );
+  }
+  if (ledger.marks !== null) {
+    failState(
+      `cannot join an instance transaction: pass ${ledger.pass} is already open for this logical instance`,
+    );
+  }
+  ledger.pass += 1;
+  ledger.marks = new Set();
+  ledger.pending = new Map();
+  ledger.joined = transaction;
+  transaction.members.push({ owner, pass: ledger.pass });
+}
+
+/**
+ * Commit one open pass: apply its staged structural-owner rebinding and sweep
+ * every entry the pass did not reach.
+ *
+ * The pass state is closed BEFORE the sweep, so a throwing cleanup cannot leave
+ * a half-open pass; every swept scope is still disposed (plain) and the first
+ * cleanup error is returned after all of them were attempted.
+ */
+function commitPass(ledger: Ledger): CleanupFailure {
+  if (ledger.marks === null || ledger.pending === null) {
     failState('cannot end an instance pass: no pass is open for this logical instance');
   }
   const marks = ledger.marks;
@@ -578,21 +719,18 @@ export function endInstancePass(owner: LifetimeScope): void {
     dropEntry(ledger, entry);
     failure = firstFailure(failure, disposeEntry(entry));
   }
-  if (failure !== null) throw failure.error;
+  return failure;
 }
 
 /**
- * Abort one pass: evict ONLY the entries created during it and keep every
+ * Abort one open pass: evict ONLY the entries created during it and keep every
  * pre-existing entry (with its previous structural-owner index) for a retry.
  *
  * Staged rebinding is discarded, not applied. Cleanup errors are dropped
  * because this path runs while the caller rethrows the pass's original
- * failure. With no open pass this is a no-op (rollback never masks the error
- * that triggered it).
+ * failure.
  */
-export function abortInstancePass(owner: LifetimeScope): void {
-  const ledger = ledgers.get(owner);
-  if (ledger === undefined || ledger.marks === null) return;
+function abortPass(ledger: Ledger): void {
   const abortedPass = ledger.pass;
   ledger.marks = null;
   ledger.pending = null;
@@ -612,4 +750,68 @@ export function abortInstancePass(owner: LifetimeScope): void {
   } finally {
     ledger.rollingBack = false;
   }
+}
+
+/**
+ * Commit the root pass and every joined member pass (shallow-first).
+ *
+ * The root pass commits first: its sweep may evict a removed retained child,
+ * and evicting that child recursively releases the child's own ledger (members
+ * included). A member whose ledger was released, or whose recorded pass no
+ * longer matches, is skipped — the idempotent form of "its subtree is already
+ * gone". Every commit still attempts all of its cleanups; the first failure
+ * surfaces after the whole transaction is closed.
+ */
+export function endInstancePass(owner: LifetimeScope): void {
+  const ledger = ledgers.get(owner);
+  if (ledger !== undefined && ledger.joined !== null) {
+    failState('a joined child pass is committed by its root transaction, never by the child body');
+  }
+  if (ledger === undefined || ledger.marks === null || ledger.pending === null) {
+    failState('cannot end an instance pass: no pass is open for this logical instance');
+  }
+  const transaction = ledger.transaction;
+  ledger.transaction = null;
+  let failure = commitPass(ledger);
+  if (transaction !== null) {
+    for (const member of transaction.members) {
+      const memberLedger = ledgers.get(member.owner);
+      if (memberLedger === undefined || memberLedger.marks === null) continue;
+      if (memberLedger.pass !== member.pass) continue;
+      memberLedger.joined = null;
+      memberLedger.transaction = null;
+      failure = firstFailure(failure, commitPass(memberLedger));
+    }
+  }
+  if (failure !== null) throw failure.error;
+}
+
+/**
+ * Abort one mount/claim attempt: the joined member passes deepest-first, then
+ * the root pass.
+ *
+ * Deepest-first matters: a member's abort evicts only entries created in its
+ * pass and keeps its pre-existing entries, so aborting the outermost pass first
+ * would dispose the scopes those inner ledgers are keyed by. With no open pass
+ * this is a no-op (rollback never masks the error that triggered it).
+ */
+export function abortInstancePass(owner: LifetimeScope): void {
+  const ledger = ledgers.get(owner);
+  if (ledger !== undefined && ledger.joined !== null) {
+    failState('a joined child pass is aborted by its root transaction, never by the child body');
+  }
+  if (ledger === undefined || ledger.marks === null) return;
+  const transaction = ledger.transaction;
+  ledger.transaction = null;
+  if (transaction !== null) {
+    for (const member of [...transaction.members].reverse()) {
+      const memberLedger = ledgers.get(member.owner);
+      if (memberLedger === undefined || memberLedger.marks === null) continue;
+      if (memberLedger.pass !== member.pass) continue;
+      memberLedger.joined = null;
+      memberLedger.transaction = null;
+      abortPass(memberLedger);
+    }
+  }
+  abortPass(ledger);
 }

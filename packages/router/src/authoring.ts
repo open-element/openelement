@@ -73,7 +73,6 @@ interface PageRenderIntent {
 
 interface NormalizedPageRenderIntent {
   mode: PageRenderingMode;
-  stream?: { defer: readonly string[] };
 }
 
 export interface PageRouteContext {
@@ -622,28 +621,16 @@ export function definePage<
           'or remove stream to keep the existing render path.',
       );
     }
-    // Streaming is a compiled-Part-Program channel: the deferred-field front
-    // gate rides the compiled program's Part owners. A server function page
-    // owns no program, so the declaration is rejected HERE — at the authoring
-    // surface, naming the real reason — instead of surfacing later as an
-    // unrelated scan/compile diagnostic.
-    if (!isClass) {
-      throw authoringError(
-        PageErrorCode.RENDER_MODE,
-        `${ERROR_PREFIX} renderIntent.stream is not supported on a server function page: ` +
-          'streaming is a compiled-Part-Program channel (the deferred-field front gate rides ' +
-          'the compiled program), and a server function page has none. Remove stream, or move ' +
-          'the page to a compiled @element class route for a streamed page.',
-      );
-    }
+    throw authoringError(
+      PageErrorCode.RENDER_MODE,
+      `${ERROR_PREFIX} renderIntent.stream is not supported on page routes. ` +
+        'Remove the stream declaration.',
+    );
   }
   const sharedDescriptor = {
     ...(descriptor?.route !== undefined ? { route: descriptor.route } : {}),
     ...(descriptor?.head !== undefined ? { head: descriptor.head } : {}),
-    renderIntent: {
-      mode: renderMode,
-      ...(stream === undefined ? {} : { stream: { defer: [...stream.defer] } }),
-    },
+    renderIntent: { mode: renderMode },
     ...(descriptor?.props !== undefined ? { props: descriptor.props } : {}),
     ...(descriptor?.error !== undefined ? { error: descriptor.error } : {}),
   };
@@ -793,17 +780,21 @@ export interface IslandConfig {
    * imports arrayed in its `static styles`, and the build refuses `styles` on a
    * lane that owns that other channel instead of silently dropping it.
    *
-   * Deliberately NOT a second adoption mechanism (GH issue #1800, the Alpha17
-   * generated-island style slice): this slice admits the declaration, resolves
-   * it and emits the sheet as a real build asset. It does not attach the sheet
-   * to a rendered island yet:
+   * One declaration, one delivery per root/delivery shape (GH issue #1800):
    *
-   * - a shadow root has no style carrier until the DSD style-link slice
-   *   (M09-2e), so `styles` with `root: 'shadow'` is refused outright;
-   * - a light root's document-level application (the head `<link>` a light-root
-   *   class component's sheet gets) is not wired to the generated-element render
-   *   path yet.
+   * - an SSR/DSD shadow island declares the sheet as the canonical marked
+   *   `<link>` INSIDE its shadow template (M09-2e / #1803);
+   * - a light-root island's sheet is delivered to the document (the head
+   *   `<link>` / the render's document sink), exactly as a light-root class
+   *   component's sheet is;
+   * - a CLIENT-ONLY island (`ssr: false`) has no template and no server render,
+   *   so the compiler emits a real module-graph `import` of the same sheet and
+   *   the generated shell adopts the resulting sheet object into the root it
+   *   creates (2026-11-20). The declaration remains the ONE source: the build
+   *   asset, the manifest entry and that import are resolved from it.
    *
+   * None of these is a second style pipeline: the sheet rides the existing
+   * style-edge registry, Vite CSS pipeline and content-addressed emitted asset.
    * Keep the list small (bounded): every entry is one emitted asset edge.
    */
   styles?: readonly string[];
@@ -823,7 +814,7 @@ export interface IslandConfig {
    * authored sidecar (D-root-source, 2026-11-13), so the generated element's
    * descriptor carries it without a second declaration.
    */
-  root?: 'light' | 'shadow';
+  root?: 'light' | 'shadow' | 'closed';
   /**
    * Delegate focus to this island's shadow root (`shadowrootdelegatesfocus`
    * in the DSD template, `attachShadow({ delegatesFocus: true })` for a
@@ -1186,12 +1177,22 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
         "Either set hydrate: 'media' or remove the media field — the two must agree.",
     );
   }
-  if (config.root !== undefined && config.root !== 'light' && config.root !== 'shadow') {
+  // `closed` is the third root family (F16): the shell has always resolved
+  // `shadow-closed` (adopting `ElementInternals.shadowRoot` or attaching a closed
+  // root), but the AUTHORING face could not spell it, so a closed component could
+  // only be written as a class. Spelling it here closes that asymmetry; `shadow`
+  // stays the open default and the two remain distinct facts.
+  if (
+    config.root !== undefined &&
+    config.root !== 'light' &&
+    config.root !== 'shadow' &&
+    config.root !== 'closed'
+  ) {
     throw authoringError(
       IslandErrorCode.DESCRIPTOR_SHAPE,
-      `${ERROR_PREFIX} defineIslandConfig() root must be "light" or "shadow". ` +
-        "Write root: 'light' for a component compiled with @element(tag, { root: 'light' }), " +
-        "or root: 'shadow' for the DSD default — the build fails closed when the two disagree.",
+      `${ERROR_PREFIX} defineIslandConfig() root must be "light", "shadow" or "closed". ` +
+        "Write root: 'light' for document content, root: 'shadow' for an open DSD root, " +
+        "or root: 'closed' for an encapsulated one — the build fails closed on any other value.",
     );
   }
   if (config.formAssociated !== undefined && typeof config.formAssociated !== 'boolean') {
@@ -1219,22 +1220,20 @@ export function defineIslandConfig(config: IslandConfig): IslandConfig {
     );
   }
   const styles = config.styles === undefined ? undefined : validateIslandStyles(config.styles);
-  if (styles !== undefined && config.root === 'shadow') {
-    // A shadow-root generated island has no style carrier in this slice: the
-    // DSD style-link channel is the later M09-2e slice, and emitting an asset
-    // nothing can reach would be a silent loss dressed up as delivery. Fail
-    // closed here (the static island scan repeats the same refusal at build
-    // time from the authored sidecar, where the lane/root fact is known).
-    // Adoption ownership: GH issue #1800 (Alpha17).
-    throw authoringError(
-      IslandErrorCode.DESCRIPTOR_SHAPE,
-      `${ERROR_PREFIX} defineIslandConfig() styles is not deliverable on a shadow-root island. ` +
-        'The DSD style-link carrier for a shadow root is not wired yet (M09-2e owed) and the ' +
-        'generated-element style adoption slice is GH issue #1800 (Alpha17), so the declared ' +
-        "sheets would be silently lost. Set root: 'light' or remove styles — the field is " +
-        'admitted only on a light-root generated-element island.',
-    );
-  }
+  // A shadow-root island's declared sheets are DELIVERABLE: the compiler emits the
+  // typed `styleLinks` channel on the host producer and `serializeGeneratedElementHtml`
+  // declares the canonical marked `<link>` prefix INSIDE the DSD template
+  // (M09-2e / #1803). An earlier revision of this face refused the combination
+  // with "the carrier is not wired yet", which the build-time admission
+  // (`island-scanner.ts`, `producer` → root `shadow`) already contradicted — two
+  // faces reading one fact differently. The carrier is the later fact, so this
+  // face admits it and keeps only the shape validation above.
+  //
+  // The one case that stays refused is OWED TO THE BUILD, not to this face: a
+  // shadow-root island whose leaf emits NO host producer has no DSD template to
+  // declare the sheet in. The authoring face cannot see the lane, so the scan
+  // owns that coded refusal (`ISLAND_STYLES_SHADOW_UNWIRED_CODE`) where the
+  // producer identity is known.
   if (config.properties !== undefined) validateIslandProperties(config.properties);
   if (config.tag !== undefined && !isValidTagName(config.tag)) {
     // The same platform predicate the generated lane's sidecar read applies:

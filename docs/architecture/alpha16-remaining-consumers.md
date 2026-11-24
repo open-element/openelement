@@ -1,10 +1,34 @@
 ---
-status: active
-topic: Alpha16 remaining consumer surface
-summary: Measured map of every class-lane module left in the production apps, and the ONE design decision each needs before it can migrate; includes the order this implies and what it unblocks for M10 P1.
+status: historical
+topic: Alpha16 remaining consumer surface (2026-11-18 snapshot — CLOSED)
+summary: Measured map of the class-lane modules left in the production apps at 87d83d095 and the ONE design decision each needed. Every entry has since migrated or retired; the header banner maps each one to its outcome. Preserved as the 2026-11-18 record, not as current state.
 ---
 
 # Alpha16 remaining consumer surface — measured map (2026-11-18, @87d83d095)
+
+> ## ⚠️ This map is CLOSED. Read it as history, not as current state.
+>
+> Every module it lists has since migrated or been retired (measured
+> 2026-11-20 at `a112b3481`):
+>
+> | module | this map said | today |
+> | --- | --- | --- |
+> | `open-standards-visual` | "inline the computed → migrate NOW" | **migrated** — `extends OpenElement` = 0 |
+> | `open-page-rail` | "strings must become declared rows" | **retired** — the file is gone |
+> | `open-reading-shell` | "21 `computed`, collapse or inline them" | **migrated** — = 0 |
+> | `open-article-view` | "the body must stop being a runtime string" | **retired** — the file is gone; the article routes inline the shell |
+> | `open-artifact-panel` | already migrated | = 0 |
+>
+> Application-wide class-lane surface after that work: **0 authored
+> `@element`/`extends OpenElement` across `www/app`, `apps/saas/app`,
+> `packages/ui/src` and `packages/create/templates`. What remains in the repo is
+> 82 class-lane contract test files, 8 migratable fixtures, and one benchmark
+> input — all named with their conditions in
+> [`alpha16-closeout-report.md`](./alpha16-closeout-report.md) §5.1.
+>
+> This banner exists because the map's own topic line ("remaining") is the kind of
+> claim that rots silently, and a reader who found it first would plan work that is
+> already done. The body below is preserved verbatim as the 2026-11-18 record.
 
 Every remaining class-lane module and the ONE design decision each needs.
 

@@ -64,6 +64,7 @@
 
 import ts from 'typescript';
 import { dirname, join, normalize } from 'pathe';
+import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
 import type { IslandDecl } from '@openelement/protocol/ssg';
 import type { RouteEntry } from '../../framework.ts';
 import {
@@ -183,6 +184,27 @@ export interface PageClassificationContext {
   readonly routesDir: string;
   readonly islandsDir: string;
   readonly islands: readonly LocalPageIsland[];
+  /**
+   * Every in-project module that DECLARES a generated component, keyed by the
+   * build's stable module id (P-4 fix, 2026-11-21).
+   *
+   * The islands list above is a PATH-convention view: it can only answer for
+   * modules inside `islandsDir`. A page whose component lives anywhere else was
+   * therefore classified as a class page while the transform compiled it as a
+   * generated element — two lanes, two answers, one module, and SSR failed with
+   * PROGRAM_MISSING. This map is the AUTHORED answer (the sidecar's own tag,
+   * read once by component-declaration.ts), so classification asks the same
+   * question the compiler does: "does this module declare a component?".
+   */
+  readonly declaredComponents: ReadonlyMap<string, DeclaredPageComponent>;
+}
+
+/** One declared generated component the classifier may resolve a page to. */
+export interface DeclaredPageComponent {
+  /** The tag the sidecar pins (or the scan's derived one). */
+  readonly tagName: string;
+  /** The generated-element lane identity the compiler resolution reported. */
+  readonly identity: GeneratedElementHostIdentity;
 }
 
 /** Inputs one build host has for the page-classification context. */
@@ -192,6 +214,24 @@ export interface PageClassificationContextInput {
   readonly islandTagNames: readonly string[];
   readonly islandFiles: readonly string[];
   readonly islandMeta: Readonly<Record<string, Partial<IslandDecl>>>;
+  /**
+   * The declared-component map the phase-1 scan already produced (module id ->
+   * tag) and its compiler-resolved host identities. Optional so a hand-built
+   * context keeps the pre-fix behaviour: absent means "only the islands view",
+   * which is exactly what a host that never ran the scan has.
+   */
+  readonly declaredTags?: ReadonlyMap<string, string>;
+  readonly declaredHostExports?: ReadonlyMap<string, string>;
+  /**
+   * Resolve a declared module's compiler host identity. The scan records the
+   * PRODUCER NAME; classification needs the full identity (kind + name) to tell a
+   * producer from a missing/light lane. Omitted: every declared module is treated
+   * as producer-unknown, which the classifier refuses rather than guesses.
+   */
+  readonly resolveHostIdentity?: (
+    moduleId: string,
+    tagName: string,
+  ) => GeneratedElementHostIdentity;
 }
 
 /**
@@ -206,6 +246,12 @@ export interface PageClassificationContextInput {
 export function buildPageClassificationContext(
   input: PageClassificationContextInput,
 ): PageClassificationContext {
+  const declaredComponents = new Map<string, DeclaredPageComponent>();
+  for (const [moduleId, tagName] of input.declaredTags ?? []) {
+    const identity = input.resolveHostIdentity?.(moduleId, tagName);
+    if (identity === undefined) continue;
+    declaredComponents.set(moduleId, { tagName, identity });
+  }
   return {
     routesDir: input.routesDir,
     islandsDir: input.islandsDir,
@@ -218,6 +264,7 @@ export function buildPageClassificationContext(
         ...(host === undefined ? {} : { generatedElementHost: host }),
       };
     }),
+    declaredComponents,
   };
 }
 
@@ -265,6 +312,50 @@ function routeModulePath(routesDir: string, routeFilePath: string): string {
 }
 
 /**
+ * The declared generated component a `definePage(...)` argument names, resolved
+ * by MODULE IDENTITY rather than by islands-dir membership (P-4 fix).
+ *
+ * The specifier is resolved against the route module's directory to the same
+ * project-relative spelling the scan recorded, then looked up in the declared
+ * map. A miss falls through to the islands path convention, so a module without a
+ * sidecar keeps the pre-fix classification exactly.
+ */
+function resolveDeclaredComponent(
+  specifier: string,
+  routePath: string,
+  context: PageClassificationContext,
+): LocalPageIsland | undefined {
+  // A hand-built context (adapter integrations, tests) may predate the declared
+  // map; absent means "only the islands view", which is the pre-fix behaviour.
+  if (context.declaredComponents === undefined || context.declaredComponents.size === 0) {
+    return undefined;
+  }
+  let base: string;
+  if (specifier.startsWith('.')) {
+    base = normalizedPath(join(dirname(routePath), specifier));
+  } else if (specifier.startsWith('/')) {
+    base = normalizedPath(specifier.slice(1));
+  } else {
+    return undefined;
+  }
+  const candidates = new Set<string>([base]);
+  for (const extension of PAGE_COMPONENT_EXTENSIONS) {
+    candidates.add(base + extension);
+    candidates.add(`${base}/index${extension}`);
+  }
+  for (const [moduleId, declared] of context.declaredComponents) {
+    if (!candidates.has(moduleId) && !candidates.has(withoutExtension(moduleId))) continue;
+    return {
+      filePath: moduleId,
+      tagName: declared.tagName,
+      generatedLaneKind: declared.identity.kind,
+      generatedElementHost: declared.identity,
+    };
+  }
+  return undefined;
+}
+
+/**
  * The local island a `definePage(ImportedComponent)` argument names, if any.
  *
  * Resolution is deliberately bounded to LOCAL islands: a relative specifier
@@ -282,6 +373,13 @@ function resolveLocalIsland(
   context: PageClassificationContext,
 ): LocalPageIsland | undefined {
   const routePath = routeModulePath(context.routesDir, routeFilePath);
+  // A registered DECLARED component wins over the path convention (P-4 fix): the
+  // island list can only answer for modules inside the islands directory, while a
+  // page's component may live anywhere. The declared map is the authored answer
+  // and the compiler picks the same module, so classification and transform now
+  // agree about what this page IS.
+  const byDeclaration = resolveDeclaredComponent(specifier, routePath, context);
+  if (byDeclaration !== undefined) return byDeclaration;
   let base: string;
   if (specifier.startsWith('.')) {
     base = normalizedPath(join(dirname(routePath), specifier));
@@ -389,7 +487,7 @@ function resolvePageArgumentIdentifier(name: string, sourceFile: ts.SourceFile):
  * adds the argument binding the `ModuleSemanticFacts` do not carry. It is a
  * bounded, syntax-only parse: no execution, no type-checking, no resolution.
  */
-function readPageArgument(source: string, filePath: string): PageArgument | undefined {
+export function readPageArgument(source: string, filePath: string): PageArgument | undefined {
   const sourceFile = ts.createSourceFile(
     filePath,
     source,
@@ -455,10 +553,11 @@ export function classifyPageModule(
     owners.push('compiled-element decorator (class lane)');
     kinds.add('class-page');
   }
-  if (facts.mdx) {
-    owners.push('MDX lowering (router-generated compiled class)');
-    kinds.add('class-page');
-  }
+  // An MDX route is OWNED BY THE GENERATED LANE (F16): the lowering emits a
+  // `defineIslandConfig` sidecar plus a function component, so the route claims a kind
+  // only through the declared-component resolution below. It used to claim
+  // `class-page` here, which sent an MDX page down the class render path that no
+  // longer exists.
   if (facts.functionPage !== undefined) {
     owners.push(`server function page "${facts.functionPage}" (server component lane)`);
     kinds.add('function-page');
@@ -589,6 +688,33 @@ function generatedPageRefusalReason(laneKind: GeneratedElementHostIdentity['kind
  * with the router-internal coded build errors below (no public catalogue row is
  * added by this slice).
  */
+/**
+ * The declared-component record for a route whose module is the lowered MDX module.
+ *
+ * The scan now registers that module under the VIRTUAL id the transform compiles
+ * under, and the route entry carries the tag, so the lookup is by tag against the one
+ * map that is keyed by module id — the same map every other declared page uses, not a
+ * parallel table for MDX.
+ */
+function findDeclaredComponentForRoute(
+  route: RouteEntry,
+  context: PageClassificationContext,
+): LocalPageIsland | undefined {
+  const declared = context.declaredComponents;
+  if (declared === undefined || declared.size === 0) return undefined;
+  const expectedTag = route.tagName ?? pathToTagName(normalizeSeparators(route.filePath));
+  for (const component of declared.values()) {
+    if (component.tagName !== expectedTag) continue;
+    return {
+      filePath: route.filePath,
+      tagName: component.tagName,
+      generatedLaneKind: component.identity.kind,
+      generatedElementHost: component.identity,
+    };
+  }
+  return undefined;
+}
+
 export function classifyPageRoute(
   route: RouteEntry,
   context: PageClassificationContext,
@@ -603,26 +729,18 @@ export function classifyPageRoute(
     return { pageKind: route.functionPage === undefined ? 'class-page' : 'function-page' };
   }
   const facts = carried;
-  const resolvedIsland =
-    facts.pageArgument?.kind === 'import'
+  const resolvedIsland = facts.mdx
+    ? // An MDX route has no `definePage(...)` argument to resolve; its declaration is
+      // keyed by the VIRTUAL module id the transform compiles under, which the
+      // declared-tag scan now writes (it lowers the `.mdx` source itself).
+      findDeclaredComponentForRoute(route, context)
+    : facts.pageArgument?.kind === 'import'
       ? resolveLocalIsland(facts.pageArgument.specifier, route.filePath, context)
       : undefined;
   const classification = classifyPageModule(facts, resolvedIsland);
   if (classification.kind === 'classified') {
     if (classification.pageKind !== 'generated-element-page') {
       return { pageKind: classification.pageKind };
-    }
-    // M11-2 bounded lane: a generated host is synchronous-SSR only (ADR-0181
-    // A6 structurally refuses the stream executor), so a stream declaration is
-    // refused at build instead of emitting a guard the runtime cannot serve.
-    if ((route as { readonly streamManifest?: unknown }).streamManifest !== undefined) {
-      throw buildError(
-        PageClassificationCode.GENERATED_ELEMENT_PAGE_UNSUPPORTED,
-        `[openElement] page route ${route.path} (${route.filePath}) is a generated element page ` +
-          'and declares renderIntent.stream; generated element hosts are synchronous-SSR only, ' +
-          'so streaming/deferred DSD for them is not supported. Remove the stream declaration, ' +
-          'or move the page to a compiled @element class page.',
-      );
     }
     const generatedElementPage = classification.generatedElementPage;
     if (generatedElementPage === undefined) {

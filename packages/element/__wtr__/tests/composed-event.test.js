@@ -11,9 +11,9 @@
  * its own event bookkeeping; here the browser's composed path is the truth.
  */
 import { assert } from 'chai';
-import { WtrShadowButton } from '../generated/wtr-shadow-button.ts';
+import { WtrShadowButtonElement } from '../generated/wtr-shadow-button.ts';
 
-customElements.define('wtr-shadow-button', WtrShadowButton);
+customElements.define('wtr-shadow-button', WtrShadowButtonElement);
 await customElements.whenDefined('wtr-shadow-button');
 
 describe('composed event across the shadow boundary', () => {

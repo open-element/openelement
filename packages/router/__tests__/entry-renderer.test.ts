@@ -357,7 +357,7 @@ test('renderEntry: imports DSD renderer; Hono assembly is the factory (#1470 blo
   // v0.44: the compiled sync renderToString is the only serializer — no
   // runtime JSX or tree renderer.
   expect(code).toContain(
-    "import { createDocumentStyleResources, createStreamShellExecutor, renderToString, trustedHtml, escapeHtml, wrapInDocument } from '@openelement/element'",
+    "import { createDocumentStyleResources, renderToString, trustedHtml, escapeHtml, wrapInDocument } from '@openelement/element'",
   );
   expect(code.includes('renderToStringTree')).toBeFalsy();
   expect(code.includes("import { jsx } from '@openelement/element'")).toBeFalsy();

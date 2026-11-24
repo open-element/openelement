@@ -69,9 +69,33 @@ A private ledger (`instance-ledger.ts`) keyed by the owning `LifetimeScope`
 provides retain/release/pass-bracket primitives with explicit, mode-independent
 release: eviction is decided by the emitted act, never inferred from a disposal
 mode. The generated root retains its own setup record across reconnect (setup
-count stays 1) and, at **depth 1**, retains the setup record of a direct hostless
-child. Depth ≥ 2 keeps today's legacy text and semantics (OWED behind a
-cross-ledger transaction protocol). The ledger module is not wired to depth ≥ 2.
+count stays 1) and every retained hostless child retains its own, at any depth.
+
+> **Superseded in part (2026-11-21, depth ≥ 2 delivered).** The paragraph above
+> originally stopped at depth 1 and called depth ≥ 2 OWED "behind a cross-ledger
+> transaction protocol". That protocol is now implemented and wired, so the
+> depth-1 ceiling is history:
+>
+> - the ROOT retaining body opens the attempt and keeps its
+>   `InstanceTransaction` token; a retained body that retains its own children
+>   calls `joinInstancePass(ownScope, token)` and NEVER commits or aborts;
+> - the root's `endInstancePass` commits the root pass first (its sweep may evict
+>   a removed child, recursively releasing that child's ledger) and then every
+>   surviving member, skipping members whose ledger was released or whose pass
+>   number no longer matches; `abortInstancePass` aborts members deepest-first;
+> - evicting ANY entry first releases that scope's OWN ledger, so grandchild
+>   bookkeeping can never outlive its owner and an explicit owner teardown closes
+>   a live transaction's member passes before dropping the ledger;
+> - the compiler's eligibility fixpoint gained one more owner class (a retained
+>   body that itself retains children), so depth-1 modules keep their exact
+>   pre-change bytes: no token capture, no join, no `txn` host field.
+>
+> Evidence at `6fc34e713` (LOCAL, clean tree): compiler 1421 tests (102 files), element 1063 (136 files), the
+> Chromium depth ≥ 2 rows R8/R10/R11 (retained grandchild across reconnect; an
+> aborted attempt that commits no child pass and converges; owner teardown
+> releasing the whole subtree once) and the ledger's five transaction rows. The
+> `p1-applicability`/milestone records are unaffected: this is a capability
+> delivery, not an exit claim.
 
 ### C. Author style declaration for generated islands
 
@@ -85,6 +109,33 @@ manifest. A shadow-root declaration fails the build closed with
 `OE_ISLAND_STYLE_LANE_UNSUPPORTED`. A declared sheet is never silently dropped.
 Application of the emitted stylesheet (document link / shadow adoption) is
 carried by GH #1800.
+
+> **Superseded in part (2026-11-20, alpha16 retirement closeout).** Three facts in
+> the paragraph above are now **history**, and a reader must not take them as
+> current:
+>
+> 1. **A shadow-root declaration no longer fails closed.** The DSD style-link
+>    carrier exists: the compiler emits the typed `styleLinks` channel on the host
+>    producer and `serializeGeneratedElementHtml` writes the canonical marked
+>    `<link>` prefix INSIDE the template. The build scan admits a `producer`
+>    identity with root `shadow`; the authoring face (`defineIslandConfig`), which
+>    had kept refusing the same combination as "not wired yet", was corrected to
+>    agree. Only `missing-producer` still fails closed, which is the honest case
+>    (no template to declare the sheet in).
+> 2. **Light-root APPLICATION is delivered.** #1800's document-level application
+>    landed: a light-root render reports the island's declared sheets to the
+>    render's document sink (the same rule the class lane's light root already
+>    followed), and "declared but carrier unavailable" stays a loud failure rather
+>    than an unstyled render.
+> 3. **What is still OWED is narrower than the paragraph implies**: the
+>    client-side SHADOW adoption slice (`ssr: false` islands, whose root the shell
+>    creates client-side and which adopt no stylesheet), and the generated lane's
+>    hoisting of a nested light root's sheet into an enclosing shadow template —
+>    the latter measured this session by porting `site-light-probe` and reverting
+>    it.
+>
+> Evidence for each is in `alpha16-class-migration-matrix.md` and the capability
+> inventory; this note exists so the ADR does not contradict them.
 
 ## Enumerated interface deltas (diff this against the snapshot)
 
@@ -223,3 +274,152 @@ P1–P5/M10/M11 status follows the 2026-11-20 re-record in the head
 as recorded at the time of writing. This later reading is append-only: it
 rewrites no decision above, creates no milestone evidence, P5 evidence or
 release claim, and adds no owner sign-off.
+
+## Later reading (2026-11-20): the last style adoption slice landed
+
+Append-only; this rewrites no decision above and creates no milestone, P5 or
+release claim.
+
+The 2026-11-16 amendment's "still open" list named client/shadow style adoption.
+It is now delivered, with one environmental limit unchanged:
+
+- An `ssr: false` (or `hydrate: 'only'`) island's declared `styles` are delivered
+  by the compiler emitting real `.css` module-graph imports and the
+  generated-element shell adopting the resulting sheet objects through the class
+  lane's SAME `CompiledStyleScope` into the root it created. Section C's
+  "application is carried by GH #1800" is therefore closed for adoption.
+- Section C's "admitted only on a light-root generated island" remains the rule
+  only for the SERVER-rendered shape's producer requirement: a shadow-root
+  declaration is admitted when the island is client-only (the browser creates the
+  root) or when the leaf emitted the compiled DSD host producer (the marked
+  `<link>` carrier). `OE_ISLAND_STYLE_SHADOW_UNWIRED` now refuses exactly the
+  server-rendered, producer-less case.
+- The failure closure §C promised is implemented at BOTH ends: the compiler
+  refuses a client-only declaration that reaches it without a static specifier
+  (`OEIR_GENERATED_ELEMENT_CLIENT_STYLES_UNWIRED`), and the shell refuses a
+  non-sheet descriptor value with a coded build-phase error rather than adopting
+  it.
+- The dev-server no-emitted-asset limitation and the nested-light-root hoisting
+  boundary are unchanged: the latter stays a written rule, not a capability.
+
+### Enumerated interface deltas (2026-11-20 client style adoption)
+
+One additive shape change, recorded by the `interface:snapshot` write; no symbol
+is added or removed.
+
+| Package / entry | Delta | Necessity and compatibility |
+| --- | --- | --- |
+| `@openelement/element` `./internal/compiled/generated-element/shell` (ADR-0177 internal subpath) | `GeneratedElementDescriptor` gains optional `styles?: readonly StyleSheetLike[]`. | This is the emitted-artifact ABI through which a client-only island's declared sheets reach the shell that adopts them. Omitted keeps every pre-slice descriptor byte-shape and behavior; the compiler emits it only for an `ssr: false` / `hydrate: 'only'` island with declared styles. It is not author API (the subpath carries no stability promise) and adds no public package export. |
+
+The snapshot also updates the four signature strings that embed the descriptor
+type (`createGeneratedElementClass`, `defineGeneratedElement`,
+`resolveGeneratedElementProps` and the descriptor's own symbol). No
+`RenderToStringOptions` change is involved; `onNestedFailure` remains this line's
+one public addition.
+
+### Enumerated interface deltas (2026-11-21 depth >= 2 transaction)
+
+One additive symbol on the same internal subpaths, recorded by the
+`interface:snapshot` write.
+
+| Package / entry | Delta | Necessity and compatibility |
+| --- | --- | --- |
+| `@openelement/element` `./internal/compiled/runtime` and `./internal/compiled/leaf-runtime` | new export `joinInstancePass(owner, transaction)`; `beginInstancePass(owner)` now RETURNS its `InstanceTransaction` (a call whose result is ignored is unchanged, so the depth-1 emitted text keeps working byte-for-byte). | The emitted child body is the caller: it must join the root attempt's transaction instead of committing its own child pass. Emitted-artifact ABI on ADR-0177's internal subpaths — no stability promise, no public export, and a module with no retained child keeps exactly its previous bytes and graph. |
+
+### Enumerated interface deltas (2026-11-21, P-1 class candidates)
+
+One additive field on the same internal subpath.
+
+| Package / entry | Delta | Necessity and compatibility |
+| --- | --- | --- |
+| `@openelement/compiler` `./internal/compiler/semantic-ir/generated-element/compile` | `CompiledGeneratedElement.classCandidates: readonly string[]` (and the same field on `GeneratedElementModule` / `GeneratedLeafModule`) | The generated lane's STATIC class tokens are what a utility engine compiles a shadow component's stylesheet from; without them a generated shadow component loses its utilities (measured on `router-unocss-probe`). Emitted bytes, map and every existing field are unchanged; refusals carry `[]`. Additive build metadata on an internal subpath — no stability promise. |
+
+### Written rule (2026-11-20): a light root must not be nested inside a shadow template
+
+This is a RULE, not a capability. No code was built for it, and the generated
+lane will not hoist a nested light-root sheet into an enclosing shadow template.
+
+- **Rule.** A light-root component must not be rendered inside another
+  component's shadow template. Use a `<slot>` (slotted content stays in the light
+  DOM and is styled by the document) or make the child a shadow root.
+- **Why it is a rule and not a gap.** Document stylesheets never cross a shadow
+  boundary. A light root's CSS is a document resource (`@scope`d document sheet /
+  the render's document sink); when the element is placed in a shadow tree, the
+  document cannot reach it. Hoisting the child's link into the parent's DSD
+  template — what the class lane did — is a workaround for a composition that the
+  platform itself does not support; it is not a contract, and the generated lane
+  does not reproduce it.
+- **Evidence.** `tests/fixtures/site-light-probe`'s generated port was built and
+  run; it measured the missing delivery and was reverted (the class version's e2e
+  is green, 25/25). The handoff's §6 measurement records **0** product-code
+  instances of the nesting across `www/app`, `apps/saas/app`, `packages/ui/src`
+  and `packages/create/templates`; this rule section cites that measurement
+  rather than re-running it.
+- **Fixture consequence.** `site-light-probe`'s e2e row is to be rewritten to
+  assert the RULE (the composition is authored as `<slot>` or a shadow child),
+  and only then can that fixture migrate. That rewrite belongs to the lane
+  deletion's change set, not to a capability slice.
+
+## Amendment (2026-11-23): property-only primitives join the SSR→claim prop seed (A5)
+
+This is a later reading in the amend-never-rewrite form; it rewrites no decision
+above and creates no milestone, P5 or release claim. It records the owner-approved
+extension of the one value algebra in A5, which had left `attribute: false` seed
+parity unclaimed (the non-primitive half was delivered separately by ADR-0182
+D-18c; this amendment covers the primitive half).
+
+- **What changed.** A supplied `attribute: false` row of type `string` / `number` /
+  `boolean` (a "property-only primitive") now travels server→client on the SAME
+  single host attribute `data-oe-prop-seed` that D-18c already uses for supplied
+  `array` / `object` rows. The emitted host producer's seeder
+  (`seedGeneratedElementHostProperties`) writes it into that one JSON document; the
+  shell's claim (`applyGeneratedPropSeed`, which already runs from
+  `connectedCallback` BEFORE `createRecipe`) parses it and writes the values through
+  the canonical property write guard, so the claim body reads the resolved props the
+  server rendered with. The emitted SSR mode stays ONE host attribute: no per-row
+  attribute is invented, and an attribute-backed primitive keeps its declared
+  attribute pair only (one row, one wire — the M11-2 projection is unchanged).
+- **Why.** Before this rule the claim re-read the declared defaults for those rows
+  and silently wiped the SSR content. Measured on the typed `definePage<Data>` page
+  roots: `#build-count` went `build-count=2` → `0`, `#note-title` was cleared and the
+  422 error branch disappeared — 24/132 e2e rows failed (recorded in the F16
+  handoff §4.5 and §8). The failure is silent: the page is correct until the claim
+  runs, which is exactly the defect class this seed channel exists to remove.
+- **Rules preserved.** The producer reads the supplied value ONCE from an own DATA
+  property; a supplied accessor is never executed and still gets no seed; a supplied
+  `undefined` is not a value. A value the JSON wire cannot carry faithfully (a
+  function, a symbol, a bigint, a cyclic graph) fails the producer closed with
+  `OEIR_LEAF_UNSEEDABLE_PROPERTY`. A seed the descriptor cannot explain (unparseable
+  JSON, a non-object, an unknown row name, or a name that is an attribute-backed
+  primitive / a `trustedHtml` brand) still fails the claim closed with
+  `OEIR_SHELL_PROP_SEED_MISMATCH`. A bare JSX boolean lowers to `""` and is seeded
+  as the `true` fact the content fold rendered (attribute presence). A supplied
+  value EQUAL to the declared default still seeds: the payload mirrors the caller's
+  supplied set exactly (the D-18c rule), and the claim writes the value it would
+  otherwise have re-read.
+- **What remains unseeded (not claimed).** (1) a property-only primitive supplied
+  through an ACCESSOR — the producer deliberately does not run it, so the claim
+  keeps the declared default; this pre-amendment behaviour is now the only remaining
+  divergence for that authoring shape and is recorded, not fixed. (2) A
+  `trustedHtml` row — a brand cannot be reconstructed from JSON (D-18c remains the
+  decision). (3) An attribute-backed primitive — its attribute pair already is the
+  wire. (4) A supplied value the JSON wire cannot carry FAILS CLOSED instead of
+  travelling. An attribute-backed `boolean false` against a presence-default `true`
+  keeps its existing `OEIR_LEAF_UNSEEDABLE_PROPERTY` refusal unchanged.
+- **Emitted-artifact consequence.** A shadow host wrapper whose descriptor has a
+  property-only primitive row now consumes the seeder's `__oeHostAttributes` pair
+  set (it previously called the seeder and ignored the pairs); a light root needed
+  no emitter change because its producer already folds the same seeder. No symbol
+  is added, renamed or removed; the wire name, the seeder signature and the
+  compiler-private `__oeHostAttributes` / `__oePropSeedRows` keys are unchanged, so
+  there is no interface delta and no snapshot change.
+- **Evidence (LOCAL, Node).** `packages/element/__tests__/compiled-server/`
+  `generated-host-props-seeding.test.ts` (producer projection, a real claim round
+  trip through the facade DOM — the light-root `renderToString` host markup parsed
+  and upgraded — plus attribute-backed unaffected, omitted row keeps its default,
+  accessor never executed and non-JSON-encodable value fails closed),
+  `generated-prop-seed-hardening.test.ts` (hostile payload and claim fail-closed)
+  and `generated-host-seed-hydrate.test.ts` (the runtime-only attribute
+  exemption); the compiler emitter rows pin the host-producer gate
+  (`generated-element.shadow-authoring.test.ts`). The fixture admission that
+  measured the wipe is NOT part of this amendment.

@@ -19,6 +19,7 @@ import {
 import {
   compileFunctionModule,
   type FunctionModelComponent,
+  type FunctionModelNode,
 } from '../../semantic-core/function-frontend.ts';
 import { analyzeModuleSemantics } from '../../semantic-core/module-analysis.ts';
 import { typescriptParser } from '../../semantic-core/parse-module.ts';
@@ -62,6 +63,53 @@ export interface CompiledGeneratedElement {
    * read; callers must not re-derive the name from the emitted text.
    */
   readonly ssrHostExport: string | null;
+  /**
+   * The module's admitted STATIC class tokens (deletion prerequisite P-1): the
+   * component stylesheet's candidate set, collected from the same function model
+   * the module was emitted from. Empty when every class channel is dynamic.
+   */
+  readonly classCandidates: readonly string[];
+  /**
+   * Whether this module's tree contains a `when`/`each` Block — the blocks axis of
+   * the runtime-shape floor table (ADR-0166), which picks the `./no-blocks` entry
+   * when no island in the app uses one.
+   *
+   * This replaces the class lane's `program.blocks`: the router's scan used to read
+   * that Part Program field, and with the class lane gone it had no fact at all.
+   * Answered from the SAME function model this compile already lowered, so it is a
+   * fact of the compilation and not a second derivation.
+   */
+  readonly usesBlocks: boolean;
+}
+
+/**
+ * Whether one lowered component's tree contains a `when` or `each` Block.
+ *
+ * The walk descends conditions and list templates because a Block nested inside one
+ * still needs the block builders at runtime. Component references are NOT followed:
+ * a child component's Blocks are its own module's business, and the router's scan
+ * asks every island module separately — following them here would make one island's
+ * answer depend on another's, which is exactly the coupling the per-module scan
+ * avoids.
+ */
+function componentUsesBlocks(component: FunctionModelComponent): boolean {
+  let found = false;
+  const visit = (nodes: readonly FunctionModelNode[]): void => {
+    for (const node of nodes) {
+      if (found) return;
+      if (node.kind === 'condition') {
+        found = true;
+        return;
+      }
+      if (node.kind === 'list') {
+        found = true;
+        return;
+      }
+      if (node.kind === 'element' || node.kind === 'fragment') visit(node.children);
+    }
+  };
+  visit(component.roots);
+  return found;
 }
 
 function toCompilerDiagnostic(diagnostic: IrDiagnostic): ElementCompilerDiagnostic {
@@ -181,6 +229,19 @@ export function compileGeneratedElementIfAdmitted(
     ...(admission.declaresStyles && admission.root === 'shadow-open'
       ? { styleLinkPrefix: true }
       : {}),
+    // 2026-11-20 client style adoption: the SAME sidecar read supplies the
+    // client-only fact and the declared specifiers. A client-only island has no
+    // DSD template to carry the marked link, so the emitter writes real
+    // module-graph imports for these specifiers and the shell adopts the
+    // resulting sheet objects into the root it creates. Both facts come from
+    // one read, so the scan-time and transform-time compiles cannot disagree.
+    // `clientOnly` and the declared specifiers both come from the ONE sidecar
+    // read, but only the SPECIFIERS are conditional on `declaresStyles`: the
+    // client-only fact stands on its own, and threading it only alongside a
+    // style declaration left a styleless `ssr: false` island looking like an
+    // SSR island to the emitter (F16 — the emitter now reads this fact directly).
+    clientOnly: admission.clientOnly,
+    ...(admission.declaresStyles ? { styles: admission.styles } : {}),
     ...(options.authoredSource === undefined ? {} : { authoredSource: options.authoredSource }),
   });
   if (emitted.diagnostics.length > 0) {
@@ -206,5 +267,7 @@ export function compileGeneratedElementIfAdmitted(
     // Additive build metadata from the emitter's one hostWrapper decision; the
     // module text and map above are unchanged by this field.
     ssrHostExport: emitted.ssrHostExport,
+    classCandidates: emitted.classCandidates,
+    usesBlocks: componentUsesBlocks(root),
   };
 }

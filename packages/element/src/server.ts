@@ -46,6 +46,7 @@ import {
   trustedHtmlValue,
 } from './internal/core/security.ts';
 import { renderToString } from './public-runtime.ts';
+import { compiledRootKindOf } from './internal/compiled/server/shared.ts';
 import { AuthoringErrorCode, frameworkError } from './internal/core/errors.ts';
 import { forbiddenSinkReason } from '@openelement/protocol/forbidden-sinks';
 import { unsafeStreamFrameAttribute } from '@openelement/protocol/stream-frame-policy';
@@ -257,6 +258,29 @@ export function __h(
  * composition the call is byte-identical to the three-argument form the
  * pre-composition lane emitted.
  */
+/**
+ * The tags this server render may expand as nested hosts (F16).
+ *
+ * The generated entry injects the set once per process, the same shape as
+ * `__setRequestTimeStyleSheetUrls`. Empty means "nothing to expand", which keeps a
+ * page with no admitted nested tags byte-identical.
+ */
+let ssrRenderableTags: readonly string[] = [];
+
+/** Inject the renderable nested-host tags for this server process. */
+export function __setSsrRenderableTags(tags: readonly string[] | null | undefined): void {
+  ssrRenderableTags = tags === null || tags === undefined ? [] : [...tags];
+}
+
+/**
+ * Serialize one admitted component's server markup.
+ *
+ * A generated element's producer is a string builder, so a nested host inside its
+ * markup reaches its own producer only through the render's nested-host expander. A
+ * class page used to receive that expander from `renderToString`; a SERVER FUNCTION
+ * PAGE's compiled `render` calls this function directly, so the expander travels
+ * through the module-level set above instead (F16).
+ */
 export function __ssr(
   tag: string,
   props?: Record<string, unknown>,
@@ -281,14 +305,11 @@ export function __ssr(
         : (customElements.get(tag) as
             | {
                 __compiledProperties?: readonly { name: string; attribute: string | null }[];
-                __partProgram?: {
-                  metadata: { properties: readonly { name: string; attribute: string | null }[] };
-                };
               }
             | undefined);
-    const records = Array.isArray(resolved?.__compiledProperties)
-      ? resolved.__compiledProperties
-      : (resolved?.__partProgram?.metadata.properties ?? []);
+    // C07–C11: the property table is the ONE source of the declared names; the
+    // Part Program fallback reached the same rows through the execution artifact.
+    const records = resolved?.__compiledProperties ?? [];
     const declared = new Set<string>();
     for (const record of records) {
       declared.add(record.name);
@@ -309,24 +330,29 @@ export function __ssr(
     ...(hostAttrs === undefined ? {} : { hostAttrs }),
   };
   if (composition !== undefined && composition.groups.length > 0) {
-    // Two lanes expose the root kind differently, and both must be read here:
-    // a compiled CLASS carries `__partProgram.root.kind`; a GENERATED element
-    // has no Part Program at all and instead carries the compiler-attached
-    // static `__ssr` producer ONLY when its descriptor root is light. Without
-    // the second read a generated light host falls into the shadow branch, its
-    // authored children ride the wrong channel, and the light serializer drops
-    // them — the host renders with empty slots.
+    // Two lanes expose the root mode, and both must be read here: a compiled
+    // CLASS carries the build-time `__oeRootKind` static (C07–C11 — it is its own
+    // fact now, so this read never depends on the execution artifact); a GENERATED
+    // element carries the compiler-attached `__ssr` producer ONLY when its
+    // descriptor root is light. Without the second read a generated light host
+    // falls into the shadow branch, its authored children ride the wrong channel,
+    // and the light serializer drops them — the host renders with empty slots.
     const registered =
       typeof customElements === 'undefined'
         ? undefined
         : (customElements.get(tag) as
             | {
+                __oeRootKind?: 'light' | 'shadow';
                 __partProgram?: { root?: { kind?: string } };
                 __ssr?: unknown;
               }
             | undefined);
+    // C07–C11: ONE reader for the build-time root mode (`compiledRootKindOf`),
+    // whose retirement condition for its Part Program arm is written there. The
+    // second arm here stays because a GENERATED element has no Part Program at all
+    // and marks its light root by carrying the `__ssr` producer.
     const rootKind =
-      registered?.__partProgram?.root?.kind ??
+      compiledRootKindOf(registered) ??
       (typeof registered?.__ssr === 'function' ? 'light' : undefined);
     if (rootKind === 'light') {
       // Light root: fold the authored-order groups into per-slot projections
@@ -351,5 +377,11 @@ export function __ssr(
       options.hostChildren = trustedHtml(composition.groups.map(([, html]) => html).join(''));
     }
   }
-  return renderToString(tag, options);
+  // The nested-host expander is built from this set INSIDE renderToString, so
+  // forwarding it here is what lets a function page expand the components in its
+  // own markup (F16). Absent tags keep the pre-slice bytes exactly.
+  return renderToString(
+    tag,
+    ssrRenderableTags.length === 0 ? options : { ...options, ssrRenderableTags },
+  );
 }

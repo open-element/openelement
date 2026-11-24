@@ -4,10 +4,6 @@ import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { expect, test } from 'vitest';
 import ts from 'typescript';
-import {
-  CompiledElementError,
-  compileElementProgram,
-} from '../../../packages/compiler/src/internal/compiler/semantic-core/compile.ts';
 
 const CORE_ROOT = new URL(
   '../../../packages/compiler/src/internal/compiler/semantic-core/',
@@ -262,32 +258,10 @@ test('ADR-0148 boundary rule rejects host edges and dynamic specifiers it cannot
   }
 });
 
-test('ADR-0148 semantic output and diagnostics are stable for canonical inputs', () => {
-  const source = `
-import { element, OpenElement, property } from '@openelement/element';
-@element('oe-deterministic')
-export default class DeterministicElement extends OpenElement {
-  @property({ reflect: false }) count = 0;
-  increment(): void { this.count++; }
-  render() { return <button onClick={this.increment}>{this.count}</button>; }
-}`;
-  const file = '/canonical/app/islands/deterministic.tsx';
-  const outputs = Array.from({ length: 3 }, () => compileElementProgram(source, file));
-  expect(outputs[1].code).toEqual(outputs[0].code);
-  expect(outputs[2].code).toEqual(outputs[0].code);
-  expect(JSON.stringify(outputs[1].program)).toEqual(JSON.stringify(outputs[0].program));
-  expect(JSON.stringify(outputs[2].program)).toEqual(JSON.stringify(outputs[0].program));
-
-  const invalid = `${source}\nconst runtimeTopLevel = Date.now();`;
-  const diagnostics = Array.from({ length: 3 }, () => {
-    try {
-      compileElementProgram(invalid, file);
-      throw new Error('invalid source unexpectedly compiled');
-    } catch (error) {
-      expect(error instanceof CompiledElementError).toBeTruthy();
-      return JSON.stringify(error.diagnostics);
-    }
-  });
-  expect(diagnostics[1]).toEqual(diagnostics[0]);
-  expect(diagnostics[2]).toEqual(diagnostics[0]);
-});
+// The class lane's compile-determinism row is retired with the lane itself
+// (Alpha16): `compileElementProgram` emitted the class Part Program this file
+// used to hold three times over, and neither that entry nor its output shape
+// exists anymore. The ADR-0148 MODULE-EDGE guard above is the part of this
+// suite that keeps guarding a living boundary, so it stays; re-pointing the
+// determinism row at a surviving lane would be a different test, not the same
+// coverage.

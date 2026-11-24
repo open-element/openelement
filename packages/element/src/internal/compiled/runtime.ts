@@ -141,13 +141,15 @@ export { bindSignalWrites, runUntracked } from './runtime/bindings.ts';
 // The retained-logical-instance surface the depth-1 generated nested wiring
 // consumes (`16b-LC retained-child`): the generated root mount/claim pass bracket, the
 // ref-site retain/release text, and the shell's connect abort and owner
-// teardown release. Exactly the seven consumed functions are re-exported —
-// this barrel is the single specifier generated code resolves, so a symbol
-// without an emitted/shell consumer must not be added here.
+// teardown release, plus the depth >= 2 transaction token join. Exactly the
+// eight consumed functions are re-exported — this barrel is the single
+// specifier generated code resolves, so a symbol without an emitted/shell
+// consumer must not be added here.
 export {
   abortInstancePass,
   beginInstancePass,
   endInstancePass,
+  joinInstancePass,
   releaseChildInstance,
   releaseRetainedChildren,
   releaseUnderStructuralScope,

@@ -1,6 +1,8 @@
 /** Bare-palette gate semantics: role table precedence, allowlist, parse, and
  * the linked authored sheet (A5: www/site-chrome.css is a scan target). */
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
 import { siteCSS } from '../site-css.ts';
@@ -113,15 +115,28 @@ test('the linked authored sheet is a scan target, not a silent gap', () => {
 });
 
 test('authored .css sheets under www/app are scan targets with the palette rule', async () => {
-  // open-article-view.css is the page-owned sheet of the #1553 protocol: a
-  // plain .css file under the scanned root that the .ts/.tsx source filter
-  // alone would still skip. It must be a target, and gated for palette too.
+  // www/app holds no authored .css sheet any more (open-article-view.css was the
+  // last one; its single `:host` box rule moved into the linked document sheet
+  // on 2026-11-20, because a server FUNCTION page's nested host never runs the
+  // class serializer's style walk). The ADMISSION rule is still load-bearing —
+  // the next `.css` a page owns must be a palette-gated scan target rather than
+  // a silent gap — so it is pinned against a scratch root instead of a live file.
+  const scratch = await mkdtemp(join(tmpdir(), 'oe-app-sheet-scan-'));
+  try {
+    await mkdir(join(scratch, 'site-ui'), { recursive: true });
+    await writeFile(join(scratch, 'site-ui', 'owned.css'), ':host { display: block; }\n');
+    const scratchTargets = await collectAppScanTargets(scratch);
+    const scratchSheets = scratchTargets.filter((target) => target.path.endsWith('.css'));
+    expect(scratchSheets.map((sheet) => sheet.path)).toEqual([
+      join(scratch, 'site-ui', 'owned.css'),
+    ]);
+    expect(scratchSheets.every((sheet) => sheet.palette)).toEqual(true);
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
   const targets = await collectAppScanTargets(APP_ROOT);
   const sheets = targets.filter((target) => target.path.endsWith('.css'));
-  expect(sheets.map((sheet) => sheet.path)).toEqual([
-    fileURLToPath(new URL('../app/site-ui/open-article-view.css', import.meta.url)),
-  ]);
-  expect(sheets.every((sheet) => sheet.palette)).toEqual(true);
+  expect(sheets.map((sheet) => sheet.path)).toEqual([]);
   // The CSS-in-TS surface keeps its segment-scoped palette rule ...
   expect(targets.find((target) => target.path.endsWith('/site-ui/head.ts'))?.palette).toEqual(true);
   // ... and the generated data dir is not a source.

@@ -30,12 +30,14 @@
  *   the same module's root body) retains its setup exactly once and the parent
  *   reconnect REUSES that record, so the reconnected child text stays the
  *   snapshot taken at first connect and the exported setup counter stays 1.
- *   This is the depth-1 acceptance only: a grandchild (depth >= 2) keeps
- *   today's legacy text and re-evaluating behavior (measured in T5 below, no
- *   new refusal, no semantic widening), and recipe/leaf bodies stay legacy.
+ *   Depth >= 2 (2026-11-21) is the same plan with one more owner class: a
+ *   retained body that references its own hostless child retains it and JOINS
+ *   the root attempt's transaction, so the grandchild keeps its setup record
+ *   across a reconnect (T5 below) and an aborted attempt never commits a child
+ *   pass. Recipe/list bodies stay legacy in both cases.
  *
  * One engine (Chromium), LOCAL. Not M09 exit, not the M13 matrix, no author
- * lifecycle/signal capability, no depth >= 2 retention claim.
+ * lifecycle/signal capability, no §4.1d subtree contract.
  */
 
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -324,6 +326,7 @@ async function buildBundle(dir: string, islandModule: string, name: string): Pro
     shim,
     [
       `export { claimRecipe, createRecipe, insertRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
+      `export { reconcileEachEntries } from ${JSON.stringify(join(runtime, 'each-reconcile.ts'))};`,
       `export { bindSignalWrites, runUntracked } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
       `export { runtimeProbe } from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
       `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
@@ -335,7 +338,7 @@ async function buildBundle(dir: string, islandModule: string, name: string): Pro
       `export { claimStaticSiblingRange, openStaticSiblingDirectory } from ${JSON.stringify(join(runtime, 'static-sibling-ranges.ts'))};`,
       // 16b-LC retained-child depth-1 nested retention: the generated root pass bracket and
       // the ref-site retain/release text import this surface.
-      `export { abortInstancePass, beginInstancePass, endInstancePass, releaseChildInstance, releaseRetainedChildren, releaseUnderStructuralScope, retainChildInstance } from ${JSON.stringify(join(runtime, 'instance-ledger.ts'))};`,
+      `export { abortInstancePass, beginInstancePass, endInstancePass, joinInstancePass, releaseChildInstance, releaseRetainedChildren, releaseUnderStructuralScope, retainChildInstance } from ${JSON.stringify(join(runtime, 'instance-ledger.ts'))};`,
       `export { escapeText } from ${JSON.stringify(join(element, 'compiled/escape-text.ts'))};`,
       `export { escapeAttrValue } from ${JSON.stringify(join(element, 'core/html-escape.ts'))};`,
       '',
@@ -420,13 +423,14 @@ beforeAll(async () => {
     }),
     'condition',
   );
-  // T5: depth >= 2 boundary (Child retained, Grand legacy).
+  // T5: depth >= 2 retention — the grandchild is retained too, so BOTH bodies
+  // own a setup factory and the counter observes real `__setup` invocations.
   const depth2 = compileIsland(DEPTH2_ID, DEPTH2_SOURCE);
   depth2Tag = depth2.tag;
   depth2Bundle = await buildBundle(
     tempDir,
     instrumentModule(instrumentModule(depth2.code, 'Child', { setupCounts: true }), 'Grand', {
-      legacySetupCounts: true,
+      setupCounts: true,
     }),
     'depth2',
   );
@@ -967,7 +971,7 @@ describe('T3 root generated setup retention (Chromium)', () => {
     }
   });
 
-  test("R8 T5: depth >= 2 keeps today's legacy text and re-evaluating semantics (OWED)", async () => {
+  test('R8 T5: depth >= 2 retains the grandchild through the same transaction', async () => {
     const page = await openPage(depth2Bundle);
     try {
       const result = await page.evaluate(async (tagName) => {
@@ -1009,17 +1013,138 @@ describe('T3 root generated setup retention (Chromium)', () => {
         childSetups: 1,
         grandSetups: 1,
       });
-      // OWED boundary: the retained Child keeps its setup (1), while the
-      // GRANDCHILD (referenced from the leaf body, emitted legacy text) keeps
-      // today's re-evaluating behavior: setup runs again during the reconnect
-      // claim and the live prop (3) is shown. This is the unchanged depth >= 2
-      // behavior, not a new refusal and not a retention expansion.
+      // Depth >= 2 (2026-11-21): the grandchild is a retained logical instance
+      // too. Its setup ran ONCE at mount, the reconnect claim reuses both
+      // records (setup stays 1 for each), and the retained snapshot (1) is what
+      // renders — not the live prop (3). The child body joined the root's
+      // transaction instead of opening its own, so no pass was double-committed
+      // and no ledger-state error surfaced (asserted with `errors` above).
       expect(result.reconnected).toEqual({
         childValue: '1',
-        grandValue: '3',
+        grandValue: '1',
         childSetups: 1,
-        grandSetups: 2,
+        grandSetups: 1,
       });
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('R10 T5b: an aborted attempt at depth >= 2 commits no child pass and evicts only what it created', async () => {
+    const page = await openPage(depth2Bundle);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeRootInstance;
+        const tick = window.__oeTick;
+        customElements.define(tagName, mod.GeneratedElement);
+        const host = document.createElement(tagName) as HTMLElement & {
+          seed: number;
+          label: string;
+          dispose: (detach?: boolean) => void;
+        };
+        const setups = () => ({
+          childSetups: window.__oeSetupCounts.Child ?? 0,
+          grandSetups: window.__oeSetupCounts.Grand ?? 0,
+        });
+        const read = () => ({
+          childValue: host.querySelector('em b')?.textContent ?? null,
+          grandValue: host.querySelector('em u')?.textContent ?? null,
+        });
+        host.seed = 1;
+        host.label = 'null';
+        document.body.append(host);
+        await tick();
+        const mounted = { ...read(), ...setups() };
+        const retainedRoot = host.firstChild;
+        host.remove();
+        await tick();
+        // Structurally damage the owned region so the reconnect claim fails
+        // AFTER the child body already retained (and joined) this attempt.
+        retainedRoot!.remove();
+        const errorsBefore = window.__oeErrors.length;
+        document.body.append(host);
+        await tick();
+        const failedErrors = window.__oeErrors.slice(errorsBefore);
+        // Converge: restore the exact node and reconnect. Both retained records
+        // were KEPT by the abort, so neither setup runs again.
+        host.appendChild(retainedRoot!);
+        host.remove();
+        await tick();
+        host.seed = 5;
+        document.body.append(host);
+        await tick();
+        const retried = { ...read(), ...setups() };
+        const afterRetryErrors = window.__oeErrors.slice(errorsBefore);
+        host.remove();
+        return { mounted, failedErrors, afterRetryErrors, retried };
+      }, depth2Tag);
+      expect(result.mounted).toEqual({
+        childValue: '1',
+        grandValue: '1',
+        childSetups: 1,
+        grandSetups: 1,
+      });
+      // The failed attempt surfaced exactly one claim mismatch and no
+      // ledger-state error: the child pass was aborted, not committed twice.
+      expect(result.failedErrors.length).toBe(1);
+      expect(result.failedErrors[0]).toContain('OEIR_LEAF_CLAIM_MISMATCH');
+      expect(
+        result.afterRetryErrors.filter((message) => message.includes('OEIR_INSTANCE_LEDGER_')),
+      ).toEqual([]);
+      // Convergence: pre-existing entries survived, so setup stays 1/1 (a
+      // committed child pass would have swept the grandchild entry instead).
+      expect(result.retried).toEqual({
+        childValue: '1',
+        grandValue: '1',
+        childSetups: 1,
+        grandSetups: 1,
+      });
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('R11 T5c: depth >= 2 owner teardown releases the whole retained subtree once', async () => {
+    const page = await openPage(depth2Bundle);
+    try {
+      const result = await page.evaluate(async (tagName) => {
+        const mod = window.__oeRootInstance;
+        const tick = window.__oeTick;
+        customElements.define(tagName, mod.GeneratedElement);
+        const host = document.createElement(tagName) as HTMLElement & {
+          seed: number;
+          label: string;
+          dispose: (detach?: boolean) => void;
+        };
+        const setups = () => ({
+          childSetups: window.__oeSetupCounts.Child ?? 0,
+          grandSetups: window.__oeSetupCounts.Grand ?? 0,
+        });
+        host.seed = 1;
+        host.label = 'null';
+        document.body.append(host);
+        await tick();
+        const mounted = setups();
+        host.dispose(true);
+        const afterDispose = {
+          childValue: host.querySelector('em b')?.textContent ?? null,
+          grandValue: host.querySelector('em u')?.textContent ?? null,
+        };
+        // Reconnect after teardown: setup re-runs on a NEW instance subtree.
+        host.seed = 2;
+        document.body.append(host);
+        await tick();
+        const reconnected = setups();
+        host.remove();
+        return { mounted, afterDispose, reconnected, errors: window.__oeErrors.slice() };
+      }, depth2Tag);
+      expect(result.errors).toEqual([]);
+      expect(result.mounted).toEqual({ childSetups: 1, grandSetups: 1 });
+      // Teardown removed the owned range (both levels) in one pass.
+      expect(result.afterDispose).toEqual({ childValue: null, grandValue: null });
+      // "dispose is not disconnect": the next connect builds a new subtree and
+      // therefore runs BOTH setup factories again exactly once.
+      expect(result.reconnected).toEqual({ childSetups: 2, grandSetups: 2 });
     } finally {
       await page.close();
     }

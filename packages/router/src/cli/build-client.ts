@@ -52,7 +52,7 @@ import {
   packageIslandChunkName,
   readViteClientManifest,
 } from '../vite/client-asset-manifest.ts';
-import { createClassCandidateRegistry } from '@openelement/compiler';
+import { createClassCandidateRegistry, stableModuleId } from '@openelement/compiler';
 import { stylePlanForApp } from '../vite/internal/style-plan.ts';
 import { createStyleBuildIntegration } from '../vite/internal/style-provider.ts';
 import {
@@ -64,8 +64,12 @@ import {
   resolveElementRuntimeIdentity,
 } from '../vite/internal/element-runtime-chunk.ts';
 import { requireViteHelperChunk, viteHelperChunkName } from '../vite/internal/vite-helper-chunk.ts';
+import { realpathSync } from 'node:fs';
 import { islandStyleDeclarations } from '../vite/internal/island-style-declarations.ts';
-import { setClientIslandStyleAssets } from '../vite/internal/island-style-build-assets.ts';
+import {
+  setClientIslandStyleAssets,
+  setClientIslandUtilityTags,
+} from '../vite/internal/island-style-build-assets.ts';
 import {
   buildPageClassificationContext,
   resolvePageComponentIsland,
@@ -85,7 +89,6 @@ import {
   clientStyleAssetPlugin,
   serverRenderedStyleEdgesPlugin,
 } from '../vite/internal/style-assets.ts';
-import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
 import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
 import {
   createServerComponentSourceResolver,
@@ -368,6 +371,21 @@ export function findReachableIslandTags(
     islandTagNames: ctx.phase1.islandTagNames ?? [],
     islandFiles: ctx.phase1.islandFiles ?? [],
     islandMeta: ctx.phase1.islandMeta ?? {},
+    // Same declared-component map the entry descriptor uses (P-4 fix): the client
+    // reachability seed must agree with the classifier about which module a page
+    // resolves to, or a generated page's island never joins the client entry.
+    ...(ctx.phase1.declaredElementTags === undefined
+      ? {}
+      : { declaredTags: ctx.phase1.declaredElementTags }),
+    ...(ctx.phase1.declaredElementHostExports === undefined
+      ? {}
+      : { declaredHostExports: ctx.phase1.declaredElementHostExports }),
+    resolveHostIdentity: (moduleId, tagName) => {
+      const producer = ctx.phase1.declaredElementHostExports?.get(moduleId);
+      return producer === undefined
+        ? { kind: 'light-no-producer', component: tagName }
+        : { kind: 'producer', component: tagName, ssrHostExport: producer };
+    },
   });
   for (const route of ctx.phase1.cachedRoutes ?? []) {
     if (route.type !== 'page' || route.special) continue;
@@ -721,7 +739,6 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
     islandFiles: selectedLocalFiles,
     packageIslandDecls: selectedPackageDecls,
     compilerBehaviorDecls: selectedCompilerBehaviorDecls,
-    staticSidecars: [ISLAND_ADMISSION],
   });
   // The emission half of the same axis: resolve the bare element specifier to
   // the blocks-free entry for the whole client graph.
@@ -1014,7 +1031,6 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
         // Linked workspace packages sit outside the project root; without the
         // workspace anchor their absolute ids would land in the source maps.
         workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
-        staticSidecars: [ISLAND_ADMISSION],
         // This build's own class-candidate registry (defect C): the transform's
         // write path and the discovery pass share exactly this instance, and no
         // other build's facts can reach it.
@@ -1052,6 +1068,9 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
           // under `app/site-ui/` has no convention of its own, so its own
           // sidecar `tag` is the only thing that admits it to the lane.
           ctx.phase1.declaredElementTags,
+          // An .mdx route's tag derives from its route-relative path; the resolver
+          // is the only place that can answer its virtual module id.
+          ctx.phase3.routesDir || 'app/routes',
         ),
       }),
       // intercepts the compiled modules' authored `.css` imports before
@@ -1301,7 +1320,11 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
         const key = styleRequestModuleId(
           declaration.moduleId,
           specifier,
-          declaration.root === 'shadow' ? undefined : declaration.tagName,
+          declaration.root === 'shadow'
+            ? undefined
+            : declaration.scopeTag === null
+              ? undefined
+              : (declaration.scopeTag ?? declaration.tagName),
         );
         const emitted = ctx.clientStyleAssetFiles.get(key);
         if (emitted === undefined) {
@@ -1351,6 +1374,65 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       }
     }
     setClientIslandStyleAssets(ctx, islandStyleAssets);
+
+    // P-1b (2026-11-21): a generated shadow island's class tokens compile into
+    // the build's ONE shared component stylesheet, and its DSD template must link
+    // that sheet in addition to its authored `styles` assets — the class lane does
+    // the same by construction, and without this a migrated shadow component
+    // paints unstyled. The registry is the authority for "this module's tokens
+    // reached the component sheet".
+    // The registry is keyed by the bundler's absolute module id while the island
+    // declaration records the SCAN's spelling of the same file; both are the same
+    // module, so the lookup tries the declaration's spelling AND its real path
+    // (the same fallback `islandStyleDeclarationFor` documents) instead of
+    // assuming one root spelling.
+    const moduleHasCandidates = (declaration: { moduleId: string }): boolean => {
+      // The discovery pass registers with the compiler's STABLE module id; the
+      // declaration records the scan's absolute path (and a symlinked root can
+      // spell it differently). Normalizing the declaration through the same
+      // function is what makes the two spellings one key.
+      if (shadowCandidateRegistry.forModule(declaration.moduleId).length > 0) return true;
+      try {
+        return (
+          shadowCandidateRegistry.forModule(
+            stableModuleId(
+              realpathSync(declaration.moduleId),
+              root,
+              findBuildWorkspaceRootOrUndefined(root),
+            ),
+          ).length > 0
+        );
+      } catch {
+        return false;
+      }
+    };
+    setClientIslandUtilityTags(
+      ctx,
+      new Set([
+        ...islandStyleDeclarations()
+          .filter(
+            (declaration) => declaration.root === 'shadow' && moduleHasCandidates(declaration),
+          )
+          .map((declaration) => declaration.tagName),
+        // A page-local GENERATED shadow component (P-2) has no island declaration:
+        // its `styles` may be empty (TSX-only Tailwind), so the class-candidate
+        // registry is the only fact that says "this shadow tree's utilities live in
+        // the shared component sheet". Without this row such a component ships an
+        // unstyled shadow root — measured on `router-ui-dogfood`'s tailwind probe.
+        ...(ctx.phase1.staticComponents ?? [])
+          .filter(
+            (component) =>
+              component.root === 'shadow' &&
+              // `modulePath` is the SSR entry's project-relative `/app/...` spelling;
+              // the registry is keyed by the compiler's stable id, so the probe's own
+              // anchor is applied through the same function the registration used.
+              shadowCandidateRegistry.forModule(
+                stableModuleId(resolve(root, `.${component.modulePath}`), root),
+              ).length > 0,
+          )
+          .map((component) => component.tagName),
+      ]),
+    );
 
     // The component stylesheet (alpha15 S lane): a discovered shadow-candidate
     // set whose entry emitted no CSS would ship unstyled shadow components —

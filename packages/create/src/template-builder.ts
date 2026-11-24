@@ -199,15 +199,6 @@ export const TEMPLATE_FILES: readonly (readonly [string, string])[] = [
   // the structured `head` channel (title/description/favicon/scripts); this
   // module carries what a URL list cannot express (meta tags, preloads).
   ['app/head.tsx.tmpl', 'app/head.tsx'],
-  // The one authored rule left per component: the root box. Pages array
-  // their own sheet in `static styles`; the layout arrays the chrome sheet.
-  ['app/components/page-home.css', 'app/components/page-home.css'],
-  ['app/components/page-about.css', 'app/components/page-about.css'],
-  ['app/components/page-404.css', 'app/components/page-404.css'],
-  ['app/components/site-chrome.css', 'app/components/site-chrome.css'],
-  ['app/components/page-home.tsx.tmpl', 'app/components/page-home.tsx'],
-  ['app/components/page-about.tsx.tmpl', 'app/components/page-about.tsx'],
-  ['app/components/page-404.tsx.tmpl', 'app/components/page-404.tsx'],
   ['app/routes/index.tsx.tmpl', 'app/routes/index.tsx'],
   ['app/routes/about.tsx.tmpl', 'app/routes/about.tsx'],
   ['app/routes/404.tsx.tmpl', 'app/routes/404.tsx'],

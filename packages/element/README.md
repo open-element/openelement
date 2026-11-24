@@ -1,21 +1,20 @@
 # @openelement/element
 
-Canonical component-authoring facade for the OpenElement 1.0 baseline.
+Runtime surface for the generated component lane of the OpenElement 1.0 baseline.
 
 Docs and guides: <https://openelement.org>.
 
-This package exposes `OpenElement`, the product-facing base class for native
-Web Components, running on the compiled Part Program kernel: one mandatory
-compiler (`@openelement/compiler`) lowers each component's `render()` into
-a serializable program consumed by server serialization, fresh DOM creation,
-and existing-DOM hydration alike. Light DOM is the current compiled default;
-Shadow/DSD is a first-class mode selected explicitly with
-`@element(tag, { root: 'shadow-open' | 'shadow-closed' })`.
+This package is the runtime surface for generated Native Custom Elements: one
+mandatory compiler (`@openelement/compiler`) lowers each default-exported
+function component, beside its `defineIslandConfig` sidecar, into a serializable
+program consumed by server serialization, fresh DOM creation, and existing-DOM
+hydration alike. Light DOM is the current compiled default; Shadow/DSD is a
+first-class mode selected in the sidecar with `root: 'shadow' | 'closed'`.
 
 Also includes:
 
-- `ErrorBoundary` — error boundary (`static isErrorBoundary = true`) that automatically captures subtree failures: on SSR a failed subtree evaluation renders the boundary's fallback branch in place of the failed subtree (the throw surfaces at the nearest boundary; without one the route still fails), and on the client descendant failures route to the nearest boundary's `catchError()` through three automatic capture points: authored platform lifecycle callback bodies (the compiler wraps `connectedCallback`/`disconnectedCallback`/`adoptedCallback`/`attributeChangedCallback`/`formAssociatedCallback`/`formResetCallback`/`formStateRestoreCallback` at compile time), post-activation Block update failures, and property writes whose signal-graph evaluation throws (the facade property setter — handler-driven and external writes alike; a handler body that throws without writing a property still needs its own try/catch). In a compiled module the subclass re-declares `hasError` as its own `@property`, sets it in `catchError()`, and branches on it with a fully static JSX ternary inside a single-return `render()` (the compiled grammar guide has the exact compilable shape — a plain `if (this.hasError) return …; return …;` with two returns does not compile, and neither does a branch containing a binding). `retry()` re-renders both the boundary and the captured source element, `reset()` clears the state entirely. Without a boundary, SSR keeps the bare-tag degradation and CSR keeps the per-element `onRenderError()` fallback
-- `element` / `property` — compile-time-only decorator intrinsics: the compiler admits them by binding provenance and erases them from generated code; evaluated without the compiler they are inert no-ops
+- `onError(cb)` — the compiler-erased error-boundary intrinsic (16b-EB): the generated element's shell runs the registered handler at its connect/claim, update and event-dispatch capture points; outside a compiled generated element module the function fails closed
+- No decorators: a component declares its tag, root and reactive properties once, in the `defineIslandConfig` sidecar the compiler reads; the `element` / `property` decorators were retired with the class lane
 - Signals: `signal`, `computed`, `effect`, and the `Signal` type
 - Context (`createContext` / `provideContext` / `consumeContext`), `StyleSheet`, HTML escaping utilities, and the `trustedHtml` explicit trust boundary
 
@@ -27,35 +26,35 @@ npm install @openelement/element
 
 ## Usage
 
-Components are classes decorated with `@element` and compiled by the
-`@openelement/router` build — there is no runtime registration call in
-authoring source:
+A component is a default-exported function beside the `defineIslandConfig`
+sidecar the compiler reads — there is no runtime registration call in authoring
+source and no decorator:
 
 ```tsx
-import { element, OpenElement, property } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
 
-@element('my-card', { root: 'shadow-open' })
-export class MyCard extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  title = '';
+export const openElement = defineIslandConfig({
+  tag: 'my-card',
+  root: 'shadow',
+  properties: { title: { attribute: false } },
+});
 
-  render() {
-    return (
-      <article>
-        <h2>{this.title}</h2>
-      </article>
-    );
-  }
+export default function MyCard(props: { title: string }) {
+  return (
+    <article>
+      <h2>{props.title}</h2>
+    </article>
+  );
 }
 ```
 
-Instance properties decorated with `@property` are the reactive state contract;
-the compiler wires them to the signal engine so server output, fresh DOM, and
-claimed DOM share one identity model. Styles ship via `static styles` (a scoped
-`StyleSheet`); raw-text `<style>`/`<script>` tags are rejected from templates.
+The sidecar's `properties` table is the reactive state contract; the compiler
+wires each row to the signal engine so server output, fresh DOM, and claimed DOM
+share one identity model. Styles ship via a declared `.css` sheet in the
+sidecar; raw-text `<style>`/`<script>` tags are rejected from templates.
 
-The 1.0 baseline intentionally starts at the compiled class model. Historic
-0.x authoring behavior remains available in Git history.
+The 1.0 baseline authors components in the generated lane. The deleted class
+authoring model remains available in Git history.
 
 ## Subpath exports
 
@@ -67,7 +66,7 @@ import targets, not author API.
 
 | Subpath                                | Import it for                                                                                                                                                                |
 | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@openelement/element`                 | Authoring: `OpenElement`, `element`/`property`, signals, `ErrorBoundary`, `StyleSheet`, HTML escaping, `trustedHtml`.                                                        |
+| `@openelement/element`                 | Runtime surface for generated components: signals, context, `StyleSheet`, HTML escaping, `trustedHtml`, and the compiler-erased lifecycle/error intrinsics (`onConnect`, `onDispose`, `onError`, `ref`, `useContext`). |
 | `@openelement/element/jsx-runtime`     | Automatic JSX runtime target (`jsxImportSource`); typecheck-only — compiled output never calls the factories, they fail closed.                                              |
 | `@openelement/element/jsx-dev-runtime` | Development JSX runtime target; same typecheck-only, fail-closed contract.                                                                                                   |
 | `@openelement/element/authoring`       | Runtime guards shared by authoring layers (tag names, dangerous keys, error class, hydration strategies, action headers).                                                    |
@@ -82,6 +81,7 @@ import targets, not author API.
 | `@openelement/element/document-services` | The document-level services a client entry installs on EVERY page that ships client JS: `ensureDeepFragmentNavigation` (fragment navigation across nested shadow roots, #1090) and `ensurePreHydrationClickCapture` (the bounded pre-upgrade interaction capture a claiming island replays after activation). Its reason to exist is the executor-free page floor: a page whose islands are ALL generated-lane emits no `element-services` loader, so without this surface those two installers would silently stop running — measured on the live site before it landed (`#start` never got `data-open-target`). The installers are the SAME function objects the root entry exports, called by the generated entry (no module-scope side effect), and the reachable value closure is four modules with no executor entry: `internal/core/deep-fragment.ts` (zero imports) and the pre-upgrade capture, which used to reach `program-kernel.ts` for one throw and now calls the error façade origin with the same code, phase and message. |
 | `@openelement/element/server`          | The server HTML constructor helpers (`__h`/`__t`/`__ssr`) a compiled server function page's generated body calls — internal by convention (the `__` prefix), application code calls the compiled components. Server-graph only: it imports the compiled serializer directly and never the client barrel, so no hydration machinery enters the graph. |
 | `@openelement/element/internal/compiled/leaf-runtime` | The generated-leaf module's CLOSED runtime entry (M11-3): the same primitives, re-exported from their origin modules and deliberately never from `program-kernel.ts`. Emitted-code import target — it exists so a generated island chunk does not reach the generic executor through its own leaf imports; not author API, and not a stability promise beyond the compiled-leaf ABI. Carries the SSR half of the context engine (`createRenderContextScope`) for the same reason: an emitted producer that renders a consumer imports it from here, and a module that does not render one never does. |
+| `@openelement/element/internal/styles` | The shared sheet registry (`themeManager`). Emitted-code import target: the generated client entry registers the compiled component stylesheet here, which used to happen through the class base's `registerGlobalStyles` static. The symbol is deliberately NOT on the public surface — the caller is framework-generated code, not author API — and this entry carries no stability promise (ADR-0177). |
 | `@openelement/element/internal/compiled/runtime` | The generated-leaf module's runtime surface (recipe mount/claim, claim markers and invariants, SSR escape, list keys). Emitted-code import target; not author API, and not a stability promise beyond the compiled-leaf ABI. |
 | `@openelement/element/internal/compiled/generated-element/shell` | The generated Native Custom Element shell (`createGeneratedElementClass`, `defineGeneratedElement`). Emitted-code import target; not author API — the compiler-private descriptor is the only contract. |
 

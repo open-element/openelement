@@ -23,6 +23,33 @@ test.describe('hydration timing', () => {
     await expect(timer.locator('#elapsed')).not.toHaveText(first, { timeout: 5_000 });
   });
 
+  // 2026-11-20, GH #1800's last slice: the SAME island's declared sheet must
+  // reach the client-created shadow root. There is no DSD template to carry a
+  // `<link>`, so the only delivery is the compiler's emitted `.css` import plus
+  // the shell's adoption of the resulting sheet object. `:host` defaults to
+  // `inline`, so `inline-block` is unreachable unless the sheet was adopted —
+  // this reads the real built starter, its real client chunk and its real style
+  // asset, not a fixture.
+  test('client-only island adopts its declared sheet (live-timer computed style)', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    const timer = page.locator('live-timer');
+    await expect(timer).toBeVisible();
+    // `toHaveCSS` retries until the adopted sheet's fetch + replace settles.
+    await expect(timer).toHaveCSS('display', 'inline-block');
+    // One sheet on the shell-created root, and it is a real CSSStyleSheet.
+    const adopted = await page.evaluate(() => {
+      const host = document.querySelector('live-timer');
+      const sheet = host?.shadowRoot?.adoptedStyleSheets[0];
+      return {
+        count: host?.shadowRoot?.adoptedStyleSheets.length ?? 0,
+        isStyleSheet: sheet instanceof CSSStyleSheet,
+      };
+    });
+    expect(adopted).toEqual({ count: 1, isStyleSheet: true });
+  });
+
   // #942 (fixed): the document-level capture listener
   // (ensurePreHydrationClickCapture) observes a retargeted event.target (the
   // island host) for clicks originating inside the island's open shadow root.

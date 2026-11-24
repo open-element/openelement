@@ -1,22 +1,27 @@
 /**
- * The island blocks scan (#1548) — the compiler-owned blocks axis of the
- * element entry selection.
+ * The island blocks scan (#1548) — the when/each axis of the element entry
+ * selection.
  *
- * The scan's fact is the compiler's fact (`program.blocks`), read through
- * the same public `compileElementModule` the Vite transform runs. These tests
- * pin the walk over a real fixture tree on disk:
+ * The scan's fact is the compiler's fact, read through the same generated-lane
+ * compile the Vite transform runs: `usesBlocks` (F16) is derived from the
+ * function model that compile already lowered, and it replaced the class lane's
+ * `program.blocks` when Alpha16 retired that lane. These tests pin the walk
+ * over a real fixture tree on disk:
  *
- * - a plain compiled island (fixed Parts only) scans blocks-free;
- * - a compiled island with a conditional Block scans blocks-carrying;
+ * - a plain generated island (static tree only) scans blocks-free;
+ * - a generated island with a when branch scans blocks-carrying;
  * - the walk follows relative imports (a plain module re-exporting a
  *   blocks-carrying island is caught);
  * - the walk follows resolvable bare imports (a tmp node_modules package
- *   whose element lowers a Block is caught);
+ *   whose generated island lowers a when is caught);
  * - an island specifier that resolves nowhere is inconclusive → the full
  *   runtime stays (the ADR-0155 asymmetry on the second axis);
- * - a module the compiler rejects is inconclusive → the full runtime stays.
+ * - a module the compiler refuses is inconclusive → the full runtime stays;
+ * - a pre-retirement packed package proves its own blocks from the embedded
+ *   program, because a packed module has no authoring grammar to recompile;
+ * - the emission half: the exact element-entry alias, and its back-off.
  */
-import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'pathe';
 import { afterAll, expect, test } from 'vitest';
@@ -26,7 +31,6 @@ import {
 } from '../src/vite/internal/ssg/island-blocks-scan.ts';
 import type { IslandsBlocksScanInput } from '../src/vite/internal/ssg/island-blocks-scan.ts';
 
-const ELEMENT_PACKAGE_ROOT = new URL('../../packages/element', import.meta.url).pathname;
 const REPO_ROOT = new URL('../..', import.meta.url).pathname;
 
 const tmpRoots: string[] = [];
@@ -38,46 +42,58 @@ function makeApp(): string {
   return root;
 }
 
-/** The @openelement/element package must resolve from the tmp app for bare-import walking. */
-function linkElementPackage(root: string): void {
-  mkdirSync(join(root, 'node_modules/@openelement'), { recursive: true });
-  symlinkSync(ELEMENT_PACKAGE_ROOT, join(root, 'node_modules/@openelement/element'), 'dir');
-}
-
 function writeIsland(root: string, name: string, body: string): void {
   writeFileSync(join(root, `app/islands/${name}`), body);
 }
 
+// The scan reads a module's sidecar through the ONE declaration reader and
+// compiles it with the generated lane, so every fixture is an authored generated
+// island: the sidecar is the lane's identity and the default-exported function is
+// what the lane lowers (and what carries the when/each nodes `usesBlocks`
+// reports). Each sidecar pins its tag because the scan passes NO path fallback to
+// that reader — a conventional island's tag comes from its path, and the reader
+// answers "absent" for it, so an untagged island never reaches the compile at
+// all. That gap is the scan's, not the authoring model's; these fixtures pin the
+// declared-identity case the scan currently admits.
+const SIDECAR = [
+  "import { defineIslandConfig } from '@openelement/router';",
+  "export const openElement = defineIslandConfig({ hydrate: 'idle', tag: 'scan-island' });",
+].join('\n');
+
 const PLAIN_ISLAND = [
-  "import { element, OpenElement } from '@openelement/element';",
-  "@element('oe-scan-plain')",
-  'export class ScanPlain extends OpenElement {',
-  '  render() {',
-  '    return <div>plain</div>;',
-  '  }',
+  SIDECAR,
+  'function ScanPlain() {',
+  '  return <div>plain</div>;',
   '}',
+  'export default ScanPlain;',
 ].join('\n');
 
+// The property table is what admits the props parameter: the generated lane
+// refuses a props parameter that no declared row replaces (D-props), so the
+// when test reads a declared value instead of an invented fixture state.
 const REGIONS_ISLAND = [
-  "import { element, OpenElement, property } from '@openelement/element';",
-  "@element('oe-scan-blocks')",
-  'export class ScanRegions extends OpenElement {',
-  '  @property({ reflect: false }) visible = 1;',
-  '  render() {',
-  '    return <div>{this.visible > 0 ? <p>on</p> : <em>off</em>}</div>;',
-  '  }',
+  "import { defineIslandConfig } from '@openelement/router';",
+  'export const openElement = defineIslandConfig({',
+  "  hydrate: 'idle',",
+  "  tag: 'scan-blocks',",
+  '  properties: { visible: { default: 1 } },',
+  '});',
+  'function ScanBlocks(props: { visible: number }) {',
+  '  return <div>{props.visible > 0 ? <p>on</p> : <em>off</em>}</div>;',
   '}',
+  'export default ScanBlocks;',
 ].join('\n');
 
+// Spread attributes are outside the admitted grammar (OEC9042): the lane fails
+// closed with a source-located diagnostic instead of returning a model, so the
+// module's block truth is unknown to the scan.
 const UNSUPPORTED_GRAMMAR_ISLAND = [
-  "import { element, OpenElement } from '@openelement/element';",
-  "@element('oe-scan-broken')",
-  'export class ScanBroken extends OpenElement {',
-  '  render() {',
-  '    const rest = {};',
-  '    return <div {...rest}></div>;',
-  '  }',
+  SIDECAR,
+  'function ScanBroken() {',
+  '  const rest = {};',
+  '  return <div {...rest}></div>;',
   '}',
+  'export default ScanBroken;',
 ].join('\n');
 
 function scan(root: string, overrides: Partial<IslandsBlocksScanInput> = {}): boolean {
@@ -95,13 +111,13 @@ afterAll(() => {
   for (const root of tmpRoots) rmSync(root, { recursive: true, force: true });
 });
 
-test('#1548: a plain island (fixed Parts only) scans blocks-free', () => {
+test('#1548: a plain generated island (static tree only) scans blocks-free', () => {
   const root = makeApp();
   writeIsland(root, 'scan-island.tsx', PLAIN_ISLAND);
   expect(scan(root)).toBe(false);
 });
 
-test('#1548: an island with a conditional Block scans blocks-carrying', () => {
+test('#1548: a generated island with a when branch scans blocks-carrying', () => {
   const root = makeApp();
   writeIsland(root, 'scan-island.tsx', REGIONS_ISLAND);
   expect(scan(root)).toBe(true);
@@ -116,9 +132,8 @@ test('#1548: the walk follows relative imports to a blocks-carrying module', () 
   expect(scan(root)).toBe(true);
 });
 
-test('#1548: the walk follows resolvable bare imports (package element with a Block)', () => {
+test('#1548: the walk follows resolvable bare imports (package island with a when)', () => {
   const root = makeApp();
-  linkElementPackage(root);
   mkdirSync(join(root, 'node_modules/app-lib'), { recursive: true });
   writeFileSync(
     join(root, 'node_modules/app-lib/package.json'),
@@ -148,9 +163,9 @@ test('#1548: an unresolvable package island is inconclusive (full runtime stays)
 
 test('#1548: a module the compiler rejects is inconclusive (full runtime stays)', () => {
   const root = makeApp();
-  // Spread attributes are outside the compiler grammar (OEC9011): the module
-  // compiles to a diagnostic, not a program, so its block truth is unknown
-  // and the scan keeps the full runtime instead of guessing.
+  // Spread attributes are outside the admitted grammar (OEC9042): the lane
+  // fails closed with a diagnostic instead of returning a model, so its block
+  // truth is unknown and the scan keeps the full runtime instead of guessing.
   writeIsland(root, 'scan-island.tsx', UNSUPPORTED_GRAMMAR_ISLAND);
   expect(scan(root)).toBe(true);
 });
@@ -160,14 +175,14 @@ test('#1548: a plain .ts island with no compiled module scans blocks-free', () =
   writeIsland(root, 'scan-island.ts', 'export const answer = 42;\n');
   expect(
     scan(root, { islandFiles: ['scan-island.ts'] }),
-    'only compiler output can carry Block Parts',
+    'only a compiled island can carry when/each nodes',
   ).toBe(false);
 });
 
 test('#1548: the walk follows an extensionless relative import to a .ts helper', () => {
   // The bundler resolves `./helper` against `helper.ts`; the walk must too, or
-  // the module's own import closure (and the Block behind it) is invisible and
-  // the scan answers blocks-free for a graph that executes a Block Part.
+  // the module's own import closure (and the when Block behind it) is invisible
+  // and the scan answers blocks-free for a graph that executes a Block.
   const root = makeApp();
   writeIsland(root, 'scan-island.tsx', `import './helper';\n${PLAIN_ISLAND}`);
   writeIsland(root, 'helper.ts', `import './blocks-el.tsx';\nexport const helper = 1;\n`);
@@ -177,14 +192,15 @@ test('#1548: the walk follows an extensionless relative import to a .ts helper',
 
 test('alpha15: a pre-compiled package island with an embedded Block scans blocks-carrying', () => {
   // A packed install ships COMPILED modules: the program rides as embedded
-  // JSON the compiler pass cannot re-derive (compileElementModule sees no
-  // authoring grammar and returns null). The alpha15 packaged-consumer
-  // appliance broke exactly here — open-button's new when Block was
-  // invisible to the scan, the build aliased the blocks-free element entry,
-  // and every Block Part failed closed in the browser. The scan reads the
-  // artifact itself; absence is still only proven from authoring sources.
+  // JSON the authoring compile cannot re-derive (it sees no sidecar and no
+  // grammar, so it returns null). The alpha15 packaged-consumer appliance
+  // broke exactly here — open-button's new when Block was invisible to the
+  // scan, the build aliased the blocks-free element entry, and every Block
+  // Part failed closed in the browser. Alpha16 retired the compiler lane that
+  // emitted this banner, but published pre-retirement packages still carry it
+  // in consumers' node_modules, so the scan's one-directional text proof is
+  // live and pinned here; absence is still only proven from authoring sources.
   const root = makeApp();
-  linkElementPackage(root);
   mkdirSync(join(root, 'node_modules/packed-ui'), { recursive: true });
   writeFileSync(
     join(root, 'node_modules/packed-ui/package.json'),
@@ -210,7 +226,6 @@ test('alpha15: a pre-compiled package island with an embedded Block scans blocks
 
 test('alpha15: a pre-compiled package island with empty blocks scans blocks-free', () => {
   const root = makeApp();
-  linkElementPackage(root);
   mkdirSync(join(root, 'node_modules/packed-plain'), { recursive: true });
   writeFileSync(
     join(root, 'node_modules/packed-plain/package.json'),

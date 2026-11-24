@@ -7,15 +7,22 @@
  * client entry registers the compiled class on load and the element then
  * upgrades in place inside the Lit shadow root, creating its own shadow
  * content fresh from the compiled Part Program.
+ *
+ * GENERATED lane (F16: class → function). `root: 'shadow'` reproduces the class
+ * lane's `shadow-open`, which is load-bearing rather than cosmetic: the
+ * qualifier reads this element's marker out of its OWN shadow root
+ * (`litHost.shadowRoot.querySelector('wc-open-child').shadowRoot.textContent`),
+ * so a light root would leave the marker where that walk never looks.
  */
 import { defineIslandConfig } from '@openelement/router';
-import { element, OpenElement } from '@openelement/element';
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: false, dsd: false });
+export const openElement = defineIslandConfig({
+  hydrate: 'load',
+  ssr: false,
+  dsd: false,
+  root: 'shadow',
+});
 
-@element('wc-open-child', { root: 'shadow-open' })
-export default class WcOpenChild extends OpenElement {
-  render() {
-    return <span id='open-child-ready'>openElement child inside Lit</span>;
-  }
+export default function WcOpenChild() {
+  return <span id='open-child-ready'>openElement child inside Lit</span>;
 }

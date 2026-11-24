@@ -16,13 +16,13 @@
  * - mount with no server DOM;
  * - attribute/property → typed props refresh and property → attribute
  *   reflection through the import-free canonical conversion leaf (not a copied
- *   table); the leaf's number/boolean/JSON semantics and the `facade-host.ts`
- *   re-export identity are pinned directly; removing a reflected attribute
- *   restores its declared default in the attribute mirror too, including the
- *   value-equal short-circuit case;
+ *   table); the leaf's number/boolean/JSON semantics are pinned directly;
+ *   removing a reflected attribute restores its declared default in the
+ *   attribute mirror too, including the value-equal short-circuit case;
  * - the REAL Vite build module IDs (emitted chunk plus the pre-tree-shake
  *   parsed graph) prove the shell bundle reaches the new leaf and never reaches
- *   `facade-host.ts`, `runtime-program.ts`, the compiled kernel, or the Part
+ *   the retired class-lane backend — `facade-host.ts` (deleted with the class
+ *   lane in 5ff82e101), `runtime-program.ts`, the compiled kernel, or the Part
  *   Program executor modules; the parsed graph is what catches a re-export-only
  *   source edge that tree-shaking removes from the emitted chunk;
  * - server HTML → browser parser → in-place claim with zero claim mutations;
@@ -50,8 +50,11 @@
  *   `createInstance` factory stays at 1. A nested hostless child is neither
  *   instantiated nor counted here; nested child retention remains OWED for
  *   `16b-LC retained-child` and UNMEASURED, and no "must flip" contract is encoded;
- * - a generated module without a claim fails closed on retained DOM/reconnect
- *   instead of silently becoming inert;
+ * - a generated module without a claim fails closed on retained DOM and on
+ *   reconnect instead of silently becoming inert: `claimRecipe` throws
+ *   `OE_RUNTIME_LEAF_CLAIM_UNAVAILABLE` before an owner exists, the failed
+ *   attempt leaves the region `present`, and the next connect retries the claim
+ *   rather than switching to mount;
  * - a structural claim mismatch fails closed and leaves the DOM/subscriptions
  *   untouched;
  * - explicit `dispose(true)` removes only the node range the shell mounted or
@@ -102,7 +105,10 @@ const OLD_BACKEND_MODULE_SUFFIXES = [
   '/internal/compiled/runtime/parts.ts',
   '/internal/compiled/runtime/hydrate.ts',
   '/internal/compiled/runtime/fresh-dom.ts',
-  '/internal/compiled/runtime/props.ts',
+  // `runtime/props.ts` is deliberately NOT listed: ADR-0183 D-5 makes it the
+  // ONE props record, and the shell (props owner) consults it. It is a neutral
+  // primitive (its only import is the signal framework), not part of the old
+  // Part Program backend this list exists to keep out.
   '/internal/compiled/runtime/blocks.ts',
   '/internal/compiled/runtime/revive.ts',
   '/internal/compiled/runtime/error-boundary.ts',
@@ -116,10 +122,18 @@ const OLD_BACKEND_MODULE_SUFFIXES = [
  * `Profile` is a claimable static-shape leaf with three primitive props: string,
  * number, boolean. `Conditional` is the claimable condition shape: its branches
  * are static elements, so the M08-2 slice emits both `__claim` and `__ssr` for
- * it. `Toggle` carries a `property` channel (`el.value = ...`); the
- * generated-leaf slice still treats that channel as mount-only, so it emits no
- * claim and no SSR. The shell's fail-closed path uses that real boundary
- * instead of a hand-written fake recipe.
+ * it. `Toggle` carries a `property` channel (`el.value = ...`); the fail-closed
+ * row below used to rely on that channel forcing the component mount-only, but
+ * F16 admitted it (`attributesClaimable`, generated-leaf/generate.ts:4354), so
+ * the leaf now emits both `__claim` and `__ssr` for `Toggle` (pinned below) and
+ * it can no longer stand for "a generated module without a claim".
+ *
+ * `NoClaim` is that boundary today, and it is a REAL generated artifact, not a
+ * hand-written fake recipe: a condition nested inside a condition branch stays
+ * mount-only by the leaf's own claimability rule (the condition arm refuses
+ * `insideTemplate`, generated-leaf/generate.ts:4409), so the generated module
+ * carries no `__claim`, no `__ssr`, and a `createNoClaimRecipe` whose recipe has
+ * only `mount`. The shell's fail-closed row uses exactly that boundary.
  */
 const SOURCE = `
 function Profile(props) {
@@ -130,6 +144,9 @@ function Conditional(props) {
 }
 function Toggle(props) {
   return <div><input value={props.ok} />on</div>;
+}
+function NoClaim(props) {
+  return <div>{props.ok ? <section>{props.inner ? <b>x</b> : <i>y</i>}</section> : null}</div>;
 }
 `;
 
@@ -146,7 +163,7 @@ interface PageRuntime {
   runtimeProbe: { snapshot(): ProbeSnapshot };
   createProfileRecipe: (owner: unknown, host: unknown) => unknown;
   createConditionalRecipe: (owner: unknown, host: unknown) => unknown;
-  createToggleRecipe: (owner: unknown, host: unknown) => unknown;
+  createNoClaimRecipe: (owner: unknown, host: unknown) => unknown;
   createRecipe: (options: {
     definitionOwner: unknown;
     source: string;
@@ -203,10 +220,17 @@ function generatedModule(): string {
   expect(module).toContain('function Conditional__claim');
   expect(module).toContain('function Conditional__ssr');
   expect(module).toContain('function Toggle__mount');
-  expect(module).not.toContain('function Toggle__claim');
-  // The property channel is mount-only in this slice; pin the exact boundary so
-  // a future partial SSR producer cannot be mistaken for the claim boundary.
-  expect(module).not.toContain('function Toggle__ssr');
+  // The property channel is admitted (F16): this component claims and produces,
+  // and the boundary that used to separate it from `Profile` is gone.
+  expect(module).toContain('function Toggle__claim');
+  expect(module).toContain('function Toggle__ssr');
+  // The fail-closed row needs a real module with NO claim; a nested condition
+  // inside a branch is not claimable, so the leaf emits only mount. Pinned here
+  // so the row can never silently become vacuous again if the compiler later
+  // admits that shape.
+  expect(module).toContain('function NoClaim__mount');
+  expect(module).not.toContain('function NoClaim__claim');
+  expect(module).not.toContain('function NoClaim__ssr');
   return module;
 }
 
@@ -221,6 +245,7 @@ async function buildBundle(module: string, dir: string): Promise<BundleResult> {
     shim,
     [
       `export { claimRecipe, createRecipe, insertRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
+      `export { reconcileEachEntries } from ${JSON.stringify(join(runtime, 'each-reconcile.ts'))};`,
       `export { bindSignalWrites, runUntracked } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
       `export { runtimeProbe } from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
       `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
@@ -238,7 +263,7 @@ async function buildBundle(module: string, dir: string): Promise<BundleResult> {
       // 16b-LC retained-child owner-teardown row: the page-side descriptor fixture retains a
       // real child instance through the SAME private ledger the generated path
       // consumes, so the shell's release placement is observable.
-      `export { abortInstancePass, beginInstancePass, endInstancePass, releaseChildInstance, releaseRetainedChildren, releaseUnderStructuralScope, retainChildInstance } from ${JSON.stringify(join(runtime, 'instance-ledger.ts'))};`,
+      `export { abortInstancePass, beginInstancePass, endInstancePass, joinInstancePass, releaseChildInstance, releaseRetainedChildren, releaseUnderStructuralScope, retainChildInstance } from ${JSON.stringify(join(runtime, 'instance-ledger.ts'))};`,
       `export { escapeText } from ${JSON.stringify(join(element, 'compiled/escape-text.ts'))};`,
       `export { escapeAttrValue } from ${JSON.stringify(join(element, 'core/html-escape.ts'))};`,
       '',
@@ -247,13 +272,13 @@ async function buildBundle(module: string, dir: string): Promise<BundleResult> {
   writeFileSync(
     entry,
     [
-      `export { createProfileRecipe, createConditionalRecipe, createToggleRecipe, Profile__ssr, Conditional__ssr } from './leaf.js';`,
+      `export { createProfileRecipe, createConditionalRecipe, createNoClaimRecipe, Profile__ssr, Conditional__ssr } from './leaf.js';`,
       `export { createGeneratedElementClass, defineGeneratedElement } from ${JSON.stringify(join(element, 'compiled/generated-element/shell.ts'))};`,
       `export { runtimeProbe } from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
       // 16b-LC retained-child owner-teardown row: the same private runtime surface the
       // generated root body consumes, re-exported for the page-side fixture.
       `export { createRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
-      `export { abortInstancePass, beginInstancePass, endInstancePass, releaseChildInstance, releaseRetainedChildren, releaseUnderStructuralScope, retainChildInstance } from ${JSON.stringify(join(runtime, 'instance-ledger.ts'))};`,
+      `export { abortInstancePass, beginInstancePass, endInstancePass, joinInstancePass, releaseChildInstance, releaseRetainedChildren, releaseUnderStructuralScope, retainChildInstance } from ${JSON.stringify(join(runtime, 'instance-ledger.ts'))};`,
       '',
     ].join('\n'),
   );
@@ -353,12 +378,15 @@ const DEFINE_CONDITIONAL = `
   });
 `;
 
-const DEFINE_TOGGLE = `
+const DEFINE_NO_CLAIM = `
   const mod = window.__oeM09;
   const ctor = mod.defineGeneratedElement({
-    tag: 'oe-m09-toggle',
-    properties: [{ name: 'ok', attribute: 'ok', type: 'boolean' }],
-    createRecipe: mod.createToggleRecipe,
+    tag: 'oe-m09-no-claim',
+    properties: [
+      { name: 'ok', attribute: 'ok', type: 'boolean' },
+      { name: 'inner', attribute: 'inner', type: 'boolean' },
+    ],
+    createRecipe: mod.createNoClaimRecipe,
   });
 `;
 
@@ -628,9 +656,11 @@ interface ConditionalReconnectResult {
 
 interface NoClaimResult {
   errors: Array<{ message: string; code: string | null }>;
-  seededResult: { sameNode: boolean; text: string; childCount: number };
+  /** Retained-DOM snapshot plus how many window errors had arrived by then. */
+  seededAfterFirst: { sameNode: boolean; text: string; childCount: number; errors: number };
+  seededAfterRetry: { sameNode: boolean; text: string; childCount: number; errors: number };
   mounted: { text: string; childCount: number };
-  retainedAfterReconnect: { sameNode: boolean; text: string; childCount: number };
+  retainedAfterReconnect: { sameNode: boolean; text: string; childCount: number; errors: number };
   beforeReconnect: ProbeSnapshot;
   afterReconnect: ProbeSnapshot;
 }
@@ -792,12 +822,6 @@ describe('canonical property conversion leaf (semantics pin)', () => {
     expect(coercePropertyValue(conversionRecord('number', 0), 'nope')).toBe(0);
     expect(coercePropertyValue(conversionRecord('string'), 7)).toBe('7');
     expect(coercePropertyValue(conversionRecord('string', 'fallback'), undefined)).toBe('fallback');
-  });
-
-  test('facade-host re-exports the same functions (compatibility edge)', async () => {
-    const facade = await import('../../../element/src/internal/compiled/facade-host.ts');
-    expect(facade.convertFromAttribute).toBe(convertFromAttribute);
-    expect(facade.convertToAttribute).toBe(convertToAttribute);
   });
 });
 
@@ -2418,7 +2442,7 @@ describe('M09-0 generated-element shell — Chromium (LOCAL)', () => {
     const page = await openPage();
     try {
       const result = (await page.evaluate(`(async () => {
-        ${DEFINE_TOGGLE}
+        ${DEFINE_NO_CLAIM}
         document.body.innerHTML = '';
         const errors = [];
         const onError = (event) => errors.push({
@@ -2426,62 +2450,97 @@ describe('M09-0 generated-element shell — Chromium (LOCAL)', () => {
           code: event.error?.code ?? null,
         });
         window.addEventListener('error', onError);
+        // Custom-element reaction exceptions are reported to the global error
+        // handler as a queued task; two macrotasks make the capture settle.
+        const settle = async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        };
+        const snapshotOf = (el, child) => ({
+          sameNode: el.firstElementChild === child,
+          text: el.textContent,
+          childCount: el.childNodes.length,
+          errors: errors.length,
+        });
 
-        // 1. Existing DOM this mount-only module cannot claim. The property
-        //    channel emits no server string, so this seeded shape is an ordinary
-        //    pre-upgrade tree, not a server-rendered artifact.
-        const seeded = document.createElement('oe-m09-toggle');
+        // 1. Existing DOM this mount-only module cannot claim. NoClaim emits no
+        //    __ssr, so this seeded shape is an ordinary pre-upgrade tree, not a
+        //    server-rendered artifact. The shell takes the claim branch
+        //    structurally because the root carries content, claimRecipe finds
+        //    no claim and throws before an owner exists, and the borrowed tree is
+        //    never touched.
+        const seeded = document.createElement('oe-m09-no-claim');
         seeded.setAttribute('ok', '');
         seeded.innerHTML = '<div><p>on</p></div>';
         const seededChild = seeded.firstElementChild;
         document.body.append(seeded);
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        const seededResult = {
-          sameNode: seeded.firstElementChild === seededChild,
-          text: seeded.textContent,
-          childCount: seeded.childNodes.length,
-        };
+        await settle();
+        const seededAfterFirst = snapshotOf(seeded, seededChild);
 
-        // 2. Mount succeeds, disconnect retains DOM, reconnect must not silently
-        //    leave the element inert.
-        const el = document.createElement('oe-m09-toggle');
+        // 2. Reconnect the SAME element after its failed claim. The failed
+        //    attempt leaves the region fact 'present', so the next connect
+        //    retries the claim instead of switching to mount; the borrowed tree
+        //    is still untouched and the second attempt throws again.
+        seeded.remove();
+        document.body.append(seeded);
+        await settle();
+        const seededAfterRetry = snapshotOf(seeded, seededChild);
+
+        // 3. Mount succeeds, disconnect retains DOM, reconnect must not silently
+        //    leave the element inert. The mount leaves the region fact
+        //    'present', so this reconnect takes the claim branch too — a mount
+        //    would append a second region.
+        const el = document.createElement('oe-m09-no-claim');
         el.setAttribute('ok', '');
+        el.setAttribute('inner', '');
         document.body.append(el);
         const mounted = { text: el.textContent, childCount: el.childNodes.length };
         const child = el.firstElementChild;
         el.remove();
         const beforeReconnect = mod.runtimeProbe.snapshot();
         document.body.append(el);
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await settle();
         window.removeEventListener('error', onError);
         const afterReconnect = mod.runtimeProbe.snapshot();
         return {
           errors,
-          seededResult,
+          seededAfterFirst,
+          seededAfterRetry,
           mounted,
-          retainedAfterReconnect: {
-            sameNode: el.firstElementChild === child,
-            text: el.textContent,
-            childCount: el.childNodes.length,
-          },
+          retainedAfterReconnect: snapshotOf(el, child),
           beforeReconnect,
           afterReconnect,
         };
       })()`)) as NoClaimResult;
 
-      expect(result.seededResult).toMatchObject({
+      // Step 1: one throw, and the borrowed tree is byte-identical afterwards.
+      expect(result.seededAfterFirst).toMatchObject({
         sameNode: true,
         text: 'on',
         childCount: 1,
+        errors: 1,
       });
-      expect(result.mounted).toMatchObject({ text: 'on', childCount: 1 });
+      // Step 2: the retry threw again (errors 2) rather than mounting a second
+      // region into the borrowed tree.
+      expect(result.seededAfterRetry).toMatchObject({
+        sameNode: true,
+        text: 'on',
+        childCount: 1,
+        errors: 2,
+      });
+      expect(result.mounted).toMatchObject({ text: 'x', childCount: 1 });
       expect(result.retainedAfterReconnect).toMatchObject({
         sameNode: true,
-        text: 'on',
+        text: 'x',
         childCount: 1,
       });
-      expect(result.errors.length).toBeGreaterThanOrEqual(2);
-      for (const error of result.errors.slice(0, 2)) {
+      // Three connects in total (borrowed DOM, its retry, the mounted region's
+      // reconnect) and one throw each. claimRecipe throws
+      // OE_RUNTIME_LEAF_CLAIM_UNAVAILABLE BEFORE it creates an owner, so this is
+      // a real fail-closed guarantee, and the retained node identity above is
+      // the proof none of the retries fell through to a mount.
+      expect(result.errors).toHaveLength(3);
+      for (const error of result.errors) {
         expect(error.code).toBe('OE_RUNTIME_LEAF_CLAIM_UNAVAILABLE');
         expect(error.message).toContain('no generated claim');
       }

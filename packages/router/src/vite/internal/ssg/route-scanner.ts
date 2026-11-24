@@ -55,7 +55,6 @@ import {
 import { safeReadDir, safeReadFile, safeStat } from './route-scanner-fs.ts';
 import { analyzeModuleSemantics } from '@openelement/compiler';
 import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
-import { scanStreamManifest } from './stream-manifest.ts';
 import type { StreamRouteManifest } from '@openelement/protocol/ssg';
 import {
   buildPageModuleFacts,
@@ -336,7 +335,6 @@ export async function scanRoutes(
         // module declares — an inline arrow or an unexported local never
         // admits (a shape whose JSX would escape to runtime).
         let functionPageName: string | undefined;
-        let streamManifest: StreamRouteManifest | undefined;
         let pageModule: PageModuleFacts | undefined;
         if (routeType === 'page') {
           // The compiler semantic core reads route meaning without executing the module.
@@ -366,14 +364,6 @@ export async function scanRoutes(
               compiledElement: semantics.compiledElementDecorator,
               functionPage: semantics.pageComponentName,
             });
-            streamManifest = await scanStreamManifest(
-              routePath,
-              fullPath,
-              source,
-              params,
-              options.root,
-              options.workspaceRoot,
-            );
             // .mdx routes never carry a tagName export either — the entry
             // wraps their function component itself (#954), like definePage.
             if (tagName === undefined && !isDefinePage && !fullPath.endsWith('.mdx')) {
@@ -446,7 +436,6 @@ export async function scanRoutes(
           tagName,
           ...(isDefinePage ? { definePage: true } : {}),
           ...(functionPageName === undefined ? {} : { functionPage: functionPageName }),
-          ...(streamManifest ? { streamManifest } : {}),
           // #569: page sources carrying data-open-enhance require the client
           // enhancement layer even when the app has zero islands. The match
           // requires attribute shape (= or >) so prose mentioning the

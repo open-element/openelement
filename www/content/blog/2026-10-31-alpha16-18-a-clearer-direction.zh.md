@@ -12,11 +12,11 @@ excerpt: '函数式 JSX 与 Signals、无需额外 host 的有状态组合、显
 
 ## 写法会怎样变化
 
-下面摘自已核读的 `compiled-element-v2/counter.tsx` fixture，保留计数、方法与按钮，其余样式和列表省略。旧例按钮显示“+”，并不显示计数；下面的新例显示计数，两段也不构成UI输出等价证明。
+下面摘自已核读的 `compiled-element-v2/counter.tsx` fixture，保留计数、方法与按钮，其余样式和列表省略。旧例按钮显示“+”，并不显示计数；下面的新例显示计数，两段也不构成UI输出等价证明。它展示的 class 作者 API 已在 alpha.16 中移除，因此这段代码只作历史保留，不再写出它的 import——该 import 在当前发布中无法解析。
 
 ```tsx
-import { element, OpenElement, property } from '@openelement/element';
-
+// Historical excerpt: the class authoring API below was removed in alpha.16.
+// Its import is not spelled out here; it does not resolve in the current release.
 @element('oe-program-counter')
 export class ProgramCounter extends OpenElement {
   @property({ reflect: true })

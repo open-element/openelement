@@ -757,11 +757,19 @@ test('starter template: openelement.config.ts validates against the accepted sch
     readTemplate('app/styles/theme.css').includes('--color-brand'),
     'theme.css must define the --color-brand palette entry',
   ).toBeTruthy();
+  // `my-counter` is a generated-lane FUNCTION island (2026-11-20): its identity
+  // comes from the islands-directory path convention plus its `defineIslandConfig`
+  // sidecar, not from an `@element` decorator — so the assertion is the sidecar,
+  // which is the fact the scan actually reads.
   expect(
-    readTemplate('app/islands/my-counter.tsx.tmpl').includes('@element("my-counter"'),
+    readTemplate('app/islands/my-counter.tsx.tmpl').includes(
+      'export const openElement = defineIslandConfig(',
+    ),
   ).toBeTruthy();
   expect(
-    readTemplate('app/islands/live-timer.tsx.tmpl').includes('@element("live-timer"'),
+    readTemplate('app/islands/live-timer.tsx.tmpl').includes(
+      'export const openElement = defineIslandConfig(',
+    ),
   ).toBeTruthy();
 });
 

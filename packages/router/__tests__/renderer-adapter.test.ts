@@ -50,7 +50,9 @@ const routes: RouteEntry[] = [
 // checkout: 2931 (58-char root) → 2862.
 const expected = {
   native: {
-    server: [16913, '9d12d9ca03948eb33a2a65403ab60c50029a26cf8c5cc50aa7ffa9ffb05a17cc'],
+    // C08/C09/C10 re-baseline (2026-11-24): the emitted entry no longer
+    // imports the program-tag resolver or the stream machinery.
+    server: [16506, 'b56614cbdc7d6ad1fb9a5eac2f568fc23492921245d5252390de6c1a8bb2d1e7'],
     client: [2862, 'e9629cded31adcb2237afa612acd50c1bd9cd8a17dbd889ab1ae46066616e5ed'],
   },
 } as const;
@@ -58,7 +60,8 @@ const expected = {
 test('internal native selection preserves the generated server/client bytes', async () => {
   const adapter = selectRendererAdapter('native');
   expect(adapter.mode).toEqual('native');
-  expect(adapter.supportsCompiledStream).toEqual(true);
+  // The compiled stream channel retired with the class lane (C09/C10): the adapter declares none.
+  expect('supportsCompiledStream' in adapter).toBe(false);
   expect(adapter.hydration).toEqual('compiled-hydration');
   const descriptor = buildEntryDescriptor(routes, { renderer: 'native' });
   const server = renderEntry(descriptor);

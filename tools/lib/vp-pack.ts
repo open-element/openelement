@@ -85,8 +85,8 @@ const STAGING_TOOLCHAIN_ALIAS_NAMES: ReadonlySet<string> = new Set(['vite', 'vit
  * resolves them by path when it generates the consumer's client entry, and
  * that entry imports their factories by name — no package-internal import
  * edge keeps them reachable, so they are explicit pack entries. The two roots
- * (`island-scheduler`, `enhance-client`) are resolved directly; the other six
- * ride along as their static value imports (G0.5 §2).
+ * (`island-scheduler`, `enhance-client`) are resolved directly; their relative
+ * value imports also need stable emitted paths (G0.5 §2).
  */
 export const ROUTER_CLIENT_RUNTIME_ENTRIES = [
   'src/vite/internal/ssg/island-scheduler.ts',
@@ -94,6 +94,7 @@ export const ROUTER_CLIENT_RUNTIME_ENTRIES = [
   'src/vite/internal/ssg/form-enhance.ts',
   'src/vite/internal/ssg/island-lifecycle.ts',
   'src/vite/internal/ssg/morph-align.ts',
+  'src/vite/internal/page-root-marker.ts',
   'src/vite/internal/ssg/morph-focus-restore.ts',
   'src/vite/internal/ssg/morph-scroll-restore.ts',
   'src/vite/internal/ssg/morph-webkit-fix.ts',

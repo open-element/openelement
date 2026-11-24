@@ -97,16 +97,27 @@ test('a package island resolves through the app root’s own resolution', async 
     'the resolved package module is registered (an authoritative entry, even when empty)',
   ).toBe(0);
 
-  // (2) A class-authored component in the same app root DOES contribute its
-  // statically admitted candidates through the same entry point.
+  // (2) A GENERATED component contributes its statically admitted candidates
+  // through the same entry point. The class lane that used to own this row retired
+  // in Alpha16, and `collectShadowClassCandidates` now reads the generated lane, so
+  // the fixture is a sidecar-admitted island — the only shape a component can take.
+  const generatedRoot = await scratchRoot({
+    'app/components/generated-probe.tsx': `import { defineIslandConfig } from '@openelement/router';
+
+export const openElement = defineIslandConfig({ tag: 'generated-probe', root: 'shadow' });
+export default function GeneratedProbe() {
+  return <p class="p-4 rounded-lg">probe</p>;
+}
+`,
+  });
   const localCandidates = createClassCandidateRegistry();
   const contributed = await collectShadowClassCandidates({
-    root: fixtureRoot,
+    root: generatedRoot,
     candidates: localCandidates,
-    modules: [{ path: 'app/components/shadow-tailwind-probe.tsx' }],
+    modules: [{ path: 'app/components/generated-probe.tsx' }],
   });
-  expect(contributed, 'a class-authored component contributes its candidates').toBe(1);
-  expect(localCandidates.all().length).toBeGreaterThan(0);
+  expect(contributed, 'a generated component contributes its candidates').toBe(1);
+  expect(localCandidates.all()).toEqual(['p-4', 'rounded-lg']);
 });
 
 test('a specifier that does not resolve is skipped, not fatal', async () => {

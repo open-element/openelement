@@ -9,8 +9,9 @@
  *   1. A compiled property/event binding patches a shipped SSR node in place.
  *   2. A browser controller activates against existing light-root SSR nodes.
  *   3. Controller cleanup and reconnect preserve those nodes and behavior.
- *   4. open-button form piercing: a click on the shadow-DOM <button> reaches
- *      the outer <form> as a composed submit event.
+ *   4. open-button form submission: a click from its shadow-DOM button uses
+ *      native form validation and delivers one native submit to the form's
+ *      root listener.
  */
 
 import { expect, type Page, test } from '@playwright/test';
@@ -174,8 +175,8 @@ test.describe('compiled activation on shipped islands', () => {
   });
 });
 
-test.describe('open-button form piercing', () => {
-  test('shadow-DOM submit click reaches the outer form as a composed submit event', async ({
+test.describe('open-button form submission', () => {
+  test('shadow-DOM submit click preserves validation and delivers one native submit', async ({
     page,
   }) => {
     await waitForHydratedSearch(page);
@@ -213,27 +214,69 @@ test.describe('open-button form piercing', () => {
         customElements.define('open-button', ButtonCtor);
       }
 
+      // Keep the form in a shadow root as page-rendered Router forms are. The
+      // enhancement runtime scans each root and listens there because native
+      // submit is not composed consistently across browser engines.
+      const formRootHost = document.createElement('div');
+      const formRoot = formRootHost.attachShadow({ mode: 'open' });
       const form = document.createElement('form');
+      const requiredInput = document.createElement('input');
+      requiredInput.required = true;
+      let invalidEventCount = 0;
+      requiredInput.addEventListener('invalid', () => {
+        invalidEventCount++;
+      });
+      form.appendChild(requiredInput);
       const host = document.createElement('open-button') as HTMLElement;
       host.setAttribute('type', 'submit');
       host.textContent = 'Go';
       form.appendChild(host);
-      document.body.appendChild(form);
+      formRoot.appendChild(form);
+      document.body.appendChild(formRootHost);
 
-      let submitEvent: { composed: boolean; bubbles: boolean } | null = null;
+      let submitEventCount = 0;
+      let submitEvent: {
+        isSubmitEvent: boolean;
+        isTrusted: boolean;
+        bubbles: boolean;
+        targetIsForm: boolean;
+        submitterIsNull: boolean;
+      } | null = null;
+      let rootEventCount = 0;
+      let rootSawSameEvent = false;
+      let formSubmitEvent: Event | null = null;
       form.addEventListener('submit', (event) => {
-        // Prevent the follow-up requestSubmit() navigation; the assertion is
-        // about the composed event crossing the shadow boundary.
+        // Prevent the native navigation; assertions inspect delivery below.
         event.preventDefault();
-        submitEvent = { composed: event.composed, bubbles: event.bubbles };
+        submitEventCount++;
+        formSubmitEvent = event;
+        submitEvent = {
+          isSubmitEvent: event instanceof SubmitEvent,
+          isTrusted: event.isTrusted,
+          bubbles: event.bubbles,
+          targetIsForm: event.target === form,
+          submitterIsNull: (event as SubmitEvent).submitter === null,
+        };
       });
-      let openClickSeen = false;
+      formRoot.addEventListener('submit', (event) => {
+        rootEventCount++;
+        rootSawSameEvent = event === formSubmitEvent;
+      });
+      let openClickCount = 0;
       host.addEventListener('open-click', () => {
-        openClickSeen = true;
+        openClickCount++;
       });
 
       const inner = host.shadowRoot?.querySelector('button');
       if (!inner) return { error: 'open-button shadow button not rendered' };
+      inner.click();
+      const invalidSubmission = {
+        submitEventCount,
+        invalidEventCount,
+        formValid: requiredInput.validity.valid,
+      };
+
+      requiredInput.value = 'ready';
       inner.click();
 
       // The form association is asserted through the PLATFORM's own view, not
@@ -243,23 +286,44 @@ test.describe('open-button form piercing', () => {
       // membership is what a form-associated custom element is required to
       // expose, and it is the observable the failure modes would break.
       const outcome = {
+        invalidSubmission,
+        submitEventCount,
         submitEvent,
-        openClickSeen,
-        listedInOuterForm: [...form.elements].includes(host as unknown as Element),
+        rootEventCount,
+        rootSawSameEvent,
+        openClickCount,
+        listedInOwningForm: [...form.elements].includes(host as unknown as Element),
       };
-      form.remove();
+      formRootHost.remove();
       return outcome;
     });
 
     if (isProbeError(result)) throw new Error(result.error);
 
-    // The inner shadow button's native submit behavior cannot cross the
-    // shadow boundary; _handleClick re-dispatches a composed submit event...
-    expect(result.submitEvent).toEqual({ composed: true, bubbles: true });
-    // ...and still fires the component's own open-click event.
-    expect(result.openClickSeen).toBe(true);
+    // requestSubmit() keeps the browser's constraint validation: the invalid
+    // first click fires invalid and no submit event.
+    expect(result.invalidSubmission).toEqual({
+      submitEventCount: 0,
+      invalidEventCount: 1,
+      formValid: false,
+    });
+    // After the required control is filled, exactly one trusted native
+    // SubmitEvent bubbles from the form to its owning shadow root. The event
+    // remains the same object along the path, as the Router listener sees it.
+    expect(result.submitEventCount).toBe(1);
+    expect(result.submitEvent).toEqual({
+      isSubmitEvent: true,
+      isTrusted: true,
+      bubbles: true,
+      targetIsForm: true,
+      submitterIsNull: true,
+    });
+    expect(result.rootEventCount).toBe(1);
+    expect(result.rootSawSameEvent).toBe(true);
+    // The component's own event is still fired for each activation.
+    expect(result.openClickCount).toBe(2);
     // The element is a form-associated custom element: the platform lists it in
     // the owning form's `elements` collection.
-    expect(result.listedInOuterForm).toBe(true);
+    expect(result.listedInOwningForm).toBe(true);
   });
 });

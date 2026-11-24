@@ -619,12 +619,18 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
       '}\n' +
       'export default SignalHook;\n';
     const fact = site('lifecycle-signal');
-    try {
-      compileGeneratedElementIfAdmitted(signalHook, fact.file, { site: fact.site });
-      throw new Error('expected the generated element lane to refuse a host binding');
-    } catch (error) {
-      expect(codes(error)).toContain(GENERATED_ELEMENT_DIAGNOSTIC.UNBOUND_BINDING);
-    }
+    // ADR-0183 D-4: a ROOT `signal` resource is created by the retained factory
+    // and returned in its record, so a hook reading it is admitted — and it is
+    // CARRIED: before 2026-11-20 the read was classified as a host binding and
+    // the hook was skipped without any diagnostic, so this row must assert the
+    // emitted callback, not just the signal declaration.
+    const signalCompiled = compileGeneratedElementIfAdmitted(signalHook, fact.file, {
+      site: fact.site,
+    });
+    expect(signalCompiled).not.toBeNull();
+    expect(signalCompiled!.code).toContain('const count = signal((');
+    expect(signalCompiled!.code).toContain('__oe_connect.push');
+    expect(signalCompiled!.code).toContain('count . value');
     // A root setup local that reads a host binding cannot host the factory: the
     // emitter keeps its existing fail-closed binding identity instead of
     // silently dropping the admitted hooks.
@@ -639,14 +645,14 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
       '}\n' +
       'export default LocalHook;\n';
     const localFact = site('lifecycle-local-binding');
-    try {
-      compileGeneratedElementIfAdmitted(localReadsBinding, localFact.file, {
-        site: localFact.site,
-      });
-      throw new Error('expected the generated element lane to refuse the setup shape');
-    } catch (error) {
-      expect(codes(error)).toContain('OEIR_LEAF_UNSUPPORTED_BINDING');
-    }
+    // ADR-0183 D-4: the factory declares `count` before the locals, so a setup
+    // local reading it is a fillable read, not an unbound one.
+    const localCompiled = compileGeneratedElementIfAdmitted(localReadsBinding, localFact.file, {
+      site: localFact.site,
+    });
+    expect(localCompiled).not.toBeNull();
+    expect(localCompiled!.code).toContain('const count = signal((');
+    expect(localCompiled!.code).toContain('const snapshot =');
     // Defensive emitter invariant: a model compiled with the root marker but
     // generated without the root instance option must not drop the hooks.
     const front = frontModuleWithRoot(
@@ -780,13 +786,17 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     expect(functionText(plain, 'Child__setup')).not.toContain('__oe_owner.add');
   });
 
-  test('A13 nested hook placement outside depth-1 fails closed at the AUTHORED span', () => {
+  test('A13 nested hook placement outside any retaining body fails closed at the AUTHORED span', () => {
     const importLine = "import { onConnect } from '@openelement/element';\n";
     const hookLine = '  onConnect(() => { globalThis.__oeNested = 1; });';
     const authoredLine = (source: string): number =>
       source.split('\n').findIndex((line) => line.includes('onConnect(')) + 1;
     const cases: Array<{ name: string; source: string; expected: RegExp }> = [
       {
+        // Depth >= 2 (2026-11-21): a retained body that retains its own child
+        // CARRIES its hooks now, so the refused case is a body that retains
+        // nothing — here `Deep` is referenced only from a body the plan cannot
+        // retain, so it has no lifecycle owner.
         name: 'depth2',
         expected: /depth>=2|no lifecycle owner/,
         source:
@@ -796,7 +806,7 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
           hookLine +
           '\n  return <em>{props.seed}</em>;\n}\n' +
           'function Mid(props: { seed: number }) {\n' +
-          '  return <div><Child seed={props.seed} /></div>;\n}\n' +
+          '  return <div>{[props.seed].map((item) => <Child seed={item} />)}</div>;\n}\n' +
           'function Host(props: { seed: number }) {\n' +
           '  return <span><Mid seed={props.seed} /></span>;\n}\n' +
           'export default Host;\n',

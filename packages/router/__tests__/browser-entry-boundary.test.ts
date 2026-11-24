@@ -44,35 +44,46 @@ async function write(path: string, content: string): Promise<void> {
   await writeFile(path, content, 'utf8');
 }
 
-const PAGE_CLASS = `import { element, OpenElement } from '@openelement/element';
+const PAGE_CLASS = `import { defineIslandConfig } from '@openelement/router';
 
-@element('probe-home', { root: 'shadow-open' })
-export default class ProbeHome extends OpenElement {
-  render() {
-    return (
-      <main>
-        <h1>boundary probe</h1>
-        <probe-counter></probe-counter>
-      </main>
-    );
-  }
+export const openElement = defineIslandConfig({ tag: 'probe-home', root: 'shadow' });
+
+export default function ProbeHome() {
+  return (
+    <main>
+      <h1>boundary probe</h1>
+      <probe-counter></probe-counter>
+    </main>
+  );
 }
 `;
 
-function islandSource(extraImport: string): string {
+/**
+ * The island module, with an optional extra import AND the expression that
+ * keeps it reachable.
+ *
+ * The generated-element emitter only carries the bindings its emitted code
+ * references (a side-effect-only `import 'node:fs'` is erased with the rest of
+ * the unused binding set), so a fixture that wants the specifier in the CLIENT
+ * GRAPH must USE it. `extraUse` is that use, evaluated in the component body —
+ * the generated lane's root setup, which the emitter lowers into the retained
+ * instance factory.
+ */
+function islandSource(extraImport: string, extraUse = ''): string {
   return `${extraImport}import { defineIslandConfig } from '@openelement/router';
-import { element, OpenElement, property } from '@openelement/element';
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });
+export const openElement = defineIslandConfig({
+  tag: 'probe-counter',
+  root: 'shadow',
+  hydrate: 'load',
+  ssr: true,
+  dsd: true,
+  properties: { count: { attribute: false, default: 0 } },
+});
 
-@element('probe-counter', { root: 'shadow-open' })
-export default class ProbeCounter extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  count = 0;
-
-  render() {
-    return <span id="count">{this.count}</span>;
-  }
+export default function ProbeCounter(props: { count: number }) {
+  ${extraUse}
+  return <span id="count">{props.count}</span>;
 }
 `;
 }
@@ -80,9 +91,11 @@ export default class ProbeCounter extends OpenElement {
 interface FixtureOptions {
   /** Extra import line prepended to the island module. */
   islandImport?: string;
-  /** Write a helper module the island side-effect-imports. */
+  /** The body expression that USES `islandImport` (see {@link islandSource}). */
+  islandUse?: string;
+  /** Write a helper module the island imports and uses. */
   helperImportsNode?: boolean;
-  /** Route module body (defaults to the plain class page). */
+  /** Route module body (defaults to the plain generated page). */
   routeSource?: string;
 }
 
@@ -106,15 +119,20 @@ async function makeFixture(name: string, options: FixtureOptions = {}): Promise<
     ].join('\n'),
   );
   await write(join(root, 'app', 'components', 'probe-home.tsx'), PAGE_CLASS);
+  const islandImport =
+    options.islandImport ??
+    (options.helperImportsNode === true
+      ? "import { helperReadsNode } from './probe-helper.ts';\n"
+      : '');
   await write(
     join(root, 'app', 'islands', 'probe-counter.tsx'),
-    islandSource(
-      options.islandImport ??
-        (options.helperImportsNode === true ? "import './probe-helper.ts';\n" : ''),
-    ),
+    islandSource(islandImport, options.islandUse ?? ''),
   );
   if (options.helperImportsNode === true) {
-    await write(join(root, 'app', 'islands', 'probe-helper.ts'), "import 'node:fs';\n");
+    await write(
+      join(root, 'app', 'islands', 'probe-helper.ts'),
+      "import { readFileSync } from 'node:fs';\n\nexport const helperReadsNode = (): number => readFileSync('.').length;\n",
+    );
   }
   await write(
     join(root, 'app', 'routes', 'index.tsx'),
@@ -166,8 +184,14 @@ let transitive: BuildResult;
 let loader: BuildResult;
 
 beforeAll(async () => {
-  const directRoot = await makeFixture('direct', { islandImport: "import 'node:fs';\n" });
-  const transitiveRoot = await makeFixture('transitive', { helperImportsNode: true });
+  const directRoot = await makeFixture('direct', {
+    islandImport: "import { readFileSync } from 'node:fs';\n",
+    islandUse: "const marker = readFileSync('.').length;",
+  });
+  const transitiveRoot = await makeFixture('transitive', {
+    helperImportsNode: true,
+    islandUse: 'const marker = helperReadsNode();',
+  });
   const loaderRoot = await makeFixture('loader', {
     routeSource: [
       "import { readFile } from 'node:fs/promises';",

@@ -2,7 +2,8 @@
  * Lifecycle-intrinsic entry of @openelement/element (A16-LANE-M, M10-P1/P4).
  *
  * Exposes ONLY the compiler-erased intrinsics — `onConnect`, `onDispose`,
- * `onPropertyChange`, `ref` (`16b-REF`) and `provideContext` / `useContext`
+ * `onPropertyChange`, `ref` / `useHost` (`16b-REF`) and `provideContext` /
+ * `useContext`
  * (`16b-CTX`) — with no side effects and no path to the compiled executor.
  *
  * All of them are COMPILE-TIME INTRINSICS, not runtime functions: the
@@ -56,4 +57,5 @@ export {
   provideContext,
   ref,
   useContext,
+  useHost,
 } from './internal/core/compile-lifecycle.ts';

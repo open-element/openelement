@@ -34,9 +34,12 @@
  * stable head sentence plus its own clause naming the position and the nearest
  * lawful spelling (no admission change; the code stays OEC9032). M14-2 pins
  * "a Promise is not a normal child": a `Promise<...>`-annotated prop read at a
- * text/attribute sink is refused at the read, `{await props.p}` stays admitted,
- * and the class path keeps today's behavior. The `__t` runtime backstop for
- * untyped props is pinned in the element suite (`server-html.test.ts`).
+ * text/attribute sink is refused at the read, `{await props.p}` stays admitted.
+ * The `__t` runtime backstop for untyped props is pinned in the element suite
+ * (`server-html.test.ts`). The former class-vs-server parity row for the
+ * Promise shape retired with the class lane: there is no second frontend left
+ * to hold parity with, and the surviving rows above still pin this lane's
+ * guard.
  */
 import { describe, expect, test } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -47,7 +50,6 @@ import {
   compileServerComponentIfAdmitted,
   compileServerComponentModule,
 } from '../src/internal/compiler/semantic-core/server-component.ts';
-import { compileElementProgram } from '../src/internal/compiler/semantic-core/compile.ts';
 import {
   CompiledElementError,
   type ElementCompilerDiagnostic,
@@ -644,28 +646,9 @@ describe('a Promise is not a normal child (M14-2)', () => {
     expect(result!.code).toContain('__t(props.p)');
   });
 
-  test("the class path keeps today's behavior for the same shape", () => {
-    // The class grammar requires a serializable-literal default, so the
-    // Promise annotation rides a `null` default (this fixture is compiled,
-    // never type-checked). Parity is the point: the SAME annotation and the
-    // SAME reads on the shared walk must keep today's text/attribute parts and
-    // raise no Promise diagnostic — the guard exists only on the server path.
-    const result = compileElementProgram(
-      `
-        import { OpenElement, element, property } from '@openelement/element';
-        @element('oe-full-await-parity')
-        export class FullAwaitParity extends OpenElement {
-          @property({ type: Object }) p: Promise<string> = null;
-          render() { return <p title={this.p}>{this.p}</p>; }
-        }
-      `,
-      FILE,
-    );
-    expect(result.program.parts.some((part) => part.k === 'text' && part.signal === 'p')).toBe(
-      true,
-    );
-    expect(result.program.parts.some((part) => part.k === 'attr' && part.name === 'title')).toBe(
-      true,
-    );
-  });
+  // The former "class path keeps today's behavior for the same shape" row is
+  // deleted rather than retargeted: it compiled an `@element` class and read
+  // that class's Part Program parts, i.e. it asserted the RETIRED grammar, not
+  // the server lane. Keeping the same assertions on another entry would be a
+  // new test, and there is no surviving class path to hold parity with.
 });

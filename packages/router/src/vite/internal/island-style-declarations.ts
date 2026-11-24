@@ -39,13 +39,13 @@
  * a light edge is wrapped in its island tag's native `@scope`, a shadow edge
  * ships the authored bytes verbatim. One registry, no second pipeline.
  *
- * WHAT THIS SLICE DOES NOT DO (recorded gap, GH issue #1800, Alpha17):
- *
- * - a LIGHT-root generated island's declared sheets are admitted and emitted,
- *   but the generated-element render path does not declare them in the document
- *   yet (the class lane's light-root `<link>` channel is not wired to it). The
- *   asset and the client asset manifest record are this slice's delivery; the
- *   document application is the Alpha17 adoption slice.
+ * THE CLIENT-ONLY CASE (2026-11-20). An `ssr: false` / `hydrate: 'only'` island
+ * has no server render and no DSD template: the browser creates the root. Its
+ * declaration is still admitted (root `shadow`, or `light` for a light root) and
+ * the compiler emits a real `.css` module-graph import for the SAME specifiers;
+ * the generated shell adopts the resulting sheet object. That is why a
+ * `missing-producer` shadow island is admitted when it is client-only — the
+ * producer only matters to a server-rendered template.
  */
 
 import { realpathSync } from 'node:fs';
@@ -64,7 +64,7 @@ export interface IslandStyleDeclaration {
    * document resource; a shadow root's sheet is declared inside its DSD
    * template by the canonical marked `<link>` prefix.
    */
-  readonly root: 'light' | 'shadow';
+  readonly root: 'light' | 'shadow' | 'closed';
   /**
    * The island module's absolute path as the bundler spells it (the importing
    * side of every style edge). Separator-normalized; queries stripped.
@@ -76,6 +76,38 @@ export interface IslandStyleDeclaration {
   readonly islandsDir: string;
   /** The authored relative `.css` specifiers, validated, in authored order. */
   readonly specifiers: readonly string[];
+  /**
+   * The `@scope` identity these sheets are projected under, or `null` for a
+   * DOCUMENT-WIDE sheet (P-2b, 2026-11-21).
+   *
+   * A light-root COMPONENT's rules are scoped to its host tag so they cannot leak
+   * past the element. A PAGE has no host element at all — its markup IS the
+   * document content — so a page module's declared sheet must be delivered
+   * unscoped; scoping it to a tag that never appears would compile rules that
+   * match nothing (measured: the base-path page's own `@scope (subpage-home)`
+   * block left every rule inert).
+   *
+   * Absent keeps the tag rule below, so every island record is unchanged.
+   */
+  readonly scopeTag?: string | null;
+}
+
+/**
+ * The canonical style scope for a generated island declaration.
+ *
+ * Light-root components use their tag as an `@scope` boundary. Pages opt out
+ * explicitly with `scopeTag: null`, while both open and closed shadow roots
+ * rely on their root boundary and therefore ship unscoped authored CSS.
+ */
+export function islandStyleScopeTag(declaration: IslandStyleDeclaration): string | undefined {
+  if (
+    declaration.root === 'shadow' ||
+    declaration.root === 'closed' ||
+    declaration.scopeTag === null
+  ) {
+    return undefined;
+  }
+  return declaration.scopeTag ?? declaration.tagName;
 }
 
 /** moduleId → declaration. Module ids are unique per island module. */

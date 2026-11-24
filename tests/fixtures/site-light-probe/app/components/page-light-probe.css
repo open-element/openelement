@@ -1,8 +1,8 @@
-:host{display:block}
-
-/* The page's own scoped rules: the page is a light root too, so its sheet is
-   a distinct emitted asset in the same document head (S-C1.2). */
-.light-probe-page{font-family:system-ui,sans-serif}
+/* The page's own rules: a SERVER FUNCTION PAGE owns no host element (F16), so
+   there is no `:host` to style — the page's sheet is a plain document sheet in
+   the same document head (S-C1.2). `main.light-probe-page` carries the block
+   display the class form got from `:host`. */
+.light-probe-page{display:block;font-family:system-ui,sans-serif}
 
 .document-probe{color:rgb(64,64,64)}
 

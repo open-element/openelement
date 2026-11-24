@@ -237,3 +237,70 @@ test('G2(d): keyed replacement swaps the backing value, then getters run per dep
   expect(counts.getterRuns).toBe(directBefore + 2);
   projection.dispose(true);
 });
+
+/**
+ * ADR-0183 D-5 — the props record is ONE record with ONE invalidation channel.
+ *
+ * These rows pin the contract the generated-element shell now depends on: the
+ * per-key write path the shell needs, the getter read registering the version
+ * signal (so an effect — and therefore a `computed` — is invalidated), the
+ * untracked internal read, and the equal-write no-op.
+ */
+test('ADR-0183 D-5: a getter read registers the ONE version channel inside an effect', () => {
+  const box = createTrackedProps({ title: 'a', count: 1 });
+  const seen: string[] = [];
+  const dispose = effect(() => {
+    seen.push(`${box.props.title}:${box.props.count}`);
+  });
+  expect(seen).toEqual(['a:1']);
+  box.set('title', 'b');
+  expect(seen).toEqual(['a:1', 'b:1']);
+  box.set('count', 2);
+  expect(seen).toEqual(['a:1', 'b:1', 'b:2']);
+  dispose();
+});
+
+test('ADR-0183 D-5: an equal per-key write notifies nobody and reports no change', () => {
+  const box = createTrackedProps({ title: 'a' });
+  let runs = 0;
+  const dispose = effect(() => {
+    box.props.title;
+    runs += 1;
+  });
+  expect(runs).toBe(1);
+  expect(box.set('title', 'a')).toBe(false);
+  expect(runs).toBe(1);
+  expect(box.set('title', 'b')).toBe(true);
+  expect(runs).toBe(2);
+  dispose();
+});
+
+test('ADR-0183 D-5: the internal read is untracked; the record getter is the tracked path', () => {
+  const box = createTrackedProps({ title: 'a' });
+  let runs = 0;
+  const dispose = effect(() => {
+    box.read('title');
+    runs += 1;
+  });
+  expect(runs).toBe(1);
+  box.set('title', 'b');
+  expect(runs).toBe(1);
+  expect(box.read('title')).toBe('b');
+  dispose();
+});
+
+test('ADR-0183 D-5: replace() and set() share the one version channel and the record identity', () => {
+  const box = createTrackedProps({ title: 'a', count: 1 });
+  const identity = box.props;
+  const versions: number[] = [];
+  const dispose = effect(() => {
+    versions.push(box.version.value);
+    box.props.title;
+  });
+  const before = box.version.value;
+  box.replace({ title: 'b', count: 1 });
+  expect(box.version.value).toBe(before + 1);
+  expect(box.props).toBe(identity);
+  expect(box.props.title).toBe('b');
+  dispose();
+});

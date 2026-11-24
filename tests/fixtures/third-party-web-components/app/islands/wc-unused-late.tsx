@@ -6,15 +6,20 @@
  * bounded search for hosts, so the fixture must prove the search cannot turn
  * into a fetch. The browser probe asserts this chunk's URL is requested zero
  * times on the page.
+ *
+ * GENERATED lane (F16: class → function). `root: 'shadow'` reproduces the class
+ * lane's `shadow-open`; the island is never fetched, so the value only has to
+ * stay truthful for the descriptor the build emits and the probe never reads.
  */
 import { defineIslandConfig } from '@openelement/router';
-import { element, OpenElement } from '@openelement/element';
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: false, dsd: false });
+export const openElement = defineIslandConfig({
+  hydrate: 'load',
+  ssr: false,
+  dsd: false,
+  root: 'shadow',
+});
 
-@element('wc-unused-late', { root: 'shadow-open' })
-export default class WcUnusedLate extends OpenElement {
-  render() {
-    return <span id='unused-late-ready'>never hosted on this page</span>;
-  }
+export default function WcUnusedLate() {
+  return <span id='unused-late-ready'>never hosted on this page</span>;
 }

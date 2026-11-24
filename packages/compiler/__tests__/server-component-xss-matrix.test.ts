@@ -3,17 +3,19 @@
  *
  * The compiled server function component lowers to a generative HTML
  * constructor function (`__h`/`__t`/`__ssr`). The security property under test
- * is the SAME one the @element class path enforces through the shared lowering
- * walk (lower-program.ts): an untrusted value can enter the output only
- * through a boundary that escapes it (text → `__t`, attribute → `__h`'s
- * attribute escape, URL attribute → the shared URL screen), or through the
- * explicit trustedHtml brand. Every row asserts one of exactly two outcomes:
+ * is enforced by the shared lowering walk (lower-program.ts) on this lane: an
+ * untrusted value can enter the output only through a boundary that escapes it
+ * (text → `__t`, attribute → `__h`'s attribute escape, URL attribute → the
+ * shared URL screen), or through the explicit trustedHtml brand. Every row
+ * asserts one of exactly two outcomes:
  *
  *   - the payload is AUTOMATICALLY ESCAPED in the rendered output, or
  *   - the compile/render is REJECTED WITH A CODE (an OEC build diagnostic or
  *     a coded OpenElementError at the render boundary).
  *
  * A bare string riding into markup through any other channel fails this file.
+ * (The Alpha15 class path used to be named here as the reference side; it is
+ * retired, while the shared walk and this lane survive.)
  *
  * The rows are driven against the REAL compiled artifact: the generated
  * constructor module is transpiled, imported, and executed with hostile props,
@@ -32,7 +34,11 @@ import {
   compileServerComponentModule,
   type ServerComponentCompileOptions,
 } from '../src/internal/compiler/semantic-core/server-component.ts';
-import { CompiledElementError } from '../src/internal/compiler/semantic-core/compile.ts';
+// Retargeted from the deleted class-lane compile.ts: the error carrier now lives
+// in compiler-diagnostics.ts, which is the module this suite's subject (the
+// server function lane) actually catches — the class grammar is gone, the coded
+// rejection contract is not.
+import { CompiledElementError } from '../src/internal/compiler/semantic-core/compiler-diagnostics.ts';
 
 const FILE = '/proj/app/server/card.tsx';
 

@@ -10,9 +10,9 @@
  *   resolver calls (one tag authority, not a basename guess);
  * - runs the REAL `compileGeneratedElementIfAdmitted` lane entry over that
  *   source and asserts facts on the compiled module text (descriptor root,
- *   default-export constructor, `__ssrHost` producer, no registration, the
- *   authored slot/part/event channels lowered by the leaf), not a regex over
- *   the built HTML;
+ *   default-export constructor, the producerless client-only boundary, no
+ *   registration, the authored slot/part/event channels lowered by the leaf),
+ *   not a regex over the built HTML;
  * - checks the fixture wiring (page/client/id/counter references) still mirrors
  *   the canonical corpus block.
  */
@@ -61,9 +61,12 @@ test('the real generated-host island is admitted by the generated-element lane',
   );
   // Zero declared primitive properties: the slice invented no property table.
   expect(code).toContain('properties: []');
-  // The shadow-host DSD producer exists (the single M11 call target) while the
-  // module still performs no registration — that stays the client entry's job.
-  expect(code).toContain('__ssrHost');
+  // A styleless client-only island is PRODUCERLESS: the emitter appends no
+  // `<Name>__ssrHost` wrapper for it (emit.ts `producerlessClientOnly`), so the
+  // admission decision is visible as the absent host export, not as a DSD
+  // producer the client entry never pairs. Registration stays the entry's job.
+  expect(compiled?.ssrHostExport).toBeNull();
+  expect(code).not.toContain('__ssrHost');
   expect(code).not.toContain('customElements.define');
   // The authored shadow channels were really lowered by the leaf: native slots,
   // the static part attribute, and the M09-2c intrinsic event channel (listener

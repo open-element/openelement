@@ -153,11 +153,7 @@ test('function pages validate the descriptor projectors like class pages', () =>
   );
 });
 
-test('function pages reject renderIntent.stream — no compiled program to front-gate', () => {
-  // Streaming is a compiled-Part-Program channel (the deferred-field front
-  // gate rides the compiled program), and a server function page has none.
-  // The rejection is authoring-time so the failure names the real reason
-  // instead of surfacing later as an unrelated scan/compile diagnostic.
+test('all page shapes reject the retired renderIntent.stream channel at authoring time', () => {
   const render = (props: Record<string, unknown>) => String(props.title ?? '');
   assertThrowsIncludes(
     () =>
@@ -165,15 +161,14 @@ test('function pages reject renderIntent.stream — no compiled program to front
         renderIntent: { mode: 'dynamic', stream: { defer: ['first'] } },
       }),
     Error,
-    'renderIntent.stream is not supported on a server function page',
+    'renderIntent.stream is not supported on page routes',
   );
-  // The same descriptor shape stays legal on the class branch (streaming is
-  // a class-page feature): a compiled class with dynamic+stream admits.
   const Page = makeCompiledPageClass('stream-page');
-  const page = definePage(Page, {
-    renderIntent: { mode: 'dynamic', stream: { defer: ['first'] } },
-  });
-  expect(page).toEqual(Page);
+  assertThrowsIncludes(
+    () => definePage(Page, { renderIntent: { mode: 'dynamic', stream: { defer: ['first'] } } }),
+    Error,
+    'renderIntent.stream is not supported on page routes',
+  );
 });
 
 // ─── 2. module-analysis: the pageComponentName fact ─────────────────────────

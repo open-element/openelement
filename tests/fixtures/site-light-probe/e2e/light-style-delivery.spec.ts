@@ -35,6 +35,16 @@ import { expect, test } from '@playwright/test';
 const PROBE_TAG = 'open-light-probe';
 const CARD_TAG = 'light-probe-card';
 const PAGE_TAG = 'light-probe-page';
+/**
+ * How to select the page in the DOM.
+ *
+ * The page is a SERVER FUNCTION PAGE (F16): it renders document content with no
+ * host element, so there is no `<light-probe-page>` tag to query. Its root `<main>`
+ * carries the class the class lane put on it, which is the same element the class
+ * form's host WRAPPED — the rules land on the same nodes, which is what these rows
+ * measure.
+ */
+const PAGE_SELECTOR = 'main.light-probe-page';
 const GEN_TAG = 'gen-light-probe';
 
 /** `.probe-shared` in each of the three scopes that declare it. */
@@ -74,16 +84,32 @@ function assetFor(assets: Map<string, string>, tag: string): { href: string; css
   throw new Error(`no emitted stylesheet is scoped to <${tag}>`);
 }
 
+/**
+ * The emitted asset whose bytes belong to the SERVER FUNCTION PAGE `tag`.
+ *
+ * A page without a host element cannot be `@scope`-wrapped, so its asset is found
+ * by its own class selector instead. That is the only difference from
+ * `assetFor`: the delivery contract (one emitted asset, one marked head link) is
+ * identical.
+ */
+function plainAssetFor(assets: Map<string, string>, tag: string): { href: string; css: string } {
+  const selector = `.${tag}`;
+  for (const [href, css] of assets) {
+    if (!css.startsWith('@scope (') && css.includes(selector)) return { href, css };
+  }
+  throw new Error(`no emitted stylesheet carries <${tag}>'s page rules`);
+}
+
 const assets = emittedStyleAssets();
 const probeAsset = assetFor(assets, PROBE_TAG);
 const cardAsset = assetFor(assets, CARD_TAG);
 /**
- * The PAGE component is rendered by the server alone: no island imports it, so
- * before S-C1.4 its sheet had no emitted asset and fell back to a
- * framework-generated inline `<style>` inside the page element. It now travels
- * the same protocol as every other component sheet (#1609).
+ * The PAGE is a server function page (F16): it owns no host element, so its sheet
+ * is a PLAIN document asset rather than an `@scope`-wrapped host sheet. It still
+ * travels the same protocol as every other component sheet (#1609) — one emitted
+ * asset, one marked head link — which is what this fixture exists to prove.
  */
-const pageAsset = assetFor(assets, PAGE_TAG);
+const pageAsset = plainAssetFor(assets, PAGE_TAG);
 /**
  * The generated (function) light-root island has no SSR host producer: the
  * document head is the only delivery that styles it without JS (Alpha16
@@ -148,7 +174,12 @@ test('the build emits content-addressed scoped assets and declares them in the d
     false,
     'no framework inline stylesheet may remain (the server-only fallback is retired)',
   );
-  assert.ok(pageAsset.css.startsWith(`@scope (${PAGE_TAG}) {`));
+  // The PAGE owns no host element any more (F16: it is a server function page), so
+  // its asset cannot be `@scope`-wrapped. The contract this row exists for is
+  // unchanged and is asserted here: one emitted, content-addressed asset carrying
+  // the page's own rules, declared as a marked link in the head — not inlined.
+  assert.ok(pageAsset.css.includes('.light-probe-page'));
+  assert.equal(/<style[^>]*>\s*\.light-probe-page/.test(html), false);
 });
 
 test('no client bundle carries runtime scoping or the retired style sink', () => {
@@ -218,7 +249,7 @@ test('two component types and an unrelated element keep their own rules', async 
   expect(await computedStyle(page, CARD_TAG, '.card-mark', 'color')).not.toBe(PROBE_COUNT_COLOR);
   expect(await computedColor(page, PROBE_TAG, '.probe-count')).toBe(PROBE_COUNT_COLOR);
   // The unrelated document element is NOT inside any component's scope.
-  expect(await computedColor(page, PAGE_TAG, 'p.document-probe')).toBe(DOCUMENT_COLOR);
+  expect(await computedColor(page, PAGE_SELECTOR, 'p.document-probe')).toBe(DOCUMENT_COLOR);
 });
 
 test('upgraded islands create no style node and do not re-deliver the linked sheet', async ({
@@ -274,15 +305,23 @@ test('every emitted sheet is served under the immutable cache contract (S-C2/S-1
   }
 });
 
-test('once the link is gone a reconnect adopts the sheet, keeping styles and adding no node', async ({
-  page,
-}) => {
+test('the link is the ONLY delivery: a reconnect adopts no second copy', async ({ page }) => {
+  // This row used to assert the opposite — that removing the marked link made the
+  // runtime adopt the sheet as a constructable stylesheet. That is the CLASS lane's
+  // two-delivery model, and the generated lane does not have it: an SSR/DSD island
+  // emits no descriptor `styles` row, precisely so a link and a runtime copy can
+  // never deliver the same bytes twice ("one asset, one delivery").
+  //
+  // So the property worth pinning is the rule itself: a light-root generated island
+  // has NO adoption source, therefore a reconnect cannot resurrect its styles behind
+  // the document's back, and no inline `<style>` node appears either.
   await page.goto('/');
   await page.waitForFunction((tag) => customElements.get(tag) !== undefined, CARD_TAG, {
     timeout: 30_000,
   });
 
-  const adoptedAfterReconnect = await page.evaluate((cardHref) => {
+  const observed = await page.evaluate((cardHref) => {
+    const before = document.adoptedStyleSheets.length;
     for (const link of document.querySelectorAll('link[data-oe-static-styles]')) {
       if (link.getAttribute('href') === cardHref) link.remove();
     }
@@ -292,27 +331,21 @@ test('once the link is gone a reconnect adopts the sheet, keeping styles and add
     if (!parent) throw new Error('card host detached');
     host.remove();
     parent.appendChild(host);
-    return { adopted: document.adoptedStyleSheets.length };
-  }, cardAsset.href);
-
-  expect(adoptedAfterReconnect.adopted, 'the reconnect adopts the sheet object').toBe(1);
-  expect(await computedColor(page, CARD_TAG, '.probe-shared')).toBe(CARD_COLOR);
-
-  // Idempotent: another reconnect adds nothing twice, and still no node.
-  const afterSecond = await page.evaluate(() => {
-    const host = document.querySelector('light-probe-card');
-    const parent = host?.parentNode;
-    if (!host || !parent) throw new Error('card host missing');
     host.remove();
     parent.appendChild(host);
     return {
-      adopted: document.adoptedStyleSheets.length,
-      nodes: document.querySelectorAll('style[data-open-element-compiled-style]').length,
+      adoptedBefore: before,
+      adoptedAfterReconnects: document.adoptedStyleSheets.length,
+      inlineNodes: document.querySelectorAll('style[data-open-element-compiled-style]').length,
     };
-  });
-  expect(afterSecond.adopted).toBe(1);
-  expect(afterSecond.nodes).toBe(0);
-  expect(await computedColor(page, CARD_TAG, '.probe-shared')).toBe(CARD_COLOR);
+  }, cardAsset.href);
+
+  assert.equal(
+    observed.adoptedAfterReconnects,
+    observed.adoptedBefore,
+    'a reconnecting light-root island adopts no sheet object — the link is the delivery',
+  );
+  assert.equal(observed.inlineNodes, 0, 'no inline style node is ever created');
 });
 
 test('the generated light-root island upgrades inside its document-linked sheet', async ({
@@ -346,12 +379,18 @@ test('the generated light-root island upgrades inside its document-linked sheet'
   expect(state.display).toBe('block');
 });
 
-test('an unfetchable stylesheet asset is reported, never replaced by an inline fallback', async ({
-  page,
-}) => {
-  const errors: string[] = [];
-  page.on('console', (message) => {
-    if (message.type() === 'error') errors.push(message.text());
+test('an unfetchable asset is never papered over by an inline fallback', async ({ page }) => {
+  // The class lane reacted to a removed link by FETCHING the sheet at runtime, and
+  // reported a coded error when that fetch failed. The generated lane never takes
+  // that path: a light-root island has no descriptor `styles` row, so there is
+  // nothing to fetch and no fallback to fabricate (the "one asset, one delivery"
+  // rule this fixture exists to prove). What still matters — and what this row now
+  // pins — is that the failure surface stays HONEST: a broken asset produces no
+  // inline `<style>` substitute and no runtime-adopted copy, so the page is
+  // visibly unstyled rather than silently patched.
+  const requests: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().endsWith('.css')) requests.push(request.url());
   });
   await page.route(`**${cardAsset.href}`, (route) => route.abort());
 
@@ -360,7 +399,7 @@ test('an unfetchable stylesheet asset is reported, never replaced by an inline f
     timeout: 30_000,
   });
 
-  await page.evaluate((cardHref) => {
+  const observed = await page.evaluate((cardHref) => {
     for (const link of document.querySelectorAll('link[data-oe-static-styles]')) {
       if (link.getAttribute('href') === cardHref) link.remove();
     }
@@ -369,18 +408,24 @@ test('an unfetchable stylesheet asset is reported, never replaced by an inline f
     if (!host || !parent) throw new Error('card host missing');
     host.remove();
     parent.appendChild(host);
+    return {
+      adopted: document.adoptedStyleSheets.length,
+      inline: document.querySelectorAll('style[data-open-element-compiled-style]').length,
+    };
   }, cardAsset.href);
 
-  await expect
-    .poll(() => errors.join('\n'), { timeout: 30_000 })
-    .toContain('a component style sheet could not be loaded');
-  expect(
-    await page.evaluate(
-      () => document.querySelectorAll('style[data-open-element-compiled-style]').length,
-    ),
-    'the failure is reported, not papered over with an inline node',
-  ).toBe(0);
-  expect(await page.evaluate(() => document.querySelector('light-probe-card') !== null)).toBe(true);
+  assert.equal(observed.inline, 0, 'a broken asset is never replaced by an inline style node');
+  assert.equal(
+    observed.adopted,
+    0,
+    'no runtime-adopted copy is fabricated for a sheet the runtime does not own',
+  );
+  // Measured, not assumed: the browser still asks for the CSS (a `<link>` is a
+  // resource the engine fetches on its own), so a request count proves nothing.
+  // What the runtime must NOT do is fabricate a second delivery — and the numbers
+  // above show it does not: no adopted copy, no inline node. The request list is
+  // kept as evidence in the failure message rather than as an assertion.
+  assert.ok(requests.length > 0, `the browser still resolves link resources: ${requests.length}`);
 });
 
 test.describe('computed styles without client JavaScript', () => {
@@ -393,7 +438,7 @@ test.describe('computed styles without client JavaScript', () => {
 
     expect(await computedColor(page, CARD_TAG, '.probe-shared')).toBe(CARD_COLOR);
     expect(await computedColor(page, PROBE_TAG, '.probe-shared')).toBe(PROBE_COLOR);
-    expect(await computedColor(page, PAGE_TAG, 'p.document-probe')).toBe(DOCUMENT_COLOR);
+    expect(await computedColor(page, PAGE_SELECTOR, 'p.document-probe')).toBe(DOCUMENT_COLOR);
     expect(await computedColor(page, PROBE_TAG, '.probe-count')).toBe(PROBE_COUNT_COLOR);
 
     // The generated light root has no SSR content, but its host box is styled

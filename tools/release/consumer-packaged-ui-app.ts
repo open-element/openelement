@@ -66,8 +66,7 @@ import { tarballPath } from '../lib/npm-tarball.ts';
 import { CREATE_BIN } from './npm-manifest.ts';
 import { PW_PROBE_PIN } from './consumer-packaged-starter.ts';
 import ts from 'typescript';
-import { compileElementModule } from '@openelement/compiler';
-import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
+import { compileGeneratedElementIfAdmitted } from '@openelement/compiler';
 import { CREATE_VERSION } from '../../packages/create/src/version.ts';
 
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
@@ -76,7 +75,12 @@ async function readJson<T = unknown>(path: string | URL): Promise<T> {
 
 const repoRoot = resolve(import.meta.dirname!, '../..');
 const BUILD_TIMEOUT_MS = 10 * 60_000;
-const NPM_INSTALL_TIMEOUT_MS = 5 * 60_000;
+// A harness budget, never an assertion: a hermetic cold-cache install must be
+// able to download the full external tree (vite, typescript, hono). Measured
+// 2026-11-23 at ~75KB/s registry throughput, that tree needs >5 minutes, so the
+// budget is sized for constrained networks instead of misreading slowness as
+// breakage.
+const NPM_INSTALL_TIMEOUT_MS = 20 * 60_000;
 const BROWSER_TIMEOUT_MS = 2 * 60_000;
 
 // ─── The dependency-only utility probe (S-C2/S-13) ──────────────────────────
@@ -114,15 +118,18 @@ const STARTER_ISLAND_UTILITY = 'p-2';
 
 const UTILITY_WIDGET_COMPONENT = `/**
  * S-C2/S-13 probe: a shadow-root component whose only styling is Tailwind
- * utility classes (no authored .css file, no static styles).
+ * utility classes (no authored .css file, no declared styles).
+ *
+ * Written in the GENERATED lane (Alpha16 retired the class lane): a sidecar plus a
+ * default-exported function component. The probe's subject is unchanged — a
+ * dependency whose component stylesheet can only come from its own compiled class
+ * candidates travelling through packaging.
  */
-import { element, OpenElement } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
 
-@element('${UTILITY_WIDGET_TAG}', { root: 'shadow-open' })
-export class UtilityWidget extends OpenElement {
-  render() {
-    return <span class='${UTILITY_WIDGET_CANDIDATES.join(' ')}'>utility widget</span>;
-  }
+export const openElement = defineIslandConfig({ tag: '${UTILITY_WIDGET_TAG}', root: 'shadow' });
+export default function UtilityWidget() {
+  return <span class='${UTILITY_WIDGET_CANDIDATES.join(' ')}'>utility widget</span>;
 }
 `;
 
@@ -132,9 +139,13 @@ export class UtilityWidget extends OpenElement {
  * with npm — the appliance installs that tarball, never workspace source.
  */
 async function packUtilityWidget(dir: string): Promise<string> {
-  const compiled = compileElementModule(UTILITY_WIDGET_COMPONENT, 'utility-widget.tsx', {
-    staticSidecars: [ISLAND_ADMISSION],
-  });
+  const compiled = compileGeneratedElementIfAdmitted(
+    UTILITY_WIDGET_COMPONENT,
+    'utility-widget.tsx',
+    {
+      site: { tag: UTILITY_WIDGET_TAG },
+    },
+  );
   if (compiled === null) {
     throw new Error('the utility-widget probe did not compile as an openElement island module');
   }
@@ -241,7 +252,7 @@ const UI_LAB_COMPONENT = `/**
  * supposed to deliver — styled here with NO application Tailwind
  * configuration, on the strength of the packages' own declarations.
  */
-import { element, OpenElement } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
 import '@openelement/ui/open-button';
 import '@openelement/ui/open-input';
 import '@openelement/ui/open-theme-toggle';
@@ -250,35 +261,37 @@ import '@openelement/ui/open-dialog';
 import '@openelement/ui/open-dropdown';
 import '@acme/utility-widget/utility-widget';
 
-@element('ui-lab', { root: 'light' })
-export default class UiLab extends OpenElement {
-  render() {
-    return (
-      <div class='ui-lab ${LIGHT_ROOT_UTILITY}'>
-        <h1>Packed UI appliance</h1>
-        <open-button variant='primary'>packed button</open-button>
-        <open-input label='Packed input' placeholder='type here'></open-input>
-        <open-theme-toggle></open-theme-toggle>
-        <open-dialog>
-          <span slot='label'>packed dialog</span>
-          <p>dialog body from the packed tarball</p>
-        </open-dialog>
-        <open-dropdown>
-          {/* The trigger is the CONSUMER's element: the component wraps its
-              slot in a presentational span and takes the keyboard affordance
-              from what the consumer puts there. A non-focusable span made this
-              appliance under-exercise the component — the behaviour rows below
-              could not reach the trigger at all. */}
-          <button slot='trigger' type='button'>packed dropdown</button>
-          <p>dropdown content from the packed tarball</p>
-        </open-dropdown>
-        <open-code-block>
-          <pre><code>const packed = true;</code></pre>
-        </open-code-block>
-        <utility-widget></utility-widget>
-      </div>
-    );
-  }
+export const openElement = defineIslandConfig({
+  tag: 'ui-lab',
+  root: 'shadow',
+});
+
+export default function UiLab() {
+  return (
+    <div class='ui-lab ${LIGHT_ROOT_UTILITY}'>
+      <h1>Packed UI appliance</h1>
+      <open-button variant='primary'>packed button</open-button>
+      <open-input label='Packed input' placeholder='type here'></open-input>
+      <open-theme-toggle></open-theme-toggle>
+      <open-dialog>
+        <span slot='label'>packed dialog</span>
+        <p>dialog body from the packed tarball</p>
+      </open-dialog>
+      <open-dropdown>
+        {/* The trigger is the CONSUMER's element: the component wraps its
+            slot in a presentational span and takes the keyboard affordance
+            from what the consumer puts there. A non-focusable span made this
+            appliance under-exercise the component — the behaviour rows below
+            could not reach the trigger at all. */}
+        <button slot='trigger' type='button'>packed dropdown</button>
+        <p>dropdown content from the packed tarball</p>
+      </open-dropdown>
+      <open-code-block>
+        <pre><code>const packed = true;</code></pre>
+      </open-code-block>
+      <utility-widget></utility-widget>
+    </div>
+  );
 }
 `;
 
@@ -1122,7 +1135,16 @@ async function runUtilityBrowserMatrix(starter: string, baseUrl: string): Promis
 async function main(): Promise<void> {
   const tmp = await mkdtemp(join(tmpdir(), 'openelement-packaged-ui-app-'));
   try {
-    const npmEnv = { NPM_CONFIG_CACHE: join(tmp, '.npm-cache') };
+    // One shared, content-addressed cache across legs and runs: a cold-cache
+    // hermetic install is this gate's slowest cell on a constrained network
+    // (measured 2026-11-24: the ~60MB external tree at 75-250KB/s needs 5-20+
+    // minutes per leg, and the gate runs several). Sharing keeps every property
+    // the gate actually asserts — the consumer never resolves into the
+    // repository and installs the six packed tarballs from their file: specs —
+    // while a warm re-run costs seconds (the same shape CI caches use).
+    const npmEnv = {
+      NPM_CONFIG_CACHE: join(tmpdir(), 'openelement-packed-consumer-npm-cache-v1'),
+    };
     const workspacePackages = await readPackages();
     const tarballFor = (name: string): string => {
       const pkg = workspacePackages.find((candidate) => candidate.name === name);
@@ -1142,16 +1164,38 @@ async function main(): Promise<void> {
     const routerTarball = tarballFor('@openelement/router');
     const elementTarball = tarballFor('@openelement/element');
 
+    // The npm half of the hermetic seal, mirroring the pnpm carrier this leg
+    // writes into the appliance below (consumerPnpmOverridesYaml). npm resolves
+    // a tarball's inter-package edges (e.g. @openelement/ui ->
+    // @openelement/element@1.0.0-alpha.16) as registry specs: argv tarballs
+    // join the root only after the nested ranges resolve, so the unpublished
+    // exact version queries registry.npmjs.org and the install dies at
+    // ETARGET/notarget. Sealing every retained name to its own packed tarball
+    // in a scratch manifest's dependencies AND overrides keeps every
+    // resolution path on these tarballs — before the publish, where the
+    // registry has no such version, and after it, where a published copy would
+    // otherwise mix into the packed proof. The specs live in the manifest
+    // rather than argv because npm rejects an override for a directly-installed
+    // argv name (EOVERRIDE).
+    const pinnedTarballs = Object.fromEntries(
+      RETAINED_PACKAGE_NAMES.map((name) => [name, `file:${tarballFor(name)}`]),
+    );
+    await writeFile(
+      join(tmp, 'package.json'),
+      `${JSON.stringify(
+        {
+          name: 'openelement-packed-ui-app-consumer',
+          private: true,
+          dependencies: pinnedTarballs,
+          overrides: pinnedTarballs,
+        },
+        null,
+        2,
+      )}\n`,
+    );
     const install = await runConsumer(
       'npm',
-      [
-        'install',
-        '--ignore-scripts',
-        '--no-audit',
-        '--no-fund',
-        '--fetch-timeout=30000',
-        ...tarballs,
-      ],
+      ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--fetch-timeout=300000'],
       tmp,
       { timeoutMs: NPM_INSTALL_TIMEOUT_MS, env: npmEnv },
     );
@@ -1313,6 +1357,10 @@ async function main(): Promise<void> {
       ),
     );
 
+    // The scaffold ships no app/components directory (its structure is
+    // head/islands/layout/routes/styles), so the appliance creates the
+    // directory its UI lab lives in before writing the pair.
+    await mkdir(join(starter, 'app', 'components'), { recursive: true });
     await writeFile(join(starter, 'app', 'components', 'ui-lab.tsx'), UI_LAB_COMPONENT);
     await writeFile(join(starter, 'app', 'routes', 'ui-lab.tsx'), UI_LAB_ROUTE);
 

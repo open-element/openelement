@@ -15,48 +15,71 @@
  * no `<template shadowrootmode>`. `hydrate: 'load'` makes the client entry
  * import this island's chunk immediately at evaluation, which is what lets
  * the spec delay the upgrade by holding that chunk's response.
+ *
+ * GENERATED lane (F16: class → function). `root: 'light'` is the class lane's
+ * `root: 'light'`, spelled explicitly rather than left to the lane's light
+ * default: the spec asserts `host.shadowRoot === null` AND reads the island's
+ * markup out of the document, so the delivery root is the contract under test
+ * and must be visible at the declaration.
+ *
+ * `count` keeps the class lane's `@property({ reflect: false })`: a
+ * NON-reflecting but still attribute-backed row (the attribute name stays
+ * derived from the property name, so nothing about the wire moves). It lives
+ * in the sidecar rather than as a bare local because the row is what makes the
+ * shell observe and convert a `count` attribute on the host. The render reads
+ * it through a component-local SIGNAL: the class lane re-rendered on a field
+ * write, and a plain local would emit one static text node — the click at the
+ * end of the spec would then be invisible and the 0/1/2 counter proof lost.
+ *
+ * `hostClass` is the class lane's reflected rename onto the host's `class`
+ * attribute, kept verbatim: the page authors `class='probe-host'` on this host
+ * and the spec asserts that class survives activation, so the attribute channel
+ * must stay the `class` attribute and not the derived `host-class`.
  */
 
-import '@openelement/element';
-import { element, OpenElement, property } from '@openelement/element';
+import { signal } from '@openelement/element';
 import { defineIslandConfig } from '@openelement/router';
-import probeStyles from './open-light-probe.css';
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true });
+export const openElement = defineIslandConfig({
+  hydrate: 'load',
+  ssr: true,
+  root: 'light',
+  styles: ['./open-light-probe.css'],
+  properties: {
+    hostClass: { reflect: true, attribute: 'class', default: '' },
+    count: { reflect: false, default: 0 },
+  },
+});
 
-@element('open-light-probe', { root: 'light' })
-export default class OpenLightProbe extends OpenElement {
-  static override styles = [probeStyles];
+interface OpenLightProbeProps {
+  hostClass: string;
+  count: number;
+}
 
-  @property({ reflect: true, attribute: 'class' })
-  hostClass = '';
+export default function OpenLightProbe(props: OpenLightProbeProps) {
+  const count = signal(props.count ?? 0);
 
-  @property({ reflect: false })
-  count = 0;
-
-  render() {
-    // The input is a static control: no markers, no bindings. Its typed
-    // value, selection, and focus must survive in-place activation.
-    // The span is signal-bound text: SSR renders
-    // <span data-signal="count">0</span>; activation binds the surviving
-    // node, proving live reactivity.
-    // `.probe-shared` is the overlapping class this component's sheet shares
-    // with the card component and an unrelated document element (S-C1.2).
-    return (
-      <div class='light-probe'>
-        <p class='probe-shared'>probe text</p>
-        <input type='text' class='probe-input' aria-label='Light probe input' />
-        <button
-          type='button'
-          class='probe-button'
-          onClick={() => {
-            this.count += 1;
-          }}
-        >
-          increment
-        </button>
-        <span class='probe-count'>{this.count}</span>
-      </div>
-    );
-  }
+  // The input is a static control: no markers, no bindings. Its typed
+  // value, selection, and focus must survive in-place activation.
+  // The span is signal-bound text: SSR renders its initial value and
+  // activation binds the SURVIVING node (the spec compares that node's
+  // identity before and after the upgrade), proving live reactivity.
+  // `.probe-shared` is the overlapping class this component's sheet shares
+  // with the card component and an unrelated document element (S-C1.2).
+  return (
+    <div class='light-probe'>
+      <p class='probe-shared'>probe text</p>
+      <input type='text' class='probe-input' aria-label='Light probe input' />
+      <button
+        type='button'
+        class='probe-button'
+        onClick={() => {
+          count.value += 1;
+        }}
+      >
+        increment
+      </button>
+      <span class='probe-count'>{count.value}</span>
+    </div>
+  );
 }

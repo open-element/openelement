@@ -1,5 +1,0 @@
-/* The page-404 light root's box: a custom element is inline by default and
-   the host tag is not authored markup, so no utility can carry it. */
-:host {
-  display: block;
-}

@@ -43,17 +43,12 @@ export interface PageRouteModule {
       renderIntent?: { stream?: unknown };
       [key: string]: unknown;
     };
-    __partProgram?: { version: unknown; tag: unknown };
+    // C11 (2026-11-24): the `__partProgram` field is GONE. The class lane's
+    // compiled Part Program was deleted with the lane, and no runtime reader
+    // remains (the page tag is a build fact, the stream guards are retired);
+    // a module that still carries one is not admitted by any lane this
+    // release ships.
     [key: string]: unknown;
   };
   [key: string]: unknown;
-}
-
-/**
- * The build-time stream manifest slice the startup dispatch guards read
- * (the wire shape is StreamRouteManifest in protocol/ssg.ts).
- */
-export interface StreamRouteManifestLike {
-  program: { version: unknown; tag: unknown };
-  fields: ReadonlyArray<{ field: string }>;
 }

@@ -74,29 +74,45 @@ async function buildServerOnlyFixture(): Promise<string> {
     join(appDirPath, 'app', 'components', 'server-only-page.css'),
     '.server-only-rule { color: rgb(1, 2, 3); }\n',
   );
+  // GENERATED lane (F16: class → function). The class form was
+  // `@element('server-only-page', { root: 'light' })` with
+  // `static override styles = [pageStyles]`; the sidecar spells `root: 'light'`
+  // explicitly and its `styles` list replaces the CSS import array. A LIGHT
+  // generated element has no DSD host producer, so it cannot be a page ROOT —
+  // the route below is a SERVER FUNCTION PAGE and this component is a page-local
+  // STATIC component, which keeps the app island-free (zero client JS) while the
+  // light root still declares its sheet as a document resource.
   await write(
     join(appDirPath, 'app', 'components', 'server-only-page.tsx'),
     [
-      "import { element, OpenElement } from '@openelement/element';",
-      "import pageStyles from './server-only-page.css';",
+      "import { defineIslandConfig } from '@openelement/router';",
       '',
-      "@element('server-only-page', { root: 'light' })",
-      'export default class ServerOnlyPage extends OpenElement {',
-      '  static override styles = [pageStyles];',
-      '  render() {',
-      "    return <p class='server-only-rule'>server only</p>;",
-      '  }',
+      'export const openElement = defineIslandConfig({',
+      "  tag: 'server-only-page',",
+      "  root: 'light',",
+      "  styles: ['./server-only-page.css'],",
+      '});',
+      '',
+      'export default function ServerOnlyPage() {',
+      "  return <p class='server-only-rule'>server only</p>;",
       '}',
       '',
     ].join('\n'),
   );
+  // A SERVER FUNCTION PAGE: its output is document content, so the light child's
+  // sheet is the document's resource and the app ships no client JavaScript. The
+  // lane admits only an EXPORTED JSX-returning function of this module.
   await write(
     join(appDirPath, 'app', 'routes', 'index.tsx'),
     [
       "import { definePage } from '@openelement/router';",
-      "import ServerOnlyPage from '../components/server-only-page.tsx';",
+      "import '../components/server-only-page.tsx';",
       '',
-      "export default definePage(ServerOnlyPage, { head: { title: 'Style-only build proof' } });",
+      'export function StyleOnlyPage() {',
+      '  return <server-only-page></server-only-page>;',
+      '}',
+      '',
+      "export default definePage(StyleOnlyPage, { head: { title: 'Style-only build proof' } });",
       '',
     ].join('\n'),
   );

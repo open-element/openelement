@@ -278,6 +278,7 @@ const LEDGER_CALLEES = [
   'beginInstancePass(',
   'endInstancePass(',
   'abortInstancePass(',
+  'joinInstancePass(',
 ] as const;
 
 function ledgerText(text: string): readonly string[] {
@@ -359,26 +360,30 @@ describe('T4 depth-1 nested-instance wiring — artifact contract', () => {
     expect(functionText(two, 'Root__claim')).toContain('retainChildInstance(');
   });
 
-  test('R3 B3a: a target referenced from a leaf/recipe body is demoted everywhere', () => {
-    // Root body + leaf body reference `Twin` -> legacy everywhere; `Holder` is
-    // only referenced from the root body -> retained leaf.
-    const demoted = compile(DEMOTED_SOURCE);
-    const demotedKeys = [
-      ...demoted.matchAll(/retainChildInstance\(__oe_host\.instance, ("[^"]+")/g),
+  test('R3 B3a: a target referenced from a RECIPE body is demoted everywhere', () => {
+    // Depth >= 2 (2026-11-21): a retained body that references its own hostless
+    // child RETAINS it too, so `Root -> Holder -> Twin` is three retained sites
+    // (mount + claim each) across two owning bodies. The one-body-shape rule
+    // still holds — a component is either retained everywhere or legacy
+    // everywhere — and a RECIPE body is still a legacy context.
+    const nested = compile(DEMOTED_SOURCE);
+    const nestedKeys = [
+      ...nested.matchAll(/retainChildInstance\(__oe_host\.instance, ("[^"]+")/g),
     ].map((match) => match[1]!);
-    // Only the Holder site (mount + claim) retains.
-    expect(demotedKeys.length).toBe(2);
-    expect(new Set(demotedKeys).size).toBe(1);
-    expect(declaredFunctions(demoted)).toContain('Holder__setup');
-    expect(declaredFunctions(demoted)).not.toContain('Twin__setup');
-    // The root's Twin reference and the Holder body's Twin reference are the
-    // today's legacy text: a fresh child scope, no retain/key/bracket.
-    const rootMount = functionText(demoted, 'Root__mount');
-    expect(occurrences(rootMount, 'retainChildInstance(')).toBe(1);
-    expect(rootMount).toContain('Twin__mount(__oe_childScope');
-    const holderMount = functionText(demoted, 'Holder__mount');
-    expect(holderMount).toContain('Twin__mount(__oe_childScope');
-    expect(ledgerText(holderMount)).toEqual([]);
+    expect(nestedKeys.length).toBe(6);
+    expect(new Set(nestedKeys).size).toBe(3);
+    expect(declaredFunctions(nested)).toContain('Holder__setup');
+    expect(declaredFunctions(nested)).toContain('Twin__setup');
+    // Holder retains its own child and JOINS the root attempt's transaction
+    // instead of opening a second one.
+    const holderMount = functionText(nested, 'Holder__mount');
+    expect(occurrences(holderMount, 'retainChildInstance(')).toBe(1);
+    expect(occurrences(holderMount, 'joinInstancePass(')).toBe(1);
+    expect(occurrences(holderMount, 'beginInstancePass(')).toBe(0);
+    expect(occurrences(holderMount, 'endInstancePass(')).toBe(0);
+    const rootMount = functionText(nested, 'Root__mount');
+    expect(occurrences(rootMount, 'beginInstancePass(')).toBe(1);
+    expect(occurrences(rootMount, 'retainChildInstance(')).toBe(2);
 
     // A children-recipe body counts as a recipe body: `Leaf` is demoted, while
     // `Frame` (referenced from the root body) is the retained leaf.

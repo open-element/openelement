@@ -249,7 +249,7 @@ export interface FunctionModelResource {
    * reactive dependency (unlike `ref`) and a reconnect re-reads the nearest
    * provider into the same object. `expression` carries the lowered TOKEN.
    */
-  readonly kind: 'signal' | 'computed' | 'local' | 'ref' | 'context';
+  readonly kind: 'signal' | 'computed' | 'local' | 'ref' | 'context' | 'host';
   /** Lowered initializer/derivation; absent when the declared form has none. */
   readonly expression: FunctionExpressionRef | null;
   /**
@@ -1254,11 +1254,81 @@ class FunctionFrontendBuilder {
     if (ts.isCallExpression(value) && this.refIntrinsicImport(value) !== null) {
       return this.buildRefHandle(declaration, name, value);
     }
+    // `16b-REF` / `useHost`: a `useHost()` declaration is the OWNING ELEMENT as a
+    // value. It needs no runtime channel and no lifetime of its own — the
+    // retained setup factory already receives the element on its host record,
+    // so the generator lowers this to one field read. Admission is binding
+    // provenance (a named import from the canonical intrinsic specifiers) plus
+    // the call shape; nothing is inferred from the spelling.
+    if (ts.isCallExpression(value) && this.useHostIntrinsicImport(value) !== null) {
+      return this.buildHostAccess(declaration, name, value);
+    }
     const expression = this.expression(value, 'setup');
     return {
       name,
       kind: 'local',
       expression,
+      recipeId: null,
+      span: spanOf(this.sourceFile, declaration),
+    };
+  }
+
+  /**
+   * `16b-REF` — the imported name when `call` invokes a canonical `useHost`
+   * intrinsic, or `null`.
+   *
+   * Same binding-provenance rule as `ref`: an identifier whose resolved binding
+   * is a named import of one of {@linkcode LIFECYCLE_INTRINSIC_SPECIFIERS} with
+   * the imported name `useHost`. A local shadow or a foreign same-named
+   * function is not the intrinsic.
+   */
+  private useHostIntrinsicImport(call: ts.CallExpression): string | null {
+    const callee = unwrap(call.expression);
+    if (!ts.isIdentifier(callee)) return null;
+    const binding = this.resolved.resolveIdentifier(callee);
+    if (binding === undefined || binding.origin.form !== 'import') return null;
+    if (!isLifecycleIntrinsicSpecifier(binding.origin.specifier)) return null;
+    return binding.origin.importedName === 'useHost' ? 'useHost' : null;
+  }
+
+  /**
+   * `16b-REF` — admit one `const host = useHost()` declaration as this
+   * component's OWNING ELEMENT.
+   *
+   * The call takes no arguments and no type arguments (the element type is not
+   * author-chosen: a root's host is the generated element, a depth-1 retained
+   * hostless child's is the nearest enclosing generated element). The
+   * declaration must be `const` — the element identity never changes for an
+   * instance, so a reassignable binding would imply something the lowered read
+   * cannot honour.
+   *
+   * `expression` stays null: there is nothing to lower. The generator emits the
+   * host-record field read, which is the same value the lifecycle/change/error
+   * callbacks already receive as `env.host`.
+   */
+  private buildHostAccess(
+    declaration: ts.VariableDeclaration,
+    name: string,
+    call: ts.CallExpression,
+  ): FunctionModelResource | null {
+    if (call.typeArguments !== undefined || call.arguments.length !== 0) {
+      this.fail(call, CODES.form, 'useHost() takes no arguments and no type arguments');
+      return null;
+    }
+    const list = declaration.parent;
+    if (!ts.isVariableDeclarationList(list) || (list.flags & ts.NodeFlags.Const) === 0) {
+      this.fail(
+        call,
+        CODES.form,
+        'a useHost() accessor must be declared with const: the element identity is the contract ' +
+          'and the emitted alias is not reassignable',
+      );
+      return null;
+    }
+    return {
+      name,
+      kind: 'host',
+      expression: null,
       recipeId: null,
       span: spanOf(this.sourceFile, declaration),
     };

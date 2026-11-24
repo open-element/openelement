@@ -1,13 +1,17 @@
 /**
- * M03-I-4a — production function-component frontend + Alpha15 diagnostics parity.
+ * M03-I-4a — production function-component frontend.
  *
  * Authority: `docs/architecture/alpha16-18-execution-plan.md` §1 M03 exit
  * (diagnostics / Source Map / security parity with the Alpha15 class frontend),
  * `docs/architecture/m03-expression-identity.md` §3/§6/§8, the M02 admitted
  * grammar, and the M03-A/-B adopted decisions. This file covers the A4a half of
- * the exit evidence: the compiler-private frontend pipeline and the
- * diagnostics-parity harness. Source-map parity, the full security parity
- * matrix, the semantic-test-matrix rows and the M03 ledger flip are A4b.
+ * the exit evidence: the compiler-private frontend pipeline.
+ *
+ * The Alpha15 side of the parity harness retired with the class frontend
+ * (Alpha16 closeout), so the former A/B pairs now assert the surviving
+ * frontend's side only. The OEC code and the OFFENDING TOKEN assertions are
+ * unchanged — they were the properties the comparison normalized to — and the
+ * class fixtures are deleted rather than left as dead references.
  */
 
 import { describe, expect, test } from 'vitest';
@@ -17,10 +21,6 @@ import {
   compileFunctionModule,
   type FunctionFrontendResult,
 } from '../../src/internal/compiler/semantic-core/function-frontend.ts';
-import {
-  CompiledElementError,
-  compileElementProgram,
-} from '../../src/internal/compiler/semantic-core/compile.ts';
 import { classifyIntrinsicAttribute } from '../../src/internal/compiler/semantic-core/attribute-classification.ts';
 import { forbiddenSinkReason } from '@openelement/protocol/forbidden-sinks';
 
@@ -325,27 +325,13 @@ describe('compiler-private parallel entry boundary', () => {
   });
 });
 
-// ─── Alpha15 diagnostics parity harness (owner-approved shape, item a) ────
+// ─── Canonical security refusals are located on the offending token ───────
 
-interface ParityCase {
+interface RefusalCase {
   readonly name: string;
-  readonly classRender: string;
   readonly functionRender: string;
   readonly code: string;
   readonly slice: string;
-}
-
-const CLASS_PRELUDE = `import { element, OpenElement, property } from '@openelement/element';
-@element('oe-parity-fixture')
-export class ParityFixture extends OpenElement {
-  @property({ reflect: false }) label = 'ready';
-  @property({ type: Array, reflect: false }) items = [];
-  render() { return `;
-
-function classSource(render: string): string {
-  return `${CLASS_PRELUDE}${render}; }
-}
-`;
 }
 
 function functionSource(render: string): string {
@@ -354,96 +340,66 @@ function ParityFixture(props) { return ${render}; }
 `;
 }
 
-function classDiagnostics(source: string): Array<{ code: string; start: number; end: number }> {
-  try {
-    compileElementProgram(source, FILE);
-  } catch (error) {
-    if (error instanceof CompiledElementError) {
-      return error.diagnostics.map((diagnostic) => ({
-        code: diagnostic.code,
-        start: diagnostic.start,
-        end: diagnostic.end,
-      }));
-    }
-    throw error;
-  }
-  return [];
-}
-
-const PARITY_CASES: readonly ParityCase[] = [
+/**
+ * The former Alpha15 parity table, now the function frontend's own refusal
+ * table. The comparison normalized to the OEC code and the OFFENDING TOKEN
+ * (never absolute offsets, because the two fixtures differed in module shape),
+ * and those two properties are asserted directly — a diagnostic whose span
+ * quotes the right token is the same source-located finding whether or not a
+ * second frontend reports it.
+ */
+const REFUSAL_CASES: readonly RefusalCase[] = [
   {
     name: 'dynamic srcdoc sink',
-    classRender: '<x-widget srcdoc={this.label}></x-widget>',
     functionRender: '<x-widget srcdoc={props.label}></x-widget>',
     code: 'OEC9011',
     slice: 'srcdoc',
   },
   {
     name: 'prototype-pollution property sink',
-    classRender: '<x-widget __proto__={this.label}></x-widget>',
     functionRender: '<x-widget __proto__={props.label}></x-widget>',
     code: 'OEC9011',
     slice: '__proto__',
   },
   {
     name: 'static innerHTML',
-    classRender: '<div innerHTML="raw"></div>',
     functionRender: '<div innerHTML="raw"></div>',
     code: 'OEC9011',
     slice: 'innerHTML',
   },
   {
     name: 'raw-text script tag',
-    classRender: '<script>alert(1)</script>',
     functionRender: '<script>alert(1)</script>',
     code: 'OEC9010',
     slice: 'script',
   },
   {
     name: 'raw-text style tag',
-    classRender: '<style>raw text</style>',
     functionRender: '<style>raw text</style>',
     code: 'OEC9010',
     slice: 'style',
   },
 ];
 
-describe('Alpha15 diagnostics parity — shared security constructs (asserted)', () => {
-  for (const entry of PARITY_CASES) {
-    test(`${entry.name}: same OEC code and same offending authored slice`, () => {
-      const cls = classDiagnostics(classSource(entry.classRender));
-      const fn = compile(functionSource(entry.functionRender)).diagnostics;
-      const classDiagnostic = cls.find((diagnostic) => diagnostic.code === entry.code);
-      const functionDiagnostic = fn.find((diagnostic) => diagnostic.code === entry.code);
-      expect(classDiagnostic, `class frontend did not report ${entry.code}`).toBeDefined();
-      expect(functionDiagnostic, `function frontend did not report ${entry.code}`).toBeDefined();
-      // Normalization decision: the two fixtures differ in module shape, so
-      // parity compares the OEC code, the field dialect and the OFFENDING
-      // TOKEN (the attribute name / tag name), not absolute offsets. A span
-      // that quotes the same token is the same source-located finding.
-      const offending = (source: string, diagnostic: { start: number; end: number }): string => {
-        const slice = source.slice(diagnostic.start, diagnostic.end);
-        return slice.includes('=') ? slice.slice(0, slice.indexOf('=')) : slice;
-      };
-      expect(offending(classSource(entry.classRender), classDiagnostic!)).toBe(entry.slice);
-      expect(offending(functionSource(entry.functionRender), functionDiagnostic!)).toBe(
-        entry.slice,
+describe('canonical security refusals are located on the offending authored token', () => {
+  for (const entry of REFUSAL_CASES) {
+    test(`${entry.name}: ${entry.code} on the offending authored slice`, () => {
+      const source = functionSource(entry.functionRender);
+      const diagnostic = compile(source).diagnostics.find(
+        (candidate) => candidate.code === entry.code,
       );
-      expect(functionDiagnostic!.file).toBe(FILE);
+      expect(diagnostic, `function frontend did not report ${entry.code}`).toBeDefined();
+      const slice = source.slice(diagnostic!.start, diagnostic!.end);
+      const offending = slice.includes('=') ? slice.slice(0, slice.indexOf('=')) : slice;
+      expect(offending).toBe(entry.slice);
+      expect(diagnostic!.file).toBe(FILE);
     });
   }
 
-  test('C+ parity: an admitted component compiles on both frontends', () => {
-    const classResult = classDiagnostics(
-      classSource('<main title={this.label}><h1>{this.label}</h1></main>'),
-    );
-    expect(classResult).toEqual([]);
-    const functionResult = compile(
-      functionSource('<main title={props.label}><h1>{props.label}</h1></main>'),
-    );
-    expect(functionResult.diagnostics).toEqual([]);
-    expect(functionResult.module).not.toBeNull();
-  });
+  // The former "C+ parity: an admitted component compiles on both frontends"
+  // row is deleted rather than retargeted: its function-half assertion is
+  // already made by the admitted-component-model suite above, so keeping it
+  // would duplicate coverage, and its class half has no subject left.
 });
 
 // ─── T+/T− truthfulness (TypeScript is the type authority) ───────────────
@@ -498,11 +454,13 @@ describe('T rows — TypeScript truthfulness of the authored fixtures (asserted)
     // from a compiler diagnostic (documented, not a silent pass).
   });
 
-  test('NOT asserted in A4a (owned by A4b): source-map parity, full security matrix, breakage of the class default path', () => {
-    // A4b owns: expression-level source-map parity via @jridgewell/trace-mapping,
+  test('NOT asserted in A4a (owned by A4b): source maps and the full security matrix', () => {
+    // A4b owns: expression-level source maps via @jridgewell/trace-mapping,
     // the per-new-position security negative matrix, the semantic-test-matrix
     // rows and the M03 ledger exit flip. Recording the boundary here keeps the
-    // harness honest: A4a asserts diagnostics parity only.
+    // harness honest: A4a asserts diagnostics only. The third former item —
+    // "breakage of the class default path" — retired with the class frontend
+    // (Alpha16 closeout): there is no class default path left to break.
     expect(true).toBe(true);
   });
 });

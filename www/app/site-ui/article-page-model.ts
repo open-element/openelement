@@ -1,3 +1,4 @@
+import { trustedHtml, type TrustedHtml } from '@openelement/element';
 import type { PageHead } from '@openelement/router';
 import { prepareArticle } from './article-body.ts';
 import { siteHead } from './head.ts';
@@ -174,5 +175,66 @@ export function projectArticlePage(
       depth: String(item.level ?? 2),
     })),
     articleHtml: article.html,
+  };
+}
+
+/**
+ * The article page's FLAT prop record — what a generated route module passes to
+ * its own page component.
+ *
+ * The article shell used to be an `@element` class that derived these fields
+ * with `computed` rows and rendered them from `this`. The page component is now
+ * the route module's own server function, and a server function page's props are
+ * a flat inline type literal (the lane refuses a nested model object: the sink
+ * and the text Parts read `props.<field>` directly), so the derivation happens
+ * HERE — once, in plain TypeScript — instead of in reactive rows.
+ *
+ * Two derivations moved with it, and both are behaviour-preserving:
+ *
+ *  - `articleHidden`: the corpus encodes visibility as the class tokens the
+ *    generated bindings already carry (`articleClass` holds `'is-hidden'` for the
+ *    not-found state). The template reads the token and re-delivers it as the
+ *    native `hidden` attribute, so visibility stays a platform fact rather than a
+ *    stylesheet rule.
+ *  - `notFoundRows`: a zero-or-one list rather than a branch, because a branch
+ *    element cannot interpolate text (OEC9012) and the fallback line is exactly
+ *    this state's dynamic text. An empty list emits no markup at all, which is
+ *    the WEB-002 fix — a valid page carries no "404" string in its textContent.
+ *    A genuinely missing article renders the visible block with the model's
+ *    message and slug.
+ */
+export type ArticleViewProps = {
+  articleHidden: boolean;
+  metadata: ReadingMetadata & { lede: string };
+  navigation: {
+    previous?: { href: string; label: string };
+    next?: { href: string; label: string };
+  };
+  railItems: Array<{ id: string; href: string; label: string; depth: string }>;
+  locale: string;
+  articleHtml: TrustedHtml;
+  notFoundRows: Array<{ key: string; label: string }>;
+};
+
+export function projectArticleView(
+  collection: ArticleCollection,
+  slug: string,
+  localeInput: string | undefined,
+): ArticleViewProps {
+  const model = projectArticlePage(collection, slug, localeInput);
+  return {
+    articleHidden: model.articleClass.includes('is-hidden'),
+    metadata: model.metadata,
+    navigation: model.navigation,
+    railItems: model.railItems,
+    locale: contentLocale(localeInput ?? 'en'),
+    // The body is a `prepareArticle` product of THIS request, never a value that
+    // crossed a process boundary, so branding it here keeps the server-component
+    // lane's trusted-HTML contract satisfied without engaging ADR-0182's
+    // crossing exclusion.
+    articleHtml: trustedHtml(model.articleHtml),
+    notFoundRows: model.notFoundClass.includes('is-hidden')
+      ? []
+      : [{ key: 'not-found', label: `${model.notFoundMessage}: ${model.slug}` }],
   };
 }

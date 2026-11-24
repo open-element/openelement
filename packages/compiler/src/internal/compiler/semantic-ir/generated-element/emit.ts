@@ -12,6 +12,12 @@
  *
  * - imports the internal M09-0/M09-shadow shell by its compiler-private
  *   specifier;
+ * - for a CLIENT-ONLY island (`ssr: false` / `hydrate: 'only'`), imports each
+ *   declared `.css` specifier as a REAL module edge and carries the bindings on
+ *   the descriptor's `styles` row (2026-11-20): no server render exists to
+ *   deliver the sheet, so the shell adopts these objects into the root it
+ *   creates. A client-only declaration with no static specifier refuses at build
+ *   time instead of rendering unstyled;
  * - builds a descriptor with `tag`, the resolved `properties` rows (or `[]`),
  *   the leaf's exported `create<Name>Recipe` factory, `createInstance` only
  *   when the leaf generator reported a root setup factory (T3 / 16b-LC-1 —
@@ -62,6 +68,9 @@ import {
   type GeneratedElementPlatformProperty,
   type GeneratedElementSite,
 } from './contract.ts';
+import { collectStaticClassCandidates } from '../generated-leaf/generate.ts';
+// The ONE compiler-private field name for the nested-host expander (P-6).
+import { NESTED_HOST_EXPANDER } from '@openelement/protocol/style-sheet';
 
 /** The emitter's result: the leaf contract plus the exact appended tail. */
 export interface GeneratedElementModule extends GeneratedLeafModule {
@@ -134,11 +143,33 @@ export interface GenerateElementModuleOptions {
   readonly authoredSource?: string;
   /**
    * M09-2e / #1803 compiler-private marker: the authored sidecar declares
-   * `styles`, so this shadow host's DSD template will carry the canonical
-   * marked link prefix. Emits the typed styleLinks channel and the claim prefix
-   * walk; omitted keeps the pre-slice bytes exactly.
+   * `styles` for a SHADOW root. The producer forwards the runtime `styleLinks`
+   * channel for EVERY shadow host since F16 (a nested LIGHT child's sheets are
+   * lifted into the template), so this fact no longer gates the channel. It
+   * keeps the DECLARED case's fail-closed guard — a declared sheet set that
+   * reaches the producer empty is a mixed/partial artifact, not an unstyled
+   * app — and the `styleLinks` name-collision check. Omitted keeps every other
+   * module's emitted bytes and diagnostics exactly as before this slice.
    */
   readonly styleLinkPrefix?: boolean;
+  /**
+   * The sidecar's client-only fact (2026-11-20 client style-adoption slice):
+   * the build's effective phase — explicit `ssr: false`, or `hydrate: 'only'`,
+   * exactly as the lane admission read it. A client-only island has no server
+   * render, so its declared sheets are emitted as REAL module-graph imports and
+   * carried on the descriptor for the shell to adopt into the root it creates.
+   * `ssr: true`/absent (the SSR case) changes no byte.
+   */
+  readonly clientOnly?: boolean;
+  /**
+   * The sidecar's declared `.css` specifiers, in authored order, when it
+   * declares `styles` at all. Present with an empty list is a FAIL-CLOSED
+   * state for a client-only island: the declaration promised a sheet but no
+   * static specifier reached the emitter, which would render unstyled. The
+   * router scan owns the author-facing shape refusals; this option is the
+   * emitter's own closure over the same fact.
+   */
+  readonly styles?: readonly string[];
 }
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -229,6 +260,9 @@ function emptyResult(
     requiredBindings: leaf.requiredBindings,
     requiredProps: leaf.requiredProps,
     requiresPropsChanged: leaf.requiresPropsChanged,
+    // A refused module contributes no candidates: the stylesheet must not
+    // compile utilities for markup that never shipped.
+    classCandidates: [],
     diagnostics,
     leaf: null,
     tail: null,
@@ -272,10 +306,15 @@ interface PropertyEmission {
   readonly hasAttributeRows: boolean;
   /**
    * The host producer must consume the seeder's merged attribute pairs, which
-   * happens for TWO reasons: the descriptor has an attribute-backed row, OR it
-   * has a JSON-seedable non-primitive row (D-18c) whose seed travels as one
-   * shell-owned host attribute. A module with ONLY property-only primitive rows
-   * still emits no attribute seed, keeping those bytes unchanged.
+   * happens for THREE reasons: the descriptor has an attribute-backed row (the
+   * M11-2 canonical projection), a JSON-seedable non-primitive row (D-18c) whose
+   * seed travels as one shell-owned host attribute, or — since the 2026-11-23
+   * ADR-0181 A5 amendment — a PROPERTY-ONLY PRIMITIVE row, which has no attribute
+   * pair of its own and reaches the claim on that same seed. The predicate is the
+   * seeder's own ("any row the JSON seed may carry"), restated here because the
+   * compiler cannot import the shell; a descriptor whose only row is a
+   * property-only `trustedHtml` brand (the one row type the seed excludes) still
+   * emits no attribute seed, keeping those bytes unchanged.
    */
   readonly emitsHostAttributeSeed: boolean;
 }
@@ -336,9 +375,15 @@ function buildPropertyEmission(
     identifiers,
     usesPropsResolver,
     hasAttributeRows: properties.some((property) => property.attribute !== null),
+    // Every declared row reaches the claim on one of the seed's channels (the
+    // canonical attribute projection for an attribute-backed row, and the JSON
+    // seed for an `array`/`object` row or — since the 2026-11-23 ADR-0181 A5
+    // amendment — for a property-only PRIMITIVE row) — EXCEPT an
+    // `attribute: null` `trustedHtml` brand, which the seed structurally
+    // excludes (a brand cannot be rebuilt from JSON). A brand-only descriptor
+    // therefore keeps its pre-amendment bytes with no seeder call.
     emitsHostAttributeSeed: properties.some(
-      (property) =>
-        property.attribute !== null || property.type === 'array' || property.type === 'object',
+      (property) => property.attribute !== null || property.type !== 'trustedHtml',
     ),
   };
 }
@@ -352,6 +397,18 @@ function buildPropertyEmission(
  * The admission gates that read the authored AST live in `site.ts`; this
  * function is the text stage and refuses only emitter invariants.
  */
+/**
+ * The host record a shadow host producer hands its leaf's `__ssr`.
+ *
+ * The leaf already routes every custom-element tag through the ONE `nestedHost`
+ * helper, which reads the expander off this record (`nestedHost.ts`'s
+ * `NESTED_HOST_PROPERTY`). The LIGHT root's producer has always supplied it; the
+ * SHADOW wrapper did not, which is why a shadow page's inner components rendered
+ * as bare tags. This is the record's spelling, kept in one place so the emitted
+ * bytes and the runtime helper can never drift about the field name.
+ */
+const NESTED_HOST_RECORD_ARG = `nestedHost === undefined ? undefined : { "${NESTED_HOST_EXPANDER}": nestedHost }`;
+
 export function generateElementModule(
   module: FunctionModelModule,
   site: GeneratedElementSite | null,
@@ -374,19 +431,54 @@ export function generateElementModule(
     module.components.some((component) => component.name === rootCandidate)
       ? rootCandidate
       : undefined;
+  // The DSD template root this descriptor pins (`null` for a LIGHT/absent root,
+  // which has no template at all). Computed HERE because it now decides the
+  // claim's prefix walk as well as the host wrapper below, and both must read
+  // the same fact.
+  const templateRoot = hostTemplateRoot(options.root);
   // M09-2e / #1803: derived from the authored sidecar by the lane admission,
-  // never from a host fact. An unstyled module passes nothing, so its bytes
-  // stay exactly the pre-slice output.
-  const styleLinkPrefix = options.styleLinkPrefix === true;
+  // never from a host fact.
+  //
+  // P-3 (2026-11-21): a shadow module whose ONLY styling is utility classes
+  // declares no `styles`, yet its DSD template still needs the build's shared
+  // COMPONENT sheet (the compiler collected those tokens as class candidates).
+  //
+  // F16 nested-light lift: NEITHER fact gates the runtime `styleLinks` forward
+  // any more. The runtime lifts a nested LIGHT island's declared sheets into the
+  // ENCLOSING template while it expands that child, so ANY shadow host's DSD
+  // template can begin with marked links even when this module declares no
+  // styles and carries no candidate token. The wrapper therefore forwards the
+  // channel unconditionally (see the wrapper below); this fact keeps only the
+  // DECLARED case's fail-closed strictness, and the `styleLinks` identifier
+  // collision guard, so no module's diagnostics grow without a declaration.
+  const declaredStyles = options.styleLinkPrefix === true;
+  const utilityChannel =
+    (options.root === 'shadow-open' || options.root === 'shadow-closed') &&
+    collectStaticClassCandidates(module).length > 0;
+  const styleLinkPrefix = declaredStyles || utilityChannel;
+  // 2026-11-20 client style adoption: only the client-only fact (`ssr: false`
+  // or `hydrate: 'only'`), read by the SAME lane admission that supplies the
+  // declared list. The imports are emitted for a client-only island only — an
+  // SSR island's sheet is already delivered by the marked `<link>` inside its
+  // DSD template, and adding a module-graph copy would change bytes for a
+  // second delivery that the link-delivery guard then has to undo.
+  const clientOnly = options.clientOnly === true;
+  const clientStyles = clientOnly ? (options.styles ?? []) : [];
   const leaf = generateLeafModule(module, {
     ...(options.authoredSource === undefined ? {} : { authoredSource: options.authoredSource }),
     ...(rootInstanceName === undefined ? {} : { rootInstance: rootInstanceName }),
-    ...(styleLinkPrefix ? { claimStyleLinkPrefix: true } : {}),
+    // F16: the DSD template claim skips a LEADING marked stylesheet-link run —
+    // delivery markup, not claimed content. The template may carry this
+    // module's declared sheets (M09-2e) or — new — a nested LIGHT child's
+    // sheets the runtime lifted into it, so the prefix is a property of the
+    // TEMPLATE, not of this module's own styling declaration. A LIGHT root has
+    // no template, so its claim keeps the pre-slice bytes.
+    ...(templateRoot === null ? {} : { claimStyleLinkPrefix: true }),
     // Slot anchors are a LIGHT-root feature only: a light root's children are
     // projections into its own `<slot>` elements, so its producer must name
     // them. A shadow root distributes its light children through the platform
     // and a hostless module is not a host, so both keep the pre-slice bytes.
-    ...(hostTemplateRoot(options.root) === null ? { lightRoot: true } : {}),
+    ...(templateRoot === null ? { lightRoot: true } : {}),
   });
   const leafText = leaf.module;
   if (leafText === null) {
@@ -406,6 +498,7 @@ export function generateElementModule(
       requiredBindings: leaf.requiredBindings,
       requiredProps: leaf.requiredProps,
       requiresPropsChanged: leaf.requiresPropsChanged,
+      classCandidates: leaf.classCandidates,
       diagnostics: leaf.diagnostics,
       leaf: leafText,
       tail: null,
@@ -420,6 +513,24 @@ export function generateElementModule(
         module.file,
         GENERATED_ELEMENT_DIAGNOSTIC.NOT_A_COMPONENT,
         'the generated element emitter needs one named default-exported component to append a CE tail',
+      ),
+    ]);
+  }
+  // Fail closed BEFORE a descriptor exists: a client-only island that declares
+  // `styles` but reaches this stage with no static specifier would ship a
+  // root the browser creates with nothing to adopt — an unstyled render with no
+  // error. The router scan owns the author-facing list-shape refusals; this is
+  // the lane's own closure over the SAME sidecar fact (shim #24's failure
+  // behaviour, kept by the client style slice).
+  if (clientOnly && options.styles !== undefined && clientStyles.length === 0) {
+    return emptyResult(leaf, [
+      moduleDiagnostic(
+        module.file,
+        GENERATED_ELEMENT_DIAGNOSTIC.CLIENT_STYLES_UNWIRED,
+        'this island declares openElement.styles and is client-only (ssr: false), but no static ' +
+          '.css specifier reached the emitter. A client-only island has no DSD template to carry ' +
+          'the stylesheet link, so the sheet can only arrive through a module-graph import: ' +
+          'refusing instead of rendering the element unstyled',
       ),
     ]);
   }
@@ -452,9 +563,12 @@ export function generateElementModule(
     ssrHost: `${rootName}__ssrHost`,
     // The light-root SSR producer name (the leaf's parameterless `<Name>__ssr`).
     ssrProducer: `${rootName}__ssr`,
+    // 2026-11-20 client style adoption: one module-scope import binding per
+    // declared sheet. The name is compiler-owned and collision-checked against
+    // the leaf text like every other tail identifier.
+    styleImport: (index: number): string => `__oeStyle${index}`,
   };
   const root = options.root;
-  const templateRoot = hostTemplateRoot(root);
   // The M09-2a host wrapper is appended only for a shadow descriptor whose leaf
   // actually emitted the content-only `<Name>__ssr`. A light root (or an absent
   // root, which the shell defaults to light) appends nothing at all, so the
@@ -471,8 +585,18 @@ export function generateElementModule(
       ),
     ]);
   }
+  // A CLIENT-ONLY island with NO declared sheet has no server render, so it must
+  // have no host producer — stated here rather than inferred from the leaf's
+  // silence. Inference is how it worked until F16: the leaf declined `__ssr` for a
+  // property channel, which incidentally kept such islands producerless, and
+  // admitting that channel exposed how fragile the dependency was.
+  //
+  // A client-only island that DOES declare sheets keeps the wrapper: its
+  // `styleLinks` channel is the SSR/DSD half of "one asset, one delivery", and the
+  // client row is additive on top of it.
+  const producerlessClientOnly = options.clientOnly === true && clientStyles.length === 0;
   const hostWrapper =
-    templateRoot !== null && exportsSsrFunction(leafText, rootName)
+    !producerlessClientOnly && templateRoot !== null && exportsSsrFunction(leafText, rootName)
       ? { root: templateRoot, name: names.ssrHost }
       : null;
   const propertyEmission = buildPropertyEmission(options.properties ?? []);
@@ -482,6 +606,7 @@ export function generateElementModule(
     names.alias,
     names.tag,
     names.shellImport,
+    ...clientStyles.map((_, index) => names.styleImport(index)),
     ...propertyEmission.identifiers,
     ...(propertyEmission.usesPropsResolver && hostWrapper !== null ? [names.propsResolver] : []),
     ...(hostWrapper === null
@@ -522,6 +647,15 @@ export function generateElementModule(
       ...(propertyEmission.usesPropsResolver && hostWrapper !== null ? [names.propsResolver] : []),
       ...(hostWrapper === null ? [] : [names.ssrHostImport, names.hostPropsSeed]),
     ].join(', ')} } from ${JSON.stringify(GENERATED_ELEMENT_SHELL_SPECIFIER)};`,
+    // 2026-11-20 client style adoption: a client-only island's declared sheets
+    // ride REAL module-graph edges. The router build's style-asset intercept
+    // answers each specifier with the sheet adapter (a `CSSStyleSheet` carrying
+    // the emitted asset URL), so the descriptor below receives objects, not
+    // strings, and the sheet is the SAME emitted asset the build-time
+    // declaration already produces (the emitter dedups by content-hash file).
+    ...clientStyles.map(
+      (specifier, index) => `import ${names.styleImport(index)} from ${JSON.stringify(specifier)};`,
+    ),
     '',
     ...propertyEmission.factoryLines,
     ...(propertyEmission.factoryLines.length === 0 ? [] : ['']),
@@ -533,6 +667,12 @@ export function generateElementModule(
     ...(delegatesFocus ? ['  delegatesFocus: true,'] : []),
     ...(formAssociated ? ['  formAssociated: true,'] : []),
     ...propertyEmission.rowLines,
+    // A client-only island's sheets are carried to the shell as imported sheet
+    // objects; every other lane keeps its pre-slice descriptor bytes (the SSR
+    // lane's sheet is the marked `<link>` inside the DSD template).
+    ...(clientStyles.length === 0
+      ? []
+      : [`  styles: [${clientStyles.map((_, index) => names.styleImport(index)).join(', ')}],`]),
     `  createRecipe: create${rootName}Recipe,`,
     // T3 / 16b-LC-1: the root setup factory is the descriptor's call-once
     // retained setup site (compiler-private member the shell already owns from
@@ -568,15 +708,41 @@ export function generateElementModule(
       : [
           '',
           '// ---- generated shadow host SSR (M09-2a) ----',
-          styleLinkPrefix
-            ? `export function ${hostWrapper.name}(props, lightChildren, attributes, styleLinks) {`
-            : `export function ${hostWrapper.name}(props, lightChildren, attributes) {`,
+          // P-6 (2026-11-21): the SHADOW host producer receives the SAME nested-host
+          // expander the LIGHT root's producer receives, in the same last position.
+          // Without it a shadow page's inner components stayed unexpanded tags while
+          // the class lane and the light lane both expanded theirs — a parity gap,
+          // not a design boundary. Appended LAST so every existing caller's argument
+          // positions are unchanged.
+          // FIXED PARAMETER POSITIONS (P-6): the producer ALWAYS declares
+          // `(props, lightChildren, attributes, styleLinks, nestedHost)`, even when
+          // this module has no stylesheet channel. An optional parameter that
+          // shifts position with a build fact makes the CALLER'S argument order
+          // depend on the callee's styling — the runtime would hand a function to
+          // `styleLinks` and the leaf would never see its expander. Declaring the
+          // slot always keeps one order for every module.
+          //
+          // F16 nested-light lift: the channel is FORWARDED for every shadow host,
+          // unconditionally. A nested LIGHT island's declared sheets are lifted
+          // into THIS template by the runtime while it builds `content:` above, so
+          // the list can be non-empty even when this module declares no styles and
+          // carries no class candidate. Gating the forward on this module's own
+          // styling dropped those links (measured on /combobox: the page template
+          // declared none and the light island rendered unstyled inside the page's
+          // shadow tree). The `=== undefined` guard keeps an absent channel out of
+          // the literal, and the canonical serializer writes zero bytes for an
+          // empty list, so a template with no links keeps its exact bytes.
+          `export function ${hostWrapper.name}(props, lightChildren, attributes, styleLinks, nestedHost) {`,
           // Mixed generated-element/entry artifacts: the new producer requires
           // the declared stylesheet URLs, but an old 3-arg caller (or a missing
           // carrier) would otherwise render the shadow host silently unstyled.
           // Fail closed before any seed/serialization work; the per-URL shape
           // stays owned by the canonical marked-link serializer.
-          ...(styleLinkPrefix
+          // ONLY the DECLARED case fails closed. A module that merely has class
+          // candidates takes the channel tolerantly: an app with no utility engine
+          // legitimately passes no URLs, and failing it closed would turn "no
+          // utility engine" into a build error for every shadow component.
+          ...(declaredStyles
             ? [
                 '  if (!Array.isArray(styleLinks) || styleLinks.length === 0) throw new Error("OEIR_LEAF_MISSING_VALUE: styleLinks (the styled generated element received no declared stylesheet URLs; mixed generated-element/entry artifacts or a missing style-link carrier)");',
               ]
@@ -593,12 +759,10 @@ export function generateElementModule(
                   propertyEmission.usesPropsResolver
                     ? `${names.propsResolver}(${names.descriptor}, ${names.hostPropsVar})`
                     : names.hostPropsVar
-                }, undefined),`,
+                }, ${NESTED_HOST_RECORD_ARG}),`,
                 '    ...(lightChildren === undefined ? {} : { lightChildren }),',
                 `    ...(attributes === undefined && ${HOST_ATTRIBUTES_VAR} === undefined ? {} : { attributes: ${HOST_ATTRIBUTES_VAR} === undefined ? attributes : ${HOST_ATTRIBUTES_VAR} }),`,
-                ...(styleLinkPrefix
-                  ? ['    ...(styleLinks === undefined ? {} : { styleLinks }),']
-                  : []),
+                '    ...(styleLinks === undefined ? {} : { styleLinks }),',
                 '  });',
                 '}',
               ]
@@ -612,12 +776,10 @@ export function generateElementModule(
                   propertyEmission.usesPropsResolver
                     ? `${names.propsResolver}(${names.descriptor}, ${names.hostPropsVar})`
                     : names.hostPropsVar
-                }, undefined),`,
+                }, ${NESTED_HOST_RECORD_ARG}),`,
                 '    ...(lightChildren === undefined ? {} : { lightChildren }),',
                 '    ...(attributes === undefined ? {} : { attributes }),',
-                ...(styleLinkPrefix
-                  ? ['    ...(styleLinks === undefined ? {} : { styleLinks }),']
-                  : []),
+                '    ...(styleLinks === undefined ? {} : { styleLinks }),',
                 '  });',
                 '}',
               ]),
@@ -645,6 +807,7 @@ export function generateElementModule(
     requiredBindings: leaf.requiredBindings,
     requiredProps: leaf.requiredProps,
     requiresPropsChanged: leaf.requiresPropsChanged,
+    classCandidates: leaf.classCandidates,
     diagnostics: [],
     leaf: leafText,
     tail,

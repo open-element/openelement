@@ -37,6 +37,12 @@
  *   `properties: []` exactly as M09-1a did. Array/object/`trustedHtml`
  *   conversion and custom converters are NOT representable here (the shell's
  *   `PROPERTY_TYPES` admits the three primitives only).
+ * - `styles` (optional array) — a CLIENT-ONLY island's declared stylesheets, as
+ *   the bucket of sheet objects its emitted `.css` imports resolve to
+ *   (2026-11-20 client style-adoption slice). Emitted only when the sidecar's
+ *   client-only phase (`ssr: false` / `hydrate: 'only'`) and a declared
+ *   `styles` list meet; the shell adopts them into the root it created. An SSR
+ *   island never carries the row — its marked DSD `<link>` is the delivery.
  * - `createRecipe` (required function) — the leaf's exported
  *   `create<Name>Recipe` factory. The claim stays reachable only through the
  *   returned `recipe.claim`; no leaf symbol is renamed.
@@ -87,6 +93,19 @@ export const GENERATED_ELEMENT_SHELL_SPECIFIER =
 export interface GeneratedElementSite {
   /** The custom-element tag the host's island pipeline will register. */
   readonly tag: string;
+  /**
+   * The descriptor root the host will create, when the host already knows it
+   * (P-1, 2026-11-21). The router resolves this from the island's OWN
+   * declaration — the same fact the DSD link list and the shell's `root` come
+   * from — so a shadow generated island's statically admitted class tokens can
+   * be registered as SHADOW candidates (the component stylesheet) rather than
+   * light ones (the document sheet, which a shadow root never sees).
+   *
+   * Optional and defaulting to the pre-P-1 answer (`light`): a host that does
+   * not know the root keeps today's behaviour, and the compiler never infers it
+   * from the sidecar here — the host owns the site fact.
+   */
+  readonly root?: 'light' | 'shadow' | 'closed';
 }
 
 /** Host hook for the site fact; returning null keeps the lane inert. */
@@ -239,6 +258,22 @@ export const GENERATED_ELEMENT_DIAGNOSTIC = {
    * or a reflected `disabled` row (the fieldset state must stay reversible).
    */
   FORM_VALUE_UNSUPPORTED: 'OEIR_GENERATED_ELEMENT_FORM_VALUE_UNSUPPORTED',
+  /**
+   * The sidecar's `ssr` cannot be read as one boolean literal (a dynamic value
+   * or a duplicate key). Only the EXPLICIT literal `false` is the client-only
+   * fact; `true` and an absent key are the same case, so a value this reader
+   * cannot prove must refuse instead of guessing the delivery phase.
+   */
+  SSR_INVALID: 'OEIR_GENERATED_ELEMENT_SSR_INVALID',
+  /**
+   * A client-only island declares `styles`, but no static `.css` specifier
+   * reached the emitter. A client-only island has no DSD template to carry the
+   * marked `<link>`, so the sheet can only arrive through a real module-graph
+   * import; emitting the descriptor without one would render unstyled. This is
+   * the build-time half of the shim #24 failure closure, kept by the client
+   * style slice.
+   */
+  CLIENT_STYLES_UNWIRED: 'OEIR_GENERATED_ELEMENT_CLIENT_STYLES_UNWIRED',
   /** The appended tail did not parse (an emitter invariant, not author input). */
   INVALID_ARTIFACT: 'OEIR_GENERATED_ELEMENT_INVALID_ARTIFACT',
 } as const;
@@ -275,7 +310,18 @@ export const GENERATED_ELEMENT_IMPORT_CLASSIFIER: ImportClassifier = {
     if (importedName === 'useContext') return 'factory';
     return 'value';
   },
-  classifyValue: () => undefined,
+  classifyValue: (specifier, importedName) => {
+    // A module import that is not one of the lane's factory specifiers is an
+    // ORDINARY value: a function, a constant, a locale table. It carries no
+    // reactive source, so a TRACKED slot reading it needs no subscription and
+    // cannot go stale — which is why the value kind is `plain` rather than
+    // left unclassified. Without this the lane refused any derived value that
+    // read a shared module helper (`OEC9043 [OEIR_UNCLASSIFIED_BINDING]`),
+    // which is the shape every site module with shared chrome copy has.
+    if (importedName === null) return undefined;
+    if (FACTORY_SPECIFIERS.has(specifier)) return undefined;
+    return 'plain';
+  },
   classifyCall: (specifier, importedName) => {
     if (!FACTORY_SPECIFIERS.has(specifier)) return undefined;
     if (importedName === 'signal') return { call: 'signal' };

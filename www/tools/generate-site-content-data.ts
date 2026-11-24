@@ -44,21 +44,26 @@ const siteRoot = fileURLToPath(new URL('../../www/', import.meta.url));
 const PAGE_CODE_SOURCES = {
   homeHeroCode: {
     lang: 'tsx',
-    source: `import { element, OpenElement, property } from '@openelement/element'
+    source: `import { signal } from '@openelement/element'
+import { defineIslandConfig } from '@openelement/router'
 
-@element('open-counter', { root: 'shadow-open' })
-export class OpenCounter extends OpenElement {
-  @property({ reflect: true, attribute: 'count', type: Number })
-  count = 0
+export const openElement = defineIslandConfig({
+  tag: 'open-counter',
+  root: 'shadow',
+  hydrate: 'load',
+  ssr: true,
+})
 
-  render() {
-    return (
-      <button type="button">Count: {this.count}</button>
-    )
-  }
+export default function OpenCounter() {
+  const count = signal(0)
+  return (
+    <button type="button" onClick={() => { count.value = count.value + 1 }}>
+      Count: {count.value}
+    </button>
+  )
 }
 
-// SSR: <open-counter count="0"> + DSD shadow root.
+// SSR: <open-counter> + DSD shadow root.
 // Markup paints and reads with no JavaScript.`,
   },
   contributingSetupCode: {
@@ -125,7 +130,7 @@ outputs.set(
 // in that tool — do not edit by hand. Regenerate with
 // \`pnpm --filter @openelement/www run generate:content\` (part of site:build).
 
-/** Home hero: the open-counter component example, Shiki-highlighted (tsx). */
+/** Home hero: the open-counter generated-island example, Shiki-highlighted (tsx). */
 export const homeHeroCodeHtml: string = ${JSON.stringify(
     await highlightSiteCode(
       PAGE_CODE_SOURCES.homeHeroCode.source,

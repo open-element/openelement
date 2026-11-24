@@ -16,6 +16,7 @@ import {
   scanStaticComponents,
   StaticScanDiagnosticCode,
 } from '../src/vite/internal/ssg/static-component-scanner.ts';
+import { buildPageModuleFacts } from '../src/vite/internal/ssg/page-classification.ts';
 import type { ModuleWalkResolver } from '../src/vite/internal/module-graph-walk.ts';
 
 async function write(root: string, path: string, source: string): Promise<void> {
@@ -242,6 +243,148 @@ test('scanStaticComponents reports the walk bound instead of shipping a partial 
       StaticScanDiagnosticCode.MODULE_BOUND_EXCEEDED,
     ]);
     expect(notes[0]!.message).toContain('module bound');
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+test('generic definePage imports retain their generated host pair and nested dependencies', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-page-components-'));
+  try {
+    await write(root, 'package.json', JSON.stringify({ name: 'proof', type: 'module' }));
+    const routeSource = `import { definePage } from '@openelement/router';
+import Page from '../components/page.tsx';
+interface PageData { title: string; }
+export default definePage<PageData>(Page);`;
+    await write(root, 'app/routes/index.tsx', routeSource);
+    await write(
+      root,
+      'app/components/page.tsx',
+      `import { defineIslandConfig } from '@openelement/router';
+import './nested.tsx';
+export const openElement = defineIslandConfig({ tag: 'x-page', root: 'shadow' });
+export default function Page() { return <x-nested></x-nested>; }`,
+    );
+    await write(
+      root,
+      'app/components/nested.tsx',
+      `import { defineIslandConfig } from '@openelement/router';
+export const openElement = defineIslandConfig({ tag: 'x-nested', root: 'shadow' });
+export default function Nested() { return <span>nested</span>; }`,
+    );
+
+    const routesWithFacts = [
+      {
+        ...ROUTES[0],
+        pageModule: buildPageModuleFacts({
+          source: routeSource,
+          filePath: 'index.tsx',
+          definePage: true,
+          compiledElement: false,
+          functionPage: undefined,
+        }),
+      },
+    ] as RouteEntry[];
+    for (const routes of [ROUTES, routesWithFacts]) {
+      const { declarations } = await scanStaticComponents({
+        root,
+        routesDir: 'app/routes',
+        islandsDir: 'app/islands',
+        routes,
+        resolve: resolverFor(root),
+      });
+
+      expect(declarations).toMatchObject([
+        {
+          tagName: 'x-nested',
+          pageComponentDependency: true,
+          generatedHostExport: expect.any(String),
+        },
+        { tagName: 'x-page', pageComponent: true, generatedHostExport: expect.any(String) },
+      ]);
+      expect(declarations[0]).not.toHaveProperty('pageComponent');
+    }
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+test('function page route graph admits nested static tags through aliases and commented side-effect imports', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-function-page-component-graph-'));
+  try {
+    await write(
+      root,
+      'package.json',
+      JSON.stringify({
+        name: 'proof',
+        type: 'module',
+        imports: {
+          '#islands/*': './app/islands/*',
+          '#components/*': './app/components/*',
+        },
+      }),
+    );
+    const routeSource = `import { definePage } from '@openelement/router';
+import '#islands/lab.tsx'; // the page's declared light-root island
+export function FunctionPage() { return <x-lab></x-lab>; }
+export default definePage(FunctionPage);`;
+    await write(root, 'app/routes/index.tsx', routeSource);
+    await write(
+      root,
+      'app/islands/lab.tsx',
+      `import { defineIslandConfig } from '@openelement/router';
+import '#components/layout.tsx'; // the island's static shadow child
+export const openElement = defineIslandConfig({ tag: 'x-lab', root: 'light', hydrate: 'load', ssr: true });
+export default function Lab() { return <x-layout></x-layout>; }`,
+    );
+    await write(
+      root,
+      'app/components/layout.tsx',
+      `import { defineIslandConfig } from '@openelement/router';
+import '#components/nested.tsx'; // a nested light-root component
+export const openElement = defineIslandConfig({ tag: 'x-layout', root: 'shadow' });
+export default function Layout() { return <x-nested></x-nested>; }`,
+    );
+    await write(
+      root,
+      'app/components/nested.tsx',
+      `import { defineIslandConfig } from '@openelement/router';
+export const openElement = defineIslandConfig({ tag: 'x-nested', root: 'light' });
+export default function Nested() { return <span>nested</span>; }`,
+    );
+
+    const routesWithFacts = [
+      {
+        ...ROUTES[0],
+        pageModule: buildPageModuleFacts({
+          source: routeSource,
+          filePath: 'index.tsx',
+          definePage: true,
+          compiledElement: false,
+          functionPage: 'FunctionPage',
+        }),
+      },
+    ] as RouteEntry[];
+    const { declarations } = await scanStaticComponents({
+      root,
+      routesDir: 'app/routes',
+      islandsDir: 'app/islands',
+      routes: routesWithFacts,
+      resolve: resolverFor(root),
+    });
+
+    expect(declarations).toMatchObject([
+      {
+        tagName: 'x-layout',
+        pageComponentDependency: true,
+        generatedHostExport: expect.any(String),
+      },
+      {
+        tagName: 'x-nested',
+        pageComponentDependency: true,
+      },
+    ]);
+    expect(declarations[1]).not.toHaveProperty('generatedHostExport');
   } finally {
     await rm(root, { recursive: true });
   }

@@ -1,12 +1,17 @@
 ---
 title: '路由与数据'
-lede: 'Routes 是基于文件的页面表面，带有显式 metadata 与数据边界。'
+lede: '路由是基于文件的表面，带有显式的 metadata 与数据边界。'
 order: 40
 ---
 
 ## 文件路由
 
-Routes 应当能从仓库目录树中被发现。`definePage` 路由默认导出由 `definePage(PageClass, { ... })` 包装的编译页面元素类；页面类位于非路由模块（例如 `app/components/`），其标记即编译后的 render 程序。路由仍可导出 `tagName` 为内容元素命名，但在 `definePage` 路由上该导出只为内容元素命名，不参与页面注册：页面本身注册在其编译类的 `@element(tag)` 下——SSR 从编译 Part Program 解析该标签——路由路径派生的标签（`app/routes/index.tsx` → `index-page`）仅作 fallback。生成的构建入口会注册所有被准入的路由与 island 类——路由模块从不自行注册。
+路由应当能从仓库目录树中被发现。页面有且只有两种形态，两种形态里文件名都拥有 URL：
+
+- 标记是静态文本（或只依赖 props）的页面是**服务端函数页**：路由模块导出组件本身，并默认导出 `definePage(Component, descriptor?)`。编译器把该函数降阶为一个生成式 HTML 构造器，因此页面在设计上就是纯服务端的。
+- 需要状态、处理器或生命周期的页面，从非路由模块（例如 `app/components/`）import 一个组件，并默认导出 `definePage(PageComponent, { ... })`。
+
+页面根必须是 **shadow** 组件：编译器发射的 DSD 宿主生产者是生成式页面根渲染所经之处，而 light root 没有它——因此 light 页面改用服务端函数形态。生成的构建入口会注册所有被准入的路由与 island 类——路由模块从不自行注册，`tagName` 导出也从不驱动页面注册。
 
 ## 元数据
 
@@ -16,44 +21,50 @@ Routes 应当能从仓库目录树中被发现。`definePage` 路由默认导出
 
 **代码路由**在路由模块里声明 `export const meta = { section, label, order }`——`section` 在侧边栏中分组，`label` 是短导航标签，`order` 决定组内排序。若某个 section 名称未被对应 basePath 在站点 section map 中列出，导航生成会直接失败，而不是悄悄把该分组从该页侧边栏里去掉。既无 `meta` 也无 frontmatter 的路由不会出现在侧边栏中，但依然正常参与路由。
 
-文档元数据——页面 head——与导航元数据是两件事。`definePage(PageClass, { head })` 声明文档标题、描述、canonical 路径与结构化数据，既可以是静态对象，也可以是接收 props projector 同一份请求级上下文的 resolver。该 resolver 必须是这份上下文的纯函数：Document 接缝会按渲染解析它，自身绝不发起请求、缓存或调度 loader。对内容页而言，标题与 lede 取自渲染 locale 的 frontmatter，并以英文原文作为兜底，因此某个译文缺字段时页面仍能给出完整的 head。
+文档元数据——页面 head——与导航元数据是两件事。`definePage(PageComponent, { head })` 声明文档标题、描述、canonical 路径与结构化数据，既可以是静态对象，也可以是接收 props projector 同一份请求级上下文的 resolver。该 resolver 必须是这份上下文的纯函数：Document 接缝会按渲染解析它，自身绝不发起请求、缓存或调度 loader。对内容页而言，标题与 lede 取自渲染 locale 的 frontmatter，并以英文原文作为兜底，因此某个译文缺字段时页面仍能给出完整的 head。
 
 两类元数据都不是标记：这里没有任何东西会渲染进页面正文。
 
 ## 数据边界
 
-数据加载与展示标记保持分离。这条边界明确而狭窄：loader 返回数据，`definePage` 的 `props` projector 把数据映射到页面的编译属性上，页面 `render()` 只读 `this.<property>`。
+数据加载与展示标记保持分离。这条边界明确而狭窄：loader 返回数据，`definePage` 的 `props` projector 把数据映射到页面**声明的属性**上，组件正文把这些属性当作普通的类型化 props 读取。
 
-`'dynamic'` 页面的 loader 在服务端运行（`'static'` 页面则在构建期按 `getStaticPaths()` 的每个条目各运行一次）并返回普通值；它拿不到元素实例，也从不接触 DOM。props projector 是请求作用域与编译页面之间唯一的确定性接缝——它接收 `{ data, actionData, params, request, route, meta }`（配置 i18n 时还有 `locale`）并返回页面声明的那些属性，因此静态产物、请求时服务端与 SPA 引导跑的是同一套投影。省略 `props` 时使用默认投影：先路由 params，再 loader 数据记录自身的条目，并过滤危险键，使恶意载荷无法重新原型化投影结果。多余条目会被忽略，因为编译序列化器只消费页面声明过的属性。
+`'dynamic'` 页面的 loader 在服务端运行（`'static'` 页面则在构建期按 `getStaticPaths()` 的每个条目各运行一次）并返回普通值；它拿不到元素实例，也从不接触 DOM。props projector 是请求作用域与组件之间唯一的确定性接缝——它接收 `{ data, actionData, params, request, route, meta }`（配置 i18n 时还有 `locale`）并返回页面声明的那些属性，因此静态产物、请求时服务端与 SPA 引导跑的是同一套投影。省略 `props` 时使用默认投影：先路由 params，再 loader 数据记录自身的条目，并过滤危险键，使恶意载荷无法重新原型化投影结果。多余条目会被忽略，因为编译序列化器只消费页面声明过的属性。
 
-正是这层分离让两条链路可以互换、让标记可测试：页面的编译 render 程序只依赖自己的属性，因此它可以在构建期序列化、按请求重新渲染，或在浏览器里用同一份数据创建。它也是失败通道的挂载点——预期的校验失败以 `actionData` 到达而非异常，`fail()` 的回显经同一个 projector 重新进入页面。
+投影器打算写入的每个属性都必须作为 sidecar 的 `properties` 行存在，且类型能容纳投影出的值。只有 `string`、`number` 与 `boolean` 行有 attribute 通道；数组或对象行必须声明 `attribute: false` 并经 projector 到达——这正是这里真正有趣的是 props 通道而非 attribute 通道的原因。
 
-两条值得写下来的推论：绝不要让 loader 返回 DOM 节点、类实例或任何序列化器需要猜测的东西（props 是投影，不是序列化）；也绝不要在 `render()` 里直接读请求（编译页面没有请求作用域——它可能渲染的一切都必须经过 projector）。
+正是这层分离让两条链路可以互换、让标记可测试：页面的编译 render 只依赖自己的属性，因此它可以在构建期序列化、按请求重新渲染，或在浏览器里用同一份数据创建。它也是失败通道的挂载点——预期的校验失败以 `actionData` 到达而非异常，`fail()` 的回显经同一个 projector 重新进入页面。
+
+两条值得写下来的推论：绝不要让 loader 返回 DOM 节点、类实例或任何序列化器需要猜测的东西（props 是投影，不是序列化）；也绝不要在组件正文里直接读请求（编译组件没有请求作用域——它可能渲染的一切都必须经过 projector）。
 
 ## 渲染模式
 
 `renderIntent.mode` 决定页面在哪里渲染:`'static'`(默认)在构建时预渲染;`'dynamic'` 跳过预渲染,通过生成的 `dist/server` 入口按请求渲染,每次请求都会运行路由 loader。导出 action 的页面可以保持 `'static'`——即混合页:其 GET 被预渲染并由静态产物伺服,而其 action POST 在请求时分派给生成的服务器入口。当 GET 本身必须按请求执行时(按请求的 loader、响应头、不可重复的内容)才选择 `'dynamic'`。该行为已冻结。
 
+`renderIntent.stream`——延迟字段的流式渲染通道——**不属于本次发布**。它属于已退役 class 通道的编译 Part Program，而取代它的函数通道目前还没有承载它的载体；Alpha18 拥有替代方案。在那之前，需要数据的路由像任何其他页面一样，在 loader 或前置门禁里解析。[流式渲染](/zh/guide/streaming) 说明了整个边界。
+
 ## 服务端函数页
 
-当页面只是一次性的静态文本——法律条款、落地段落——编译类的机制就显得多余。**服务端函数页**就是路由模块自己导出的 TSX 组件函数,包在 `definePage(Component, descriptor?)` 里:编译器把该函数降阶为一个生成式 HTML 构造器(与所有编译组件共用同一套语义检查与转义——文本走一条转义通道、属性走另一条),渲染输出在设计上就是纯服务端的。服务端函数页不产生 Part Program、不产生 `@property` 状态机,也永远不会进入 island、静态组件或客户端 chunk 表面;只要没有组合任何 island,页面就零客户端 JS 出货。
+当页面只是一次性的静态文本——法律条款、落地段落——编译组件的机制就显得多余。**服务端函数页**就是路由模块自己导出的 TSX 组件函数，包在 `definePage(Component, descriptor?)` 里:编译器把该函数降阶为一个生成式 HTML 构造器(与所有编译组件共用同一套语义检查与转义——文本走一条转义通道、属性走另一条),渲染输出在设计上就是纯服务端的。服务端函数页不产生编译程序、不产生属性状态机,也永远不会进入 island、静态组件或客户端 chunk 表面;只要没有组合任何 island,页面就零客户端 JS 出货。
 
 ```tsx
 // app/routes/about.tsx
 import { definePage } from '@openelement/router';
 
-export const loader = async () => ({ title: '关于' });
+export const loader = async () => ({ title: 'About' });
 
 export function AboutPage(props: { title: string }) {
   return <main><h1>{props.title}</h1></main>;
 }
 
-export default definePage(AboutPage, { head: { title: '关于' } });
+export default definePage(AboutPage, { head: { title: 'About' } });
 ```
 
 组件函数必须是**本模块导出的声明**并以标识符形式传入——内联箭头或未导出的本地函数在编译器文法之外(运行时 JSX 没有解释器)。动态文本经 JSX 插值(`{props.title}`)由编译器转义;`props.children` 是编译器持有的组合通道(调用方的 JSX children 以终态 HTML 到达),而 loader 载荷若携带 `children` 键会在渲染运行前被拒绝,而不是被注入。
 
-页面之外的一切都与编译类路径完全相同:loader 照常运行,`props` 投影器(或默认投影)构建 props 记录;render 输出流经同一套 renderer 包装、布局包装和文档包装——因此 HTTP/DSD 契约、head 解析、redirect/not-found 通道,以及错误投影器的 500 重渲染(把错误投影后的 props 交给同一个 render 函数)都与编译页面一致。`renderIntent.stream` 是编译 Part Program 的通道,在服务端函数页上会被拒绝;页面需要流式渲染时请使用编译式 `definePage` 类路由。
+**light 页面**用的也是这个形态。light root 没有编译器发射的 DSD 宿主生产者可供生成式页面根渲染，因此路由声明自己的组件，而该组件的标记就是文档内容——一个普通的 `<main>`，由文档和页面声明的样式表提供样式。当页面的标记必须完全留在 shadow 边界之外时，用的也是这个形态。
+
+页面之外的一切都与组件路由路径完全相同:loader 照常运行,`props` 投影器(或默认投影)构建 props 记录;render 输出流经同一套 renderer 包装、布局包装和文档包装——因此 HTTP/DSD 契约、head 解析、redirect/not-found 通道,以及错误投影器的 500 重渲染(把错误投影后的 props 交给同一个 render 函数)都与组件页面一致。
 
 ## 表单 action
 
@@ -62,38 +73,42 @@ export default definePage(AboutPage, { head: { title: '关于' } });
 ### app/components/page-guestbook.tsx
 
 ```tsx
-// 由 open:compiled-element transform 编译。
-import { element, OpenElement, property } from '@openelement/element';
+// A page-assembled component: the markup owns the form, the route owns the data.
+import { defineIslandConfig } from '@openelement/router';
 
-@element('guestbook-page', { root: 'shadow-open' })
-export default class GuestbookPage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  entries: Array<{ id: string; text: string }> = [];
+export const openElement = defineIslandConfig({
+  tag: 'guestbook-page',
+  // A page root is a shadow root: the compiler's DSD host producer is what
+  // renders it on the server, and a light root has no producer.
+  root: 'shadow',
+  properties: {
+    // Array rows have no attribute wire, so the projector is their only channel.
+    entries: { attribute: false, default: [] },
+    message: { attribute: false, default: '' },
+    error: { attribute: false, default: '' },
+    echoed: { attribute: false, default: '' },
+  },
+});
 
-  @property({ reflect: false, attribute: false })
-  message = '';
-
-  @property({ reflect: false, attribute: false })
-  error = '';
-
-  @property({ reflect: false, attribute: false })
-  echoed = '';
-
-  render() {
-    return (
-      <main>
-        <h1>guestbook</h1>
-        <form method='post' data-open-enhance>
-          <input name='message' type='text' value={this.message} />
-          <button type='submit'>Send</button>
-          <button type='submit' formaction='?/shout'>Shout</button>
-        </form>
-        {this.error ? <p role='alert' data-message={this.error}>Please fix the errors above.</p> : <span></span>}
-        {this.echoed ? <p data-echoed={this.echoed}>Saved.</p> : <span></span>}
-        <ul>{this.entries.map((entry) => <li key={entry.id}>{entry.text}</li>)}</ul>
-      </main>
-    );
-  }
+export default function GuestbookPage(props: {
+  entries: Array<{ id: string; text: string }>;
+  message: string;
+  error: string;
+  echoed: string;
+}) {
+  return (
+    <main>
+      <h1>guestbook</h1>
+      <form method='post' data-open-enhance>
+        <input name='message' type='text' value={props.message} />
+        <button type='submit'>Send</button>
+        <button type='submit' formaction='?/shout'>Shout</button>
+      </form>
+      {props.error ? <p role='alert' data-message={props.error}>{props.error}</p> : null}
+      {props.echoed ? <p data-echoed={props.echoed}>Saved.</p> : null}
+      <ul>{props.entries.map((entry) => <li key={entry.id}>{entry.text}</li>)}</ul>
+    </main>
+  );
 }
 ```
 
@@ -109,7 +124,7 @@ import {
 import GuestbookPage from '../components/page-guestbook.tsx';
 
 interface GuestbookData {
-  entries: string[];
+  entries: Array<{ id: string; text: string }>;
 }
 
 interface GuestbookActionData {
@@ -139,7 +154,8 @@ export const actions = {
   },
 };
 
-// props 投影器是把请求作用域映射到编译页面属性的唯一确定性接缝。
+// The props projector is the single deterministic seam mapping request scope
+// onto the page's declared properties.
 export default definePage(GuestbookPage, {
   renderIntent: { mode: 'dynamic' },
   props({ data, actionData, request }) {
@@ -158,7 +174,8 @@ export default definePage(GuestbookPage, {
 **成功数据没有信封——它经由 PRG 目标传递。** 上文的 `actionData` 只是「返回式失败」（`fail(status, data)`）的载荷，别无其他。成功的 action 以 303（PRG）应答，因此投影器只会在重定向后的 GET 上再次运行——这正是无 JS 提交的落点——要展示的成功状态就是该 GET 能读到的东西：loader 的重新运行与 PRG 目标自身的查询状态。上文的 `echoed` 就是这一模式；loader 侧读取是它的另一半：
 
 ```ts
-// 重定向后的 GET 会重新运行 loader：成功状态在这里到达，而不是通过 POST 上的成功信封。
+// The redirected GET re-runs the loader: success state arrives here, not
+// through a success envelope on the POST.
 export async function loader(ctx: { request: Request }): Promise<GuestbookData> {
   const posted = new URL(ctx.request.url).searchParams.get('posted');
   return { entries: await listEntries(), posted: posted ?? '' };
@@ -185,6 +202,7 @@ request-time(`'dynamic'`)loader/action 运行在服务端,上下文是 Web 标�
 
 ## 另见
 
-- [核心概念](/zh/guide/core-concepts)——这些路由所组合的元素与 island。
+- [核心概念](/zh/guide/core-concepts)——这些路由所组合的组件与 island。
 - [错误处理](/zh/guide/error-handling)——action 返回值所进入的失败通道。
 - [API 路由](/zh/guide/api)——不经过页面的请求路由。
+- [流式渲染](/zh/guide/streaming)——为什么 `renderIntent.stream` 不属于本次发布。

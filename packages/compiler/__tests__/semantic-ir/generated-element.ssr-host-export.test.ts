@@ -75,10 +75,14 @@ export default Card;
  * channel (`el.value = …`) keeps the component mount-only, so the M08 producer
  * slice has no `__ssr` export for the wrapper to call.
  */
+// A shadow island that lawfully has NO host producer. This used to be a
+// property-channel field, because that channel kept the component mount-only and
+// therefore producerless; F16 admits the channel, so the fixture states the real
+// reason instead — `ssr: false` means there is no server render at all.
 const SHADOW_WITHOUT_SSR_ISLAND = `import { defineIslandConfig } from '@openelement/router';
-export const openElement = defineIslandConfig({ root: 'shadow', properties: { value: { default: '' } }, hydrate: 'idle' });
-function Field(props: { value: string }) {
-  return <input value={props.value} />;
+export const openElement = defineIslandConfig({ root: 'shadow', ssr: false, hydrate: 'only' });
+function Field() {
+  return <input value="x" />;
 }
 export default Field;
 `;
@@ -151,9 +155,16 @@ describe('M11 prerequisite — compiler-owned ssrHostExport metadata', () => {
     // The reported string IS the emitted declaration (AST read), and the
     // wrapper is still the M09-2a host producer.
     expect(exportedFunctionNames(emitted.module!)).toContain(emitted.ssrHostExport);
+    // P-3 (2026-11-21): this fixture carries a static `class="card"`, so the
+    // producer grows the declared-stylesheet channel — the shared component
+    // stylesheet can only reach the shadow tree through the DSD template, and a
+    // utility-styled component has no `styles` declaration to trigger it. The
+    // channel is TOLERANT here: absent URLs render without a link, so an app with
+    // no utility engine is not failed closed.
     expect(emitted.module).toContain(
-      `export function ${emitted.ssrHostExport}(props, lightChildren, attributes) {`,
+      `export function ${emitted.ssrHostExport}(props, lightChildren, attributes, styleLinks, nestedHost) {`,
     );
+    expect(emitted.module).not.toContain('OEIR_LEAF_MISSING_VALUE: styleLinks');
     // M11: the emitted producer's third channel is the host attribute wire, and
     // its content props are seeded from the descriptor rows through the shell's
     // canonical conversion — the metadata field itself still never enters text.
@@ -161,15 +172,51 @@ describe('M11 prerequisite — compiler-owned ssrHostExport metadata', () => {
       '  const __oeHostProps = seedGeneratedElementHostProperties(__oeElementDescriptor.properties, props, attributes);',
     );
     expect(emitted.module).toContain('    ...(attributes === undefined ? {} : { attributes }),');
-    // Return-only: the module text is unchanged (leaf prefix plus tail, byte
-    // equality), the metadata field name never enters it, and the map and
-    // placement ledger are still the leaf's reused ones.
-    expect(emitted.module!.startsWith(leaf.module!)).toBe(true);
-    expect(emitted.module!.length).toBe(leaf.module!.length + emitted.tail!.length);
+    // Return-only: the emitted text is the leaf prefix plus the tail, the
+    // metadata field name never enters it, and the map and placement ledger are
+    // still the leaf's reused ones. (P-3 grows the PRODUCER's parameter list, so
+    // the tail is not byte-identical to the pre-P-3 tail for a class-carrying
+    // module — the CANDIDATE-FREE sibling below pins that identity.)
+    // The EMITTER's own leaf (not the bare `generateLeafModule` call above): P-3
+    // passes `claimStyleLinkPrefix` when the channel exists, which legitimately
+    // changes the leaf bytes — the identity that must hold is "module = leaf +
+    // tail", not "module = the unflagged leaf + tail".
+    expect(emitted.leaf).not.toBeNull();
+    expect(emitted.module!.startsWith(emitted.leaf!)).toBe(true);
+    expect(emitted.module!.length).toBe(emitted.leaf!.length + emitted.tail!.length);
     expect(emitted.module).not.toContain('ssrHostExport');
     expect(emitted.tail).not.toContain('ssrHostExport');
     expect(emitted.sourceMap).toEqual(leaf.sourceMap);
     expect(emitted.placements).toEqual(leaf.placements);
+  });
+
+  test('a candidate-free shadow module still declares every producer slot (P-6, F16)', () => {
+    // No static class and no `styles` anywhere: the producer still keeps the
+    // P-6 fixed parameter list, and since F16 it also FORWARDS the channel
+    // unconditionally — a nested LIGHT child's sheets are lifted into this
+    // template at render time, so "this module declares no styles" is not "this
+    // template carries no links".
+    const PLAIN = `${SHADOW_SIDECAR}
+function Card() {
+  return <div><slot></slot></div>;
+}
+export default Card;
+`;
+    const emitted = generateElementModule(frontModule(PLAIN), SITE, {
+      rootComponent: 'Card',
+      root: 'shadow-open',
+    });
+    expect(emitted.diagnostics).toEqual([]);
+    expect(emitted.module).toContain(
+      `export function ${emitted.ssrHostExport}(props, lightChildren, attributes, styleLinks, nestedHost) {`,
+    );
+    // The channel is threaded for every shadow host; what stays absent is the
+    // DECLARED-case strictness (no `styles` declaration, so no fail-closed guard).
+    expect(emitted.module).toContain('...(styleLinks === undefined ? {} : { styleLinks }),');
+    expect(emitted.module).not.toContain('OEIR_LEAF_MISSING_VALUE: styleLinks');
+    // No `styles` declaration means no declared-sheet import and no descriptor row.
+    expect(emitted.module).not.toContain('.css";');
+    expect(emitted.module).not.toContain('styles: [');
   });
 
   test('a hostless emitter call reports null and stays byte-identical to the leaf', () => {
@@ -199,14 +246,22 @@ describe('M11 prerequisite — compiler-owned ssrHostExport metadata', () => {
   test('compile propagates the field and returns the emitter module byte-for-byte', () => {
     const compiled = compileGeneratedElementIfAdmitted(SHADOW_ISLAND, FILE, { site: SITE });
     expect(compiled).not.toBeNull();
-    // Additive shape pin: the pre-M11 result keys plus exactly one field.
+    // Additive shape pin: the pre-M11 result keys, the M11 host identity, and the
+    // P-1 class-candidate set — one field per dated contract addition, no more.
     expect(Object.keys(compiled!).sort()).toEqual([
+      'classCandidates',
       'code',
       'component',
       'map',
       'ssrHostExport',
       'tag',
+      // F16: the blocks-axis fact the router's runtime-shape scan reads now that
+      // `program.blocks` is gone.
+      'usesBlocks',
     ]);
+    // The fixture's `<div class="card">` is the one static token: the candidate
+    // set reads the SAME model the bytes come from, which is the point of P-1.
+    expect(compiled!.classCandidates).toEqual(['card']);
     expect(compiled!.tag).toBe('x-card');
     expect(compiled!.component).toBe('Card');
     expect(compiled!.ssrHostExport).toBe('Card__ssrHost');
@@ -253,9 +308,10 @@ describe('M11 prerequisite — compiler-owned ssrHostExport metadata', () => {
     expect(compiled!.ssrHostExport).toBeNull();
     expect(compiled!.code).toContain('root: "shadow-open"');
     expect(compiled!.code).not.toContain('__ssrHost');
-    expect(
-      exportedFunctionNames(compiled!.code).filter((name) => name.startsWith('Field__ssr')),
-    ).toEqual([]);
+    // The leaf still emits its `__ssr` body — the leaf does not read the sidecar's
+    // `ssr` fact. What must be absent is the HOST PRODUCER, which is this lane's
+    // whole subject: the emitter decides it, and for a client-only island it
+    // decides no.
     expect(emittedHostExports(compiled!.code)).toEqual([]);
   });
 

@@ -6,6 +6,13 @@ summary: One row per milestone with the evidence PR, squash SHA, commands and re
 
 # Alpha16–18 progress ledger and audit closure register
 
+> **2026-11-21 scope note.** Owner direction retired the separate Alpha17 milestone
+> number and folded its scope into the Alpha16 closeout (execution plan §19.10).
+> Every "Alpha17" in the dated entries below is historical wording for what is now
+> the closeout's own work; the current view lives in
+> [`alpha16-closeout-report.md`](./alpha16-closeout-report.md) §7 and in
+> [`alpha16-capability-inventory.md`](./alpha16-capability-inventory.md).
+
 Date: 2026-11-09. Baseline: `origin/main` =
 `bbe25445dda16afae0ba99e477eec55a96245844` (PR #1748, the last slice of the 2026-11-09 landing batch: PRs
 #1746/#1745/#1747/#1749/#1748); the 2026-11-03 audit closure register in §5 is

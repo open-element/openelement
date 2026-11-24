@@ -40,13 +40,9 @@
 
 import { describe, expect, test } from 'vitest';
 import ts from 'typescript';
-import { CompiledElementError } from '../../src/internal/compiler/semantic-core/compiler-diagnostics.ts';
 import { compileFunctionModule } from '../../src/internal/compiler/semantic-core/function-frontend.ts';
 import { compileGeneratedElementIfAdmitted } from '../../src/internal/compiler/semantic-ir/generated-element/compile.ts';
-import {
-  GENERATED_ELEMENT_DIAGNOSTIC,
-  type GeneratedElementSite,
-} from '../../src/internal/compiler/semantic-ir/generated-element/contract.ts';
+import { type GeneratedElementSite } from '../../src/internal/compiler/semantic-ir/generated-element/contract.ts';
 import {
   generateLeafModule,
   type GeneratedLeafModule,
@@ -111,16 +107,6 @@ function island(component: string, sidecar = "root: 'light'"): string {
     component +
     'export default C;\n'
   );
-}
-
-function laneError(source: string): CompiledElementError {
-  try {
-    compileGeneratedElementIfAdmitted(source, FILE, { site: SITE });
-  } catch (error) {
-    if (error instanceof CompiledElementError) return error;
-    throw error;
-  }
-  throw new Error('expected the generated element lane to refuse the module');
 }
 
 /** The frontend attribute record for one authored dynamic attribute. */
@@ -609,16 +595,20 @@ describe('binding/import carry is not faked', () => {
     ).not.toThrow();
   });
 
-  test('a handler closing over an owned signal keeps the signal-carry refusal', () => {
+  test('a handler closing over an owned signal: leaf still demands a source, element root provides one', () => {
     const component =
       "import { signal } from '@openelement/element';\nfunction C() { const count = signal(0); return <button onClick={() => { count.value += 1; }}>{count.value}</button>; }\n";
     const leaf = compileLeaf(component);
     expect(leaf.module).not.toBeNull();
     expect(leaf.requiredBindings).toEqual(['count']);
-    const error = laneError(island(component));
-    expect(error.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
-      GENERATED_ELEMENT_DIAGNOSTIC.UNBOUND_BINDING,
-    ]);
+    // ADR-0183 D-4: the ELEMENT ROOT provides the resource from its retained
+    // setup factory, so the island compiles; the hostless LEAF still records the
+    // binding demand (`requiredBindings`) for its consumer to satisfy.
+    const admitted = compileGeneratedElementIfAdmitted(island(component), '/proj/src/c.tsx', {
+      site: { tag: 'x-c' },
+    });
+    expect(admitted).not.toBeNull();
+    expect(admitted!.code).toContain('const count = signal((');
   });
 });
 

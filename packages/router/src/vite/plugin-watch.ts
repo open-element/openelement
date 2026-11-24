@@ -16,6 +16,7 @@ import { createLogger } from '@openelement/element';
 import { relative, resolve } from 'pathe';
 import { DEFAULT_ISLANDS_DIR } from './internal/paths.ts';
 import { reportRecoveryFailure } from './internal/build-diagnostics.ts';
+import { DEV_STYLE_LINKS_MODULE_ID } from './dev-style-components.ts';
 import { RESOLVED_CLIENT_ENTRY_ID } from './dev-island-client.ts';
 import { rescanIslands, rescanRoutes, scanPackageIslandsInto } from './plugin-scanners.ts';
 import { RESOLVED_ENTRY_ID } from './plugin-virtual-modules.ts';
@@ -173,6 +174,11 @@ export function createConfigureServerHook(
               if (closed) return;
               invalidateVirtualEntries([
                 RESOLVED_ENTRY_ID,
+                // This module seeds the element runtime's nested-host set from
+                // the same descriptor as the regenerated entry. Re-evaluate it
+                // after route/island rescans so a removed tag is removed from
+                // the runtime set and a newly reachable tag becomes expandable.
+                DEV_STYLE_LINKS_MODULE_ID,
                 ...(scanIslandsNow ? [RESOLVED_CLIENT_ENTRY_ID] : []),
               ]);
               log.info(

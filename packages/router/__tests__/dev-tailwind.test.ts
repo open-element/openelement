@@ -74,63 +74,73 @@ const HOME_CSS = `:host { display: block; }
 .panel { border: 1px solid var(--line); border-radius: 10px; }
 `;
 
-const HOME_TSX = `import { element, OpenElement } from '@openelement/element';
-import pageStyles from './page-home.css';
-import './dev-card.tsx';
+// GENERATED lane (F16: class → function). The page is a SERVER FUNCTION PAGE
+// declared by its route module: the class form was a LIGHT root, and a light
+// generated element cannot be a page ROOT (classification needs the
+// compiler-emitted DSD host producer). Its own sheet is a document resource
+// declared by the sidecar on the ROUTE module — the page owns no host element,
+// so the sheet is delivered unscoped to the head. The nested shadow card and the
+// counter island provide the component-sheet half this suite measures.
+const INDEX_ROUTE = `import { defineIslandConfig, definePage } from '@openelement/router';
+import '../islands/oe-dev-card.tsx';
+import '../islands/dev-counter.tsx';
 
-@element('index-page', { root: 'light' })
-export default class HomePage extends OpenElement {
-  static override styles = [pageStyles];
+export const openElement = defineIslandConfig({
+  tag: 'index-page',
+  root: 'light',
+  styles: ['./page-home.css'],
+});
 
-  render() {
-    return (
-      <main>
-        <h1 id='home'>dev tailwind fixture</h1>
-        <section class='panel shadow-1'>panel</section>
-        <oe-dev-card label='dev probe'></oe-dev-card>
-        <dev-counter></dev-counter>
-      </main>
-    );
-  }
+export function HomePage() {
+  return (
+    <main>
+      <h1 id='home'>dev tailwind fixture</h1>
+      <section class='panel shadow-1'>panel</section>
+      <oe-dev-card label='dev probe'></oe-dev-card>
+      <dev-counter></dev-counter>
+    </main>
+  );
 }
+
+export default definePage(HomePage, { head: { title: 'dev tailwind fixture' } });
 `;
 
-const DEV_COUNTER_TSX = `import { element, OpenElement, property } from '@openelement/element';
-import { defineIslandConfig } from '@openelement/router';
+// The class's `@property({ reflect: false }) label = 'counter'` becomes a
+// non-reflecting `properties` row plus the typed props parameter that applies
+// the default, so the emitted bytes keep the same initial label.
+const DEV_COUNTER_TSX = `import { defineIslandConfig } from '@openelement/router';
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });
+export const openElement = defineIslandConfig({
+  hydrate: 'load',
+  ssr: true,
+  dsd: true,
+  properties: {
+    label: { default: 'counter' },
+  },
+});
 
-@element('dev-counter')
-export default class DevCounter extends OpenElement {
-  @property({ reflect: false }) label = 'counter';
-
-  render() {
-    return <button id='dev-counter-button'>{this.label}</button>;
-  }
+export default function DevCounter(props: { label: string }) {
+  return <button id='dev-counter-button'>{props.label ?? 'counter'}</button>;
 }
 `;
 
 /** A shadow component whose ONLY styling is Tailwind utilities in TSX (S5-A). */
-const DEV_CARD_TSX = `import { element, OpenElement, property } from '@openelement/element';
+const DEV_CARD_TSX = `import { defineIslandConfig } from '@openelement/router';
 
-@element('oe-dev-card', { root: 'shadow-open' })
-export default class OeDevCard extends OpenElement {
-  @property({ reflect: false }) label = '';
+export const openElement = defineIslandConfig({
+  root: 'shadow',
+  properties: {
+    label: { default: '' },
+  },
+});
 
-  render() {
-    return (
-      <article class='dev-card rounded-xl bg-primary p-8 text-white'>
-        <h2 class='text-2xl font-semibold'>{this.label}</h2>
-      </article>
-    );
-  }
+export default function OeDevCard(props: { label: string }) {
+  return (
+    <article class='dev-card rounded-xl bg-primary p-8 text-white'>
+      <h2 class='text-2xl font-semibold'>{props.label ?? ''}</h2>
+    </article>
+  );
 }
-`;
-
-const INDEX_ROUTE = `import { definePage } from '@openelement/router';
-import HomePage from '../components/page-home.tsx';
-
-export default definePage(HomePage, { head: { title: 'dev tailwind fixture' } });
 `;
 
 /** Write the fixture app; idempotent so a re-run reuses the same tree. */
@@ -153,10 +163,16 @@ function writeFixtureAt(dir: string, cardUtility: string): void {
   ];
   for (const nested of dirs) mkdirSync(join(dir, nested), { recursive: true });
   writeFileSync(join(dir, 'app/styles/theme.css'), THEME_CSS, 'utf8');
-  writeFileSync(join(dir, 'app/components/page-home.css'), HOME_CSS, 'utf8');
-  writeFileSync(join(dir, 'app/components/page-home.tsx'), HOME_TSX, 'utf8');
+  // The page's own sheet sits next to the route module that declares it, because
+  // a sidecar `styles` specifier resolves against the module, not against the
+  // component directory the class-lane import used.
+  writeFileSync(join(dir, 'app/routes/page-home.css'), HOME_CSS, 'utf8');
+  // An ISLAND, not a page-local component: dev resolves a generated shadow
+  // host's DSD link list from the island style declarations, so the utility
+  // facts only reach the served DSD when the module is in the islands directory
+  // (the tag is then path-derived, `oe-dev-card`).
   writeFileSync(
-    join(dir, 'app/components/dev-card.tsx'),
+    join(dir, 'app/islands/oe-dev-card.tsx'),
     DEV_CARD_TSX.replaceAll('p-8', cardUtility),
     'utf8',
   );
@@ -482,7 +498,7 @@ test('dev serves the component stylesheet and declares it in the DSD (S5-A)', as
 test('a TSX class edit recompiles the served component sheet (S5-A)', async () => {
   const handle = await bootDev(openElement(TAILWIND_ON));
   handles.push(handle);
-  const cardPath = join(FIXTURE_DIR, 'app/components/dev-card.tsx');
+  const cardPath = join(FIXTURE_DIR, 'app/islands/oe-dev-card.tsx');
 
   // Prime: render the page (compiles the card module, registering candidates)
   // and read the sheet the document declares.
@@ -514,7 +530,7 @@ test('a TSX class edit recompiles the served component sheet (S5-A)', async () =
 test('a TSX edit that removes every class drops the stale candidate (defect C)', async () => {
   const handle = await bootDev(openElement(TAILWIND_ON));
   handles.push(handle);
-  const cardPath = join(FIXTURE_DIR, 'app/components/dev-card.tsx');
+  const cardPath = join(FIXTURE_DIR, 'app/islands/oe-dev-card.tsx');
 
   const href = await declaredComponentSheetHref(handle);
   expect(await fetchEntryCss(handle, '', href), 'the initial sheet carries p-8').toMatch(
@@ -540,7 +556,7 @@ test('a TSX edit that removes every class drops the stale candidate (defect C)',
 test('a deleted component module stops contributing its candidates (defect C)', async () => {
   const handle = await bootDev(openElement(TAILWIND_ON));
   handles.push(handle);
-  const cardPath = join(FIXTURE_DIR, 'app/components/dev-card.tsx');
+  const cardPath = join(FIXTURE_DIR, 'app/islands/oe-dev-card.tsx');
 
   // Prime through a real render (the versioned URL is a cache-buster; the
   // middleware recompiles for the CURRENT candidate set on every request).
@@ -552,10 +568,15 @@ test('a deleted component module stops contributing its candidates (defect C)', 
   const original = await readFile(cardPath, 'utf8');
   try {
     rmSync(cardPath);
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    const served = await fetchEntryCss(handle, '', href);
-    expect(served, 'the deleted module contributes nothing').not.toMatch(/\.p-8\s*\{/);
-    expect(served, 'nor any of its other rules').not.toMatch(/\.rounded-xl\s*\{/);
+    await expect
+      .poll(
+        async () => {
+          const served = await fetchEntryCss(handle, '', href);
+          return served.match(/\.(?:p-8|rounded-xl)\s*\{/g) ?? [];
+        },
+        { message: 'the deleted module contributes neither rule', timeout: 5_000 },
+      )
+      .toEqual([]);
   } finally {
     await writeFile(cardPath, original);
   }
@@ -753,23 +774,35 @@ test('cold dev start links the document sheet before any warm-up request (D2)', 
   );
   writeFixtureAt(coldStartFixture, 'p-8');
   writeFileSync(join(coldStartFixture, 'app/layout.css'), `:host { display: block; }\n`, 'utf8');
+  // GENERATED lane (F16: class → function), keeping the layout convention's
+  // SHADOW root.
+  //
+  // `styles` is deliberately ABSENT here (F16 breaking removal, owner-approved
+  // and recorded): the generated lane has NO carrier for a LAYOUT's declared
+  // sheets — the island scan walks only the islands directory, the
+  // static-component scan has no layout handling, and no other pass registers a
+  // layout's `styles` — so the emitted host producer's strict `styleLinks`
+  // channel failed closed with `OEIR_LEAF_MISSING_VALUE: styleLinks` on the
+  // first render. Declaring a sheet here would promise a delivery the dev lane
+  // cannot make; the declaration is removed rather than silently mislinked. The
+  // root stays `shadow` because the ordering defect this row pins (the layout
+  // walk starting buildStart early) is independent of styling.
   writeFileSync(
     join(coldStartFixture, 'app/layout.tsx'),
-    `import { element, OpenElement } from '@openelement/element';
-import styles from './layout.css';
+    `import { defineIslandConfig } from '@openelement/router';
 
-@element('app-layout', { root: 'shadow-open' })
-export default class Layout extends OpenElement {
-  static override styles = [styles];
+export const openElement = defineIslandConfig({
+  tag: 'app-layout',
+  root: 'shadow',
+});
 
-  render() {
-    return (
-      <div>
-        <header class='p-4'>chrome</header>
-        <slot></slot>
-      </div>
-    );
-  }
+export default function Layout() {
+  return (
+    <div>
+      <header class='p-4'>chrome</header>
+      <slot></slot>
+    </div>
+  );
 }
 `,
     'utf8',

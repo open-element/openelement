@@ -143,14 +143,18 @@ describe('M09-2a generated shadow host producer', () => {
       `import { createGeneratedElementClass, serializeGeneratedElementHtml, seedGeneratedElementHostProperties } from ${JSON.stringify(GENERATED_ELEMENT_SHELL_SPECIFIER)};`,
     );
     expect(tail).toContain('root: "shadow-open"');
-    expect(tail).toContain('export function Profile__ssrHost(props, lightChildren, attributes) {');
+    expect(tail).toContain(
+      'export function Profile__ssrHost(props, lightChildren, attributes, styleLinks, nestedHost) {',
+    );
     // M11: the host producer seeds its content props from the canonical host
     // attribute pairs through the shell's ONE conversion surface.
     expect(tail).toContain(
       '  const __oeHostProps = seedGeneratedElementHostProperties(__oeElementDescriptor.properties, props, attributes);',
     );
     expect(tail).toContain('    root: "open",');
-    expect(tail).toContain('    content: Profile__ssr(__oeHostProps, undefined),');
+    expect(tail).toContain(
+      '    content: Profile__ssr(__oeHostProps, nestedHost === undefined ? undefined : { "__oe_nestedHost": nestedHost }),',
+    );
     expect(tail).toContain('    ...(lightChildren === undefined ? {} : { lightChildren }),');
     expect(tail).toContain('    ...(attributes === undefined ? {} : { attributes }),');
     expect(tail).toContain('tag: "profile-card"');
@@ -188,7 +192,7 @@ describe('M09-2a generated shadow host producer', () => {
     expect(parseDiagnostics(emitted(LIGHT, 'light').module!)).toEqual([]);
   });
 
-  test('a styles sidecar grows the typed styleLinks channel and the claim prefix', () => {
+  test("a styles sidecar grows the fail-closed guard; the channel is every shadow host's (F16)", () => {
     // The fact is read from the SAME authored sidecar the lane already reads for
     // root/focus/props, so no host boolean and no scan-order dependence exists.
     const styledSource = SHADOW.replace(
@@ -197,7 +201,7 @@ describe('M09-2a generated shadow host producer', () => {
     );
     const styled = compileGeneratedElementIfAdmitted(styledSource, FILE, { site: SITE })!;
     expect(styled.code).toContain(
-      'export function Profile__ssrHost(props, lightChildren, attributes, styleLinks) {',
+      'export function Profile__ssrHost(props, lightChildren, attributes, styleLinks, nestedHost) {',
     );
     expect(styled.code).toContain('    ...(styleLinks === undefined ? {} : { styleLinks }),');
     // Mixed generated-element/entry artifacts: an old 3-arg caller (or a missing
@@ -206,7 +210,7 @@ describe('M09-2a generated shadow host producer', () => {
       'if (!Array.isArray(styleLinks) || styleLinks.length === 0) throw new Error("OEIR_LEAF_MISSING_VALUE: styleLinks';
     expect(styled.code).toContain(guard);
     const producerStart = styled.code.indexOf(
-      'export function Profile__ssrHost(props, lightChildren, attributes, styleLinks) {',
+      'export function Profile__ssrHost(props, lightChildren, attributes, styleLinks, nestedHost) {',
     );
     expect(producerStart).toBeGreaterThan(-1);
     const guardStart = styled.code.indexOf('OEIR_LEAF_MISSING_VALUE: styleLinks');
@@ -221,13 +225,37 @@ describe('M09-2a generated shadow host producer', () => {
     // The claim skips exactly the canonical marked link prefix.
     expect(styled.code).toContain('data-oe-static-styles');
     expect(styled.code).toContain('nodeName === "LINK"');
-    // The unstyled module keeps the 3-arg producer, no prefix walk, no guard.
+    // F16: an UNSTYLED shadow host is no different in these two respects. Its
+    // DSD template can begin with a nested LIGHT child's lifted marked links,
+    // so the producer forwards the runtime channel and the claim skips the
+    // leading run. What the declaration alone adds is the STRICT half: without
+    // a declared sheet set the producer tolerates an absent URL list.
     const unstyled = compileGeneratedElementIfAdmitted(SHADOW, FILE, { site: SITE })!;
     expect(unstyled.code).toContain(
-      'export function Profile__ssrHost(props, lightChildren, attributes) {',
+      'export function Profile__ssrHost(props, lightChildren, attributes, styleLinks, nestedHost) {',
     );
-    expect(unstyled.code).not.toContain('data-oe-static-styles');
+    expect(unstyled.code).toContain('...(styleLinks === undefined ? {} : { styleLinks }),');
+    expect(unstyled.code).toContain('data-oe-static-styles');
+    expect(unstyled.code).toContain('nodeName === "LINK"');
     expect(unstyled.code).not.toContain('OEIR_LEAF_MISSING_VALUE: styleLinks');
+  });
+
+  test('the claim prefix walk is a DSD-template fact, not a styling fact (F16)', () => {
+    // A LIGHT root has no template to prefix, so its claim keeps the pre-slice
+    // bytes even when the sidecar declares styles (the next row owns the
+    // byte-identity half).
+    const styledLight = LIGHT.replace(
+      "export const openElement = defineIslandConfig({ root: 'light' });",
+      "export const openElement = defineIslandConfig({ root: 'light', styles: ['./profile-card.css'] });",
+    );
+    const light = compileGeneratedElementIfAdmitted(styledLight, FILE, { site: SITE })!;
+    expect(light.code).not.toContain('data-oe-static-styles');
+    expect(light.code).not.toContain('styleLinks');
+    // ... while EVERY shadow root gets the walk, candidate-free included.
+    const plainShadow = compileGeneratedElementIfAdmitted(SHADOW, FILE, { site: SITE })!;
+    expect(plainShadow.code).toMatch(
+      /let (__oe_claimStart\d+) = __oe_parent\.firstChild;\n {2}while \(\1 !== null && \1\.nodeType === 1 && \1\.nodeName === "LINK" && \1\.hasAttribute\("data-oe-static-styles"\)\) \1 = \1\.nextSibling;/,
+    );
   });
 
   test('a light root keeps its bytes even when the sidecar declares styles', () => {
@@ -267,11 +295,33 @@ export default Profile;
     expect(plain.code).toContain('...(attributes === undefined ? {} : { attributes }),');
   });
 
+  test('a property-only primitive row makes the producer consume the ONE seed (A5)', () => {
+    // ADR-0181 A5 amendment (2026-11-23): a supplied `attribute: false` primitive
+    // has no attribute pair of its own, so the JSON seed is its ONLY host wire.
+    // Without this gate the emitted wrapper called the seeder and IGNORED the
+    // pair set, so the seed never reached the tag and the claim kept the default.
+    const sidecar =
+      "import { defineIslandConfig } from '@openelement/router';\n" +
+      "export const openElement = defineIslandConfig({ root: 'shadow', " +
+      "properties: { inner: { attribute: false, default: 'prop-only' } } });\n";
+    const body = `
+function Profile(props: { inner: string }) {
+  return <p>{props.inner}</p>;
+}
+export default Profile;
+`;
+    const code = compileGeneratedElementIfAdmitted(`${sidecar}${body}`, FILE, { site: SITE })!.code;
+    expect(code).toContain('const __oeHostAttrs = __oeHostProps.__oeHostAttributes;');
+    expect(code).toContain('attributes: __oeHostAttrs === undefined ? attributes : __oeHostAttrs');
+    // No per-row attribute is invented for the property-only row.
+    expect(code).not.toContain('attribute: "inner"');
+  });
+
   test('the lane reads the authored sidecar and emits the wrapper only for shadow', () => {
     const shadow = compileGeneratedElementIfAdmitted(SHADOW, FILE, { site: SITE });
     expect(shadow).not.toBeNull();
     expect(shadow!.code).toContain(
-      'export function Profile__ssrHost(props, lightChildren, attributes) {',
+      'export function Profile__ssrHost(props, lightChildren, attributes, styleLinks, nestedHost) {',
     );
     expect(shadow!.code).toContain('root: "shadow-open"');
     expect(shadow!.code).toContain('    root: "open",');

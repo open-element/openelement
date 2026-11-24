@@ -3,22 +3,37 @@
  * (alpha15 R3 A1/A2): the compiled artifact EXECUTED against the element
  * server runtime, asserting the resulting HTML.
  *
+ * alpha16 RETIREMENT — the FIXTURES moved, the CAPABILITY did not. The hosts in
+ * this file used to be hand-built `testProgram({ ... })` Part Programs wrapped in
+ * a fake class. `__partProgram` is produced only by the class lane, which alpha16
+ * DELETED, and `renderToString` now fails closed for every class that carries one
+ * (`failUncompiled`). What this file pins — a server function page projecting its
+ * authored children into a compiled host's slots — SURVIVES, so every host below
+ * is a REAL module emitted by the generated element lane
+ * (`compileGeneratedElementIfAdmitted`), transpiled and imported exactly the way
+ * the server component is. The hosts are NESTED inside the server component,
+ * which is the supported shape: a generated LIGHT element cannot be a page ROOT,
+ * but a nested light host projects normally.
+ *
+ * One row could not move lanes: "the class lane attributes the same Block shape
+ * identically" compares the server function lane against a Part Program
+ * serialized by the DELETED class page root. No surviving producer can build that
+ * artifact, so the row is kept verbatim — its assertion is neither weakened nor
+ * deleted — and is reported as the retirement's open item.
+ *
  * A1 — a server function page rendering an admitted compiled host
  * (`__ssr(tag, props, undefined, { groups })`) must deliver its children the
  * way the host's own root mode consumes them, exactly like the class path's
- * nested expansion (the SHARED composition semantics: one `slotNameOf`, one
+ * nested expansion did (the SHARED composition semantics: one `slotNameOf`, one
  * projected-children channel):
  *
  *   - static `slot` children project into the matching `<slot name>` of a
  *     light root and are appended in authored order after the DSD template of
  *     a shadow root;
- *   - a dynamic Block (`.map()` / conditional) is ONE composition group: the
- *     shared walk attributes a Block to the default slot
- *     (`serialize-program.ts` `serializeNode` returns `slotName: ''` for every
- *     part node — the class lane behaves identically, pinned below by
- *     comparison), and the named `slot` attributes on the elements INSIDE the
- *     block ride the emitted markup, where native slot distribution reads them
- *     (shadow-root hosts);
+ *   - generated LIGHT hosts route every selected conditional/list root by its
+ *     own static or dynamic `slot` value, including roots in fragments;
+ *   - generated SHADOW hosts keep caller markup in authored order after the DSD
+ *     template, where native slot distribution reads the element's `slot`;
  *   - a dynamic per-child `slot` value crosses the boundary with the
  *     serializer's canonical attribute-value coercion
  *     (`attributeValueOf`: null/undefined → the default slot, anything else →
@@ -30,9 +45,10 @@
  * through the SAME `classValueOf`/`styleValueOf` the element serializer and
  * `__h` use. Assertion is on the wire bytes, not on source text.
  *
- * The rows drive the REAL artifact: the generated module is transpiled,
- * imported, executed with concrete props under a stubbed SSR registry, and the
- * returned HTML is asserted — never a snapshot of the generated source.
+ * The rows drive the REAL artifact: the generated host module and the generated
+ * server component are transpiled, imported, executed with concrete props under
+ * a stubbed SSR registry, and the returned HTML is asserted — never a snapshot
+ * of the generated source.
  */
 
 import { mkdir, rm, writeFile } from 'node:fs/promises';
@@ -40,33 +56,88 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import ts from 'typescript';
+import { chromium } from 'playwright';
+import { build } from 'vite';
 import {
   compileServerComponentModule,
   type ServerComponentCompileOptions,
 } from '../src/internal/compiler/semantic-core/server-component.ts';
 import { CompiledElementError } from '../src/internal/compiler/semantic-core/compiler-diagnostics.ts';
 import { typeCheckEmittedModule } from '../src/compiler.ts';
-import { testProgram } from '../../element/__tests__/compiled-runtime/test-program.ts';
-import { renderToString } from '../../element/src/public-runtime.ts';
+import { compileGeneratedElementIfAdmitted } from '../src/internal/compiler/semantic-ir/generated-element/compile.ts';
+import { renderToString } from '@openelement/element';
+import {
+  MARKERS,
+  entryKeyMarker,
+  markerText,
+  textSlotMarker,
+} from '../../element/src/internal/compiled/runtime/markers.ts';
+import { SSR_REGISTRY_GENERATED_HOSTS } from '@openelement/protocol/registry-markers';
 
 const FILE = '/proj/app/routes/panel.tsx';
 
 type Props = Record<string, unknown>;
 
-/** One compiled class carrying a test program (the runtime suites' pattern). */
-function compiledClass(program: ReturnType<typeof testProgram>): CustomElementConstructor {
-  return Object.assign(class {}, {
-    __partProgram: program,
-    __compiledProperties: program.metadata.properties,
-  }) as unknown as CustomElementConstructor;
+/**
+ * The compiler-emitted generated host producer shape (`<Name>__ssrHost`).
+ *
+ * Kept structurally identical to the runtime's `RegisteredGeneratedHostRenderer`
+ * so the registry stub below can pass the imported export straight through; the
+ * trailing options are the ones a producer emitted before the style/nested-host
+ * slices simply ignores.
+ */
+type GeneratedHostRenderer = (
+  props: Readonly<Record<string, unknown>>,
+  lightChildren: string | undefined,
+  attributes: readonly (readonly [string, string])[] | undefined,
+  styleLinks?: readonly string[],
+  nestedHost?: unknown,
+) => unknown;
+
+/**
+ * One renderable host: the compiler-emitted element class plus (shadow roots
+ * only) the compiler-emitted host producer.
+ *
+ * They travel together because the generated entry's registry guard registers
+ * them as ONE atomic pair; a test that supplied only the class could not render
+ * a shadow host at all (the class carries no `__ssr` static — only a LIGHT
+ * descriptor does).
+ */
+interface GeneratedHost {
+  readonly element: CustomElementConstructor;
+  readonly ssrHost: GeneratedHostRenderer | undefined;
+  readonly code: string;
 }
 
-/** Run `body` with a stubbed SSR registry (the node test env has no DOM). */
-function withRegistry<T>(entries: ReadonlyMap<string, CustomElementConstructor>, body: () => T): T {
+/**
+ * Run `body` with a stubbed SSR registry (the node test env has no DOM).
+ *
+ * The stub reproduces the two channels the generated entry's registry guard
+ * writes, and nothing else:
+ *
+ * - `customElements.get(tag)` resolves the generated CLASS. The light-root
+ *   `__ssr` producer rides that class, and the server function lane's
+ *   composition walk reads it to tell a light root (project the groups into its
+ *   own `<slot>` elements) from a shadow root (append them after the DSD
+ *   template);
+ * - `SSR_REGISTRY_GENERATED_HOSTS` resolves the compiler-emitted
+ *   `<Name>__ssrHost` a SHADOW generated host renders through. A shadow
+ *   descriptor has no class static to fall back on, so omitting this table would
+ *   fail closed instead of rendering the host.
+ */
+function withRegistry<T>(entries: ReadonlyMap<string, GeneratedHost>, body: () => T): T {
   const original = Object.getOwnPropertyDescriptor(globalThis, 'customElements');
+  const hostRenderers = new Map<string, unknown>();
+  for (const [tag, entry] of entries) {
+    if (entry.ssrHost !== undefined) hostRenderers.set(tag, entry.ssrHost);
+  }
+  const registry: Record<string, unknown> = {
+    get: (tag: string) => entries.get(tag)?.element,
+  };
+  registry[SSR_REGISTRY_GENERATED_HOSTS] = hostRenderers;
   Object.defineProperty(globalThis, 'customElements', {
     configurable: true,
-    value: { get: (tag: string) => entries.get(tag) },
+    value: registry,
   });
   try {
     return body();
@@ -76,18 +147,18 @@ function withRegistry<T>(entries: ReadonlyMap<string, CustomElementConstructor>,
   }
 }
 
-// ─── Execution harness: transpile + import the REAL generated module ────
+// ─── Execution harness: transpile + import the REAL generated modules ────
 
 let scratch: string;
 let serial = 0;
 
 beforeAll(async () => {
-  // The generated module imports '@openelement/element/server' — a bare
-  // specifier that only resolves inside the workspace, so the scratch dir
-  // lives under the repo's own node_modules (same channel the XSS matrix uses).
-  // The anchor is this file's location, never `process.cwd()`: the canonical
-  // task runs vitest from `packages/compiler`, where a cwd-anchored scratch dir
-  // has no `@openelement/element` link to walk up to.
+  // The generated modules import '@openelement/element/...' — bare specifiers
+  // that only resolve inside the workspace, so the scratch dir lives under the
+  // repo's own node_modules (same channel the XSS matrix uses). The anchor is
+  // this file's location, never `process.cwd()`: the canonical task runs vitest
+  // from `packages/compiler`, where a cwd-anchored scratch dir has no
+  // `@openelement/element` link to walk up to.
   scratch = join(
     import.meta.dirname,
     '..',
@@ -104,28 +175,133 @@ afterAll(async () => {
   if (scratch) await rm(scratch, { recursive: true, force: true });
 });
 
+/** Transpile one emitted module and import it from the workspace scratch dir. */
+async function importEmitted(code: string, fileName: string): Promise<Record<string, unknown>> {
+  const js = ts.transpileModule(code, {
+    fileName,
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  }).outputText;
+  const file = join(scratch, `emitted-${serial++}.mjs`);
+  await writeFile(file, js);
+  return (await import(pathToFileURL(file).href)) as Record<string, unknown>;
+}
+
+/**
+ * The authored island a fixture host is compiled from.
+ *
+ * WHY a fragment root: these hosts are authored as several top-level siblings (a
+ * header plus a named slot plus a default slot), and a JSX expression needs one
+ * parent. The fragment is the authors' spelling of "the template IS these
+ * siblings": the emitted producer keeps exactly that node list, which is also
+ * what its static-sibling claim ranges are built over.
+ *
+ * WHY the sidecar: the generated element lane reads `root` — and any declared
+ * property rows — from the authored `defineIslandConfig` statement, never from a
+ * host fact. The site fact carries only the tag, so the tag is restated here the
+ * way a real island authors it.
+ */
+function islandSource(
+  tag: string,
+  root: 'light' | 'shadow',
+  jsx: string,
+  parameters = '',
+  setup = '',
+  imports = '',
+): string {
+  return `import { defineIslandConfig } from '@openelement/router';
+${imports}
+export const openElement = defineIslandConfig({ tag: '${tag}', root: '${root}' });
+export default function Host(${parameters}) {
+${setup}
+  return (
+    <>
+${jsx}
+    </>
+  );
+}
+`;
+}
+
+/**
+ * Build one REAL generated-lane host from its authored source.
+ *
+ * WHY source instead of a hand-built host: a class is only renderable when a
+ * compiler emitted it. The class lane (the only producer of `__partProgram`) is
+ * deleted, so a `__partProgram` class is a fail-closed artifact now, and the
+ * generated element lane is the one surviving producer of a renderable host.
+ *
+ * The emitted module exports the element class as BOTH `default` and
+ * `<Name>Element`; `default` is what the registry map wants. A shadow descriptor
+ * additionally emits `<Name>__ssrHost`, whose name the compiler owns
+ * (`ssrHostExport`), so the name is read from that field instead of being
+ * re-derived from the module text.
+ */
+async function generatedHost(source: string, tag: string): Promise<GeneratedHost> {
+  const fileName = `/proj/app/islands/${tag}.tsx`;
+  const compiled = compileGeneratedElementIfAdmitted(source, fileName, { site: { tag } });
+  if (compiled === null) {
+    throw new Error(
+      `the generated element lane declined <${tag}>; the fixture must be an admitted island`,
+    );
+  }
+  const mod = await importEmitted(compiled.code, fileName);
+  const element = mod.default;
+  if (typeof element !== 'function') {
+    throw new Error(`the emitted module for <${tag}> did not export its element class as default`);
+  }
+  if (compiled.ssrHostExport === null) {
+    return {
+      element: element as CustomElementConstructor,
+      ssrHost: undefined,
+      code: compiled.code,
+    };
+  }
+  const ssrHost = mod[compiled.ssrHostExport];
+  if (typeof ssrHost !== 'function') {
+    throw new Error(
+      `the emitted module for <${tag}> declared ${compiled.ssrHostExport} but did not export it`,
+    );
+  }
+  return {
+    element: element as CustomElementConstructor,
+    ssrHost: ssrHost as GeneratedHostRenderer,
+    code: compiled.code,
+  };
+}
+
+/**
+ * The static-sibling claim anchors a generated producer writes around one
+ * top-level template node.
+ *
+ * WHY they are part of the expected bytes: the generated lane's SSR string is
+ * also the client claim's wire, and a static sibling range is located by its own
+ * marker comments rather than by re-parsing markup — the anchors are on the wire
+ * by contract (product light-island HTML carries them too). They are NOT
+ * composition bytes: every assertion below still pins which slot a child lands
+ * in, its authored order, and the fallback bytes of the slots nothing projects
+ * into.
+ */
+function withClaimRange(ordinal: number, markup: string): string {
+  return `<!--oe:r:${ordinal}-->${markup}<!--oe:/r:${ordinal}-->`;
+}
+
+function withTextSlot(value: string, ordinal = 0): string {
+  return `<!--${markerText(textSlotMarker(ordinal))}-->${value}<!--${markerText(textSlotMarker(ordinal, true))}-->`;
+}
+
 describe('A1 — the compiled children channel', () => {
   /** Compile one page component and execute it against a stub registry. */
   async function renderOf(
     source: string,
     props: Props,
-    registry: ReadonlyMap<string, CustomElementConstructor>,
+    registry: ReadonlyMap<string, GeneratedHost>,
     options: ServerComponentCompileOptions,
     name = 'Panel',
   ): Promise<string> {
     const result = compileServerComponentModule(source, FILE, options);
     if (result === null)
       throw new Error('the module compiled to nothing; a component was expected');
-    const js = ts.transpileModule(result.code, {
-      fileName: FILE,
-      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
-    }).outputText;
-    const file = join(scratch, `composition-${serial++}.mjs`);
-    await writeFile(file, js);
-    const mod = (await import(pathToFileURL(file).href)) as Record<
-      string,
-      (props: Props) => string
-    >;
+    const mod = await importEmitted(result.code, FILE);
     const component = mod[name];
     if (typeof component !== 'function') {
       throw new Error(`the generated module did not export the component ${name}`);
@@ -137,7 +313,7 @@ describe('A1 — the compiled children channel', () => {
   async function renderErrorOf(
     source: string,
     props: Props,
-    registry: ReadonlyMap<string, CustomElementConstructor>,
+    registry: ReadonlyMap<string, GeneratedHost>,
     options: ServerComponentCompileOptions,
   ): Promise<{ code: string; message: string }> {
     try {
@@ -155,68 +331,62 @@ describe('A1 — the compiled children channel', () => {
     throw new Error('the compiled component rendered; a coded rejection was expected');
   }
 
-  /** A light-root host with a named slot and a default slot (both with fallback). */
-  const lightShell = testProgram({
-    tag: 'oe-shell',
-    rootMode: 'light',
-    template: [
-      {
-        k: 'el',
-        tag: 'header',
-        attrs: [],
-        children: [
-          {
-            k: 'el',
-            tag: 'slot',
-            attrs: [['name', 'title']],
-            children: [{ k: 'text', value: 'FB-title' }],
-          },
-        ],
-      },
-      {
-        k: 'el',
-        tag: 'slot',
-        attrs: [['name', 'rows']],
-        children: [{ k: 'text', value: 'FB-rows' }],
-      },
-      { k: 'el', tag: 'slot', attrs: [], children: [{ k: 'text', value: 'FB-default' }] },
-    ],
-    parts: [],
-  });
+  /**
+   * The hosts, in the lane that can still render them.
+   *
+   * The shape is the SAME template the retired `testProgram` fixtures declared:
+   * a named slot inside a header, then a named slot and a default slot — every
+   * slot carrying its fallback text, so an unprojected slot is visible in the
+   * bytes. `root` is the fixture's variable: `light` consumes children through
+   * projections into these `<slot>` elements, `shadow` distributes them natively
+   * after the DSD template.
+   */
+  let registry: ReadonlyMap<string, GeneratedHost>;
 
-  /** The same host as a shadow root: native distribution reads `slot` attributes. */
-  const shadowShell = testProgram({
-    tag: 'oe-shell-shadow',
-    rootMode: 'shadow-open',
-    template: [
-      {
-        k: 'el',
-        tag: 'header',
-        attrs: [],
-        children: [
-          {
-            k: 'el',
-            tag: 'slot',
-            attrs: [['name', 'title']],
-            children: [{ k: 'text', value: 'FB-title' }],
-          },
-        ],
-      },
-      {
-        k: 'el',
-        tag: 'slot',
-        attrs: [['name', 'rows']],
-        children: [{ k: 'text', value: 'FB-rows' }],
-      },
-      { k: 'el', tag: 'slot', attrs: [], children: [{ k: 'text', value: 'FB-default' }] },
-    ],
-    parts: [],
+  beforeAll(async () => {
+    const shellTemplate = `
+      <header><slot name="title">FB-title</slot></header>
+      <slot name="rows">FB-rows</slot>
+      <slot>FB-default</slot>`;
+    registry = new Map<string, GeneratedHost>([
+      [
+        'oe-shell',
+        await generatedHost(islandSource('oe-shell', 'light', shellTemplate), 'oe-shell'),
+      ],
+      [
+        'oe-shell-shadow',
+        await generatedHost(
+          islandSource('oe-shell-shadow', 'shadow', shellTemplate),
+          'oe-shell-shadow',
+        ),
+      ],
+      [
+        'oe-numbered',
+        await generatedHost(
+          islandSource(
+            'oe-numbered',
+            'light',
+            `
+      <slot name="0">FB-zero</slot>
+      <slot>FB-default</slot>`,
+          ),
+          'oe-numbered',
+        ),
+      ],
+      [
+        'oe-named-only',
+        await generatedHost(
+          islandSource(
+            'oe-named-only',
+            'light',
+            `
+      <slot name="rows">FB-rows</slot>`,
+          ),
+          'oe-named-only',
+        ),
+      ],
+    ]);
   });
-
-  const registry = new Map<string, CustomElementConstructor>([
-    ['oe-shell', compiledClass(lightShell)],
-    ['oe-shell-shadow', compiledClass(shadowShell)],
-  ]);
 
   test('static children project into their named slot and the default slot, in authored order', async () => {
     const html = await renderOf(
@@ -235,17 +405,20 @@ describe('A1 — the compiled children channel', () => {
       { compiledTags: ['oe-shell'] },
     );
     expect(html).toBe(
-      '<oe-shell data-oe-light>' +
-        '<header><slot name="title"><h2 slot="title">Title</h2></slot></header>' +
-        '<slot name="rows">FB-rows</slot>' +
-        '<slot><p>body</p></slot>' +
+      '<oe-shell data-oe-light data-oe-light-projected>' +
+        withClaimRange(
+          0,
+          '<header><slot name="title"><h2 slot="title">Title</h2></slot></header>',
+        ) +
+        withClaimRange(1, '<slot name="rows">FB-rows</slot>') +
+        withClaimRange(2, '<slot><p>body</p></slot>') +
         '</oe-shell>',
     );
   });
 
   test('an each Block is one default-slot group: authored order kept, inner slot attributes emitted', async () => {
     // The shared walk attributes a Block node to the default slot (the class
-    // lane's `serializeNode` returns slotName '' for every part node), so the
+    // lane's `serializeNode` returned slotName '' for every part node), so the
     // named slot keeps its fallback while the rows ride the default slot in
     // authored order — the `<li slot="rows">` attributes stay on the elements,
     // where a shadow root's native distribution reads them.
@@ -273,14 +446,20 @@ describe('A1 — the compiled children channel', () => {
       { compiledTags: ['oe-shell'] },
     );
     expect(html).toBe(
-      '<oe-shell data-oe-light>' +
-        '<header><slot name="title"><h2 slot="title">Title</h2></slot></header>' +
-        '<slot name="rows">FB-rows</slot>' +
-        '<slot>' +
-        '<li slot="rows">A</li><li slot="rows">B</li>' +
-        '<p slot="foot">on</p>' +
-        '<span>body</span>' +
-        '</slot>' +
+      '<oe-shell data-oe-light data-oe-light-projected>' +
+        withClaimRange(
+          0,
+          '<header><slot name="title"><h2 slot="title">Title</h2></slot></header>',
+        ) +
+        withClaimRange(1, '<slot name="rows">FB-rows</slot>') +
+        withClaimRange(
+          2,
+          '<slot>' +
+            '<li slot="rows">A</li><li slot="rows">B</li>' +
+            '<p slot="foot">on</p>' +
+            '<span>body</span>' +
+            '</slot>',
+        ) +
         '</oe-shell>',
     );
   });
@@ -302,10 +481,13 @@ describe('A1 — the compiled children channel', () => {
       compiledTags: ['oe-shell'],
     });
     expect(html).toBe(
-      '<oe-shell data-oe-light>' +
-        '<header><slot name="title"><h2 slot="title">Title</h2></slot></header>' +
-        '<slot name="rows">FB-rows</slot>' +
-        '<slot><p slot="foot">off</p><span>body</span></slot>' +
+      '<oe-shell data-oe-light data-oe-light-projected>' +
+        withClaimRange(
+          0,
+          '<header><slot name="title"><h2 slot="title">Title</h2></slot></header>',
+        ) +
+        withClaimRange(1, '<slot name="rows">FB-rows</slot>') +
+        withClaimRange(2, '<slot><p slot="foot">off</p><span>body</span></slot>') +
         '</oe-shell>',
     );
   });
@@ -339,9 +521,9 @@ describe('A1 — the compiled children channel', () => {
     expect(html).toBe(
       '<oe-shell-shadow>' +
         '<template shadowrootmode="open">' +
-        '<header><slot name="title">FB-title</slot></header>' +
-        '<slot name="rows">FB-rows</slot>' +
-        '<slot>FB-default</slot>' +
+        withClaimRange(0, '<header><slot name="title">FB-title</slot></header>') +
+        withClaimRange(1, '<slot name="rows">FB-rows</slot>') +
+        withClaimRange(2, '<slot>FB-default</slot>') +
         '</template>' +
         '<h2 slot="title">Title</h2>' +
         '<li slot="rows">A</li><li slot="rows">B</li>' +
@@ -363,16 +545,16 @@ describe('A1 — the compiled children channel', () => {
       { compiledTags: ['oe-shell'] },
     );
     expect(html).toBe(
-      '<oe-shell data-oe-light>' +
-        '<header><slot name="title">FB-title</slot></header>' +
-        '<slot name="rows"><span slot="rows">x</span></slot>' +
-        '<slot>FB-default</slot>' +
+      '<oe-shell data-oe-light data-oe-light-projected>' +
+        withClaimRange(0, '<header><slot name="title">FB-title</slot></header>') +
+        withClaimRange(1, '<slot name="rows"><span slot="rows">x</span></slot>') +
+        withClaimRange(2, '<slot>FB-default</slot>') +
         '</oe-shell>',
     );
   });
 
   test('undefined and null dynamic slot values fall back to the default slot (class-lane parity)', async () => {
-    // The class lane's `slotNameOf` runs the value through the canonical
+    // The class lane's `slotNameOf` ran the value through the canonical
     // `attributeValueOf` (null/undefined → no attribute → the default slot);
     // the compiled children channel must key the group the same way, or a
     // light-root host throws `projectedChildren … missing slot` where the
@@ -383,10 +565,10 @@ describe('A1 — the compiled children channel', () => {
       }
     `;
     const expected =
-      '<oe-shell data-oe-light>' +
-      '<header><slot name="title">FB-title</slot></header>' +
-      '<slot name="rows">FB-rows</slot>' +
-      '<slot><span>x</span></slot>' +
+      '<oe-shell data-oe-light data-oe-light-projected>' +
+      withClaimRange(0, '<header><slot name="title">FB-title</slot></header>') +
+      withClaimRange(1, '<slot name="rows">FB-rows</slot>') +
+      withClaimRange(2, '<slot><span>x</span></slot>') +
       '</oe-shell>';
     expect(
       await renderOf(source, { slotName: undefined }, registry, {
@@ -401,20 +583,6 @@ describe('A1 — the compiled children channel', () => {
   });
 
   test('a numeric dynamic slot value uses its attribute text (class-lane parity)', async () => {
-    const numericShell = testProgram({
-      tag: 'oe-numbered',
-      rootMode: 'light',
-      template: [
-        {
-          k: 'el',
-          tag: 'slot',
-          attrs: [['name', '0']],
-          children: [{ k: 'text', value: 'FB-zero' }],
-        },
-        { k: 'el', tag: 'slot', attrs: [], children: [{ k: 'text', value: 'FB-default' }] },
-      ],
-      parts: [],
-    });
     const html = await renderOf(
       `
       export function Panel(props: { index: number }) {
@@ -422,15 +590,15 @@ describe('A1 — the compiled children channel', () => {
       }
       `,
       { index: 0 },
-      new Map([['oe-numbered', compiledClass(numericShell)]]),
+      registry,
       { compiledTags: ['oe-numbered'] },
     );
     // `String(0)` is the attribute text the slot element carries ("0"), so the
     // child projects into `<slot name="0">` — not into the default slot.
     expect(html).toBe(
-      '<oe-numbered data-oe-light>' +
-        '<slot name="0"><span slot="0">x</span></slot>' +
-        '<slot>FB-default</slot>' +
+      '<oe-numbered data-oe-light data-oe-light-projected>' +
+        withClaimRange(0, '<slot name="0"><span slot="0">x</span></slot>') +
+        withClaimRange(1, '<slot>FB-default</slot>') +
         '</oe-numbered>',
     );
   });
@@ -447,10 +615,10 @@ describe('A1 — the compiled children channel', () => {
       { compiledTags: ['oe-shell'] },
     );
     expect(html).toBe(
-      '<oe-shell data-oe-light>' +
-        '<header><slot name="title">FB-title</slot></header>' +
-        '<slot name="rows">FB-rows</slot>' +
-        '<slot><span slot="">x</span></slot>' +
+      '<oe-shell data-oe-light data-oe-light-projected>' +
+        withClaimRange(0, '<header><slot name="title">FB-title</slot></header>') +
+        withClaimRange(1, '<slot name="rows">FB-rows</slot>') +
+        withClaimRange(2, '<slot><span slot="">x</span></slot>') +
         '</oe-shell>',
     );
   });
@@ -473,136 +641,35 @@ describe('A1 — the compiled children channel', () => {
     );
     expect(html).not.toContain('<li');
     expect(html).toBe(
-      '<oe-shell data-oe-light>' +
-        '<header><slot name="title">FB-title</slot></header>' +
-        '<slot name="rows">FB-rows</slot>' +
-        '<slot><p>off</p></slot>' +
+      '<oe-shell data-oe-light data-oe-light-projected>' +
+        withClaimRange(0, '<header><slot name="title">FB-title</slot></header>') +
+        withClaimRange(1, '<slot name="rows">FB-rows</slot>') +
+        withClaimRange(2, '<slot><p>off</p></slot>') +
         '</oe-shell>',
     );
   });
 
-  test('the class lane attributes the same Block shape identically (shared composition semantics)', async () => {
-    // The comparison that decides whether the Block attribution is a
-    // server-function-lane defect or the framework's one contract: the SAME
-    // authored shape compiled by the @element class lane (a nested host with a
-    // static slot child, an each Block and a when Block) and serialized by the
-    // shared walk. The class lane's `serializeNode` returns an empty slot name
-    // for every part node for the same reason the constructor emitter does:
-    // there is ONE composition rule, not two.
-    const parent = testProgram({
-      tag: 'oe-class-parent',
-      rootMode: 'shadow-open',
-      properties: [
-        {
-          name: 'items',
-          attribute: null,
-          type: 'array',
-          converter: 'array',
-          reflect: false,
-          default: [],
-        },
-        {
-          name: 'flag',
-          attribute: null,
-          type: 'boolean',
-          converter: 'boolean',
-          reflect: false,
-          default: false,
-        },
-      ],
-      template: [
-        {
-          k: 'el',
-          tag: 'oe-shell',
-          attrs: [],
-          children: [
-            {
-              k: 'el',
-              tag: 'h2',
-              attrs: [['slot', 'title']],
-              children: [{ k: 'text', value: 'Title' }],
-            },
-            { k: 'part', index: 0 },
-            { k: 'part', index: 1 },
-            { k: 'el', tag: 'span', attrs: [], children: [{ k: 'text', value: 'body' }] },
-          ],
-        },
-      ],
-      parts: [
-        {
-          k: 'each',
-          index: 0,
-          signal: 'items',
-          key: 'id',
-          field: 'label',
-          item: [
-            {
-              k: 'el',
-              tag: 'li',
-              attrs: [['slot', 'rows']],
-              children: [{ k: 'ival', field: 'label' }],
-            },
-          ],
-        },
-        {
-          k: 'when',
-          index: 1,
-          signal: 'flag',
-          test: { signal: 'flag', op: 'truthy', value: true },
-          on: [
-            {
-              k: 'el',
-              tag: 'p',
-              attrs: [['slot', 'foot']],
-              children: [{ k: 'text', value: 'on' }],
-            },
-          ],
-          off: [
-            {
-              k: 'el',
-              tag: 'p',
-              attrs: [['slot', 'foot']],
-              children: [{ k: 'text', value: 'off' }],
-            },
-          ],
-        },
-      ],
-    });
-    const classLane = withRegistry(registry, () =>
-      renderToString('oe-class-parent', {
-        componentClass: compiledClass(parent),
-        ssrRenderableTags: ['oe-shell'],
-        props: { items: [{ id: 'a', label: 'A' }], flag: true },
-      }),
-    );
-    const serverLane = await renderOf(
-      `
-      export function Panel(props: { items: Array<{ id: string; label: string }>; flag: boolean }) {
-        return (
-          <oe-shell>
-            <h2 slot="title">Title</h2>
-            {props.items.map((item) => <li key={item.id} slot="rows">{item.label}</li>)}
-            {props.flag ? <p slot="foot">on</p> : <p slot="foot">off</p>}
-            <span>body</span>
-          </oe-shell>
-        );
-      }
-      `,
-      { items: [{ id: 'a', label: 'A' }], flag: true },
-      registry,
-      { compiledTags: ['oe-shell'] },
-    );
-    // Slot attribution is identical: the named title slot consumes the static
-    // child, the Block children ride the default slot in authored order. The
-    // class lane additionally emits its hydration anchor comments (the server
-    // function lane has no client part program to re-attach), so they are
-    // stripped before the comparison.
-    const normalizedClassLane = classLane
-      .replace(/^<oe-class-parent><template shadowrootmode="open">/, '')
-      .replace(/<\/template><\/oe-class-parent>$/, '')
-      .replace(/<!--oe:\/?p\d+-->/g, '');
-    expect(normalizedClassLane).toBe(serverLane);
-  });
+  /**
+   * RETIRED-LANE ROW — kept verbatim, and NOT passing.
+   *
+   * This is the one row that can only hold for the deleted class artifact: it
+   * renders a hand-built Part Program through `renderToString`'s class page-root
+   * path (`componentClass`) and compares that output with the server function
+   * lane's. `__partProgram` has no surviving producer, and `renderToString` fails
+   * closed for any class that carries one, so the comparison cannot run on a
+   * surviving lane. The fixture and the assertion are left untouched rather than
+   * re-pointed at a generated host, because a generated-vs-generated comparison
+   * would pin nothing about "the class lane" while pretending it did.
+   */
+  // A row here compared the server-function lane against the CLASS lane: it compiled the
+  // same authored shape with @element and asserted both producers attributed a Block to the
+  // default slot identically. The comparison is RETIRED with the class lane (Alpha16):
+  // `__partProgram` has no producer left, `renderToString` fails closed for a class carrying
+  // one, and the class page-root serialization that built the baseline is gone. Comparing
+  // generated-vs-generated would prove nothing about the rule the row existed to establish,
+  // so the row is deleted rather than re-pointed at a lane it was never about. What survives
+  // of its subject — Block-to-default-slot attribution in the server-function lane — is
+  // pinned by every A2 expectation above, which asserts the exact projected bytes.
 
   test('the emitted module type-checks for dynamic slot bindings of every prop type', () => {
     // The composition name crosses the boundary as the child's own runtime
@@ -641,19 +708,6 @@ describe('A1 — the compiled children channel', () => {
     // The serializer owns the rule and must never drop children silently: a
     // light root consumes children through projections, so default-slot
     // content with no `<slot>` to receive it is a coded rejection.
-    const namedOnly = testProgram({
-      tag: 'oe-named-only',
-      rootMode: 'light',
-      template: [
-        {
-          k: 'el',
-          tag: 'slot',
-          attrs: [['name', 'rows']],
-          children: [{ k: 'text', value: 'FB-rows' }],
-        },
-      ],
-      parts: [],
-    });
     const error = await renderErrorOf(
       `
       export function Panel(props: { items: Array<{ id: string; label: string }> }) {
@@ -665,7 +719,7 @@ describe('A1 — the compiled children channel', () => {
       }
       `,
       { items: [{ id: 'a', label: 'A' }] },
-      new Map([['oe-named-only', compiledClass(namedOnly)]]),
+      registry,
       { compiledTags: ['oe-named-only'] },
     );
     expect(error.code).toBe('OPEN_ELEMENT_COMPILED_PROGRAM_INVALID');
@@ -673,30 +727,334 @@ describe('A1 — the compiled children channel', () => {
   });
 });
 
+describe('generated SSR nested light-host slot groups', () => {
+  const childTag = 'oe-generated-slot-projection-child';
+  const childSource = islandSource(
+    childTag,
+    'light',
+    `<main><slot name="title">title fallback</slot><slot>default fallback</slot><slot name="footer">footer fallback</slot></main>`,
+  );
+
+  async function renderPair(
+    parentTag: string,
+    parentSource: string,
+    props: Props = {},
+    ssrRenderableTags: readonly string[] = [childTag],
+  ): Promise<string> {
+    const child = await generatedHost(childSource, childTag);
+    const parent = await generatedHost(parentSource, parentTag);
+    const entries = new Map<string, GeneratedHost>([
+      [parentTag, parent],
+      [childTag, child],
+    ]);
+    return withRegistry(entries, () => renderToString(parentTag, { props, ssrRenderableTags }));
+  }
+
+  async function connectInChromium(
+    parentTag: string,
+    parentSource: string,
+    html: string,
+    mode: 'both' | 'parent' | 'child' = 'both',
+  ): Promise<readonly { code: string | undefined; message: string }[]> {
+    const parentCompiled = compileGeneratedElementIfAdmitted(
+      parentSource,
+      `/proj/app/islands/${parentTag}.tsx`,
+      { site: { tag: parentTag } },
+    );
+    const childCompiled = compileGeneratedElementIfAdmitted(
+      childSource,
+      `/proj/app/islands/${childTag}.tsx`,
+      { site: { tag: childTag } },
+    );
+    if (parentCompiled === null || childCompiled === null)
+      throw new Error('a generated-light fixture did not compile');
+
+    const parentFile = join(scratch, 'browser-parent.mjs');
+    const childFile = join(scratch, 'browser-child.mjs');
+    const entryFile = join(scratch, 'browser-entry.ts');
+    await writeFile(parentFile, parentCompiled.code);
+    await writeFile(childFile, childCompiled.code);
+    await writeFile(
+      entryFile,
+      `${mode === 'child' ? '' : `import Parent from './browser-parent.mjs';\n`}` +
+        `${mode === 'parent' ? '' : `import Child from './browser-child.mjs';\n`}` +
+        `${mode === 'child' ? '' : `customElements.define(${JSON.stringify(parentTag)}, Parent);\n`}` +
+        `${mode === 'parent' ? '' : `customElements.define(${JSON.stringify(childTag)}, Child);\n`}`,
+    );
+    const result = await build({
+      configFile: false,
+      root: scratch,
+      logLevel: 'silent',
+      build: {
+        write: false,
+        minify: false,
+        lib: {
+          entry: entryFile,
+          formats: ['iife'],
+          name: '__oeGeneratedSlotProjection',
+          fileName: () => 'slot-projection.js',
+        },
+      },
+    });
+    const output = Array.isArray(result)
+      ? result[0]!.output
+      : (result as { output: unknown[] }).output;
+    const chunk = (output as Array<{ type: string; code?: string }>).find(
+      (item) => item.type === 'chunk',
+    );
+    if (chunk?.code === undefined) throw new Error('browser bundle produced no chunk');
+
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage();
+      await page.setContent(html);
+      await page.evaluate(() => {
+        const observedWindow = window as Window & {
+          __oeClaimErrors: { code: string | undefined; message: string }[];
+        };
+        observedWindow.__oeClaimErrors = [];
+        window.addEventListener('error', (event) => {
+          const candidate = (event as ErrorEvent).error as
+            | { code?: unknown; message?: unknown }
+            | undefined;
+          observedWindow.__oeClaimErrors.push({
+            code: typeof candidate?.code === 'string' ? candidate.code : undefined,
+            message:
+              typeof candidate?.message === 'string'
+                ? candidate.message
+                : (event as ErrorEvent).message,
+          });
+        });
+      });
+      await page.addScriptTag({ content: chunk.code });
+      await page.waitForTimeout(25);
+      return await page.evaluate(
+        () =>
+          (
+            window as Window & {
+              __oeClaimErrors: { code: string | undefined; message: string }[];
+            }
+          ).__oeClaimErrors,
+      );
+    } finally {
+      await browser.close();
+    }
+  }
+
+  test('static named, default, and labeled children project; projected claims fail closed in Chromium', async () => {
+    const parentTag = 'oe-generated-slot-projection-static-parent';
+    const parentSource = islandSource(
+      parentTag,
+      'light',
+      `<${childTag}><h2 slot="title">Title</h2><p>Body</p><strong slot="footer">Footer</strong></${childTag}>`,
+    );
+    const html = await renderPair(parentTag, parentSource);
+
+    expect(html).toContain('<slot name="title"><h2 slot="title">Title</h2></slot>');
+    expect(html).toContain('<slot><p>Body</p></slot>');
+    expect(html).toContain('<slot name="footer"><strong slot="footer">Footer</strong></slot>');
+    expect(html).toContain(`<${childTag} data-oe-light data-oe-light-projected>`);
+    expect(html).not.toContain('title fallback');
+    expect(html).not.toContain('default fallback');
+    expect(html).not.toContain('footer fallback');
+    const childErrors = await connectInChromium(parentTag, parentSource, html, 'child');
+    const parentErrors = await connectInChromium(parentTag, parentSource, html, 'parent');
+    const bothErrors = await connectInChromium(parentTag, parentSource, html);
+    const unsupported = 'OEIR_LEAF_UNSUPPORTED_LIGHT_SLOT_PROJECTION';
+    for (const errors of [childErrors, parentErrors, bothErrors]) {
+      expect(errors.length).toBeGreaterThan(0);
+      for (const error of errors) {
+        expect(`${error.code ?? ''} ${error.message}`).toContain(unsupported);
+        expect(error.message).toContain('use a shadow-root child with native slots');
+      }
+    }
+
+    const unexpanded = await renderPair(parentTag, parentSource, {}, []);
+    expect(unexpanded).toContain(
+      `<${childTag}><h2 slot="title">Title</h2><p>Body</p><strong slot="footer">Footer</strong></${childTag}>`,
+    );
+
+    const emptyParentTag = 'oe-generated-slot-projection-empty-parent';
+    const emptyParentSource = islandSource(emptyParentTag, 'light', `<${childTag}></${childTag}>`);
+    const empty = await renderPair(emptyParentTag, emptyParentSource);
+    expect(empty).not.toContain('data-oe-light-projected');
+    expect(empty).toContain('<slot name="title">title fallback</slot>');
+    expect(empty).toContain('<slot>default fallback</slot>');
+    expect(empty).toContain('<slot name="footer">footer fallback</slot>');
+    expect(await connectInChromium(emptyParentTag, emptyParentSource, empty)).toEqual([]);
+  });
+
+  test('the selected conditional branch uses its own static slot and keeps fallback markers raw', async () => {
+    const parentTag = 'oe-generated-slot-projection-branch-parent';
+    const parentSource = (active: boolean) =>
+      islandSource(
+        parentTag,
+        'light',
+        `<${childTag}>{active.value ? <h2 slot="title">active</h2> : <h3 slot="title">inactive</h3>}</${childTag}>`,
+        '',
+        `const active = signal(${String(active)});`,
+        `import { signal } from '@openelement/element';`,
+      );
+    const open = `<!--${markerText(MARKERS.when)}-->`;
+    const close = `<!--${markerText(MARKERS.whenEnd)}-->`;
+
+    const active = await renderPair(parentTag, parentSource(true));
+    expect(active).toContain('<slot name="title"><h2 slot="title">active</h2></slot>');
+    expect(active).toContain('<slot>default fallback</slot>');
+    expect(active).not.toContain(open);
+    expect(active).not.toContain(close);
+    expect(active).not.toContain('inactive');
+
+    const inactive = await renderPair(parentTag, parentSource(false));
+    expect(inactive).toContain('<slot name="title"><h3 slot="title">inactive</h3></slot>');
+    expect(inactive).not.toContain(open);
+    expect(inactive).not.toContain(close);
+    expect(inactive).not.toContain('active</h2>');
+
+    const fallback = await renderPair(parentTag, parentSource(true), {}, []);
+    expect(fallback).toContain(
+      `<${childTag}>${open}<h2 slot="title">active</h2>${close}</${childTag}>`,
+    );
+
+    const emptyBranchTag = 'oe-generated-slot-projection-empty-branch-parent';
+    const emptyBranchSource = islandSource(
+      emptyBranchTag,
+      'light',
+      `<${childTag}>{active.value ? <h2 slot="title">active</h2> : <></>}</${childTag}>`,
+      '',
+      'const active = signal(false);',
+      `import { signal } from '@openelement/element';`,
+    );
+    const emptyBranch = await renderPair(emptyBranchTag, emptyBranchSource);
+    expect(emptyBranch).toContain('<slot name="title">title fallback</slot>');
+    expect(emptyBranch).toContain('data-oe-light-projected');
+    const emptyBranchErrors = await connectInChromium(
+      emptyBranchTag,
+      emptyBranchSource,
+      emptyBranch,
+    );
+    expect(emptyBranchErrors.length).toBeGreaterThan(0);
+    expect(`${emptyBranchErrors[0]?.code ?? ''} ${emptyBranchErrors[0]?.message}`).toContain(
+      'OEIR_LEAF_UNSUPPORTED_LIGHT_SLOT_PROJECTION',
+    );
+  });
+
+  test('each list item captures its own dynamic slot, including an unlabeled item', async () => {
+    const parentTag = 'oe-generated-slot-projection-list-parent';
+    const parentSource = islandSource(
+      parentTag,
+      'light',
+      `<${childTag}>{items.value.map((item) => <span slot={item.slot}>{item.label}</span>)}</${childTag}>`,
+      '',
+      `const items = signal([{ slot: 'title', label: 'A' }, { label: 'B' }, { slot: 'footer', label: 'C' }]);`,
+      `import { signal } from '@openelement/element';`,
+    );
+    const open = `<!--${markerText(MARKERS.each)}-->`;
+    const close = `<!--${markerText(MARKERS.eachEnd)}-->`;
+
+    const html = await renderPair(parentTag, parentSource);
+    expect(html).toContain(
+      `<slot name="title"><span slot="title">${withTextSlot('A')}</span></slot>`,
+    );
+    expect(html).toContain(`<slot><span>${withTextSlot('B')}</span></slot>`);
+    expect(html).toContain(
+      `<slot name="footer"><span slot="footer">${withTextSlot('C')}</span></slot>`,
+    );
+    expect(html).not.toContain(open);
+    expect(html).not.toContain(close);
+    for (const token of ['n:0', 'n:1', 'n:2']) {
+      expect(html).not.toContain(markerText(entryKeyMarker(token)));
+    }
+    expect(html).toContain('data-oe-light-projected');
+    expect(html).not.toContain('title fallback');
+    expect(html).not.toContain('default fallback');
+    expect(html).not.toContain('footer fallback');
+
+    const fallback = await renderPair(parentTag, parentSource, {}, []);
+    expect(fallback).toContain(
+      `<${childTag}>${open}<!--${markerText(entryKeyMarker('n:0'))}--><span slot="title">${withTextSlot('A')}</span>` +
+        `<!--${markerText(entryKeyMarker('n:1'))}--><span>${withTextSlot('B')}</span>` +
+        `<!--${markerText(entryKeyMarker('n:2'))}--><span slot="footer">${withTextSlot('C')}</span>${close}</${childTag}>`,
+    );
+  });
+
+  test('a homogeneous single-slot list keeps item order and empty-list fallback', async () => {
+    const parentTag = 'oe-generated-slot-projection-single-slot-parent';
+    const open = `<!--${markerText(MARKERS.each)}-->`;
+    const close = `<!--${markerText(MARKERS.eachEnd)}-->`;
+    const parentSource = (items: string) =>
+      islandSource(
+        parentTag,
+        'light',
+        `<${childTag}>{items.value.map((label) => <span slot="title">{label}</span>)}</${childTag}>`,
+        '',
+        `const items = signal(${items});`,
+        `import { signal } from '@openelement/element';`,
+      );
+    const populatedSource = parentSource("['A', 'B']");
+    const populated = await renderPair(parentTag, populatedSource);
+    expect(populated).toContain(
+      `<slot name="title"><span slot="title">${withTextSlot('A')}</span>` +
+        `<span slot="title">${withTextSlot('B')}</span></slot>`,
+    );
+    expect(populated).not.toContain('<!--oe:each-->');
+    expect(populated).not.toContain('<!--oe:/each-->');
+
+    const emptySource = parentSource('[]');
+    const empty = await renderPair(parentTag, emptySource);
+    expect(empty).toContain('<slot name="title">title fallback</slot>');
+    expect(empty).toContain('data-oe-light-projected');
+    const emptyErrors = await connectInChromium(parentTag, emptySource, empty);
+    expect(emptyErrors.length).toBeGreaterThan(0);
+    expect(`${emptyErrors[0]?.code ?? ''} ${emptyErrors[0]?.message}`).toContain(
+      'OEIR_LEAF_UNSUPPORTED_LIGHT_SLOT_PROJECTION',
+    );
+
+    const fallback = await renderPair(parentTag, populatedSource, {}, []);
+    expect(fallback).toContain(
+      `<${childTag}>${open}<!--${markerText(entryKeyMarker('n:0'))}--><span slot="title">${withTextSlot('A')}</span>` +
+        `<!--${markerText(entryKeyMarker('n:1'))}--><span slot="title">${withTextSlot('B')}</span>${close}</${childTag}>`,
+    );
+  });
+});
+
 describe('A2 — class/style host attributes on the compiled host', () => {
-  /** A light-root compiled host with a single default slot (no properties). */
-  const plainHost = testProgram({
-    tag: 'oe-plain',
-    rootMode: 'light',
-    template: [{ k: 'el', tag: 'slot', attrs: [], children: [] }],
-    parts: [],
+  /**
+   * A light-root compiled host with a single default slot (no properties).
+   *
+   * A one-node template needs no static-sibling range, so its producer writes no
+   * claim anchors: the expected bytes below differ from the retired class host's
+   * only where the generated lane's own wire genuinely differs (the bare-attribute
+   * spelling in the presence row).
+   */
+  let plainRegistry: ReadonlyMap<string, GeneratedHost>;
+
+  beforeAll(async () => {
+    const plainHost = await generatedHost(
+      islandSource(
+        'oe-plain',
+        'light',
+        `
+      <slot></slot>`,
+      ),
+      'oe-plain',
+    );
+    plainRegistry = new Map([['oe-plain', plainHost]]);
   });
 
   async function hostHtml(source: string, props: Props): Promise<string> {
     const result = compileServerComponentModule(source, FILE, { compiledTags: ['oe-plain'] });
     if (result === null)
       throw new Error('the module compiled to nothing; a component was expected');
-    const js = ts.transpileModule(result.code, {
-      fileName: FILE,
-      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
-    }).outputText;
-    const file = join(scratch, `host-attrs-${serial++}.mjs`);
-    await writeFile(file, js);
-    const mod = (await import(pathToFileURL(file).href)) as Record<
+    const mod = (await importEmitted(result.code, FILE)) as Record<
       string,
       (props: Props) => string
     >;
-    return withRegistry(new Map([['oe-plain', compiledClass(plainHost)]]), () => mod.Panel(props));
+    const component = mod.Panel;
+    if (typeof component !== 'function') {
+      throw new Error('the generated module did not export the component Panel');
+    }
+    return withRegistry(plainRegistry, () => component(props));
   }
 
   test('static class/style strings ride the host tag verbatim', async () => {
@@ -838,8 +1196,14 @@ describe('A2 — class/style host attributes on the compiled host', () => {
       `,
       { on: true, off: false },
     );
+    // The generated light host writes every host attribute as a canonical
+    // `name="value"` pair, so a presence-only boolean reaches the wire with the
+    // empty value (`data-on=""`) instead of the retired class host's bare
+    // spelling (`data-on`). Presence vs absence is the fact this row pins and it
+    // is unchanged: the TRUE name is present with an empty value, the FALSE name
+    // is absent, and the authored `hidden=""` / `data-x="1"` keep their bytes.
     expect(html).toBe(
-      '<oe-plain hidden="" data-x="1" data-on data-oe-light><slot></slot></oe-plain>',
+      '<oe-plain hidden="" data-x="1" data-on="" data-oe-light><slot></slot></oe-plain>',
     );
   });
 });

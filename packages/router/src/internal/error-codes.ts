@@ -67,10 +67,12 @@ export const IslandErrorCode = {
   /** `exportNames` is malformed or names a tag outside the delivery set. */
   EXPORT_NAMES: 'OE_ISLAND_EXPORT_NAMES',
   /**
-   * `styles` was declared on a SHADOW-root generated island. The generated
-   * element's DSD template has no stylesheet-link channel yet (M09-2e owed), so
-   * the declaration is refused at build instead of being silently dropped.
-   * Carrier: GH #1800 (Alpha17 shadow style adoption).
+   * `styles` was declared on a SHADOW-root generated island that has no compiled
+   * DSD host producer AND is not client-only. A server-rendered shadow island
+   * needs the producer's template to declare the sheet in; a client-only island
+   * (`ssr: false` / `hydrate: 'only'`) is admitted instead, because the compiler
+   * emits the module-graph import the shell adopts (2026-11-20). The code name
+   * is historical: the DSD link carrier itself landed in M09-2e.
    */
   STYLE_SHADOW_UNWIRED: 'OE_ISLAND_STYLE_SHADOW_UNWIRED',
   /**
@@ -322,19 +324,6 @@ export const StreamErrorCode = {
   DEFERRED_TIMEOUT: 'OE_STREAM_DEFERRED_TIMEOUT',
   /** A resolved deferred range serializes past the payload bound. */
   RANGE_BOUND: 'OE_STREAM_RANGE_BOUND',
-  /** The route, its build manifest, and its compiled Part Program disagree. */
-  ROUTE_PROGRAM_MISMATCH: 'OE_STREAM_ROUTE_PROGRAM_MISMATCH',
-} as const;
-
-/**
- * Stable codes for the dispatch-table startup guards
- * (`vite/internal/server-runtime/route-dispatch.ts`). Phase `ssr`: these
- * reject a route whose compiled shape contradicts its renderer or its build
- * manifest while the generated entry wires its dispatch table.
- */
-export const DispatchErrorCode = {
-  /** A stream route's literal declaration has no matching build manifest/program. */
-  STREAM_DECLARATION_MISMATCH: 'OE_DISPATCH_STREAM_DECLARATION',
 } as const;
 
 /**

@@ -223,8 +223,8 @@ RETIRE onError / onPropertyChange / the env.states channel WHEN interface:snapsh
 RETIRE the ./lifecycle public subpath WHEN interface:snapshot no longer lists it AND
   every shipped intrinsic is reachable from the root subpaths alone ;
   VERIFY gate:source GREEN AT one SHA ; RECORD 16b-MN + snapshot ; OWNER single owner
-RETIRE the ./internal/compiled/leaf-runtime internal subpath WHEN the Alpha17
-  precompiled distribution replaces the closed leaf entry AND no emitted module
+RETIRE the ./internal/compiled/leaf-runtime internal subpath WHEN the precompiled
+  distribution (the former Alpha17 scope, now the Alpha16 closeout's) replaces the closed leaf entry AND no emitted module
   imports it ; VERIFY gate:source GREEN AT one SHA ; RECORD 16b-MN row ;
   OWNER single owner
 RETIRE the workspace-package island site admission WHEN the P1 browser-entry-graph
@@ -1186,3 +1186,204 @@ head's local values. They **stay historical (advisory only)** and are not
 upgraded by this section. The delivery-line evidence for the same claims is this
 section and the per-row records it cites; where the two readings disagree, this
 section's re-recorded values and the cited row records are the later reading.
+
+## Amendment (2026-11-20): `useHost` is IMPLEMENTED in Alpha16b
+
+Append-only status record. Supersedes the amendment above ("`useHost` is
+FUTURE/OWED") without rewriting it — that text stays as the historical reading.
+
+Owner direction (execution-plan §19, `16b-REF`) moved `useHost` from FUTURE into
+Alpha16b. It is now delivered, and this record states exactly what was built so
+the delivery claim has a written shape.
+
+**What it is.** `useHost()` returns the OWNING ELEMENT as a value — the same fact
+the lifecycle / change / error callbacks already receive as `env.host`: the
+generated element for a root, the nearest enclosing generated element host for a
+depth-1 retained hostless child. It is a **compiler-erased intrinsic**, admitted
+by binding provenance (a named import of `useHost` from `@openelement/element` or
+`@openelement/element/lifecycle`), exactly like `ref` and `useContext`.
+
+**What it is not.** Not a runtime channel and not a second host lookup: the
+retained setup factory already receives the element on its host record
+(`__oe_hostElement`), so the lowering is ONE field read. It allocates nothing, so
+it needs no lifetime and no cleanup; and the element identity never changes for an
+instance, so it needs no reactivity — a derived node capturing it cannot go stale.
+
+**Refusals (fail closed, existing `OEC9042` form code):** arguments, type
+arguments, and a reassignable (`let`/`var`) binding. A local function that happens
+to be named `useHost` is not the intrinsic and keeps the ordinary grammar.
+
+**Server side.** The server has no bindings channel and no element (ADR-0181), so
+a component whose *rendered output* depends on the host element is not
+server-renderable. That is a loud, named failure (`OEIR_LEAF_MISSING_VALUE:
+host`), never a silently empty slot — pinned by a test row.
+
+**Public delta:** `useHost` is added to the root entry and to the
+`./lifecycle` subpath. The regenerated public-interface snapshot carries exactly
+two additions (`useHost=value:{call:()=>HTMLElement}` on `.` and `./base`) plus
+the derived shape hash; no other symbol changed.
+
+**P5 retirement condition.** The intrinsic retires if the compiler ever gains a
+general author-visible element accessor with the same fact (e.g. a framework-level
+`this`); it would then be replaced by that spelling rather than kept as a second
+one. Recorded here so a later reader removes it deliberately.
+
+Superseded count: ADR-0182's "not counted in the delivered experience-edition
+surface" line no longer applies to `useHost`; `16b-MN` and the capability
+inventory must read this amendment as the later status.
+
+## Amendment (2026-11-20): `trustedHtml` and non-JSON seeds — PERMANENT exclusion
+
+Append-only status record. Owner-approved 2026-11-20 (delegated in-session
+remediation authorization; execution-plan §19.4). This is the dated amendment
+§19.4 requires, and it settles the question rather than deferring it.
+
+**The decision.** No server→client channel is built for a `trustedHtml` value, and
+none for a property value that is not JSON-encodable. This is a **permanent
+exclusion** — not an Alpha17 carry, and **not** a §13.3/§14.1 exception that a
+later slice may lift.
+
+**Why it is permanent, in two sentences.** The `trustedHtml` brand is `WeakSet`
+object identity: a byte stream on the wire cannot reconstruct it, so any transport
+would either drop the brand (a raw-markup channel — refused on principle) or
+invent a second brand-issuing constructor (a second trust root). A non-JSON value
+has no faithful wire form at all, and a lossy one would make the claimed state
+quietly differ from the server's — which is the exact divergence D-18c exists to
+prevent.
+
+**What the code already does (measured, not aspirational).**
+
+| site | behaviour |
+| --- | --- |
+| `generated-element/shell.ts:541-554` | a supplied property-only row that fails `JSON.stringify` (or serializes to `undefined`) throws `OEIR_LEAF_UNSEEDABLE_PROPERTY` with the JSON reason — it never silently degrades to the declared default |
+| `generated-element/shell.ts:340-348` | the seeder's contract names the exclusion: `trustedHtml` stays out because a brand cannot be reconstructed from JSON and promoting a plain string back to it would be a raw-markup channel |
+| `generated-prop-seed-hardening.test.ts:59-70` | the row set carries a real `trustedHtml` row as an excluded-row CONTROL, so the test fails if a later change starts seeding it |
+| `generated-prop-seed-hardening.test.ts:309-330` | the cyclic-array and `undefined`-serializing rows pin the two refusal shapes |
+
+**What stays, and what does not.** The property-only, in-process value model stays:
+a `trustedHtml` row is still declarable, still defaults, and still renders — the
+exclusion is about the server→client CROSSING, not about the value's existence.
+`§14.2`'s retained `array/object/trustedHtml` row is read with this exclusion.
+
+**The in-tree consumer that motivated it.** `open-article-view`'s article body was
+the component that made the question concrete. It is handled by the owner-directed
+build-time structured body (class-migration matrix D-M5): the body stops being a
+runtime string crossing and becomes a build-time fact. **That design is owed as
+its own amendment before any file claims it**, and this record does not
+pre-approve it — it only removes the "we could just seed it" alternative from the
+table permanently.
+
+**P5 note.** A permanent exclusion adds no capability to inventory and retires
+nothing; it must still be listed in the closeout's exclusion section so a reader
+does not mistake absence for an unfinished item.
+
+## Amendment (2026-11-20, later): the `16b-EB` SSR fallback is NOT an Alpha17 carry — condition 1 delivered
+
+Append-only fact record. Owner-approved 2026-11-20 (delegated in-session
+remediation authorization; plan §18.7). **It supersedes the "Not delivered: an SSR
+fallback … defers the SSR fallback to Alpha17" half of the amendment above**, by the
+owner's reversal recorded in execution plan §19.2:
+
+> the owner reversed that deferral on 2026-11-20: the SSR fallback is implemented
+> **inside Alpha16b**. The deferred status and the §13.2-preamble supersession are
+> history.
+
+The earlier amendment stays as written — it is an append-only record of the
+2026-11-20 state of knowledge — but a reader must not take its Alpha17 carry as
+current. This is exactly the two-faces-one-fact drift the design constitution
+forbids, corrected at its source rather than left for a reader to reconcile.
+
+### Condition 1 of §19.2 — DELIVERED
+
+The contract, as implemented:
+
+| question | answer |
+| --- | --- |
+| Bytes a failing descendant contributes | the **enclosing boundary's fallback** — the caller's own literal markup for that host, passed through unchanged |
+| How the failure stays observable | it is **carried out** to the render's `onNestedFailure` report channel — never swallowed |
+| No boundary on the render | the **original error propagates** and the whole render fails — byte-identical to pre-`16b-EB` |
+
+Seat: `nestedHost`'s expansion call (`packages/element/src/internal/compiled/runtime/nested-host.ts`).
+The failing phase IS the descendant's producer and the enclosing frame that catches
+it is the boundary's, so it is the only place that both knows the failure and can
+still emit fallback bytes; it is also already the ONE call every generated producer
+makes per dash tag, so the fallback needed no second dispatcher.
+
+**The rejected shape, recorded because it is instructive.** The first attempt put a
+reporter on the producer's host record and widened its third argument to
+`{ nestedHost, reporter }`. It type-checked and its unit rows passed — then
+`site:build` produced **0 DSD templates** on the docs page and the A6
+unreferenced-sheet row went red: the wrapper's host record is a single-argument
+ABI the shell builds, and widening it silently broke nested expansion for every
+host. Reverted and re-seated on the catch, which touches nothing the producer sees.
+A runtime ABI that "looks internal" is still an ABI when the emitted code is the
+caller.
+
+The one public-surface consequence: `RenderToStringOptions` gained
+`onNestedFailure?: (error: unknown) => void`, the **only** addition this release
+line made to the public API, and it is recorded in
+`docs/release/public-interface-snapshot.json`.
+
+### Condition 2 — DELIVERED (`generated-nested-fallback.test.ts`)
+
+The render path emits the boundary's fallback bytes for a failing descendant, and
+the failure is carried out rather than swallowed. Pinned in **consumer form**: a
+real `renderToString` pass over a light-root class carrying the compiler-emitted
+`__ssr` producer — the one root shape whose render installs the nested expander —
+whose nested generated producer throws.
+
+Four properties, all asserted: (1) the failing descendant contributes the CALLER's
+literal bytes so the render still returns markup; (2) the failure reaches
+`onNestedFailure` exactly once with the real error; (3) with NO report channel the
+original error propagates, which is the no-silent-swallow guarantee; (4) a healthy
+SIBLING producer in the same render still expands to its DSD.
+
+**Why the harness matters more than usual here.** The first three drafts of this
+suite passed nothing: one emitted the dash tags literally (never calling
+`nestedHost`, so nothing could fail), one registered the page through the
+generated-host-renderer channel (which does not install the expander), and one
+wrapped the expander by hand in a way the shell does not. Only the shape that
+matches what the light path actually does — a class with `__ssr`, expander as the
+third argument — could observe the fallback. That is precisely why condition 1's
+own rows were not sufficient: they call the helper directly, so they cannot see
+whether the RENDER wires it.
+
+### Condition 3 — DELIVERED: the one-SHA consumer-form bundle
+
+Four rows, all in `generated-nested-fallback.test.ts` +
+`error-boundary-capture.test.ts` at one commit:
+
+| row | what it proves |
+| --- | --- |
+| fallback bytes for a failing producer | the failing descendant contributes the caller's literal bytes and the render still returns markup |
+| **claim parity over them** | the fallback bytes are **byte-identical** to the bytes of a render that never expanded the host — so the claim path, which is byte-driven, adopts them under the unchanged claim and identity rules without a special case |
+| the no-silent-swallow row | with NO report channel the original error propagates |
+| the two Alpha16 capture points unchanged | `error-boundary-capture.test.ts` 10 rows, unmodified by this slice |
+
+**How the parity row is measured, and why it is the strong form.** It renders the
+SAME producer twice — once with an expander that throws for the tag, once with the
+tag not registered at all — and asserts the two HTML strings are `toEqual`. That
+makes claim parity STRUCTURAL rather than a second assertion about the claim code:
+if the fallback bytes are indistinguishable from no-expansion bytes, the claim
+cannot tell them apart, and there is nothing extra to prove.
+
+That row also paid for itself immediately: its first draft registered a
+SUCCEEDING debug renderer for the "no expander" side, so the comparison was
+meaningless. The row failed, the diff named the cause, and the helper now omits the
+registration entirely — which is what "no expander" actually means.
+
+### Condition 4 — performed alongside
+
+The `16b-MN` record, the capability inventory and this ADR each carry the same
+truth: capture points delivered; SSR fallback conditions 1, 2 and 3 delivered;
+`16b-EB` still not MIGRATED because the client claim adoption of the fallback
+bytes under a new IDENTITY is explicitly NOT part of this delivery.
+- **3** — the one-SHA consumer-form evidence bundle (fallback bytes for a failing
+  producer, claim parity over them, the no-silent-swallow row, and the two Alpha16
+  capture points unchanged);
+- **4** — the row-for-row status move in the `16b-MN` record, the capability
+  inventory and this ADR. This amendment performs the ADR half; the inventory and
+  `16b-MN` rows move with it and both name condition 1 as delivered and 2–4 as open.
+
+**`16b-EB` is therefore still NOT a delivered capability.** The capture points
+(unchanged) plus condition 1 are delivered; the row cannot flip until all four hold.

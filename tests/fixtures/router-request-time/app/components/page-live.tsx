@@ -2,30 +2,36 @@
  * /live page element — request-time rendered (renderIntent mode 'dynamic').
  *
  * The loader derives data from the incoming request (query param `x`) and a
- * per-process counter, so two requests must never return identical HTML. The
- * route module's props projector maps that data onto the compiled
- * `xText`/`nonceText` properties; the compiled render() only reads
- * this.<property>. A live-counter island verifies hydration behaves the same
- * as on static pages.
+ * per-process counter, so two requests must never return identical HTML. The route
+ * module's props projector maps that data onto the `xText`/`nonceText` props; the
+ * component only reads props. A live-counter island verifies hydration behaves the
+ * same as on static pages.
+ *
+ * GENERATED lane (F16: class → function).
  */
-import { element, OpenElement, property } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
 
-@element('live-page', { root: 'shadow-open' })
-export default class LivePage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  xText = 'x=';
+export const openElement = defineIslandConfig({
+  tag: 'live-page',
+  root: 'shadow',
+  properties: {
+    xText: { attribute: false, default: 'x=' },
+    nonceText: { attribute: false, default: 'nonce=0' },
+  },
+});
 
-  @property({ reflect: false, attribute: false })
-  nonceText = 'nonce=0';
+interface LivePageProps {
+  xText: string;
+  nonceText: string;
+}
 
-  render() {
-    return (
-      <main>
-        <h1>request-time live</h1>
-        <p id='x-value'>{this.xText}</p>
-        <p id='nonce'>{this.nonceText}</p>
-        <live-counter></live-counter>
-      </main>
-    );
-  }
+export default function LivePage(props: LivePageProps) {
+  return (
+    <main>
+      <h1>request-time live</h1>
+      <p id="x-value">{props.xText}</p>
+      <p id="nonce">{props.nonceText}</p>
+      <live-counter></live-counter>
+    </main>
+  );
 }

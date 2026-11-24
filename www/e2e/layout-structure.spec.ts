@@ -8,9 +8,11 @@ test.describe('Docs Layout Structure', () => {
 
     // The guide section is Markdown-authored through content collections (#1087), not a
     // card grid: article body with heading sections and code blocks.
-    await expect(page.locator('guide-getting-started open-article-view')).toHaveCount(1);
+    await expect(page.locator('open-reading-shell .article-content')).toHaveCount(1);
     const headings = await page.getByRole('heading', { level: 2 }).count();
     expect(headings).toBeGreaterThan(0);
-    await expect(page.locator('guide-getting-started open-code-block').first()).toBeVisible();
+    await expect(
+      page.locator('open-reading-shell .article-content open-code-block').first(),
+    ).toBeVisible();
   });
 });

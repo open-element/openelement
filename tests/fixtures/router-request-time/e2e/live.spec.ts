@@ -5,8 +5,28 @@
  * request (not prerendered), that islands hydrate on request-time pages
  * exactly like on static pages, and that static routes are untouched.
  */
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
+/**
+ * Wait until a page root has finished its claim.
+ *
+ * A page root is an idle-strategy generated host: its SSR markup carries the
+ * `data-oe-prop-seed` transport attribute and the claim consumes it on connect.
+ * A row that TYPES INTO a claimed form must do so after the claim, otherwise the
+ * claim restores the server state over the typed value and the submit sends the
+ * wrong body (measured: `#message` filled before the claim → the 422 branch
+ * instead of the PRG navigation, so `waitForURL` times out).
+ */
+async function waitForPageClaim(page: Page, tag: string): Promise<void> {
+  await page.waitForFunction(
+    (pageTag: string) => {
+      const host = document.querySelector(pageTag);
+      return host !== null && !host.hasAttribute('data-oe-prop-seed');
+    },
+    tag,
+    { timeout: 10_000 },
+  );
+}
 test.describe('request-time rendering', () => {
   test('GET /live renders loader data per request', async ({ request }) => {
     const first = await request.get('/live?x=42');
@@ -182,7 +202,7 @@ test.describe('fetch middleware module contract (ADR-0123, #858, Alpha.1)', () =
 });
 
 test.describe('revalidation continuity (0.42.0-alpha.3)', () => {
-  test('422 morph keeps a hydrated island alive and shows the failure echo', async ({ page }) => {
+  test('422 morph preserves the interactive page root and nested island', async ({ page }) => {
     await page.goto('/form');
     const button = page.locator('live-counter #increment');
     const count = page.locator('live-counter #count');
@@ -191,8 +211,25 @@ test.describe('revalidation continuity (0.42.0-alpha.3)', () => {
     await button.click();
     await expect(count).toHaveText('3');
 
+    const pageButton = page.locator('#page-increment');
+    await pageButton.click();
+    await expect(pageButton).toHaveText('1');
+    await page.evaluate(() => {
+      (window as Window & { originalFormPage?: Element | null }).originalFormPage =
+        document.querySelector('form-page');
+    });
+
     await page.click('#submit');
     await expect(page.locator('#error')).toHaveText('message is required');
+    expect(
+      await page.evaluate(
+        () =>
+          (window as Window & { originalFormPage?: Element | null }).originalFormPage ===
+          document.querySelector('form-page'),
+      ),
+    ).toBe(true);
+    await pageButton.click();
+    await expect(pageButton).toHaveText('2');
     // The island survived the morph: its shadow state was not reset.
     await expect(count).toHaveText('3');
   });
@@ -459,6 +496,7 @@ test.describe('morph continuity hardening (ADR-0121, 0.42.0-alpha.5)', () => {
 
   test('back after an enhanced PRG reloads the restored URL (#545)', async ({ page }) => {
     await page.goto('/form');
+    await waitForPageClaim(page, 'form-page');
     await page.fill('#message', 'history-check');
     await page.click('#submit');
     await page.waitForURL('**/form?echoed=history-check');
@@ -606,6 +644,7 @@ test.describe('round-2 morph client fixes (0.42.0-alpha.6)', () => {
     page,
   }) => {
     await page.goto('/form');
+    await waitForPageClaim(page, 'form-page');
     await page.fill('#message', 'nav-guard');
     await page.click('#submit');
     await page.waitForURL('**/form?echoed=nav-guard');
@@ -766,11 +805,13 @@ test.describe('morph/enhance robustness (0.42.0-alpha.13, #603-#606)', () => {
     // Live page (injected below): checkbox WITHOUT checked, server-set with
     // value v1. Server response: checkbox WITH checked (it echoed the form
     // data), server-set bumped to v2, message re-rendered with an echo value.
-    // The compiled serializer emits boolean-ish marker attributes quoted
-    // (data-open-enhance=""), so the interception needle carries the quote
-    // form; the morph behavior under assertion is unchanged.
+    // The compiled serializer emits the boolean-ish marker attribute with its
+    // value folded to "true" (measured on the generated lane's SSR:
+    // `<form method="post" data-open-enhance="true">`; the class lane emitted
+    // the bare `data-open-enhance=""`), so the interception needle carries the
+    // current spelling; the morph behavior under assertion is unchanged.
     let intercepted = html.replace(
-      '<form method="post" data-open-enhance="">',
+      '<form method="post" data-open-enhance="true">',
       '<form method="post" data-open-enhance=""><input type="checkbox" id="agree" name="agree" checked><input id="server-set" name="server-set" type="text" value="from-server-v2">',
     );
     expect(intercepted).not.toBe(html);

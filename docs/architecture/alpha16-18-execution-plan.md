@@ -955,3 +955,618 @@ and none is a blocker this section waives:
 This section records the decisions above under that form and nothing more: it
 creates no version, tag, publication or public-API freeze, no release
 qualification and no milestone exit.
+
+## 19. Dated amendment 2026-11-20 (owner-approved Alpha16 closeout decisions)
+
+This section is the plan-level record of the owner's 2026-11-20 Alpha16
+closeout decisions — the D1–D12 register the session's plan-amendment record
+carries. It follows the amend-never-rewrite form of §13–§18: every earlier
+section stays as written and this is the later reading. It introduces **no new
+milestone and no new slice label** (§14.4:525-527 stays in force), moves no
+verdict, and creates no version, tag, publication, public-API freeze, release
+qualification, milestone exit or P5 evidence of its own. It supersedes the
+2026-11-18 generated-lane `computed` ruling (§19.1), reverses the §18.3
+`16b-EB` SSR-fallback deferral (§19.2), expands the §13.2 obligations and
+re-decides the §13.3/§14.2 residue (§19.3), records the class-retirement scope
+the release depends on (§19.4), restates the evidence floor (§19.5), and keeps
+the Alpha17 boundary (§19.6).
+
+### Authorization record (delegated, in-session — 2026-11-20)
+
+The owner's direction for this closeout, quoted from the 2026-11-20 session
+record, is: "所有涉及的任务在 Alpha16 范围内一次解决，不要狗皮膏药式打补丁，遵守设计哲学"
+— every task in scope is resolved inside Alpha16 in one pass, no patchwork
+plaster, and the design philosophy is obeyed. The authorization is the same
+delegation §18 records under §18.7: owner-approved 2026-11-20, delegated
+in-session, recorded by the takeover team under that delegation. This section is
+**not a personal written signature**; every "owner-approved 2026-11-20" below
+means the §18.7 delegation, and a record that requires the owner's own line (a
+§13.5 P5 sign-off on a final-SHA matrix, a release authorization) is not
+satisfied by it.
+
+### 19.1 Supersedes the 2026-11-18 ruling: the generated lane gains a `computed` intrinsic (option B)
+
+The 2026-11-18 ruling — "no `computed` support in the generated lane; inline at
+the sinks" — was a consequence of the generated lane's props record not being
+signal-backed, not an independent design decision. It is **superseded** by the
+owner decision of 2026-11-20: model completeness outranks the minimum-mechanism
+count, and the generated lane introduces a `computed` intrinsic (option B).
+
+- **Design carrier.** ADR-0183
+  (`docs/adr/ADR-0183-one-reactive-contract.md`) records the
+  one-reactive-contract decision and its D-4 derived-state contract:
+  `const x = computed(() => expr)` is a compiler-erased intrinsic admitted by
+  the same binding provenance as the lifecycle intrinsics, lowered to an
+  instance-retained derived node over the existing `@preact/signals-core` engine
+  (already in the runtime bundle, not a new dependency): lazy, cut by
+  `Object.is`, read-only, released with the owning scope, fail-closed on
+  cycle/declaration-order/placement errors, and evaluated once per render on the
+  server with no reactive graph. The record's own `Status:` line is the
+  authority for its acceptance state; this section creates no acceptance.
+- **Not a delivered capability.** The decision is a direction. Until ADR-0183's
+  implementation slices land with their own consumer-form, byte, SSR/claim and
+  migration evidence, `computed` may not be claimed implemented, and no matrix
+  row may be marked migrated on the strength of this section
+  (design-principles, "Accepted direction versus shipped capability").
+- **No second mechanism.** The intrinsic is not a second rendering model, and
+  inline-only is no longer the lane's derived-state model. Inlining a read at a
+  sink remains a lawful local shape only where the compiler proves it is not a
+  derived tracked value.
+- **Registry and migration evidence.** The matrix's D-M2 row is superseded by
+  this section; the matrix must carry the later reading as a superseded row plus
+  the row naming the intrinsic, not a rewrite of the 2026-11-18 text.
+  `open-reading-shell` (21 computed) and `open-article-view` (6 computed) are
+  the named behavioural-equivalence rows for the intrinsic; `www/app/layout.tsx`
+  (30 computed) stops being a special case once the same decision reaches it.
+  The 16b-MN's 2026-11-18 section stays as written and gains a dated later
+  reading pointing at ADR-0183 (amend-never-rewrite).
+
+### 19.2 Supersedes §18.3: the `16b-EB` SSR fallback is implemented in Alpha16b, not carried to Alpha17
+
+§18.3:819-851 deferred the `16b-EB` SSR fallback to Alpha17 as a named carry
+and, for that capability only, superseded the §13.2:386-387 sentence "no
+Alpha17-first implementation is permitted for any of them". The owner reversed
+that deferral on 2026-11-20: the SSR fallback is implemented **inside Alpha16b**.
+The deferred status and the §13.2-preamble supersession above are history; the
+§18.3 text stays as written, the §13.2 preamble reads unchanged for `16b-EB`
+again, and the row is an Alpha16b obligation — not a §13.3 exception and not an
+Alpha17 carry.
+
+The four satisfaction conditions §18.3:830-844 enumerated still apply, with the
+contract's owner moved from Alpha17 to the `16b-EB` slice inside Alpha16b:
+
+1. the `__ssr` fallback contract for a failing descendant producer — the bytes
+   emitted for the boundary, how the failure stays observable, and the
+   guarantee that a producer throw owned by the boundary no longer fails the
+   whole render — is defined inside Alpha16b, with the D-18b boundary reset
+   policy decided in the same record;
+2. the client claim adopts those fallback bytes under the unchanged claim and
+   identity rules (a new identity needs its own record);
+3. consumer-form evidence at one SHA: the fallback bytes for a failing
+   producer, claim parity over them, the no-silent-swallow row, and the two
+   Alpha16 capture points unchanged;
+4. the `16b-MN` `16b-EB` row and the capability inventory's `16b-EB` row move
+   row-for-row from deferred to delivered, and ADR-0182's EB amendment records
+   the same truth.
+
+Until all four hold, the row is an open obligation and is not a delivered
+capability. The two capture points already delivered (§18.3) remain part of the
+delivery, and the no-silent-swallow row is unchanged.
+
+### 19.3 The §13.2 obligations, read after 2026-11-20
+
+**`16b-LC` — the five named items are implemented inside Alpha16b.** Depth ≥ 2
+retention, placement inside recipe/list bodies, non-retained targets, pre-DOM
+timing and the connection-scope helper parameters are implemented in Alpha16b.
+This supersedes the "Still owed" reading in ADR-0181:73-74 and in the `16b-LC`
+PARTIAL/Owed lists of the 16b-MN (16b-MN:131-134, 16b-MN:329) and of the
+capability inventory. The final form is recorded by a dated ADR-0180 amendment
+plus the slice's consumer-form evidence; until that record lands, the older
+status text stays as written and is read against this section.
+
+> **Correction (2026-11-21, measured).** The sentence above is too broad as
+> written. What actually landed is the FIRST item — depth ≥ 2 retention — via
+> ADR-0181's cross-ledger transaction (Chromium R8/R10/R11 and the ledger's
+> transaction rows). The other four are NOT delivered and are not "implemented":
+> placement inside a reusable-JSX/list body and a non-retained target still have
+> no lifecycle owner and stay refused (`OEIR_LEAF_INVALID_ARTIFACT`), the
+> connection-scope helper parameters were already delivered before this section
+> was written, and pre-DOM timing is a documented semantic (a connect handler runs
+> before the generated region exists), not work. A future slice that wants
+> retention inside reusable bodies needs its own carrier — a reusable body can be
+> inserted N times, so "retain one record per site key" does not answer which
+> insertion owns it.
+
+**`16b-REF` — `useHost` and component `ref` are implemented in Alpha16b.** The
+owner decision is to implement both inside Alpha16b. That supersedes ADR-0182's
+2026-11-20 "`useHost` is FUTURE/OWED" amendment (ADR-0182:1044-1056) and its
+D-18b-5 "Component `ref` is FUTURE" (ADR-0182:111-114). A **dated ADR-0182
+amendment** must record the later decision before implementation claims
+delivery; the FUTURE text stays as written (amend-never-rewrite). The delivery
+needs its own consumer-form rows, the public-interface delta and regenerated
+snapshot, a written P5 retirement condition, and the row-for-row `16b-MN` /
+capability-inventory updates.
+
+**`trustedHtml` and non-JSON-encodable seeds — permanently excluded, not
+deferred.** No server→client channel is built for `trustedHtml` or for a
+non-JSON-encodable property value. This is a **permanent exclusion** — not an
+Alpha17 carry and not a §13.3/§14.1 exception: the `trustedHtml` brand is
+`WeakSet` object identity and cannot be rebuilt from bytes, and a raw-markup
+transport is refused on principle. A dated ADR-0182 amendment records the reason
+and the boundary. §14.2's retained `array/object/trustedHtml` row is read with
+this exclusion: the property-only, in-process value model stays; what is
+excluded is a server→client crossing. The in-tree consumer that motivated the
+question — `open-article-view`'s article body — is handled by the owner-directed
+build-time structured body (the matrix's D-M5): the body stops being a runtime
+string, and that design is owed as its own ADR amendment before any file claims
+it.
+
+**CEM for generated elements and the form validity policy — re-decided inside
+Alpha16.** The 2026-11-20 decision removes the "carry to Alpha17" reading from
+both: where an Alpha16 consumer or a packed/release need exists, the capability
+is implemented inside Alpha16; otherwise it is recorded as a **permanent product
+boundary** with the owner decision and the affected parties, and it is not
+booked as a deferral. §14.2 keeps both as retained obligations and is unchanged;
+this clause fixes their disposition rule, not a waiver. Neither row may be
+claimed delivered from this section alone.
+
+**The §13.3/§14.2 non-primitive conversion rows.** The array/object channel
+shipped as the JSON seed (D-17c); the `trustedHtml`/non-JSON crossing is the
+permanent exclusion above. No new attribute carrier or raw-markup channel is
+admitted.
+
+### 19.4 Class-retirement scope is the whole tree, not only the packages
+
+The class authoring frontend and the serialized Part Program v2 protocol retire
+from **every** production path in the tree, not only from `packages/*`:
+
+- `www/app`: the convention layout, the hand-written `site-ui` modules the
+  matrix measures, and the generator-owned article-route bindings (one
+  generator edit plus regeneration is the unit of work, not one edit per
+  generated file);
+- `apps/saas`: the 13 class modules the matrix records (12 page classes and the
+  layout shell);
+- `packages/create/templates`: the shipped starter — a new app must not be born
+  on a retired lane;
+- `tests/fixtures`: the three-way disposition the matrix §7.2 records —
+  **migrate** (fixtures that prove a capability), **retire with the code**
+  (fixtures that pin the deleted frontend/executor/protocol) and **keep as the
+  pinned negative** (the fixture that must fail to compile after retirement);
+- `docs/**` and `www/content/**`: doc rewrite alongside the row-for-row
+  `16b-MN` entries;
+- `packages/{element,compiler,router,protocol}`: the class frontend, the Part
+  Program v2 emitter/`__partProgram` emission and the C07–C11 runtime
+  `__partProgram` reads. The C07–C11 rows become **build-time facts** (the
+  matrix §8 rows), not deletions of the version check.
+
+**What retirement does not mean.** The server-private rendering structure, the
+SSR serializer, streaming data, DSD, claim markers and the security sinks stay
+(§2:134-135), and `COMPILED_MODULE_ABI_VERSION` plus the compatible-shape
+validation stay (§12:328-329). The retention is the build-identity check, not
+the serialized Part Program.
+
+**Carrier.** `docs/architecture/alpha16-class-migration-matrix.md` is the
+tracked per-file class→function matrix §15.1 requires: one row per file at a
+recorded SHA, the ONE design decision each row needs, and a final disposition.
+It is the carrier, not a signature — it creates no §13.5 evidence, and P5 stays
+unclaimable until the owner signs.
+
+### 19.5 The evidence floor does not move
+
+- Every claim this section authorizes carries the four-part record of §13.6 and
+  the evidence baseline: measured commit, clean status, exact command, exact
+  result, provenance. No number is written into a carrier before it was measured
+  at the cited SHA.
+- The matrix is the §15.1 per-file matrix carrier; it is not a P5 sign-off and
+  satisfies no §13.5 row by itself.
+- P5 still needs the tracked capability inventory, the final-SHA matrix, the
+  migration note with its `16b-MN` rows, **and the owner's personal signature**.
+  The 2026-11-20 delegation does not sign for the owner (§18.7).
+- M12, M13, M10 and M14 keep their original §2/§18.2 records: recorded evidence
+  is not a declared exit, and the consolidation PR §18.6 item 3 names remains
+  the carrier for that consolidation.
+- Every PR in this closeout states its P1–P8 compliance (or a named, accepted
+  deviation) and declares the absence of patch-style compatibility; a reviewer
+  rejects a change that adds a second mechanism or a compatibility adapter.
+
+### 19.6 The Alpha17 boundary is unchanged
+
+Alpha17 still owns Full TSX productization, precompiled distribution (the
+platform-boundary bundle), repository organisation, byte convergence and the
+frozen cross-module ABI. This section does not move any of that work into
+Alpha16: it moves only capability implementations the release obligations
+already require onto the Alpha16b side of the line. §13.4 stays in force —
+Alpha17 never becomes the first home of a §13.2 obligation — and the Alpha17 plan
+change the owner recorded (source-form first, no internal ABI freeze in this
+batch) is recorded, not implemented here; it needs its own Alpha17 plan
+amendment after the Alpha16 closeout.
+
+### 19.7 Record form (owner-approved 2026-11-20, delegated session)
+
+| Field | Value |
+| --- | --- |
+| Authorization | owner-approved 2026-11-20, delegated in-session closeout session (the §18.7 delegation) |
+| Authority quoted | "所有涉及的任务在 Alpha16 范围内一次解决，不要狗皮膏药式打补丁，遵守设计哲学" (2026-11-20 session), and the session's D1–D12 decision register |
+| Recorder | the takeover team — recorded as "carried out by the agent team under owner delegation" |
+| Signature status | no personal written signature is recorded or implied; every "owner-approved 2026-11-20" in this plan means the §18.7 delegation |
+| Downstream carriers | the class-migration matrix (the superseded D-M2 row, plus the row naming the `computed` intrinsic); ADR-0183 (the one reactive contract and its D-4 derived-state contract); the dated ADR-0182 amendment (`useHost`, component `ref`, the `trustedHtml`/non-JSON exclusion); the dated ADR-0180/ADR-0181 amendments (`16b-LC` final form, `16b-EB` fallback contract); the `16b-MN` row-for-row entries; the capability inventory; the progress ledger. Each must carry the same dated wording; none creates an exit or release claim by itself |
+| Not created | no version, tag, publication, public-API freeze, release qualification, milestone exit or P5 evidence |
+
+### 19.8 The reactive contract is one contract, and two props mechanisms is a defect to fix (ADR-0183)
+
+This section records a **defect**, not a feature request, and it is a release
+obligation of Alpha16b because the deferred capability (§19.1) cannot be built
+correctly on top of it.
+
+The measured state at `cd7e9e065`:
+
+- `packages/element/src/internal/compiled/runtime/props.ts:57`
+  (`createTrackedProps`, landed 2026-11-09 in `a82ef5957`, M04) builds per-read
+  props getters over **one version signal**, so a read inside an effect tracks;
+  it has **zero production callers**.
+- `packages/element/src/internal/compiled/generated-element/shell.ts:1451-1470`
+  (`createState`, landed 2026-11-13 in `735749b1c`, M09-0) builds per-read
+  getters over a **plain `Map`** plus a separate `propsChanged` counter bumped
+  by `bumpProps`; every generated element uses it.
+
+The shell's getters read a `Map`, so nothing they read is trackable — which is
+the entire technical premise of the 2026-11-18 ruling "the generated lane gains
+no `computed`; inline instead". That ruling is therefore read as a consequence
+of the duplication, superseded by §19.1; its text stays as history.
+
+**Decision.** The generated lane has exactly one reactive contract
+([ADR-0183](../adr/ADR-0183-one-reactive-contract.md)): one engine
+(`@preact/signals-core` behind the `SignalEngine` seam), one subscription
+wiring (`bindSignalWrites`/`guardUpdate`, released by the owning scope), one
+lifetime hierarchy (`instance` → `connection` → `projection`), and one
+derived-state contract (the `computed` intrinsic of §19.1). `runtime/props.ts`
+is the **one owner** of the props record; the element shell keeps only its
+element-specific write paths (declaration defaults, attribute conversion and
+reflection, pre-upgrade reconciliation, JSON seed apply) and writes through that
+one record. The `propsChanged` counter and `bumpProps` are **deleted, not
+aliased**.
+
+**Order inside Alpha16b.** Props unification first; the `computed` intrinsic
+second; the `propDeps` channel re-evaluated by measurement third (it exists only
+to compensate for untrackable props, so its removal is an evidence question, not
+a preference); the migrations that §19.1 unblocks (`open-reading-shell`,
+`open-article-view`, the convention layout, the remaining `site-ui` rows) last.
+
+**Gate.** The seam registry gains the reactive-channel rows (props,
+subscription, lifetime, derived state), each with one owner and a consumer-form
+test, and the registry's own rule states that introducing a second invalidation
+channel for a concept requires deleting or amending its row. A slice may not
+keep both props mechanisms alive behind a compatibility shim.
+
+**Why the gates missed it (recorded with the fix).** The seams row named the
+shell "the ONE owner of the per-read props record and the shell-owned
+`propsChanged` signal" — every `seams:check` clause was satisfied while the fork
+lived outside the registry; no consumer-form test spanned the two
+implementations; the M09-0 rule "do not import the runtime barrel" (a bundle/P1
+rule about the executor) was generalised by habit into "do not reuse runtime
+primitives", although the shell already imports four sibling modules from the
+same directory; and M04/M09-0 landed in different PRs, so no artefact asked
+which existing primitive the new code replaced.
+
+### 19.9 A function page declares its component in its own route module
+
+Measured: `pageComponentName` is set only when `definePage`'s first argument is
+a plain identifier naming an exported server function component **that this
+module declares** (`packages/compiler/src/internal/compiler/semantic-core/module-analysis.ts:612,660-684`,
+`serverComponents.has(firstArgument.text)`). `apps/saas/app/routes/index.tsx`
+currently imports its component (`import HomePage from
+'../components/page-home.tsx'`) and therefore classifies as `class-page`, which
+resolves a registered compiled class. The production precedent for the lawful
+shape is `www/app/routes/404.tsx`: the component is declared in the route module.
+
+**Decision.** Migrating a class page to the function lane means: declare the
+component function in the route module, keep `definePage(Component, { … })`
+options unchanged, leave loader/action/route-logic untouched, and delete the
+former `components/page-*.tsx` file (or reduce it to a pure helper module with
+no JSX). No admission branch is added for cross-module imported page
+components: that would be a new capability, with its own record, not a migration
+step.
+
+This section records the decisions above under that form and nothing more.
+
+### 19.10 Owner direction 2026-11-21: the Alpha17 milestone number is retired; its scope is Alpha16's closeout
+
+Verbatim intent from the owner: "不保留阿尔法17的编号，阿尔法17全部整合到阿尔法16里面，作为阿尔法16的收口" — do not keep an Alpha17 milestone number; fold its whole scope into the Alpha16 closeout.
+
+What this section changes:
+
+- **§19.6 is superseded in its boundary wording.** The work it named (Full TSX productization, precompiled distribution, repository organisation, byte convergence, the frozen cross-module ABI) is not moved into a new milestone: it is the Alpha16 closeout's ongoing work list. Where an earlier section says "Alpha17 owns …", read "the Alpha16 closeout owns …".
+- **§5's Alpha16/Alpha17 packed-consumer split and §13.4's boundary keep their TECHNICAL content and lose their milestone label.** The rule they carry — a §13.2 obligation is never parked in a later batch as its first implementation — survives unchanged and is now simply the closeout's rule.
+- **No obligation is deferred BY this section.** Everything the former boundary listed is either delivered (the `ssr: false` style slice at `b12d0403`, `16b-LC` depth ≥ 2 on 2026-11-21) or enumerated as closeout remainder in the closeout report §7.
+- **The dated records stay as written (amend-never-rewrite).** `16b-MN`, the progress ledger, `README.md` and the shim rows that name "Alpha17" are historical wording; the capability inventory, this plan and the closeout report are the current view.
+
+This section creates no milestone exit, no release qualification, no public-API freeze and no P5 evidence. It records a scope decision.
+
+### 19.11 Owner approval 2026-11-21: the class-lane deletion is authorized as ONE complete change set
+
+Verbatim scope selection by the owner: **"全部批准：一个完整变更集"** — approve all
+three breaking decisions and land the deletion as one change set.
+
+Authorized decisions (they were owner/release items, not code moves):
+
+1. **Public API.** Delete `OpenElement` / `ErrorBoundary` from the public surface
+   and delete the class render path in `public-runtime.ts`. This is a breaking
+   change; the interface snapshot must be regenerated in the same change set and
+   the CHANGELOG entry must name it.
+2. **ABI / third-party class admission.** Delete the Part Program artifact and
+   `COMPILED_MODULE_ABI_VERSION`'s class half, and stop admitting third-party
+   class modules. The two fixtures whose SUBJECT is a foreign class
+   (`third-party-web-components`, `web-component-interop`) are RETAINED as
+   foreign-WC qualification, not as class-lane qualification: they must keep
+   passing against whatever public surface remains.
+3. **Benchmark.** Build the generated lane's own benchmark baseline BEFORE
+   deleting `benchmarks/micro/oe-table.tsx` (whose subject is the class
+   compiler); the old input is deleted only once the new baseline exists, so the
+   benchmark keeps a subject.
+
+**Scope measured at `1e2bdc289` (LOCAL):** 75 test files author `extends
+OpenElement` (65 of them also carry `@element(`); 9 fixture apps author class
+components (2 retained as foreign-WC subjects); the compiler class entry is
+`internal/compiler/plugin.ts` + `semantic-core` + `semantic-ir`; the element class
+runtime is `internal/compiled/runtime/{kernel,program-kernel,parts,hydrate,
+fresh-dom,blocks,revive,error-boundary,facade-host}.ts` (the shell's P1 closure
+list is the ready-made inventory); the public exports are `OpenElement`,
+`ErrorBoundary` and the class half of `public-runtime.ts`.
+
+**A prerequisite discovered by migrating a fixture (2026-11-21, measured).**
+Migrating `router-unocss-probe`'s shadow island to the generated lane made its
+component stylesheet lose the component's utilities: the DSD marked link is
+emitted, but the emitted component sheet contains ONLY the authored CSS, while
+the island's class tokens land in the document sheet (which cannot reach a shadow
+root). Cause: `collect-shadow-candidates.ts` registers class candidates from
+exactly three producers — the class compiler, the server FUNCTION component lane
+(which reuses the class-lane `Lowering`, hence its `classCandidates`), and packed
+artifacts — and the generated-element lane produces none, because the function
+frontend never collects static class tokens. Consequence: **deleting the class
+lane without this would unstyle every generated-lane shadow component compiled by
+a utility engine.** The fixture was reverted to the class island (its e2e is green
+again, 5/5) and the gap is recorded here as deletion prerequisite **P-1**:
+`generateLeafModule` must return the module's static class tokens,
+`compileGeneratedElementIfAdmitted` must carry them, and the candidate pass must
+register them for generated islands (shadow scope) before the fixture migrates.
+
+> **A SECOND prerequisite surfaced while migrating the NEXT fixture: P-2 — now
+> DELIVERED 2026-11-21.** `router-base-path`'s nested components (a generated
+> LIGHT note and a generated SHADOW card, imported by the page) rendered as EMPTY
+> hosts: the class lane emits a constructor for every module the page graph
+> imports, while the generated lane's page-side admission only covered declared
+> island sites. Three facts were missing and are now in place:
+>
+> 1. a page-local generated component's tags are DISCOVERED (the static-component
+>    scanner declares them from the sidecar) and its **host producer** is
+>    resolved through the same `resolveGeneratedElementHost` the island path uses,
+>    so `StaticComponentDecl` carries `generatedHostExport`;
+> 2. the SSG entry **registers that pair** (`registerSsrIsland`) instead of a bare
+>    class — a generated component has no Part Program, so the class-only form
+>    failed every render with PROGRAM_MISSING;
+> 3. its `styles` declaration rides the SAME build-time carrier an island's does,
+>    held in `ctx.phase1.pageLocalStyleDeclarations` and re-registered after every
+>    place that owns the carrier's reset (the island scan owns it, and a
+>    page-local component has no islands-dir entry to be rediscovered from).
+>
+> Measured: the fixture's nested generated note (`data-oe-light`, its sheet in the
+> head) and card (DSD template with its marked `<link>`) both render, build green,
+> **e2e 9/9 on chromium, firefox and webkit**.
+>
+> **P-2b is DELIVERED too (2026-11-21).** A generated LIGHT function page now
+> DECLARES its own sheet and gets it in the original head: the static scan reads a
+> page module's sidecar and registers an `IslandStyleDeclaration` whose
+> `scopeTag` is `null` (a page owns no host element, so its rules must be
+> delivered UNSCOPED — the tag-scoped form compiled a `@scope (subpage-home)`
+> block that matched nothing), and the route's document link list is seeded from
+> that declaration. Measured on `router-base-path` with the page CONVERTED to the
+> generated lane: three marked links in the head (page, nested light component,
+> nested shadow component), build green, **e2e 9/9 on chromium, firefox and
+> webkit**, including the JavaScript-disabled computed-style row.
+>
+> **P-1 status 2026-11-21: DELIVERED for the BUILD (collection + DSD linkage).**
+> **P-1c (dev channel) is also DELIVERED (2026-11-21).** Four dev-side facts had
+> to be fixed for dev and build to agree: the dev transform registered "none" for
+> a generated module (now registers the lane's own `classCandidates`, scoped by
+> the site fact's root); the site resolver now carries that root (read from the
+> island's OWN declaration, so a shadow island's tokens can be classified as
+> shadow facts); the dev component sheet compiles from the SHADOW view instead of
+> `all()`; and a sheet request now re-registers every declared shadow island
+> before compiling, because a browser fetches the DSD link as soon as it parses —
+> before the declaring module's transform — and the empty sheet would be kept
+> under a stable URL. Measured: `dev-unocss` 8/8 with the MIGRATED generated
+> island, and the fixture's build e2e still **15/15 on three engines**. —
+> `generateLeafModule` returns `classCandidates` (a model walk over roots and
+> recipe targets, static `class` transcripts only, sorted/deduped),
+> `GeneratedElementModule` / `CompiledGeneratedElement` carry it, the generator's
+> refusals return `[]`, and the build's discovery pass registers a declared
+> generated island's candidates with the SHADOW scope its declaration records
+> (the island scan's declaration is the one site fact). Compiler rows: 16 in
+> `generated-element.client-styles.test.ts` (two new: a static-token row and the
+> dynamic-channel exclusion). **P-1b is also DELIVERED**: Phase 2 records the
+> generated shadow tags whose tokens reached the shared component sheet
+> (`setClientIslandUtilityTags`, keyed through the compiler's `stableModuleId`
+> so the declaration's scan spelling and the discovery pass's bundler spelling
+> converge), and Phase 3 unions that set into `utilityRequiredTags`, so the DSD
+> template links the authored `styles` assets AND the shared component sheet.
+> Measured on the migrated `router-unocss-probe` island: both links are in the
+> template, and the fixture's e2e is **15/15 across chromium, firefox and webkit**
+> (the computed-style row that failed before now passes on all three). Two
+> spelling bugs were found and fixed on the way: registering the raw absolute path
+> instead of the stable id, and looking up the scan's path without normalizing it
+> (the registry held 15 tokens while the declaration answered 0).
+
+> **P-3 (2026-11-21): a TSX-only shadow component's utilities reach its DSD
+> template.** The `router-ui-dogfood` probe declares no `styles` and no `.css`
+> file — its ONLY styling is Tailwind classes — so nothing grew the host
+> producer's `styleLinks` channel and the shadow tree rendered unstyled. Fixed at
+> three layers: the emitter now grows the channel when the module HAS class
+> candidates (TOLERANT: absent URLs render without a link, so an app with no
+> utility engine is never failed closed — only a DECLARED `styles` list keeps the
+> strict refusal); the discovery walk reads a page-local generated component's
+> sidecar identity (it has no island declaration); and the build's utility-tag set
+> unions page-local generated shadow components plus an entry row for a tag with
+> no authored asset. Measured: `router-ui-dogfood` probe renders its DSD template
+> with the shared sheet link and **e2e 120/120 across three engines**.
+
+> **P-4 is FIXED (2026-11-21, `e8661bad0`) and its follow-on gap is P-6.** The
+> root cause was that four passes read the sidecar themselves: page
+> classification resolved a page's component only against the islands directory,
+> so one module was a class page to the classifier and a generated element to the
+> transform. There is now ONE reader
+> (`vite/internal/component-declaration.ts`) and classification resolves by
+> MODULE IDENTITY from the declared-component map, falling back to the path
+> convention. With that, converting `router-ui-dogfood`'s `/dialog` to the
+> generated lane builds and renders its DSD — but the INNER `<open-dialog>` UI
+> package component stays an unexpanded tag: **a SHADOW-root generated host has no
+> nested-host expansion channel** (the light root's producer receives one; the
+> `__ssrHost` wrapper never does). That is P-6, a capability gap three fixtures'
+> shadow pages would hit, so they stay class-authored and the /dialog fixture is
+> reverted.
+>
+> **DEV VS BUILD STYLE DELIVERY — owner decision (2026-11-22): dev keeps HMR.**
+> The generated lane's BUILD delivery is link-only: an SSR/DSD island's sheet is
+> declared as one marked `<link>` inside its DSD template, and no runtime-adopted
+> copy is created, so the same bytes can never be delivered twice. `site-light-probe`
+> pins that rule.
+>
+> DEV is deliberately DIFFERENT, and the owner chose this explicitly: dev keeps
+> runtime adoption because HMR needs it. A live `CSSStyleSheet` held on `globalThis`
+> is re-filled in place when the sheet re-evaluates, so a CSS-only edit updates
+> computed styles WITHOUT a reload and without swapping the sheet object — every root
+> already holding it re-renders. A `<link>` cannot do that: replacing its href
+> re-parses and re-applies, which flickers and rebuilds the sheet.
+>
+> So the two paths differ in a way that is intentional and recorded:
+> build = one asset, one delivery; dev = one live object, updated in place. The dev
+> adoption rows in `dev-authored-css` are NOT stale class-lane assertions — they pin
+> the HMR contract.
+>
+> **F16 STATE (2026-11-22, measured).** The class lane's SOURCE is deleted:
+> `public-runtime.ts` lost the program serialization path, six modules are gone
+> (`open-element*`, `error-boundary`, `internal/compiled/facade-host`), and
+> `OpenElement` / `ErrorBoundary` are no longer exported. `root: 'closed'` became
+> authorable on the generated lane (owner decision; four readers had to agree
+> before it worked). Fixtures: `router-base-path` fully migrated (page → islands,
+> stream route retired, 6/6 three engines), `router-ui-dogfood` fully migrated
+> (39/40 e2e; the one red row fails identically before the migration — it is the
+> P-4 static-sibling-range defect). `element` suite is GREEN at 712.
+>
+> **What is NOT done, stated plainly.** (a) `compiler` has 22 red rows in
+> `server-component-composition` + 2 files: they drive the SURVIVING server-function
+> lane through hand-built Part Program hosts, so the composition-projection coverage
+> is real and must be rewritten onto generated fixtures, not deleted. (b) `router`
+> has 23 red files (98 class references) — integration suites that validate build
+> pipelines which STILL EXIST, using class-form fixtures; they need fixture
+> rewrites. (c) MDX lowering still emits class source. (d) 43 page components
+> remain class-authored across `router-request-time` (24), `router-native-framework`
+> (12), `site-light-probe` (6), `router-ui-dogfood` (1, the dropdown page's
+> static-range blocker). The deletion is therefore one change set in PROGRESS, not
+> one that can be landed green today.
+>
+> **P-5 IS DISSOLVED — it was a migration mistake, not a capability gap (2026-11-21).**
+> The five red morph rows came from migrating `live-counter` WITHOUT
+> `root: 'shadow'`: the class form was `shadow-open`, the generated form became a
+> LIGHT root, and the morph client's `islandIntact` compares LIGHT-DOM surfaces —
+> so a list prepend legitimately replaced the node and the signal reset. Declaring
+> the same root restores **114/114 and 342/342 across three engines**. Recorded
+> because a recipient-shaped "morph continuity contract" would have been designed
+> for a bug that does not exist.
+>
+> **Ten more islands are migrated (2026-11-21, `956f3ad2d`)**: request-time
+> (styled-badge, probe-panel, decoupled-view, visible-probe), native-framework
+> (note-counter, stream-lit-probe), ui-dogfood (form-probe, page-home,
+> page-tailwind-probe, boundary-light). Builds exit 0; e2e 114 / 53 / 40 — each at
+> or above its baseline. Three blockers are recorded rather than forced: the zag
+> comboboxes need an authored-method capability the generated lane does not have;
+> `boundary-closed` needs a closed-root spelling; and any page containing a nested
+> host that writes an attribute at connect time trips
+> `OE_RUNTIME_STATIC_RANGE_MISMATCH` (present at baseline for `/dialog`).
+>
+> **P-6 is FIXED (2026-11-21).** The parity gap is closed: the shadow host
+> producer now declares `(props, lightChildren, attributes, styleLinks,
+> nestedHost)` — FIXED positions, always all five — and hands the expander to its
+> leaf through the ONE compiler-private record field
+> (`@openelement/protocol`'s `NESTED_HOST_EXPANDER`). The runtime builds that
+> expander with ONE factory shared by the page root, the light root and the class
+> lane's nested walk, so a generated shadow host nested inside another keeps
+> recursing. Measured: `router-ui-dogfood`'s /dialog is now a GENERATED shadow
+> page and its `<open-dialog>` renders
+> `<template shadowrootmode="open" shadowrootdelegatesfocus>` with its own marked
+> links — **e2e 120/120 on chromium, firefox and webkit** (was 40/40 chromium with
+> the page still class-authored). Two rows in
+> `generated-leaf.nested-host.test.ts` pin the producer signature and the record
+> field.
+>
+> A LAYOUT DEFECT was found and fixed on the way, and it is the interesting part:
+> the producer's parameters were CONDITIONAL (`styleLinks` appeared only for a
+> styled module), so the caller's argument order depended on the callee's styling —
+> the runtime handed a function to `styleLinks` and the leaf never saw its
+> expander. Every emitted producer now declares all five slots.
+>
+> **Superseded reading (kept as history): a generated PAGE must resolve to a
+> declared ISLAND.** Converting `router-ui-dogfood`'s `page-dialog` to the
+> generated lane fails at SSR with PROGRAM_MISSING: `classifyPageRoute` resolves a
+> page's component only against the islands directory (`resolveLocalIsland`), so a
+> page-local component used AS the page is classified a class page while the
+> transform compiles it as a generated element — the two lanes disagree about the
+> same module. The page therefore stays class-authored (reverted; build green).
+> Consequence for the remaining fixtures: migrating a PAGE to the generated lane
+> means moving its module into `islands/` (or teaching page classification the
+> page-local site fact). Their page components were not migrated in this line, and
+> this is recorded as the reason rather than left implicit.
+>
+> **P-5 (2026-11-21, measured boundary): island state does not survive a morph on
+> the generated lane.** Migrating `router-request-time`'s two simplest islands
+> (`live-counter`, `visible-probe`) builds clean and keeps 109/114 e2e rows, but
+> the five rows that pin state continuity across a morph go RED — "island state
+> survives a list prepend", "rows keep order and island state through a reverse",
+> "PRG morph preserves island state", "enhanced submit morphs the PRG target",
+> "a morph instantiates nested DSD templates recursively". Baseline at HEAD is
+> **114 passed**. The class lane re-uses the SAME element instance across a morph
+> (its property state rides the instance); the generated lane re-runs the setup,
+> so a signal resets. That is a capability gap, not a migration defect, and it is
+> out of this line's scope — **the two islands are reverted** and the fixture stays
+> class-authored. Deleting the class lane therefore also OWES a morph-continuity
+> contract for generated islands, which this plan does not claim.
+>
+**Ordering within the one change set (each step is a gate, not a commit):**
+
+1. ~~generated-lane benchmark baseline~~ — **DONE 2026-11-21**:
+   `benchmarks/micro/generated-table.ts` compiles a function component through the
+   generated lane, evaluates the REAL emitted bytes with the leaf runtime, and
+   measures the same keyed-table work against the shared counting DOM;
+   `generated-table.test.ts` asserts deterministic counts (1k keyed rows mount;
+   an array replacement reuses every entry — zero insertions — and rewrites both
+   text slots per entry, 2000 writes; keyed swap moves ids 1↔998; one removal
+   removes exactly one node). Two counting-DOM gaps were fixed on the way and are
+   part of the baseline's honesty: `insertBefore(node, null)` and
+   `insertBefore(node, node)` now follow the DOM spec, and `FText.nodeValue`
+   aliases `data` (the spelling the generated text Parts write);
+2. fixture rewrites: `site-light-probe`'s e2e asserts the nesting RULE (ADR-0181
+   2026-11-20), the other six migrate or retire; the two foreign-WC fixtures are
+   re-based on the public WC surface. **Three fixtures are DONE (2026-11-21)**:
+   `router-static-only`'s two class pages became in-module server function pages
+   and their component files are deleted (build + both router suites green);
+   `router-unocss-probe`'s shadow island AND its light page are both generated now
+   (the page declares its sheet, delivered unscoped; e2e **15/15 on three
+   engines**, dev channel 8/8); and `router-base-path`'s page plus both nested
+   components are generated, with its streamed route still class-authored (the
+   stream channel is Alpha18's).
+   **A hard blocker is now decided**: `renderIntent.stream` (deferred-field
+   streamed pages) is a Class-page-only channel today — the authoring surface
+   refuses it on a function page and the build refuses it on a generated element
+   page (D-M11). Owner direction 2026-11-21: **remove streamed-page authoring
+   with the class lane; the replacement streaming carrier is Alpha18's**. The two
+   streamed fixture routes (`router-base-path/app/routes/live.tsx`,
+   `router-native-framework/app/routes/stream-lit-proof.tsx`) and their
+   components/tests therefore retire with the lane instead of migrating;
+3. delete the 75 class contract test files TOGETHER with the lane they pin;
+4. delete the compiler class entry, Part Program artifact/validator, ABI record
+   and the admission of class modules (router + compiler + element together);
+5. delete `OpenElement`/`ErrorBoundary`/class render path and regenerate the
+   interface snapshot + CHANGELOG;
+6. run the full matrix, `check`, `site:build`, packed starter smoke and the
+   benchmark baseline, and only then record the deletion.
+
+This section is the authorization; no step above is claimed done.

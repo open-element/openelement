@@ -259,164 +259,174 @@ export default definePage(NotFoundPage, {
 });
 `;
 
-const NATIVE_PAGE_HOME = `import { element, OpenElement, property } from '@openelement/element';
+const NATIVE_PAGE_HOME = `import { defineIslandConfig } from '@openelement/router';
 
-@element('index-page', { root: 'shadow-open' })
-export default class HomePage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  buildCountText = 'build-count=0';
+export const openElement = defineIslandConfig({
+  tag: 'index-page',
+  root: 'shadow',
+  properties: { buildCountText: { attribute: false, default: 'build-count=0' } },
+});
 
-  render() {
-    return (
-      <main>
-        <h1 id='home-marker'>packed-app-native home</h1>
-        <p id='build-count'>{this.buildCountText}</p>
-        <p>This page is prerendered; /notes is rendered at request time.</p>
-        <a id='notes-link' href='/notes'>Notes</a>
-      </main>
-    );
-  }
+export default function HomePage(props: { buildCountText: string }) {
+  const buildCountText = props.buildCountText ?? 'build-count=0';
+  return (
+    <main>
+      <h1 id='home-marker'>packed-app-native home</h1>
+      <p id='build-count'>{buildCountText}</p>
+      <p>This page is prerendered; /notes is rendered at request time.</p>
+      <a id='notes-link' href='/notes'>Notes</a>
+    </main>
+  );
 }
 `;
 
-const NATIVE_PAGE_NOTES = `import { element, OpenElement, property } from '@openelement/element';
+const NATIVE_PAGE_NOTES = `import { defineIslandConfig } from '@openelement/router';
 
-@element('notes-index', { root: 'shadow-open' })
-export default class NotesPage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  rows: Array<{ id: string; title: string; href: string }> = [];
+export const openElement = defineIslandConfig({
+  tag: 'notes-index',
+  root: 'shadow',
+  properties: {
+    rows: { attribute: false, default: [] },
+    countText: { attribute: false, default: 'note-count=0' },
+    intentText: { attribute: false, default: 'intent=' },
+  },
+});
 
-  @property({ reflect: false, attribute: false })
-  countText = 'note-count=0';
-
-  @property({ reflect: false, attribute: false })
-  intentText = 'intent=';
-
-  render() {
-    return (
-      <main>
-        <h1>packed-app-native notes</h1>
-        <p id='note-count'>{this.countText}</p>
-        <p id='last-intent'>{this.intentText}</p>
-        <a id='new-note' href='/notes/new'>New note</a>
-        <ul>
-          {this.rows.map((note) => (
-            <li key={note.id}>
-              <a href={note.href}>{note.title}</a>
-            </li>
-          ))}
-        </ul>
-        <note-counter></note-counter>
-      </main>
-    );
-  }
+export default function NotesPage(props: {
+  rows: Array<{ id: string; title: string; href: string }>;
+  countText: string;
+  intentText: string;
+}) {
+  const rows = props.rows ?? [];
+  const countText = props.countText ?? 'note-count=0';
+  const intentText = props.intentText ?? 'intent=';
+  return (
+    <main>
+      <h1>packed-app-native notes</h1>
+      <p id='note-count'>{countText}</p>
+      <p id='last-intent'>{intentText}</p>
+      <a id='new-note' href='/notes/new'>New note</a>
+      <ul>
+        {rows.map((note) => (
+          <li key={note.id}>
+            <a href={note.href}>{note.title}</a>
+          </li>
+        ))}
+      </ul>
+      <note-counter></note-counter>
+    </main>
+  );
 }
 `;
 
-const NATIVE_PAGE_DETAIL = `import { element, OpenElement, property } from '@openelement/element';
+const NATIVE_PAGE_DETAIL = `import { defineIslandConfig } from '@openelement/router';
 
-@element('notes-id', { root: 'shadow-open' })
-export default class NoteDetailPage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  idText = 'id=';
+export const openElement = defineIslandConfig({
+  tag: 'notes-id',
+  root: 'shadow',
+  properties: {
+    idText: { attribute: false, default: 'id=' },
+    titleText: { attribute: false, default: '' },
+    bodyText: { attribute: false, default: '' },
+    createdText: { attribute: false, default: 'created=' },
+    intentText: { attribute: false, default: 'intent=' },
+  },
+});
 
-  @property({ reflect: false, attribute: false })
-  titleText = '';
-
-  @property({ reflect: false, attribute: false })
-  bodyText = '';
-
-  @property({ reflect: false, attribute: false })
-  createdText = 'created=';
-
-  @property({ reflect: false, attribute: false })
-  intentText = 'intent=';
-
-  render() {
-    return (
-      <main>
-        <h1 id='note-title'>{this.titleText}</h1>
-        <p id='note-id'>{this.idText}</p>
-        <p id='note-body'>{this.bodyText}</p>
-        <a id='back-to-notes' href='/notes'>All notes</a>
-        <p id='flash-created'>{this.createdText}</p>
-        <p id='last-intent'>{this.intentText}</p>
-      </main>
-    );
-  }
+export default function NoteDetailPage(props: {
+  idText: string;
+  titleText: string;
+  bodyText: string;
+  createdText: string;
+  intentText: string;
+}) {
+  const idText = props.idText ?? 'id=';
+  const titleText = props.titleText ?? '';
+  const bodyText = props.bodyText ?? '';
+  const createdText = props.createdText ?? 'created=';
+  const intentText = props.intentText ?? 'intent=';
+  return (
+    <main>
+      <h1 id='note-title'>{titleText}</h1>
+      <p id='note-id'>{idText}</p>
+      <p id='note-body'>{bodyText}</p>
+      <a id='back-to-notes' href='/notes'>All notes</a>
+      <p id='flash-created'>{createdText}</p>
+      <p id='last-intent'>{intentText}</p>
+    </main>
+  );
 }
 `;
 
-const NATIVE_PAGE_NEW = `import { element, OpenElement, property } from '@openelement/element';
+const NATIVE_PAGE_NEW = `import { defineIslandConfig } from '@openelement/router';
 
-@element('notes-new', { root: 'shadow-open' })
-export default class NoteNewPage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  titleText = '';
+export const openElement = defineIslandConfig({
+  tag: 'notes-new',
+  root: 'shadow',
+  properties: {
+    titleText: { attribute: false, default: '' },
+    hasError: { attribute: false, default: 0 },
+    intentText: { attribute: false, default: 'intent=' },
+  },
+});
 
-  @property({ reflect: false, attribute: false })
-  hasError = 0;
-
-  @property({ reflect: false, attribute: false })
-  intentText = 'intent=';
-
-  render() {
-    return (
-      <main>
-        <h1>new note</h1>
-        <form method='post' data-open-enhance>
-          <input id='title' name='title' type='text' required value={this.titleText} />
-          <textarea id='body' name='body'></textarea>
-          <button id='submit' type='submit' name='intent' value='create'>Create</button>
-        </form>
-        {this.hasError > 0
-          ? <p id='error'>title must be at least 3 characters</p>
-          : <span data-error='none'></span>}
-        <p id='last-intent'>{this.intentText}</p>
-      </main>
-    );
-  }
+export default function NoteNewPage(props: {
+  titleText: string;
+  hasError: number;
+  intentText: string;
+}) {
+  return (
+    <main>
+      <h1>new note</h1>
+      <form method='post' data-open-enhance>
+        <input id='title' name='title' type='text' required value={props.titleText} />
+        <textarea id='body' name='body'></textarea>
+        <button id='submit' type='submit' name='intent' value='create'>Create</button>
+      </form>
+      {props.hasError > 0 ? (
+        <p id='error'>title must be at least 3 characters</p>
+      ) : (
+        <span data-error='none'></span>
+      )}
+      <p id='last-intent'>{props.intentText}</p>
+    </main>
+  );
 }
 `;
 
-const NATIVE_PAGE_404 = `import { element, OpenElement } from '@openelement/element';
+const NATIVE_PAGE_404 = `import { defineIslandConfig } from '@openelement/router';
 
-@element('el-404', { root: 'shadow-open' })
-export default class NotFoundPage extends OpenElement {
-  render() {
-    return (
-      <main>
-        <h1 id='styled-404'>packed-app-native styled not found</h1>
-        <p>The requested note or page does not exist.</p>
-        <a id='back-home' href='/'>Home</a>
-      </main>
-    );
-  }
+export const openElement = defineIslandConfig({ tag: 'el-404', root: 'shadow' });
+
+export default function NotFoundPage() {
+  return (
+    <main>
+      <h1 id='styled-404'>packed-app-native styled not found</h1>
+      <p>The requested note or page does not exist.</p>
+      <a id='back-home' href='/'>Home</a>
+    </main>
+  );
 }
 `;
 
-const NATIVE_ISLAND_COUNTER = `import { element, OpenElement, property } from '@openelement/element';
+const NATIVE_ISLAND_COUNTER = `import { signal } from '@openelement/element';
 import { defineIslandConfig } from '@openelement/router';
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });
+export const openElement = defineIslandConfig({
+  hydrate: 'load',
+  ssr: true,
+  dsd: true,
+  root: 'shadow',
+});
 
-@element('note-counter', { root: 'shadow-open' })
-export default class NoteCounter extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  count = 0;
-
-  increment(): void {
-    this.count++;
-  }
-
-  render() {
-    return (
-      <div class='counter-row'>
-        <button id='increment' type='button' onClick={this.increment}>+</button>
-        <span id='count'>{this.count}</span>
-      </div>
-    );
-  }
+export default function NoteCounter() {
+  const count = signal(0);
+  return (
+    <div class='counter-row'>
+      <button id='increment' type='button' onClick={() => (count.value = count.value + 1)}>+</button>
+      <span id='count'>{count.value}</span>
+    </div>
+  );
 }
 `;
 
@@ -467,7 +477,17 @@ const NATIVE_LEG: PackedAppLegSpec = {
   },
   viteConfig: NATIVE_VITE_CONFIG,
   probes: [
-    { path: '/', status: 200, markers: ['packed-app-native home', 'build-count=2'] },
+    {
+      path: '/',
+      status: 200,
+      markers: [
+        '<index-page',
+        'shadowrootmode="open"',
+        'id="home-marker"',
+        'packed-app-native home',
+        'build-count=2',
+      ],
+    },
     {
       path: '/notes',
       status: 200,

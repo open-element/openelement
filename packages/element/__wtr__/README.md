@@ -27,15 +27,20 @@ see "Negative proofs" below.
 __wtr__/
 ├── package.json                npm-local runtime deps (exact versions, see below)
 ├── package-lock.json           committed; `npm ci` is part of the hermetic gate
-├── fixtures/                   authored TSX grammar (compiler input)
-│   ├── wtr-shadow-button.tsx   shadow-open event source
-│   └── wtr-field.tsx           minimal FACE (distilled from packages/ui open-input)
-├── generated/                  OFFICIAL compiler output, committed (regenerable)
-│   ├── oe-program-counter.ts   from packages/element/__fixtures__/compiled-element-v2/counter.tsx
+├── fixtures/                   generated-element authoring (compiler input)
+│   ├── wtr-counter.tsx         light-root counter (tag oe-program-counter)
+│   ├── wtr-shadow-button.tsx   shadow-root event source
+│   ├── wtr-field.tsx           minimal FACE (distilled from packages/ui open-input)
+│   └── wtr-live-timer.tsx      client-only style-adoption fixture (+ its .css)
+├── generated/                  compiler output, regenerable (gitignored)
+│   ├── oe-program-counter.ts   from fixtures/wtr-counter.tsx
 │   ├── wtr-shadow-button.ts
 │   ├── wtr-field.ts
 │   ├── open-dialog.ts          production packages/ui component (#1339 case 8)
-│   └── open-dropdown.ts        production packages/ui component (#1339 case 8)
+│   ├── open-dropdown.ts        production packages/ui component (#1339 case 8)
+│   ├── open-input.ts           production packages/ui component
+│   ├── open-button.ts          production packages/ui component
+│   └── wtr-live-timer.ts       client-only styles (#1339 style-adoption slice)
 ├── tests/                      the browser cases (collected by the element-browser vitest project)
 └── tools/
     ├── compile-fixtures.ts     regenerates generated/ (browser:compile)
@@ -67,28 +72,41 @@ Dependencies are tiered by actual consumption:
   plus its browser revisions come from the root install, the same revision
   map the repo's E2E stack uses.
 
-## Compile path (unchanged decision)
+## Compile path (one lane: the generated element)
 
-Chosen: **`compileElementModule`** from
-`packages/compiler/src/internal/compiler/plugin.ts` (the exact function the
-`open:compiled-element` Vite plugin's `transform` hook calls), driven by
-`tools/compile-fixtures.ts` and emitted into `generated/` — a pure function,
-hermetic, and guaranteed not to drift from the plugin because the plugin
-delegates to it. Not chosen: the full vite lib-mode path
-(`tools/consumer-packaged-element.ts` style); that packs tarballs and
-npm-installs them into temp dirs, which `consumer:packaged-element` already
-exercises.
+Chosen: **`compileGeneratedElementIfAdmitted`** from
+`packages/compiler/src/internal/compiler/semantic-ir/generated-element/compile.ts`
+— the entry the `open:compiled-element` Vite plugin's `transform` hook calls
+for an admitted island — driven by `tools/compile-fixtures.ts` and emitted
+into `generated/`: a pure function, hermetic, and guaranteed not to drift from
+the plugin because the plugin delegates to it. This is the ONLY compile path
+in the suite: the class/decorator lane and its `compileElementModule` entry
+were deleted with the Alpha16 closeout, so every fixture here is authored as a
+`defineIslandConfig` sidecar plus a default-exported function component, and
+the script fails closed when the lane declines one (no fixture is skipped).
+Not chosen: the full vite lib-mode path (`tools/consumer-packaged-element.ts`
+style); that packs tarballs and npm-installs them into temp dirs, which
+`consumer:packaged-element` already exercises.
 
-No second TSX transform exists in this suite: the compiler's emitted module
-keeps its TS annotations, and vite's oxc transform lowers them at serve time
-(mirroring what the plugin-plus-vite pipeline does in a real build). The
-`.ts` extension on `generated/*` files reflects this. Runtime resolution:
-generated modules import the bare specifier `@openelement/element`; the
-`element-browser` project's alias maps it to `packages/element/src/index.ts`
-— this working tree's runtime source, not a published tarball — and the two
-production ui imports (`component-recipes.ts`, `instance-state.ts`) resolve
-straight from `packages/ui/src`, so the tests cannot drift from production
-sources. `lit`/`chai` resolve from this directory's own `node_modules`.
+Each fixture entry supplies the generated lane's host **site fact** (its
+element tag — in a real build the island scan supplies it). The lane returns
+`{ code, map }` separately (the appended CE tail carries no source-map
+segments, so there is no inline `sourceMappingURL` comment to decode), and the
+script checks the returned map's `sources` point back at the authored `.tsx`.
+No second TSX transform exists in this suite: the emitted modules are plain
+JavaScript that keeps importing `@openelement/element` by bare specifier; the
+`element-browser` project's alias maps that specifier to
+`packages/element/src/index.ts` — this working tree's runtime source, not a
+published tarball — the generated leaf/runtime subpaths resolve through the
+package's own exports map into the same source tree, and the production ui
+imports (`component-recipes.ts`, `instance-state.ts`) resolve straight from
+`packages/ui/src`, so the tests cannot drift from production sources.
+`lit`/`chai` resolve from this directory's own `node_modules`.
+
+The generated element class is exported as `<Component>Element` plus the
+module default (`export { __oe<Component>Element as <Component>Element }`), so
+a suite registers `Module.default` or the `<Component>Element` named export —
+the tag is the fixture's site fact, not an export name.
 
 ## Negative proofs (exit contract)
 

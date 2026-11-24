@@ -7,54 +7,64 @@
  * carries one static Block branch per variant (compiled conditional
  * branches are fully static — the boundary texts are the two constant
  * failure messages this page can raise).
+ *
+ * GENERATED lane (F16: class → function). The three drivers stay
+ * `attribute: false`: the boundary is reached by the descriptor's `error`
+ * projector writing in-process, so an attribute channel would publish a
+ * variant flag onto the host that nothing reads. `boomNormal` keeps its
+ * class-lane default of 1 so the success path renders without a projection.
  */
-import { element, OpenElement, property } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
 
-@element('boom-page', { root: 'shadow-open' })
-export default class BoomPage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  boomNormal = 1;
+export const openElement = defineIslandConfig({
+  tag: 'boom-page',
+  root: 'shadow',
+  properties: {
+    boomNormal: { attribute: false, default: 1 },
+    boomLoader: { attribute: false, default: 0 },
+    boomAction: { attribute: false, default: 0 },
+  },
+});
 
-  @property({ reflect: false, attribute: false })
-  boomLoader = 0;
+interface BoomPageProps {
+  boomNormal: number;
+  boomLoader: number;
+  boomAction: number;
+}
 
-  @property({ reflect: false, attribute: false })
-  boomAction = 0;
-
-  render() {
-    return (
-      <main>
-        {this.boomLoader > 0
-          ? (
-            <section data-variant='loader'>
-              <h1 id='boundary'>boom boundary: boom-loader</h1>
-              <form method='post' data-open-enhance>
-                <button id='boom-submit' type='submit'>Boom</button>
-              </form>
-            </section>
-          )
-          : <span data-variant='off'></span>}
-        {this.boomAction > 0
-          ? (
-            <section data-variant='action'>
-              <h1 id='boundary'>boom boundary: boom-action</h1>
-              <form method='post' data-open-enhance>
-                <button id='boom-submit' type='submit'>Boom</button>
-              </form>
-            </section>
-          )
-          : <span data-variant='off'></span>}
-        {this.boomNormal > 0
-          ? (
-            <section data-variant='normal'>
-              <h1>boom page</h1>
-              <form method='post' data-open-enhance>
-                <button id='boom-submit' type='submit'>Boom</button>
-              </form>
-            </section>
-          )
-          : <span data-variant='off'></span>}
-      </main>
-    );
-  }
+export default function BoomPage(props: BoomPageProps) {
+  return (
+    <main>
+      {props.boomLoader > 0
+        ? (
+          <section data-variant='loader'>
+            <h1 id='boundary'>boom boundary: boom-loader</h1>
+            <form method='post' data-open-enhance>
+              <button id='boom-submit' type='submit'>Boom</button>
+            </form>
+          </section>
+        )
+        : <span data-variant='off'></span>}
+      {props.boomAction > 0
+        ? (
+          <section data-variant='action'>
+            <h1 id='boundary'>boom boundary: boom-action</h1>
+            <form method='post' data-open-enhance>
+              <button id='boom-submit' type='submit'>Boom</button>
+            </form>
+          </section>
+        )
+        : <span data-variant='off'></span>}
+      {props.boomNormal > 0
+        ? (
+          <section data-variant='normal'>
+            <h1>boom page</h1>
+            <form method='post' data-open-enhance>
+              <button id='boom-submit' type='submit'>Boom</button>
+            </form>
+          </section>
+        )
+        : <span data-variant='off'></span>}
+    </main>
+  );
 }

@@ -299,33 +299,41 @@ async function buildFixture(): Promise<string> {
     join(appDir, 'app', 'islands', 'proof-island.tsx'),
     [
       "import { defineIslandConfig } from '@openelement/router';",
-      "import { element, OpenElement } from '@openelement/element';",
       '',
-      "export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true });",
+      // The tag is declared EXPLICITLY: the style-edge discovery pass reads a
+      // generated module's sidecar identity to know the module is a generated
+      // shadow component, and only a declared tag (or a `styles` list) gives it
+      // that fact. The spelling agrees with the islands-dir path convention.
+      'export const openElement = defineIslandConfig({',
+      "  tag: 'proof-island',",
+      "  hydrate: 'idle',",
+      '  ssr: true,',
+      "  root: 'shadow',",
+      '});',
       '',
-      "@element('proof-island', { root: 'shadow-open' })",
-      'export default class ProofIsland extends OpenElement {',
-      '  render() {',
-      "    return <div class='flex proof-token'>proof-island</div>;",
-      '  }',
+      'export default function ProofIsland() {',
+      "  return <div class='flex proof-token'>proof-island</div>;",
       '}',
       '',
     ].join('\n'),
   );
+  // The page is a generated SHADOW root: classification requires the
+  // compiler-emitted DSD host producer, so a light root could not serve as the
+  // page root here. The tag is declared because the island is an island and the
+  // page needs an explicit identity of its own.
   await write(
     join(appDir, 'app', 'components', 'proof-page.tsx'),
     [
-      "import { element, OpenElement } from '@openelement/element';",
+      "import { defineIslandConfig } from '@openelement/router';",
       '',
-      "@element('proof-page', { root: 'shadow-open' })",
-      'export default class ProofPage extends OpenElement {',
-      '  render() {',
-      '    return (',
-      '      <div>',
-      '        <proof-island></proof-island>',
-      '      </div>',
-      '    );',
-      '  }',
+      "export const openElement = defineIslandConfig({ tag: 'proof-page', root: 'shadow' });",
+      '',
+      'export default function ProofPage() {',
+      '  return (',
+      '    <div>',
+      '      <proof-island></proof-island>',
+      '    </div>',
+      '  );',
       '}',
       '',
     ].join('\n'),

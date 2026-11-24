@@ -34,7 +34,6 @@ import {
   ClientBuildErrorCode,
   DeliveryErrorCode,
   DescriptorErrorCode,
-  DispatchErrorCode,
   DocumentErrorCode,
   IslandEntryErrorCode,
   IslandErrorCode,
@@ -61,10 +60,7 @@ import { buildPackageIslandDecls } from '../src/vite/internal/ssg/island-scanner
 import { scanRoutes } from '../src/vite/internal/ssg/index.ts';
 import { resolveDynamicRoutePath } from '../src/vite/internal/ssg/ssg-helpers.ts';
 import { mdxToCompiledPageSource } from '../src/vite/plugin-mdx-lower.ts';
-import {
-  createStreamPageShell,
-  streamFields,
-} from '../src/vite/internal/server-runtime/stream-runtime.ts';
+import { streamFields } from '../src/vite/internal/server-runtime/stream-runtime.ts';
 import { createNativePageRenderer } from '../src/vite/internal/server-runtime/renderer-runtime.ts';
 import {
   buildClientAssetManifest,
@@ -88,7 +84,6 @@ const TABLES = {
   SsgRenderErrorCode,
   DocumentErrorCode,
   StreamErrorCode,
-  DispatchErrorCode,
   RendererErrorCode,
   MdxErrorCode,
   PackageIslandErrorCode,
@@ -404,7 +399,7 @@ function streamManifest(): StreamRouteManifest {
   };
 }
 
-test('error codes: the streaming pump reports ssr-phase codes', async () => {
+test('error codes: the streaming pump reports ssr-phase codes', () => {
   // The front gate rejects non-object loader data (LOADER_NOT_OBJECT)…
   const loader = assertThrowsIncludes(
     () => streamFields('nope', streamManifest()),
@@ -416,18 +411,9 @@ test('error codes: the streaming pump reports ssr-phase codes', async () => {
   // …and the message text is unchanged — clients may match on it.
   expect(loader.message).toEqual('stream loader must return one object');
 
-  // The deferred-shell gate fails closed on a route/manifest/program mismatch.
-  const gate = createStreamPageShell({
-    streamManifests: {},
-    createStreamShellExecutor: () => Promise.reject(new Error('unreached')),
-  });
-  const mismatch = await assertRejectsIncludes(
-    () => gate('/', { default: {} }, {}, 'i', 't'),
-    OpenElementError,
-    'no matching compiled route manifest/program',
-  );
-  expect(mismatch.code).toEqual(StreamErrorCode.ROUTE_PROGRAM_MISMATCH);
-  expect(mismatch.phase).toEqual('ssr');
+  // The deferred-shell gate's ROUTE_PROGRAM_MISMATCH arm retired with the
+  // class lane's Part-Program read (C10, 2026-11-24): the gate itself is gone,
+  // so there is no code path left to report it. The pump codes above stay.
 });
 
 test('error codes: the dispatch guards and the renderer seam report ssr-phase codes', () => {

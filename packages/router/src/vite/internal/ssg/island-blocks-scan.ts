@@ -30,13 +30,13 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
+import { readComponentDeclaration } from '../component-declaration.ts';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join, resolve } from 'pathe';
 import ts from 'typescript';
 import {
-  compileElementModule,
+  compileGeneratedElementIfAdmitted,
   stableModuleId,
-  type SemanticCoreOptions,
   type StaticSidecarDescriptor,
 } from '@openelement/compiler';
 import type { IslandDecl } from '@openelement/protocol/ssg';
@@ -190,15 +190,26 @@ function resolveDeclaredModule(root: string, modulePath: string): string | null 
  */
 export function islandsMightUseBlocks(input: IslandsBlocksScanInput): boolean {
   const seeds: string[] = [];
+  /**
+   * Seed path -> the tag the app already knows it by.
+   *
+   * The generated lane needs a tag to compile a module, and an island that follows
+   * the naming convention pins none in its sidecar. Passing this as the reader's
+   * fallback is what keeps a convention-tagged when/each island from answering
+   * "absent": that answer would skip the compile, report blocks-free, pick the
+   * blocks-free entry, and then fail every when/each Part at runtime with
+   * OE_RUNTIME_BLOCK_BUILDERS_MISSING. The ambiguity resolves the SAFE way instead.
+   */
+  const seedTags = new Map<string, string>();
   input.islandTagNames.forEach((tagName, index) => {
-    seeds.push(
-      resolve(
-        input.root,
-        input.islandFiles[index]
-          ? `${input.islandsDir}/${input.islandFiles[index]}`
-          : `${input.islandsDir}/${tagName}.ts`,
-      ),
+    const seed = resolve(
+      input.root,
+      input.islandFiles[index]
+        ? `${input.islandsDir}/${input.islandFiles[index]}`
+        : `${input.islandsDir}/${tagName}.ts`,
     );
+    seeds.push(seed);
+    seedTags.set(seed.replaceAll('\\', '/'), tagName);
   });
   for (const decl of [...input.packageIslandDecls, ...(input.compilerBehaviorDecls ?? [])]) {
     const found = resolveDeclaredModule(input.root, decl.modulePath);
@@ -208,9 +219,6 @@ export function islandsMightUseBlocks(input: IslandsBlocksScanInput): boolean {
     seeds.push(found);
   }
 
-  const options: SemanticCoreOptions = input.staticSidecars
-    ? { staticSidecars: [...input.staticSidecars] }
-    : {};
   const visited = new Set<string>();
   const queue = [...seeds];
   while (queue.length > 0) {
@@ -226,8 +234,23 @@ export function islandsMightUseBlocks(input: IslandsBlocksScanInput): boolean {
       continue;
     }
     try {
-      const compiled = compileElementModule(source, stableModuleId(file, input.root), options);
-      if (compiled !== null && compiled.program.blocks.length > 0) return true;
+      // The generated lane answers the same question from the same compilation
+      // (F16): `usesBlocks` is derived from the function model this compile already
+      // lowered, so the scan keeps asking the compiler rather than re-deriving the
+      // grammar itself. A module with no declared sidecar is not a component and
+      // contributes nothing, which is the same "non-compiled modules contribute
+      // nothing" posture the class pass had.
+      const reading = readComponentDeclaration(source, seedTags.get(file));
+      if (reading.kind === 'declared' && reading.declaration.tag !== undefined) {
+        const compiled = compileGeneratedElementIfAdmitted(
+          source,
+          stableModuleId(file, input.root),
+          {
+            site: { tag: reading.declaration.tag },
+          },
+        );
+        if (compiled !== null && compiled.usesBlocks) return true;
+      }
     } catch {
       // A module the compiler cannot settle here would fail the real build
       // transform with its own diagnostic; for this scan its truth is unknown.

@@ -163,12 +163,16 @@ import {
   type ErrorPhase,
 } from '@openelement/protocol/errors';
 import type { RootMode } from '@openelement/protocol/part-program';
+import type { StyleSheetLike } from '@openelement/protocol/style-sheet';
 import { OpenElementBase } from '../../../open-element-base.ts';
 // The class lane's theme broadcaster: it mirrors the document's `data-theme`
 // onto every connected host (and keeps it in sync), which is what makes the
 // shared token sheet's `:host([data-theme])` overrides apply inside a shadow
 // root. A generated host links the same sheet, so it joins the same manager.
-import { themeManager } from '../../../open-element-styles.ts';
+// `CompiledStyleScope` is the SAME adoption owner the class lane's kernel uses
+// (S-C1.2): the generated shell installs a client-only island's declared sheets
+// through it instead of inventing a second style sink.
+import { CompiledStyleScope, themeManager } from '../../../open-element-styles.ts';
 // The runtime-only host attribute fact (the JSON seed name included) lives in
 // ONE DOM-free leaf so the hydration executor can derive its exemption from the
 // same source without importing this shell module. See that leaf for the why.
@@ -181,12 +185,23 @@ import {
   type PropertyConversionRecord,
 } from '../../core/property-conversion.ts';
 import { isTrustedHtmlValue, trustedHtml } from '../../core/security.ts';
+import { NESTED_HOST_PROPERTY } from '../runtime/nested-host.ts';
 import { LifetimeScope } from '../lifetime-scope.ts';
 import { abortInstancePass, releaseRetainedChildren } from '../runtime/instance-ledger.ts';
 import { claimRecipe, insertRecipe, type Projection, type Recipe } from '../runtime/recipe.ts';
+// The pre-upgrade replay HOOK (2026-11-21 closeout): the generated lane captured a
+// pre-hydration click through `document-services` but never replayed it — the replay
+// pair lived in `pre-upgrade-events.ts`, which this shell's P1 closure forbids. The
+// hook module reaches nothing; the capture module publishes its implementation when
+// the entry installs the capture, so both halves stay one registry and one capture.
+import {
+  releasePreUpgradeCapturesFor,
+  replayPreUpgradeCaptures,
+} from '../runtime/pre-upgrade-replay-hook.ts';
+import { createTrackedProps, type TrackedProps } from '../runtime/props.ts';
 import { CompiledProgramValidationError, removeNodes } from '../runtime/values.ts';
+import { isExpandedLightRootHost } from '../runtime/claim-invariants.ts';
 import { CompiledContextService, contextChannelFor } from '../runtime/context.ts';
-import { signal } from '../../signal/framework.ts';
 import type { WritableSignal } from '../../signal/types.ts';
 import {
   assertGeneratedRootOptions,
@@ -270,12 +285,14 @@ const GENERATED_HOST_ATTRIBUTES = '__oeHostAttributes';
 
 /**
  * Compiler-private record key carrying the names of the declared rows whose ONLY
- * host wire is the JSON prop seed. Non-enumerable, beside the pairs, and written
- * by the same seeder that decided the payload — never re-derived by a consumer,
- * because the derivation would also claim rows the seed does not actually carry
- * (a supplied getter is deliberately not read, so it gets no seed) and that
- * difference is exactly the one that would turn a filtered pair into a lost
- * value.
+ * host wire is the JSON prop seed: the JSON-seedable non-primitive rows
+ * (`array`/`object`) and, since the 2026-11-23 ADR-0181 A5 amendment, the
+ * property-only primitives (`attribute: null`). Non-enumerable, beside the
+ * pairs, and written by the same seeder that decided the payload — never
+ * re-derived by a consumer, because the derivation would also claim rows the
+ * seed does not actually carry (a supplied getter is deliberately not read, so
+ * it gets no seed) and that difference is exactly the one that would turn a
+ * filtered pair into a lost value.
  */
 const GENERATED_PROP_SEED_ROWS = '__oePropSeedRows';
 
@@ -286,7 +303,12 @@ const GENERATED_PROP_SEED_ROWS = '__oePropSeedRows';
 // hydration executor also reads — so the writer and the claim exemption cannot
 // drift again (C-1).
 
-/** The declared row types a JSON seed may carry (D-18c). */
+/**
+ * The declared NON-PRIMITIVE row types a JSON seed may carry (D-18c). The other
+ * family the same seed carries is a property-only PRIMITIVE row
+ * (`attribute: null`), which joins the wire under the ADR-0181 A5 amendment;
+ * see {@link isJsonPropertySeedRow}, the ONE predicate both halves read.
+ */
 const JSON_SEEDABLE_PROPERTY_TYPES: ReadonlySet<string> = new Set(['array', 'object']);
 
 /**
@@ -298,12 +320,16 @@ const JSON_SEEDABLE_PROPERTY_TYPES: ReadonlySet<string> = new Set(['array', 'obj
 const PROP_SEED_MISMATCH = 'OEIR_SHELL_PROP_SEED_MISMATCH';
 
 /**
- * Internal identity for a supplied primitive value that has NO SSR→claim
- * attribute channel: a `boolean false` against a presence-default `true`.
- * Rendering it would silently diverge (the server content carries `false` while
- * the claim can only re-read the presence default). The property-only
- * (`attribute: false`) primitive case stays the recorded ADR-0181 A5 boundary.
- * Fail closed with an internal `OEIR_LEAF_*` identity (no public catalogue row).
+ * Internal identity for a supplied value the SSR→claim wire cannot carry
+ * faithfully. Two cases reach it: an attribute-backed `boolean false` against a
+ * presence-default `true` (rendering it would silently diverge: the server
+ * content carries `false` while the claim can only re-read the presence
+ * default), and a supplied JSON-family value whose serialization is not
+ * encodable (a function, a symbol, a bigint, a cyclic graph). Property-only
+ * primitives are no longer in this family: they travel on the JSON seed under
+ * the ADR-0181 A5 amendment (2026-11-23) instead of silently losing their value
+ * at claim time. Fail closed with an internal `OEIR_LEAF_*` identity (no public
+ * catalogue row).
  */
 const UNSEEDABLE_PROPERTY = 'OEIR_LEAF_UNSEEDABLE_PROPERTY';
 
@@ -312,6 +338,32 @@ function primitiveRowFallback(property: GeneratedElementProperty): unknown {
   return (
     property.default ?? (property.type === 'boolean' ? false : property.type === 'number' ? 0 : '')
   );
+}
+
+/**
+ * Whether ONE declared row may travel on the JSON prop seed
+ * ({@link GENERATED_PROP_SEED}) — the predicate the producer and the claim
+ * BOTH read, so the wire the seeder writes and the wire the claim accepts
+ * cannot drift.
+ *
+ * Two families are carried:
+ *
+ * - a JSON-seedable NON-PRIMITIVE row (`array`/`object`), which has no
+ *   attribute form at all (D-18c / M11-3);
+ * - a PROPERTY-ONLY PRIMITIVE row (`attribute: null`). Before the 2026-11-23
+ *   ADR-0181 A5 amendment this was the recorded boundary: the claim re-read the
+ *   declared default and silently wiped the server content a page root had
+ *   rendered (the typed-`definePage` route case). The row has no attribute name
+ *   to carry it, so the seed is its ONE host wire.
+ *
+ * An ATTRIBUTE-BACKED primitive is deliberately NOT seedable: its declared
+ * attribute pair is already the SSR→claim wire (M11-2), and putting one row on
+ * two wires is the double spelling this fold refuses. `trustedHtml` stays
+ * excluded: a brand cannot be reconstructed from JSON (D-18c).
+ */
+function isJsonPropertySeedRow(property: GeneratedElementProperty): boolean {
+  if (JSON_SEEDABLE_PROPERTY_TYPES.has(property.type)) return true;
+  return PRIMITIVE_PROPERTY_TYPES.has(property.type) && hostPropertyAttribute(property) === null;
 }
 
 /**
@@ -331,22 +383,27 @@ function primitiveRowFallback(property: GeneratedElementProperty): unknown {
  * over the attribute wire; a primitive row supplied by neither falls back to
  * its declared default.
  *
- * The non-primitive family is TWO different facts and is documented separately:
+ * The JSON-seeded family is documented separately, because its rows have no
+ * attribute wire and therefore carry TWO different facts:
  *
  * - an UNSUPPLIED `array`/`object` row is not fabricated here: its generated
  *   factory default materialises per CLIENT instance, so this fold leaves the
  *   row absent rather than pretending a server value exists (the shell
  *   resolver still supplies the declared default lazily until a claim writes
  *   it);
- * - a SUPPLIED, JSON-encodable `array`/`object` row DOES travel to the claim:
- *   it is serialized into one {@link GENERATED_PROP_SEED} host attribute
- *   (ADR-0182 D-18c / M11-3), and the shell restores it BEFORE setup so the
- *   server bytes and the upgraded state are the same fact. The value is read
- *   once here; a supplied getter is deliberately deferred to the content leaf
- *   and therefore gets no seed. `trustedHtml` stays excluded on purpose — a
- *   brand cannot be reconstructed from JSON, and promoting a plain string back
- *   to it would be a raw-markup channel (D-18c records that as a separate
- *   decision).
+ * - a SUPPLIED, JSON-encodable row travels to the claim: it is serialized into
+ *   one {@link GENERATED_PROP_SEED} host attribute (ADR-0182 D-18c / M11-3),
+ *   and the shell restores it BEFORE setup so the server bytes and the upgraded
+ *   state are the same fact. That row is either a JSON-seedable
+ *   `array`/`object`, or — under the 2026-11-23 ADR-0181 A5 amendment — a
+ *   PROPERTY-ONLY PRIMITIVE (`attribute: null`), whose claim used to re-read the
+ *   declared default and silently wipe the server content. An attribute-backed
+ *   primitive is NOT seeded: its declared attribute pair already is the wire.
+ *   The value is read once here; a supplied getter is deliberately deferred to
+ *   the content leaf and therefore gets no seed. `trustedHtml` stays excluded
+ *   on purpose — a brand cannot be reconstructed from JSON, and promoting a
+ *   plain string back to it would be a raw-markup channel (D-18c records that as
+ *   a separate decision).
  *
  * Pure: the input records are never mutated.
  */
@@ -383,7 +440,16 @@ export function seedGeneratedElementHostProperties<P extends object = Record<str
         configurable: false,
         get: () => {
           const value = supplied[property.name];
-          return value === undefined && primitiveFallback !== undefined ? primitiveFallback : value;
+          if (value === undefined && primitiveFallback !== undefined) return primitiveFallback;
+          // The canonical BARE-ATTRIBUTE encoding: a JSX `<host rail>` lowers to
+          // `"rail": ""`, and on the wire attribute presence means true. The
+          // class-lane server coercion spells this rule once
+          // (`public-runtime.ts` `coerceServerProp`), and this fold is the
+          // generated lane's version of the same fact — a boolean row given the
+          // empty string must read `true`, or the pair below would serialize
+          // `false` against a presence-true wire and fail closed as unseedable.
+          if (property.type === 'boolean' && value === '') return true;
+          return value;
         },
       });
       continue;
@@ -456,10 +522,12 @@ export function seedGeneratedElementHostProperties<P extends object = Record<str
     const record = { converter: property.type, type: property.type, default: property.default };
     const fallback = primitiveRowFallback(property);
     if (attribute === null) {
-      // Property-only primitive: no attribute carries the value to the claim.
-      // Supplied differing values stay a RECORDED boundary (ADR-0181 A5 does not
-      // claim attribute:false seed parity); only the boolean presence case below
-      // is provably divergent against a presence-true default and fails closed.
+      // Property-only primitive: no PER-ROW attribute carries the value to the
+      // claim. Since the 2026-11-23 ADR-0181 A5 amendment it travels on the ONE
+      // JSON seed instead ({@link isJsonPropertySeedRow}); emitting a pair here
+      // as well would put one row on two wires. Only the attribute-backed
+      // boolean presence case below is still provably divergent and fails
+      // closed.
       continue;
     }
     const seededValue = seeded[property.name];
@@ -500,28 +568,46 @@ export function seedGeneratedElementHostProperties<P extends object = Record<str
     merged.push(pair);
   }
 
-  // D-18c / M11-3: the NON-PRIMITIVE half of the same seed. A JSON-seedable row
-  // that the caller supplied is serialized onto one host attribute so the claim
-  // can restore it; without this the server rendered the declared default while
-  // the client value existed only in memory. The row is read ONCE here, which
-  // matches the attribute rows above — the supplied-getter "read per read"
+  // D-18c / M11-3, extended 2026-11-23 (ADR-0181 A5 amendment): the JSON half of
+  // the same seed. A row with NO attribute wire that the caller supplied is
+  // serialized onto one host attribute so the claim can restore it; without this
+  // the server rendered the supplied/default split while the client value
+  // existed only in memory. Two row families qualify ({@link
+  // isJsonPropertySeedRow}): an `array`/`object` row (D-18c), and a PROPERTY-ONLY
+  // PRIMITIVE row, whose claim used to re-read the declared default and silently
+  // wipe the page root's SSR content. An attribute-backed primitive is excluded:
+  // its declared attribute pair already carries it. The row is read ONCE here,
+  // which matches the attribute rows above — the supplied-getter "read per read"
   // contract is about the fold not running it eagerly and each leaf read
   // reading again, both still true.
   const propSeed: Record<string, unknown> = {};
   for (const property of properties ?? []) {
-    if (!JSON_SEEDABLE_PROPERTY_TYPES.has(property.type)) continue;
+    if (!isJsonPropertySeedRow(property)) continue;
     if (!Object.prototype.hasOwnProperty.call(supplied, property.name)) continue;
     // NEVER execute an accessor here. The supplied-getter contract is "read per
     // read, and only when a reader asks": a data property is safe to read once
     // for the seed, but a getter must be deferred to the content leaf, exactly
-    // as the fold below does. A caller passing a getter for a non-primitive row
-    // therefore gets no seed — the content still renders their value, and the
-    // claim keeps the declared default, which is the pre-D-18c behaviour rather
-    // than a silent double-read.
+    // as the fold below does. A caller passing a getter therefore gets no seed —
+    // the content still renders their value, and the claim keeps the declared
+    // default, which is the pre-amendment behaviour rather than a silent
+    // double-read (recorded as still-unseeded in the ADR-0181 A5 amendment).
     const own = Object.getOwnPropertyDescriptor(supplied, property.name);
     if (own === undefined || !('value' in own)) continue;
-    const value = own.value;
+    let value = own.value;
     if (value === undefined) continue;
+    // A supplied value EQUAL to the declared default still seeds. This is the
+    // D-18c rule for the non-primitive family, and the reason is structural, not
+    // convenience: the seed payload and `__oePropSeedRows` are decided together,
+    // so a row named "the seed carries it" must actually be in the payload, and
+    // the single source of "supplied" is the caller's own record — a default
+    // comparison here would be a second, looser rule the claim cannot check.
+    // The cost is one redundant row on the wire; the claim writes the declared
+    // default it would have re-read anyway.
+    // The BARE-BOOLEAN encoding must be normalized to the fact the content fold
+    // renders: a supplied `""` (JSX `<host flag>`) reads `true` there (see the
+    // fold above), while the claim's `Boolean('')` would restore `false`. One
+    // conversion, and the wire carries the content's value.
+    if (property.type === 'boolean' && value === '') value = true;
     // JSON is the wire: a value that cannot round-trip would arrive as a
     // different fact, so refuse rather than silently degrade to the default.
     let encoded: string;
@@ -589,8 +675,23 @@ export function seedGeneratedElementHostProperties<P extends object = Record<str
 function lightSsrProducer(
   descriptor: NormalizedDescriptor,
   producer: () => unknown,
-): (input?: unknown, attributes?: readonly (readonly [string, string])[]) => unknown {
-  return (input?: unknown, attributes?: readonly (readonly [string, string])[]) => {
+): (
+  input?: unknown,
+  attributes?: readonly (readonly [string, string])[],
+  /**
+   * alpha16 nested-expansion: the render's nested-host expander. It is
+   * forwarded to the emitted producer on the host record it already receives,
+   * so a dash-tag element inside this host's markup can be expanded. Absent
+   * means the producer's own literal bytes are the answer — the additive
+   * contract.
+   */
+  nestedHost?: unknown,
+) => unknown {
+  return (
+    input?: unknown,
+    attributes?: readonly (readonly [string, string])[],
+    nestedHost?: unknown,
+  ) => {
     const supplied =
       input !== null && typeof input === 'object' ? (input as Record<string, unknown>) : undefined;
     // The seeder is typed against the PUBLIC property row (`default`) while the
@@ -635,25 +736,29 @@ function lightSsrProducer(
     // itself, so the pairs must ride back to that caller. Exposed as a second
     // property on the result rather than a changed return type, so the content
     // string the shadow path and every existing caller expect is unchanged.
-    const content = (producer as (props: unknown, host: undefined) => unknown).call(
+    const content = (producer as (props: unknown, host: unknown) => unknown).call(
       undefined,
       resolved,
-      undefined,
+      // The producer's host record: today it carries only the nested-host
+      // expander (the light lane has no bindings channel). Absent expander →
+      // `nestedHost` returns the caller's literal bytes.
+      nestedHost === undefined ? undefined : { [NESTED_HOST_PROPERTY]: nestedHost },
     );
     const hostAttributes = (seeded as Record<string, unknown>)[GENERATED_HOST_ATTRIBUTES] as
       | readonly (readonly [string, string])[]
       | undefined;
     // The declared rows whose ONLY host wire is the JSON seed — the seeder's own
     // verdict, read off the record beside the pairs rather than re-derived. A row
-    // with no attribute channel has exactly ONE host wire (that seed); the
-    // descriptor refuses an attribute for it and `observedAttributes` never
-    // observes one, so a caller pair naming it is not a second spelling of the
-    // row: it is a raw value the light writer's normalizer would `String()`,
-    // turning an array into `[object Object],…`. The light host writer drops such
-    // a pair on both sides (the seeded list still carries the caller's verbatim
-    // pair for these rows); the value reaches the claim on `data-oe-prop-seed`
-    // alone. A row the seed does NOT carry stays listed nowhere and keeps its
-    // bytes, so this cannot silently discard a value.
+    // with no attribute channel (a JSON-seedable non-primitive, or since the
+    // 2026-11-23 ADR-0181 A5 amendment a property-only primitive) has exactly ONE
+    // host wire (that seed); the descriptor refuses an attribute for it and
+    // `observedAttributes` never observes one, so a caller pair naming it is not a
+    // second spelling of the row: it is a raw value the light writer's normalizer
+    // would `String()`, turning an array into `[object Object],…`. The light host
+    // writer drops such a pair on both sides (the seeded list still carries the
+    // caller's verbatim pair for these rows); the value reaches the claim on
+    // `data-oe-prop-seed` alone. A row the seed does NOT carry stays listed
+    // nowhere and keeps its bytes, so this cannot silently discard a value.
     const seedRows = ((seeded as Record<string, unknown>)[GENERATED_PROP_SEED_ROWS] ??
       []) as readonly string[];
     return { content, hostAttributes, seedRows };
@@ -745,6 +850,44 @@ export interface GeneratedElementDescriptor<P extends object = Record<string, un
    */
   readonly formAssociated?: boolean;
   readonly properties?: readonly GeneratedElementProperty[];
+  /**
+   * A CLIENT-ONLY island's declared stylesheets, as the sheet OBJECTS its
+   * emitted `.css` imports resolve to (2026-11-20 client style-adoption slice).
+   *
+   * The compiler emits this row only for a CLIENT-ONLY island (`ssr: false`, or
+   * the `hydrate: 'only'` coercion): such an island has no server render, so no
+   * marked `<link>` can deliver its sheet and the browser creates the root. The
+   * shell adopts these sheets into the root it created (`rootCreatedByShell`) —
+   * or, for a light root, into the tree the element is in — through the class
+   * lane's ONE `CompiledStyleScope`, and removes them again on disconnect so a
+   * reconnect re-arms exactly one adoption.
+   *
+   * An SSR/DSD island never carries this row: its sheet IS the `<link>` inside
+   * its template, and `sheetDeliveredByLink()` keeps that single delivery.
+   *
+   * Every entry must be a real sheet object (`replaceSync` callable). A string
+   * — what a build that failed to intercept the import would hand over — fails
+   * descriptor normalization with a coded build-phase error instead of
+   * rendering the element silently unstyled.
+   */
+  readonly styles?: readonly StyleSheetLike[];
+  /**
+   * DEV-ONLY live sheets for an SSR/DSD island (owner decision, 2026-11-22).
+   *
+   * `styles` above is deliberately absent for an SSR island: its sheet IS the
+   * marked `<link>` in its template, and `sheetDeliveredByLink()` keeps that one
+   * delivery. But dev needs something a `<link>` cannot give it — HMR. A live
+   * `CSSStyleSheet` held on `globalThis` is re-filled IN PLACE when the sheet
+   * re-evaluates, so a CSS-only edit updates computed styles with no reload and no
+   * flicker, and every root already holding that object re-renders. Replacing a
+   * `<link>` href would re-parse and rebuild instead.
+   *
+   * So the two deliveries differ ON PURPOSE: build is one asset, one delivery; dev
+   * is one live object, updated in place. A field rather than a mode flag keeps the
+   * difference visible at the adoption site, and it is never emitted by the
+   * compiler — the dev client entry injects it at runtime.
+   */
+  devLiveStyles?: readonly StyleSheetLike[];
   /**
    * The light-root SSR producer the compiler emits as `<Name>__ssr()`: a
    * parameterless function returning the content HTML the mount would build.
@@ -873,6 +1016,18 @@ interface NormalizedDescriptor {
   readonly form: FormMapping | null;
   readonly properties: readonly NormalizedProperty[];
   readonly byAttribute: ReadonlyMap<string, NormalizedProperty>;
+  /**
+   * The client-only island's adopted sheets (see
+   * {@link GeneratedElementDescriptor.styles}). Always an array; empty for every
+   * SSR/DSD descriptor.
+   */
+  readonly styles: readonly StyleSheetLike[];
+  /**
+   * DEV-ONLY live sheets, carried through normalization untouched (see
+   * {@link GeneratedElementDescriptor.devLiveStyles}). Never emitted by the
+   * compiler; the dev client entry injects it.
+   */
+  readonly devLiveStyles?: readonly StyleSheetLike[];
   readonly createRecipe: (
     owner: LifetimeScope,
     host: GeneratedElementHost<Record<string, unknown>>,
@@ -894,8 +1049,18 @@ interface FormRuntime {
 
 interface ElementState {
   readonly descriptor: NormalizedDescriptor;
-  readonly values: Map<string, unknown>;
+  /**
+   * The ONE props record (ADR-0183 D-5): the M04 tracked-props primitive. Its
+   * getters read one version signal, so a read inside an effect tracks; the
+   * shell keeps only its element-specific write paths and no second record.
+   */
+  readonly tracked: TrackedProps<Record<string, unknown>>;
   readonly props: Readonly<Record<string, unknown>>;
+  /**
+   * The props primitive's ONE invalidation channel, exposed under the emitted
+   * ABI's existing name so generated modules need no byte change. The
+   * hand-written counter that used to back this name is deleted (not aliased).
+   */
   readonly propsChanged: WritableSignal<number>;
   /**
    * The element/island-lifetime setup scope (LC-0). Created on the first
@@ -937,6 +1102,15 @@ interface ElementState {
    * server-rendered content and is claimed on the first connect.
    */
   rootCreatedByShell: boolean;
+  /**
+   * The ONE element-lifetime style owner for a client-only island's declared
+   * sheets (2026-11-20). It is the class lane's `CompiledStyleScope`: adoption,
+   * readiness reporting and the shadow-root disconnect removal all live there,
+   * so the generated lane has no second style sink. A descriptor with no
+   * `styles` never connects it, so the pre-slice elements allocate it and do
+   * nothing else.
+   */
+  readonly styleScope: CompiledStyleScope;
   /**
    * The ONE element-lifetime ElementInternals record: closed-root discovery and
    * form association share it. Null-safe until a lazy attach needs it.
@@ -1299,6 +1473,34 @@ function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Normalized
   if (descriptor.formAssociated !== undefined && typeof descriptor.formAssociated !== 'boolean') {
     descriptorError('formAssociated must be a boolean when present');
   }
+  // A client-only island's sheets arrive as EMITTED MODULE IMPORTS (2026-11-20).
+  // Validate the OBJECT here, before any DOM work: a build that failed to
+  // intercept the `.css` import hands over a string (or nothing), and adopting
+  // that would render the element silently unstyled. One coded descriptor error
+  // is the fail-closed half of that contract; the compiler's
+  // CLIENT_STYLES_UNWIRED refusal is the build-time half.
+  //
+  // Never read `cssRules`: a sheet whose `replace()` is still in flight throws
+  // on that read in Firefox (the class lane's KR-2/Q1-B race), and adoption
+  // needs no rule read at all.
+  const declaredStyles = descriptor.styles;
+  if (declaredStyles !== undefined && !Array.isArray(declaredStyles)) {
+    descriptorError('styles must be an array of stylesheet objects when present');
+  }
+  const styles: readonly StyleSheetLike[] = declaredStyles ?? [];
+  for (const [index, sheet] of styles.entries()) {
+    if (
+      typeof sheet !== 'object' ||
+      sheet === null ||
+      typeof (sheet as { replaceSync?: unknown }).replaceSync !== 'function'
+    ) {
+      descriptorError(
+        `styles[${index}] is not a stylesheet object: a client-only island's declared sheet must ` +
+          'arrive as the module-graph import the build intercepts, never as a string or a missing ' +
+          'binding (refusing instead of rendering the element unstyled)',
+      );
+    }
+  }
   const formAssociated = descriptor.formAssociated === true;
 
   const properties = (descriptor.properties ?? []).map(normalizeProperty);
@@ -1371,6 +1573,8 @@ function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Normalized
     form,
     properties,
     byAttribute,
+    styles,
+    ...(descriptor.devLiveStyles === undefined ? {} : { devLiveStyles: descriptor.devLiveStyles }),
     createRecipe: descriptor.createRecipe as NormalizedDescriptor['createRecipe'],
     ...(descriptor.ssrProducer === undefined ? {} : { ssrProducer: descriptor.ssrProducer }),
     ...(descriptor.createInstance === undefined
@@ -1449,22 +1653,16 @@ export function resolveGeneratedElementProps<P extends object = Record<string, u
 }
 
 function createState(descriptor: NormalizedDescriptor): ElementState {
-  const values = new Map<string, unknown>();
-  const props: Record<string, unknown> = Object.create(null);
+  const initial: Record<string, unknown> = Object.create(null);
   for (const property of descriptor.properties) {
-    values.set(property.name, materialiseDefault(property));
-    Object.defineProperty(props, property.name, {
-      enumerable: true,
-      configurable: false,
-      get: () => values.get(property.name),
-    });
+    initial[property.name] = materialiseDefault(property);
   }
-  Object.freeze(props);
+  const tracked = createTrackedProps(initial);
   return {
     descriptor,
-    values,
-    props,
-    propsChanged: signal(0),
+    tracked,
+    props: tracked.props,
+    propsChanged: tracked.version,
     instance: null,
     connection: null,
     projection: null,
@@ -1473,6 +1671,7 @@ function createState(descriptor: NormalizedDescriptor): ElementState {
     root: null,
     rootKind: null,
     rootCreatedByShell: false,
+    styleScope: new CompiledStyleScope(),
     internalsRecord: { internals: null },
     form:
       descriptor.form === null
@@ -1501,15 +1700,9 @@ function stateOf(element: HTMLElement): ElementState {
   return state;
 }
 
-function bumpProps(state: ElementState): void {
-  state.propsChanged.value += 1;
-}
-
-/** Write one value into the props record's backing map, without reflection. */
+/** Write one value through the ONE props primitive, without reflection. */
 function writeValue(state: ElementState, property: NormalizedProperty, value: unknown): boolean {
-  if (Object.is(state.values.get(property.name), value)) return false;
-  state.values.set(property.name, value);
-  return true;
+  return state.tracked.set(property.name, value);
 }
 
 function reflectProperty(
@@ -1538,7 +1731,6 @@ function setProperty(
 ): void {
   if (!writeValue(state, property, next)) return;
   if (reflect) reflectProperty(element, state, property, next);
-  bumpProps(state);
   syncFormProperty(state, property);
   notifyPropertyChange(element, state, property.name);
   // `16b-CTX`: a declared-row commit is this runtime's ONE provider-change
@@ -1567,7 +1759,7 @@ function notifyPropertyChange(element: HTMLElement, state: ElementState, name: s
     host: element,
     signal,
     name,
-    value: state.values.get(name),
+    value: state.tracked.read(name),
     get states(): CustomStateSet {
       return ensureFormInternals(element, state).states;
     },
@@ -1685,28 +1877,34 @@ function reconcilePreUpgradeProperties(element: HTMLElement, state: ElementState
 }
 
 /**
- * Restore the non-primitive declared rows the SSR producer serialized into
- * {@link GENERATED_PROP_SEED} (ADR-0182 D-18c / M11-3).
+ * Restore the declared rows the SSR producer serialized into
+ * {@link GENERATED_PROP_SEED}: JSON-seedable non-primitives (ADR-0182 D-18c /
+ * M11-3) and, since the 2026-11-23 ADR-0181 A5 amendment, property-only
+ * primitives — the rows with no attribute wire at all.
  *
  * The attribute is the SHELL's slot, not an author attribute: it is written by
- * the emitted `__ssrHost` and removed here, so the same markup re-claims
- * identically (the claim's static-seed check excludes it, and an absent seed
- * leaves every row at its declared default exactly as before).
+ * the emitted `__ssrHost` / light-root producer and removed here, so the same
+ * markup re-claims identically (the claim's static-seed check excludes it, and
+ * an absent seed leaves every row at its declared default exactly as before).
+ *
+ * This runs from `connectedCallback` BEFORE the recipe is created (the same
+ * seam the claim body reads its props from), so the resolved props a page root's
+ * setup reads are the values the server rendered with, not the declared
+ * defaults.
  *
  * Fail closed on anything the descriptor cannot explain: an unparseable
- * payload, a non-object, an unknown row name, or a row the descriptor does not
- * declare as JSON-seedable. Silently keeping the default would render a page
- * whose visible content and upgraded state disagree — the defect this channel
- * exists to remove — so it throws the shell's own seed-mismatch identity
- * ({@link PROP_SEED_MISMATCH}) instead of keeping the default.
+ * payload, a non-object, an unknown row name, or a row whose type has no JSON
+ * wire (an attribute-backed primitive, a `trustedHtml` brand). Silently keeping
+ * the default would render a page whose visible content and upgraded state
+ * disagree — the defect this channel exists to remove — so it throws the
+ * shell's own seed-mismatch identity ({@link PROP_SEED_MISMATCH}) instead of
+ * keeping the default.
  */
 function applyGeneratedPropSeed(element: HTMLElement, state: ElementState): void {
-  // A descriptor with no JSON-seedable row can never carry this attribute, so
-  // the shell must not even ASK for it: the constructor/connect path is
+  // A descriptor with no row the seed can carry can never hold this attribute,
+  // so the shell must not even ASK for it: the constructor/connect path is
   // contractually attribute-read-free unless a declared row needs one.
-  if (
-    !state.descriptor.properties.some((property) => JSON_SEEDABLE_PROPERTY_TYPES.has(property.type))
-  ) {
+  if (!state.descriptor.properties.some(isJsonPropertySeedRow)) {
     return;
   }
   const raw = element.getAttribute(GENERATED_PROP_SEED);
@@ -1734,7 +1932,7 @@ function applyGeneratedPropSeed(element: HTMLElement, state: ElementState): void
   const byName = new Map(state.descriptor.properties.map((property) => [property.name, property]));
   for (const [name, value] of Object.entries(parsed as Record<string, unknown>)) {
     const property = byName.get(name);
-    if (property === undefined || !JSON_SEEDABLE_PROPERTY_TYPES.has(property.type)) {
+    if (property === undefined || !isJsonPropertySeedRow(property)) {
       throw frameworkError(
         PROP_SEED_MISMATCH,
         `[generated-element] ${where} the prop seed names "${name}", which is not a ` +
@@ -1742,6 +1940,11 @@ function applyGeneratedPropSeed(element: HTMLElement, state: ElementState): void
         { phase: 'csr' },
       );
     }
+    // The SAME canonical write guard a property assignment goes through, so a
+    // primitive row lands as its declared type (and an `array`/`object` row
+    // keeps the shell's shape refusal). The one difference from a client write
+    // is the channel: this write happens before setup and does not reflect
+    // (these rows have no attribute to reflect to).
     writeValue(state, property, coercePropertyWrite(property, value));
   }
   // The seed is consumed once: leaving it would make a later re-claim re-apply a
@@ -1762,7 +1965,7 @@ function restoreReflectedDefault(
   property: NormalizedProperty,
 ): void {
   if (!property.reflect || property.attribute === null || property.conversion === undefined) return;
-  const serialized = convertToAttribute(property.conversion, state.values.get(property.name));
+  const serialized = convertToAttribute(property.conversion, state.tracked.read(property.name));
   if (serialized === null) return;
   if (element.getAttribute(property.attribute) === serialized) return;
   state.reflecting = true;
@@ -2299,18 +2502,18 @@ function attachForm(element: HTMLElement, state: ElementState): void {
 function formValueOf(state: ElementState): string {
   const form = state.form;
   if (form === null || form.mapping.value === null) return '';
-  const value = state.values.get(form.mapping.value.name);
+  const value = state.tracked.read(form.mapping.value.name);
   return typeof value === 'string' ? value : '';
 }
 
 function formRequiredOf(state: ElementState): boolean {
   const required = state.form?.mapping.required;
-  return required === undefined ? false : state.values.get(required.name) === true;
+  return required === undefined ? false : state.tracked.read(required.name) === true;
 }
 
 function formAuthorDisabledOf(state: ElementState): boolean {
   const disabled = state.form?.mapping.disabled;
-  return disabled === undefined ? false : state.values.get(disabled.name) === true;
+  return disabled === undefined ? false : state.tracked.read(disabled.name) === true;
 }
 
 function syncFormValue(state: ElementState): void {
@@ -2472,6 +2675,47 @@ function rootFor(element: HTMLElement, state: ElementState): HTMLElement | Shado
 }
 
 /**
+ * Adopt a CLIENT-ONLY island's declared sheets into the root this element owns
+ * (2026-11-20 client style-adoption slice).
+ *
+ * Only a shell-created shadow root or a light root is a target here. An adopted
+ * DSD root already carries the compiler's canonical marked `<link>` INSIDE its
+ * template — that template is the sheet's delivery, and `sheetDeliveredByLink`
+ * exists to keep a second constructable copy off it. The compiler never emits a
+ * descriptor `styles` row for an SSR/DSD island, so this gate is the shell's own
+ * statement of the same one-delivery rule, not a second policy.
+ *
+ * The scope is the class lane's `CompiledStyleScope`; `connect` is idempotent
+ * (a sheet the root already adopted is not added twice), so a reconnect re-arms
+ * the same root without a bookkeeping copy. Disconnect removes a shadow root's
+ * adopted sheets only — a document's are shared per component type and stay.
+ */
+function adoptClientStyles(
+  state: ElementState,
+  root: HTMLElement | ShadowRoot,
+  constructor: unknown,
+): void {
+  // A dev live sheet is adopted even into an ADOPTED (DSD) root: that is the whole
+  // point of the field — dev must re-fill the same sheet object in place for HMR,
+  // which a `<link>` delivered sheet cannot do. Build never sets it, so the
+  // link-only rule is unchanged there.
+  //
+  // It is read off the CONSTRUCTOR, not the descriptor: the descriptor is a
+  // module-local constant the dev entry cannot reach, while the class it defines is
+  // a global the entry can annotate right after `customElements.define`.
+  const devLive = (constructor as { __oeDevLiveStyles?: readonly StyleSheetLike[] } | undefined)
+    ?.__oeDevLiveStyles;
+  if (devLive !== undefined && devLive.length > 0) {
+    state.styleScope.connect(root, [...devLive]);
+    return;
+  }
+  const styles = state.descriptor.styles;
+  if (styles.length === 0) return;
+  if (state.rootKind !== 'light' && !state.rootCreatedByShell) return;
+  state.styleScope.connect(root, [...styles]);
+}
+
+/**
  * Build the element class for one descriptor without registering it. Exposed so
  * the M09-1 emitter can decide its registration point; consumers normally use
  * {@linkcode defineGeneratedElement}.
@@ -2499,6 +2743,11 @@ export function createGeneratedElementClass<P extends object = Record<string, un
     connectedCallback(): void {
       const state = stateOf(this);
       if (state.projection !== null || state.connecting) return;
+      // The projected-region guard needs no connection resources and runs
+      // before the shell or a recipe can observe this cross-owner claim.
+      if (typeof this.hasAttribute === 'function') {
+        isExpandedLightRootHost(this);
+      }
       // Join the document-theme broadcast before any paint decision: the shared
       // component sheet carries `:root, :host` light defaults, and its dark
       // overrides key off `[data-theme]` on the host. Without the mirror a
@@ -2511,10 +2760,12 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       if (state.form !== null) attachForm(this, state);
       // Must precede createRecipe: the recipe reads host.props on creation.
       reconcilePreUpgradeProperties(this, state);
-      // D-18c / M11-3: restore the non-primitive rows the server serialized.
-      // This runs BEFORE the recipe so setup reads the same values the server
-      // rendered with (a row supplied at SSR time would otherwise fall back to
-      // its declared default on the client).
+      // D-18c / M11-3 (extended 2026-11-23, ADR-0181 A5 amendment): restore the
+      // rows only the server's JSON seed carries — the non-primitive rows, and
+      // now the property-only primitives too. This runs BEFORE the recipe so
+      // setup reads the same values the server rendered with (a row supplied at
+      // SSR time would otherwise fall back to its declared default on the
+      // client, silently wiping the server content of a page root).
       //
       // DELIBERATE PLACEMENT (C-10): this call sits OUTSIDE the `16b-EB` try
       // below, so a malformed/unknown seed throws before the boundary and its
@@ -2543,6 +2794,12 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       let connection: LifetimeScope | null = null;
       try {
         const parent = rootFor(this, state);
+        // 2026-11-20 client style adoption: a client-only island's shadow root
+        // comes into existence only now, so this is the first moment its
+        // declared sheets have a target. The scope is element-lifetime and
+        // idempotent; the catch below releases it on a failed connect and
+        // `disconnectedCallback` removes a shadow root's adoption.
+        adoptClientStyles(state, parent, this.constructor);
         // Publish the reconciled initial value/validity/state once the root (and
         // the shared internals record used by closed discovery) is resolved.
         syncFormAll(state);
@@ -2582,6 +2839,24 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         state.projection = projection;
         state.ownedNodes = projection.nodes;
         state.regionState = 'present';
+        // Pre-hydration replay at the SAME point the class facade does it: after
+        // the region exists and its handlers are installed. A click that landed
+        // before an idle generated island hydrated was captured by the
+        // document-level capture the generated entry installs; replaying here is
+        // what makes it reach the live tree exactly once. The chained hook IS the
+        // registry's own function object, so this is one implementation, not a
+        // second one.
+        //
+        // FIRST activation only (`!hadInstance`), which is the class facade's
+        // own `!activation.resumed` rule. A reconnect disproves nothing about
+        // timing, so it must not replay: it re-arms listeners over DOM that is
+        // already live, and this element's own generated activation may have won
+        // the race against the entry's element-runtime load, in which case the
+        // reconnect IS the registry's first replay pass — a click already handled
+        // by the live handler is then delivered a second time (measured: a 422
+        // morph's moved island incremented one extra time). A first connect is
+        // the only pass whose capture bucket is still undelivered.
+        if (!hadInstance) replayPreUpgradeCaptures(this);
       } catch (error) {
         state.connection = null;
         state.projection = null;
@@ -2611,6 +2886,10 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         // failed re-claim borrowed no new DOM and must not adopt the host's
         // children. The recipe/projection rolled back its own child scope.
         const release: Array<() => void> = [
+          // A failed attempt must not leave a client-only island's sheets
+          // adopted on a root whose connect never completed: the retry
+          // re-adopts through the same element-lifetime scope.
+          () => state.styleScope.disconnect(),
           // `16b-CTX`: a failed attempt leaves no published provider and no
           // consumer bridge behind. Disconnect (not dispose) keeps the scope and
           // its intents, so a retry republishes them on the next connect.
@@ -2649,6 +2928,10 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         throw error;
       } finally {
         state.connecting = false;
+        // Activation decision — success OR failure, the class facade's rule: this
+        // element's captured records never outlive its decision. Records owned by
+        // still-pending islands stay in the shared pool for their own upgrade.
+        releasePreUpgradeCapturesFor(this);
       }
     }
 
@@ -2671,6 +2954,11 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       // disconnected element neither answers nor observes. The scope and its
       // intents survive for the reconnect.
       captureCleanupFailures([
+        // 2026-11-20: a disconnected generated host keeps its DOM (LC-0), and a
+        // client-only island's shadow root keeps its sheets the same way — the
+        // scope removes them here and the reconnect adopts them again, so no
+        // second copy accumulates.
+        () => state.styleScope.disconnect(),
         () => state.context?.disconnect(),
         () => projection?.dispose(false),
         () => connection?.dispose(false),
@@ -2749,6 +3037,10 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         // the FIRST error, so a projection/connection teardown error still wins,
         // while a release error wins only over a later `instance.dispose` error.
         captureCleanupFailures([
+          // The client-only island's style owner dies with the element: a later
+          // connect after `dispose` re-runs setup and re-arms adoption from the
+          // descriptor's sheets.
+          () => state.styleScope.disconnect(),
           () => projection?.dispose(false),
           () => connection?.dispose(false),
           () => {
@@ -2770,6 +3062,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       // content is still there and the next connect must still claim it.
       if (hadOwnedRegion) state.regionState = 'absent';
       captureCleanupFailures([
+        () => state.styleScope.disconnect(),
         () => projection?.dispose(true),
         () => state.context?.dispose(),
         // The projection's range cleanup normally removes the region; remove
@@ -2802,6 +3095,14 @@ export function createGeneratedElementClass<P extends object = Record<string, un
     configurable: true,
     value: observedAttributes,
   });
+  // `renderToString(constructor)` needs the descriptor's authoritative tag to
+  // serialize a generated light root. The class name is compiler-minted and
+  // cannot stand in for the registered custom-element name.
+  Object.defineProperty(GeneratedElementShell, '__oeTag', {
+    configurable: false,
+    enumerable: false,
+    value: descriptor.tag,
+  });
 
   if (normalized.delegatesFocus) {
     // The class lane's emitted static carries this platform fact; a generated
@@ -2827,7 +3128,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       configurable: true,
       enumerable: false,
       get(this: HTMLElement): unknown {
-        return stateOf(this).values.get(property.name);
+        return stateOf(this).tracked.read(property.name);
       },
       set(this: HTMLElement, value: unknown): void {
         const state = stateOf(this);

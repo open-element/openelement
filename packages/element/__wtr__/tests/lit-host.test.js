@@ -6,7 +6,7 @@
  */
 import { assert } from 'chai';
 import { html, LitElement } from 'lit';
-import { ProgramCounter } from '../generated/oe-program-counter.ts';
+import { ProgramCounterElement } from '../generated/oe-program-counter.ts';
 
 class WtrLitHost extends LitElement {
   static properties = { message: { type: String } };
@@ -21,7 +21,7 @@ class WtrLitHost extends LitElement {
   }
 }
 customElements.define('wtr-lit-host', WtrLitHost);
-customElements.define('oe-program-counter', ProgramCounter);
+customElements.define('oe-program-counter', ProgramCounterElement);
 await Promise.all([
   customElements.whenDefined('wtr-lit-host'),
   customElements.whenDefined('oe-program-counter'),

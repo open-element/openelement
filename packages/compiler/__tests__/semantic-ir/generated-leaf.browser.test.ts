@@ -124,6 +124,7 @@ async function buildRuntimeBundle(): Promise<string> {
       entry,
       [
         `export { createRecipe, insertRecipe } from ${JSON.stringify(`${REPO_ROOT}packages/element/src/internal/compiled/runtime/recipe.ts`)};`,
+        `export { reconcileEachEntries } from ${JSON.stringify(`${REPO_ROOT}packages/element/src/internal/compiled/runtime/each-reconcile.ts`)};`,
         `export { bindSignalWrites, runUntracked } from ${JSON.stringify(`${REPO_ROOT}packages/element/src/internal/compiled/runtime/bindings.ts`)};`,
         `export { runtimeProbe } from ${JSON.stringify(`${REPO_ROOT}packages/element/src/internal/compiled/runtime/observability.ts`)};`,
         `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(`${REPO_ROOT}packages/element/src/internal/compiled/runtime/values.ts`)};`,

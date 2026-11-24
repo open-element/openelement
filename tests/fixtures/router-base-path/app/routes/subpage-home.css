@@ -1,0 +1,10 @@
+/* The page's own rule set (F16). A server function page owns no host element, so
+   these are delivered UNSCOPED into the document sheet and reach the markup as
+   plain document rules. */
+.subpage-shell {
+  display: block;
+}
+
+.subpage-document {
+  color: rgb(20, 40, 60);
+}

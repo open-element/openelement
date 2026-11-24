@@ -96,14 +96,14 @@ export interface LocalIslandMeta {
   /** Required when hydrate is media; kept as build metadata, not runtime. */
   media?: string;
   /**
-   * The island's declared stylesheets (`IslandConfig.styles`, GH issue #1800),
-   * admitted only for a light-root generated-element island. The build-time
-   * record is the scanned metadata's copy of the declaration; the style-edge
-   * plan reads it through `island-style-declarations.ts`, which this same scan
-   * writes. It is build metadata only: the public `IslandDecl` protocol shape
-   * is unchanged and no renderer consumes it yet (asset + client asset manifest
-   * is this slice's delivery; document application is the Alpha17 adoption
-   * slice).
+   * The island's declared stylesheets (`IslandConfig.styles`, GH issue #1800).
+   * The build-time record is the scanned metadata's copy of the declaration;
+   * the style-edge plan reads it through `island-style-declarations.ts`, which
+   * this same scan writes. It is build metadata: the public `IslandDecl`
+   * protocol shape is unchanged and no renderer consumes this list — the
+   * generated element's delivery is the emitted asset plus, per root/delivery
+   * shape, the DSD marked `<link>`, the document head entry, or the client
+   * module-graph import the shell adopts (2026-11-20).
    */
   styles?: string[];
   /**
@@ -111,7 +111,7 @@ export interface LocalIslandMeta {
    * default. Absent when the author pinned none: the compiled program's own
    * root decision stands, and the generated shell applies its `light` default.
    */
-  root?: 'light' | 'shadow';
+  root?: 'light' | 'shadow' | 'closed';
   /**
    * The tag this island's sidecar declares EXPLICITLY (`openElement.tag`), or
    * undefined when it declares none. The generated-element site resolver reads
@@ -317,7 +317,7 @@ export function admittedTailwindDeclarations(
  */
 export interface PackageIslandStyleFact {
   readonly tagName: string;
-  readonly root: 'light' | 'shadow';
+  readonly root: 'light' | 'shadow' | 'closed';
   readonly specifiers: readonly string[];
 }
 
@@ -338,7 +338,14 @@ export function packageIslandStyleDeclarations(
       }
       facts.push({
         tagName: declaration.tagName,
-        root: declaration.openElement?.root === 'shadow' ? 'shadow' : 'light',
+        // Three states, not two (F16): an encapsulated component's declaration
+        // must reach the compiler as `closed`, never as the open default.
+        root:
+          declaration.openElement?.root === 'closed'
+            ? 'closed'
+            : declaration.openElement?.root === 'shadow'
+              ? 'shadow'
+              : 'light',
         specifiers: [...check.styles],
       });
     }
@@ -419,7 +426,7 @@ export function attachPackageIslandHostIdentities(
   declarations: readonly IslandDecl[],
   packageManifests: readonly OpenElementPackageManifest[],
 ): IslandDecl[] {
-  const declaredRoots = new Map<string, 'light' | 'shadow' | undefined>();
+  const declaredRoots = new Map<string, 'light' | 'shadow' | 'closed' | undefined>();
   for (const pkg of packageManifests) {
     for (const declaration of pkg.declarations) {
       declaredRoots.set(
@@ -574,7 +581,7 @@ function staticOpenElementError(message: string): OpenElementError {
 }
 
 /** Static island metadata literal read from defineIslandConfig(). */
-type StaticIslandConfig = Pick<
+export type StaticIslandConfig = Pick<
   LocalIslandMeta,
   | 'ssr'
   | 'dsd'
@@ -1047,7 +1054,12 @@ function parseStaticIslandConfig(
       // fails closed on anything else (P8: one sidecar, two readers, one
       // accepted set).
       const value = literalText(raw, 'openElement.root');
-      if (value !== 'light' && value !== 'shadow') {
+      // THREE values (F16). This reader and the runtime authoring surface are the
+      // same fact's two readers (P8), so they must accept the same set: the
+      // authoring face gained `closed` and this one kept refusing it, which made
+      // the scanner read a valid sidecar as an invalid one — the module was then
+      // invisible to every discovery pass while the transform compiled it fine.
+      if (value !== 'light' && value !== 'shadow' && value !== 'closed') {
         throw staticOpenElementError(`openElement.root has unsupported value "${value}"`);
       }
       meta.root = value;
@@ -1239,24 +1251,30 @@ const ISLAND_STYLES_LANE_UNSUPPORTED_CODE = IslandErrorCode.STYLE_LANE_UNSUPPORT
  * #1800) on the lane/root the compiler identity resolved for it, or fail
  * closed.
  *
- * Carrier matrix for this slice (the Alpha17 generated-island style adoption is
- * the owner of the missing delivery surfaces, GH issue #1800):
+ * Carrier matrix (the 2026-11-20 client style-adoption slice completed the last
+ * gap; GH issue #1800):
  *
  * - `light-no-producer` (a light-root generated-element island): admitted. The
  *   list is recorded in the build-time declaration carrier
  *   (`island-style-declarations.ts`), which the client build's style-edge plan
  *   turns into the SAME content-addressed `.css` asset and client asset
- *   manifest entry the class lane's sheets get. The document-level application
- *   of that asset is the Alpha17 adoption slice, not this one.
+ *   manifest entry the class lane's sheets get; the render path reports it to
+ *   the document sink.
  * - `producer` (a shadow-root generated-element island whose leaf emitted the
  *   compiled host producer): admitted with root `shadow`. The carried sheet is
  *   declared INSIDE the host's DSD template as the canonical marked `<link>`
  *   prefix (M09-2e / #1803); a sheet the client build did not emit fails the
- *   build closed, so the asset and the declared link cannot disagree.
- * - `missing-producer` (a shadow-root island with no compiled host producer):
- *   refused. There is no DSD template to declare the sheet in and no client
- *   adoption channel yet, so shipping the asset would be a silent loss dressed
- *   up as delivery.
+ *   build closed, so the asset and the declared link cannot disagree. When the
+ *   island is CLIENT-ONLY the template is never rendered, and the same
+ *   declaration is delivered by the compiler's module-graph import the shell
+ *   adopts.
+ * - `missing-producer`: a shadow-root island with no compiled host producer.
+ *   CLIENT-ONLY: admitted (root `shadow`). There is no DSD template, but the
+ *   browser creates the root, so the compiler's emitted import plus the shell's
+ *   adoption is a complete delivery — refusing here would reject a sheet the
+ *   build can actually deliver.
+ *   Otherwise: refused. A server-rendered shadow island needs the producer's
+ *   template to declare the sheet in, and no client import exists for it.
  * - `lane-declined` (the module is not a generated-element island: a class
  *   island or a file outside the lane's admission): refused. A class island
  *   owns the `static styles` + `.css` import channel; this field would be
@@ -1275,6 +1293,13 @@ function admitIslandStyles(input: {
   readonly absoluteModuleId: string;
   readonly identity: GeneratedElementHostIdentity;
   readonly styles: readonly string[];
+  /**
+   * The island's RESOLVED client-only delivery (`ssr === false` after the
+   * scanner's `resolveIslandSsrDsd` coercion). The compiler's sidecar read
+   * derives the same fact from the same authored statement, so the import it
+   * emits and this admission cannot disagree.
+   */
+  readonly clientOnly: boolean;
 }): string[] {
   switch (input.identity.kind) {
     case 'light-no-producer':
@@ -1302,6 +1327,21 @@ function admitIslandStyles(input: {
       });
       return [...input.styles];
     case 'missing-producer':
+      // 2026-11-20: a CLIENT-ONLY island has no template because it has no
+      // server render at all — the browser creates the root and the compiler's
+      // emitted `.css` import plus the shell's adoption is a complete delivery.
+      // Refusing here would reject a sheet the build can actually deliver.
+      if (input.clientOnly) {
+        registerIslandStyleDeclaration({
+          tagName: input.tagName,
+          root: 'shadow',
+          moduleId: input.absoluteModuleId,
+          filePath: input.filePath,
+          islandsDir: normalizeSeparators(input.islandsDir),
+          specifiers: input.styles,
+        });
+        return [...input.styles];
+      }
       throw reportScanFatal(
         buildError(
           ISLAND_STYLES_SHADOW_UNWIRED_CODE,
@@ -1309,8 +1349,9 @@ function admitIslandStyles(input: {
             'shadow-root generated element whose leaf emitted no compiled DSD host producer, ' +
             'so there is no template the canonical style link could be declared in. The ' +
             'declared sheets would be silently lost, so the build fails closed: give the ' +
-            "component a claimable/SSR-capable shadow shape, set root: 'light', or remove " +
-            'styles (generated-island client style adoption is GH issue #1800, Alpha17).',
+            "component a claimable/SSR-capable shadow shape, set root: 'light', or remove styles. " +
+            'A client-only island (ssr: false) does not need a producer: it may declare styles ' +
+            'and the browser adopts the emitted import (GH issue #1800).',
         ),
       );
     case 'lane-refused':
@@ -1328,7 +1369,7 @@ function admitIslandStyles(input: {
             'imports arrayed in `static styles`, and this field would be silently dropped, so the ' +
             "build fails closed: move the sheets to the component's static styles, or author the " +
             'island as a generated (default-exported function) island. Generated-island style ' +
-            'adoption is GH issue #1800 (Alpha17).',
+            'adoption is GH issue #1800.',
         ),
       );
   }
@@ -1406,6 +1447,8 @@ export async function scanIslandMeta(
   resetIslandStyleDeclarations();
   // One resolver per scan, over the same root the island loop reads: the
   // generated host site fact is the transform's own admission identity.
+  // No routes dir: this scanner walks the ISLANDS directory, and an `.mdx` route is not
+  // one of its inputs — the build/dev resolvers answer that virtual id.
   const generatedElementSite = createGeneratedElementSiteResolver(normalizeSeparators(islandsDir));
 
   for (const filePath of islandFiles) {
@@ -1487,6 +1530,10 @@ export async function scanIslandMeta(
             absoluteModuleId,
             identity: generatedElementHost,
             styles: islandConfig.styles,
+            // The RESOLVED phase, not the raw `ssr` key: the scanner coerces
+            // `hydrate: 'only'` to client-only below, and the compiler's
+            // sidecar read applies the same resolution. One fact, two readers.
+            clientOnly: ssr === false,
           });
 
     meta[tagName] = {

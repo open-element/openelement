@@ -84,7 +84,7 @@ export type {
   ProjectedProps,
   RouteModule,
 } from './page-render.ts';
-export { createNativePageRenderer, resolveCompiledPageTag } from './renderer-runtime.ts';
+export { createNativePageRenderer } from './renderer-runtime.ts';
 export type {
   NativePageRendererDeps,
   PageSsrRenderer,
@@ -95,14 +95,12 @@ export type {
 export { createLayoutRuntime, createStatusHtml, localizeLayoutHref } from './document-runtime.ts';
 export type { LayoutRuntime, LayoutRuntimeDeps, StatusHtmlRenderer } from './document-runtime.ts';
 export {
-  createStreamPageShell,
   createStreamBody,
   createStreamRequestScope,
   STREAM_BROWSER_BOOTSTRAP,
   streamFields,
 } from './stream-runtime.ts';
 export type {
-  StreamPageShellConfig,
   StreamBodyConfig,
   StreamBodyFn,
   StreamBodyOptions,
@@ -115,10 +113,6 @@ export type {
 // the slimmed entry binds (app.ts, route-dispatch.ts, security.ts).
 export { createGeneratedApp } from './app.ts';
 export type { GeneratedApp, GeneratedAppConfig, GeneratedPageRuntime } from './app.ts';
-export {
-  assertCompiledStreamRoute,
-  createMethodNotAllowedResponder,
-  createPageHandlerTable,
-} from './route-dispatch.ts';
+export { createMethodNotAllowedResponder, createPageHandlerTable } from './route-dispatch.ts';
 export { DANGEROUS_KEYS, installSsrRegistryGuard } from './security.ts';
 export type { SsrRegistryGuard } from './security.ts';

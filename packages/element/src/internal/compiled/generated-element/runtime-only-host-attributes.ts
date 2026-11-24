@@ -7,8 +7,8 @@
  * WHY A SEPARATE LEAF: two consumers need exactly these names and neither may
  * import the other.
  *
- * - The generated-element shell WRITES them: its host seeder writes the JSON
- *   prop seed, the DSD producer marks light roots, and the document-theme
+ * - The generated-element shell writes the JSON prop seed; the SSR writers mark
+ *   light-root ownership and projected light children; the document-theme
  *   broadcaster mirrors the broadcast attribute on every connected host.
  * - `internal/compiled/runtime/hydrate.ts` must EXEMPT them from its
  *   "unexpected attribute" drift check: a class-lane parent can claim a nested
@@ -42,16 +42,21 @@ import { DATA_OE_LIGHT } from '@openelement/protocol/part-program';
 import { THEME_ATTRIBUTE } from '../../../open-element-theme.ts';
 
 /**
- * The host attribute carrying the JSON seed for NON-PRIMITIVE declared rows
- * (ADR-0182 D-18c / M11-3). A declared `array`/`object` row has no attribute
- * wire, so before this channel the server rendered the row's DEFAULT while a
- * supplied value existed only on the client — the content a visitor saw and
- * the state the component upgraded into were different facts.
+ * The host attribute carrying the JSON seed for declared rows with NO attribute
+ * wire: the non-primitive `array`/`object` rows (ADR-0182 D-18c / M11-3) and,
+ * since the 2026-11-23 ADR-0181 A5 amendment, the property-only primitives
+ * (`attribute: null`). A row in that family has no attribute name to carry it,
+ * so before this channel the server rendered a value while the claim re-read the
+ * declared default — the content a visitor saw and the state the component
+ * upgraded into were different facts (for a page root, the claim silently wiped
+ * the SSR content).
  *
  * Shape: `{"<rowName>": <json value>, …}`. Only JSON-encodable rows are
  * carried; `trustedHtml` is excluded on purpose (a brand cannot be
  * reconstructed from JSON, and promoting a plain string back to it would be a
- * raw-markup channel — D-18c records that as a separate decision).
+ * raw-markup channel — D-18c records that as a separate decision). An
+ * ATTRIBUTE-BACKED primitive is excluded too: its declared attribute pair
+ * already is the SSR→claim wire, and one row must not ride two wires.
  *
  * The shell parses the payload, validates every name against the descriptor's
  * JSON-seedable rows, and writes the values BEFORE setup. An unparseable
@@ -59,6 +64,13 @@ import { THEME_ATTRIBUTE } from '../../../open-element-theme.ts';
  * identity rather than silently keeping the default.
  */
 export const GENERATED_PROP_SEED = 'data-oe-prop-seed';
+
+/**
+ * SSR marker that caller-owned children were projected into a generated light
+ * root's slot anchors. The generated parent and child cannot both claim that
+ * region under the current ownership contract, so either upgrade fails closed.
+ */
+export const DATA_OE_LIGHT_PROJECTION = 'data-oe-light-projected';
 
 /**
  * The runtime-only host attributes as one owner fact. Members are the WRITERS'
@@ -71,9 +83,12 @@ export const GENERATED_PROP_SEED = 'data-oe-prop-seed';
  *   connected compiled host at that host's own connect;
  * - `GENERATED_PROP_SEED` — the JSON seed the shell's host seeder writes and
  *   its claim removes.
+ * - `DATA_OE_LIGHT_PROJECTION` — the SSR renderer marks a generated light host
+ *   whose slot anchors received caller-owned children; both claim sides guard
+ *   this unsupported cross-owner shape.
  *
- * The generated-element shell writes these; the compiled hydration executor
- * derives its exemption from this set. A writer that adds an attribute here
+ * The shell, SSR writers and theme broadcaster own these; the compiled
+ * hydration executor derives its exemption from this set. A writer that adds an attribute here
  * and a hydrator that consumes it are updated together because there is only
  * one list.
  */
@@ -81,4 +96,5 @@ export const GENERATED_RUNTIME_ONLY_ATTRIBUTES: ReadonlySet<string> = new Set([
   DATA_OE_LIGHT,
   THEME_ATTRIBUTE,
   GENERATED_PROP_SEED,
+  DATA_OE_LIGHT_PROJECTION,
 ]);

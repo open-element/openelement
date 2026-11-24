@@ -184,12 +184,15 @@ async function frameworkRootConsumer(tmp: string): Promise<void> {
   await writeFile(
     join(tmp, 'root.ts'),
     `import { createRequestContext, definePage } from '@openelement/router';
-import type { LoaderContext, OpenElementPageDescriptor } from '@openelement/router';
-import type { OpenElement } from '@openelement/element';
+import type {
+  FunctionPageComponent,
+  LoaderContext,
+  OpenElementFunctionPageDescriptor,
+} from '@openelement/router';
 const authoring: typeof definePage = definePage;
-const descriptor: OpenElementPageDescriptor | undefined = undefined;
-const elementCtor: typeof OpenElement | undefined = undefined;
-void authoring; void descriptor; void elementCtor;
+const descriptor: OpenElementFunctionPageDescriptor | undefined = undefined;
+const pageComponent: FunctionPageComponent | undefined = undefined;
+void authoring; void descriptor; void pageComponent;
 async function loader(context: LoaderContext<Record<string, unknown>>) {
   return { url: context.request.url };
 }

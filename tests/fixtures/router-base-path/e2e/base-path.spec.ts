@@ -83,46 +83,12 @@ test('the SSG page declares base-prefixed marked links in its original head', as
   );
 });
 
-// The webServer port comes from the same env knob the Playwright config reads;
-// the streaming read needs Node's own fetch (Playwright's `request` fixture
-// buffers a body), so the origin is built here.
-const ORIGIN = `http://127.0.0.1:${process.env.BASE_PATH_E2E_PORT ?? 4181}`;
-
-test('the streamed request-time head is original, live and base-prefixed', async () => {
-  const response = await fetch(`${ORIGIN}${BASE}/live?delay=400`);
-  expect(response.status).toBe(200);
-  expect(response.headers.get('content-type') ?? '').toContain('text/html');
-  // Streaming evidence: the document is sent without a content-length.
-  expect(response.headers.get('content-length'), 'a streamed document is not length-prefixed').toBe(
-    null,
-  );
-
-  // Read the response as it arrives: the first flush must already carry the
-  // complete head (with the marked links) — the streamed document's head is
-  // the ORIGINAL head, never a late append after the body started.
-  const reader = response.body!.getReader();
-  const firstChunk = await waitForFirstChunkContaining(reader, '</head>');
-  const links = headStyleLinks(firstChunk);
-  expect(links.length, 'the streamed head declares the light sheet link').toBeGreaterThanOrEqual(1);
-  for (const href of links) {
-    expect(href, 'the streamed head link carries the base').toMatch(
-      /^\/sub\/client\/assets\/[0-9a-f]{12}\.css$/,
-    );
-  }
-  expect(
-    firstChunk.includes('deferred content resolved'),
-    'the deferred frame is NOT part of the first flush',
-  ).toBe(false);
-  expect(/<style[^>]*data-oe-static-styles/.test(firstChunk)).toBe(false);
-  // The shell of the streamed document (its rendered tree) is part of that
-  // same flush: head + shell first, deferred frames later.
-  expect(firstChunk).toContain('subpage-live');
-
-  // The rendered document completes with the deferred content in a later frame.
-  const rest = await drain(reader);
-  expect(rest).toContain('deferred content resolved');
-  expect(rest).toContain('</html>');
-});
+// The streamed request-time page was REMOVED with the class lane (F16):
+// `renderIntent.stream` is a class-page-only channel, this line's owner retired
+// it, and the replacement streaming carrier is scheduled separately. Its two
+// assertions — a first flush carrying the original head, and the no-JS computed
+// style of the streamed shell — retired with the capability rather than being
+// re-pointed at something that no longer exists.
 
 test.describe('with JavaScript disabled', () => {
   test.use({ javaScriptEnabled: false });
@@ -144,46 +110,11 @@ test.describe('with JavaScript disabled', () => {
     );
     expect(home.document).toEqual('rgb(20, 40, 60)');
 
-    await page.goto(`${BASE}/live`);
-    await page.waitForLoadState('load');
-    const live = await page.evaluate(() => {
-      const shell = document.querySelector('subpage-live .subpage-live');
-      return { color: shell ? getComputedStyle(shell).color : 'missing' };
-    });
-    expect(live.color, 'the streamed page is styled with no JS').toEqual('rgb(70, 20, 120)');
-    // The deferred field's frame is inert without a client runtime, so the
-    // server ships its no-JS twin beside it (the frame's <noscript>; the HTTP
-    // test above asserts that twin's content). Assert the delivery shape here:
-    // the twin is in the parsed document — a JS-disabled page must not depend
-    // on the frame being applied.
-    await expect(page.locator('noscript')).toHaveCount(1);
+    // The streamed route's half of this test retired with the capability (see the
+    // note where that test was). What remains is the assertion the fixture exists
+    // for: a page and its nested light component are BOTH styled from document
+    // links alone.
   });
 });
 
 /** Read chunks until the accumulated text contains `needle`; return it. */
-async function waitForFirstChunkContaining(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  needle: string,
-): Promise<string> {
-  const decoder = new TextDecoder();
-  let text = '';
-  for (let i = 0; i < 200; i++) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    text += decoder.decode(value, { stream: true });
-    if (text.includes(needle)) return text;
-  }
-  throw new Error(`the stream never carried ${needle} (read ${text.length} chars)`);
-}
-
-/** The remainder of the stream, decoded. */
-async function drain(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<string> {
-  const decoder = new TextDecoder();
-  let text = '';
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    text += decoder.decode(value, { stream: true });
-  }
-  return text;
-}

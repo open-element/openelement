@@ -1,13 +1,14 @@
 import { expect, test } from 'vitest';
 import { assertRejectsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { isActionFailure, isOpenElementRedirect } from '@openelement/router';
-import { renderToString } from '@openelement/element';
 import { NOTES_HTML_BUDGET_BYTES, NOTES_PAGE_SIZE } from '../../lib/notes-pagination.ts';
 
 // v0.44: route logic lives in app/route-logic/ so tests never evaluate the
-// authoring module's compile-time-only decorators; SSR assertions compile the
-// real page class through the adapter compiler first.
-import { compileComponentClass } from './compile-page.ts';
+// authoring module's compile-time-only decorators. The page component now lives
+// in the route module as a server FUNCTION page (execution-plan §19.9), so the
+// SSR assertions compile that function through the server-component lane —
+// the same lane the build uses, not a hand-built double.
+import { compileFunctionPage } from './compile-page.ts';
 
 const {
   createNoteAction,
@@ -18,14 +19,13 @@ const {
 } = await import('../route-logic/notes.ts');
 type NotesSupabaseClient = import('../route-logic/notes.ts').NotesSupabaseClient;
 
-/** Compile the real notes page class once per process (the compiler is pure). */
-const NotesPage = await compileComponentClass('../components/page-notes.tsx');
+/** Compile the real notes page FUNCTION once per process (the compiler is pure). */
+const renderNotesPageFunction = await compileFunctionPage('../routes/notes.tsx', 'NotesPage');
 
 /** Project loader data through the route's props projector, then serialize. */
-function renderNotesPage(data: Record<string, unknown>) {
-  return renderToString('notes-page', {
-    componentClass: NotesPage,
-    props: notesPageProps({
+function renderNotesPage(data: Record<string, unknown>): Promise<string> {
+  return renderNotesPageFunction(
+    notesPageProps({
       data: data as never,
       actionData: undefined,
       params: {},
@@ -33,7 +33,7 @@ function renderNotesPage(data: Record<string, unknown>) {
       route: { path: '/notes' },
       meta: {},
     }),
-  });
+  );
 }
 
 const USER = { id: 'user-123', email: 'tester@example.com' };
@@ -165,24 +165,24 @@ test('notes loader applies a fixed keyset page and emits a stable next cursor', 
   expect(cursorFilter.includes(`id.lt.${notes[9].id}`)).toBeTruthy();
 });
 
-test('bounded Notes page stays under its SSR budget at database maxima', () => {
+test('bounded Notes page stays under its SSR budget at database maxima', async () => {
   const notes = Array.from({ length: NOTES_PAGE_SIZE }, (_, index) => ({
     id: `123e4567-e89b-42d3-a456-${String(426614174000 + index).padStart(12, '0')}`,
     title: 't'.repeat(MAX_NOTE_TITLE_LENGTH),
     body: '&<>"'.repeat(MAX_NOTE_BODY_LENGTH / 4),
     created_at: new Date(Date.UTC(2026, 7, 23, 0, 0, 20 - index)).toISOString(),
   }));
-  const html = renderNotesPage({ denied: false, notes });
+  const html = await renderNotesPage({ denied: false, notes });
   // renderToString throws on a render error; the retired result object's
   // `errors` field it used to assert on was a hardcoded empty array.
   const bytes = new TextEncoder().encode(html).byteLength;
   expect(bytes <= NOTES_HTML_BUDGET_BYTES, `${bytes} > ${NOTES_HTML_BUDGET_BYTES}`).toBeTruthy();
 });
 
-test('authenticated SSR places the user JWT only on the one-shot Realtime handoff', () => {
+test('authenticated SSR places the user JWT only on the one-shot Realtime handoff', async () => {
   const token =
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsInJvbGUiOiJhdXRoZW50aWNhdGVkIn0.signature';
-  const html = renderNotesPage({
+  const html = await renderNotesPage({
     denied: false,
     notes: [],
     live: {

@@ -23,6 +23,7 @@
 import { readFile } from 'node:fs/promises';
 import type { Plugin } from 'vite';
 import { buildError, MdxErrorCode } from '../internal/error-codes.ts';
+import { publishMdxScanLowering } from './plugin-mdx-scan-hook.ts';
 
 /** Options for the `.mdx` route plugin ({@linkcode mdxPlugin}). */
 export interface OpenMdxPluginOptions {
@@ -41,6 +42,16 @@ type LowerModule = typeof import('./plugin-mdx-lower.ts');
 
 let lowerPromise: Promise<LowerModule> | undefined;
 
+/**
+ * The ONE loader for the lowering module. Single-flight, and the single owner
+ * of the optional-peer diagnostic: a graph that never meets an `.mdx` route
+ * must never resolve this module — or the `marked` peer it imports at top
+ * level. The declared-tag scan reaches the lowering through the slot this
+ * plugin publishes (plugin-mdx-scan-hook.ts), so no config-load path can pull
+ * the peer into a marked-less app, and the bundled ./vite entry never gains
+ * the in-package dynamic import that makes rolldown ship a chunk-loading
+ * runtime (both measured 2026-11-24 in gate:packed's starter leg).
+ */
 function loadLower(): Promise<LowerModule> {
   lowerPromise ??= import('./plugin-mdx-lower.ts').catch((cause: unknown) => {
     if (cause instanceof Error && /marked/.test(cause.message)) {
@@ -59,6 +70,17 @@ function loadLower(): Promise<LowerModule> {
 
 /** Vite plugin compiling `.mdx` route files into compiled page modules. */
 export function mdxPlugin(options: OpenMdxPluginOptions = {}): Plugin {
+  // The factory is the ONE publisher of the lowering slot: composing this
+  // plugin is the build's statement that MDX routes exist, and the
+  // declared-tag scan lowers its `.mdx` rows through this slot instead of a
+  // static edge (the edge would put the in-package dynamic import on the
+  // bundled ./vite graph and make rolldown ship its chunk runtime — measured
+  // 2026-11-24). A build without this plugin leaves the slot empty and the
+  // scan reports its `.mdx` rows, never resolving `marked`.
+  publishMdxScanLowering(async (source, file, routesDir) => {
+    const { mdxToCompiledPageSource } = await loadLower();
+    return mdxToCompiledPageSource(source, file, routesDir ?? options.routesDir);
+  });
   return {
     name: 'open:mdx',
     enforce: 'pre',

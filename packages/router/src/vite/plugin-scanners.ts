@@ -11,7 +11,7 @@ import type { Plugin } from 'vite';
 import type { OpenElementPackageManifest, RouteEntry } from './framework.ts';
 import type { IslandDecl } from '@openelement/protocol/ssg';
 import { createLogger, formatError, OpenElementError } from '@openelement/element';
-import { join } from 'pathe';
+import { join, resolve } from 'pathe';
 import { DEFAULT_ISLANDS_DIR, DEFAULT_ROUTES_DIR } from './internal/paths.ts';
 import {
   buildEntryDescriptor,
@@ -35,6 +35,15 @@ import {
   buildPackageIslandDecls,
   registerPackageIslandStyleDeclarations,
 } from './internal/ssg/island-scanner.ts';
+import { registerIslandStyleDeclaration } from './internal/island-style-declarations.ts';
+import { islandStyleDeclarations } from './internal/island-style-declarations.ts';
+import {
+  buildRouteDocumentStyleLinks,
+  deliveredIslandStyleTags,
+  routeDocumentStyleLinks,
+  setRouteDocumentStyleLinks,
+} from './internal/ssg/route-style-links.ts';
+import { devAuthoredIslandStyleUrls } from './internal/style-assets.ts';
 import { resolveIslandDeliveryTags } from './internal/ssg/delivery.ts';
 import type { OpenPluginState } from './plugin-config.ts';
 import type { ModuleWalkResolver } from './internal/module-graph-walk.ts';
@@ -85,6 +94,8 @@ function buildDescriptor(
     upgradeStrategy: state.resolvedOptions.island?.upgradeStrategy || 'idle',
     layout: state.resolvedOptions.layout,
     layouts: state.resolvedOptions.layouts,
+    declaredElementTags: state.ctx.phase1.declaredElementTags,
+    declaredElementHostExports: state.ctx.phase1.declaredElementHostExports,
     // #1411: the default-CORS production advisory belongs to a production
     // build. Repeating it on every dev first run trained users to ignore it,
     // so the dev server (command 'serve') generates the same entry without
@@ -93,6 +104,9 @@ function buildDescriptor(
     // Same source as the SSG descriptor: the dev/SSR entry must resolve
     // locales identically or dev and build disagree about `/zh/...` paths.
     i18n: state.ctx.plugins.i18nOptions ?? undefined,
+    // The dev route -> document stylesheet fact, derived in the async scan phase
+    // through the SAME carrier and builder the build uses (F16).
+    routeDocumentStyleLinks: routeDocumentStyleLinks(state.ctx),
   });
 }
 
@@ -154,6 +168,11 @@ async function scanRoutesAndStaticComponents(state: OpenPluginState): Promise<Ro
     resolve,
   });
   state.ctx.phase1.staticComponents = staticScan.declarations;
+  // The page-local components' declared sheets (P-2). They are RE-registered here
+  // because the island scan resets the carrier later in this same buildStart —
+  // that reset is the island scan's authority over ISLANDS, not over a page-local
+  // component, which has no islands-dir entry to be re-read from.
+  state.ctx.phase1.pageLocalStyleDeclarations = staticScan.styleDeclarations;
   // The discovery walk's boundaries are NOT silent: a partial registry must
   // say so through the same envelope channel as every other scan degradation
   // (#1612) — the machine-readable exit replays it, the log carries the line.
@@ -379,6 +398,7 @@ async function scanDeclaredTagsInto(
     // empty, which is the pre-slice behavior: the resolver falls through to
     // the path convention exactly as before.
     state.ctx.phase1.declaredElementTags = new Map();
+    state.ctx.phase1.declaredElementHostExports = new Map();
     return;
   }
   const scanned = await scanDeclaredElementTags({
@@ -386,6 +406,9 @@ async function scanDeclaredTagsInto(
     workspaceRoot: state.workspaceRoot,
     resolve,
     seeds,
+    // An .mdx route's tag derives from its route-relative path, so the scan needs
+    // the same routes dir the lowering gets.
+    routesDir,
   });
   for (const note of scanned.notes) {
     const envelope = {
@@ -399,6 +422,7 @@ async function scanDeclaredTagsInto(
     log.warn(formatDiagnosticLine(envelope));
   }
   state.ctx.phase1.declaredElementTags = scanned.tags;
+  state.ctx.phase1.declaredElementHostExports = scanned.hostExports;
   if (scanned.tags.size > 0) {
     log.info(`Declared element tags: ${[...scanned.tags.values()].sort().join(', ')}`);
   }
@@ -406,7 +430,20 @@ async function scanDeclaredTagsInto(
 
 /** Rescan the islands dir into ctx; returns the islands root for later reuse. */
 async function scanIslandsIntoCtx(state: OpenPluginState): Promise<string> {
-  const islandsRoot = join(process.cwd(), state.resolvedOptions.islandsDir || DEFAULT_ISLANDS_DIR);
+  // The islands dir is a convention of the PROJECT root, and the project root is
+  // the RESOLVED Vite config's `root` — not a process cwd that a dev server may
+  // legitimately leave behind (a host that boots a child dev server, a watcher
+  // that restores cwd after startup). A dev island RESCAN used to scan from the
+  // cwd and could therefore report "no islands" for a server whose root is
+  // elsewhere: the rescan then REPLACED the scanned inventory with an empty one,
+  // so every consumer of `islandFiles`/`islandTagNames` (the descriptor, the dev
+  // client map, the component-sheet tagging) lost the app's islands after one
+  // edit. `viteRoot` is the anchor the very same scan already uses for the
+  // compiler identity; the cwd fallback only serves hosts without a config.
+  const islandsRoot = join(
+    state.viteRoot ?? process.cwd(),
+    state.resolvedOptions.islandsDir || DEFAULT_ISLANDS_DIR,
+  );
   const islandFiles = await scanIslands(islandsRoot);
   state.ctx.phase1.islandTagNames = islandFiles.map((f) => fileToTagName(f));
   state.ctx.phase1.islandFiles = islandFiles;
@@ -418,6 +455,11 @@ async function scanIslandsIntoCtx(state: OpenPluginState): Promise<string> {
     islandFiles,
     state.viteRoot ?? process.cwd(),
   );
+  // The island scan reset the style declaration carrier; re-register the
+  // PAGE-LOCAL generated components' declared sheets (P-2) here: they have no
+  // islands-dir entry for the scan to rediscover, so the reset above would
+  // otherwise drop them.
+  registerPageLocalStyleDeclarations(state);
   // The island scan reset the style declaration carrier; re-register the
   // admitted packages' declared sheets (idempotent, and order-independent with
   // the package scan that may run before or after this one).
@@ -466,14 +508,116 @@ export async function rescanRoutes(state: OpenPluginState): Promise<void> {
  * from ctx.phase1), and let the configureServer watcher invalidate both
  * virtual entries and full-reload, exactly as for routes.
  */
+
+/**
+ * Re-register the page-local GENERATED components' style declarations (P-2).
+ *
+ * Idempotent, and called after every place that owns the carrier's reset — the
+ * island scan is that owner, and a page-local component has no islands-dir entry
+ * for it to rediscover, so the caller has to put these records back.
+ */
+export function registerPageLocalStyleDeclarations(state: OpenPluginState): void {
+  for (const declaration of state.ctx.phase1.pageLocalStyleDeclarations ?? []) {
+    registerIslandStyleDeclaration(declaration);
+  }
+}
+
 export async function rescanIslands(state: OpenPluginState): Promise<void> {
   await scanIslandsIntoCtx(state);
+  // The island scan resets the style-declaration carrier; re-register the
+  // page-local generated components' declarations (P-2) in the same pass, or a
+  // rescan would silently drop a page-local component's sheet.
+  registerPageLocalStyleDeclarations(state);
   // A rescan re-reads the island sources, so the declared-tag provider must be
   // refreshed in the same pass: an edited sidecar `tag` (or a newly added
   // page-local component the route graph now reaches) has to replace the stale
   // map, exactly as `islandMeta` is replaced.
   await scanDeclaredTagsInto(state, state.ctx.phase1.cachedRoutes || []);
+  await deriveDevRouteDocumentStyleLinks(state);
   syncEntryDescriptor(state, state.ctx.phase1.cachedRoutes || []);
+}
+
+/**
+ * The route -> document stylesheet fact for the DEV server (F16).
+ *
+ * The build derives this from Phase 2's emitted assets. Dev has no emitted assets,
+ * so it derives the same fact from the AUTHORED-CSS endpoint instead — the same
+ * `devAuthoredStyleUrl` the dev island channel publishes. Both paths feed ONE
+ * carrier (`setRouteDocumentStyleLinks`) and ONE consumer (the entry's
+ * `__documentStyles`), so dev and build cannot disagree about which sheets a page
+ * declares; only the URL spelling differs, which is the whole point of dev.
+ *
+ * Without this, a light-root generated island's sheet was computed and published
+ * into the island map but never reached the document head — the card rendered
+ * unstyled in dev while the build styled it.
+ */
+async function deriveDevRouteDocumentStyleLinks(state: OpenPluginState): Promise<void> {
+  const declarations = islandStyleDeclarations();
+  if (declarations.length === 0) return;
+  const islandMeta = state.ctx.phase1.islandMeta as Record<
+    string,
+    { tags?: readonly string[]; tagNames?: readonly string[] } | undefined
+  >;
+  const tags = deliveredIslandStyleTags(declarations, islandMeta);
+  if (tags.light.size === 0) return;
+  // The base the DEV document's links must carry. Dev never populates
+  // `ctx.phase3` (that carrier is the BUILD's emitted-asset phase), so reading
+  // it first meant `?? '/'` won under a configured non-root base and every
+  // authored link was declared base-less — the dev server serves the resource
+  // at `<base>/.openElement/...` while the markup named `/.openElement/...`.
+  // The RESOLVED Vite config is the live, authoritative spelling of the base
+  // (the dev style plugins already read `config.base` in `configResolved`);
+  // phase3 stays as the fallback for a caller with no resolved config.
+  const base = state.resolvedConfig?.base ?? state.ctx.phase3.base ?? '/';
+  const islandStyleUrls = new Map<string, readonly string[]>();
+  for (const declaration of declarations) {
+    if (declaration.root === 'shadow') continue;
+    const urls = devAuthoredIslandStyleUrls(base, declaration);
+    if (urls.length === 0) continue;
+    islandStyleUrls.set(declaration.tagName, urls);
+  }
+  if (islandStyleUrls.size === 0) return;
+  // A PAGE MODULE's OWN declared sheets (P-2b): the build joins them to the
+  // route path from Phase 2's emitted assets (`build-ssg.ts`'s
+  // `pageModuleStyleUrls`), and the dev document needs the same join or a
+  // generated page's own `:host`/box rule never reaches the head — the tag walk
+  // below cannot find it, because a page has no host element to reference.
+  // Dev has no emitted asset, so the join resolves the SAME declaration's
+  // authored-CSS dev resource URL and keys it by the route the module IS.
+  //
+  // The route spelling is project-relative (`route.filePath`) while a page
+  // module declaration carries the module's absolute id in `filePath` (a page
+  // has no islands-relative path); `resolve` against the SAME project root makes
+  // the two one key, exactly as the build's join does.
+  const routeRoot = resolve(state.viteRoot ?? process.cwd(), state.resolvedOptions.routesDir!);
+  const routePathByPageModule = new Map<string, string>();
+  for (const route of state.ctx.phase1.cachedRoutes || []) {
+    if (route.type !== 'page' || route.special) continue;
+    routePathByPageModule.set(resolve(routeRoot, route.filePath), route.path);
+  }
+  const pageModuleStyleUrls = new Map<string, readonly string[]>();
+  for (const declaration of declarations) {
+    const routePath = routePathByPageModule.get(resolve(declaration.filePath));
+    if (routePath === undefined) continue;
+    const urls = devAuthoredIslandStyleUrls(base, declaration);
+    if (urls.length === 0) continue;
+    pageModuleStyleUrls.set(routePath, urls);
+  }
+  const result = await buildRouteDocumentStyleLinks({
+    root: state.viteRoot ?? process.cwd(),
+    routes: state.ctx.phase1.cachedRoutes || [],
+    routesDir: state.resolvedOptions.routesDir!,
+    // Phase 1 always installs the resolver before the first scan; the guard keeps
+    // the type honest instead of asserting it.
+    resolve: state.resolveModule as NonNullable<typeof state.resolveModule>,
+    lightIslandTags: tags.light,
+    islandStyleUrls,
+    // Only when the app really has one: the helper's absent-map branch is the
+    // "no page-declared sheet" path, so an app without one keeps its exact
+    // previous route facts.
+    ...(pageModuleStyleUrls.size === 0 ? {} : { pageModuleStyleUrls }),
+  });
+  setRouteDocumentStyleLinks(state.ctx, result.links);
 }
 
 /**
@@ -785,6 +929,7 @@ export function createBuildStartHook(state: OpenPluginState): Pick<Plugin, 'buil
         // admission plan come from the same object. The returned code string
         // is discarded — the call populates entryDescriptor, which
         // virtualEntryPlugin.load() renders from.
+        await deriveDevRouteDocumentStyleLinks(state);
         syncEntryDescriptor(state, routes);
         const pageCount = routes.filter((r) => r.type === 'page' && !r.special).length;
         const apiCount = routes.filter((r) => r.type === 'api' && !r.special).length;

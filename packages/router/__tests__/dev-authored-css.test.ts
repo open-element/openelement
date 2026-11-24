@@ -105,68 +105,74 @@ const LIGHT_CARD_CSS = `:host {
 }
 `;
 
-const CARD_TSX = `import { element, OpenElement, property } from '@openelement/element';
-import { defineIslandConfig } from '@openelement/router';
-import cardStyles from './card.css';
+// GENERATED lane (F16: class → function). The class's `static override styles =
+// [cardStyles]` over a CSS-module import becomes the sidecar's `styles` list;
+// no test in this file reads the imported binding, so the import is gone with
+// the member. `root: 'shadow-open'` maps to `'shadow'`; `@property({ reflect:
+// false }) label = ''` becomes a `properties` row (non-reflecting, but NOT
+// attribute-less: the class form kept the attribute channel, and the fixture
+// sets `label` as a host attribute) plus the typed props parameter that applies
+// the default.
+const CARD_TSX = `import { defineIslandConfig } from '@openelement/router';
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });
+export const openElement = defineIslandConfig({
+  hydrate: 'load',
+  ssr: true,
+  dsd: true,
+  tag: 'dev-css-card',
+  root: 'shadow',
+  styles: ['./card.css'],
+  properties: {
+    label: { default: '' },
+  },
+});
 
-@element('dev-css-card', { root: 'shadow-open' })
-export default class DevCssCard extends OpenElement {
-  static override styles = [cardStyles];
-
-  @property({ reflect: false })
-  label = '';
-
-  render() {
-    return (
-      <article class='card card-extra'>
-        <span class='card-inner'>{this.label}</span>
-        <span class='card-relative'></span>
-      </article>
-    );
-  }
+export default function DevCssCard(props: { label: string }) {
+  return (
+    <article class='card card-extra'>
+      <span class='card-inner'>{props.label ?? ''}</span>
+      <span class='card-relative'></span>
+    </article>
+  );
 }
 `;
 
-const LIGHT_CARD_TSX = `import { element, OpenElement, property } from '@openelement/element';
-import { defineIslandConfig } from '@openelement/router';
-import lightStyles from './light-card.css';
+const LIGHT_CARD_TSX = `import { defineIslandConfig } from '@openelement/router';
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true });
+export const openElement = defineIslandConfig({
+  hydrate: 'load',
+  ssr: true,
+  tag: 'dev-css-light-card',
+  root: 'light',
+  styles: ['./light-card.css'],
+  properties: {
+    label: { default: '' },
+  },
+});
 
-@element('dev-css-light-card', { root: 'light' })
-export default class DevCssLightCard extends OpenElement {
-  static override styles = [lightStyles];
-
-  @property({ reflect: false })
-  label = '';
-
-  render() {
-    return <section class='light-card'>{this.label}</section>;
-  }
+export default function DevCssLightCard(props: { label: string }) {
+  return <section class='light-card'>{props.label ?? ''}</section>;
 }
 `;
 
-const PAGE_TSX = `import { element, OpenElement } from '@openelement/element';
-
-@element('dev-css-page', { root: 'light' })
-export default class DevCssPage extends OpenElement {
-  render() {
-    return (
-      <main id='dev-css-page'>
-        <p class='light-card-shared' id='unrelated'>unrelated document text</p>
-        <dev-css-card label='one'></dev-css-card>
-        <dev-css-card label='two'></dev-css-card>
-        <dev-css-light-card label='light'></dev-css-light-card>
-      </main>
-    );
-  }
-}
-`;
-
+// The page is a SERVER FUNCTION PAGE declared BY the route module: its markup
+// is document content (the class form was a LIGHT root), and a generated light
+// element cannot be a page ROOT. A page owns no host element, so it declares no
+// sheet of its own — the two islands below are the whole style subject.
 const INDEX_ROUTE = `import { definePage } from '@openelement/router';
-import DevCssPage from '../components/page-dev-css.tsx';
+import '../islands/dev-css-card.tsx';
+import '../islands/dev-css-light-card.tsx';
+
+export function DevCssPage() {
+  return (
+    <main id='dev-css-page'>
+      <p class='light-card-shared' id='unrelated'>unrelated document text</p>
+      <dev-css-card label='one'></dev-css-card>
+      <dev-css-card label='two'></dev-css-card>
+      <dev-css-light-card label='light'></dev-css-light-card>
+    </main>
+  );
+}
 
 export default definePage(DevCssPage, { head: { title: 'dev authored css fixture' } });
 `;
@@ -197,7 +203,6 @@ function writeFixture(): void {
   );
   writeFileSync(join(FIXTURE_DIR, 'app/islands/dev-css-card.tsx'), CARD_TSX, 'utf8');
   writeFileSync(join(FIXTURE_DIR, 'app/islands/dev-css-light-card.tsx'), LIGHT_CARD_TSX, 'utf8');
-  writeFileSync(join(FIXTURE_DIR, 'app/components/page-dev-css.tsx'), PAGE_TSX, 'utf8');
   writeFileSync(join(FIXTURE_DIR, 'app/routes/index.tsx'), INDEX_ROUTE, 'utf8');
   writeFileSync(
     join(FIXTURE_DIR, 'package.json'),

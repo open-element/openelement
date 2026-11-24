@@ -17,6 +17,7 @@
  * (entry-render-runtime.ts).
  */
 
+import { PAGE_ROOT_ATTRIBUTE } from '../page-root-marker.ts';
 import { RendererErrorCode, serveError } from '../../../internal/error-codes.ts';
 
 /** Opaque capability marking HTML the application has explicitly vetted as trusted. */
@@ -40,6 +41,7 @@ export interface DocumentStyleSink {
 export interface PageSsrSourceInfo {
   route?: string;
   source?: string;
+  generatedPageRoot?: boolean;
   /**
    * The render's document stylesheet collection. It rides this per-render
    * object because every emitted `__ssr` call site already builds one, and the
@@ -62,6 +64,15 @@ export type PageSsrRenderer = (
   sourceInfo?: PageSsrSourceInfo,
   depth?: number,
   projectedChildren?: ProjectedChildren,
+  /**
+   * The SHADOW-side sibling of `projectedChildren`: light children appended
+   * after a DSD template. A generated SHADOW-root host distributes its children
+   * through the platform (`<slot>` in the template plus light DOM after it), so
+   * a page projected into a generated shadow LAYOUT rides this channel — the
+   * class lane used in-template slot substitution, which a generated template
+   * does not perform.
+   */
+  hostChildren?: TrustedHtmlValue,
 ) => string;
 
 /** The subset of the Element serializer the native renderer needs. */
@@ -76,6 +87,8 @@ export interface NativePageRendererDeps {
       ssrRenderableTags?: readonly string[];
       projectedChildren?: ProjectedChildren;
       documentStyles?: DocumentStyleSink;
+      hostChildren?: TrustedHtmlValue;
+      hostAttrs?: readonly (readonly [string, unknown])[];
     },
   ) => string;
   /** The SSR registry (the runtime's `customElements` global). */
@@ -93,7 +106,14 @@ export interface NativePageRendererDeps {
  */
 export function createNativePageRenderer(deps: NativePageRendererDeps): PageSsrRenderer {
   const { renderToString, customElements, ssrRenderableTags } = deps;
-  return (tag, props = {}, sourceInfo = {}, __depth = 0, projectedChildren): string => {
+  return (
+    tag,
+    props = {},
+    sourceInfo = {},
+    __depth = 0,
+    projectedChildren,
+    hostChildren,
+  ): string => {
     // Validate tag name - must be a valid Custom Element (contains hyphen)
     if (!tag || !tag.includes('-')) {
       throw serveError(
@@ -121,7 +141,7 @@ export function createNativePageRenderer(deps: NativePageRendererDeps): PageSsrR
     // The collection is a render-side channel, not render diagnostics: it is
     // split out of sourceInfo so the serializer's source attribution stays
     // exactly what the call site declared (alpha15 S lane, S-C1.2).
-    const { documentStyles, ...diagnostics } = sourceInfo ?? {};
+    const { documentStyles, generatedPageRoot, ...diagnostics } = sourceInfo ?? {};
     return renderToString(tag, {
       componentClass: Cls,
       props,
@@ -129,26 +149,17 @@ export function createNativePageRenderer(deps: NativePageRendererDeps): PageSsrR
       documentStyles,
       ssrRenderableTags,
       projectedChildren,
+      ...(generatedPageRoot ? { hostAttrs: [[PAGE_ROOT_ATTRIBUTE, '']] } : {}),
+      ...(hostChildren === undefined ? {} : { hostChildren }),
     });
   };
 }
 
-/**
- * Compiled page-tag resolution (#1276, B1.3-F1): the compiled Part Program is
- * the one canonical source for the route→program tag binding. A definePage
- * route module default-exports the compiled page class, whose
- * `__partProgram.tag` carries the @element(...) decorator tag; the route FILE
- * name derives the ROUTE, not the element's identity, so the bare
- * path-derived tag must never reach the serializer when the program declares
- * a different one. The path-derived fallback remains for classes without a
- * compiled program — the serializer fails closed on those exactly as before.
+/*
+ * Compiled page-tag resolution (#1276, B1.3-F1; C08 closed 2026-11-24): the
+ * runtime `__partProgram.tag` read retired with the class compiler. Every
+ * page kind this lane emits resolves its tag at BUILD time — a generated
+ * element page from the island scan's tag, a server function page from the
+ * path itself — and the emitted entry evaluates a literal (see
+ * entry-route-helpers.ts). No runtime reader remains.
  */
-export function resolveCompiledPageTag(routeModule: unknown, fallbackTag: string): string {
-  const module = routeModule as
-    | { default?: { __partProgram?: { tag?: unknown } } }
-    | undefined
-    | null;
-  const program = module?.default?.__partProgram;
-  if (program && typeof program.tag === 'string' && program.tag.includes('-')) return program.tag;
-  return fallbackTag;
-}

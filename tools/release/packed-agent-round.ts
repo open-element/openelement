@@ -11,10 +11,11 @@
  * from public artifacts alone:
  *
  *   1. **Break** — the scaffold's app is extended with a documented failure
- *      class: a component whose `static styles` carries the retired inline
- *      sheet string. The one style authoring form is a `.css` file import
- *      arrayed in `static styles` (#1558); every other shape is refused by the
- *      compiler with `OEC9029`.
+ *      class: a generated component whose `defineIslandConfig` sidecar carries
+ *      `styles` as an inline sheet string instead of the admitted array of
+ *      relative `.css` specifiers. The router refuses the shape when the
+ *      module is evaluated (`OE_ISLAND_DESCRIPTOR_SHAPE`), and the
+ *      diagnostic's own message names the admitted form.
  *   2. **Diagnose** — the app's own packed build CLI runs with the #1612
  *      machine-readable exit (`--diagnostics-file=<path>`); the report is
  *      parsed with the public `parseDiagnosticReport`
@@ -23,7 +24,12 @@
  *      message carries the migration recipe, and the public error reference
  *      (`/errors` on the docs site) must document the code it names. Both are
  *      required: a failure whose output carries no fix hint fails the round,
- *      and so does a docs page that does not resolve the code.
+ *      and so does a docs page that does not resolve the code. The caller
+ *      serves the CANDIDATE'S OWN docs build as the round's origin (the
+ *      `docsOrigin` mirror option), so the page the code resolves on is the
+ *      one this release ships; an explicit env override points the round at
+ *      any other origin (a staged site, a mirror) without changing the
+ *      assertion.
  *   4. **Repair and re-qualify** — the fix the public artifacts prescribe is
  *      applied (the sheet moves to a real `.css` file and is arrayed), the
  *      build must go clean, and the authored rule must actually reach the
@@ -61,7 +67,7 @@ import {
 } from '@openelement/protocol/diagnostics';
 
 /** The documented failure class the round introduces (refused style source). */
-export const AGENT_ROUND_CODE = 'OEC9029';
+export const AGENT_ROUND_CODE = 'OE_ISLAND_DESCRIPTOR_SHAPE';
 
 /** The probe route: a new route file is discovered by convention, no config. */
 export const AGENT_PROBE_ROUTE = 'app/routes/agent-probe.tsx';
@@ -136,12 +142,8 @@ export interface AgentRoundTranscript {
 export interface StyleFixPlan {
   /** App-relative path of the `.css` sheet the fix writes. */
   sheetPath: string;
-  /** The default-import specifier the component must carry. */
-  importSpecifier: string;
-  /** The binding adopted by `static styles`. */
-  binding: string;
-  /** The `static styles` initializer the admitted form arrays. */
-  stylesInitializer: string;
+  /** The relative `.css` specifier the sidecar's `styles` arrays. */
+  stylesSpecifier: string;
 }
 
 /** A coded failure the round refuses to continue past. */
@@ -166,30 +168,36 @@ export class DocsUnreachableError extends AgentRoundError {
 }
 
 /**
- * The broken component: the retired inline sheet string. The compiler refuses
- * it (OEC9029) — the shape is exactly the migration #1558 documented, so the
- * diagnostic's own message names the repair.
+ * The broken component: the sidecar's `styles` carries an inline sheet string
+ * instead of the admitted array of relative `.css` specifiers. The router
+ * refuses the shape when the build evaluates the module
+ * (`OE_ISLAND_DESCRIPTOR_SHAPE`), so the diagnostic's own message names the
+ * repair. The root is 'shadow' because the route renders this component as a
+ * generated page root, and a light root emits no DSD host producer (the
+ * boundary the router itself reports).
  */
 const BROKEN_COMPONENT_SOURCE = `/**
  * agent-probe-card — the qualification's deliberately broken component.
  *
- * Presentation is authored as an inline sheet string, the form retired with
- * #1558. The compiler refuses it: a compiled module's sheets are real .css
- * files imported into the module and arrayed in \`static styles\`.
+ * Presentation is authored as an inline sheet string inside the sidecar's
+ * \`styles\`. The admitted form is an array of relative .css specifiers the
+ * build resolves against this module; the router refuses the string when the
+ * module is evaluated.
  */
-import { element, OpenElement } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
 
-@element('${AGENT_PROBE_TAG}', { root: 'light' })
-export default class AgentProbeCard extends OpenElement {
-  static override styles = \`
+export const openElement = defineIslandConfig({
+  tag: '${AGENT_PROBE_TAG}',
+  root: 'shadow',
+  styles: \`
 .${AGENT_PROBE_TAG} {
   color: rgb(1, 2, 3);
 }
-\`;
+\`,
+});
 
-  render() {
-    return <div class='${AGENT_PROBE_TAG}'>${AGENT_PROBE_MARKER}</div>;
-  }
+export default function AgentProbeCard() {
+  return <div class='${AGENT_PROBE_TAG}'>${AGENT_PROBE_MARKER}</div>;
 }
 `;
 
@@ -204,7 +212,7 @@ export default definePage(AgentProbeCard, {
 `;
 
 /** The sheet the fix writes — the same rule, now a real style source. */
-const PROBE_SHEET_SOURCE = `/* agent-probe-card — written by the documented fix (file-based styles, #1558). */
+const PROBE_SHEET_SOURCE = `/* agent-probe-card — written by the documented fix (file-based styles). */
 .${AGENT_PROBE_TAG} {
   color: rgb(1, 2, 3);
 }
@@ -218,24 +226,27 @@ async function writeAppFile(appDir: string, relativePath: string, text: string):
 }
 
 /**
- * The repaired component: the admitted form the diagnostic prescribes — a
- * `.css` file, imported by default, arrayed in `static styles`.
+ * The repaired component: the admitted form the diagnostic prescribes — the
+ * sheet as a real `.css` file beside the module, arrayed as a relative
+ * specifier in the sidecar's `styles`. The build resolves the specifier
+ * against the module and emits the sheet through the style plan; the module
+ * itself imports nothing.
  */
 function fixedComponentSource(plan: StyleFixPlan): string {
   return `/**
  * agent-probe-card — repaired from the public artifacts alone: the diagnostic
  * named the form and the docs page resolved the code.
  */
-import { element, OpenElement } from '@openelement/element';
-import ${plan.binding} from '${plan.importSpecifier}';
+import { defineIslandConfig } from '@openelement/router';
 
-@element('${AGENT_PROBE_TAG}', { root: 'light' })
-export default class AgentProbeCard extends OpenElement {
-  static override styles = ${plan.stylesInitializer};
+export const openElement = defineIslandConfig({
+  tag: '${AGENT_PROBE_TAG}',
+  root: 'shadow',
+  styles: ['${plan.stylesSpecifier}'],
+});
 
-  render() {
-    return <div class='${AGENT_PROBE_TAG}'>${AGENT_PROBE_MARKER}</div>;
-  }
+export default function AgentProbeCard() {
+  return <div class='${AGENT_PROBE_TAG}'>${AGENT_PROBE_MARKER}</div>;
 }
 `;
 }
@@ -275,13 +286,19 @@ export async function readBuildDiagnosticsReport(
   }
 }
 
-/** The fix hint the environment must carry: the migration recipe, not a code alone. */
+/**
+ * The fix hint the environment must carry: the migration recipe, not a code
+ * alone. The three shapes the refusal's own message names — the `.css` file
+ * target, the `styles` array form, and the style plan that resolves and emits
+ * the sheet — are exactly what an agent needs to repair the app from the
+ * diagnostic alone.
+ */
 function fixRecipeOf(diagnostic: DiagnosticEnvelope): string {
   const text = `${diagnostic.message}\n${diagnostic.hint ?? ''}`;
   const missing = [
     [/\.css\b/i, 'the `.css` file target'],
-    [/static styles/i, 'the `static styles` array'],
-    [/#1558|retired/i, 'the retirement note pointing at the current form'],
+    [/\bstyles\b/i, 'the `styles` array'],
+    [/style plan/i, 'the style plan that resolves and emits the sheet'],
   ]
     .filter(([pattern]) => !(pattern as RegExp).test(text))
     .map(([, label]) => label as string);
@@ -336,9 +353,7 @@ export function deriveStyleFixPlan(diagnostic: DiagnosticEnvelope): StyleFixPlan
   fixRecipeOf(diagnostic);
   return {
     sheetPath: AGENT_PROBE_SHEET,
-    importSpecifier: './agent-probe-card.css',
-    binding: 'agentProbeCardSheet',
-    stylesInitializer: '[agentProbeCardSheet]',
+    stylesSpecifier: './agent-probe-card.css',
   };
 }
 

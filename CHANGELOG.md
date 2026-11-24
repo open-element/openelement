@@ -9,6 +9,85 @@ lives in:
 - [`docs/release/release-state.json`](./docs/release/release-state.json)
 - [`docs/release/public-interface-snapshot.json`](./docs/release/public-interface-snapshot.json)
 
+## 1.0.0-alpha.16
+
+**The alpha.16 line: the class lane is DELETED, and the generated lane is the only
+way to author.** A search for `@element` / `extends OpenElement` across the product
+source roots, the test suites and the fixture apps returns nothing. The lane's
+compiler entry (`compileElementProgram`), its Part Program writers, its
+`static styles` admission, its ABI record (`COMPILED_MODULE_ABI_VERSION` — no
+importer, and its doc block enumerated five statics nothing emitted), its render path
+in `public-runtime.ts`, its public exports (`OpenElement`, `ErrorBoundary`) and its
+own contract tests are all removed. There is no compatibility base class and no
+adapter: an app that extended one moves to the generated lane.
+
+What that costs, stated plainly rather than deferred: `ErrorBoundary`'s
+cross-element containment is gone (the surviving `onError` intrinsic is
+element-scoped, two capture points, both update-phase), and streaming
+(`renderIntent.stream`) retired with the artifact it deferred against — a later
+release owns its replacement. `PART_PROGRAM_VERSION` stays: the runtime still
+validates the wire format on revive.
+
+- **Authoring — `computed` is a generated-lane intrinsic (ADR-0183, option B).**
+  `const x = computed(() => expr)` is a compiler-erased, instance-retained derived
+  node over the one reactive engine; the generated-element and function-component
+  lanes share it, so a derived value no longer forces a class. `www/app/layout.tsx`
+  alone carries 30 of them.
+- **Authoring — `useHost`, `ref` and the lifecycle/context/error intrinsics on the
+  generated lane.** `useHost()` returns the host element; `ref(cb?)` rides the
+  existing `ref` JSX channel (no second attachment mechanism); `provideContext` /
+  `useContext` work over the generated owner tree including hostless owners,
+  nested shadowing and server rendering; `onConnect` / `onDispose` /
+  `onPropertyChange` / `onError` replace the four class callbacks.
+- **Authoring — a nested generated host expands to DSD.** The generated SSR
+  producer is a string builder, so a custom-element tag inside its markup used to
+  stay an unexpanded tag. One runtime call per dash tag now asks the render to
+  expand it, and the helper returns the caller's own literal bytes whenever no
+  expander applies — an admission regression can only ever show up as "no DSD",
+  never as wrong markup.
+- **Authoring — `16b-EB` gains its SSR fallback contract.** A descendant producer
+  that throws is owned by the enclosing error boundary: the render emits the
+  boundary's fallback bytes in its place and the failure is carried out to that
+  boundary instead of failing the whole render. With no boundary the original
+  error still propagates, so this is not a silent swallow.
+- **CSS — a LIGHT-root generated island's declared sheets reach the document.**
+  The build emitted the asset and recorded its URL, but no render path declared
+  it, so a styled light island shipped unstyled and nothing failed. The light-root
+  render now reports the island's sheets to the render's document sink — the same
+  rule the class lane's light root already followed — and the
+  "declared but no carrier" state stays a loud failure.
+- **CSS — a shadow-root generated island declares its sheets inside its DSD
+  template.** The compiler emits the typed `styleLinks` channel and the serializer
+  writes the canonical marked `<link>` prefix. `defineIslandConfig` had been
+  REFUSING that combination as "not wired yet" while the build admitted it: two
+  faces reading one fact differently. The stale refusal is gone.
+- **Templates — the starter no longer teaches the retired lane.** The three page
+  templates are server function components declared in their own route modules,
+  the layout is a generated element, the counter island uses `signal`, and six
+  `app/components/page-*` files are deleted.
+- **Retirement evidence, per surface (M10).** The class lane is provably absent
+  from every built browser bundle. What remains in the server entry is NOT the lane:
+  it is `validatePartProgram`, the Part Program WIRE-format validator that the
+  runtime runs on revive, and it outlives the authoring lane that used to produce
+  those artifacts — the distinction is stated because an earlier revision of this
+  line recorded the validator's survival as the lane's.
+- **Re-adjudicated, not deferred (plan §19.3).** CEM covers generated elements
+  completely for the shipped package, and form participation is closed: the
+  framework mirrors `required → valueMissing` and hands the author the complete
+  `ElementInternals` seam, because a shell-side mirror of type/email/pattern would
+  be a second validation model.
+- **The last `__partProgram` runtime reads are gone (migration matrix C08–C11).**
+  The route→element tag binding is a build fact for every page kind the lane
+  emits, so the entry evaluates a literal and imports no program-tag resolver;
+  the streamed-page startup assertion, the deferred-shell gate and the public
+  `createStreamShellExecutor` (+ its three types) are deleted with their
+  `OE_STREAM_ROUTE_PROGRAM_MISMATCH` / `OE_DISPATCH_STREAM_DECLARATION` codes.
+  The stream *pump* (`createStreamBody`, `streamFields`,
+  `createStreamRequestScope`, `STREAM_BROWSER_BOOTSTRAP`) is deliberately
+  retained as an internal substrate with no emitted consumer — it is the piece
+  the Alpha18 streaming carrier is built on, and it is covered by its own
+  tests rather than left dangling.
+
 ## 1.0.0-alpha.15
 
 **The alpha.15 line: vocabulary finalization, defect closure, and the release

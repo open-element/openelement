@@ -17,19 +17,20 @@
  *   6. action/method/enctype/target IDL vs attribute resolution, including
  *      submitter formaction/formmethod/formenctype/formtarget overrides
  *      (IDL reads the document URL when the attribute is absent — #576).
- *   7. Restore-reason path: the component (like packages/ui open-input.tsx)
- *      implements formResetCallback only; the inherited
- *      formStateRestoreCallback is a safe no-op because no restore hook is
- *      registered. Only what the component implements is asserted.
+ *   7. Restore path: the generated shell maps a string restore state onto the
+ *      declared value row (the class lane's inherited callback was a no-op),
+ *      ignores a non-string state, and the component's formResetCallback still
+ *      restores the default. Only what the component actually implements is
+ *      asserted.
  *
  * Style: no sleeps; async settling is awaited through waitFor predicates.
  */
 import { assert } from 'chai';
 import { userEvent } from 'vitest/browser';
-import { WtrField } from '../generated/wtr-field.ts';
+import { WtrFieldElement } from '../generated/wtr-field.ts';
 import { formDataForSubmitter, typeInto, waitFor } from './helpers.js';
 
-customElements.define('wtr-field', WtrField);
+customElements.define('wtr-field', WtrFieldElement);
 await customElements.whenDefined('wtr-field');
 
 /** form > wtr-field(name=q) + caller-supplied extra controls; connected. */
@@ -275,23 +276,32 @@ describe('form/platform matrix', () => {
     form.remove();
   });
 
-  it('7. the inherited formStateRestoreCallback is a safe no-op (no restore hook implemented)', () => {
+  it('7. the restore channel maps a string state onto the declared value; reset still restores', () => {
     const { form, field } = setup();
     typeInto(field, 'keep-me');
 
-    // open-input.tsx (and this distilled fixture) implement formResetCallback
-    // only; the base class forwards formStateRestoreCallback to a kernel
-    // restore hook that the component never registers, so a platform restore
-    // callback must neither throw nor mutate the control.
+    // The generated shell implements the platform restore channel itself
+    // (`restoreFormValue`): a string state is written through the declared
+    // `value` row and re-published. The class lane forwarded the callback to a
+    // kernel restore hook this component never registered, so it was a no-op
+    // there; the measured generated-lane contract is what is asserted here.
     assert.strictEqual(typeof field.formStateRestoreCallback, 'function');
     field.formStateRestoreCallback('restored-value', 'restore');
-    field.formStateRestoreCallback(null, 'autocomplete');
-    assert.strictEqual(field.value, 'keep-me', 'no restore hook: state is ignored');
-    assert.strictEqual(field.matches(':valid'), true, 'validity untouched by the no-op');
+    assert.strictEqual(field.value, 'restored-value', 'a string state restores the value row');
+    assert.strictEqual(
+      field.shadowRoot.querySelector('input').value,
+      'restored-value',
+      'the compiled prop sink follows the restored value',
+    );
+    assert.strictEqual(field.matches(':valid'), true, 'validity re-synced to the restored value');
 
-    // The implemented channel (reset) still restores through
-    // formResetCallback — the full reset contract lives in
-    // form-contract.test.js; here only the contrast with restore matters.
+    // A null/File/FormData state has no mapping onto a string value: ignored.
+    field.formStateRestoreCallback(null, 'autocomplete');
+    assert.strictEqual(field.value, 'restored-value', 'a null state is ignored');
+
+    // The implemented reset channel still restores through formResetCallback —
+    // the full reset contract lives in form-contract.test.js; here only the
+    // contrast with restore matters.
     form.reset();
     assert.strictEqual(field.value, '', 'reset restores via formResetCallback');
 

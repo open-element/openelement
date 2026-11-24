@@ -84,7 +84,7 @@ export interface OpenElementExtensions {
    * a class declaration (its descriptor owns the root) and for a generated
    * declaration whose sidecar declares none (the descriptor default is light).
    */
-  root?: 'light' | 'shadow';
+  root?: 'light' | 'shadow' | 'closed';
   /**
    * The authored package-relative `.css` specifiers a generated SHADOW host
    * declares, published so a consuming build can emit the sheet and hand its

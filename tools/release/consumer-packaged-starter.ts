@@ -51,6 +51,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -91,7 +92,12 @@ const repoRoot = resolve(import.meta.dirname!, '../..');
 // Generous ceiling for the starter's real SSG build (vite + nitro); a hung
 // packed adapter must fail the tool instead of stalling CI forever.
 const BUILD_TIMEOUT_MS = 10 * 60_000;
-const NPM_INSTALL_TIMEOUT_MS = 5 * 60_000;
+// A harness budget, never an assertion: a hermetic cold-cache install must be
+// able to download the full external tree (vite, typescript, hono). Measured
+// 2026-11-23 at ~75KB/s registry throughput, that tree needs >5 minutes, so the
+// budget is sized for constrained networks instead of misreading slowness as
+// breakage.
+const NPM_INSTALL_TIMEOUT_MS = 20 * 60_000;
 const BROWSER_TIMEOUT_MS = 5 * 60_000;
 // One browser per probe invocation so every starter x browser pair is an
 // individually identifiable PASS/FAIL unit in the gate output.
@@ -317,10 +323,104 @@ async function runStarterBrowserMatrix(starter: string): Promise<void> {
 // convention, npm-manifest.ts): this module must be importable — for the
 // PW_PROBE_PIN anchor test — without executing the whole packed-consumer
 // walkthrough as a side effect.
+
+/**
+ * The agent round's docs origin when no explicit override is set: the
+ * CANDIDATE'S OWN docs build, served locally. The round's positive assertion
+ * is unchanged — the /errors page must document the failure code — but the
+ * page it resolves on is the one THIS release ships, not the currently
+ * deployed site (which is one release behind by construction). An explicit
+ * `OPENELEMENT_AGENT_DOCS_ORIGIN` still points the round at any other origin
+ * (a staged site, a mirror) without changing the assertion.
+ */
+const DOCS_SITE_TIMEOUT_MS = 6 * 60_000;
+
+async function buildCandidateDocsSite(): Promise<string> {
+  const dist = join(repoRoot, 'www/dist');
+  const built = await new Promise<boolean>((settled) => {
+    const child = spawn('pnpm', ['run', 'site:build'], {
+      cwd: repoRoot,
+      stdio: ['ignore', 'ignore', 'inherit'],
+      detached: false,
+    });
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM');
+      settled(false);
+    }, DOCS_SITE_TIMEOUT_MS);
+    child.addListener('exit', (code) => {
+      clearTimeout(timer);
+      settled(code === 0);
+    });
+  });
+  if (!built || !existsSync(join(dist, 'errors/index.html'))) {
+    throw new Error(
+      'the candidate docs build did not produce www/dist/errors — the agent round needs the ' +
+        '/errors page this release ships. Run `pnpm run site:build` at the repository root to see ' +
+        'the failure.',
+    );
+  }
+  return dist;
+}
+
+/** Serve one directory over 127.0.0.1 with the .html/.css/.js/.json map. */
+async function serveDocsMirror(dist: string): Promise<{ server: Server; origin: string }> {
+  const types: Record<string, string> = {
+    '.html': 'text/html; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.js': 'text/javascript; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.svg': 'image/svg+xml',
+    '.txt': 'text/plain; charset=utf-8',
+  };
+  const server = createServer((request, response) => {
+    void (async () => {
+      const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+      const pathname = decodeURIComponent(url.pathname);
+      const candidates = [
+        join(dist, pathname),
+        join(dist, pathname, 'index.html'),
+        join(dist, `${pathname}.html`),
+      ];
+      for (const candidate of candidates) {
+        if (!candidate.startsWith(dist) || !existsSync(candidate)) continue;
+        try {
+          const bytes = await readFile(candidate);
+          const type =
+            types[candidate.slice(candidate.lastIndexOf('.'))] ?? 'application/octet-stream';
+          response.writeHead(200, { 'content-type': type });
+          response.end(bytes);
+          return;
+        } catch {
+          // fall through to the next candidate
+        }
+      }
+      response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      response.end('not found');
+    })();
+  });
+  await new Promise<void>((ready) => {
+    server.listen(0, '127.0.0.1', () => ready());
+  });
+  const address = server.address();
+  if (address === null || typeof address === 'string') {
+    server.close();
+    throw new Error('the docs mirror failed to bind a loopback port');
+  }
+  return { server, origin: `http://127.0.0.1:${address.port}` };
+}
 async function main(): Promise<void> {
   const tmp = await mkdtemp(join(tmpdir(), 'openelement-packaged-starter-'));
   try {
-    const npmEnv = { NPM_CONFIG_CACHE: join(tmp, '.npm-cache') };
+    // One shared, content-addressed cache across legs and runs: a cold-cache
+    // hermetic install is this gate's slowest cell on a constrained network
+    // (measured 2026-11-24: the ~60MB external tree at 75-250KB/s needs 5-20+
+    // minutes per leg, and the gate runs several). Sharing keeps every property
+    // the gate actually asserts — the consumer never resolves into the
+    // repository and installs the six packed tarballs from their file: specs —
+    // while a warm re-run costs seconds (the same shape CI caches use).
+    const npmEnv = {
+      NPM_CONFIG_CACHE: join(tmpdir(), 'openelement-packed-consumer-npm-cache-v1'),
+    };
     // Cover the canonical retained package line (#828) with the shared tarball
     // naming helper (#793) so a new package cannot escape the smoke.
     const workspacePackages = await readPackages();
@@ -341,16 +441,38 @@ async function main(): Promise<void> {
     }
     await assertPackedTarballsFresh(tarballs);
 
+    // The npm half of the hermetic seal, mirroring the pnpm carrier written
+    // into the starter below (consumerPnpmOverridesYaml). npm resolves a
+    // tarball's inter-package edges (e.g. @openelement/router ->
+    // @openelement/compiler@1.0.0-alpha.16) as registry specs: argv tarballs
+    // join the root only after the nested ranges resolve, so the unpublished
+    // exact version queries registry.npmjs.org and the install dies at
+    // ETARGET/notarget. Sealing every retained name to its own packed tarball
+    // in a scratch manifest's dependencies AND overrides keeps every
+    // resolution path on these tarballs — before the publish, where the
+    // registry has no such version, and after it, where a published copy would
+    // otherwise mix into the packed proof. The specs live in the manifest
+    // rather than argv because npm rejects an override for a directly-installed
+    // argv name (EOVERRIDE).
+    const pinnedTarballs = Object.fromEntries(
+      RETAINED_PACKAGE_NAMES.map((name) => [name, `file:${tarballFor(name)}`]),
+    );
+    await writeFile(
+      join(tmp, 'package.json'),
+      `${JSON.stringify(
+        {
+          name: 'openelement-packed-starter-consumer',
+          private: true,
+          dependencies: pinnedTarballs,
+          overrides: pinnedTarballs,
+        },
+        null,
+        2,
+      )}\n`,
+    );
     const install = await runConsumer(
       'npm',
-      [
-        'install',
-        '--ignore-scripts',
-        '--no-audit',
-        '--no-fund',
-        '--fetch-timeout=30000',
-        ...tarballs,
-      ],
+      ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--fetch-timeout=300000'],
       tmp,
       { timeoutMs: NPM_INSTALL_TIMEOUT_MS, env: npmEnv },
     );
@@ -840,18 +962,37 @@ async function main(): Promise<void> {
       join(starter, 'node_modules'),
       'Packed consumer',
     );
-    const agentRound = await runAgentWorkflowRound({
-      appDir: starter,
-      run: (command, args, label) => {
-        console.log(`Agent-workflow round: ${label}`);
-        return runConsumer(command, [...args], starter, {
-          timeoutMs: BUILD_TIMEOUT_MS,
-          env: npmEnv,
-        });
-      },
-      docsOrigin: process.env.OPENELEMENT_AGENT_DOCS_ORIGIN,
-      docsWhenUnreachable: process.env.OPENELEMENT_AGENT_ROUND_OFFLINE === '1' ? 'skip' : 'fail',
-    });
+    // The docs origin: the candidate's own docs build by default (served on
+    // loopback), or the explicit env override for a staged/mirrored origin.
+    const docsEnv = process.env.OPENELEMENT_AGENT_DOCS_ORIGIN;
+    let docsOrigin = docsEnv;
+    let docsServer: Server | undefined;
+    if (docsOrigin === undefined) {
+      const dist = await buildCandidateDocsSite();
+      const mirror = await serveDocsMirror(dist);
+      docsServer = mirror.server;
+      docsOrigin = mirror.origin;
+      console.log(
+        `Agent-workflow docs mirror: serving the candidate's own docs build at ${docsOrigin}`,
+      );
+    }
+    let agentRound;
+    try {
+      agentRound = await runAgentWorkflowRound({
+        appDir: starter,
+        run: (command, args, label) => {
+          console.log(`Agent-workflow round: ${label}`);
+          return runConsumer(command, [...args], starter, {
+            timeoutMs: BUILD_TIMEOUT_MS,
+            env: npmEnv,
+          });
+        },
+        docsOrigin,
+        docsWhenUnreachable: process.env.OPENELEMENT_AGENT_ROUND_OFFLINE === '1' ? 'skip' : 'fail',
+      });
+    } finally {
+      if (docsServer !== undefined) docsServer.close();
+    }
     console.log(
       `Packed agent-workflow round passed: ${agentRound.failureCode} surfaced through the ` +
         `envelope, the fix was derived from public artifacts, docs=${agentRound.docs.status}` +

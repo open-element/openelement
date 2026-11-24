@@ -5,7 +5,7 @@ lede: '从空目录开始做一个完整的小应用：创建项目、加一个�
 order: 2
 ---
 
-> {{SOURCE_LINE_NOTE}} 下文讲的是基线创作接口，也就是本指南通篇记录的那一套。
+> {{SOURCE_LINE_NOTE}} 下文讲的是基线创作面，也就是本指南通篇记录的那一套。
 
 ## 开始之前
 
@@ -58,45 +58,33 @@ Docs: https://openelement.org
 
 ```text
 my-app/
-  package.json      依赖与脚本：dev、build、start、test、typecheck
-  openelement.config.ts  框架选项（token、head、shell 约定）
-  vite.config.ts    Vite 配置；插件调用不接受参数
-  app/routes/       一个文件对应一个 URL
-  app/components/   页面元素及其样式表
-  app/islands/      选择进入客户端投递的模块
-  public/           静态资源，原样拷进 dist/
+  package.json      dependencies + scripts: dev, build, start, test, typecheck
+  openelement.config.ts  framework options (tokens, head, shell conventions)
+  vite.config.ts    Vite configuration; the plugin call takes no arguments
+  app/routes/       one file per URL
+  app/components/   page-scope components and their style sheets
+  app/islands/      modules that opt into client delivery
+  public/           static assets, copied into dist/ as-is
 ```
 
 `npm run typecheck` 会类型检查 starter 的 `app/` 目录以及 `vite.config.ts` 与 `openelement.config.ts`；新增的路由会被自动纳入。
 
 ## 第 2 步：加第一个页面
 
-URL 就是文件：`app/routes/hello.tsx` 对应 `/hello`。标记本身属于 `app/components/` 下的编译元素，所以两个文件都要建。
-
-`app/components/page-hello.tsx`：
+URL 就是文件：`app/routes/hello.tsx` 对应 `/hello`。标记是静态文本的页面只需要这一个文件——路由模块导出一个组件，再用 `definePage` 把它包起来。
 
 ```tsx
-// Compiled by the open:compiled-element transform at build time.
-import { element, OpenElement } from '@openelement/element';
-
-@element('hello-page', { root: 'light' })
-export default class HelloPage extends OpenElement {
-  render() {
-    return (
-      <main>
-        <h1>Hello from a page</h1>
-        <p>This markup is server-rendered HTML, with no client JavaScript.</p>
-      </main>
-    );
-  }
-}
-```
-
-`app/routes/hello.tsx`：
-
-```ts
+// app/routes/hello.tsx
 import { definePage } from '@openelement/router';
-import HelloPage from '../components/page-hello.tsx';
+
+export function HelloPage() {
+  return (
+    <main>
+      <h1>Hello from a page</h1>
+      <p>This markup is server-rendered HTML, with no client JavaScript.</p>
+    </main>
+  );
+}
 
 export default definePage(HelloPage, {
   head: {
@@ -106,9 +94,9 @@ export default definePage(HelloPage, {
 });
 ```
 
-关于这个路由模块，现在就要知道两件事：
+关于这个模块，现在就该知道两件事：
 
-- 它是一层**绑定**。标记归类所有；路由模块把类交给 `definePage`，并附上页面的 head 元数据。
+- 它是一个**服务端函数页**：编译器把导出的函数降级成一个生成式 HTML 构造器，所以这个页面在构造上就在服务端渲染——没有 Part Program、没有属性机制，浏览器永远收不到这个函数。
 - `definePage` 只接受 `route`、`head`、`renderIntent`、`props` 和 `error`。没有 `render()` 字段，也没有 `route.path`——URL 由文件名决定。
 
 预期结果：dev server 不需要重启就会接管新文件。打开 http://localhost:5173/hello，或者直接看响应：
@@ -130,105 +118,70 @@ island 就是 `app/islands/` 下的一个模块。这个目录**本身**就是�
 `app/islands/hello-counter.tsx`：
 
 ```tsx
+import { signal } from '@openelement/element';
 import { defineIslandConfig } from '@openelement/router';
-import { element, OpenElement, property } from '@openelement/element';
 
-export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true, dsd: true });
+export const openElement = defineIslandConfig({
+  tag: 'hello-counter',
+  // shadow root 正是让计数器的标记成为 DSD 模板、由浏览器在任何脚本
+  // 运行之前解析的那个选择。
+  root: 'shadow',
+  hydrate: 'idle',
+  ssr: true,
+  dsd: true,
+});
 
-@element('hello-counter', { root: 'shadow-open' })
-export default class HelloCounter extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  count = 0;
+export default function HelloCounter() {
+  // 计数是一个信号，所以文本与两个按钮读的是同一个来源，
+  // 也只有读取它的那些槽位会刷新。
+  const count = signal(0);
 
-  decrement(): void {
-    this.count--;
-  }
-
-  increment(): void {
-    this.count++;
-  }
-
-  render() {
-    return (
-      <div class='counter-row'>
-        <button type='button' onClick={this.decrement}>-</button>
-        <span id='count'>{this.count}</span>
-        <button type='button' onClick={this.increment}>+</button>
-      </div>
-    );
-  }
+  return (
+    <div class='counter-row'>
+      <button type='button' onClick={() => { count.value = count.value - 1; }}>-</button>
+      <span id='count'>{count.value}</span>
+      <button type='button' onClick={() => { count.value = count.value + 1; }}>+</button>
+    </div>
+  );
 }
 ```
 
-接着让刚才那个页面承载它。`app/components/page-hello.tsx` 变成：
+接着让刚才那个页面承载它。`app/routes/hello.tsx` 变成：
 
 ```tsx
-import { element, OpenElement } from '@openelement/element';
+import { definePage } from '@openelement/router';
+// 副作用导入正是构建得知这个页面能到达该 island 的方式。
+import '../islands/hello-counter.tsx';
 
-@element('hello-page', { root: 'light' })
-export default class HelloPage extends OpenElement {
-  render() {
-    return (
-      <main>
-        <h1>Hello from a page</h1>
-        <p>This markup is server-rendered HTML, with no client JavaScript.</p>
-        <section class='demo'>
-          <p>The server sent this counter's markup; the browser upgrades it on idle.</p>
-          <hello-counter></hello-counter>
-        </section>
-      </main>
-    );
-  }
+export function HelloPage() {
+  return (
+    <main>
+      <h1>Hello from a page</h1>
+      <p>This markup is server-rendered HTML, with no client JavaScript.</p>
+      <section class='demo'>
+        <p>The server sent this counter's markup; the browser upgrades it on idle.</p>
+        <hello-counter></hello-counter>
+      </section>
+    </main>
+  );
 }
+
+export default definePage(HelloPage, { head: { title: 'Hello — my-app' } });
 ```
 
 预期结果——刷新 http://localhost:5173/hello：
 
-- 在任何 JavaScript 执行之前，响应里就已经有计数器标记，里面的数字是 `0`：island 通过同一个编译类在服务端完成了渲染。
-- 点 `+` 和 `-`，数字会变。`hydrate: 'idle'` 让浏览器在页面稳定后去取该 island 的 chunk、升级元素，并绑定编译模板声明的那些事件处理。
+- 在任何 JavaScript 执行之前，响应里就已经有计数器标记，里面的数字是 `0`：island 通过同一个编译组件在服务端完成了渲染。
+- 点 `+` 和 `-`，数字会变。`hydrate: 'idle'` 让浏览器在页面稳定后去取该 island 的 chunk、upgrade 元素，并绑定编译组件声明过的那些事件处理。
 - 没有任何路由引用的 island 永远不会被投递——构建从你的路由源码推导可达标签，所以只往 `app/islands/` 里放一个模块，不会给任何页面增加 JavaScript。
 
 ## 第 4 步：加一个表单 action
 
-路由模块还可以导出 `action`。先建页面，再建承载表单的路由。
-
-`app/components/page-notes.tsx`：
+路由模块还可以导出 `action`。表单本身是纯 HTML，所以 notes 页面不需要任何客户端行为，仍然是一个服务端函数页。
 
 ```tsx
-import { element, OpenElement, property } from '@openelement/element';
-
-@element('notes-page', { root: 'light' })
-export default class NotesPage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  note = '';
-
-  @property({ reflect: false, attribute: false })
-  error = '';
-
-  @property({ reflect: false, attribute: false })
-  saved = '';
-
-  render() {
-    return (
-      <main>
-        <h1>Notes</h1>
-        <form method='post' data-open-enhance>
-          <input name='note' type='text' value={this.note} placeholder='Write a note' />
-          <button type='submit'>Save</button>
-        </form>
-        <p id='error'>{this.error}</p>
-        <p id='saved'>{this.saved}</p>
-      </main>
-    );
-  }
-}
-```
-
-`app/routes/notes.tsx`：
-
-```ts
-import { definePage, fail, type OpenElementActionFailure, redirect } from '@openelement/router';
-import NotesPage from '../components/page-notes.tsx';
+// app/routes/notes.tsx
+import { definePage, fail, redirect, type OpenElementActionFailure } from '@openelement/router';
 
 interface NotesActionData {
   error?: string;
@@ -241,6 +194,20 @@ export function action(ctx: { formData: FormData }): OpenElementActionFailure<No
     return fail(422, { error: 'a note is required', note });
   }
   throw redirect(`/notes?saved=${encodeURIComponent(note)}`);
+}
+
+export function NotesPage(props: { note: string; error: string; saved: string }) {
+  return (
+    <main>
+      <h1>Notes</h1>
+      <form method='post' data-open-enhance>
+        <input name='note' type='text' value={props.note} placeholder='Write a note' />
+        <button type='submit'>Save</button>
+      </form>
+      <p id='error'>{props.error}</p>
+      <p id='saved'>{props.saved}</p>
+    </main>
+  );
 }
 
 export default definePage(NotesPage, {
@@ -263,7 +230,7 @@ export default definePage(NotesPage, {
 - 表单是纯 HTML，没有 JavaScript 也能用。那种提交会在服务端执行 `action`；`fail(422, …)` 用报错文案和用户刚输入的值重新渲染同一个页面。
 - `redirect()` 用一个 `303` 指向一个 GET 地址——即 post/redirect/get，因此刷新结果页不会重复提交。
 - 这里的 `renderIntent: { mode: 'dynamic' }` 是有意的：GET 要从请求里读 `?saved=`，必须按请求渲染。GET 不需要请求的页面可以保持 `'static'` 并同样导出 action，此时只有 POST 走请求时路径。
-- `props` 是请求作用域与编译标记之间**唯一**的接缝。它返回一个对象，每个键设置页面元素上同名的 `@property`。
+- `props` 是请求作用域与编译标记之间**唯一**的接缝。它返回一个对象，每个键设置页面组件上同名的声明属性。
 
 预期结果：`data-open-enhance` 用 `fetch` 提交表单，并把返回的文档 morph 到位，页面不整页刷新。想看协议本身，可以直接向 action 发请求：
 
@@ -321,7 +288,8 @@ index.html          预渲染的 /
 hello/index.html    预渲染的 /hello
 client/islands/     每个可达 island 一个 chunk
 island-manifests/   page-<hash>.json——记录每个页面加载哪些 island
-server/index.js     请求时处理器：回答 POST /notes，并为未匹配路径渲染带样式的 404
+server/index.js     请求时处理器：回答 POST /notes，并为未匹配路径
+                    渲染带样式的 404
 ```
 
 起服务：
@@ -357,6 +325,6 @@ HTTP/1.1 200 OK
 
 ## 另见
 
-- [核心概念](/zh/guide/core-concepts)——`@element` 与 `@property` 背后的元素模型。
+- [核心概念](/zh/guide/core-concepts)——sidecar 及其属性背后的组件模型。
 - [样式](/zh/guide/styling)——页面样式放在哪里，以及什么能穿过 shadow 边界。
 - [测试](/zh/guide/testing)——面对构建产物值得跑的检查。

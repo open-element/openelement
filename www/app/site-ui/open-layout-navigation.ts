@@ -204,7 +204,7 @@ export interface SidebarRow {
   key: string;
   kind: string;
   heading: string;
-  href: string | false;
+  href: string | null;
   label: string;
   current: 'page' | false;
   rel: string | false;
@@ -296,7 +296,7 @@ export function buildSidebarRows(
       key: `section:${section.section}`,
       kind: 'section',
       heading: localizedLabel(section.section, section.sectionZh, locale),
-      href: false,
+      href: null,
       label: '',
       current: false,
       rel: false,
@@ -311,7 +311,7 @@ export function buildSidebarRows(
         ? safe
         : safe
           ? layoutSiteHref(safe, locale, localeList, defaultLocale)
-          : false;
+          : null;
       rows.push({
         key: `link:${safe || item.label}`,
         kind: 'link',
@@ -319,7 +319,7 @@ export function buildSidebarRows(
         href,
         label: localizedLabel(item.label, item.labelZh, locale),
         current:
-          !external && href !== false && bareIdentity(href) === currentIdentity ? 'page' : false,
+          !external && href !== null && bareIdentity(href) === currentIdentity ? 'page' : false,
         rel: external ? EXTERNAL_REL : false,
         headingHidden: true,
         linkHidden: false,

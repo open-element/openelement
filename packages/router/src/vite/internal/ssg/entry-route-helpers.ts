@@ -8,28 +8,16 @@ export function renderImport(imp: ImportDecl): string {
 }
 
 /**
- * Page-route tag expression (#1276, B1.3-F1): resolves the route→program tag
- * binding from the route module's compiled Part Program at generated-entry
- * evaluation time (`__resolvePageTag`, imported from
- * @openelement/router/server-runtime per the renderer adapter
- * (#1470). The path-derived tag is passed only as the fallback for classes
- * without a compiled program. Used for SSR registration, the page/404
- * handlers, and the SSG routeInfo — one canonical binding for every
- * page-route tag consumer.
+ * Page-route tag expression (#1276, B1.3-F1; C08 closed 2026-11-24): the
+ * route→tag binding is a BUILD fact for every page kind this lane emits. A
+ * generated element page's tag is the island scan's tag (also the tag the
+ * compiler emitted the class and host producer under); a server function
+ * page has no element at all, so the path-derived tag IS the binding. The
+ * retired class lane's runtime `__resolvePageTag` program read went with the
+ * class compiler — the entry evaluates a literal, never a module static.
  */
-export function pageRouteTagExpr(
-  varName: string,
-  fallbackTagName: string,
-  pageKind?: 'class-page' | 'function-page' | 'generated-element-page',
-): string {
-  // M11-2: a generated element page's tag is a compiler-owned build fact (the
-  // island scan's tag, which is also the tag the compiler emitted the class
-  // and host producer under). The class lane keeps the runtime program-tag
-  // resolver; the generated lane never reads `__partProgram`.
-  if (pageKind === 'generated-element-page') {
-    return quoteGeneratedJavaScriptValue(fallbackTagName);
-  }
-  return `__resolvePageTag(${varName}, ${quoteGeneratedJavaScriptValue(fallbackTagName)})`;
+export function pageRouteTagExpr(_varName: string, fallbackTagName: string): string {
+  return quoteGeneratedJavaScriptValue(fallbackTagName);
 }
 
 /* ------------------------------------------------------------------------- *

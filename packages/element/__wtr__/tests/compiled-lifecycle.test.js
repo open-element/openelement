@@ -16,9 +16,9 @@
  * counter.tsx.
  */
 import { assert } from "chai";
-import { ProgramCounter } from "../generated/oe-program-counter.ts";
+import { ProgramCounterElement } from "../generated/oe-program-counter.ts";
 
-customElements.define("oe-program-counter", ProgramCounter);
+customElements.define("oe-program-counter", ProgramCounterElement);
 await customElements.whenDefined("oe-program-counter");
 
 describe("compiled element lifecycle", () => {
@@ -114,7 +114,7 @@ describe("compiled element lifecycle", () => {
     element.remove();
   });
 
-  it("keyed distant swap preserves stationary focus and nested lifecycle", () => {
+  it("keyed distant swap keeps entry identity and balances nested lifecycle", () => {
     const tag = "oe-wtr-keyed-probe";
     class Probe extends HTMLElement {
       static connections = 0;
@@ -152,9 +152,28 @@ describe("compiled element lifecycle", () => {
       assert.strictEqual(after[1], before[998]);
       assert.strictEqual(after[998], before[1]);
       assert.strictEqual(after[500], stable);
-      assert.strictEqual(root.activeElement ?? document.activeElement, stable);
-      assert.strictEqual(Probe.connections, 1);
-      assert.strictEqual(Probe.disconnections, 0);
+      // MINIMAL MOVE — the class lane's own contract (#1455), restored on the
+      // generated lane: the emitted `__oe_eachSync` tail hands placement to the
+      // ONE leaf-runtime helper (`reconcileEachEntries`), whose stable chain is
+      // never re-inserted, so a distant swap places exactly the two swapped
+      // entries, the stationary `li` is never detached, its nested element
+      // never reconnects, and the browser keeps focus where the author put it.
+      assert.strictEqual(
+        Probe.connections,
+        1,
+        "a stationary entry's nested element is never re-inserted",
+      );
+      assert.strictEqual(
+        Probe.disconnections,
+        0,
+        "…and never disconnects (no duplicate or lost lifecycle)",
+      );
+      assert.isTrue(probe.isConnected, "the nested element ends connected");
+      assert.strictEqual(
+        root.activeElement ?? document.activeElement,
+        stable,
+        "a distant swap preserves focus inside the list",
+      );
     } finally {
       element.remove();
     }

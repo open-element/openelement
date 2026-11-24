@@ -1,12 +1,15 @@
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { expect, test } from 'vitest';
 import { assertRejectsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { isActionFailure, isOpenElementRedirect } from '@openelement/router';
-import { renderToString } from '@openelement/element';
+import { compileServerComponentModule } from '@openelement/compiler';
 
 // v0.44: route logic lives in app/route-logic/ so tests never evaluate the
-// authoring module's compile-time-only decorators; SSR assertions compile the
-// real page class through the adapter compiler first.
-import { compileComponentClass } from './compile-page.ts';
+// authoring module's compile-time-only constructs; SSR assertions compile the
+// real page module through the server component compiler first.
 const {
   configuredOAuthProviders,
   createLoginAction,
@@ -16,6 +19,42 @@ const {
 } = await import('../route-logic/login.ts');
 type LoginAuthClient = import('../route-logic/login.ts').LoginAuthClient;
 type LoginOAuthClient = import('../route-logic/login.ts').LoginOAuthClient;
+
+// The page component lives in its ROUTE module (D-M11: the server function page
+// lane admits only a component function the route module declares itself), so
+// the SSR assertions compile that module and call its render with the
+// projector's rows — the same bytes the request-time handler renders. The
+// emitted module imports the element server helpers and the router entry by
+// bare specifier, so both are re-pointed at the workspace sources (the rewrite
+// `compile-page.ts` performs for the retired class form); relative imports are
+// rebased onto the route module's own directory.
+const ELEMENT_SERVER_URL = import.meta.resolve('@openelement/element/server');
+const ROUTER_URL = import.meta.resolve('@openelement/router');
+
+async function renderLoginPage(props: Record<string, unknown>): Promise<string> {
+  const routeUrl = new URL('../routes/login.tsx', import.meta.url);
+  const compiled = compileServerComponentModule(
+    await readFile(routeUrl, 'utf8'),
+    routeUrl.pathname,
+  );
+  if (compiled === null) throw new Error('the login route module compiled to nothing');
+  const rewritten = compiled.code
+    .replaceAll("from '@openelement/element/server'", `from '${ELEMENT_SERVER_URL}'`)
+    .replaceAll("from '@openelement/router'", `from '${ROUTER_URL}'`)
+    .replaceAll(
+      /from (['"])(\.[^'"]*)\1/g,
+      (_match, quote: string, specifier: string) =>
+        `from ${quote}${new URL(specifier, routeUrl).href}${quote}`,
+    );
+  const tempDir = await mkdtemp(join(tmpdir(), 'oe-saas-login-page-'));
+  const tempModule = join(tempDir, 'login-page.ts');
+  await writeFile(tempModule, rewritten, 'utf8');
+  const mod = (await import(pathToFileURL(tempModule).href)) as Record<string, unknown>;
+  await rm(tempDir, { recursive: true, force: true });
+  const render = mod.LoginPage;
+  if (typeof render !== 'function') throw new Error('the login route emitted no LoginPage render');
+  return String((render as (pageProps: Record<string, unknown>) => unknown)(props));
+}
 
 function client(error: { message: string } | null = null): () => LoginAuthClient {
   return () => ({ auth: { signInWithPassword: () => Promise.resolve({ error }) } });
@@ -73,18 +112,16 @@ test('login success redirects with PRG', async () => {
 });
 
 test('login SSR includes the action error mount point contract', async () => {
-  const LoginPage = await compileComponentClass('../components/page-login.tsx');
-  const html = renderToString('login-page', {
-    componentClass: LoginPage,
-    props: loginPageProps({
+  const html = await renderLoginPage(
+    loginPageProps({
       data: { oauthProviders: [] },
       actionData: { error: 'x', email: 'e' },
       params: {},
       route: { path: '/login' },
       meta: {},
     }),
-  });
-  // renderToString returns the serialized markup directly; a render error
+  );
+  // The compiled render returns the serialized markup directly; a render error
   // propagates as a throw (the retired result object's `errors` field was a
   // hardcoded empty array), so reaching these assertions is the guarantee.
   expect(html.includes("id='error'") || html.includes('id="error"'), html).toBeTruthy();
@@ -164,17 +201,12 @@ test('login projects one flag per configured provider instead of the placeholder
 });
 
 test('login SSR renders the provider branches and placeholder from the projection', async () => {
-  const LoginPage = await compileComponentClass('../components/page-login.tsx');
   const base = { actionData: undefined, params: {}, route: { path: '/login' }, meta: {} };
-  const none = renderToString('login-page', {
-    componentClass: LoginPage,
-    props: loginPageProps({ ...base, data: { oauthProviders: [] } }),
-  });
+  const none = await renderLoginPage(loginPageProps({ ...base, data: { oauthProviders: [] } }));
   expect(none.includes('OAuth providers: not configured'), none).toBeTruthy();
   expect(!none.includes('Continue with'), none).toBeTruthy();
-  const both = renderToString('login-page', {
-    componentClass: LoginPage,
-    props: loginPageProps({
+  const both = await renderLoginPage(
+    loginPageProps({
       ...base,
       data: {
         oauthProviders: [
@@ -183,7 +215,7 @@ test('login SSR renders the provider branches and placeholder from the projectio
         ],
       },
     }),
-  });
+  );
   expect(both.includes('Continue with Google'), both).toBeTruthy();
   expect(both.includes('Continue with GitHub'), both).toBeTruthy();
   expect(!both.includes('not configured'), both).toBeTruthy();

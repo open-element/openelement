@@ -307,7 +307,15 @@ describe('references and parity', () => {
     const findings = run({
       'www/content/docs/guide/x.md': `---\ntitle: 'X'\nlede: '${long}'\n---\n`,
     });
-    expect(findings.some((finding) => finding.rule === 'lede')).toBe(true);
+    const finding = findings.find((candidate) => candidate.rule === 'lede');
+    expect(finding).toBeDefined();
+    // The finding carries its own evidence (the bug printed `undefined` here
+    // because the report call passed its message in the value slot).
+    expect(finding!.message).toBe(
+      `lede is ${long.length} characters; the meta-description budget is 160`,
+    );
+    expect(finding!.value).toBe(long);
+    expect(finding!.line).toBeGreaterThan(0);
   });
 
   test('a package count that disagrees with the release line is a finding', () => {

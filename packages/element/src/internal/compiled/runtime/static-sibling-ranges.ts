@@ -32,12 +32,20 @@
  * committed in the attempt are cleared, and those ranges' owners are released
  * with `dispose(false)`. Borrowed nodes are not deleted. A dynamic write that
  * already happened may stay. This is not a byte-level restore of the claim.
- * A directory claim that commits every declared range stays permanent,
- * including after `dispose`. A validation failure of the range in hand writes
- * nothing and creates no owner for that range. An activation failure disposes
- * that uncommitted scope with `dispose(false)` before the attempt is rolled
- * back. A failure before the reservation is taken does not roll the attempt
- * back, and a `busy` reentry does not clear the holder's reservation.
+ * A directory claim that commits every declared range stays permanent while
+ * the claim owns the DOM: a later open of the same parent cannot re-take those
+ * ordinals. Two disposal modes, two halves of one rule. A RETAINED-DOM dispose
+ * -- `dispose(false)` on the claim, or a retained disposal of the scope the
+ * claim was inserted into, which is the disconnect cascade -- releases that
+ * claim's OWN tombstones and rewinds the cursor to its ordinal, so the
+ * surviving markers can be claimed again in order by a reconnect. A DETACH
+ * dispose (`dispose(true)`) keeps the tombstones: its range cleanup removed
+ * the markers, so `consumed:` is the honest refusal for that ordinal. A
+ * validation failure of the range in hand writes nothing and creates no owner
+ * for that range. An activation failure disposes that uncommitted scope with
+ * `dispose(false)` before the attempt is rolled back. A failure before the
+ * reservation is taken does not roll the attempt back, and a `busy` reentry
+ * does not clear the holder's reservation.
  *
  * @module ./static-sibling-ranges.ts
  */
@@ -47,6 +55,7 @@ import {
   RUNTIME_MESSAGES_ENABLED,
   RuntimeErrorCode,
 } from '@openelement/protocol/errors';
+import { STATIC_STYLES_MARKER } from '@openelement/protocol/part-program';
 import type { LifetimeScope } from '../lifetime-scope.ts';
 import {
   recordOwnerCreated,
@@ -105,7 +114,11 @@ export interface StaticRangeHandle {
   readonly start: Node;
 }
 
-/** A committed range. `dispose` does not clear the directory tombstone. */
+/**
+ * A committed range. `dispose(false)` releases this range's directory
+ * tombstones (the retained-DOM case); `dispose(true)` keeps them, because it
+ * removes the markers.
+ */
 export interface StaticSiblingClaim {
   readonly ordinal: number;
   readonly owner: LifetimeScope;
@@ -158,10 +171,11 @@ export interface StaticSiblingDirectory {
 
 /**
  * Ownership of one parent. Keyed by the element, so it survives a second open
- * and a `dispose` that removes the markers. The marker set keeps the committed
- * start and end nodes reachable for that parent's lifetime. It is not a global
- * marker lock: a committed node moved under a different parent is outside
- * this slice.
+ * and a retained-DOM `dispose` that keeps the markers. The ordinal set and the
+ * marker set are one claim's tombstone pair: permanent while that claim owns
+ * the DOM, released together when that claim is disposed with the DOM
+ * retained. It is not a global marker lock: a committed node moved under a
+ * different parent is outside this slice.
  */
 interface PairIdentity {
   next: number;
@@ -269,12 +283,46 @@ function rejectNestedMarker(node: Node, source: string): void {
 }
 
 /**
+ * The number of LEADING canonical marked stylesheet `<link>` nodes a claim
+ * parent delivers before its authored content (M09-2e / #1803; F16 nested-light
+ * lift).
+ *
+ * A claim parent that is a ShadowRoot is a parser-adopted DSD template. The
+ * runtime prefixes that template with the marked links it owns: the module's
+ * own declared sheets, plus — when a nested LIGHT child is expanded into the
+ * same template — that child's lifted sheets. Those nodes are borrowed
+ * delivery markup, never static-directory content, so the directory parse
+ * starts after the run. The predicate is the emitted claim walk's own
+ * (`nodeName === "LINK"` carrying the marker): a marked `<style>`, an unmarked
+ * `<link>`, or a marked link past the run is NOT prefix and stays the
+ * structural mismatch it always was.
+ *
+ * Scoped to the claim ROOT: an element directory's first child is never a
+ * style link, so no other parent skips anything.
+ */
+function leadingStyleLinkCount(parent: StaticSiblingDirectoryParent): number {
+  if (!isClaimParentShadowRoot(parent)) return 0;
+  const children = parent.childNodes;
+  let count = 0;
+  for (;;) {
+    const node = count < children.length ? childAt(children, count) : null;
+    if (node === null || node.nodeType !== 1) return count;
+    const element = node as Element;
+    if (element.nodeName !== 'LINK') return count;
+    if (!element.hasAttribute(STATIC_STYLES_MARKER)) return count;
+    count += 1;
+  }
+}
+
+/**
  * The parent must be only sibling ranges. Ordinals are strictly increasing.
  * Every ordinal `>= requiredFrom` (the unconsumed suffix) must be present.
  * The start slot must carry the start spelling `oe:r:<n>`; an end marker
  * `oe:/r:<n>` there is malformed, not a start whose close happens to follow.
- * A consumed range may still be present after `dispose(false)`, or absent
- * after `dispose(true)`. Neither case rewinds the cursor.
+ * A retained-DOM dispose rewinds the cursor to the released ordinal, so those
+ * markers are the unconsumed suffix again. A detach dispose keeps the
+ * tombstone and never rewinds: its markers are absent and the suffix starts
+ * after them.
  */
 function parseDirectory(
   parent: StaticSiblingDirectoryParent,
@@ -282,7 +330,9 @@ function parseDirectory(
   source: string,
   requiredFrom: number,
 ): ParsedRange[] {
-  const children = childrenOf(parent);
+  const all = childrenOf(parent);
+  const skip = leadingStyleLinkCount(parent);
+  const children = skip === 0 ? all : all.slice(skip);
   const ranges: ParsedRange[] = [];
   let index = 0;
   let previous = -1;
@@ -455,16 +505,19 @@ function asState(directory: StaticSiblingDirectory): DirectoryState {
  * before that reservation does not roll back an earlier range. A failure
  * after it releases the reservation and rolls back ranges committed earlier
  * in the same incomplete directory attempt. When every declared range has
- * committed, the tombstones stay, including after `dispose` and including a
- * later open of the same parent.
+ * committed, the claim owns its tombstones: they stay while it owns the DOM
+ * (a later open of the same parent cannot re-take them), until a retained-DOM
+ * dispose releases them for the next claim in order. A detach dispose keeps
+ * them, because it removed the markers.
  */
 
 /**
  * Undo tombstones and the success cursor of the incomplete attempt, then
  * release those owners. A directory claim that already committed every range
- * has nothing provisional and is left alone. Dispose errors do not replace
- * the claim error. Borrowed nodes are not removed: release uses
- * `dispose(false)`.
+ * has nothing provisional and is left alone: its tombstones are permanent
+ * while it owns the DOM, and only a retained-DOM dispose releases them (a
+ * rollback is not one). Dispose errors do not replace the claim error.
+ * Borrowed nodes are not removed: release uses `dispose(false)`.
  */
 function rollbackProvisional(identity: PairIdentity): void {
   const ranges = identity.provisional.splice(0);
@@ -484,6 +537,26 @@ function rollbackProvisional(identity: PairIdentity): void {
       // The claim error is what surfaces. Borrowed nodes stay.
     }
   }
+}
+
+/**
+ * Release one claim's OWN tombstone pair: its ordinal and its two marker
+ * nodes leave the identity, and the cursor rewinds to its ordinal so the next
+ * claim can take it in order. A tombstone the identity has since given back to
+ * a later claim is never touched -- the caller's one-shot guard limits this to
+ * one call per claim. The live-owner guard is elsewhere and stays: only a
+ * claim whose owner is disposed reaches this function.
+ */
+function releaseClaimTombstones(
+  identity: PairIdentity,
+  ordinal: number,
+  start: Node,
+  end: Node,
+): void {
+  identity.consumedOrdinals.delete(ordinal);
+  identity.consumedMarkers.delete(start);
+  identity.consumedMarkers.delete(end);
+  if (ordinal < identity.next) identity.next = ordinal;
 }
 
 export function claimStaticSiblingRange(
@@ -579,6 +652,13 @@ export function claimStaticSiblingRange(
     identity.consumedMarkers.add(range.end);
     identity.next = ordinal + 1;
     identity.reservation = null;
+    // One release per claim, and only this claim's own pair.
+    let released = false;
+    const release = (): void => {
+      if (released) return;
+      released = true;
+      releaseClaimTombstones(identity, ordinal, range.start, range.end);
+    };
     let disposed = false;
     const claim: StaticSiblingClaim = {
       ordinal,
@@ -590,9 +670,27 @@ export function claimStaticSiblingRange(
         if (disposed) return;
         disposed = true;
         recordProjectionDisposed();
-        owner.dispose(detachOwnedNodes);
+        try {
+          owner.dispose(detachOwnedNodes);
+        } finally {
+          // The retained-DOM dispose releases the tombstones even when a
+          // cleanup throws: the markers are still in the parent.
+          if (!detachOwnedNodes) release();
+        }
       },
     };
+    // The shell disposes the scope the claim was inserted into, not this
+    // handle: `projection?.dispose(false)` on disconnect cascades to the range
+    // owner. That cascade is the retained-DOM case too, so the claim registers
+    // one cleanup on its inserting scope. A parent's regular cleanups run
+    // after its child scopes are disposed and after their detach range
+    // cleanups, so a marker still in the parent means "retained" (release) and
+    // an absent marker means "detached" (keep the tombstone).
+    insertingOwner.add(() => {
+      if (!owner.disposed) return;
+      if (range.start.parentNode !== state.parent) return;
+      release();
+    });
     const frozen = Object.freeze(claim);
     identity.provisional.push({
       ordinal,

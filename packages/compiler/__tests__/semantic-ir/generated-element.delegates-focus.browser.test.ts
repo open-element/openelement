@@ -101,6 +101,7 @@ async function buildBundle(dir: string, islandModule: string): Promise<BundleRes
     shim,
     [
       `export { claimRecipe, createRecipe, insertRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
+      `export { reconcileEachEntries } from ${JSON.stringify(join(runtime, 'each-reconcile.ts'))};`,
       `export { bindSignalWrites, runUntracked } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
       `export { runtimeProbe } from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
       `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
@@ -206,7 +207,7 @@ describe('M09-2a authored delegatesFocus island (Chromium)', () => {
     expect(compiledCode).toContain('delegatesFocus: true');
     expect(compiledCode).toContain('dsd: { delegatesFocus: true },');
     expect(compiledCode).toContain(
-      'export function ProfileFocus__ssrHost(props, lightChildren, attributes) {',
+      'export function ProfileFocus__ssrHost(props, lightChildren, attributes, styleLinks, nestedHost) {',
     );
   });
 

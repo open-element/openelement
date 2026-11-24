@@ -1,7 +1,6 @@
 import { expect, test } from 'vitest';
-import { compileElementProgram, compileGeneratedElementIfAdmitted } from '@openelement/compiler';
-import { REPOSITORY_URL } from '../app/site-ui/open-layout-navigation.ts';
-import { readFile } from 'node:fs/promises';
+import { compileGeneratedElementIfAdmitted } from '@openelement/compiler';
+import { readdir, readFile } from 'node:fs/promises';
 
 /**
  * The emitted descriptor's `properties` rows, read off the generated module.
@@ -31,38 +30,114 @@ function descriptorRows(code: string): Array<{
   return rows;
 }
 
-const siteModules = [
-  ['open-standards-visual', '../app/site-ui/open-standards-visual.tsx'],
-  ['open-reading-shell', '../app/site-ui/open-reading-shell.tsx'],
-  ['open-article-view', '../app/site-ui/open-article-view.tsx'],
-] as const;
-
-for (const [tagName, path] of siteModules) {
-  test(`site UI owns compiled ${tagName}`, async () => {
-    const url = new URL(path, import.meta.url);
-    const result = compileElementProgram(await readFile(url, 'utf8'), url.pathname);
-    expect(result.program.tag).toEqual(tagName);
+// The class-lane roster is EMPTY (2026-11-20): every www site-ui module compiles
+// through the generated lane or is a plain TypeScript module. `open-article-view`
+// was the last row — it retired when the article routes inlined the reading shell
+// D-M5 resolved: a function page's nested styled host never runs the class
+// serializer's style walk, so the shell is authored in the generated page and its
+// presentation comes from the linked document sheet. The assert below pins the
+// rostre's emptiness so a new class-lane module cannot return unnoticed.
+test('no www site-ui module remains on the class lane', async () => {
+  const entries = await readdir(new URL('../app/site-ui/', import.meta.url), {
+    withFileTypes: true,
   });
-}
+  const classLane: string[] = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.tsx')) continue;
+    const source = await readFile(new URL(`../app/site-ui/${entry.name}`, import.meta.url), 'utf8');
+    if (source.includes('extends OpenElement') || source.includes('@element(')) {
+      classLane.push(entry.name);
+    }
+  }
+  expect(
+    classLane,
+    'site-ui migrated wholesale; a class-lane module would re-open the retired path',
+  ).toEqual([]);
+});
 
-test('app/layout.tsx is the compiled shell convention (no island declaration)', async () => {
+test('app/layout.tsx is the generated site shell with all 31 derived nodes', async () => {
   const url = new URL('../app/layout.tsx', import.meta.url);
   const source = await readFile(url, 'utf8');
-  // The convention module carries no island admission — a compiled light-root
-  // component with no island declaration ships zero client JS. (The former
-  // open-layout island, hydrate: 'none', retired with this migration.)
-  expect(source).not.toContain('defineIslandConfig');
-  expect(source).toContain("@element('app-layout')");
-  expect(source).toContain('export default class Layout extends OpenElement');
-  const result = compileElementProgram(source, url.pathname);
-  expect(result.program.tag).toEqual('app-layout');
-  // Blocks: header nav (desktop + mobile panel), sidebar rows (desktop +
-  // mobile disclosure panel) and the four footer link columns.
-  expect(result.program.blocks.length).toEqual(8);
+  // Generated lane (2026-11-20 migration): the class became a function component
+  // whose sidecar keeps the convention tag (the router constant, D-M1) and whose
+  // `computed` calls use the lane's intrinsic to declare derived nodes
+  // the compiler creates in the retained setup factory (ADR-0183 D-4). The entry
+  // registers it through the generated host PAIR channel (layout-pair slice).
+  expect(source).not.toContain('extends OpenElement');
+  expect(source).toContain("tag: 'app-layout'");
+  expect(source.match(/const \w+ = computed\(/g)?.length).toEqual(31);
+  const compiled = compileGeneratedElementIfAdmitted(source, url.pathname, {
+    site: { tag: 'app-layout' },
+  });
+  expect(compiled).not.toBeNull();
+  // The two chrome micro-islands are DASH tags in its markup, so the SSR
+  // producer routes each through the render's nested-host expander rather than
+  // hard-coding their bytes (nested-expansion slice). Without that routing they
+  // would stay unexpanded — an inert tag instead of DSD.
+  expect(compiled!.code).toContain('nestedHost(');
+  // One light root, so no DSD wrapper of its own; the islands inside it still
+  // get theirs through the expander.
+  expect(compiled!.code).not.toContain('serializeGeneratedElementHtml');
+});
+
+test('open-section-frame is a page-local generated component with its slots preserved', async () => {
+  const url = new URL('../app/site-ui/open-section-frame.tsx', import.meta.url);
+  const source = await readFile(url, 'utf8');
+  // `app/site-ui/` is neither the islands directory (whose tag is the file path's
+  // convention) nor a package (whose tag is its manifest declaration), so the
+  // sidecar's authored `tag` is this module's ONLY tag source
+  // (declared-element-tags.ts). The root stays LIGHT: the class lane rendered it
+  // in the document tree and www/site-chrome.css selects
+  // `open-section-frame > section` there.
+  expect(source).toContain("root: 'light'");
+  expect(source).toContain("tag: 'open-section-frame'");
+  expect(source).not.toContain('extends OpenElement');
+  const result = compileGeneratedElementIfAdmitted(source, url.pathname, {
+    site: { tag: 'open-section-frame' },
+  });
   expect(
-    result.program.metadata.properties.find((property) => property.name === 'repositoryHref')
-      ?.default,
-  ).toEqual(REPOSITORY_URL);
+    result,
+    'open-section-frame must be admitted by the generated-element lane',
+  ).not.toBeNull();
+  expect(result!.component).toEqual('OpenSectionFrame');
+  expect(String(result?.diagnostics ?? '')).not.toContain('OEC');
+  // No property rows at all: the index line, heading and body arrive through the
+  // `index`/`title`/`copy` named slots plus the default slot, so there is no
+  // reactive surface to bind.
+  expect(descriptorRows(result!.code)).toEqual([]);
+  // A light root's children ARE its region, so the producer writes one anchor
+  // pair per declared slot — that is what lets the light serializer substitute
+  // the caller's children without pattern-matching markup (slot-anchors.ts).
+  expect(result!.code.match(/slotAnchorMarker\(/g)?.length).toBe(8);
+  for (const anchor of [
+    'slotAnchorMarker(0, "index")',
+    'slotAnchorMarker(1, "title")',
+    'slotAnchorMarker(2, "copy")',
+    'slotAnchorMarker(3, "")',
+  ]) {
+    expect(result!.code).toContain(anchor);
+  }
+});
+
+test('open-standards-visual is a generated component and its computed stays a derived node', async () => {
+  const url = new URL('../app/site-ui/open-standards-visual.tsx', import.meta.url);
+  const source = await readFile(url, 'utf8');
+  // Migrated on the generated lane (ADR-0183 D-4): the class lanes four rows
+  // are the sidecar table, `showPackages` is the lane's `computed` intrinsic
+  // rather than a padded numeric property, and the root stays LIGHT because the
+  // class rendered in the document tree (`data-oe-light` in the built pages).
+  expect(source).toContain("root: 'light'");
+  expect(source).toContain("tag: 'open-standards-visual'");
+  expect(source).not.toContain('extends OpenElement');
+  expect(source).toContain('const showPackages = computed(');
+  const compiled = compileGeneratedElementIfAdmitted(source, url.pathname, {
+    site: { tag: 'open-standards-visual' },
+  });
+  expect(compiled).not.toBeNull();
+  // The derived node is created by the retained setup factory and returned in
+  // the record the shell keeps as bindings — not a declared property row.
+  expect(compiled!.code).toContain('const showPackages = computed(');
+  expect(compiled!.code).not.toContain('name: "showPackages"');
 });
 
 test('open-page-rail keeps its view compiler-owned on the generated lane', async () => {
@@ -162,4 +237,32 @@ test('open-page-rail keeps its view compiler-owned and its browser state externa
     attribute: 'locale',
     type: 'string',
   });
+});
+
+test('open-reading-shell is a generated component with all 21 derived nodes', async () => {
+  const url = new URL('../app/site-ui/open-reading-shell.tsx', import.meta.url);
+  const source = await readFile(url, 'utf8');
+  // Generated lane (2026-11-20): the class's 21 `computed` fields are the lane's
+  // `computed` intrinsic — derived nodes the compiler creates in the retained
+  // setup factory, never declared property rows.
+  expect(source).not.toContain('extends OpenElement');
+  expect(source).toContain("tag: 'open-reading-shell'");
+  expect(source.match(/const \w+ = computed\(/g)?.length).toEqual(21);
+  // The two `attribute: false` rows are local mirrors: the lane refuses an
+  // imported or generic props member type.
+  expect(source).toContain('interface ReadingMetadata');
+  expect(source).toContain('interface ReadingNavigation');
+  const compiled = compileGeneratedElementIfAdmitted(source, url.pathname, {
+    site: { tag: 'open-reading-shell' },
+  });
+  expect(compiled).not.toBeNull();
+  expect(compiled!.code).not.toContain('name: "breadcrumb"');
+  // The retained factory emits the captured chrome copy BEFORE the nodes read it.
+  const factory = compiled!.code.slice(compiled!.code.indexOf('function __oe_rootInstance'));
+  const localIndex = factory.indexOf('const chrome =');
+  const firstDerived = factory.indexOf('= computed(');
+  expect(localIndex).toBeGreaterThan(-1);
+  expect(localIndex).toBeLessThan(firstDerived);
+  // The named slots survive the lane switch.
+  expect(compiled!.code).toContain('slot');
 });

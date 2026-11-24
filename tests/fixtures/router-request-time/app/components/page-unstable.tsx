@@ -8,16 +8,19 @@
  * notFound(), ?kind=redirect throws redirect('/live'), and every
  * error/redirect response keeps the no-store baseline because the loader
  * throws before the render succeeds.
+ *
+ * GENERATED lane (F16: class → function). The body stays static because the
+ * page must never render: the loader throws first, so any markup here would be
+ * dead code that the #943 rows could not distinguish from a working render.
  */
-import { element, OpenElement } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
 
-@element('unstable-page', { root: 'shadow-open' })
-export default class UnstablePage extends OpenElement {
-  render() {
-    return (
-      <main>
-        <h1>unstable page</h1>
-      </main>
-    );
-  }
+export const openElement = defineIslandConfig({ tag: 'unstable-page', root: 'shadow' });
+
+export default function UnstablePage() {
+  return (
+    <main>
+      <h1>unstable page</h1>
+    </main>
+  );
 }

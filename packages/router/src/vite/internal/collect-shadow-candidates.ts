@@ -10,7 +10,11 @@
  * resolver-driven discovery pass (which compiles every module the server
  * renders and registers the same way).
  *
- * There is no second parser here and no class grammar of our own.
+ * There is no second parser here and no class grammar of our own. The lanes are
+ * tried in the order the transform tries them, because each lane's admission is
+ * its own: a generated island is admitted by its island declaration, a page or
+ * layout by the server function frontend, a shipped package by its embedded
+ * artifact facts. A module the classifier cannot place registers its absence.
  *
  * A module that fails to compile is skipped by design: this pass only feeds the
  * component stylesheet's candidate set, and the authoritative compile (the SSR
@@ -27,12 +31,13 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import {
   type ClassCandidateRegistry,
-  compileElementModule,
+  compileGeneratedElementIfAdmitted,
   compileServerComponentIfAdmitted,
   compiledArtifactClassCandidates,
 } from '@openelement/compiler';
-import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
 import { join, resolve } from 'pathe';
+import { readComponentDeclaration } from './component-declaration.ts';
+import { islandStyleDeclarationFor } from './island-style-declarations.ts';
 import { createServerComponentSourceResolver } from './server-component-host.ts';
 
 /** One module the collection pass should compile. */
@@ -45,6 +50,19 @@ export interface CandidateModule {
   readonly path: string;
   /** Resolve `path` as a package specifier from the app root. */
   readonly resolve?: boolean;
+  /**
+   * The caller's convention-derived tag, when the caller knows it (an island's
+   * path tag).
+   *
+   * It is only the declaration reader's FALLBACK identity: a generated island
+   * carries no `tag` in its sidecar (its tag comes from its path), so without
+   * this the reader answers `absent` for the module, it falls through to the
+   * server function lane, and a SHADOW island with TSX-only utilities registers
+   * its tokens as LIGHT facts — the wrong sheet (F16). A page-local component
+   * pins its own tag and needs no fallback; omitting the field keeps every
+   * existing caller's behaviour byte-identical.
+   */
+  readonly tag?: string;
 }
 
 export interface CollectShadowCandidatesOptions {
@@ -57,27 +75,10 @@ export interface CollectShadowCandidatesOptions {
   /**
    * The admitted static component tags (alpha15 server lane): a server
    * function component module compiles through the lane so its LIGHT class
-   * candidates register exactly like a class module's. Omitted: the lane
+   * candidates register exactly like a generated component's. Omitted: the lane
    * still compiles (with no `__ssr`-routed nested hosts).
    */
   readonly serverComponentTags?: readonly string[];
-}
-
-/**
- * Register one already-compiled module's candidates. The root scope is part of
- * the fact: only a shadow-root component's classes need the component
- * stylesheet (light-root classes live in document DOM, where the document
- * entry's own pipeline already covers them).
- */
-export function registerCandidatesFromCompiled(
-  file: string,
-  compiled: { classCandidates?: readonly string[]; program: { root: { kind: string } } },
-  candidates: ClassCandidateRegistry,
-): boolean {
-  candidates.register(file, compiled.classCandidates ?? [], {
-    shadow: compiled.program.root.kind !== 'light',
-  });
-  return (compiled.classCandidates ?? []).length > 0;
 }
 
 /**
@@ -126,48 +127,88 @@ export async function collectShadowClassCandidates(
     } catch {
       continue;
     }
-    // No local prefilter: `compileElementModule` carries the one admission
-    // gate, and duplicating it here is how this pass grew its own copy of the
-    // `@element(` substring bug — a module whose decorator arrives through an
-    // alias (`import { element as defineElement }`) skipped the compiler
-    // entirely and registered as an already-compiled artifact instead. The
-    // gate is cheap enough to run for a config-declared module list.
-    let compiled: ReturnType<typeof compileElementModule>;
-    try {
-      compiled = compileElementModule(source, file, { staticSidecars: [ISLAND_ADMISSION] });
-    } catch {
-      // The authoritative compile reports diagnostics; see the module header.
-      continue;
-    }
-    if (compiled === null) {
-      // The server function component lane (alpha15): a route module carrying
-      // an exported JSX-returning function. Its classes are LIGHT facts (no
-      // element class, no shadow root) — the same registry, the same
-      // authoritative registration.
-      let serverCompiled: ReturnType<typeof compileServerComponentIfAdmitted>;
+    // No local "is this a component?" prefilter: each lane below carries its own
+    // admission, and a hand-written spelling test here is how this pass once
+    // grew a second, wrong copy of the `@element(` gate. A config-declared
+    // module list is small enough to pay one admission attempt per module.
+    //
+    // The GENERATED lane comes FIRST (P-1, 2026-11-21). A generated island is
+    // also an exported JSX-returning function, so the server component lane
+    // below would claim it as a LIGHT page component and register its tokens in
+    // the wrong scope — measured: the fixture's shadow island registered 15
+    // tokens as light and the shadow sheet compiled empty. The island
+    // declaration is the authoritative site fact (tag + root), so the lane is
+    // asked only for a module that has one.
+    // The gate is the SIDECAR, not the style-declaration registry (F16): that
+    // registry only carries islands that declare `styles`, so using it here skipped
+    // every generated component with class tokens but no authored sheet — its tokens
+    // still compile into the shared component sheet and it still needs them in the
+    // shadow scope. The declaration reader answers "is this a generated component,
+    // and which root", which is exactly the admission question.
+    // The style-declaration registry is preferred when it HAS an entry: it is the
+    // authoritative tag+root the scan already resolved, and using it keeps every
+    // styled island's registration byte-identical. The SIDECAR READER is the
+    // fallback, and it exists because that registry only carries islands declaring
+    // `styles` — without the fallback a generated component with class tokens but no
+    // authored sheet was skipped entirely, so its tokens never reached the scope
+    // that compiles them (F16).
+    const declaration = islandStyleDeclarationFor(file);
+    const reading =
+      declaration === undefined ? readComponentDeclaration(source, entry.tag) : undefined;
+    const declaredRoot =
+      declaration !== undefined
+        ? declaration.root
+        : reading?.kind === 'declared'
+          ? (reading.declaration.root ?? 'light')
+          : undefined;
+    const declaredTag =
+      declaration !== undefined
+        ? declaration.tagName
+        : reading?.kind === 'declared'
+          ? reading.declaration.tag
+          : undefined;
+    if (declaredTag !== undefined) {
+      let generated: ReturnType<typeof compileGeneratedElementIfAdmitted> = null;
       try {
-        serverCompiled = compileServerComponentIfAdmitted(source, file, {
-          resolveModule: (specifier) =>
-            createServerComponentSourceResolver({ root: options.root })(specifier, file) ??
-            undefined,
-          ...(options.serverComponentTags === undefined
-            ? {}
-            : { compiledTags: options.serverComponentTags }),
+        generated = compileGeneratedElementIfAdmitted(source, file, {
+          site: { tag: declaredTag },
         });
       } catch {
         // The authoritative compile reports diagnostics; see the module header.
         continue;
       }
-      if (serverCompiled !== null) {
-        const tokens = serverCompiled.classCandidates ?? [];
-        options.candidates.register(file, tokens, { shadow: false });
-        if (tokens.length > 0) contributed += 1;
+      if (generated !== null) {
+        options.candidates.register(file, generated.classCandidates, {
+          shadow: declaredRoot === 'shadow',
+        });
+        if (generated.classCandidates.length > 0) contributed += 1;
         continue;
       }
-      if (registerArtifactCandidates(source, file, options.candidates)) contributed += 1;
+    }
+    // The server function component lane (alpha15): a route module carrying
+    // an exported JSX-returning function. Its classes are LIGHT facts (no
+    // element class, no shadow root) — the same registry, the same
+    // authoritative registration.
+    let serverCompiled: ReturnType<typeof compileServerComponentIfAdmitted>;
+    try {
+      serverCompiled = compileServerComponentIfAdmitted(source, file, {
+        resolveModule: (specifier) =>
+          createServerComponentSourceResolver({ root: options.root })(specifier, file) ?? undefined,
+        ...(options.serverComponentTags === undefined
+          ? {}
+          : { compiledTags: options.serverComponentTags }),
+      });
+    } catch {
+      // The authoritative compile reports diagnostics; see the module header.
       continue;
     }
-    if (registerCandidatesFromCompiled(file, compiled, options.candidates)) contributed += 1;
+    if (serverCompiled !== null) {
+      const tokens = serverCompiled.classCandidates ?? [];
+      options.candidates.register(file, tokens, { shadow: false });
+      if (tokens.length > 0) contributed += 1;
+      continue;
+    }
+    if (registerArtifactCandidates(source, file, options.candidates)) contributed += 1;
   }
   return contributed;
 }

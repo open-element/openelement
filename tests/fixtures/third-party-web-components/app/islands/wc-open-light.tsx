@@ -7,15 +7,23 @@
  * late-host case for them is a host appended into their light DOM (and
  * projected through a slot). The scheduler must find that too — a document
  * query does, and the fixture pins that it actually happens.
+ *
+ * GENERATED lane (F16: class → function). It keeps `root: 'shadow'`
+ * (`shadow-open` in the class lane) even though the HOST is light: this element
+ * is appended as a light child, and the qualifier then reads the marker from the
+ * ISLAND's own shadow root (`upgraded(root.querySelector('wc-open-light'))`). A
+ * light root here would put the marker in the Shoelace/Material/Ionic light DOM
+ * — the same place the host was appended — and that probe reads the wrong node.
  */
 import { defineIslandConfig } from '@openelement/router';
-import { element, OpenElement } from '@openelement/element';
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: false, dsd: false });
+export const openElement = defineIslandConfig({
+  hydrate: 'load',
+  ssr: false,
+  dsd: false,
+  root: 'shadow',
+});
 
-@element('wc-open-light', { root: 'shadow-open' })
-export default class WcOpenLight extends OpenElement {
-  render() {
-    return <span id='open-light-ready'>openElement child appended late</span>;
-  }
+export default function WcOpenLight() {
+  return <span id='open-light-ready'>openElement child appended late</span>;
 }

@@ -173,14 +173,18 @@ async function writeComponentPackage(
       exports: { './widget': './src/widget.tsx', './manifest': './manifest.js' },
     }),
   );
+  // The tag is the package MANIFEST's fact here (a package module has no islands
+  // directory to derive one from), so the sidecar pins only the platform facts.
+  // The component is the lane's default export.
   await write(
     join(packageDir, 'src', 'widget.tsx'),
     [
-      "import { element, OpenElement } from '@openelement/element';",
+      "import { defineIslandConfig } from '@openelement/router';",
       '',
-      `@element('${options.tagName}', { root: 'shadow-open' })`,
-      `export class ProbeWidget extends OpenElement {`,
-      `  render() { return <span>probe</span>; }`,
+      `export const openElement = defineIslandConfig({ root: 'shadow' });`,
+      '',
+      `export default function ProbeWidget() {`,
+      `  return <span>probe</span>;`,
       `}`,
       '',
     ].join('\n'),
@@ -196,8 +200,16 @@ async function writeComponentPackage(
         declarations: [
           {
             tagName: options.tagName,
-            className: 'ProbeWidget',
-            openElement: { module: `${packageName}/widget`, ssr: true, dsd: true },
+            className: 'ProbeWidgetElement',
+            openElement: {
+              module: `${packageName}/widget`,
+              ssr: true,
+              dsd: true,
+              // A generated package publishes the compiler's host-producer name;
+              // without it the build registers the tag as a bare CLASS and the
+              // SSR emits no DSD template (the shell then never claims it).
+              ssrHostExport: 'ProbeWidget__ssrHost',
+            },
           },
         ],
       };
@@ -250,14 +262,13 @@ async function writeProbeApp(
   await write(
     join(appDir, 'app', 'components', 'import-probe-page.tsx'),
     [
-      "import { element, OpenElement } from '@openelement/element';",
+      "import { defineIslandConfig } from '@openelement/router';",
       ...page.imports,
       '',
-      "@element('import-probe-page', { root: 'shadow-open' })",
-      'export default class ImportProbePage extends OpenElement {',
-      '  render() {',
+      "export const openElement = defineIslandConfig({ tag: 'import-probe-page', root: 'shadow' });",
+      '',
+      'export default function ImportProbePage() {',
       page.body,
-      '  }',
       '}',
       '',
     ].join('\n'),

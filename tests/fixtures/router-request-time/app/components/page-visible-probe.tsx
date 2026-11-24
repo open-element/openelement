@@ -5,21 +5,27 @@
  * module can only evaluate once the host scrolls into view. The page root is
  * shadow-open, so the island host lives inside the page's DSD shadow root —
  * the deep-query case a light-DOM scan never finds.
+ *
+ * GENERATED lane (F16: class → function). The class's `static styles =
+ * [pageStyles]` becomes the sidecar `styles` list: the spacer's 5000px height
+ * is what makes the island start below the fold, so a migration that dropped the
+ * sheet would put the island in view at load and turn the #606 row green for the
+ * wrong reason.
  */
-import { element, OpenElement } from '@openelement/element';
-import pageStyles from './page-visible-probe.css';
+import { defineIslandConfig } from '@openelement/router';
 
-@element('visible-page', { root: 'shadow-open' })
-export default class VisiblePage extends OpenElement {
-  static override styles = [pageStyles];
+export const openElement = defineIslandConfig({
+  tag: 'visible-page',
+  root: 'shadow',
+  styles: ['./page-visible-probe.css'],
+});
 
-  render() {
-    return (
-      <main>
-        <h1>visible probe</h1>
-        <div id='visible-probe-spacer' class='visible-probe-spacer'>spacer</div>
-        <visible-probe></visible-probe>
-      </main>
-    );
-  }
+export default function VisiblePage() {
+  return (
+    <main>
+      <h1>visible probe</h1>
+      <div id='visible-probe-spacer' class='visible-probe-spacer'>spacer</div>
+      <visible-probe></visible-probe>
+    </main>
+  );
 }

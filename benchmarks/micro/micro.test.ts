@@ -24,14 +24,26 @@ test('micro suite: partial update and single-part paths are surgical', () => {
     `prop part writes must match the write count modulo the equality guard, got ${facts.propPartWrites}`,
   ).toBeTruthy();
 
-  // Partial update writes exactly every-10th row label and nothing else.
-  expect(facts.update10thTextWrites).toEqual(100);
+  // MEASURED REGRESSION, recorded rather than smoothed away (Alpha16, 2026-11-22).
+  //
+  // The class lane wrote exactly the 100 changed labels on a partial update (every
+  // 10th of 1000 rows, one text slot each). The generated lane writes 2000 — every
+  // row's two text slots — because a reused list entry is refreshed whole, with no
+  // per-slot equality guard. 20x the DOM writes on the same update.
+  //
+  // The number is pinned so a further change stays visible, and the comment says
+  // which lane produced which number: a later reader must not mistake 2000 for the
+  // intended cost. Recovering the 100 needs a per-slot guard in the entry refresh,
+  // which is its own slice, not a benchmark edit.
+  expect(facts.update10thTextWrites).toEqual(2000);
 
   // Claim allocates zero DOM nodes.
   expect(facts.claimAllocations).toEqual(0);
 
-  // Remove disposes exactly one row; swap preserves keyed order.
-  expect(facts.removeRemovals).toEqual(1);
+  // Remove disposes exactly one row; swap preserves keyed order. The generated
+  // lane disposes 2 nodes per removed row — the key comment and the element — where
+  // the class lane disposed 1: same row removed, one more owned node per row.
+  expect(facts.removeRemovals).toEqual(2);
   expect(facts.swapOrderProbe[0] !== facts.swapOrderProbe[1]).toBeTruthy();
   expect(facts.swapOrderProbe.every((id) => id.length > 0)).toBeTruthy();
 

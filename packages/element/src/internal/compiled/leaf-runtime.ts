@@ -34,10 +34,19 @@ export {
   attributeValueOf,
   displayValue,
   removeNodes,
+  selectOptionSelected,
+  selectOptionValue,
 } from './runtime/values.ts';
 // The escaping pair lives in the shared core (one HTML-escape contract with
 // the server serializer); `escapeText` is its text-node half.
 export { escapeAttrValue } from '../core/html-escape.ts';
+// ADR-0183 D-4: the ONE reactive entry. A generated module creates the root's
+// `signal`/`computed` resources in its retained setup factory and its SSR
+// producer creates the same resources per render, so the emitted code needs both
+// factories from THIS closed entry — importing them from the package root would
+// drag the root's side effects (the executor installs) into an island chunk,
+// which is the P1 property this entry exists to keep.
+export { computed, signal } from '../signal/framework.ts';
 export { escapeText } from './escape-text.ts';
 
 // Marker protocol: the wire the SSR and claim paths must agree on.
@@ -58,11 +67,13 @@ export {
   assertEachEndMarker,
   assertElementInHtmlNamespace,
   assertElementInNamespace,
+  assertNestedHostStaticAttributeSeed,
   assertStaticAttributeSeed,
   assertTextSlotMarker,
   assertWhenAnchor,
   assertWhenEndMarker,
   entrySeedMismatch,
+  isExpandedLightRootHost,
   isWhenEndMarker,
   leafClaimMismatch,
   leafRuntimeError,
@@ -71,11 +82,28 @@ export {
 
 // Recipes and their projection ownership.
 export { claimRecipe, createRecipe, insertRecipe } from './runtime/recipe.ts';
+// Keyed-list minimal-move placement (each blocks): the emitted `__oe_eachSync`
+// tail calls this ONE helper instead of an inline backward walk, which
+// re-inserted every entry between a distant swap and the list's tail (measured
+// 997 of 1000 entries, 1994 insertBefore calls, stationary focus lost). The
+// LIS rule leaves the stable chain untouched; a distant swap moves exactly
+// the swapped pair.
+export { reconcileEachEntries } from './runtime/each-reconcile.ts';
+// `nestedHost` (alpha16 nested-expansion slice): the emitted SSR producer
+// routes every custom-element (dash) tag through this ONE call, which asks the
+// render's host for the nested expansion and falls back to the literal bytes the
+// producer would otherwise have pushed. The fallback path is what makes the
+// slice additive: an un-admitted tag, or a render with no expander, emits
+// exactly today's markup.
+export { nestedHost } from './runtime/nested-host.ts';
 
-// The retained-child ledger the LC-2 depth-1 hooks use.
+// The retained-child ledger the LC-2 hooks use: the root pass bracket/commit,
+// the ref-site retain/release, and (depth >= 2) the token a retained body joins
+// when it retains its own children.
 export {
   beginInstancePass,
   endInstancePass,
+  joinInstancePass,
   releaseChildInstance,
   releaseUnderStructuralScope,
   retainChildInstance,

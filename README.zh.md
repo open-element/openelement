@@ -17,7 +17,7 @@
 OpenElement 是一个 Web Platform 优先、只围绕两个核心产品构建的仓库：**Element** 与 **Router**。
 Element 将 JSX 编写的 Custom Element 编译为 Part Program，并统一用于服务端序列化、创建新 DOM 与复用现有 DOM。Router 负责路由选择、HTTP 语义、导航、loader/action，以及共享的文件路由应用协议（单一编译型 native 渲染器，渲染器选择显式）。
 
-源码目前是 Element 与 Router 的全新公开基线 `1.0.0-alpha.15`。它不是从历史 0.x API 到 1.x 的兼容迁移。从这个版本起，六个包（`protocol`、`element`、`compiler`、`router`、`create`、`ui`）作为同一条版本线发布，npm `latest` 指向该线——`npm install @openelement/router` 解析到当前 1.0 预发布。自 #1557 起，Element 单体拆为三个包：`@openelement/protocol`（跨系统契约，零依赖）、`@openelement/element`（纯运行时）与 `@openelement/compiler`（构建期 TSX-to-Part-Program 编译器 + Vite 插件）。
+源码目前是 Element 与 Router 的全新公开基线 `1.0.0-alpha.16`。它不是从历史 0.x API 到 1.x 的兼容迁移。从这个版本起，六个包（`protocol`、`element`、`compiler`、`router`、`create`、`ui`）作为同一条版本线发布，npm `latest` 指向该线——`npm install @openelement/router` 解析到当前 1.0 预发布。自 #1557 起，Element 单体拆为三个包：`@openelement/protocol`（跨系统契约，零依赖）、`@openelement/element`（纯运行时）与 `@openelement/compiler`（构建期 TSX-to-Part-Program 编译器 + Vite 插件）。
 
 以上描述的是当前 alpha.15 实现。[已接受的目标](./docs/architecture/product-model.md)是 HTML-first Full TSX、显式 Signals 与显式 CE 边界。2026-11-03 所有者终止 OhMyLit 独立产品计划，并正式启动第一方 Lit renderer 退役；2026-11-08 所有者裁决（[ADR-0152](./docs/adr/ADR-0152-product-router-and-alpha-convergence.md)）以零兼容窗口执行该退役。当前源码线不再包含第一方 Lit renderer——公共入口、运行时分支、测试与 fixture 均已删除，`renderer: 'lit'` 以显式迁移错误失败——而已发布的 alpha.15 产物仍包含它。第三方 Lit WC 的 client-only 使用继续保留，但不保证自动 SSR 或 Lit DSD hydration。[候选作者样例](./docs/architecture/tsx-author-candidate-contract.md)尚未发布或验证，不是下方快速开始的 API。
 

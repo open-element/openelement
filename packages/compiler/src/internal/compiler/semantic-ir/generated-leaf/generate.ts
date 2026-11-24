@@ -328,6 +328,26 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
   { symbol: 'leafClaimMismatch', predicate: (body) => body.includes('leafClaimMismatch(') },
   { symbol: 'leafRuntimeError', predicate: (body) => body.includes('leafRuntimeError(') },
   {
+    symbol: 'selectOptionSelected',
+    predicate: (body) => body.includes('selectOptionSelected('),
+  },
+  {
+    symbol: 'selectOptionValue',
+    predicate: (body) => body.includes('selectOptionValue('),
+  },
+  // alpha16 nested-expansion: the emitted producer routes every custom-element
+  // tag through this ONE helper, which asks the render's host to expand it.
+  { symbol: 'nestedHost', predicate: (body) => body.includes('nestedHost(') },
+  // Keyed-list placement (each blocks): the emitted sync tail names this ONE
+  // helper, whose LIS rule leaves the stable chain untouched and moves exactly
+  // the displaced entries.
+  { symbol: 'reconcileEachEntries', predicate: (body) => body.includes('reconcileEachEntries(') },
+  // ADR-0183 D-4: a root-owned binding declared in the retained setup factory
+  // (a `signal`/`computed` resource) and the SSR producer's per-render copy are
+  // the only emitters of these calls.
+  { symbol: 'signal', predicate: (body) => body.includes('= signal((') },
+  { symbol: 'computed', predicate: (body) => body.includes('= computed(') },
+  {
     symbol: 'assertElementInHtmlNamespace',
     predicate: (body) => body.includes('assertElementInHtmlNamespace('),
   },
@@ -338,6 +358,18 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
   {
     symbol: 'assertStaticAttributeSeed',
     predicate: (body) => body.includes('assertStaticAttributeSeed('),
+  },
+  // alpha16 nested-expansion, claim half: a dash tag's seed is checked through
+  // the host-aware assertion (runtime-only child attributes are not the parent's
+  // seed), and a childless host's expanded light interior is consumed opaquely
+  // instead of walked.
+  {
+    symbol: 'assertNestedHostStaticAttributeSeed',
+    predicate: (body) => body.includes('assertNestedHostStaticAttributeSeed('),
+  },
+  {
+    symbol: 'isExpandedLightRootHost',
+    predicate: (body) => body.includes('isExpandedLightRootHost('),
   },
   { symbol: 'emitComment', predicate: (body) => body.includes('emitComment(') },
   { symbol: 'escapeAttrValue', predicate: (body) => body.includes('escapeAttrValue(') },
@@ -442,6 +474,12 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
     symbol: 'endInstancePass',
     predicate: (body) => body.includes('endInstancePass('),
   },
+  {
+    // 16b-LC depth >= 2: a retained body that retains its own children joins the
+    // root attempt's transaction token and never commits.
+    symbol: 'joinInstancePass',
+    predicate: (body) => body.includes('joinInstancePass('),
+  },
   // `16b-CTX` SERVER side: the per-render owner scope a producer creates when it
   // is the module root of the render. Registered by the body predicate like the
   // other optional symbols, so a module that never renders a context consumer
@@ -453,6 +491,13 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
 ];
 
 const INTERNAL_PREFIX = '__oe_';
+/**
+ * 16b-LC depth >= 2 (2026-11-21): the transaction token local of a retaining
+ * body. The root body captures `beginInstancePass`'s return in it; a retained
+ * body reads the token from its compiler-private host literal and joins. The
+ * `__oe_` prefix is refused for authored identifiers, so it cannot collide.
+ */
+const TRANSACTION_VAR = `${INTERNAL_PREFIX}txn`;
 /** The namespace URI an `<svg>` subtree is created and claimed in. */
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
@@ -607,6 +652,29 @@ function moduleUsesPropertyChange(state: EmitState): boolean {
  * for such a module, so a module that never opts into the env form keeps its
  * exact pre-env bytes (including every hook-free SHA pin).
  */
+/**
+ * True when ANY component in the module declares a `useHost()` accessor
+ * (`16b-REF`).
+ *
+ * The lowering is a field read on the setup host record, so the record must
+ * carry the element. A generated element ROOT gets it unconditionally (the
+ * shell attaches it), but a RETAINED depth-1 hostless child's host literal is
+ * built by the parent and only forwards the fields the child actually reads —
+ * which is why this fact has to be module-wide, exactly like the env-form
+ * lifecycle gate beside it.
+ */
+function moduleUsesHostAccess(state: EmitState): boolean {
+  for (const component of state.componentByName.values()) {
+    if (component.resources.some((resource) => resource.kind === 'host')) return true;
+  }
+  return false;
+}
+
+/** True when `component` itself declares a `useHost()` accessor. */
+function componentUsesHostAccess(component: FunctionModelComponent): boolean {
+  return component.resources.some((resource) => resource.kind === 'host');
+}
+
 function moduleUsesLifecycleEnv(state: EmitState): boolean {
   for (const component of state.componentByName.values()) {
     if (
@@ -626,9 +694,15 @@ function moduleUsesLifecycleEnv(state: EmitState): boolean {
  * so every other module and reference site keeps its exact bytes.
  */
 function childHostElementField(state: EmitState, node: FunctionModelComponentRef): string {
-  if (!moduleUsesLifecycleEnv(state)) return '';
   const child = state.componentByName.get(node.name);
-  if (child === undefined || !child.lifecycle.some((hook) => hook.receivesEnv)) return '';
+  if (child === undefined) return '';
+  // `16b-REF`: a child that reads `useHost()` needs the element field for the
+  // same reason an env-form lifecycle callback does — its retained setup reads
+  // the field off its own host literal.
+  const needsElement =
+    (moduleUsesLifecycleEnv(state) && child.lifecycle.some((hook) => hook.receivesEnv)) ||
+    componentUsesHostAccess(child);
+  if (!needsElement) return '';
   return `, ${HOST_ELEMENT_PROPERTY}: ${state.hostVar}.${HOST_ELEMENT_PROPERTY}, ${STATES_PROPERTY}: ${state.hostVar}.${STATES_PROPERTY}`;
 }
 
@@ -949,6 +1023,13 @@ export interface GeneratedLeafModule {
   /** True when the module subscribes to `host.propsChanged` (tracked props). */
   readonly requiresPropsChanged: boolean;
   readonly diagnostics: readonly IrDiagnostic[];
+  /**
+   * The module's admitted STATIC class tokens (deletion prerequisite P-1): the
+   * component stylesheet's candidate set. Empty when every class channel is
+   * dynamic or the module declares none, which is the pre-P-1 answer for the
+   * generated lane and stays byte-neutral.
+   */
+  readonly classCandidates: readonly string[];
 }
 
 /**
@@ -972,6 +1053,12 @@ function importContextOf(component: FunctionModelComponent): ModuleImportContext
 
 interface EmitState {
   readonly component: FunctionModelComponent;
+  /**
+   * ADR-0183 D-4: this SSR body belongs to the ELEMENT ROOT, whose host record
+   * has no bindings channel — so its `signal`/`computed` resources are created
+   * inline per render instead of being read from `host.bindings`.
+   */
+  elementRootBinding?: boolean;
   readonly lines: string[];
   /**
    * Physical generated lines emitted so far in this chunk. `lines` holds one
@@ -1124,6 +1211,8 @@ interface EmitState {
   retainBody: boolean;
   /** True while emitting a leaf instance body (aliases the retained record). */
   leafBody: boolean;
+  /** This body emits retain calls (root, or a retained body with retained children). */
+  retainsChildren: boolean;
   /**
    * Number of enclosing claim-time recipe bodies (M07a). It is separate from
    * `recipeDepth` because claim-time recipe closures are emitted inside the
@@ -1798,8 +1887,11 @@ function emitList(
   state.indent += 1;
   // Keyed placement: the list owns the siblings AFTER the anchor. Find the tail
   // reference (first following sibling that is not a current entry node), then
-  // place the next entries in reverse and move only nodes not already in place.
-  // Unchanged nodes (and a focused element in them) are never re-inserted.
+  // hand the placement to the ONE leaf-runtime helper. Its LIS rule leaves the
+  // stable chain untouched — an unchanged node (and a focused element inside
+  // it) is never re-inserted, and a distant swap moves exactly the swapped
+  // entries, where the inline backward walk re-inserted every entry between
+  // the swap and the tail (measured 997 of 1000, 2026-11-24).
   push(state, `const ${INTERNAL_PREFIX}previousNodes = new Set();`);
   push(
     state,
@@ -1808,41 +1900,18 @@ function emitList(
   if (wire) {
     // The list end is the fixed tail: every entry node belongs before it and a
     // following sibling can never be mistaken for a list node.
-    push(state, `let ${INTERNAL_PREFIX}reference = ${endVar};`);
+    push(state, `const ${INTERNAL_PREFIX}tail = ${endVar};`);
   } else {
-    push(state, `let ${INTERNAL_PREFIX}reference = ${anchorVar}.nextSibling;`);
+    push(state, `let ${INTERNAL_PREFIX}tail = ${anchorVar}.nextSibling;`);
     push(
       state,
-      `while (${INTERNAL_PREFIX}reference !== null && ${INTERNAL_PREFIX}previousNodes.has(${INTERNAL_PREFIX}reference)) ${INTERNAL_PREFIX}reference = ${INTERNAL_PREFIX}reference.nextSibling;`,
+      `while (${INTERNAL_PREFIX}tail !== null && ${INTERNAL_PREFIX}previousNodes.has(${INTERNAL_PREFIX}tail)) ${INTERNAL_PREFIX}tail = ${INTERNAL_PREFIX}tail.nextSibling;`,
     );
   }
   push(
     state,
-    `for (let ${INTERNAL_PREFIX}entryIndex = ${INTERNAL_PREFIX}next.length - 1; ${INTERNAL_PREFIX}entryIndex >= 0; ${INTERNAL_PREFIX}entryIndex--) {`,
+    `reconcileEachEntries(${INTERNAL_PREFIX}next, ${INTERNAL_PREFIX}parent, ${INTERNAL_PREFIX}tail, ${INTERNAL_PREFIX}previous);`,
   );
-  state.indent += 1;
-  push(
-    state,
-    `const ${INTERNAL_PREFIX}entryNodes = ${INTERNAL_PREFIX}next[${INTERNAL_PREFIX}entryIndex].nodes;`,
-  );
-  push(
-    state,
-    `for (let ${INTERNAL_PREFIX}nodeIndex = ${INTERNAL_PREFIX}entryNodes.length - 1; ${INTERNAL_PREFIX}nodeIndex >= 0; ${INTERNAL_PREFIX}nodeIndex--) {`,
-  );
-  state.indent += 1;
-  push(
-    state,
-    `const ${INTERNAL_PREFIX}node = ${INTERNAL_PREFIX}entryNodes[${INTERNAL_PREFIX}nodeIndex];`,
-  );
-  push(
-    state,
-    `if (${INTERNAL_PREFIX}node.parentNode !== ${INTERNAL_PREFIX}parent || ${INTERNAL_PREFIX}node.nextSibling !== ${INTERNAL_PREFIX}reference) ${INTERNAL_PREFIX}parent.insertBefore(${INTERNAL_PREFIX}node, ${INTERNAL_PREFIX}reference);`,
-  );
-  push(state, `${INTERNAL_PREFIX}reference = ${INTERNAL_PREFIX}node;`);
-  state.indent -= 1;
-  push(state, `}`);
-  state.indent -= 1;
-  push(state, `}`);
   state.indent -= 1;
   push(state, `}`);
   push(state, `${entriesVar} = ${INTERNAL_PREFIX}next;`);
@@ -1916,8 +1985,21 @@ function recordFor(
 }
 
 /** Declare the host bindings an expression reads (prologue) and validate names. */
-function declareReads(state: EmitState, record: LoweredExpressionRecord): boolean {
+function declareReads(
+  state: EmitState,
+  record: LoweredExpressionRecord,
+  /**
+   * Names the ENCLOSING retained setup factory declares as sibling locals
+   * (ADR-0183 D-4: the ROOT's `signal`/`computed` resources). A read of one is a
+   * closure capture there, not a host-binding demand: the factory creates the
+   * value before the hook closures are recorded, and mount/claim demand the same
+   * name through the bindings record in their own `declareReads` calls. An empty
+   * set (every non-root component) changes no behaviour.
+   */
+  localCaptures?: ReadonlySet<string>,
+): boolean {
   for (const read of record.reads) {
+    if (localCaptures?.has(read.name) || localCaptures?.has(read.binding.name)) continue;
     // The enclosing list-entry mapper shadows every same-named outer binding,
     // including `props`. Check the entry binding before the component-props
     // branch: a legal `items.map((props) => …)` read is entry-local, never a
@@ -2736,7 +2818,7 @@ function emitComponentRef(
   push(state, `const ${scopeVar} = ${state.scopeVar}.child();`, span);
   push(
     state,
-    `const ${hostVar} = { bindings: ${setupHostVar}.bindings, propDeps: ${setupHostVar}.propDeps, instance: ${instanceVar}.scope, setup: ${instanceVar}.record${childHostElementField(state, node)}${childErrorReportField(state, node)}${childContextField(state, node)} };`,
+    `const ${hostVar} = { bindings: ${setupHostVar}.bindings, propDeps: ${setupHostVar}.propDeps, instance: ${instanceVar}.scope, setup: ${instanceVar}.record${childHostElementField(state, node)}${childErrorReportField(state, node)}${childContextField(state, node)}${retainedTransactionField(state, node.name)} };`,
     span,
   );
   push(state, `let ${nodesVar};`);
@@ -2882,10 +2964,22 @@ interface RetentionPlan {
   readonly rootName: string;
   /** Reference sites that emit `retainChildInstance` (mount == claim identity). */
   readonly retainedRefs: ReadonlySet<FunctionModelComponentRef>;
-  /** Non-root components emitted as leaf instance bodies. */
+  /** Non-root components emitted as retained (leaf) instance bodies. */
   readonly leafBodies: ReadonlySet<string>;
   /** Leaf targets that also emit their module-scope `<Name>__setup` factory. */
   readonly setupBodies: ReadonlySet<string>;
+  /**
+   * Bodies that emit retain calls: the root plus every retained component that
+   * itself retains children (depth >= 2). A body NOT in this set emits no
+   * ledger text; a retained body in this set JOINS the root's transaction.
+   */
+  readonly retainingBodies: ReadonlySet<string>;
+  /**
+   * True when at least one retained child is itself a retaining body, so the
+   * root body must capture `beginInstancePass`'s token and thread it through
+   * the ref-site host literals. False keeps the depth-1 bytes exactly.
+   */
+  readonly transaction: boolean;
 }
 
 /** One emitted component-reference site and the emission context it sits in. */
@@ -3058,8 +3152,17 @@ function setupGatewayPasses(
 }
 
 /**
- * Compute the depth-1 plan, or `null` when this module emits today's bytes
- * exactly (no root marker, a root-target reference, or no eligible site).
+ * Compute the retention plan, or `null` when this module emits today's bytes
+ * exactly (no eligible site, or a root-target reference).
+ *
+ * Depth-1 vs depth >= 2 is the SAME fixpoint with one more owner class: a site
+ * is retention-eligible when its owner emits retain calls (the root, or a
+ * retained component that itself retains children). The plan starts at the
+ * greatest candidate set and demotes monotonically, so a component referenced
+ * from BOTH a retaining body and a legacy/recipe/list body ends up legacy
+ * everywhere (one body shape per component, no runtime probing), and the
+ * transaction flag is true only when a retained child is itself a retaining
+ * body. A depth-1 module therefore keeps its exact pre-change bytes.
  */
 function planRetention(
   module: FunctionModelModule,
@@ -3090,32 +3193,73 @@ function planRetention(
       candidates.add(component.name);
     }
   }
-  // Monotone fixpoint: demotion only removes candidates; the iteration is kept
-  // explicit so a future site class (one that depends on the target's body
-  // mode) slots in without changing the shape.
+  // Joint greatest fixpoint over two sets:
+  //   - retained: non-root components whose body is the retained (leaf) shape;
+  //   - retaining: bodies that emit retain calls (root + retained components
+  //     whose own body references a retained child).
+  // Both start maximal and only shrink, so the iteration terminates and the
+  // largest valid plan wins. A target is demoted when ANY of its refs sits in
+  // a recipe/list body, comes from an owner that is not root/retained, or comes
+  // from an owner that is not a retainer (its body emits no ledger text).
+  const retained = new Set(candidates);
+  const retaining = new Set<string>([rootName, ...retained]);
   let changed = true;
   while (changed) {
     changed = false;
-    for (const name of [...candidates]) {
+    for (const name of [...retained]) {
       const targetSites = byTarget.get(name) ?? [];
-      const eligible =
-        targetSites.length > 0 &&
-        targetSites.every((site) => site.owner === rootName && !site.inRecipe && !site.inList);
+      if (targetSites.length === 0) {
+        retained.delete(name);
+        retaining.delete(name);
+        changed = true;
+        continue;
+      }
+      const eligible = targetSites.every(
+        (site) =>
+          !site.inRecipe &&
+          !site.inList &&
+          retaining.has(site.owner) &&
+          (site.owner === rootName || retained.has(site.owner)),
+      );
       if (!eligible) {
-        candidates.delete(name);
+        retained.delete(name);
+        retaining.delete(name);
+        changed = true;
+      }
+    }
+    for (const name of [...retaining]) {
+      if (name === rootName) continue;
+      const ownsRetainedChild = sites.some(
+        (site) =>
+          site.owner === name && !site.inRecipe && !site.inList && retained.has(site.node.name),
+      );
+      if (!ownsRetainedChild) {
+        retaining.delete(name);
         changed = true;
       }
     }
   }
-  if (candidates.size === 0) return null;
   const retainedRefs = new Set<FunctionModelComponentRef>();
   for (const site of sites) {
-    if (site.owner !== rootName || site.inRecipe || site.inList) continue;
-    if (candidates.has(site.node.name)) retainedRefs.add(site.node);
+    if (site.inRecipe || site.inList) continue;
+    if (!retaining.has(site.owner)) continue;
+    if (site.owner !== rootName && !retained.has(site.owner)) continue;
+    if (retained.has(site.node.name)) retainedRefs.add(site.node);
   }
   if (retainedRefs.size === 0) return null;
+  // The retaining bodies that actually carry a retained ref site (the fixpoint
+  // above may leave a retained component in `retaining` only through a stale
+  // maximal start; recompute from the selected sites).
+  const retainingBodies = new Set<string>([rootName]);
+  for (const site of sites) {
+    if (!retainedRefs.has(site.node)) continue;
+    if (retained.has(site.owner)) retainingBodies.add(site.owner);
+  }
+  const transaction = sites.some(
+    (site) => retainedRefs.has(site.node) && retainingBodies.has(site.node.name),
+  );
   const setupBodies = new Set<string>();
-  for (const name of candidates) {
+  for (const name of retained) {
     const component = componentByName.get(name)!;
     // A hook-bearing retained child needs its `<Name>__setup` factory even when
     // it has no setup local: the factory is the only carrier of its retained
@@ -3133,7 +3277,14 @@ function planRetention(
       setupBodies.add(name);
     }
   }
-  return { rootName, retainedRefs, leafBodies: candidates, setupBodies };
+  return {
+    rootName,
+    retainedRefs,
+    leafBodies: retained,
+    setupBodies,
+    retainingBodies,
+    transaction,
+  };
 }
 
 /** One `childrenRecipeId` projection edge (M06b2a mount-graph input). */
@@ -3760,10 +3911,27 @@ function directoryParentAllowed(tag: string): boolean {
   return TAG_PATTERN.test(tag) && !DIRECTORY_EXCLUDED_TAGS.has(tag);
 }
 
-/** A fully static element tree: no dynamic slots, sites, or excluded tags. */
+/**
+ * A dash tag is a nested custom-element host (the same test the SSR producer
+ * already applies at its dash-tag branch). A host's content is not this
+ * component's template: the render's expander owns it and injects children no
+ * authored declaration describes, so the host cannot be a static-sibling range
+ * MEMBER either — the parent's directory would then bracket a subtree whose
+ * markers and children belong to the nested host's own claim.
+ */
+function isNestedHostTag(tag: string): boolean {
+  return tag.includes('-');
+}
+
+/**
+ * A fully static element tree: no dynamic slots, sites, excluded tags, or
+ * nested custom-element hosts (see {@linkcode isNestedHostTag}: their expanded
+ * interior is another claim's region).
+ */
 function isStaticDirectoryElement(node: FunctionModelNode): boolean {
   if (node.kind !== 'element') return false;
   if (!directoryParentAllowed(node.tag)) return false;
+  if (isNestedHostTag(node.tag)) return false;
   for (const attribute of node.attributes) {
     if (attribute.kind !== 'static' || !ATTRIBUTE_PATTERN.test(attribute.name)) return false;
   }
@@ -4204,9 +4372,11 @@ function attributesClaimable(attributes: readonly FunctionModelAttribute[]): boo
     // Client-only channels install nothing structural; they are attached in
     // claim phase 2 after the walk verifies, so the shape stays claimable.
     if (CLIENT_ONLY_ATTRIBUTE_CHANNELS.has(attribute.channel)) continue;
-    // Property writes (`el.value = …`) can clobber pre-claim user input.
-    // That preservation is a later M07 slice, so the shape stays mount-only.
-    if (attribute.channel === 'property') return false;
+    // A property channel does NOT force mount-only any more (F16): the SSR
+    // producer renders it as an attribute (see `emitSsrDynamicAttribute`), and
+    // the claim path writes the property only after the walk verified the shape,
+    // which is exactly the "don't clobber user input" ordering this comment used
+    // to defer to an unbuilt slice.
     if (!ADMITTED_ATTRIBUTE_CHANNELS.has(attribute.channel)) return false;
   }
   return true;
@@ -4496,6 +4666,14 @@ function emitClaimStaticAttributeSeed(
   attributes: readonly FunctionModelAttribute[],
   where: string,
   anchor?: SpanLike,
+  /**
+   * A nested custom-element (dash-tag) host carries runtime-managed attributes
+   * the parent template never authored (the server light-root ownership marker,
+   * the child's theme mirror and JSON prop seed). The claim routes those
+   * through the host-aware runtime assertion so the ONE runtime-only attribute
+   * fact decides the exemption; an intrinsic element keeps the strict rule.
+   */
+  nestedHost = false,
 ): void {
   const staticAttrs = attributes.filter((attribute) => attribute.kind === 'static');
   const dynamicNames = attributes
@@ -4516,10 +4694,13 @@ function emitClaimStaticAttributeSeed(
     })
     .join(', ');
   const skip = `[${dynamicNames.map((name) => JSON.stringify(name)).join(', ')}]`;
+  const assertion = nestedHost
+    ? 'assertNestedHostStaticAttributeSeed'
+    : 'assertStaticAttributeSeed';
   state.usesLeafClaimMismatch = true;
   push(
     state,
-    `assertStaticAttributeSeed(${elementVar}, [${declared}], ${JSON.stringify(where)}, ${skip}${originArgs(anchor)});`,
+    `${assertion}(${elementVar}, [${declared}], ${JSON.stringify(where)}, ${skip}${originArgs(anchor)});`,
   );
 }
 
@@ -5494,6 +5675,12 @@ function emitClaimInto(
     }
     if (node.kind === 'element') {
       const name = nextName(state, 'el');
+      // alpha16 nested-expansion: a dash tag is a NESTED custom-element host,
+      // exactly as in the SSR producer. Its tag carries runtime-managed
+      // attributes the parent never authored, and when the render expanded a
+      // LIGHT-root child its children are that child's region — so both facts
+      // route through the host-aware runtime predicates below.
+      const isNestedHost = node.tag.includes('-');
       emitClaimTake(state, cursor, name, here, node.span);
       emitClaimMismatch(
         state,
@@ -5512,7 +5699,7 @@ function emitClaimInto(
       } else {
         emitClaimHtmlNamespace(state, name, here, node.span);
       }
-      emitClaimStaticAttributeSeed(state, name, node.attributes, here, node.span);
+      emitClaimStaticAttributeSeed(state, name, node.attributes, here, node.span, isNestedHost);
       for (const attribute of node.attributes) {
         if (attribute.kind === 'static') continue;
         if (attribute.kind === 'dynamic' && CONSUMED_ATTRIBUTE_CHANNELS.has(attribute.channel)) {
@@ -5543,15 +5730,18 @@ function emitClaimInto(
       const ranges = directoryParentAllowed(node.tag)
         ? staticElementDirectory(node.children)
         : null;
-      if (ranges !== null) emitClaimedDirectory(state, name, ranges);
-      else {
+      const emitClaimChildren = (): void => {
+        if (ranges !== null) {
+          emitClaimedDirectory(state, name, ranges);
+          return;
+        }
         const childCursor = nextName(state, 'cursor');
         push(state, `const ${childCursor} = { node: ${name}.firstChild };`);
         const saved = state.claimCursorShared ? nextName(state, 'savedCursor') : null;
         // Shared-cursor interiors are a `try` block. Child node bindings are
-        // block-scoped, so their refresh closures must be emitted in that
-        // same block; flushing them on the parent phase2 would name a binding
-        // the refresh cannot see.
+        // block-scoped, so their refresh closures must be emitted in that same
+        // block; flushing them on the parent phase2 would name a binding the
+        // refresh cannot see.
         const childPhase2: Array<() => void> = [];
         if (saved !== null) {
           push(state, `const ${saved} = __oe_claimCursor;`);
@@ -5578,6 +5768,35 @@ function emitClaimInto(
           state.indent -= 1;
           push(state, `} finally { __oe_claimCursor = ${saved}; }`);
         }
+      };
+      if (isNestedHost && node.children.length === 0) {
+        // A childless nested host's interior is NOT the parent's to claim:
+        //   - an expanded LIGHT-root child wrote its content as this element's
+        //     children (`data-oe-light` is the ownership marker), so the child's
+        //     own element claim consumes them and the parent must treat the
+        //     interior as opaque;
+        //   - with no marker the host owns no light region, so the strict empty
+        //     child check stays: a foreign node injected there is still drift.
+        emitClaimMismatch(
+          state,
+          `!isExpandedLightRootHost(${name}) && ${name}.firstChild !== null`,
+          `extra node at ${here}`,
+          node.span,
+        );
+      } else if (isNestedHost) {
+        // An expanded light child owns its whole interior, including its
+        // fallback when the caller produced no visible children. If it received
+        // caller content, the shared marker makes both upgrade orders fail
+        // closed before either side can claim through the other.
+        push(state, `if (isExpandedLightRootHost(${name})) { /* child-owned fallback */ } else {`);
+        state.indent += 1;
+        emitClaimChildren();
+        state.indent -= 1;
+        push(state, '}');
+      } else if (ranges !== null) {
+        emitClaimedDirectory(state, name, ranges);
+      } else {
+        emitClaimChildren();
       }
       adopt(name);
     }
@@ -5786,7 +6005,7 @@ function emitClaimComponentRef(
   push(state, `const ${scopeVar} = ${state.scopeVar}.child();`, span);
   push(
     state,
-    `const ${hostVar} = { bindings: ${setupHostVar}.bindings, propDeps: ${setupHostVar}.propDeps, instance: ${instanceVar}.scope, setup: ${instanceVar}.record${childHostElementField(state, node)}${childErrorReportField(state, node)}${childContextField(state, node)} };`,
+    `const ${hostVar} = { bindings: ${setupHostVar}.bindings, propDeps: ${setupHostVar}.propDeps, instance: ${instanceVar}.scope, setup: ${instanceVar}.record${childHostElementField(state, node)}${childErrorReportField(state, node)}${childContextField(state, node)}${retainedTransactionField(state, node.name)} };`,
     span,
   );
   push(state, `let ${nodesVar};`);
@@ -5932,7 +6151,7 @@ interface SetupLocal {
    * is a `16b-REF` NODE HANDLE the factory builds (one object for the whole
    * element lifetime) and the emitted `ref` channel drives.
    */
-  readonly kind: 'local' | 'ref' | 'context';
+  readonly kind: 'local' | 'ref' | 'context' | 'host';
   /**
    * The record the factory evaluates for a `local`. For a `ref` this is the
    * OPTIONAL attach/detach notification callback (the same record the plain
@@ -5963,6 +6182,15 @@ function emitSetupBinding(state: EmitState, local: SetupLocal): void {
   if (local.kind === 'local') {
     if (local.record === null) return;
     pushParts(state, [`const ${local.name} = (`, { record: local.record }, ');'], local.span);
+    return;
+  }
+  if (local.kind === 'host') {
+    // `16b-REF` / `useHost`: the owning element is ALREADY on the retained
+    // setup factory's host record (the shell attaches it for the lifecycle env
+    // form), so the lowering is one field read — no channel, no allocation and
+    // no cleanup. The value never changes for an instance, which is why no
+    // reactivity or lifetime work is needed here.
+    push(state, `const ${local.name} = ${state.hostVar}.${HOST_ELEMENT_PROPERTY};`, local.span);
     return;
   }
   if (local.kind === 'context') {
@@ -6296,6 +6524,34 @@ function emitLifecycleEnvReplay(hostRecordProperty: 'bindings' | 'setup'): strin
  * Emit `<Name>__claim` for a claimable component. Returns null when the shape
  * is outside the admitted claim slice; the caller then leaves the recipe mount-only.
  */
+/**
+ * The depth >= 2 transaction-token field a retained child body joins with, as a
+ * fragment of its compiler-private host literal. A target that retains no
+ * children gets no field, so every depth-1 host literal keeps its exact bytes.
+ * The root body threads its own captured token; a retained body forwards the
+ * one it received.
+ */
+function retainedTransactionField(state: EmitState, target: string): string {
+  if (state.retention?.retainingBodies.has(target) !== true) return '';
+  return `, txn: ${state.retainBody ? TRANSACTION_VAR : `${state.hostVar}.txn`}`;
+}
+
+/**
+ * 16b-LC depth >= 2 (2026-11-21): a retained body that retains its own children
+ * joins the root attempt's transaction before any retain call. The token arrives
+ * in the compiler-private host literal (`host.txn`); a hand-built fixture host
+ * without one emits nothing (such a body would then be legacy-shaped and has no
+ * retain calls to coordinate).
+ */
+function emitJoinTransaction(state: EmitState): void {
+  if (!state.leafBody || !state.retainsChildren) return;
+  push(state, `const ${TRANSACTION_VAR} = ${MOUNT_HOST}.txn;`);
+  push(
+    state,
+    `if (${TRANSACTION_VAR} !== undefined) joinInstancePass(${MOUNT_HOST}.instance, ${TRANSACTION_VAR});`,
+  );
+}
+
 function emitClaimFunction(
   file: string,
   component: FunctionModelComponent,
@@ -6366,6 +6622,7 @@ function emitClaimFunction(
     retention,
     retainBody: retention !== null && retention.rootName === component.name,
     leafBody: retention?.leafBodies.has(component.name) === true,
+    retainsChildren: retention?.retainingBodies.has(component.name) === true,
     claimTimeRecipeDepth: 0,
   };
   if (!assertTextBoundaryContext(state, component.roots)) {
@@ -6397,6 +6654,14 @@ function emitClaimFunction(
       localLines.push({ name: resource.name, kind: 'ref', record, span: resource.span });
       continue;
     }
+    if (resource.kind === 'host') {
+      // `16b-REF` / `useHost`: no lowered expression and no read classification
+      // — the value is a compiler-owned host-record field, exactly like a ref
+      // handle is a compiler-owned object.
+      state.localResources.add(resource.name);
+      localLines.push({ name: resource.name, kind: 'host', record: null, span: resource.span });
+      continue;
+    }
     if (resource.kind === 'context') {
       // `16b-CTX`: a consumer is a retained setup value (the signal identity is
       // the contract, so a reconnect writes into the same object). Only its
@@ -6424,7 +6689,17 @@ function emitClaimFunction(
   // 16b-LC retained-child: the ROOT retaining body opens exactly one instance pass before
   // any claim work, so a failed claim is evicted by the shell's abort. Only the
   // root body has a ledger; every leaf/legacy/recipe body emits no ledger text.
-  if (state.retainBody) push(state, `beginInstancePass(${MOUNT_HOST}.instance);`);
+  if (state.retainBody) {
+    // 16b-LC depth >= 2: capture the token only when a retained child is
+    // itself a retaining body; a depth-1 module keeps the bare call bytes.
+    const beginCall = `beginInstancePass(${MOUNT_HOST}.instance)`;
+    push(
+      state,
+      state.retention?.transaction === true
+        ? `const ${TRANSACTION_VAR} = ${beginCall};`
+        : `${beginCall};`,
+    );
+  }
   const phase2: Array<() => void> = [];
   // M08-2 B2: only the shared-cursor claim queues activation. Its per-element
   // blocks are flushed before the enclosing cursor owner's final structure
@@ -6448,15 +6723,20 @@ function emitClaimFunction(
     } else {
       for (const line of localLines) emitSetupBinding(state, line);
     }
+    emitJoinTransaction(state);
     push(state, `const ${rootAdoptedVar} = [];`);
   }
   const rootDirectory = staticElementDirectory(component.roots);
-  // M09-2e / #1803: a styled shadow host's DSD template prefixes the claimed
-  // content with canonical marked links, and the static sibling directory
-  // consumer parses the parent from its first child. The styled root claim
-  // therefore uses the general cursor walk (which skips that prefix) instead of
-  // the directory fast path; the admissibility of the shape is unchanged.
-  if (!useShared && rootDirectory !== null && !state.claimStyleLinkPrefix) {
+  // M09-2e / #1803 + F16: a DSD template may PREFIX its claimed content with
+  // canonical marked stylesheet links — this module's own declared sheets, or a
+  // nested LIGHT child's sheets the runtime lifted into the template. Both claim
+  // forms skip exactly that leading run: the general cursor walk below, and the
+  // directory consumer (`openStaticSiblingDirectory`), whose parse starts after
+  // the run when the claim parent is the ShadowRoot. The prefix is a property of
+  // the TEMPLATE, never of this module's styling declaration, so the directory
+  // fast path stays available for every root shape and the admissibility of the
+  // shape is unchanged.
+  if (!useShared && rootDirectory !== null) {
     for (const interior of emitClaimedDirectory(state, CLAIM_PARENT, rootDirectory)) {
       push(state, `${rootAdoptedVar}.push(${interior});`);
     }
@@ -6464,10 +6744,13 @@ function emitClaimFunction(
     emitClaimHtmlNamespace(state, CLAIM_PARENT, '/', component.span);
     const rootCursor = nextName(state, 'cursor');
     if (state.claimStyleLinkPrefix) {
-      // D-claim-prefix (M09-2e / #1803): a shadow host's DSD template declares
-      // its stylesheets as canonical marked `<link>` nodes BEFORE the authored
-      // content. They are borrowed server DOM: the claim adopts the authored
-      // nodes after them and never writes, moves or duplicates a link.
+      // D-claim-prefix (M09-2e / #1803, widened by F16): a DSD template may
+      // declare canonical marked `<link>` nodes BEFORE the authored content —
+      // this module's own sheets, or a nested LIGHT child's lifted sheets. They
+      // are borrowed server DOM: the claim adopts the authored nodes after them
+      // and never writes, moves or duplicates a link. The skip is exactly the
+      // marked-LINK run; an unmarked link, a marked non-link, or a marked link
+      // anywhere past the run stays a structural mismatch.
       const startVar = nextName(state, 'claimStart');
       push(state, `let ${startVar} = ${CLAIM_PARENT}.firstChild;`);
       push(
@@ -6506,6 +6789,7 @@ function emitClaimFunction(
     } else {
       for (const line of localLines) emitSetupBinding(state, line);
     }
+    emitJoinTransaction(state);
     if (state.childrenRecipeVar !== null) {
       push(state, `const ${state.childrenRecipeVar} = ${MOUNT_PROPS}.children;`);
       push(
@@ -6691,6 +6975,14 @@ function staticSsrNode(
   if (node.kind === 'fragment') return staticSsrExpression(node.children, markers, slots);
   if (node.kind !== 'element') return null;
   if (!TAG_PATTERN.test(node.tag)) return null;
+  // alpha16 nested-expansion: a DASH tag is a nested custom-element host, and a
+  // host's markup is only correct once the render has had the chance to expand
+  // it. The static form is a compile-time string with no such call, so a static
+  // host would silently stay unexpanded — the exact defect this slice exists to
+  // fix. Returning null here routes the whole component to the dynamic producer,
+  // whose dash-tag branch routes through `nestedHost` and falls back to these
+  // same literal bytes when nothing admits the tag.
+  if (node.tag.includes('-')) return null;
   const isVoid = VOID_TAGS.has(node.tag);
   // A void element has no content model. The frontend refuses authored
   // children with `OEC9013`; this null is the generator's fail-closed guard for
@@ -6842,6 +7134,7 @@ function ssrEmitState(
     retention: null,
     retainBody: false,
     leafBody: false,
+    retainsChildren: false,
     claimTimeRecipeDepth: 0,
   };
 }
@@ -6865,6 +7158,15 @@ function emitSsrDynamicAttribute(
   attribute: Extract<FunctionModelAttribute, { readonly kind: 'dynamic' }>,
   outVar: string,
   records: ReadonlyMap<string, LoweredExpressionRecord>,
+  /**
+   * When present, the same evaluated value is ALSO recorded as an `[name, value]`
+   * pair. A nested custom-element host hands those pairs to the render's
+   * expander, so the value is evaluated ONCE and both the serialized bytes and
+   * the expander's props read that one evaluation — no second getter read.
+   */
+  pairsVar?: string,
+  slotCaptureVar?: string,
+  valueCaptureVar?: string,
 ): boolean {
   if (CLIENT_ONLY_ATTRIBUTE_CHANNELS.has(attribute.channel)) return false;
   if (!ADMITTED_ATTRIBUTE_CHANNELS.has(attribute.channel)) return false;
@@ -6872,6 +7174,18 @@ function emitSsrDynamicAttribute(
   if (record === null || !declareReads(state, record)) return false;
   const literal = JSON.stringify(attribute.name);
   if (attribute.channel === 'boolean') {
+    if (pairsVar !== undefined) {
+      pushParts(
+        state,
+        [
+          `if (Boolean((`,
+          { record },
+          `))) { ${outVar}.push(${JSON.stringify(` ${attribute.name}=""`)}); ${pairsVar}.push([${literal}, ${JSON.stringify('')}]); }`,
+        ],
+        attribute.span,
+      );
+      return true;
+    }
     pushParts(
       state,
       [
@@ -6883,9 +7197,23 @@ function emitSsrDynamicAttribute(
     );
     return true;
   }
-  if (attribute.channel !== 'attribute') return false;
+  // A PROPERTY channel renders as an HTML ATTRIBUTE in SSR (owner decision F16).
+  // `el.value = x` is the correct CLAIM behaviour — it sets the DOM property
+  // without clobbering user input — but the server has no live DOM and no user
+  // input to preserve: the honest server artifact for `value={x}` is
+  // `value="x"`, which is also what the browser parses back before any claim
+  // runs. Refusing here made every form page unproducible as a generated page
+  // root (measured: `ssrHostExport: null`), which is why nine fixtures could not
+  // leave the class lane.
+  if (attribute.channel !== 'attribute' && attribute.channel !== 'property') return false;
   const valueVar = nextName(state, 'value');
   pushParts(state, [`const ${valueVar} = attributeValueOf((`, { record }, '));'], attribute.span);
+  if (valueCaptureVar !== undefined) {
+    push(state, `${valueCaptureVar} = ${valueVar};`, attribute.span);
+  }
+  if (slotCaptureVar !== undefined && attribute.name.toLowerCase() === 'slot') {
+    push(state, `${slotCaptureVar} = ${valueVar} ?? \"\";`, attribute.span);
+  }
   push(state, `if (${valueVar} !== null) {`, attribute.span);
   push(state, `  assertSafeUrlAttribute(${literal}, ${valueVar});`, attribute.span);
   push(
@@ -6893,6 +7221,8 @@ function emitSsrDynamicAttribute(
     `  ${outVar}.push(${JSON.stringify(` ${attribute.name}="`)}, escapeAttrValue(${valueVar}), ${JSON.stringify('"')});`,
     attribute.span,
   );
+  if (pairsVar !== undefined)
+    push(state, `  ${pairsVar}.push([${literal}, ${valueVar}]);`, attribute.span);
   push(state, `}`, attribute.span);
   return true;
 }
@@ -7135,6 +7465,27 @@ function emitSsrRecipeHelpers(
  * interior recurses with markers suppressed, so the SSR output is what the
  * M07b directory parser accepts.
  */
+function staticCompositionSlotName(node: FunctionModelNode): string | null {
+  if (node.kind !== 'element') return '';
+  const slot = node.attributes.find((attribute) => attribute.name.toLowerCase() === 'slot');
+  return slot === undefined ? '' : slot.kind === 'static' ? slot.value : null;
+}
+
+interface SsrSelectContext {
+  readonly value: string;
+  readonly multiple: string;
+  readonly state: string;
+}
+
+interface SsrFormContext {
+  readonly select?: SsrSelectContext;
+  readonly optionText?: string;
+}
+
+interface SsrCompositionGroups {
+  readonly groups: string;
+}
+
 function emitDynamicSsrNodes(
   state: EmitState,
   nodes: readonly FunctionModelNode[],
@@ -7142,15 +7493,74 @@ function emitDynamicSsrNodes(
   markers: boolean,
   records: ReadonlyMap<string, LoweredExpressionRecord>,
   slots: SlotAnchors | null,
+  slotCaptureVar?: string,
+  formContext?: SsrFormContext,
+  composition?: SsrCompositionGroups,
 ): boolean {
   const list = state.emitTextBoundaries ? normalizeTextRuns(nodes) : nodes;
   for (const node of list) {
+    // A dynamic condition/list can produce different top-level roots at render
+    // time. Keep each selected root as its own group so a static or dynamic
+    // `slot` attribute on that root still controls projection into a nested
+    // light host. Fragments and control-flow nodes recurse with this context;
+    // the root itself is rendered without it so descendants do not become
+    // separate projection groups.
+    if (
+      composition !== undefined &&
+      node.kind !== 'fragment' &&
+      node.kind !== 'condition' &&
+      node.kind !== 'list'
+    ) {
+      const childHtmlVar = nextName(state, 'nestedChild');
+      const childSlotVar = nextName(state, 'nestedChildSlot');
+      const staticSlot = staticCompositionSlotName(node);
+      push(state, `const ${childHtmlVar} = [];`, node.span);
+      push(
+        state,
+        `let ${childSlotVar} = ${staticSlot === null ? '""' : literalText(staticSlot)};`,
+        node.span,
+      );
+      if (
+        !emitDynamicSsrNodes(
+          state,
+          [node],
+          childHtmlVar,
+          markers,
+          records,
+          slots,
+          childSlotVar,
+          formContext,
+        )
+      )
+        return false;
+      const childHtmlTextVar = nextName(state, 'nestedChildText');
+      push(state, `const ${childHtmlTextVar} = ${childHtmlVar}.join("");`, node.span);
+      push(state, `${outVar}.push(${childHtmlTextVar});`, node.span);
+      push(state, `${composition.groups}.push([${childSlotVar}, ${childHtmlTextVar}]);`, node.span);
+      continue;
+    }
     if (node.kind === 'text') {
+      if (formContext?.optionText !== undefined) {
+        push(state, `${formContext.optionText}.push(${literalText(node.value)});`, node.span);
+      }
       push(state, `${outVar}.push(escapeText(${literalText(node.value)}));`, node.span);
       continue;
     }
     if (node.kind === 'fragment') {
-      if (!emitDynamicSsrNodes(state, node.children, outVar, markers, records, slots)) return false;
+      if (
+        !emitDynamicSsrNodes(
+          state,
+          node.children,
+          outVar,
+          markers,
+          records,
+          slots,
+          slotCaptureVar,
+          formContext,
+          composition,
+        )
+      )
+        return false;
       continue;
     }
     if (node.kind === 'dynamic-text') {
@@ -7158,16 +7568,27 @@ function emitDynamicSsrNodes(
       if (record === null || !declareReads(state, record)) return false;
       const ordinal = textOrdinal(state, node);
       if (ordinal === null) return false;
+      const optionTextCaptureVar = formContext?.optionText;
+      const textValueVar =
+        optionTextCaptureVar === undefined ? undefined : nextName(state, 'ssrTextValue');
+      if (textValueVar !== undefined) {
+        pushParts(state, [`const ${textValueVar} = displayValue((`, { record }, '));'], node.span);
+        push(state, `${optionTextCaptureVar}.push(${textValueVar});`, node.span);
+      }
       push(
         state,
         `${outVar}.push("<!--", markerText(textSlotMarker(${ordinal})), "-->");`,
         node.span,
       );
-      pushParts(
-        state,
-        [`${outVar}.push(escapeText(displayValue((`, { record }, '))));'], // displayValue((expr))
-        node.span,
-      );
+      if (textValueVar !== undefined) {
+        push(state, `${outVar}.push(escapeText(${textValueVar}));`, node.span);
+      } else {
+        pushParts(
+          state,
+          [`${outVar}.push(escapeText(displayValue((`, { record }, '))));'], // displayValue((expr))
+          node.span,
+        );
+      }
       push(
         state,
         `${outVar}.push("<!--", markerText(textSlotMarker(${ordinal}, true)), "-->");`,
@@ -7182,13 +7603,28 @@ function emitDynamicSsrNodes(
       // request-time fact, so a static branch body still needs this producer.
       const testVar = nextName(state, 'whenTest');
       pushParts(state, [`const ${testVar} = (`, { record }, ');'], node.span);
+      // Keep the control markers in `outVar`, the caller's raw fallback bytes.
+      // A selected branch may project roots into different slot parents, so a
+      // single when range cannot be copied into the expanded groups safely.
       push(state, `${outVar}.push("<!--", markerText(MARKERS.when), "-->");`, node.span);
       push(state, `if (${testVar}) {`, node.span);
       state.indent += 1;
       const thenOrdinals = state.textOrdinals;
       const preparedThen = emissionNodes(state, node.consequent);
       state.textOrdinals = textSlotOrdinals(preparedThen);
-      if (!emitDynamicSsrNodes(state, preparedThen, outVar, markers, records, slots)) {
+      if (
+        !emitDynamicSsrNodes(
+          state,
+          preparedThen,
+          outVar,
+          markers,
+          records,
+          slots,
+          slotCaptureVar,
+          formContext,
+          composition,
+        )
+      ) {
         state.textOrdinals = thenOrdinals;
         return false;
       }
@@ -7200,7 +7636,19 @@ function emitDynamicSsrNodes(
         const elseOrdinals = state.textOrdinals;
         const preparedElse = emissionNodes(state, node.alternate);
         state.textOrdinals = textSlotOrdinals(preparedElse);
-        if (!emitDynamicSsrNodes(state, preparedElse, outVar, markers, records, slots)) {
+        if (
+          !emitDynamicSsrNodes(
+            state,
+            preparedElse,
+            outVar,
+            markers,
+            records,
+            slots,
+            slotCaptureVar,
+            formContext,
+            composition,
+          )
+        ) {
           state.textOrdinals = elseOrdinals;
           return false;
         }
@@ -7219,6 +7667,10 @@ function emitDynamicSsrNodes(
       }
       const itemsVar = nextName(state, 'eachItems');
       pushParts(state, [`const ${itemsVar} = (`, { record: itemsRecord }, ');'], node.span);
+      // List and entry markers remain in `outVar`, which is also the raw
+      // unexpanded fallback. Projected groups are individual slot-owned roots;
+      // placing one each range around roots in different slots would split its
+      // start/end markers across unrelated parent nodes.
       push(state, `${outVar}.push("<!--", markerText(MARKERS.each), "-->");`, node.span);
       const indexVar = nextName(state, 'eachIndex');
       push(state, `for (let ${indexVar} = 0; ${indexVar} < ${itemsVar}.length; ${indexVar}++) {`);
@@ -7254,7 +7706,17 @@ function emitDynamicSsrNodes(
       // A component reference inside an entry cannot re-read props on a keyed
       // reuse (M06b1b), so the SSR walk keeps mount's refusal.
       state.listDepth += 1;
-      const entriesEmitted = emitDynamicSsrNodes(state, prepared, outVar, markers, records, slots);
+      const entriesEmitted = emitDynamicSsrNodes(
+        state,
+        prepared,
+        outVar,
+        markers,
+        records,
+        slots,
+        slotCaptureVar,
+        formContext,
+        composition,
+      );
       state.listDepth -= 1;
       state.textOrdinals = outerOrdinals;
       if (!outerEntryName) state.entryNames.delete(node.parameter);
@@ -7265,10 +7727,28 @@ function emitDynamicSsrNodes(
       continue;
     }
     if (node.kind === 'component-ref') {
+      if (formContext?.select !== undefined || formContext?.optionText !== undefined) {
+        diag(
+          state,
+          'OEIR_LEAF_UNSUPPORTED_NODE',
+          'a controlled select cannot determine option selectedness across a component reference',
+          node.span,
+        );
+        return false;
+      }
       if (!emitSsrComponentRef(state, node, outVar, records)) return false;
       continue;
     }
     if (node.kind === 'insertion-site') {
+      if (formContext?.select !== undefined || formContext?.optionText !== undefined) {
+        diag(
+          state,
+          'OEIR_LEAF_UNSUPPORTED_NODE',
+          'a controlled select cannot determine option selectedness across a reusable JSX value',
+          node.span,
+        );
+        return false;
+      }
       if (!state.declaredRecipeIds.has(node.recipeId)) {
         diag(
           state,
@@ -7292,6 +7772,15 @@ function emitDynamicSsrNodes(
       continue;
     }
     if (node.kind === 'children-projection') {
+      if (formContext?.select !== undefined || formContext?.optionText !== undefined) {
+        diag(
+          state,
+          'OEIR_LEAF_UNSUPPORTED_NODE',
+          'a controlled select cannot determine option selectedness across children projection',
+          node.span,
+        );
+        return false;
+      }
       if (state.recipeDepth > 0) {
         diag(
           state,
@@ -7328,6 +7817,66 @@ function emitDynamicSsrNodes(
       );
       return false;
     }
+    const tagName = node.tag.toLowerCase();
+    const attributeOf = (name: string): FunctionModelAttribute | undefined =>
+      node.attributes.find((attribute) => attribute.name.toLowerCase() === name);
+    const selectValueAttribute = tagName === 'select' ? attributeOf('value') : undefined;
+    let activeSelect = formContext?.select;
+    let selectValueVar: string | undefined;
+    let selectMultipleVar: string | undefined;
+    if (selectValueAttribute !== undefined) {
+      selectValueVar = nextName(state, 'selectValue');
+      selectMultipleVar = nextName(state, 'selectMultiple');
+      push(state, `let ${selectValueVar};`, node.span);
+      push(state, `let ${selectMultipleVar} = false;`, node.span);
+      const stateVar = nextName(state, 'selectState');
+      push(state, `const ${stateVar} = { selected: false };`, node.span);
+      activeSelect = { value: selectValueVar, multiple: selectMultipleVar, state: stateVar };
+    }
+
+    const textareaValueAttribute = tagName === 'textarea' ? attributeOf('value') : undefined;
+    let textareaValueVar: string | undefined;
+    if (textareaValueAttribute !== undefined) {
+      textareaValueVar = nextName(state, 'textareaValue');
+      push(state, `let ${textareaValueVar};`, node.span);
+    }
+
+    const controlledOption = tagName === 'option' && activeSelect !== undefined;
+    const optionOpenVar = controlledOption ? nextName(state, 'optionOpen') : undefined;
+    const optionChildrenVar = controlledOption ? nextName(state, 'optionChildren') : undefined;
+    const optionTextVar = controlledOption ? nextName(state, 'optionText') : undefined;
+    const optionValueVar = controlledOption ? nextName(state, 'optionValue') : undefined;
+    if (controlledOption) {
+      push(state, `const ${optionOpenVar} = [];`, node.span);
+      push(state, `const ${optionChildrenVar} = [];`, node.span);
+      push(state, `const ${optionTextVar} = [];`, node.span);
+      push(state, `let ${optionValueVar} = null;`, node.span);
+      const staticValue = attributeOf('value');
+      if (staticValue?.kind === 'static') {
+        push(state, `${optionValueVar} = ${literalText(staticValue.value)};`, staticValue.span);
+      }
+    }
+    const childFormContext: SsrFormContext | undefined =
+      controlledOption && activeSelect !== undefined
+        ? { select: activeSelect, optionText: optionTextVar }
+        : activeSelect === undefined
+          ? formContext
+          : {
+              select: activeSelect,
+              ...(formContext?.optionText === undefined
+                ? {}
+                : { optionText: formContext.optionText }),
+            };
+
+    if (formContext?.select !== undefined && node.tag.includes('-')) {
+      diag(
+        state,
+        'OEIR_LEAF_UNSUPPORTED_NODE',
+        'a controlled select cannot determine option selectedness across a custom-element host',
+        node.span,
+      );
+      return false;
+    }
     // A light-root `<slot>` anchor: the pair brackets the slot element's
     // INTERIOR (after the open tag, around the fallback content), so the
     // serializer substitutes the caller's children for the fallback while the
@@ -7342,8 +7891,106 @@ function emitDynamicSsrNodes(
     // projection into it fails closed at the serializer because no anchor names
     // it.
     const slotName = slotOrdinal === undefined ? null : slotNameOf(node);
-    push(state, `${outVar}.push(${literalText(`<${node.tag}`)});`, node.span);
+    // alpha16 nested-expansion: a dash tag is a NESTED CUSTOM-ELEMENT HOST. Its
+    // bytes are built into their own buffers and then routed through the ONE
+    // `nestedHost` helper, which asks the render to expand it and falls back to
+    // these same literal bytes when nothing admits the tag. An intrinsic tag
+    // keeps direct pushes (byte-identical).
+    const isNestedHost = node.tag.includes('-');
+    const bytesVar = isNestedHost ? nextName(state, 'nestedOpen') : (optionOpenVar ?? outVar);
+    const pairsVar = isNestedHost ? nextName(state, 'nestedAttrs') : undefined;
+    const kidsVar = isNestedHost ? nextName(state, 'nestedKids') : undefined;
+    const groupsVar = isNestedHost ? nextName(state, 'nestedGroups') : undefined;
+    if (isNestedHost) {
+      push(state, `const ${bytesVar} = [];`, node.span);
+      push(state, `const ${pairsVar} = [];`, node.span);
+      push(state, `const ${kidsVar} = [];`, node.span);
+      push(state, `const ${groupsVar} = [];`, node.span);
+    }
+    push(state, `${bytesVar}.push(${literalText(`<${node.tag}`)});`, node.span);
     for (const attribute of node.attributes) {
+      const attributeName = attribute.name.toLowerCase();
+      if (tagName === 'select' && selectValueAttribute !== undefined && attributeName === 'value') {
+        if (attribute.kind === 'static') {
+          push(state, `${selectValueVar} = ${literalText(attribute.value)};`, attribute.span);
+        } else {
+          const record = recordFor(state, attribute.expression, records);
+          if (record === null || !declareReads(state, record)) return false;
+          pushParts(state, [`${selectValueVar} = (`, { record }, ');'], attribute.span);
+        }
+        continue;
+      }
+      if (
+        tagName === 'textarea' &&
+        textareaValueAttribute !== undefined &&
+        attributeName === 'value'
+      ) {
+        if (attribute.kind === 'static') {
+          push(state, `${textareaValueVar} = ${literalText(attribute.value)};`, attribute.span);
+        } else {
+          const record = recordFor(state, attribute.expression, records);
+          if (record === null || !declareReads(state, record)) return false;
+          pushParts(state, [`${textareaValueVar} = (`, { record }, ');'], attribute.span);
+        }
+        continue;
+      }
+      if (controlledOption && attributeName === 'selected') {
+        continue;
+      }
+      if (
+        tagName === 'select' &&
+        selectValueAttribute !== undefined &&
+        attributeName === 'multiple' &&
+        attribute.kind === 'dynamic' &&
+        attribute.channel === 'boolean'
+      ) {
+        const record = recordFor(state, attribute.expression, records);
+        if (record === null || !declareReads(state, record)) return false;
+        const multipleValueVar = nextName(state, 'selectMultipleValue');
+        pushParts(
+          state,
+          [`const ${multipleValueVar} = Boolean((`, { record }, '));'],
+          attribute.span,
+        );
+        push(state, `${selectMultipleVar} = ${multipleValueVar};`, attribute.span);
+        push(
+          state,
+          `if (${selectMultipleVar}) ${bytesVar}.push(${JSON.stringify(' multiple=""')});`,
+          attribute.span,
+        );
+        continue;
+      }
+      if (
+        tagName === 'select' &&
+        selectValueAttribute !== undefined &&
+        attributeName === 'multiple' &&
+        attribute.kind === 'dynamic' &&
+        attribute.channel !== 'boolean'
+      ) {
+        const record = recordFor(state, attribute.expression, records);
+        if (record === null || !declareReads(state, record)) return false;
+        const multipleValueVar = nextName(state, 'selectMultipleValue');
+        pushParts(
+          state,
+          [`const ${multipleValueVar} = attributeValueOf((`, { record }, '));'],
+          attribute.span,
+        );
+        push(state, `${selectMultipleVar} = ${multipleValueVar} !== null;`, attribute.span);
+        push(
+          state,
+          `if (${multipleValueVar} !== null) ${bytesVar}.push(${JSON.stringify(' multiple="')}, escapeAttrValue(${multipleValueVar}), ${JSON.stringify('"')});`,
+          attribute.span,
+        );
+        continue;
+      }
+      if (
+        tagName === 'select' &&
+        selectValueAttribute !== undefined &&
+        attributeName === 'multiple' &&
+        attribute.kind === 'static'
+      ) {
+        push(state, `${selectMultipleVar} = true;`, attribute.span);
+      }
       if (
         attribute.kind === 'dynamic' &&
         (CONSUMED_ATTRIBUTE_CHANNELS.has(attribute.channel) ||
@@ -7363,51 +8010,219 @@ function emitDynamicSsrNodes(
           : attribute.value;
         push(
           state,
-          `${outVar}.push(${JSON.stringify(` ${attribute.name}="`)}, escapeAttrValue(${literalText(ssrValue)}), ${JSON.stringify('"')});`,
+          `${bytesVar}.push(${JSON.stringify(` ${attribute.name}="`)}, escapeAttrValue(${literalText(ssrValue)}), ${JSON.stringify('"')});`,
           attribute.span,
         );
+        if (pairsVar !== undefined) {
+          push(
+            state,
+            `${pairsVar}.push([${JSON.stringify(attribute.name)}, ${literalText(ssrValue)}]);`,
+            attribute.span,
+          );
+        }
         continue;
       }
-      if (!emitSsrDynamicAttribute(state, attribute, outVar, records)) return false;
+      if (
+        !emitSsrDynamicAttribute(
+          state,
+          attribute,
+          bytesVar,
+          records,
+          pairsVar,
+          slotCaptureVar,
+          controlledOption && attributeName === 'value' ? optionValueVar : undefined,
+        )
+      )
+        return false;
     }
-    push(state, `${outVar}.push(">");`, node.span);
-    if (isVoid) continue;
+    if (!controlledOption) push(state, `${bytesVar}.push(">");`, node.span);
+    if (isVoid) {
+      if (isNestedHost)
+        pushNestedHostExpansion(state, outVar, bytesVar, pairsVar!, kidsVar!, groupsVar!, node);
+      continue;
+    }
+    const childVar = kidsVar ?? optionChildrenVar ?? outVar;
     if (slotOrdinal !== null && slotName !== null) {
       push(
         state,
-        `${outVar}.push("<!--", markerText(slotAnchorMarker(${slotOrdinal}, ${literalText(slotName)})), "-->");`,
+        `${childVar}.push("<!--", markerText(slotAnchorMarker(${slotOrdinal}, ${literalText(slotName)})), "-->");`,
         node.span,
       );
     }
+    // A nested light host needs caller child groups as well as their concatenated
+    // fallback bytes: its own <slot> anchors route each authored child to the
+    // right named region. The composition context flattens fragments and walks
+    // selected condition/list roots at producer time, rendering each root once
+    // into both channels.
     const directory =
-      markers && directoryParentAllowed(node.tag) ? staticElementDirectory(node.children) : null;
-    if (directory !== null) {
+      !isNestedHost && textareaValueVar === undefined && markers && directoryParentAllowed(node.tag)
+        ? staticElementDirectory(node.children)
+        : null;
+    if (isNestedHost) {
+      if (
+        !emitDynamicSsrNodes(
+          state,
+          node.children,
+          kidsVar!,
+          markers,
+          records,
+          slots,
+          undefined,
+          undefined,
+          {
+            groups: groupsVar!,
+          },
+        )
+      )
+        return false;
+    } else if (directory !== null) {
       for (const [ordinal, range] of directory.entries()) {
         push(
           state,
-          `${outVar}.push("<!--", markerText(rangeMarker(${ordinal})), "-->");`,
+          `${childVar}.push("<!--", markerText(rangeMarker(${ordinal})), "-->");`,
           range.span,
         );
-        if (!emitDynamicSsrNodes(state, [range], outVar, false, records, slots)) return false;
+        if (
+          !emitDynamicSsrNodes(
+            state,
+            [range],
+            childVar,
+            false,
+            records,
+            slots,
+            undefined,
+            childFormContext,
+          )
+        )
+          return false;
         push(
           state,
-          `${outVar}.push("<!--", markerText(rangeMarker(${ordinal}, true)), "-->");`,
+          `${childVar}.push("<!--", markerText(rangeMarker(${ordinal}, true)), "-->");`,
           range.span,
         );
       }
-    } else if (!emitDynamicSsrNodes(state, node.children, outVar, markers, records, slots)) {
+    } else if (textareaValueVar !== undefined) {
+      const textareaTextVar = nextName(state, 'textareaText');
+      push(
+        state,
+        `if (${textareaValueVar} !== null && ${textareaValueVar} !== undefined) {`,
+        node.span,
+      );
+      state.indent += 1;
+      push(
+        state,
+        `const ${textareaTextVar} = displayValue(${textareaValueVar}).replace(/\\r\\n?/g, "\\n");`,
+        node.span,
+      );
+      push(
+        state,
+        `${outVar}.push(escapeText(${textareaTextVar}.startsWith("\\n") ? "\\n" + ${textareaTextVar} : ${textareaTextVar}));`,
+        node.span,
+      );
+      state.indent -= 1;
+      push(state, '} else {', node.span);
+      state.indent += 1;
+      if (
+        !emitDynamicSsrNodes(
+          state,
+          node.children,
+          childVar,
+          markers,
+          records,
+          slots,
+          undefined,
+          childFormContext,
+        )
+      )
+        return false;
+      state.indent -= 1;
+      push(state, '}');
+    } else if (
+      !emitDynamicSsrNodes(
+        state,
+        node.children,
+        childVar,
+        markers,
+        records,
+        slots,
+        undefined,
+        childFormContext,
+      )
+    ) {
       return false;
     }
     if (slotOrdinal !== null && slotName !== null) {
       push(
         state,
-        `${outVar}.push("<!--", markerText(slotAnchorMarker(${slotOrdinal}, ${literalText(slotName)}, true)), "-->");`,
+        `${childVar}.push("<!--", markerText(slotAnchorMarker(${slotOrdinal}, ${literalText(slotName)}, true)), "-->");`,
         node.span,
       );
+    }
+    if (isNestedHost) {
+      pushNestedHostExpansion(state, outVar, bytesVar, pairsVar!, kidsVar!, groupsVar!, node);
+      continue;
+    }
+    if (controlledOption && activeSelect !== undefined) {
+      const optionEffectiveValue = nextName(state, 'optionEffectiveValue');
+      push(
+        state,
+        `const ${optionEffectiveValue} = ${optionValueVar} === null ? selectOptionValue(${optionTextVar}.join("")) : ${optionValueVar};`,
+        node.span,
+      );
+      push(
+        state,
+        `if (selectOptionSelected(${activeSelect.value}, ${optionEffectiveValue}, ${activeSelect.multiple}, ${activeSelect.state})) ${optionOpenVar}.push(${JSON.stringify(' selected=""')});`,
+        node.span,
+      );
+      push(state, `${optionOpenVar}.push(">");`, node.span);
+      push(
+        state,
+        `${outVar}.push(${optionOpenVar}.join(""), ${optionChildrenVar}.join(""), ${literalText(`</${node.tag}>`)});`,
+        node.span,
+      );
+      continue;
     }
     push(state, `${outVar}.push(${literalText(`</${node.tag}>`)});`, node.span);
   }
   return true;
+}
+
+/**
+ * alpha16 nested-expansion: close one nested custom-element host.
+ *
+ * The element's bytes are in two buffers (`open`: the start tag plus attributes
+ * and `>`; `kids`: its children), and the attribute pairs were recorded as they
+ * were serialized. The emitted call hands all three to `nestedHost`, which asks
+ * the render's host to expand the tag and falls back to the caller's own literal
+ * bytes when nothing admits it — so an un-admitted tag produces exactly the
+ * markup the direct pushes would have produced.
+ *
+ * Stated as a request record (never positional arguments) because the expander
+ * is host-supplied code: a named shape is what makes the contract readable at
+ * both ends.
+ */
+function pushNestedHostExpansion(
+  state: EmitState,
+  outVar: string,
+  openVar: string,
+  pairsVar: string,
+  kidsVar: string,
+  groupsVar: string,
+  node: {
+    readonly tag: string;
+    readonly span: SpanLike;
+    readonly children: readonly FunctionModelNode[];
+  },
+): void {
+  const htmlVar = nextName(state, 'nestedHtml');
+  const kidsHtmlVar = nextName(state, 'nestedKids');
+  push(state, `const ${htmlVar} = ${openVar}.join("");`, node.span);
+  push(state, `const ${kidsHtmlVar} = ${kidsVar}.join("");`, node.span);
+  push(
+    state,
+    `${outVar}.push(nestedHost(${state.hostVar}, { tag: ${JSON.stringify(node.tag)}, attributes: ${pairsVar}, open: ${htmlVar}, children: ${kidsHtmlVar}, groups: ${groupsVar}, hasChildren: ${node.children.length > 0}, fallback: ${htmlVar} + ${kidsHtmlVar} + ${JSON.stringify(`</${node.tag}>`)} }));`,
+    node.span,
+  );
 }
 
 /**
@@ -7433,6 +8248,15 @@ function emitDynamicSsrNodes(
 function ssrReachableLocalResourceNames(
   component: FunctionModelComponent,
   records: ReadonlyMap<string, LoweredExpressionRecord>,
+  /**
+   * ADR-0183 D-4: records the producer evaluates OUTSIDE the JSX tree — the
+   * `signal`/`computed` derivations it creates inline. A setup local those
+   * bodies read (a shared chrome-copy snapshot, a formatter input) is
+   * server-reachable exactly as one the JSX reads is; without these seeds the
+   * producer emitted the derivation and dropped the local it captures, which is
+   * a runtime `undefined` at SSG.
+   */
+  extraSeeds: readonly LoweredExpressionRecord[] = [],
 ): ReadonlySet<string> {
   const localRecords = new Map<string, LoweredExpressionRecord>();
   for (const resource of component.resources) {
@@ -7508,6 +8332,7 @@ function ssrReachableLocalResourceNames(
     if (node.kind === 'insertion-site') walkRecipe(node.recipeId);
   };
   walkNodes(component.roots);
+  for (const record of extraSeeds) usedRecords.add(record);
 
   // Transitive closure over the local initializers the server output reads.
   const reachable = new Set<string>();
@@ -7542,11 +8367,14 @@ function emitDynamicSsrFunction(
   records: ReadonlyMap<string, LoweredExpressionRecord>,
   componentByName: ReadonlyMap<string, FunctionModelComponent>,
   slots: SlotAnchors | null,
+  /** ADR-0183 D-4: this body is the element root's producer (see `EmitState`). */
+  elementRootBinding: boolean,
 ): SsrEmission | null {
   const propsName = component.propsParam;
   const projectsChildren = componentProjectsChildren(component);
   const composition = treeHasComposition(component.roots);
   const state = ssrEmitState(component, file, propsName, componentByName, projectsChildren);
+  if (elementRootBinding) state.elementRootBinding = true;
   if (!assertTextBoundaryContext(state, component.roots)) return failedSsr(state);
   const usesContext = componentUsesContextIntrinsic(component);
   // `16b-CTX` SERVER side: the render's owner scope is a PARAMETER of this
@@ -7564,7 +8392,20 @@ function emitDynamicSsrFunction(
   // Only locals the server output actually (transitively) evaluates are
   // declared. A client-only handler/ref helper must not make `__ssr` request a
   // callable it never reads; surviving locals keep their authored order.
-  const reachableLocalResources = ssrReachableLocalResourceNames(component, records);
+  // ADR-0183 D-4: the derived nodes' own bodies are evaluated here too, so the
+  // reachability closure is seeded with them.
+  const reachableLocalResources = ssrReachableLocalResourceNames(
+    component,
+    records,
+    (elementRootBinding ? component.resources : [])
+      .filter(
+        (resource) =>
+          (resource.kind === 'signal' || resource.kind === 'computed') &&
+          resource.expression !== null,
+      )
+      .map((resource) => records.get(resource.expression!.id))
+      .filter((record): record is LoweredExpressionRecord => record !== undefined),
+  );
   for (const resource of component.resources) {
     if (!IDENTIFIER_PATTERN.test(resource.name) || resource.name.startsWith(INTERNAL_PREFIX)) {
       continue;
@@ -7606,6 +8447,32 @@ function emitDynamicSsrFunction(
       const record = recordFor(state, resource.expression, records);
       if (record === null || !declareReads(state, record)) return failedSsr(state);
       pushParts(state, [`const ${resource.name} = (`, { record }, ');'], resource.span);
+      continue;
+    }
+    // ADR-0183 D-4: the server has no bindings channel and must not acquire one
+    // (a per-render, no-graph contract), so a `signal`/`computed` resource is
+    // CREATED here and the producer reads it as a local. This is what keeps one
+    // component working in both phases instead of only after hydration.
+    if ((resource.kind === 'signal' || resource.kind === 'computed') && state.elementRootBinding) {
+      if (resource.expression === null) {
+        state.hostBindings.add(resource.name);
+        state.requiredBindings.add(resource.name);
+        continue;
+      }
+      const record = recordFor(state, resource.expression, records);
+      if (record === null || !declareReads(state, record)) return failedSsr(state);
+      state.localResources.add(resource.name);
+      pushParts(
+        state,
+        [
+          resource.kind === 'computed'
+            ? `const ${resource.name} = computed(`
+            : `const ${resource.name} = signal((`,
+          { record },
+          resource.kind === 'computed' ? ');' : '));',
+        ],
+        resource.span,
+      );
       continue;
     }
     state.hostBindings.add(resource.name);
@@ -7716,6 +8583,13 @@ function emitSsrFunction(
   records: ReadonlyMap<string, LoweredExpressionRecord>,
   componentByName: ReadonlyMap<string, FunctionModelComponent>,
   lightRoot: boolean,
+  /**
+   * ADR-0183 D-4 compiler-private marker: the ELEMENT ROOT component whose
+   * `signal`/`computed` resources the producer must create per render, because
+   * the element host record has no bindings channel. `null` for a hostless leaf
+   * module, whose consumer supplies the bindings record (unchanged behavior).
+   */
+  rootComponent: string | null,
 ): SsrEmission | null {
   // The gate runs FIRST, on its own emit state: a dynamic slot name must be
   // refused before any byte is emitted, and both producer shapes below share the
@@ -7754,7 +8628,14 @@ function emitSsrFunction(
       placements: [],
     };
   }
-  return emitDynamicSsrFunction(file, component, records, componentByName, slots);
+  return emitDynamicSsrFunction(
+    file,
+    component,
+    records,
+    componentByName,
+    slots,
+    rootComponent !== null && component.name === rootComponent,
+  );
 }
 
 function emitComponent(
@@ -7825,6 +8706,7 @@ function emitComponent(
     retention,
     retainBody: retention !== null && retention.rootName === component.name,
     leafBody: retention?.leafBodies.has(component.name) === true,
+    retainsChildren: retention?.retainingBodies.has(component.name) === true,
     claimTimeRecipeDepth: 0,
   };
   if (claimable && !assertTextBoundaryContext(state, component.roots)) {
@@ -7879,6 +8761,16 @@ function emitComponent(
       if (record === null || !declareReads(state, record)) continue;
       state.localResources.add(resource.name);
       localLines.push({ name: resource.name, kind: 'ref', record, span: resource.span });
+      continue;
+    }
+    if (resource.kind === 'host') {
+      // `16b-REF` / `useHost`: the owning element is a host-record field the
+      // retained factory reads — no lowered expression and no read
+      // classification, and deliberately NOT a host binding (a binding lookup
+      // would demand the name from the module's `bindings` channel, which is a
+      // different thing entirely).
+      state.localResources.add(resource.name);
+      localLines.push({ name: resource.name, kind: 'host', record: null, span: resource.span });
       continue;
     }
     if (resource.kind === 'context') {
@@ -7953,6 +8845,31 @@ function emitComponent(
   // Depth>=2, a reusable JSX/list body and a non-retained target have no
   // connection/disposal owner; they fail closed at the AUTHORED span instead of
   // silently dropping the author's work.
+  // ADR-0183 D-4: the ROOT's `signal`/`computed` resources are CREATED by the
+  // retained setup factory (`__oe_rootInstance`) and returned in its record, so
+  // they are that factory's sibling locals rather than a demand on the shell.
+  // A lifecycle hook carried by the SAME factory therefore reads them as
+  // closure captures.
+  //
+  // This set is load-bearing, not an optimisation: the resource loop above has
+  // already put every signal name in `state.hostBindings` (mount/claim resolve
+  // them through the retained bindings record, which is correct for those
+  // bodies), so without it `hookReadsHostBinding` classified the hook's read as
+  // a host binding and the gate below skipped the callback SILENTLY — no
+  // diagnostic, no emitted hook. A hook that read a root signal was therefore
+  // dead code with a green build. The mount/claim bodies keep their own
+  // `declareReads` calls and still declare the binding, so the two phases stay
+  // one fact with two legitimate carriers.
+  const rootBindingResources =
+    rootInstance === component.name
+      ? component.resources.filter(
+          (resource) =>
+            (resource.kind === 'signal' || resource.kind === 'computed') &&
+            resource.expression !== null,
+        )
+      : [];
+  const rootBindingNames = new Set(rootBindingResources.map((resource) => resource.name));
+  const rootSetupCaptures = rootBindingNames;
   // The SAME fact `declareReads` just recorded: a read it turned into a host
   // binding cannot be satisfied by the retained setup factory (no bindings
   // channel there), so the hook is NOT admitted here and the module gate keeps
@@ -7962,10 +8879,12 @@ function emitComponent(
   const hookReadsHostBinding = (record: LoweredExpressionRecord): boolean =>
     record.reads.some(
       (read) =>
-        state.hostBindings.has(read.name) ||
-        state.hostBindings.has(read.binding.name) ||
-        state.requiredBindings.has(read.name) ||
-        state.requiredBindings.has(read.binding.name),
+        !rootSetupCaptures.has(read.name) &&
+        !rootSetupCaptures.has(read.binding.name) &&
+        (state.hostBindings.has(read.name) ||
+          state.hostBindings.has(read.binding.name) ||
+          state.requiredBindings.has(read.name) ||
+          state.requiredBindings.has(read.binding.name)),
     );
   // `16b-CTX`: a context intrinsic needs an OWNER SCOPE, and this lane's owner
   // scopes exist at exactly two places — the generated element ROOT setup and a
@@ -7988,9 +8907,8 @@ function emitComponent(
       state,
       'OEIR_LEAF_INVALID_ARTIFACT',
       'a context intrinsic needs an owner scope: context is carried only by the generated element ' +
-        'ROOT setup or a depth-1 retained hostless child setup (a direct root-body reference that ' +
-        'is not inside a reusable JSX/list body); depth>=2, recipe/list bodies and non-retained ' +
-        'targets fail closed',
+        'ROOT setup or a RETAINED hostless body setup (any depth, direct hostless references ' +
+        'only); recipe/list bodies and a component no retained body references fail closed',
       toIrSpan({ id: 'context', mode: 'setup', span }),
     );
   }
@@ -7998,7 +8916,10 @@ function emitComponent(
   const admittedHooks: AdmittedLifecycleHook[] = [];
   for (const hook of component.lifecycle) {
     const record = recordFor(state, hook.callback, records);
-    if (record === null || !declareReads(state, record)) continue;
+    // The root setup factory's own signal/computed locals are sibling closure
+    // captures for a hook it carries; they are NOT host bindings there. The
+    // mount/claim bodies keep demanding them through the bindings record.
+    if (record === null || !declareReads(state, record, rootSetupCaptures)) continue;
     if (hookReadsHostBinding(record)) continue;
     const carriedByRoot = rootInstance === component.name;
     const carriedByLeaf =
@@ -8008,9 +8929,8 @@ function emitComponent(
         state,
         'OEIR_LEAF_INVALID_ARTIFACT',
         `the '${hook.kind}' lifecycle hook has no lifecycle owner: nested hooks are carried ` +
-          'only by a depth-1 retained hostless child setup (a direct root-body reference that ' +
-          'is not inside a reusable JSX/list body); depth>=2, recipe/list bodies and ' +
-          'non-retained targets fail closed',
+          'only by a RETAINED hostless body setup (any depth, direct hostless references only); ' +
+          'recipe/list bodies and a component no retained body references fail closed',
         hook.span,
       );
       continue;
@@ -8046,13 +8966,17 @@ function emitComponent(
   // `UNBOUND_BINDING` gate refuses such a module; keeping `rootSetup` false
   // here preserves the pre-change emitted text instead of writing a factory
   // that references a name it never declares.
+  // ADR-0183 D-4: `rootBindingResources`/`rootBindingNames` were computed above
+  // (the hook gate consumes them too); the setup-local check below reuses them.
   const setupReadsHostBinding = localLines.some((line) =>
     (line.record?.reads ?? []).some(
       (read) =>
-        state.hostBindings.has(read.name) ||
-        state.hostBindings.has(read.binding.name) ||
-        state.requiredBindings.has(read.name) ||
-        state.requiredBindings.has(read.binding.name),
+        !rootBindingNames.has(read.name) &&
+        !rootBindingNames.has(read.binding.name) &&
+        (state.hostBindings.has(read.name) ||
+          state.hostBindings.has(read.binding.name) ||
+          state.requiredBindings.has(read.name) ||
+          state.requiredBindings.has(read.binding.name)),
     ),
   );
   // `16b-CTX`: a provider is element-lifetime setup work exactly like a hook, so
@@ -8062,7 +8986,7 @@ function emitComponent(
   const hooksOnRoot = rootInstance === component.name && admittedHooks.length > 0;
   const rootSetup =
     rootInstance === component.name &&
-    (localLines.length > 0 || hooksOnRoot || providersOnRoot) &&
+    (localLines.length > 0 || hooksOnRoot || providersOnRoot || rootBindingResources.length > 0) &&
     !setupReadsHostBinding;
   // A component ALIASES the retained record only when the record can satisfy
   // every read the body needs. That is: it has setup locals, or it uses a context
@@ -8149,6 +9073,14 @@ function emitComponent(
       };
     }
     const setupReadsProps =
+      // ADR-0183 D-4: a binding resource's initializer/derivation evaluates
+      // INSIDE this factory, so a props read there needs the same alias a setup
+      // local's read does.
+      rootBindingResources.some((resource) =>
+        (records.get(resource.expression?.id ?? '')?.reads ?? []).some(
+          (read) => read.name === 'props' || read.binding.name === 'props',
+        ),
+      ) ||
       localLines.some((line) =>
         (line.record?.reads ?? []).some(
           (read) => read.name === 'props' || read.binding.name === 'props',
@@ -8202,7 +9134,67 @@ function emitComponent(
     // the element anchor itself, so its provider also covers every depth-1 child.
     emitContextScopeDeclaration(setupState, component, false);
     emitContextProviders(setupState, component.contextProviders, records);
-    for (const line of localLines) emitSetupBinding(setupState, line);
+    // ADR-0183 D-4: the binding resources are created ONCE per element (this
+    // factory runs once per retained instance) and returned in the record the
+    // shell keeps as `bindings`, so mount/claim resolve them through their
+    // existing `host.bindings[name]` prologue.
+    //
+    // A binding resource and a setup local share ONE authored declaration
+    // order: a derived node may read a local snapshot declared above it
+    // (`const chrome = strings(props.locale); const label = computed(() => chrome.x)`),
+    // which is the shape every site module with shared copy has. Emitting all
+    // resources first would put `const label = computed(...)` above the
+    // `const chrome = ...` it captures — a TDZ at runtime that no diagnostic
+    // would catch. The merge is by authored `span.start`, which is the same
+    // order the frontend lowered them in.
+    type FactoryDecl = {
+      readonly name: string;
+      /** Authored position key: the lane's spans are 1-based line + column. */
+      readonly order: number;
+      readonly emit: () => void;
+    };
+    const factoryDecls: FactoryDecl[] = [];
+    for (const resource of rootBindingResources) {
+      const record = recordFor(setupState, resource.expression!, records);
+      if (record === null || !declareReads(setupState, record)) {
+        return {
+          lines: [],
+          diagnostics: state.diagnostics,
+          requiredBindings: [],
+          requiredProps: [],
+          requiresPropsChanged: false,
+          rootInstanceFactory: null,
+          segments: [],
+          placements: [],
+        };
+      }
+      factoryDecls.push({
+        name: resource.name,
+        order: resource.span.line * 100_000 + resource.span.column,
+        emit: () => {
+          pushParts(
+            setupState,
+            [
+              resource.kind === 'computed'
+                ? `const ${resource.name} = computed(`
+                : `const ${resource.name} = signal((`,
+              { record },
+              resource.kind === 'computed' ? ');' : '));',
+            ],
+            resource.span,
+          );
+        },
+      });
+    }
+    for (const line of localLines) {
+      factoryDecls.push({
+        name: line.name,
+        order: line.span.line * 100_000 + line.span.column,
+        emit: () => emitSetupBinding(setupState, line),
+      });
+    }
+    factoryDecls.sort((left, right) => left.order - right.order);
+    for (const declaration of factoryDecls) declaration.emit();
     // `16b-LC` option 1a: the connect callbacks are RECORDED, not replayed
     // here. The root mount/claim prologue replays them on the per-connection
     // scope, so "setup runs once" and "the callback runs on every connection"
@@ -8296,7 +9288,7 @@ function emitComponent(
         hook.span,
       );
     }
-    const recordFields = localLines.map((line) => line.name);
+    const recordFields = factoryDecls.map((declaration) => declaration.name);
     if (componentUsesContextIntrinsic(component)) {
       recordFields.push(GENERATED_CONTEXT_SCOPE_RECORD);
     }
@@ -8527,7 +9519,17 @@ function emitComponent(
 
   // 16b-LC retained-child: the ROOT retaining body opens exactly one instance pass before
   // any setup/DOM work; the shell aborts it when mount/claim throws.
-  if (state.retainBody) push(state, `beginInstancePass(${MOUNT_HOST}.instance);`);
+  if (state.retainBody) {
+    // 16b-LC depth >= 2: capture the token only when a retained child is
+    // itself a retaining body; a depth-1 module keeps the bare call bytes.
+    const beginCall = `beginInstancePass(${MOUNT_HOST}.instance)`;
+    push(
+      state,
+      state.retention?.transaction === true
+        ? `const ${TRANSACTION_VAR} = ${beginCall};`
+        : `${beginCall};`,
+    );
+  }
   push(state, `const ${INTERNAL_PREFIX}nodes = [];`);
   if (rootSetup && aliasesSetupRecord) {
     emitSetupAlias(state, localLines, ROOT_SETUP_HOST_PROPERTY);
@@ -8536,6 +9538,7 @@ function emitComponent(
   } else {
     for (const line of localLines) emitSetupBinding(state, line);
   }
+  emitJoinTransaction(state);
   // One read of the children recipe per mount (M06b2a): every projection site
   // inserts this same recipe value, and dynamic children content refreshes
   // through the recipe body's own subscriptions (never a props re-read here).
@@ -8626,9 +9629,10 @@ function emitComponent(
   // Env-form callbacks read the owning element from the host record. The shell
   // attaches it; this literal carries it into the mount/claim host the replay
   // prologues read. Guests: modules without the env form keep today's bytes.
-  const forwardedHostElement = moduleUsesLifecycleEnv(state)
-    ? `, ${HOST_ELEMENT_PROPERTY}: ${INTERNAL_PREFIX}host.${HOST_ELEMENT_PROPERTY}, ${STATES_PROPERTY}: ${INTERNAL_PREFIX}host.${STATES_PROPERTY}`
-    : '';
+  const forwardedHostElement =
+    moduleUsesLifecycleEnv(state) || moduleUsesHostAccess(state)
+      ? `, ${HOST_ELEMENT_PROPERTY}: ${INTERNAL_PREFIX}host.${HOST_ELEMENT_PROPERTY}, ${STATES_PROPERTY}: ${INTERNAL_PREFIX}host.${STATES_PROPERTY}`
+      : '';
   // The change channel rides the same literal for the depth-1 child setup host.
   const forwardedPropertyChange = moduleUsesPropertyChange(state)
     ? `, ${PROPERTY_CHANGE_PROPERTY}: ${INTERNAL_PREFIX}host.${PROPERTY_CHANGE_PROPERTY}`
@@ -8720,7 +9724,15 @@ function emitComponent(
   const ssr =
     claim === null
       ? null
-      : emitSsrFunction(file, component, rootDirectory, records, componentByName, lightRoot);
+      : emitSsrFunction(
+          file,
+          component,
+          rootDirectory,
+          records,
+          componentByName,
+          lightRoot,
+          rootInstance ?? null,
+        );
   if (ssr !== null && ssr.diagnostics.length > 0) {
     return {
       lines: [],
@@ -8977,6 +9989,65 @@ function emitAuthoredImport(entry: FunctionModelImport): string {
   }
 }
 
+/**
+ * The module's STATIC class tokens (deletion prerequisite P-1, 2026-11-21).
+ *
+ * A utility engine compiles a component's stylesheet from its admitted class
+ * candidates, and until now only the class lane, the server function lane (which
+ * reuses the class lowering) and packed artifacts produced them. The
+ * generated-element lane produced NONE, so a generated shadow component migrated
+ * off the class lane silently lost its utilities: the authored `.css` still
+ * shipped, the utility classes landed in the document sheet (which a shadow root
+ * cannot reach no matter what).
+ *
+ * The tokens are a MODEL fact, not an emission fact: this walk reads the same
+ * `FunctionModelModule` the generator emits, so the set cannot drift from the
+ * markup. Dynamic `class` channels are deliberately excluded — an authored
+ * expression is not a compile-time candidate, and guessing at one would compile
+ * utilities nobody declared. Duplicates are collapsed and the result is sorted,
+ * so the registry sees a stable fact.
+ */
+export function collectStaticClassCandidates(module: FunctionModelModule): readonly string[] {
+  const tokens = new Set<string>();
+  const visit = (nodes: readonly FunctionModelNode[]): void => {
+    for (const node of nodes) {
+      switch (node.kind) {
+        case 'element': {
+          for (const attribute of node.attributes) {
+            if (attribute.kind !== 'static' || attribute.name !== 'class') continue;
+            for (const token of attribute.value.split(/\s+/)) {
+              if (token.length > 0) tokens.add(token);
+            }
+          }
+          visit(node.children);
+          break;
+        }
+        case 'fragment':
+          visit(node.children);
+          break;
+        case 'component-ref':
+          // A reference's children live in the component's recipe table, not on
+          // the ref; those recipes are walked below.
+          break;
+        case 'condition':
+          visit(node.consequent);
+          visit(node.alternate ?? []);
+          break;
+        case 'list':
+          visit(node.template);
+          break;
+        default:
+          break;
+      }
+    }
+  };
+  for (const component of module.components) {
+    visit(component.roots);
+    for (const recipe of component.recipes) visit([recipe.target]);
+  }
+  return [...tokens].sort();
+}
+
 export function generateLeafModule(
   module: FunctionModelModule,
   options: {
@@ -8992,13 +10063,15 @@ export function generateLeafModule(
      */
     readonly rootInstance?: string;
     /**
-     * M09-2e / #1803 compiler-private claim-prefix marker: `true` when the
-     * generated-element lane read a `styles` declaration from the same authored
-     * sidecar (shadow root only), so this module's DSD template prefixes its
-     * claimed content with the canonical marked stylesheet links. The ROOT claim
-     * then skips exactly that leading marked <link> prefix — borrowed server
-     * DOM, never deleted, re-written or duplicated. Omitted keeps every byte of
-     * the pre-slice claim unchanged.
+     * M09-2e / #1803 compiler-private claim-prefix marker, widened by F16: `true`
+     * when this module has a DSD template root (every shadow descriptor), so its
+     * claimed content can be prefixed with canonical marked stylesheet links —
+     * its own declared sheets, and a nested LIGHT child's sheets the runtime
+     * lifted into this template. The ROOT claim (either form: the general cursor
+     * walk or the M07b directory consumer) then skips exactly that leading
+     * marked <link> run — borrowed server DOM, never deleted, re-written or
+     * duplicated. A LIGHT root has no template and keeps the pre-slice claim
+     * bytes.
      */
     readonly claimStyleLinkPrefix?: boolean;
     /**
@@ -9025,6 +10098,7 @@ export function generateLeafModule(
       requiredBindings: [],
       requiredProps: [],
       requiresPropsChanged: false,
+      classCandidates: [],
       diagnostics: [
         {
           severity: 'error',
@@ -9054,6 +10128,7 @@ export function generateLeafModule(
       requiredBindings: [],
       requiredProps: [],
       requiresPropsChanged: false,
+      classCandidates: [],
       diagnostics: [cycle],
     };
   }
@@ -9128,6 +10203,8 @@ export function generateLeafModule(
       // No module exists, so no declaration exists: keep the invariant
       // "non-null exactly when the factory was emitted".
       rootInstanceFactory: null,
+      // A refused module contributes no candidates (nothing shipped to style).
+      classCandidates: [],
       requiredBindings: [...requiredBindings].sort(),
       requiredProps: [...requiredProps].sort(),
       requiresPropsChanged,
@@ -9171,6 +10248,7 @@ export function generateLeafModule(
       sourceMap: null,
       placements: [...placements],
       rootInstanceFactory: null,
+      classCandidates: [],
       requiredBindings: [...requiredBindings].sort(),
       requiredProps: [...requiredProps].sort(),
       requiresPropsChanged,
@@ -9208,6 +10286,7 @@ export function generateLeafModule(
     requiredBindings: [...requiredBindings].sort(),
     requiredProps: [...requiredProps].sort(),
     requiresPropsChanged,
+    classCandidates: collectStaticClassCandidates(module),
     diagnostics: [],
   };
 }

@@ -78,10 +78,9 @@ import { fileURLToPath } from 'node:url';
 import { readPackages } from '../../tools/lib/package-graph.ts';
 import { apiReference } from '../app/data/_generated-api-reference.ts';
 import {
-  compileElementModule,
+  compileGeneratedElementIfAdmitted,
   compileServerComponentIfAdmitted,
 } from '../../packages/compiler/src/compiler.ts';
-import { ISLAND_ADMISSION } from '../../packages/protocol/src/island-admission.ts';
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 
@@ -261,7 +260,6 @@ export function isCompileExcluded(file: string): boolean {
 }
 
 /** The compiler options the real build passes: the router's island sidecar. */
-const COMPILE_OPTIONS = { staticSidecars: [ISLAND_ADMISSION] } as const;
 
 /** One fence's virtual module id; the compiler derives diagnostics/source maps from it. */
 function virtualExampleId(example: ContentExample, index: number): string {
@@ -289,7 +287,18 @@ export function compileExample(example: ContentExample): ExampleFailure[] {
   if (isCompileExcluded(example.file)) return [];
   const id = virtualExampleId(example, example.index);
   try {
-    if (compileElementModule(example.code, id, COMPILE_OPTIONS) !== null) return [];
+    // The GENERATED lane (Alpha16 retired the class lane): a documented example that
+    // declares a sidecar is admitted by the same entry the build's transform uses.
+    // The tag comes from the AUTHORED sidecar — the entry needs one, and a documented
+    // example pins its own; an example without one is not a component and contributes
+    // no verdict here, exactly as the class bridge answered for a non-class module.
+    const declaredTag = /defineIslandConfig\(\{[^}]*\btag:\s*'([^']+)'/.exec(example.code)?.[1];
+    if (
+      declaredTag !== undefined &&
+      compileGeneratedElementIfAdmitted(example.code, id, { site: { tag: declaredTag } }) !== null
+    ) {
+      return [];
+    }
     if (compileServerComponentIfAdmitted(example.code, id) !== null) return [];
     return [];
   } catch (error) {

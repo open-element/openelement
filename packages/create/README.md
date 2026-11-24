@@ -150,9 +150,9 @@ npm create @openelement@0.43 my-app
     `Response.json`
   - `app/islands/` — the two islands (`my-counter` hydrating on idle,
     `live-timer` client-only), the only code that ships JavaScript
-  - `app/components/` — compiled page elements and their style sheets
-    (`.css` files next to each element; `site-chrome.css`/`badges.css` are
-    the shared sheets)
+  - `app/components/` — where page-scope components live when you add one
+    (the shipped pages are server functions in `app/routes/`; each SHADOW
+    element that needs one carries its own root `.css` sheet)
   - `app/styles/theme.css` — the @theme role sheet, Tailwind-ON single-default
     scaffold form (dark values ride
     `prefers-color-scheme`)

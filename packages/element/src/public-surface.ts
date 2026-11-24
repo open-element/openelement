@@ -15,10 +15,14 @@
  */
 
 // ─── Core exports ───────────────────────────────────────
-
-export { OpenElement } from './open-element.ts';
-
-export { ErrorBoundary } from './error-boundary.ts';
+//
+// `OpenElement` and `ErrorBoundary` were the CLASS lane's public base classes. The
+// lane is deleted (F16): the generated lane's authoring form is a default-exported
+// function component plus a `defineIslandConfig` sidecar, and its author-facing
+// hooks (`onConnect`, `onDispose`, `onError`, `ref`, `useHost`, `useContext`) are
+// the compiler-erased intrinsics re-exported further down this file. There is no
+// replacement base class and no compatibility shim: an app that extended one must
+// move to the generated lane.
 
 export { collectPublicProps } from './public-runtime.ts';
 
@@ -27,12 +31,11 @@ export { collectPublicProps } from './public-runtime.ts';
 // renderToString serializes a compiled class to deterministic HTML for generated
 // server entries; ensurePreHydrationClickCapture installs the pre-upgrade
 // capture that the compiled hydration replays after upgrade (generated client
-// entries call it).
-export {
-  createStreamShellExecutor,
-  ensurePreHydrationClickCapture,
-  renderToString,
-} from './public-runtime.ts';
+// entries call it). The streamed-page shell executor (createStreamShellExecutor
+// and its three types) is DELETED with the class lane's compiled stream
+// channel: its one identity input was `componentClass.__partProgram`, and
+// every consumer retired with renderIntent.stream (2026-11-24).
+export { ensurePreHydrationClickCapture, renderToString } from './public-runtime.ts';
 // alpha15 S lane: the component-stylesheet URL channel the router's generated
 // SSR/SSG entry feeds before rendering (the DSD templates of components whose
 // classes were statically admitted declare the emitted assets as external
@@ -49,11 +52,6 @@ export { __setRequestTimeStyleSheetUrls } from './internal/compiled/server/style
 export { createDocumentStyleResources } from './public-runtime.ts';
 export type { DocumentStyleResources } from './public-runtime.ts';
 export type { RenderToStringOptions } from './public-runtime.ts';
-export type {
-  CreateStreamShellOptions,
-  StreamShellExecutor,
-  StreamShellManifest,
-} from './public-runtime.ts';
 
 // Explicit type-only surface for build adapters (#488).
 export type { SsrAdmissionDecision } from './public-runtime.ts';
@@ -79,16 +77,14 @@ export { ERROR_PREFIX, reportError, setErrorTelemetryHook } from './public-runti
 export { computed, effect, signal } from './public-runtime.ts';
 export type { ReadonlySignal, Signal } from './public-runtime.ts';
 
-/**
- * @experimental Compile-time-only decorator intrinsics (#1209): the compiler
- * admits these by binding provenance (a runtime named import from this
- * module) and erases them from generated code — they carry no runtime
- * semantics and are not a second recognizer. When a module is evaluated
- * WITHOUT the compiler (unit tests, config evaluation), these are inert
- * no-op decorators so module evaluation and class definition stay safe.
- * May move to a dedicated authoring subpath at the B1.2 surface freeze.
- */
-export { element, property } from './public-runtime.ts';
+// `element` and `property` were the CLASS lane's decorators. They survived as inert
+// no-ops "so module evaluation and class definition stay safe" — but with the lane
+// deleted nothing defines a class for them to decorate, and NO lane compiles a
+// decorated module (both the generated and the server entry decline it). Keeping an
+// exported decorator whose only effect is to make an uncompilable module evaluate is
+// the opposite of failing closed: the module looks accepted and then renders nothing.
+//
+// Deleted with no replacement. `defineIslandConfig` is the authoring form.
 
 /**
  * @experimental Compile-time-only lifecycle/change intrinsics (`16b-LC` plus
@@ -133,6 +129,7 @@ export {
   onPropertyChange,
   ref,
   useContext,
+  useHost,
 } from './public-runtime.ts';
 
 // ─── HTML utilities (re-export from core) ────────────────

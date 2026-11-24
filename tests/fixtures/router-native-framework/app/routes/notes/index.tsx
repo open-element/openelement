@@ -26,7 +26,9 @@ export function loader(ctx: { responseHeaders: Headers }): NotesData {
   };
 }
 
-export default definePage<NotesData>(NotesPage, {
+// Bare call on purpose: the page-component scanner cannot match a type
+// argument; the loader/props typing lives on the annotations below.
+export default definePage(NotesPage, {
   renderIntent: { mode: 'dynamic' },
   head: { title: 'app-flow-native fixture — notes' },
   props({ data }: PagePropsContext<NotesData>) {

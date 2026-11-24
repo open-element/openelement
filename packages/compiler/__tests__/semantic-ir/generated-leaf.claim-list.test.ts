@@ -360,7 +360,7 @@ function C(props) {
     expect(tree.module).not.toContain('entryKeyMarker(');
   });
 
-  test('insertion-site / property / nested condition in an entry keeps the component mount-only', () => {
+  test('insertion-site and nested condition in an entry stay mount-only; property is admitted', () => {
     const insertion = compile(
       `import { signal } from '@openelement/element';
 function C(props) {
@@ -383,9 +383,12 @@ function C(props) {
 }
 `,
     );
+    // A property channel inside a list entry is claimable since F16 (SSR renders
+    // it as an attribute); the insertion-site and nested-condition shapes below
+    // stay mount-only on their own grounds.
     expect(property.diagnostics).toEqual([]);
-    expect(property.module).not.toContain('function C__claim');
-    expect(property.module).not.toContain('function C__ssr');
+    expect(property.module).toContain('function C__claim');
+    expect(property.module).toContain('function C__ssr');
 
     const condition = compile(
       `import { signal } from '@openelement/element';

@@ -32,15 +32,12 @@ test('header nav links are spaced apart (not jammed)', async ({ page }) => {
   expect(about.left - home.right).toBeGreaterThan(4);
 });
 
-test('a page card is styled by its own utility classes inside the layout shadow tree', async ({
-  page,
-}) => {
-  // The layout convention renders every page INSIDE the layout's shadow
-  // template, so a page's utility classes can only reach it through the
-  // component stylesheet — the document sheet is not in that tree. The
-  // measured values are the declarations themselves: `px-7` (1.75rem) and
-  // `rounded-(--radius-l)` (16px), both zero when the sheet stops at the
-  // shadow-root subset.
+test('a page card is styled by its own utility classes through the layout', async ({ page }) => {
+  // The layout is a LIGHT root (2026-11-20): page content projects through its
+  // `<slot>` and stays in the document, so the document sheet's utilities reach
+  // it. The measured values are the declarations themselves: `px-7` (1.75rem)
+  // and `rounded-(--radius-l)` (16px) — zero if the page content or the sheet is
+  // cut off from the document.
   await page.goto('/');
   const card = page.locator('main section:has(my-counter)').first();
   const style = await card.evaluate((el) => {

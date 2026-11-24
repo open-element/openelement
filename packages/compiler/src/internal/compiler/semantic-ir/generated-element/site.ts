@@ -105,6 +105,15 @@ export interface GeneratedElementSiteAdmission {
    */
   readonly root: RootMode | undefined;
   /**
+   * The sidecar's client-only delivery fact (2026-11-20): explicit
+   * `ssr: false`, or `hydrate: 'only'` — the same phase resolution the router
+   * scanner applies. A client-only island is the only case whose declared
+   * sheets need a module-graph import: no server render exists to carry the
+   * marked `<link>`, and the browser creates the root the shell must style.
+   * `ssr: true`/absent keep the SSR delivery and add no descriptor byte.
+   */
+  readonly clientOnly: boolean;
+  /**
    * The native `delegatesFocus` fact the sidecar declares; false covers both an
    * absent key and an explicit `false` (the same descriptor behavior). The
    * reader has already refused `true` without `root: 'shadow'`.
@@ -216,6 +225,18 @@ export type IslandRootRead =
  */
 export interface IslandMetadataFacts {
   readonly root: RootMode | undefined;
+  /**
+   * The sidecar's client-only delivery fact: the build's effective decision —
+   * explicit `ssr: false`, or `hydrate: 'only'` (which the router scanner's
+   * `resolveIslandSsrDsd` coerces to `ssr: false`). `ssr: true` and an absent
+   * key are the same SSR case.
+   *
+   * A client-only island has no server render at all: the browser creates the
+   * root, so its sheets can only arrive as real module-graph imports the shell
+   * adopts. This is the ONE fact the emitter's client-style channel is derived
+   * from (never a host boolean, never a second sidecar read).
+   */
+  readonly clientOnly: boolean;
   readonly delegatesFocus: boolean;
   /**
    * The sidecar declares a `styles` key (M09-2e / #1803). Presence, not the
@@ -732,7 +753,16 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
   const descriptor = islandPolicyObjectLiteral(sourceFile);
   if (descriptor === null) return { kind: 'absent' };
   let seenRoot = false;
-  let declaredRoot: 'light' | 'shadow' | null = null;
+  let declaredRoot: 'light' | 'shadow' | 'closed' | null = null;
+  let seenSsr = false;
+  /**
+   * The sidecar's explicit `ssr` boolean, or undefined when it pins none. The
+   * CLIENT-ONLY fact below is the same resolution the router scanner applies
+   * (`resolveIslandSsrDsd`): explicit `false` OR `hydrate: 'only'`, which
+   * forces `ssr` off. Two readers, one phase decision.
+   */
+  let ssrExplicit: boolean | undefined;
+  let hydrateOnly = false;
   let seenDelegatesFocus = false;
   let delegatesFocus = false;
   let delegatesFocusSpan: ts.Node | null = null;
@@ -795,18 +825,72 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
           ),
         };
       }
-      if (initializer.text !== 'light' && initializer.text !== 'shadow') {
+      if (
+        initializer.text !== 'light' &&
+        initializer.text !== 'shadow' &&
+        initializer.text !== 'closed'
+      ) {
         return {
           kind: 'refused',
           diagnostic: rootDiagnostic(
             sourceFile,
             initializer,
             `openElement.root has unsupported value "${initializer.text}"; ` +
-              'use "light" or "shadow"',
+              'use "light", "shadow" or "closed"',
           ),
         };
       }
       declaredRoot = initializer.text;
+      continue;
+    }
+    if (name === 'ssr') {
+      // The client-only delivery fact (2026-11-20). The router scanner is the
+      // author-facing authority for the same literal rule; this reader refuses
+      // rather than guessing a phase, because the emitter's module-graph
+      // imports (and the shell's client adoption) hang off this one boolean.
+      if (seenSsr) {
+        return {
+          kind: 'refused',
+          diagnostic: diagnosticAt(
+            sourceFile,
+            property,
+            GENERATED_ELEMENT_DIAGNOSTIC.SSR_INVALID,
+            'the openElement sidecar declares ssr more than once, so the delivery phase is ' +
+              'ambiguous',
+          ),
+        };
+      }
+      seenSsr = true;
+      const initializer = property.initializer;
+      if (
+        initializer.kind !== ts.SyntaxKind.TrueKeyword &&
+        initializer.kind !== ts.SyntaxKind.FalseKeyword
+      ) {
+        return {
+          kind: 'refused',
+          diagnostic: diagnosticAt(
+            sourceFile,
+            initializer,
+            GENERATED_ELEMENT_DIAGNOSTIC.SSR_INVALID,
+            'openElement.ssr must be a static literal, got dynamic value ' +
+              `"${initializer.getText(sourceFile)}"`,
+          ),
+        };
+      }
+      ssrExplicit = initializer.kind === ts.SyntaxKind.TrueKeyword;
+      continue;
+    }
+    if (name === 'hydrate') {
+      // `hydrate: 'only'` is the OTHER spelling of the client-only phase: the
+      // scanner's `resolveIslandSsrDsd` coerces it to `ssr: false, dsd: false`.
+      // The reader mirrors that coercion so a client-only island cannot be
+      // classified one way by the scan and the other way by the compiler (the
+      // drift class that would leave its sheet unemitted and the render
+      // unstyled). Other hydrate values carry no phase fact for this lane; the
+      // router scan owns their validation.
+      if (ts.isStringLiteral(property.initializer) && property.initializer.text === 'only') {
+        hydrateOnly = true;
+      }
       continue;
     }
     if (name === 'styles') {
@@ -942,8 +1026,18 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
     }
     delegatesFocus = initializer.kind === ts.SyntaxKind.TrueKeyword;
   }
+  // Three root families map one-to-one onto the descriptor's three modes (F16).
+  // Before `closed` was spellable here, every non-light root collapsed to
+  // `shadow-open`, so a component that wanted an encapsulated root could only be
+  // written as a class — the asymmetry the shell never had.
   const root: RootMode | undefined =
-    declaredRoot === null ? undefined : declaredRoot === 'light' ? 'light' : 'shadow-open';
+    declaredRoot === null
+      ? undefined
+      : declaredRoot === 'light'
+        ? 'light'
+        : declaredRoot === 'closed'
+          ? 'shadow-closed'
+          : 'shadow-open';
   if (delegatesFocus && root !== 'shadow-open') {
     return {
       kind: 'refused',
@@ -958,7 +1052,19 @@ export function readIslandMetadata(sourceFile: ts.SourceFile): IslandMetadataRea
   }
   return {
     kind: 'read',
-    facts: { tag, root, delegatesFocus, formAssociated, declaresStyles, styles, properties },
+    facts: {
+      tag,
+      root,
+      // The build's effective client-only phase: explicit `ssr: false`, or the
+      // `hydrate: 'only'` coercion the router scanner applies. `ssr: true` and
+      // an absent key stay the SSR case.
+      clientOnly: ssrExplicit === false || hydrateOnly,
+      delegatesFocus,
+      formAssociated,
+      declaresStyles,
+      styles,
+      properties,
+    },
   };
 }
 
@@ -1989,6 +2095,7 @@ export function admitGeneratedElementSite(
       ? metadata.facts
       : {
           root: undefined,
+          clientOnly: false,
           delegatesFocus: false,
           formAssociated: false,
           declaresStyles: false,
@@ -2021,6 +2128,7 @@ export function admitGeneratedElementSite(
       componentName: fact.name,
       defaultExportSpan: fact.span,
       root: facts.root,
+      clientOnly: facts.clientOnly,
       delegatesFocus: facts.delegatesFocus,
       formAssociated: facts.formAssociated,
       declaresStyles: facts.declaresStyles,
@@ -2154,6 +2262,12 @@ export function gateGeneratedElementBindings(
   leaf: GeneratedLeafModule,
 ): readonly IrDiagnostic[] {
   if (leaf.requiredBindings.length === 0) return [];
+  // ADR-0183 D-4: the retained root setup factory IS the production bindings
+  // source when it exists — it creates the root's `signal`/`computed` resources
+  // and returns them in the record the shell keeps as `bindings`. The gate keeps
+  // refusing a module that needs bindings with no factory, which is the shape it
+  // was written for (a binding with no producer in this lane).
+  if (leaf.rootInstanceFactory !== null) return [];
   return [
     {
       severity: 'error',

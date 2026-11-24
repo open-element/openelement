@@ -66,16 +66,16 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 | 16 | CEM 兼容分类（第三方 WC 准入） | `packages/router/src/vite/internal/ssg/cem-compat.ts` | 保留为平台边缘（产品互操作面） |
 | 17 | 渲染器适配缝（native / lit；lit 分支已删） | ~~`packages/router/src/lit.ts`~~、~~`packages/router/src/lit-ssr.ts`~~（native 选择缝保留于 `packages/router/src/vite/internal/ssg/renderer-adapter.ts`） | **已删（ADR-0152 2026-11-08 零兼容退役；native 为唯一渲染器）** |
 | 18 | legacy 虚拟入口 id（`virtual:open-hono-entry`，ADR-0152） | `packages/router/src/vite/plugin-virtual-modules.ts` | 条件到即删（随下一次产物命名不兼容变更一起改名） |
-| 19 | Part Program 执行器（旧执行后端） | `packages/element/src/internal/compiled/facade-host.ts`（Part Program → live element 行为的唯一入口；`packages/element/src/internal/compiled/runtime-program.ts` 与之同属该后端，`packages/element/src/internal/compiled/runtime/` 下的 hydrate/resume 的 Part 路径由它驱动） | 条件到即删（M08 的 SSR→claim 与 per-phase 等价在固定 SHA 签收后，下一个 release 周期随生成叶路径接入产品入口一起删除） |
-| 20 | Class authoring API（旧作者面） | `packages/element/src/open-element-implementation.ts`（`OpenElement` 基类；`base.ts`、`open-element-configuration.ts`、`error-boundary.ts` 的类形状同属该面）；router 侧连带文件（退役执行时一并清理）：`packages/router/src/authoring.ts:456`（`isElementPageClass` 类形状判别）、`packages/router/src/vite/internal/server-runtime/renderer-runtime.ts:146`（`resolveCompiledPageTag` 读编译产物 `__partProgram.tag`）、`packages/router/src/vite/internal/ssg/entry-descriptor.ts:467`（页面路由 `defaultTagName` 载体） | 条件到即删（ADR-0173 第四轮已批准零兼容退役；Alpha16b 的 C-1/C-3 能力清单覆盖证据落地、starter/文档迁移完成后删除） |
+| 19 | ~~Part Program 执行器（旧执行后端）~~ **已删除（Alpha16，2026-11-22）** | ~~packages/element/src/internal/compiled/facade-host.ts~~（原执行器入口；`runtime/error-boundary.ts`、`stream-state.ts` 与 class lane 同一变更集删除） | **已删（Alpha16，2026-11-22）**（class lane 删除时执行器作为同一变更集移除。生成 lane 的 shell 通过 `generated-element/shell.ts` 自行 mount/claim，`leaf-runtime.ts` 是叶子端的闭合集合，从不导入这些端点——已实测 `element-runtime` chunk 不再包含执行器。孤儿模块 `stream-state.ts` / `runtime/error-boundary.ts` 由 `vp-pack` 的“has no packed .js”门禁抓出并一并删除，那正是该门禁存在的理由。） |
+| 20 | ~~Class authoring API（旧作者面）~~ | ~~packages/element/src/open-element-implementation.ts~~（`OpenElement` 基类；`open-element-configuration.ts`、`error-boundary.ts` 的类形状同属该面，随 class lane 删除；`base.ts` 保留为 entry 子路径）；router 侧判别/产物读取仍在树内、服务生成 lane 的编译页类：`packages/router/src/authoring.ts:456`（`isElementPageClass` 的 ES class 形状判别）、`packages/router/src/vite/internal/server-runtime/renderer-runtime.ts:146`（`resolveCompiledPageTag` 读编译产物 `__partProgram.tag`）、`packages/router/src/vite/internal/ssg/entry-descriptor.ts:467`（页面路由 `defaultTagName` 载体） | **已删（Alpha16，2026-11-22）**（ADR-0173 第四轮批准零兼容退役；class lane 随 Alpha16 删除，公开面只保留 Native Custom Element 边界，不留适配器。C-1/C-3 能力清单证据与 starter/文档迁移此前已落地。） |
 | 21 | 生成宿主注册对（M11 垂直切片，ADR-0181） | `packages/router/src/vite/internal/server-runtime/security.ts`（`registerIsland`）+ `packages/protocol/src/registry-markers.ts`（`SSR_REGISTRY_GENERATED_HOSTS`） | 条件到即删（P1 在 tracked 依赖图工件上对全部适用应用判 MET 后随 M11-3 入口切换删除） |
 | 22 | 私有实例保留账本（ADR-0181） | `packages/element/src/internal/compiled/runtime/instance-ledger.ts`（经 `runtime.ts` 对发射代码 re-export） | 条件到即删（Alpha17 预编译分发取代发射式保留计划、且无发射模块再 import 该账本） |
 | 23 | browser-entry-graph 观测工件与检查器（temporary-by-intent） | `packages/router/src/vite/internal/browser-entry-graph.ts`、`browser-entry-graph-artifact.ts`、`tools/repo/check-browser-entry-graph.ts` | 条件到即删（P1 判 MET 且该证据并入 release 门禁后移除一次性检查器；工件本身不进入发布面） |
-| 24 | `OE_ISLAND_STYLE_SHADOW_UNWIRED` 拒绝（ADR-0181） | `packages/router/src/vite/internal/ssg/island-scanner.ts` | 条件到即删（GH #1800 落地 shadow 样式 link 载体、且三引擎通过后移除该拒绝） |
+| 24 | `OE_ISLAND_STYLE_SHADOW_UNWIRED` 拒绝（ADR-0181） | `packages/router/src/vite/internal/ssg/island-scanner.ts` | 条件到即删（2026-11-20 已按书面条件退役一次：shadow 载体落地后范围收窄为 server-rendered 且无 producer 的诚实情形；client-only 半边随后也放开。剩余情形的删除条件：server-rendered 生成岛全部获得 producer） |
 | 25 | legacy allocation-only 绑定工厂（descriptor `createBindings`，M09-0 shell 测试遗留） | `packages/element/src/internal/compiled/generated-element/shell.ts`（descriptor `createBindings` 字段及其 allocation-only 契约注释，条目引用 `:448-470`） | 条件到即删（M09 shell 测试全部迁移到 `createInstance` 后删除） |
 | 26 | rolldown-vite `buildStart` 诊断面 workaround（#1616 报告先行契约） | `packages/router/src/vite/internal/build-diagnostics.ts`（"The interim contract, until the bundler is fixed"，条目引用 `:91`） | 条件到即删（rolldown-vite 修复对应缺陷后删除） |
 | 27 | #1558 前已发布产物的 permissive 样式边兼容读 | `packages/compiler/src/internal/compiler/compiled-artifact-style-requests.ts`（PERMISSIVE 读，条目引用 `:23-25`） | 条件到即删（#1558 前发布的产物退出受支持窗口后收紧为严格准入） |
-| 28 | `registerOpenUi` published-API 空操作垫片（`@openelement/ui`） | `packages/ui/src/register.ts` | 条件到即删（`@openelement/ui` 不再发布该 export / 全部消费方改用 generated entry，或下一个 breaking alpha 时删除） |
+| 28 | `registerOpenUi` published-API 空操作垫片（`@openelement/ui`） | ~~packages/ui/src/register.ts~~ | **已删（1.0.0-alpha.16；该 shim 写的 breaking-alpha 条件已满足）** |
 
 没有"现在删"项：扫描发现的文本级残余（脚本头部陈旧的 `deno run` 用法
 散文）已在 alpha8/alpha10 清理；其余命中要么已含书面退役条件，要么是
@@ -359,38 +359,36 @@ native 选择缝是主产物，不再作为垫片登记。）
   ADR-0152 否决。
 - 处置：条件到即删（随下一次产物命名不兼容变更一起改名）。
 
-### 19. Part Program 执行器（旧执行后端）——条件到即删
+### 19. Part Program 执行器（旧执行后端）——**已退役**（2026-11-22）
 
-- 所有者：element runtime（`packages/element/src/internal/compiled/facade-host.ts`
-  与 `packages/element/src/internal/compiled/runtime-program.ts` 是 `__partProgram`
-  的消费者；`packages/element/src/open-element-implementation.ts` 是编译期产物
-  进入公开 facade 的唯一入口）。
-- 方向：编译器产物（`__compiledProperties` / `__partProgram`）→ 公开基类的
+- 所有者（历史）：element runtime（~~packages/element/src/internal/compiled/facade-host.ts~~
+  与 class lane 同一变更集删除；生成 lane 的 shell 改为 `generated-element/shell.ts`
+  自行 mount/claim，`leaf-runtime.ts` 是叶子端的闭合集合，从不导入这些端点）。
+- 方向（历史）：编译器产物（`__compiledProperties` / `__partProgram`）→ 公开基类的
   live element 行为。
-- 存在原因：alpha.15 及以前唯一的执行后端；ADR-0174 接受下一代
+- 存在原因（历史）：alpha.15 及以前唯一的执行后端；ADR-0174 接受下一代
   mount/claim/update/dispose 的直出路径，同时明示"旧执行器尚未退役"。生成叶
-  路径目前只被编译器内部与测试使用，尚未接入产品入口，因此这条后端仍然是
-  产品实际运行的路径。
-- 退役条件：M08 的 SSR→claim 与 per-phase 等价（S/K/U/D）在固定 SHA 上签收，
-  且生成叶路径已接入产品入口（同一入口只有一处路径决策点）之后，下一个
-  release 周期删除本后端；删除时必须同时移除 `__partProgram` 产物形状与
-  对应的 README/公开说明。条件事件而非日期。
-- 处置：条件到即删。
+  路径接入产品入口后，这条后端不再是产品实际运行的路径。
+- 退役条件：**已执行**——M08 的 SSR→claim 与 per-phase 等价（S/K/U/D）签收且生成叶
+  路径接入产品入口后，执行器随 class lane 在同一变更集删除（Alpha16，2026-11-22）；
+  `__partProgram` 的公开基类消费面与对应 README/公开说明同时移除。孤儿模块
+  （`stream-state.ts`、`runtime/error-boundary.ts`）由 `vp-pack` 的“has no packed .js”
+  门禁抓出并一并删除。
+- 处置：**已删**（Alpha16，2026-11-22）。
 
-### 20. Class authoring API（旧作者面）——条件到即删
+### 20. Class authoring API（旧作者面）——**已退役**（2026-11-22）
 
-- 所有者：element 作者面（`packages/element/src/open-element-implementation.ts`
-  的 `OpenElement` 基类是唯一根；`base.ts` / `open-element-configuration.ts` /
-  `error-boundary.ts` 继承它）。
-- 方向：authoring 源（class + decorator）→ 编译期产物 → 上述执行器。
-- 存在原因：alpha.15 的公开作者面。ADR-0173 第四轮修正案（2026-11-03，
-  D-O3 取代）已批准**零兼容退役、不建迁移适配器**，但批准的形态变更不等于
-  实现证据：类作者面仍在树内。
-- 退役条件：Alpha16b 的 C-1（size attribution）与 C-3（base codegen）能力
-  清单覆盖证据落地，且 starter/docs 完成迁移（`docs/architecture/tsx-author-candidate-contract.md`
-  从候选转正）之后删除；删除时公开面只保留 Native Custom Element 边界，不留
-  适配器。
-- 处置：条件到即删。
+- 所有者（历史）：element 作者面（~~packages/element/src/open-element-implementation.ts~~
+  的 `OpenElement` 基类是唯一根；`open-element-configuration.ts` /
+  `error-boundary.ts` 继承它，随 class lane 删除；`base.ts` 保留为 entry 子路径）。
+- 方向（历史）：authoring 源（class + decorator）→ 编译期产物 → 上述执行器。
+- 存在原因（历史）：alpha.15 的公开作者面。ADR-0173 第四轮修正案（2026-11-03，
+  D-O3 取代）批准了**零兼容退役、不建迁移适配器**。
+- 退役条件：**已执行**——Alpha16b 的 C-1（size attribution）与 C-3（base codegen）
+  能力清单覆盖证据落地，starter/docs 完成迁移（`docs/architecture/tsx-author-candidate-contract.md`
+  从候选转正），class lane 随后在 Alpha16 删除（2026-11-22）；公开面只保留
+  Native Custom Element 边界，不留适配器。
+- 处置：**已删**（Alpha16，2026-11-22）。
 
 ## 审计中排除的非垫片（避免下次重查）
 
@@ -452,13 +450,32 @@ native 选择缝是主产物，不再作为垫片登记。）
 - 退役条件：P1 判 MET 且该证据并入 release 门禁之后，一次性检查器删除；工件始终是 Git-ignored 构建输出，不进入发布面。
 - 处置：条件到即删（工具本身不是产品面）。
 
-### 24. `OE_ISLAND_STYLE_SHADOW_UNWIRED` 拒绝——条件到即删
+### 24. `OE_ISLAND_STYLE_SHADOW_UNWIRED` 拒绝——**已退役**（2026-11-20）
 
-- 所有者：router island 扫描（静态准入的唯一权威）。
-- 方向：`defineIslandConfig({ styles })` + `root: 'shadow'` → 构建期 coded 拒绝，消息点名 M09-2e 与 GH #1800。
-- 存在原因：生成宿主的 DSD 模板尚无 stylesheet-link 通道，若接受声明就会静默丢样式；按 P5 宁可 fail closed。
-- 退役条件：GH #1800 落地 shadow 样式 link/adoption 载体，且一个带 `styles` 的 shadow-root 生成岛在三引擎上构建并渲染通过（`gate:release` 在同一 SHA 绿）。
-- 处置：条件到即删。
+- 所有者：`packages/router/src/vite/internal/ssg/island-scanner.ts`
+  （`admitIslandStyles` 的 `missing-producer` 分支）。
+- 退役条件：GH #1800 落地 shadow 样式 link 载体、且 shadow-root 生成岛带
+  `styles` 能构建并渲染后移除该拒绝。**条件已满足**（载体 M09-2e 落地，随后
+  client-only 半边也落地）。
+- **退役动作**：`docs/architecture/alpha16-class-migration-matrix.md` 的
+  "the shadow style carrier exists; the authoring face said otherwise" 一节。
+- **退役时的事实**：DSD 样式 link 载波已落地 —— 编译器在宿主 producer 上发出类型化
+  `styleLinks` 通道，`serializeGeneratedElementHtml` 在模版内写出规范 marked
+  `<link>` 前缀；构建扫描对 `producer` 身份 + root `shadow` **准入**（原先是拒绝）。
+  作者面（`defineIslandConfig`）此前仍以"载波未接"为由拒绝同一组合，已一并改正 ——
+  这正是该 shim 记录要防的两面读同一事实却答案相反。
+- **保留的部分**：`missing-producer` 情形仍 fail closed。那是**诚实的**情形 ——
+  没有模版可以声明样式表，接受声明才是静默丢失。它与原 shim 的方向不同：原 shim
+  拒绝的是"shadow root 一律拒绝"，现在拒绝的是"没有模版的 shadow root"。
+- 证据：`island-styles.test.ts` 的准入行（原拒绝行已改写并写明原因）、
+  `generated-light-styles.test.ts`、`@openelement/create` 3 files / 68 tests。
+- **2026-11-20 追加：`missing-producer` 的范围再收窄一次。** client-only
+  （`ssr: false` / `hydrate: 'only'`）的 shadow island 不再需要 host producer：
+  浏览器自建 root，编译器为同一 `styles` 声明发出真实模块图 import，shell 用
+  `CompiledStyleScope` 采用 sheet。因此扫描对 client-only 的 `missing-producer`
+  **准入**，该拒绝只剩 server-rendered 无 producer 一种诚实情形。
+  证据：`island-styles.test.ts` 的新增准入行、`generated-element.client-styles.test.ts`、
+  element-browser `client-only-styles.test.js`（真实浏览器 computed `:host`）。
 
 ### 25. legacy allocation-only 绑定工厂（descriptor `createBindings`）——条件到即删
 
@@ -489,10 +506,23 @@ native 选择缝是主产物，不再作为垫片登记。）
   [m01-consumer-migration-matrix.md](./m01-consumer-migration-matrix.md) 完成重编译迁移）之后，把这段 permissive 读收紧为对 ONE 样式创作语法（`semantic-core/style-imports.ts`）的严格准入；届时旧形状在打包消费证据上 fail closed，而不是静默走旧路径。
 - 处置：条件到即删。
 
-### 28. `registerOpenUi` published-API 空操作垫片（`@openelement/ui`）——条件到即删
+### 28. `registerOpenUi` published-API 空操作垫片（`@openelement/ui`）——**已退役**（2026-11-20）
 
-- 所有者：`@openelement/ui`（`packages/ui/src/register.ts` 是唯一声明点：`registerOpenUi(registry?)` 的签名、空注册表语义与其文档注释都由该模块拥有；2026-11-20 owner-approved delegated remediation 决定保留该 published API 并登记，不删除）。
-- 方向：published API 调用方（`registerOpenUi(registry?)`）→ 空注册表（无副作用）；该调用今天不注册任何元素，返回值 `void`。
-- 存在原因：`registerOpenUi` 是已发布的公开 API，外部消费者可能仍在 import 或调用它，删除属于 P5 退役决定而不是一次迁移的副作用。函数体为空的唯一原因是六个 first-party UI 组件（`open-input`、`open-button` 等）已全部迁移到 generated lane，类组件注册表已空；它因此成为纯兼容面而不是功能面。
-- 退役条件：当 `@openelement/ui` 不再发布该 export，或全部消费方改用 generated entry 时删除 `registerOpenUi`（连同 `packages/ui/src/register.ts` 的导出与其 snapshot 行）；或随下一次 breaking alpha 删除（该 export 属 experience-edition 面，不需要兼容适配器）。删除时同步更新 `docs/release/public-interface-snapshot.json` 与 ADR-0182 的实现记录。
-- 处置：条件到即删（2026-11-20 登记：保留 published API，条件到即执行删除，不等下一次评审）。
+- 所有者：`@openelement/ui` 的 published-API 面（`packages/ui/src/index.ts` 的
+  `registerOpenUi` 导出及其 `register.ts` 实现）。
+- 退役条件：`@openelement/ui` 不再发布该 export / 全部消费方改用 generated entry，
+  **或**随下一次 breaking alpha 删除（该 export 属 experience-edition 面，不需要
+  兼容适配器）。**条件已满足**：`1.0.0-alpha.16` 就是那次 breaking alpha。
+- **退役动作**：`1.0.0-alpha.16`（本条线）。~~packages/ui/src/register.ts~~ 删除，根
+  导出与模块文档示例同步移除，packaged-consumer harness 不再调用它。
+- **依据**：该 shim 自己写的第二个退役条件——"或随下一次 breaking alpha 删除（该
+  export 属 experience-edition 面，不需要兼容适配器）"。alpha.16 是那次 breaking
+  alpha，所以不等"全部消费方改用 generated entry"这条更慢的条件。
+- **退役时的状态**（删除前的实测）：`packages/ui/src` 中 `extends OpenElement` 计数
+  **0**，函数体为空，`registerOpenUi` 只出现在自身声明、根导出、文档示例与
+  packaged-consumer harness 四处——即一个**纯兼容面**。
+- **同步更新**：`docs/release/public-interface-snapshot.json`（diff 恰为删掉
+  `registerOpenUi` 一个符号 + shape hash）、`packages/ui/__tests__/smoke.test.ts`
+  （原"空注册表且幂等"行改写为"该面已退役而非仅空"，并仍断言每个元素由构建注册）。
+- **不是缺口**：六个 first-party 元素依旧各自导出并通过构建自行注册；删除的是一次
+  空调用，不是任何元素。

@@ -8,7 +8,7 @@
  * components/page-live.tsx; the descriptor's props projector maps loader
  * data onto the page's compiled properties.
  */
-import { definePage } from '@openelement/router';
+import { definePage, type PagePropsContext } from '@openelement/router';
 import LivePage from '../components/page-live.tsx';
 
 interface LiveData {
@@ -27,10 +27,18 @@ export function loader(ctx: { request: Request }): LiveData {
   };
 }
 
-export default definePage<LiveData>(LivePage, {
+// Bare call on purpose: the page-component scanner
+// (packages/router/src/vite/internal/ssg/static-component-scanner.ts) matches a
+// BARE identifier call, so `definePage<Data>(Component, …)` is unmatchable and
+// the page root gets no host producer. The loader/props typing lives on the
+// annotations instead.
+export default definePage(LivePage, {
   renderIntent: { mode: 'dynamic' },
   head: { title: 'request-time fixture — live' },
-  props({ data }) {
+  // The projector stays typed: with the call's type argument gone the
+  // PagePropsContext annotation is what keeps `data` typed (the loader's
+  // LiveData no longer flows through definePage's generic).
+  props({ data }: PagePropsContext<LiveData>) {
     return {
       xText: `x=${data?.x ?? ''}`,
       nonceText: `nonce=${data?.nonce ?? 0}`,

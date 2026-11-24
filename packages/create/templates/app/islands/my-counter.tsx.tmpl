@@ -1,52 +1,52 @@
 /**
  * my-counter — the interactive counter island (compiled).
  *
- * Hydrates on idle; the buttons drive compiled event Parts and the count
- * renders through a compiled text Part. Presentation is utility-first below,
- * and the shadow root keeps the island a DSD citizen.
+ * Hydrates on idle; the buttons drive compiled event Parts and the count renders
+ * through a compiled text Part. Presentation is utility-first below, and the
+ * shadow root keeps the island a DSD citizen.
+ *
+ * Generated-element lane (2026-11-20): the class this template used to declare is
+ * a function component with a sidecar. `count` is the lane's `signal` intrinsic —
+ * a reactive node the compiler creates in the retained instance scope, so the
+ * buttons write it and the text Part reads it with no second state channel. The
+ * sidecar's `styles` channel is the DSD style-link carrier (M09-2e / #1803): the
+ * sheet is declared as a marked `<link>` INSIDE the shadow template.
  */
 import { defineIslandConfig } from "@openelement/router";
-import { element, OpenElement, property } from "@openelement/element";
-import counterStyles from "./my-counter.css";
+import { signal } from "@openelement/element";
 
-export const openElement = defineIslandConfig({ hydrate: "idle", ssr: true, dsd: true });
+export const openElement = defineIslandConfig({
+  hydrate: "idle",
+  ssr: true,
+  dsd: true,
+  root: "shadow",
+  styles: ["./my-counter.css"],
+});
 
-@element("my-counter", { root: "shadow-open" })
-export default class MyCounter extends OpenElement {
-  static override styles = [counterStyles];
+function MyCounter() {
+  const count = signal(0);
 
-  @property({ reflect: false, attribute: false })
-  count = 0;
-
-  decrement(): void {
-    this.count--;
-  }
-
-  increment(): void {
-    this.count++;
-  }
-
-  render() {
-    return (
-      <div class="inline-flex items-center gap-3">
-        <button
-          class="size-8 cursor-pointer rounded-(--radius-s) border border-line bg-paper text-[1rem] leading-none text-ink transition-[border-color,color] duration-150 ease-out hover:border-brand hover:text-brand"
-          type="button"
-          onClick={this.decrement}
-        >
-          -
-        </button>
-        <span id="count" class="min-w-[2ch] text-center font-semibold tabular-nums">
-          {this.count}
-        </span>
-        <button
-          class="size-8 cursor-pointer rounded-(--radius-s) border border-line bg-paper text-[1rem] leading-none text-ink transition-[border-color,color] duration-150 ease-out hover:border-brand hover:text-brand"
-          type="button"
-          onClick={this.increment}
-        >
-          +
-        </button>
-      </div>
-    );
-  }
+  return (
+    <div class="inline-flex items-center gap-3">
+      <button
+        class="size-8 cursor-pointer rounded-(--radius-s) border border-line bg-paper text-[1rem] leading-none text-ink transition-[border-color,color] duration-150 ease-out hover:border-brand hover:text-brand"
+        type="button"
+        onClick={() => count.value--}
+      >
+        -
+      </button>
+      <span id="count" class="min-w-[2ch] text-center font-semibold tabular-nums">
+        {count.value}
+      </span>
+      <button
+        class="size-8 cursor-pointer rounded-(--radius-s) border border-line bg-paper text-[1rem] leading-none text-ink transition-[border-color,color] duration-150 ease-out hover:border-brand hover:text-brand"
+        type="button"
+        onClick={() => count.value++}
+      >
+        +
+      </button>
+    </div>
+  );
 }
+
+export default MyCounter;

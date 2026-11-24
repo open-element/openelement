@@ -110,3 +110,35 @@ test('retention: a root release never touches another pending root share', () =>
 
   cleanup(a.host, b.host);
 });
+
+// ---- the generated shell's neutral replay hook (2026-11-21) ----------------
+
+test('the shell hook is published by the capture install and chains the ONE registry', async () => {
+  const hook = await import('../../src/internal/compiled/runtime/pre-upgrade-replay-hook.ts');
+  // Before any capture install in THIS realm the hook is a no-op: a generated
+  // page whose entry never installs the capture has nothing to replay, and the
+  // shell's call must not throw.
+  expect(() =>
+    hook.replayPreUpgradeCaptures(asNode(pendingHost(dom, 'oe-hook-none').host)),
+  ).not.toThrow();
+
+  ensurePreHydrationClickCapture();
+  expect(hook.preUpgradeReplayHookInstalled()).toBe(true);
+
+  // The hook's implementation IS the registry's pair: a record captured before a
+  // root's first activation is adopted out of the shared pool by the hook's call
+  // (the bucket count is the structural fact), and the hook's release empties it.
+  const { host, button } = pendingHost(dom, 'oe-hook-claimed');
+  button.dispatchEvent(click());
+  expect(
+    preUpgradeRetainedRecordCount(asNode(host)),
+    'the record sits in the shared pool before any adoption',
+  ).toBe(0);
+  hook.replayPreUpgradeCaptures(asNode(host));
+  expect(
+    preUpgradeRetainedRecordCount(asNode(host)),
+    "the hook adopted this root's share into its own bucket",
+  ).toBe(1);
+  hook.releasePreUpgradeCapturesFor(asNode(host));
+  expect(preUpgradeRetainedRecordCount(asNode(host)), 'the hook released it').toBe(0);
+});

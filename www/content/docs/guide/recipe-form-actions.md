@@ -13,40 +13,45 @@ One route, one form, three outcomes: empty submissions re-render with the echo a
 ## The component
 
 ```tsx
-import { computed, element, OpenElement, property, type ReadonlySignal } from '@openelement/element';
+// app/components/page-contact.tsx — the form's own markup, no client behavior.
+import { computed } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
 
-@element('contact-page')
-export default class ContactPage extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  error = '';
+export const openElement = defineIslandConfig({
+  tag: 'contact-page',
+  // The page root is a shadow root: the compiler's DSD host producer renders it,
+  // which is what puts the form in the first response with no script.
+  root: 'shadow',
+  properties: {
+    // One row per projector key. Both values are attribute-free: the projector
+    // is their only channel, so nothing can leak into a host attribute.
+    error: { attribute: false, default: '' },
+    echoed: { attribute: false, default: '' },
+  },
+});
 
-  @property({ reflect: false, attribute: false })
-  echoed = '';
+export default function ContactPage(props: { error: string; echoed: string }) {
+  // Derived, not stored: the flags are projections of the rows, so they can
+  // never disagree with the values they gate.
+  const hideError = computed(() => props.error === '');
+  const hideEcho = computed(() => props.echoed === '');
 
-  @property({ reflect: false, attribute: false })
-  hideError: ReadonlySignal<boolean> = computed(() => this.error === '');
-
-  @property({ reflect: false, attribute: false })
-  hideEcho: ReadonlySignal<boolean> = computed(() => this.echoed === '');
-
-  render() {
-    return (
-      <main>
-        <h1>contact</h1>
-        <form method='post' data-open-enhance>
-          <input name='message' type='text' />
-          <button type='submit'>Send</button>
-          <button type='submit' formaction='?/shout'>Shout</button>
-        </form>
-        <p role='alert' hidden={this.hideError}>{this.error}</p>
-        <p hidden={this.hideEcho}>echo=<span>{this.echoed}</span></p>
-      </main>
-    );
-  }
+  return (
+    <main>
+      <h1>contact</h1>
+      <form method='post' data-open-enhance>
+        <input name='message' type='text' />
+        <button type='submit'>Send</button>
+        <button type='submit' formaction='?/shout'>Shout</button>
+      </form>
+      <p role='alert' hidden={hideError.value}>{props.error}</p>
+      <p hidden={hideEcho.value}>echo=<span>{props.echoed}</span></p>
+    </main>
+  );
 }
 ```
 
-The two message elements sit outside any conditional branch on purpose: a branch element binds attributes but cannot interpolate text (`OEC9012` — branches bind, they don't act). The recipe derives a boolean `computed()` property and toggles the `hidden` attribute instead, so the echoed value stays an ordinary text binding and the build accepts it.
+The two message elements sit outside any conditional on purpose. A branch admits a JSX element or `null`, and a branch whose *value* is text — `{props.error ? 'has an error' : null}` — fails closed with `OEC9042` ("a conditional branch must be JSX or null"). The recipe keeps both messages unconditionally rendered and derives a boolean `computed()` per row, toggling the `hidden` attribute instead. The echoed value therefore stays an ordinary text interpolation: it has one stable node, and it is never the thing a branch has to re-create.
 
 ## The route
 

@@ -76,7 +76,7 @@ try {
 
   writeFileSync(
     join(tmp, 'main.ts'),
-    `import { OpenButton, OpenInput, manifest, registerOpenUi } from '@openelement/ui';
+    `import { OpenButton, OpenInput, manifest } from '@openelement/ui';
 import { OpenDialog } from '@openelement/ui/open-dialog';
 import { OpenDropdown } from '@openelement/ui/open-dropdown';
 import { createLogger, type Logger, type ReadonlySignal } from '@openelement/element';
@@ -87,7 +87,6 @@ log.info('ui consumer booted');
 const label: ReadonlySignal<string> = null as unknown as ReadonlySignal<string>;
 void label;
 
-registerOpenUi();
 const button = new OpenButton();
 button.variant = 'primary';
 const input = new OpenInput();

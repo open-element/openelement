@@ -3,7 +3,8 @@
  *
  * MDX/static markup is lowered to a compiled page program at build time: a
  * `.mdx` module resolves to a virtual `.tsx` module carrying an
- * `@element(...)` class with a fully static render(), then runs through the
+ * generated-lane component (a `defineIslandConfig` sidecar plus a function) with
+ * fully static JSX, then runs through the
  * standard open:compiled-element transform. Raw HTML, JSX expressions and
  * ESM statements inside .mdx fail closed.
  */
@@ -17,6 +18,11 @@ import { mdxToCompiledPageSource } from '../src/vite/plugin-mdx-lower.ts';
 import { compiledElementPlugin } from '@openelement/compiler';
 
 const WORKSPACE_ELEMENT = new URL('../../element/src/index.ts', import.meta.url).pathname;
+// The lowered module imports `defineIslandConfig` from the router (the generated
+// lane's sidecar helper), so this fixture's module graph needs that specifier to
+// resolve — the class form imported nothing but the element package.
+const WORKSPACE_ROUTER = new URL('../src/index.ts', import.meta.url).pathname;
+const WORKSPACE_JSX_RUNTIME = new URL('../../element/src/jsx-runtime.ts', import.meta.url).pathname;
 
 test('mdxPlugin exposes a pre-transform Vite plugin', () => {
   const plugin = mdxPlugin();
@@ -31,9 +37,11 @@ test('mdxToCompiledPageSource lowers static markdown to a compiled page module',
     'app/routes',
   );
   // The canonical compiled page authoring shape: one default-exported
-  // @element class whose render() holds the static markup.
-  expect(tsx).toContain("@element('mdx-page', { root: 'shadow-open' })");
-  expect(tsx).toContain('export default class MdxPage extends OpenElement {');
+  // Generated-lane component whose function holds the static markup. The sidecar
+  // pins the tag the route scanner derives from the same path, and `root: 'shadow'`
+  // is required for a page ROOT.
+  expect(tsx).toContain("defineIslandConfig({ tag: 'mdx-page', root: 'shadow' })");
+  expect(tsx).toContain('export default function MdxPage() {');
   expect(tsx).toContain('<h1>{"MDX route page"}</h1>');
   expect(tsx).toContain('<strong>{"MDX"}</strong>');
   expect(tsx).toContain('<a href="/about">{"link"}</a>');
@@ -86,7 +94,13 @@ test('mdxToCompiledPageSource fails closed outside the static subset', () => {
 
 test('mdxToCompiledPageSource output passes through the compiler unchanged in shape', () => {
   const tsx = mdxToCompiledPageSource('# Title\n\nBody text.\n', '/project/app/routes/title.mdx');
-  const transform = compiledElementPlugin().transform;
+  // The plugin needs the host's site fact to admit a GENERATED module (the same
+  // fact the router passes in a real build); without it the lane declines and the
+  // transform returns null, which the old class lane never required.
+  const transform = compiledElementPlugin({
+    generatedElementSite: (moduleId: string) =>
+      moduleId.includes('title') ? { tag: 'title-page' } : null,
+  }).transform;
   expect(typeof transform === 'function').toBeTruthy();
   const result = transform.call(
     {
@@ -99,8 +113,11 @@ test('mdxToCompiledPageSource output passes through the compiler unchanged in sh
   ) as { code: string } | null;
   // The standalone compiledElementPlugin returns the compiled module ({code,map}).
   expect(typeof result?.code === 'string').toBeTruthy();
-  expect(result!.code).toContain('__partProgram');
-  expect(result!.code).toContain('export default class TitlePage');
+  // The lowered module compiles through the GENERATED lane now, so the artifact is
+  // the descriptor plus the shell factory — `__partProgram` was the class lane's and
+  // has no producer since Alpha16.
+  expect(result!.code).toContain('seedGeneratedElementHostProperties');
+  expect(result!.code).toContain('createTitlePageRecipe');
 });
 
 test('mdxPlugin: Phase 3-style SSR viteBuild (configFile:false, noExternal) compiles .mdx routes', async () => {
@@ -131,9 +148,19 @@ test('mdxPlugin: Phase 3-style SSR viteBuild (configFile:false, noExternal) comp
       },
     },
     resolve: {
-      alias: {
-        '@openelement/element': WORKSPACE_ELEMENT,
-      },
+      // The element alias must not swallow its OWN subpaths
+      // (`@openelement/element/authoring` is reached from the router barrel), so it
+      // is anchored with a trailing `$`; the router alias needs the same exactness
+      // for the same reason.
+      alias: [
+        { find: /^@openelement\/element$/, replacement: WORKSPACE_ELEMENT },
+        { find: /^@openelement\/router$/, replacement: WORKSPACE_ROUTER },
+        // The lowering's output is JSX, so the automatic runtime asks for
+        // `<importSource>/jsx-runtime`. The element package ships that subpath; the
+        // fixture has to reach it through the workspace, because the temp dir has no
+        // node_modules of its own.
+        { find: /^@openelement\/element\/jsx-runtime$/, replacement: WORKSPACE_JSX_RUNTIME },
+      ],
     },
     plugins: [mdxPlugin(), compiledElementPlugin()],
   });
@@ -154,8 +181,13 @@ test('mdxPlugin: Phase 3-style SSR viteBuild (configFile:false, noExternal) comp
     'expected entry.js chunk output',
   ).toBeTruthy();
   const code = (chunk as { code: string }).code;
-  // The compiled Part Program carries the static page content.
+  // The compiled module carries the static page content. `__partProgram` was the
+  // class lane's artifact and has no producer since Alpha16; the generated module's
+  // own marker is the descriptor.
   expect(code).toContain('Title');
   expect(code).toContain('Hello compiled MDX.');
-  expect(code).toContain('__partProgram');
+  // The generated-lane marker: the sidecar's descriptor seed. The tag itself may be
+  // written as a descriptor field rather than a bare string in this bundle, so the
+  // assertion names the emitted helper instead of guessing at its spelling.
+  expect(code).toContain('defineIslandConfig');
 });

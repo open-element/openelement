@@ -123,7 +123,23 @@ export function renderEntry(desc: EntryDescriptor): string {
   const ssrIslands = desc.islands.filter((island) => ssrRenderableTags.has(island.tagName));
   const generatedHostExports = new Map<string, string>();
   for (const island of ssrIslands) {
-    const identity = readGeneratedElementHost(island);
+    // The island META carries the identity for a module the island scan saw. A
+    // page-local component is not in that scan: its identity is the
+    // static-component record's compiler-returned export (P-2/P-4), which is the
+    // SAME fact read through the same resolver at scan time. One pairing channel,
+    // two producers of the fact — never a derived name.
+    const staticProducer = (desc.staticComponents ?? []).find(
+      (component) => component.tagName === island.tagName,
+    )?.generatedHostExport;
+    const identity =
+      readGeneratedElementHost(island) ??
+      (staticProducer === undefined
+        ? undefined
+        : {
+            kind: 'producer' as const,
+            component: island.tagName,
+            ssrHostExport: staticProducer,
+          });
     if (
       identity === undefined ||
       identity.kind === 'lane-declined' ||
@@ -192,10 +208,15 @@ export function renderEntry(desc: EntryDescriptor): string {
   // module namespace and registers the default-exported compiled class under
   // the configured layout tag. renderToString fails closed on a tag mismatch.
   // Deduped by importPath — one module maps to one compiled class and tag.
-  const layoutModules = new Map<string, string>();
+  const layoutModules = new Map<string, { tagName: string; hostExport?: string }>();
   const collectLayoutModule = (shell: typeof desc.layout.default) => {
     if (shell && !layoutModules.has(shell.importPath)) {
-      layoutModules.set(shell.importPath, shell.tagName);
+      layoutModules.set(shell.importPath, {
+        tagName: shell.tagName,
+        ...(shell.generatedHostExport === undefined
+          ? {}
+          : { hostExport: shell.generatedHostExport }),
+      });
     }
   };
   collectLayoutModule(desc.layout.default);
@@ -229,9 +250,10 @@ export function renderEntry(desc: EntryDescriptor): string {
   lines.push('');
 
   // Element owns document and compiled-render semantics; this entry wires them.
-  const layoutModuleList = [...layoutModules].map(([importPath, tagName], index) => ({
+  const layoutModuleList = [...layoutModules].map(([importPath, facts], index) => ({
     importPath,
-    tagName,
+    tagName: facts.tagName,
+    hostExport: facts.hostExport,
     varName: `__layout_${index}`,
   }));
   for (const layoutModule of layoutModuleList) {
@@ -240,6 +262,16 @@ export function renderEntry(desc: EntryDescriptor): string {
         layoutModule.importPath,
       )};`,
     );
+    if (layoutModule.hostExport !== undefined) {
+      // A GENERATED layout: its render artifact is the compiler-emitted host
+      // producer, so the entry must pair it like an island. A lost export is a
+      // bundler BUILD error, never a silent runtime miss.
+      lines.push(
+        `import { ${layoutModule.hostExport} as __layouthost_${layoutModule.tagName.replace(/-/g, '_')} } from ${quoteGeneratedJavaScriptValue(
+          layoutModule.importPath,
+        )};`,
+      );
+    }
   }
   const staticComponentModules = desc.staticComponents.map((component, index) => ({
     ...component,
@@ -251,6 +283,13 @@ export function renderEntry(desc: EntryDescriptor): string {
         component.modulePath,
       )};`,
     );
+    if (component.generatedHostExport !== undefined) {
+      lines.push(
+        `import { ${component.generatedHostExport} as __statichost_${component.varName} } from ${quoteGeneratedJavaScriptValue(
+          component.modulePath,
+        )};`,
+      );
+    }
   }
   lines.push('');
 
@@ -308,31 +347,9 @@ export function renderEntry(desc: EntryDescriptor): string {
 
   // --- Stream manifests (stream routes; consumed by the handlers, the
   // deferred-shell gate, and the SSG routeInfo) ---
-  const streamManifests = Object.fromEntries(
-    desc.pageRoutes
-      .filter((route) => route.streamManifest)
-      .map((route) => [route.path, route.streamManifest]),
-  );
-  if (Object.keys(streamManifests).length > 0) {
-    lines.push(
-      `export const __streamManifests = ${quoteGeneratedJavaScriptValue(streamManifests)};`,
-    );
-    lines.push('');
-    // Stream pump runtime (#1470 block d): the pump, the browser bootstrap,
-    // and (Amendment 1) the deferred-shell gate are imported runtime; the
-    // entry binds the pump to its escapeAttr import and the gate to its
-    // serialized manifests + createStreamShellExecutor import.
-    lines.push("// Stream pump runtime, bound to the entry's escapeAttr import.");
-    lines.push('const __streamBody = __createStreamBody({ escapeAttr });');
-    lines.push(
-      "// The deferred-shell gate (Amendment 1), bound to the entry's",
-      '// serialized stream manifests and its createStreamShellExecutor import.',
-    );
-    lines.push(
-      'const __createStreamPageShell = __createStreamPageShellGate({ streamManifests: __streamManifests, createStreamShellExecutor });',
-    );
-    lines.push('');
-  }
+  // The streamed-page manifests retired with the class lane (owner decision
+  // 2026-11-22): the scanner emits none, so there is nothing to serialize and
+  // no deferred-shell gate to bind. Alpha18 owns the replacement carrier.
 
   // --- Generated-app assembly (#1470 block e) ---
   // One factory call owns what the entry template used to emit as assembly
@@ -409,7 +426,15 @@ export function renderEntry(desc: EntryDescriptor): string {
   lines.push('  methodNotAllowed: __methodNotAllowed,');
   lines.push('  actionBodyLimit: __actionBodyLimit,');
   lines.push('  registerSsrComponent: __registerSsrComponent,');
-  if (generatedHostExports.size > 0) lines.push('  registerSsrIsland: __registerSsrIsland,');
+  // A static component or a generated layout also needs the pair channel: the
+  // factory binding is a union of every consumer, never the island map alone.
+  if (
+    generatedHostExports.size > 0 ||
+    desc.staticComponents.some((component) => component.generatedHostExport !== undefined) ||
+    [...layoutModules.values()].some((layout) => layout.hostExport !== undefined)
+  ) {
+    lines.push('  registerSsrIsland: __registerSsrIsland,');
+  }
   lines.push('  clientScriptDescriptors: __clientScriptDescriptors,');
   lines.push('  locales: __locales,');
   lines.push('  getDefaultLocale: __getDefaultLocale,');
@@ -450,25 +475,37 @@ export function renderEntry(desc: EntryDescriptor): string {
       // pairs the class and its compiler-emitted host producer atomically).
       // Registering it here again would clear that pair (ADR-0181 A4).
       if (isFunctionPage(route) || pageKindOf(route) === 'generated-element-page') continue;
-      const tagNameExpr = pageRouteTagExpr(route.varName, route.tagName, pageKindOf(route));
+      const tagNameExpr = pageRouteTagExpr(route.varName, route.tagName);
       lines.push(
         `try { __registerSsrComponent(${tagNameExpr}, ${route.varName}.default); } catch (err) { console.error('[ssg] Failed to register route custom element ${tagNameExpr}:', err); throw err; }`,
       );
     }
     for (const layoutModule of layoutModuleList) {
+      // A generated layout registers through the SAME pair channel an island
+      // uses: `__registerSsrComponent` alone would register a class with no
+      // Part Program, and every render of it would fail PROGRAM_MISSING. The
+      // class path stays byte-identical for a class layout.
+      const register =
+        layoutModule.hostExport === undefined
+          ? `__registerSsrComponent(${quoteGeneratedJavaScriptValue(layoutModule.tagName)}, ${layoutModule.varName}.default)`
+          : `__registerSsrIsland(${quoteGeneratedJavaScriptValue(layoutModule.tagName)}, ${layoutModule.varName}.default, __layouthost_${layoutModule.tagName.replace(/-/g, '_')})`;
       lines.push(
-        `try { __registerSsrComponent(${quoteGeneratedJavaScriptValue(
-          layoutModule.tagName,
-        )}, ${layoutModule.varName}.default); } catch (err) { console.error('[ssg] Failed to register layout custom element ${quoteGeneratedJavaScriptValue(
+        `try { ${register}; } catch (err) { console.error('[ssg] Failed to register layout custom element ${quoteGeneratedJavaScriptValue(
           layoutModule.tagName,
         )}:', err); throw err; }`,
       );
     }
     for (const component of staticComponentModules) {
+      // A GENERATED page-local component is registered as the host PAIR (P-2):
+      // it carries no Part Program, so a class-only registration fails every
+      // render with PROGRAM_MISSING. The same channel an island and a generated
+      // layout use, with the compiler-returned export name.
+      const register =
+        component.generatedHostExport === undefined
+          ? `__registerSsrComponent(${quoteGeneratedJavaScriptValue(component.tagName)}, ${component.varName}.default)`
+          : `__registerSsrIsland(${quoteGeneratedJavaScriptValue(component.tagName)}, ${component.varName}.default, __statichost_${component.varName})`;
       lines.push(
-        `try { __registerSsrComponent(${quoteGeneratedJavaScriptValue(
-          component.tagName,
-        )}, ${component.varName}.default); } catch (err) { console.error('[ssg] Failed to register static component <${component.tagName}>:', err); throw err; }`,
+        `try { ${register}; } catch (err) { console.error('[ssg] Failed to register static component <${component.tagName}>:', err); throw err; }`,
       );
     }
     lines.push('');
@@ -518,28 +555,9 @@ export function renderEntry(desc: EntryDescriptor): string {
   lines.push('');
 
   // --- Startup stream guards ---
-  // The adapter-selected assertion is imported from
-  // @openelement/router/server-runtime; the entry emits only the per-route
-  // call sites. A stream declaration that has no matching compiled route
-  // manifest/program fails the entry at load, not at request time.
-  if (desc.pageRoutes.length > 0) {
-    for (const route of desc.pageRoutes) {
-      // Generated element pages are synchronous-SSR only; the classifier
-      // refuses a stream declaration at build, so no guard is emitted for the
-      // bounded lane (defensive, keeps the runtime contract unchanged).
-      if (pageKindOf(route) === 'generated-element-page') continue;
-      lines.push(
-        `__assertStreamRoute(${route.varName}, ${quoteGeneratedJavaScriptValue(route.path)}, ${quoteGeneratedJavaScriptValue(
-          route.filePath,
-        )}, ${
-          route.streamManifest
-            ? `__streamManifests[${quoteGeneratedJavaScriptValue(route.path)}]`
-            : 'undefined'
-        });`,
-      );
-    }
-    lines.push('');
-  }
+  // The class lane's startup stream assertion and its Part-Program read
+  // retired with the lane (C09, 2026-11-24): no emitted page kind carries a
+  // stream manifest, so there is no declaration left to guard.
 
   // --- App middleware ---
   for (const mw of desc.middleware) {

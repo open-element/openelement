@@ -41,9 +41,9 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('the document sheet applies the page’s compiled utilities', async ({ page }) => {
-  expect(await computed(page, 'probe-unocss-page main', 'max-width')).toBe('672px');
-  expect(await computed(page, 'probe-unocss-page main', 'padding-top')).toBe('40px');
-  expect(await computed(page, 'probe-unocss-page h1', 'font-weight')).toBe('600');
+  expect(await computed(page, 'main.probe-page', 'max-width')).toBe('672px');
+  expect(await computed(page, 'main.probe-page', 'padding-top')).toBe('40px');
+  expect(await computed(page, 'main.probe-page h1', 'font-weight')).toBe('600');
 });
 
 test('the token source’s own variable is what the utilities resolve to', async ({ page }) => {
@@ -51,13 +51,13 @@ test('the token source’s own variable is what the utilities resolve to', async
   // `--color-muted` is Open Props' `--gray-3` through the app's role table.
   // The assertion is on the RESOLVED colour, so a missing token source (which
   // would compute to the inherited colour) fails.
-  const paragraph = await computed(page, 'probe-unocss-page p', 'color');
+  const paragraph = await computed(page, 'main.probe-page p', 'color');
   const root = await page.evaluate(() =>
     getComputedStyle(document.documentElement).getPropertyValue('--color-muted').trim(),
   );
   expect(root, 'the token source reached the document').not.toBe('');
   expect(paragraph, 'the compiled utility resolved through the token variable').not.toBe(
-    await computed(page, 'probe-unocss-page main', 'color'),
+    await computed(page, 'main.probe-page', 'color'),
   );
 });
 

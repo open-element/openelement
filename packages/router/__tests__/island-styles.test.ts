@@ -232,21 +232,20 @@ for (const [label, value, fragment] of MALFORMED_STYLES) {
   });
 }
 
-test('defineIslandConfig: refuses styles on a shadow-root island and names the missing carrier', () => {
-  expectAuthoringError(
-    () => defineIslandConfig({ root: 'shadow', styles: ['./card.css'] }),
-    IslandErrorCode.DESCRIPTOR_SHAPE,
-    'not deliverable on a shadow-root island',
-  );
-  let caught: unknown;
-  try {
-    defineIslandConfig({ root: 'shadow', styles: ['./card.css'] });
-  } catch (error) {
-    caught = error;
-  }
-  const message = (caught as Error).message;
-  expect(message).toContain('M09-2e');
-  expect(message).toContain('#1800');
+test('defineIslandConfig: ADMITS styles on a shadow-root island (carrier exists)', () => {
+  // The DSD carrier is implemented: the compiler emits the typed `styleLinks`
+  // channel on the host producer and the serializer declares the canonical
+  // marked `<link>` prefix inside the template (M09-2e / #1803). This face used
+  // to refuse the combination as "not wired yet", which the build-time
+  // admission (`island-scanner.ts`, `producer` → root `shadow`) contradicted —
+  // two faces reading one fact differently. The carrier is the later fact, so
+  // the authoring face admits it.
+  //
+  // The one case that stays refused belongs to the BUILD, not here: a
+  // shadow-root island whose leaf emits no host producer has no template to
+  // declare the sheet in, and only the scan knows the producer identity.
+  const config = defineIslandConfig({ root: 'shadow', styles: ['./card.css'] });
+  expect(config.styles).toEqual(['./card.css']);
 });
 
 // ── Static island scan (`readIslandConfig`) ───────────────────────────────
@@ -374,18 +373,37 @@ test('scan: a shadow-root generated island without a host producer still fails c
   // A shadow-root function island with a shape the leaf generator cannot turn
   // into a claimable host producer: the identity is `missing-producer`, so no
   // template exists to declare the sheet in and the build must refuse.
-  // A shadow root whose declared property channel keeps the component
-  // mount-only: the compiler admits the module but emits no `<Name>__ssr`, so
-  // there is no host producer to append and no template to declare the sheet in.
+  //
+  // The shape is the generator's own branch-template rule: a condition branch
+  // may only carry shapes that were already claimable, so a NESTED condition
+  // inside a branch keeps the whole component mount-only
+  // (`generated-leaf/generate.ts:4409`, the condition case's `insideTemplate`
+  // gate). The compiler admits the module, but the leaf emits no `<Name>__ssr`,
+  // so the emitter's `hostWrapper` decision appends no `<Name>__ssrHost`
+  // (`generated-element/emit.ts:208` `exportsSsrFunction` → `:586`), and the
+  // scan's identity is `missing-producer`
+  // (`generated-element-host-metadata.ts:263`), refused at
+  // `island-scanner.ts:1347`.
+  //
+  // REPLACED FIXTURE (2026-11-23): this row used to use a `value={props.value}`
+  // property channel, which was `missing-producer` only while that channel
+  // forced mount-only (at the row's introduction, cd7e9e065). F16 (d97a85c5a)
+  // intentionally admits the property channel — it renders as an HTML attribute
+  // in SSR (`generate.ts:7129`) and `attributesClaimable` no longer declines it
+  // (`generate.ts:4359`) — so that fixture now resolves to `producer` and the
+  // scan admits it. The nested-condition shape is still outside the claim
+  // slice, so the refusal stays pinned by a real missing-producer identity.
   const missingProducer = `import { defineIslandConfig } from '@openelement/router';
+import { signal } from '@openelement/element';
 export const openElement = defineIslandConfig({
   root: 'shadow',
   hydrate: 'idle',
   styles: ['./profile-card.css'],
-  properties: { value: { default: '' } },
 });
-function Field(props: { value: string }) {
-  return <input value={props.value} />;
+function Field() {
+  const outer = signal(true);
+  const inner = signal(false);
+  return <div>{outer.value ? <span>{inner.value ? <i>inner</i> : null}</span> : null}</div>;
 }
 export default Field;
 `;
@@ -394,6 +412,41 @@ export default Field;
     'OE_ISLAND_STYLE_SHADOW_UNWIRED',
     ['emitted no compiled DSD host producer', 'GH issue #1800'],
   );
+});
+
+test('scan: a CLIENT-ONLY shadow island without a producer is admitted (the browser adopts the import)', async () => {
+  // 2026-11-20 client style adoption: the `missing-producer` refusal exists
+  // because a server-rendered shadow island needs the producer's template to
+  // declare the sheet in. A client-only island has no server render at all:
+  // the browser creates the root, the compiler emits the `.css` import for the
+  // same declaration, and the shell adopts the sheet object. Refusing here
+  // would reject a delivery that now works.
+  const missingProducerClientOnly = `import { defineIslandConfig } from '@openelement/router';
+export const openElement = defineIslandConfig({
+  root: 'shadow',
+  ssr: false,
+  dsd: false,
+  hydrate: 'only',
+  styles: ['./profile-card.css'],
+  properties: { value: { default: '' } },
+});
+function Field(props: { value: string }) {
+  return <input value={props.value} />;
+}
+export default Field;
+`;
+  const { root, scan } = await scanProject({
+    'app/islands/profile-card.tsx': missingProducerClientOnly,
+  });
+  const meta = await scan();
+  expect(meta['profile-card']!.styles).toEqual(['./profile-card.css']);
+  const declarations = islandStyleDeclarations();
+  expect(declarations).toHaveLength(1);
+  // Authored bytes, no `@scope`: a shadow edge is isolated by its boundary.
+  expect(declarations[0]!.root).toBe('shadow');
+  expect(declarations[0]!.specifiers).toEqual(['./profile-card.css']);
+  const absoluteModuleId = normalizeSeparators(join(root, 'app', 'islands', 'profile-card.tsx'));
+  expect(islandStyleDeclarationFor(absoluteModuleId)).toBe(declarations[0]);
 });
 
 test('scan: a class island with styles fails closed — static styles is its channel', async () => {
@@ -441,7 +494,7 @@ test('the compiler derives the style-link fact from the sidecar, not scan order'
   );
   expect(before).not.toBeNull();
   expect(before!.code).toContain(
-    'export function ProfileCard__ssrHost(props, lightChildren, attributes, styleLinks) {',
+    'export function ProfileCard__ssrHost(props, lightChildren, attributes, styleLinks, nestedHost) {',
   );
 
   await scanProject({ 'app/islands/profile-card.tsx': SHADOW_GENERATED }).then(({ scan }) =>

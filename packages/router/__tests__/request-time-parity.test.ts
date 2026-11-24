@@ -283,6 +283,9 @@ describe('request-time parity: dev (hono) vs build (Nitro)', () => {
       );
       const body = await response.text();
       expect(body, `${name}: POST /form failure echo`).toContain('message is required');
+      expect(body, `${name}: generated form root marker`).toMatch(
+        /<form-page\b[^>]*\bdata-oe-page-root=""/,
+      );
     }
   });
 

@@ -199,52 +199,83 @@ async function collectRoutes(): Promise<ArticleRoute[]> {
 
 export function renderRouteModule(route: ArticleRoute): string {
   const source = `www/content/docs/${route.collection}/${route.slug}.md`;
+  // The page COMPONENT is declared in this module (execution-plan §19.9): the
+  // server function page lane records `pageComponentName` only for an exported
+  // component function the route module declares itself, and an imported class
+  // binding would silently classify as a legacy class page. The article body is
+  // the server-component lane's `trustedHtml` sink — it is produced by
+  // `prepareArticle` during THIS request, so the brand never crosses a process
+  // boundary and ADR-0182's crossing exclusion is not engaged.
+  // The emitted module must be format-clean on its own (the generated tree is
+  // checked by the repo formatter), so the signature honours the same printWidth
+  // the formatter uses: one line while it fits, the wrapped form only if not.
   return `${generatedHeader} from ${source} - do not edit.
 import { definePage } from '@openelement/router';
-import ${route.className} from '../../components/article-routes/${route.componentFile}';
-import { articlePageHead, projectArticlePage } from '../../site-ui/article-page-model.ts';
+import '../../site-ui/open-reading-shell.tsx';
+import '../../islands/open-page-rail.tsx';
+import type { TrustedHtml } from '@openelement/element';
+import { articlePageHead, projectArticleView } from '../../site-ui/article-page-model.ts';
+
+export function ${route.className}(props: {
+  articleHidden: boolean;
+  metadata: {
+    breadcrumb: string;
+    breadcrumbHref?: string;
+    title: string;
+    lede: string;
+    updated?: string;
+    version?: string;
+  };
+  navigation: {
+    previous?: { href: string; label: string };
+    next?: { href: string; label: string };
+  };
+  railItems: Array<{ id: string; href: string; label: string; depth: string }>;
+  locale: string;
+  articleHtml: TrustedHtml;
+  notFoundRows: Array<{ key: string; label: string }>;
+}) {
+  return (
+    <div>
+      <div hidden={props.articleHidden} data-pagefind-body>
+        <open-reading-shell
+          meta
+          rail
+          footer
+          metadata={props.metadata}
+          navigation={props.navigation}
+          locale={props.locale}
+        >
+          <div slot='rail'>
+            <open-page-rail items={props.railItems} locale={props.locale}></open-page-rail>
+          </div>
+          <div class='article-content' innerHTML={props.articleHtml} trustedHtml />
+        </open-reading-shell>
+      </div>
+      {props.notFoundRows.map((row) => (
+        <div
+          key={row.key}
+          class='relative mx-auto max-w-(--site-container-reading) px-4 pt-6 pb-10 wrap-break-word [word-break:normal] [background:linear-gradient(90deg,transparent,color-mix(in_srgb,var(--color-border)_20%,transparent),transparent)_top/100%_1px_no-repeat] min-[481px]:px-5 min-[481px]:pt-8 min-[481px]:pb-12 min-[901px]:px-6 min-[901px]:pt-[clamp(2rem,5vh,3.5rem)] min-[901px]:pb-[clamp(6rem,14vh,11rem)]'
+          data-pagefind-ignore
+        >
+          <p class='my-2 font-mono text-(length:--text-6xl) leading-[1.72] text-muted-foreground'>
+            404
+          </p>
+          <p class='my-2 text-sm leading-[1.72] text-foreground min-[901px]:text-(length:--text-base)'>
+            {row.label}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default definePage(${route.className}, {
   head: ({ locale }) => articlePageHead('${route.collection}', '${route.slug}', locale),
   props({ locale }) {
-    return { model: projectArticlePage('${route.collection}', '${route.slug}', locale) };
+    return projectArticleView('${route.collection}', '${route.slug}', locale);
   },
 });
-`;
-}
-
-export function renderComponent(route: ArticleRoute): string {
-  const source = `www/content/docs/${route.collection}/${route.slug}.md`;
-  return `${generatedHeader} for ${source} - do not edit.
-import { element, OpenElement, property } from '@openelement/element';
-import '../../site-ui/open-article-view.tsx';
-import type { ArticlePageModel } from '../../site-ui/article-page-model.ts';
-
-@element('${route.elementTag}')
-export default class ${route.className} extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  model: ArticlePageModel = {
-    notFoundClass: 'container',
-    articleClass: 'is-hidden',
-    slug: '',
-    notFoundMessage: '',
-    metadata: { breadcrumb: '', title: '', lede: '' },
-    navigation: {},
-    railItems: [],
-    articleHtml: '',
-  };
-
-  // Same base-field redeclaration as the layout shell: the compiled @property
-  // shadows OpenElementConfiguration.locale (SSR injection or the \`locale\`
-  // attribute); tsc's \`override\` demand is rejected by the compiled grammar.
-  @property({ reflect: false })
-  // @ts-expect-error compiled @property shadows the optional base field
-  locale = 'en';
-
-  render() {
-    return <open-article-view model={this.model} locale={this.locale}></open-article-view>;
-  }
-}
 `;
 }
 
@@ -311,7 +342,6 @@ export function planFiles(routes: ArticleRoute[]): PlannedFile[] {
   for (const route of routes) {
     const source = `content/docs/${route.collection}/${route.slug}.md`;
     claim(`${routesDir}/${route.collection}/${route.routeFile}`, renderRouteModule(route), source);
-    claim(`${componentsDir}/${route.componentFile}`, renderComponent(route), source);
   }
   claim(tablePath, renderTable(routes), 'the generated route table');
   return files;
@@ -323,6 +353,9 @@ export function managedDirectories(): Map<string, number> {
   // A collection's route directory is managed even when its content is empty:
   // that is exactly when its last generated route module must be cleaned up.
   for (const collection of collectionNames) dirs.set(`${routesDir}/${collection}`, Infinity);
+  // The per-route component directory RETIRED with the class lane: the page
+  // component lives in its route module now. The directory is still managed so
+  // a leftover from a previous generation is cleaned up.
   dirs.set(componentsDir, 1);
   return dirs;
 }

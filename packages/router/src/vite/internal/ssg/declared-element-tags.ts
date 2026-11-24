@@ -42,7 +42,9 @@ import {
   type ModuleWalkDiagnostic,
   type ModuleWalkResolver,
 } from '../module-graph-walk.ts';
-import { readIslandConfig } from './island-scanner.ts';
+import { readComponentDeclaration } from '../component-declaration.ts';
+import { mdxScanLowering } from '../../plugin-mdx-scan-hook.ts';
+import { resolveGeneratedElementHost } from './generated-element-host-metadata.ts';
 
 /** Stable code for a note this pass owns (a malformed sidecar it skipped). */
 export const DeclaredElementTagScanCode = {
@@ -50,6 +52,11 @@ export const DeclaredElementTagScanCode = {
   SIDECAR_UNREADABLE: 'OE_DECLARED_TAG_SIDECAR_UNREADABLE',
   /** The discovery walk stopped at its module bound (a partial map). */
   MODULE_BOUND_EXCEEDED: 'OE_DECLARED_TAG_MODULE_BOUND_EXCEEDED',
+  /**
+   * An `.mdx` route exists but no open:mdx plugin was composed, so the scan
+   * has no published lowering to read its declared tag from.
+   */
+  MDX_PLUGIN_NOT_COMPOSED: 'OE_DECLARED_TAG_MDX_PLUGIN_NOT_COMPOSED',
 } as const;
 
 export interface ScanDeclaredElementTagsInput {
@@ -65,6 +72,12 @@ export interface ScanDeclaredElementTagsInput {
   /** Absolute seed module paths (page routes, islands, layout modules). */
   readonly seeds: Iterable<string>;
   /**
+   * The routes directory, as the MDX lowering needs it: the tag an `.mdx` route
+   * compiles under derives from its route-RELATIVE path, and this scan is one of the
+   * two places that must spell it identically.
+   */
+  readonly routesDir?: string;
+  /**
    * The discovery walk's module bound, forwarded to `walkModuleGraph`; the
    * explicit field exists so a truncated walk is testable.
    */
@@ -74,6 +87,17 @@ export interface ScanDeclaredElementTagsInput {
 export interface ScanDeclaredElementTagsResult {
   /** The declared tags, keyed by the same stable id the transform derives. */
   readonly tags: ReadonlyMap<string, string>;
+  /**
+   * The compiler-emitted SSR host producer export name, for the declared
+   * modules the generated lane actually emits one for (`<Name>__ssrHost`), keyed
+   * by the same stable module id.
+   *
+   * A module that declares a tag but emits no host producer (a LIGHT root: no
+   * DSD wrapper by design) has no entry here — absence is the law, not an
+   * error. The name is the compiler's return value, never a `${X}__ssrHost`
+   * convention: re-deriving it is the drift ADR-0182 forbids.
+   */
+  readonly hostExports: ReadonlyMap<string, string>;
   /**
    * What the walk or the sidecar read could not do, in walk order. Every entry
    * is reported through the build-diagnostics envelope by the caller.
@@ -92,6 +116,18 @@ function inside(root: string, candidate: string): boolean {
  * `moduleId -> tag` map. Nothing is imported or executed: the walk asks the
  * bundler for edges and the sidecar parser reads literal text.
  */
+/**
+ * The tag an MDX lowering pinned in its own sidecar.
+ *
+ * Read from the LOWERED text rather than re-derived: the lowering's derivation depends
+ * on the routes dir and the process cwd, so a second copy here could disagree with the
+ * module the transform actually compiles — and a page registered under one tag while
+ * rendering under another is exactly the split this scan exists to prevent.
+ */
+function mdxLoweredTag(lowered: string): string | undefined {
+  return /defineIslandConfig\(\{\s*tag:\s*'([^']+)'/.exec(lowered)?.[1];
+}
+
 export async function scanDeclaredElementTags(
   input: ScanDeclaredElementTagsInput,
 ): Promise<ScanDeclaredElementTagsResult> {
@@ -114,11 +150,65 @@ export async function scanDeclaredElementTags(
   }
   notes.push(...walk.diagnostics);
   const tags = new Map<string, string>();
+  const hostExports = new Map<string, string>();
   for (const file of walk.files) {
+    if (!inside(root, file)) continue;
+    // An `.mdx` route is lowered to a generated module before the transform ever
+    // sees it, so its declaration must be admitted from the LOWERED source: the
+    // route file itself is Markdown, and the transform's module id is virtual
+    // (`\0open-mdx:<abs>.mdx.tsx`) — a key no file-system walk can produce. Without
+    // this row an .mdx route had a generated page module but no declared fact, so
+    // page classification fell back to the retired class page and the build failed
+    // with PROGRAM_MISSING.
+    if (file.endsWith('.mdx')) {
+      // The optional-peer contract (plugin-mdx.ts): the lowering — and the
+      // `marked` peer it imports at top level — is reached ONLY through the
+      // slot the open:mdx plugin publishes. A STATIC import of the lowering
+      // module would resolve `marked` for every consumer at config load
+      // (measured 2026-11-24 in the packed starter's dev cell), and a static
+      // edge to plugin-mdx's loader would put the in-package dynamic import
+      // on the bundled ./vite graph and ship rolldown's chunk runtime in the
+      // artifact (measured the same night). No plugin composed: report the
+      // row and record no tag — an honest no-op, never a silent drop.
+      const lower = mdxScanLowering();
+      if (lower === undefined) {
+        notes.push({
+          code: DeclaredElementTagScanCode.MDX_PLUGIN_NOT_COMPOSED,
+          file,
+          message:
+            'the .mdx route needs the open:mdx plugin (mdxPlugin()) composed to lower its ' +
+            'declared tag; the scan reports it and records no tag.',
+        });
+        continue;
+      }
+      let mdxSource: string;
+      try {
+        mdxSource = await readFile(file, 'utf8');
+      } catch {
+        continue;
+      }
+      const lowered = await lower(mdxSource, file, input.routesDir);
+      const loweredTag = mdxLoweredTag(lowered);
+      if (loweredTag === undefined) continue;
+      // The VIRTUAL module id, because that is the id the transform compiles under
+      // and therefore the id the classification lookup is keyed by.
+      const virtualId = `${file}.tsx`;
+      const moduleId = stableModuleId(virtualId, root, input.workspaceRoot);
+      tags.set(moduleId, loweredTag);
+      const identity = resolveGeneratedElementHost({
+        source: lowered,
+        moduleId: virtualId,
+        // The lane's extension gate is `.tsx`; the lowered module IS one.
+        filePath: virtualId,
+        root: 'shadow',
+        site: { tag: loweredTag },
+      });
+      hostExports.set(moduleId, identity.kind === 'producer' ? identity.ssrHostExport : '');
+      continue;
+    }
     // The generated lane is a TSX lane (`compileGeneratedElementIfAdmitted`
     // refuses a non-TSX id), and a package module's identity is its manifest.
     if (!file.endsWith('.tsx')) continue;
-    if (!inside(root, file)) continue;
     let source: string;
     try {
       source = await readFile(file, 'utf8');
@@ -132,33 +222,38 @@ export async function scanDeclaredElementTags(
       });
       continue;
     }
-    // Cheap text prefilter before the parser: almost every module has no
-    // island sidecar, and `readIslandConfig` builds a full SourceFile.
-    //
-    // This prefilter is only sound while `readIslandConfig` requires the callee
-    // to be spelled literally `defineIslandConfig` (its
-    // `locateDefineIslandConfigCall` does, and does not follow import aliases).
-    // If that parser ever learns aliases, THIS line must move onto the same
-    // predicate — otherwise an aliased sidecar is skipped here while the
-    // transform admits it, and the module silently loses its tag.
-    if (!source.includes('defineIslandConfig')) continue;
-    let declared: string | undefined;
-    try {
-      declared = readIslandConfig(source)?.tag;
-    } catch (error) {
+    // ONE reader for the authored sidecar (component-declaration.ts): the same
+    // answer the island scan, the static-component scan and the style walk get,
+    // so a module cannot be a component for one pass and a plain module for
+    // another. The reader owns the text prefilter too.
+    const reading = readComponentDeclaration(source);
+    if (reading.kind === 'absent') continue;
+    if (reading.kind === 'invalid') {
       notes.push({
         code: DeclaredElementTagScanCode.SIDECAR_UNREADABLE,
         file,
         message:
-          `the sidecar could not be read (${
-            error instanceof Error ? error.message : String(error)
-          }), so its declared tag is not admitted; the transform reports the authored ` +
-          'diagnostic when it compiles this module',
+          `the sidecar could not be read (${reading.reason}), so its declared tag is not ` +
+          'admitted; the transform reports the authored diagnostic when it compiles this module',
       });
       continue;
     }
-    if (declared === undefined) continue;
-    tags.set(stableModuleId(file, root, input.workspaceRoot), declared);
+    const declaration = reading.declaration;
+    if (declaration.tag === undefined) continue;
+    const moduleId = stableModuleId(file, root, input.workspaceRoot);
+    tags.set(moduleId, declaration.tag);
+    // The generated-host identity is resolved from the SAME source this loop
+    // already read, through the SAME compiler entry the island scan uses. A
+    // refusal or a lane decline is not this pass's diagnostic to report (the
+    // transform owns the authored refusal); it simply contributes no host.
+    const identity = resolveGeneratedElementHost({
+      source,
+      moduleId,
+      filePath: file,
+      root: declaration.root,
+      site: { tag: declaration.tag },
+    });
+    if (identity.kind === 'producer') hostExports.set(moduleId, identity.ssrHostExport);
   }
-  return { tags, notes };
+  return { tags, hostExports, notes };
 }

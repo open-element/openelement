@@ -263,12 +263,12 @@ describe('M08-1b dynamic SSR producer — Node contract', () => {
     // keeps the parameterless form.
     expect(generated.module).toContain('function Voided__ssr()');
     expect(ssr(generated.loaded, 'Voided')()).toBe('<div><br></div>');
-    // M08 composition slice: a component reference and a reusable-JSX
-    // insertion now emit a server producer (the new composition suite owns
-    // their bytes); the `property` channel remains mount-only.
+    // M08 composition slice: a component reference and a reusable-JSX insertion
+    // emit a server producer (the composition suite owns their bytes). The
+    // `property` channel does too since F16 — its SSR form is an attribute.
     expect(generated.module).toContain('function Reused__ssr');
     expect(generated.module).toContain('function Composed__ssr');
-    expect(generated.module).not.toContain('function Propertied__ssr');
+    expect(generated.module).toContain('function Propertied__ssr');
   });
 
   test('SSR expression placements decode back to the authored slots', () => {
@@ -371,6 +371,7 @@ async function buildRuntimeBundle(): Promise<string> {
     entry,
     [
       `export { claimRecipe, createRecipe, insertRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
+      `export { reconcileEachEntries } from ${JSON.stringify(join(runtime, 'each-reconcile.ts'))};`,
       `export { bindSignalWrites, runUntracked } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
       `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
       `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, assertTextSlotMarker, assertWhenAnchor, assertWhenEndMarker, isWhenEndMarker, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,

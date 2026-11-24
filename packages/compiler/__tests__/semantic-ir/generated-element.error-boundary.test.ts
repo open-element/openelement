@@ -42,7 +42,6 @@ import { CompiledElementError } from '../../src/internal/compiler/semantic-core/
 import { generateLeafModule } from '../../src/internal/compiler/semantic-ir/generated-leaf/generate.ts';
 import { compileGeneratedElementIfAdmitted } from '../../src/internal/compiler/semantic-ir/generated-element/compile.ts';
 import {
-  GENERATED_ELEMENT_DIAGNOSTIC,
   GENERATED_ELEMENT_IMPORT_CLASSIFIER,
   type GeneratedElementSite,
 } from '../../src/internal/compiler/semantic-ir/generated-element/contract.ts';
@@ -453,7 +452,7 @@ describe('16b-EB error boundary — emitted artifact contract (Node)', () => {
     }
   });
 
-  test('B13 a host-binding read inside the callback keeps the existing binding gates', () => {
+  test('B13 a ROOT signal resource read inside the callback is admitted (ADR-0183 D-4)', () => {
     const source =
       SIDECAR +
       "import { onError, signal } from '@openelement/element';\n" +
@@ -464,12 +463,9 @@ describe('16b-EB error boundary — emitted artifact contract (Node)', () => {
       '}\n' +
       'export default SignalError;\n';
     const fact = site('error-host-binding');
-    try {
-      compileGeneratedElementIfAdmitted(source, fact.file, { site: fact.site });
-      throw new Error('expected the generated element lane to refuse a host binding');
-    } catch (error) {
-      expect(codes(error)).toContain(GENERATED_ELEMENT_DIAGNOSTIC.UNBOUND_BINDING);
-    }
+    const compiled = compileGeneratedElementIfAdmitted(source, fact.file, { site: fact.site });
+    expect(compiled).not.toBeNull();
+    expect(compiled!.code).toContain('const count = signal((');
   });
 
   test('B14 a model compiled with the root marker but generated without the option never drops the handler', () => {

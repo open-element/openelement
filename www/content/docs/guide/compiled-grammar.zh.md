@@ -1,519 +1,548 @@
 ---
 title: '编译模块文法'
-lede: '一套有界、构建期强制的创作文法，配以带码诊断——编译器承认什么，以及它拒绝什么（而不是回退到运行时解释）。'
+lede: '生成元素范式的创作文法：编译器允许什么进入一个组件模块，以及它拒绝什么，而不是在运行时回退。'
 navLabel: '模块文法'
 order: 15
 section: 'Core'
 ---
 
-编译器把每个 `@element` 模块降级为 Part Program——一份可序列化的产物，服务端序列化器、全新挂载与既有 DOM 认领三方能逐字节一致地重放它。这份三态一致正是文法换来的东西，也是文法封闭的原因：编译器无法降级的写法会在构建期以 `OEC9xxx` 诊断失败，而不是把解释器发到浏览器。本页即速查表——先一表列全部法则，再逐条给出可用示例与失败形态。
+每个编译组件都是一个模块：它默认导出一个函数组件，旁边放着一份 `defineIslandConfig` sidecar。编译器把这一对降级为一个 Native Custom Element——一个构建作者所写树的构造器，外加（对 shadow root 而言）服务端渲染所用的宿主生成器。这份文法是封闭的：编译器无法降级的写法会在构建期以带码诊断失败，而不是把运行时解释器发到浏览器。本页即速查表——先一表列出全部法则，再逐条给出可用示例与失败形态。
+
+类范式已在本版本中删除。`extends OpenElement` 与 `@element(...)` 类都不再是创作面：`OpenElement` 与 `ErrorBoundary` 不再导出，也没有任何兼容垫片替代它们。`element` 与 `property` 装饰器仍以惰性的空操作替身存在，好让旧模块能被单元测试或配置加载*求值*，但没有任何编译器会编译它们——仍然带着它们的模块不会被任何范式接纳。
 
 ## 法则一览
 
 | 法则 | 编译器承认 | 编译器拒绝 |
 | --- | --- | --- |
-| 一模块一编译类 | 恰好一个类，携带恰好一个规范的 `@element(...)` 装饰器 | 模块内的第二个类（哪怕是无装饰器的辅助类），或第二个装饰器（`OEC9001`、`OEC9004`） |
-| 类必须导出 | `export class` 或 `export default class`，类上无其它修饰符 | 模块内私有类、`abstract`、`declare`（`OEC9006`） |
-| 基类必须规范 | `extends OpenElement` 或 `extends ErrorBoundary`，两者都须是 `@openelement/element` 的运行时具名导入 | 同名本地类、外部导入、命名空间、默认或 type-only 导入、经再导出（`OEC9003`） |
-| 实例字段必须全是 `@property` | `@property({ ... }) name = <许可初始化形态之后的字面量>` | 无装饰器字段、constructor、getter/accessor（`OEC9005`、`OEC9006`） |
-| 唯一 static 成员是 `styles` | `static override styles: StyleSheetLike[] = [sheet]`，数组里是本模块的 `.css` 导入 | 其它任何 static 成员；内联字符串表或没有导入绑定的表（`OEC9005`、`OEC9029`） |
-| 禁止顶层运行语句 | import、`type`/`interface`/`module`/`declare` 声明，以及岛交付策略语句（`export const openElement = defineIslandConfig(...)`） | `const x = signal(0)`、`createContext(...)`、模块级查找表等任何会执行的语句（`OEC9008`） |
-| JSX 用标签名组合 | 小写内置元素与自定义元素宿主（`<my-counter>`） | 把类值当标签（`<ChildCard />`）（`OEC9010`） |
-| `innerHTML` 必须带显式信任手势 | `@property({ type: Object, reflect: false, attribute: false }) body = trustedHtml(...)`，且 `innerHTML={this.body} trustedHtml` | `String` 类型来源、普通字符串值、无 `trustedHtml()` 品牌的值（`OEC9026`） |
-| 文本区读属性 | `{this.label}`、`{this.count}`、字面量文本 | 文本位置上的方法调用或任何其它表达式（`OEC9013`） |
-| 分支只绑定，不行动 | `{this.flag ? <b data-label={this.label}>on</b> : <i title={this.off}>off</i>}` —— 每个分支是一个静态元素，其属性可绑定 `this.<property>` | 不是单个静态 JSX 元素的分支；嵌套三元；分支内的事件处理器、`ref`、内联条件 class（`OEC9012`） |
-| `render()` 单 return | `render() { return <main>…</main>; }` | return 前的局部变量、两个根元素、fragment 根、根为文本（`OEC9007`） |
-| 失败发生在运行时 | 在 `connectedCallback()` 等生命周期方法里 `throw` | `render()` 内的 `if (…) throw`（`OEC9007`）——手写 throw 不可编译；边界捕获的是运行时失败 |
-| 事件处理器是方法引用 | `onClick={this.pick}` 或单一动作箭头函数 | `onClick={this.pick()}` 等内联调用表达式（`OEC9016`） |
-| 属性值是字面量或属性读取 | 字面量、`this.<property>` sink、许可的 boolean/class/style 形态，以及内置元素上的内联条件 class | 展开属性、计算表达式（`OEC9011`） |
+| 一模块一组件 | 一个默认导出的函数组件加上它的 `defineIslandConfig` sidecar | 类的默认导出，或没有默认导出函数的模块（本范式不接纳它）；默认导出的函数不是组件（`OEC9040`） |
+| sidecar 就是身份 | `tag`、`root: 'light' \| 'shadow' \| 'closed'` | 已退役的写法 `'shadow-open'` / `'shadow-closed'`（`OEIR_GENERATED_ELEMENT_ROOT_INVALID`） |
+| props 是一张声明的表 | 带类型的 props 形参，其成员与 `properties` 一一对应 | 没有 sidecar 行的类型成员，或没有类型成员的 sidecar 行（`OEIR_GENERATED_ELEMENT_PROPERTY_MISMATCH`） |
+| 只有原语走 attribute 通道 | `string`、`number` 与 `boolean` 行 | 未声明 `attribute: false` 的数组、对象或 `trustedHtml` 行（`OEIR_GENERATED_ELEMENT_PROPERTY_INVALID`） |
+| 模块作用域只有 import、sidecar 和组件 | import、`export const openElement`、默认导出 | 组件正文会读取的模块局部 `const` 或 `function`（`OEIR_GENERATED_ELEMENT_UNBOUND_BINDING`） |
+| setup 声明状态，只有一个 return | `signal(...)`、`computed(...)`、`const` 绑定、箭头辅助函数、内置调用、最终唯一一个 `return` | 嵌套的 `function` 声明、`if` 语句或第二个 `return`（`OEC9041`） |
+| 正文返回一个 JSX 元素 | 恰好一个被返回的 JSX 元素 | 字符串或其它非 JSX 返回值（`OEC9040`） |
+| JSX 按标签组合 | 内置标签、自定义元素宿主、同一模块内声明的组件 | 从其它模块导入的组件（`OEIR_LEAF_UNKNOWN_COMPONENT`） |
+| 属性是 JSX 表达式 | 字面量值，以及动态的 `attribute` / `boolean` / `property` / `event` / `ref` 通道 | 展开（`OEC9042`）；动态的 `class` 或 `style` 通道（`OEIR_LEAF_UNSUPPORTED_ATTRIBUTE`） |
+| 分支是 JSX 或 null | `{cond ? <b/> : <i/>}` 与 `{cond ? <b/> : null}` | 文本分支、嵌套三元（`OEC9042`） |
+| `innerHTML` 不在本范式内 | 什么都不承认——见下文 | 任何 `innerHTML` sink（`OEC9044`） |
+| 生命周期是根 setup 里的内置调用 | 根正文里的 `onConnect`、`onDispose`、`onPropertyChange`、`onError` | 没有保留正文持有的 hook（`OEIR_LEAF_INVALID_ARTIFACT`） |
+| 页面是服务端函数 | 路由模块自己导出的组件，由 `definePage` 包起来 | return 前的局部 `const`、事件处理器、作为 JSX 的导入组件（`OEC9031`、`OEC9032`） |
 
-## 一模块一编译类
+## 一模块一组件
 
-一个模块就是一个组件。它需要的辅助类、常量与函数写在普通模块里再导入——编译模块不允许出现别的顶层类。
+一个模块就是一个组件。组件是默认导出，sidecar 名为 `openElement`。共享的辅助函数、表与常量住在普通模块里并被导入——编译模块的正文可以读取 import，但不能读取本模块自己声明的标识符，所以局部 `const` 不是私有辅助函数。
 
 ```tsx
-// app/components/my-card.tsx
-import { element, OpenElement, property } from '@openelement/element';
+// app/islands/my-card.tsx
+import { defineIslandConfig } from '@openelement/router';
 
-@element('my-card', { root: 'shadow-open' })
-export default class MyCard extends OpenElement {
-  @property({ reflect: false })
-  title = '';
+export const openElement = defineIslandConfig({
+  tag: 'my-card',
+  root: 'shadow',
+  hydrate: 'idle',
+  ssr: true,
+  properties: { title: { default: '' } },
+});
 
-  render() {
-    return <article><h2>{this.title}</h2><slot></slot></article>;
-  }
+export default function MyCard(props: { title: string }) {
+  return (
+    <article>
+      <h2>{props.title}</h2>
+      <slot></slot>
+    </article>
+  );
 }
 ```
 
 ```text
-// 拒绝：模块内的第二个类以 OEC9001 失败
-class CardStyles { padding = 1; }
+// 不接纳、不编译：类的默认导出属于已退役的范式，
+// 而没有默认导出函数的模块不是本范式的组件
+export default class MyCard { render() { return <article></article>; } }
+export function MyCard() { return <article></article>; }
+
+// 拒绝：默认导出的函数返回非 JSX 值 —— OEC9040
+export default function MyCard() { return 'not a component'; }
 ```
 
-## 类必须导出
+## sidecar 声明身份与 root
 
-路由与岛的扫描器通过模块导出找到组件，编译器对此的要求与此一致：`export class` 或 `export default class`，类声明行上没有别的修饰符。
-
-```tsx
-import { element, OpenElement, property } from '@openelement/element';
-
-@element('my-badge', { root: 'shadow-open' })
-export class MyBadge extends OpenElement {
-  @property({ reflect: true })
-  tone = 'neutral';
-
-  render() {
-    return <span class='badge'>{this.tone}</span>;
-  }
-}
-```
-
-```text
-// 拒绝：未导出，或带 abstract/declare —— OEC9006
-@element('my-badge')
-class MyBadge extends OpenElement { /* … */ }
-```
-
-## 基类必须规范
-
-基类必须是 `@openelement/element` 的运行时具名导入——`OpenElement`，或文档化的错误边界形态 `ErrorBoundary`。决定权在绑定来源而非拼写：一个碰巧叫 `OpenElement` 的本地类、默认或命名空间导入、经再导出模块的导入，都会失败关闭。
-
-```tsx
-import { element, ErrorBoundary, property } from '@openelement/element';
-
-@element('my-boundary', { root: 'shadow-open' })
-export default class MyBoundary extends ErrorBoundary {
-  @property({ reflect: false, attribute: false })
-  hasError = false;
-
-  override retry(): void {
-    super.retry();
-  }
-
-  render() {
-    return <div>{this.hasError ? <p>出错了</p> : <slot></slot>}</div>;
-  }
-}
-```
-
-```text
-// 拒绝：再导出来源永不被追踪 —— OEC9003
-import { OpenElement } from './my-element-re-export.ts';
-```
-
-两种交付形态的注册是不对称的，上面示例里的 `default` 导出对其中一种至关重要。页作用域组件——位于 routes 与 islands 目录之外的编译模块——只能经路由导入链被发现：页面模块（或页面导入的模块）必须导入组件模块，例如 `import './my-boundary.tsx'`，且静态组件扫描只登记模块**默认导出**的标签，因此组件为具名导出的页作用域模块可以正常编译，却永远进不了服务端注册表。island 正相反：页面/岛模板扫描按标签发现它们，页面无需导入其模块。每种形态向浏览器发布什么，见 [Islands 与 SSR](/zh/guide/islands-and-ssr)。
-
-## 实例字段必须全是 `@property`
-
-响应式状态就是编译属性契约：constructor 由编译器生成、attribute 映射到属性、没有 `@property` 的字段没有通道。派生值用 `computed(...)` 字段；不属于状态的内部辅助放在普通模块。
-
-```tsx
-import { computed, element, OpenElement, property, type ReadonlySignal } from '@openelement/element';
-
-@element('my-counter', { root: 'shadow-open' })
-export default class MyCounter extends OpenElement {
-  @property({ reflect: true })
-  count = 0;
-
-  @property({ reflect: false, attribute: false, type: Boolean })
-  empty: ReadonlySignal<boolean> = computed(() => this.count === 0);
-
-  render() {
-    return <p hidden={this.empty}>{this.count}</p>;
-  }
-}
-```
-
-```text
-// 拒绝：无装饰器字段、constructor 与 getter 都在文法之外 —— OEC9005 / OEC9006
-@element('my-counter')
-export class MyCounter extends OpenElement {
-  helper = 1;                 // 无 @property
-  constructor() { super(); } // constructor 由编译器生成
-  get double() { return this.count * 2; } // 请用 computed 属性
-}
-```
-
-## 唯一 static 成员是 `styles`
-
-`static styles` 是文法保留的唯一 static，且必须数组真实的 `.css` 文件导入：表的字节只存在于一处——作者写下的文件——构建再把它产出为带内容寻址的资产。内联字符串会把样式字节放回 JavaScript chunk，因此其它任何表的写法（字符串字面量、工厂调用、在别的模块里构造的值）都会失败关闭。
-
-```tsx
-import { element, OpenElement, type StyleSheetLike } from '@openelement/element';
-import widgetStyles from './my-widget.css';
-
-@element('my-widget', { root: 'shadow-open' })
-export class MyWidget extends OpenElement {
-  static override styles: StyleSheetLike[] = [widgetStyles];
-
-  render() {
-    return <div class='widget'><slot></slot></div>;
-  }
-}
-```
-
-```text
-// 拒绝：别的 static 成员，以及内联表 —— OEC9005 / OEC9029
-static cache = 1;
-static override styles: StyleSheetLike[] = [`:host { display: block; }`];
-```
-
-## 禁止顶层运行语句
-
-编译模块是数据加一个类。信号、context 与共享常量住在普通 `.ts` 模块里——下方的 `app/islands/lab-context.ts` 模块就是范式——编译模块再导入它们。唯一被承认的语句是岛交付策略。
-
-```ts
-// app/islands/lab-context.ts —— 普通模块承载模块级状态，以及编译类自己无法
-// 承载的绑定表（编译字段只允许带初始值的 @property 声明）
-import {
-  consumeContext,
-  createContext,
-  provideContext,
-  releaseConsumedContext,
-  signal,
-  type Signal,
-} from '@openelement/element';
-
-export const labA = signal(0);
-export const LabCtx = createContext<string>(Symbol('lab-ctx'), 'lab-default');
-
-type LabRelease = ReturnType<typeof provideContext>;
-const labReleases = new WeakMap<HTMLElement, LabRelease>();
-
-/** 供给一个值，并且只保留最新的提供者侧释放句柄。 */
-export function provideLab(host: HTMLElement, value: string): void {
-  labReleases.set(host, provideContext(host, LabCtx, value));
-}
-
-/** 恰好一次释放提供者记录；被替换的句柄本身已是 no-op。 */
-export function releaseLab(host: HTMLElement): void {
-  const release = labReleases.get(host);
-  if (!release) return;
-  labReleases.delete(host);
-  release();
-}
-
-interface LabBinding {
-  readonly signal: Signal<string>;
-  readonly unsubscribe: () => void;
-}
-
-const labBindings = new WeakMap<HTMLElement, LabBinding>();
-
-/** 为单个宿主消费最近的提供者，并保存桥接清理。 */
-export function bindLab(host: HTMLElement, apply: (value: string) => void): void {
-  unbindLab(host);
-  const lab = consumeContext<string>(LabCtx, host);
-  const unsubscribe = lab.subscribe(apply);
-  labBindings.set(host, { signal: lab, unsubscribe });
-}
-
-/** 恰好一次释放本地订阅与提供者桥接。 */
-export function unbindLab(host: HTMLElement): void {
-  const binding = labBindings.get(host);
-  if (!binding) return;
-  labBindings.delete(host);
-  binding.unsubscribe();
-  releaseConsumedContext(binding.signal);
-}
-```
+这里没有基类要导入，也没有装饰器要施加。身份就是数据：sidecar 的 `tag` 命名自定义元素，`root` 选择它的内容渲染到哪里。`'shadow'` 是一个开放的声明式 shadow root，`'closed'` 是封装起来的那一个，`'light'` 则渲染进文档树。Alpha15 的两种写法 `'shadow-open'` 与 `'shadow-closed'` 已经不存在——闭合性现在是独立的 `'closed'` 取值，而不再是 `-open`/`-closed` 后缀，因此移植过来的取值必须重写。
 
 ```tsx
 import { defineIslandConfig } from '@openelement/router';
-import { element, OpenElement, property } from '@openelement/element';
 
-export const openElement = defineIslandConfig({ hydrate: 'idle', ssr: true, dsd: true });
+export const openElement = defineIslandConfig({
+  // 身份住在这里，而不是某个装饰器上：本范式把这张表当作
+  // 这个元素的完整声明来读。
+  tag: 'my-badge',
+  root: 'light',
+  properties: { tone: { default: 'neutral' } },
+});
 
-@element('element-lab', { root: 'shadow-open' })
-export default class ElementLab extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  summary = '';
-
-  render() {
-    return <p>{this.summary}</p>;
-  }
+export default function MyBadge(props: { tone: string }) {
+  return <span class='badge'>{props.tone}</span>;
 }
 ```
-
-context 沿着同一条接缝端到端工作。普通模块持有令牌；提供者元素在 `connectedCallback` 里供给值，并保存 `provideContext` 返回的释放句柄；消费者用 `consumeContext` 读取最近的提供者，并把值复制进一个 `@property`。每次 provide 都会替换该宿主在该 key 上的记录，因此 `provideLab` 只保留最新句柄（被替换的句柄已是 no-op），`releaseLab` 在 `disconnectedCallback` 里释放当前记录——提供者的请求监听器被摘掉，重新连接也不会新增监听器。在消费者一侧，桥接归消费者所有：保存它，并在 `disconnectedCallback` 里用 `unbindLab` 释放——`releaseConsumedContext` 会断开提供者一侧，因此断开连接的消费者不会再收到更新，重复连接也不会新增第二条桥接。下面两个元素都是 island，各自携带与上方 `element-lab` 相同的 `defineIslandConfig` 声明——页作用域组件永远不会在浏览器里运行生命周期代码（见 [Islands 与 SSR](/zh/guide/islands-and-ssr)）。
-
-```tsx
-// app/islands/lab-provider.tsx —— 提供者持有值及其释放句柄
-import { element, OpenElement, property } from '@openelement/element';
-import { provideLab, releaseLab } from './lab-context.ts';
-
-@element('lab-provider', { root: 'shadow-open' })
-export default class LabProvider extends OpenElement {
-  @property({ reflect: false })
-  lab = 'lab-default';
-
-  override connectedCallback(): void {
-    super.connectedCallback();
-    provideLab(this, this.lab);
-  }
-
-  override disconnectedCallback(): void {
-    releaseLab(this);
-    super.disconnectedCallback();
-  }
-
-  pick(): void {
-    this.lab = 'lab-a';
-    // 替换已保存的句柄；提供者监听器始终只有一个。
-    provideLab(this, this.lab);
-  }
-
-  render() {
-    return <button type='button' onClick={this.pick}>在实验 A 中工作</button>;
-  }
-}
-```
-
-```tsx
-// 消费者每次连接只绑定一次，并在断开时释放桥接
-import { element, OpenElement, property } from '@openelement/element';
-import { bindLab, unbindLab } from './lab-context.ts';
-
-@element('lab-readout', { root: 'shadow-open' })
-export default class LabReadout extends OpenElement {
-  @property({ reflect: false })
-  lab = 'lab-default';
-
-  override connectedCallback(): void {
-    super.connectedCallback();
-    bindLab(this, (value) => { this.lab = value; });
-  }
-
-  override disconnectedCallback(): void {
-    unbindLab(this);
-    super.disconnectedCallback();
-  }
-
-  render() {
-    return <p>{this.lab}</p>;
-  }
-}
-```
-
-订阅再复制的形态是文法本身决定的：`computed(...)` 字段只能读取 `this.<已声明的属性>`，而消费到的信号不是属性——因此消费者把提供者的更新复制进属性，编译 Part 读取的是那个属性。桥接表与提供者句柄表都住在普通模块里，因为编译类不能携带私有状态字段；`unbindLab` 同时释放本地订阅与消费者桥接，而 `provideLab`/`releaseLab` 让提供者在重复 provide 与重连之间始终只有一个请求监听器。
 
 ```text
-// 拒绝：模块顶层的 signal()/createContext() —— OEC9008
-const count = signal(0);
-const ThemeCtx = createContext<string>(Symbol('theme'), 'dark');
+// 拒绝：已退役的 root 写法 —— OEIR_GENERATED_ELEMENT_ROOT_INVALID
+export const openElement = defineIslandConfig({ tag: 'my-badge', root: 'shadow-open' });
 ```
 
-## JSX 用标签名组合
+`root` 还决定构建能为这个模块产出什么。shadow root 会得到一份编译器自有的宿主生成器（`<Name>__ssrHost`），服务端把它渲染进 `<template shadowrootmode>`；light root 则什么都没有，因为没有模板可产出。正是这种不对称，使得 light root 组件可以被嵌套进页面、却不能自己充当生成的页面根——light 的*页面*要使用下文的服务端函数形态。
 
-编译标记按 HTML 标签与自定义元素宿主书写；类以 `@element` 标签注册，因此 render 里读取的是该标签的字符串。宿主模块仍需导入子组件模块——见下方 `import './my-counter.tsx'`——这样标签才被注册、路由导入链也才能到达它；文法禁止的只是 JSX 位置上的类值。
+```text
+// 产出的形态，shadow root：一个只含内容的 <Name>__ssr 加一个宿主生成器
+export function MyCard__ssrHost(props, lightChildren) { … }
+
+// 产出的形态，light root：根本没有宿主生成器
+// （没有什么可包裹——子节点就是普通的文档节点）
+```
+
+## props 是一张声明的表
+
+组件的输入只经过一条通道：带类型的 `props` 形参。它的每个成员都必须在 sidecar 里有对应的 `properties` 行，而每一行也必须点名一个类型成员。这个形参是有名字、非泛型、就地书写的对象类型——解构形参、rest 形参、可选成员，以及导入的或泛型的类型，全都在文法之外：编译器读不懂的形状会悄悄从属性通道里掉出去。
 
 ```tsx
-import { element, OpenElement, property } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
+
+export const openElement = defineIslandConfig({
+  tag: 'my-counter',
+  root: 'shadow',
+  properties: {
+    // 原语行省略默认值时会取其类型的零值；写出它，是为了记录
+    // 服务端与浏览器共同起步的那个种子值。
+    start: { default: 0 },
+  },
+});
+
+export default function MyCounter(props: { start: number }) {
+  return <div class='counter-row'><span id='count'>{props.start}</span></div>;
+}
+```
+
+```text
+// 拒绝：类型成员 `other` 没有 sidecar 行 —— PROPERTY_MISMATCH
+export default function MyCounter(props: { start: number; other: number }) { … }
+
+// 拒绝：props 形参从未声明的 sidecar 行 —— 同一个诊断
+export const openElement = defineIslandConfig({
+  tag: 'my-counter',
+  properties: { start: { default: 0 }, extra: { default: '' } },
+});
+```
+
+### 哪些行带 attribute
+
+一行的 `attribute` 通道就是该属性的 attribute 侧：`reflect: true` 会写回，`attribute: false` 声明一个完全没有 attribute 的属性，省略 `attribute` 则推导出 kebab-case 的名字。只有 `string`、`number` 与 `boolean` 被承认——没有 converter，也没有数组或对象的线上格式——所以非原语行必须显式写出 `attribute: false`，而不是让构建去猜一种 JSON 编码。
+
+```tsx
+import { defineIslandConfig } from '@openelement/router';
+
+interface Row {
+  id: string;
+  label: string;
+}
+
+export const openElement = defineIslandConfig({
+  tag: 'my-list',
+  properties: {
+    heading: { default: '' },
+    // 没有任何 attribute 或 JSON 线上格式承载行列表：值经
+    // props 投影器抵达，所以这一行声明自己是纯 property 的。
+    rows: { attribute: false, default: [] },
+  },
+});
+
+export default function MyList(props: { heading: string; rows: Row[] }) {
+  return (
+    <section>
+      <h2>{props.heading}</h2>
+      <ul>
+        {props.rows.map((row) => <li key={row.id}>{row.label}</li>)}
+      </ul>
+    </section>
+  );
+}
+```
+
+```text
+// 拒绝：非原语行没有显式的 attribute: false —— PROPERTY_INVALID
+export const openElement = defineIslandConfig({
+  tag: 'my-list',
+  properties: { rows: { default: [] } },
+});
+```
+
+## 模块作用域只有 import、sidecar 和组件
+
+一个编译模块只声明三样东西：它的 import、`openElement` sidecar，以及默认导出的组件。状态、context 与共享表都属于普通 `.ts` 模块——而且它们必须被*导入*，因为一个模块为自己声明的标识符会被当作未绑定的宿主绑定，而不是被捕获的局部变量。
+
+```ts
+// app/lib/lab-context.ts —— 普通模块持有模块级状态、令牌，
+// 以及编译组件自己无法携带的绑定表
+import { createContext, signal } from '@openelement/element';
+
+export const labA = signal(0);
+export const LabCtx = createContext<string>(Symbol('lab-ctx'), 'lab-default');
+```
+
+```tsx
+// app/islands/element-lab.tsx
+import { defineIslandConfig } from '@openelement/router';
+import { labA } from '../lib/lab-context.ts';
+
+export const openElement = defineIslandConfig({
+  tag: 'element-lab',
+  root: 'shadow',
+  properties: { summary: { default: '' } },
+});
+
+export default function ElementLab(props: { summary: string }) {
+  // `labA` 是导入的，因此这个引用落在模块作用域；在本文件里声明的
+  // `const` 会成为未绑定绑定并让构建失败。
+  return <p>{props.summary} — lab A at {labA.value}</p>;
+}
+```
+
+```text
+// 拒绝：组件模块里的顶层状态——正文对 `count` 的读取
+// 会变成未绑定的宿主绑定，OEIR_GENERATED_ELEMENT_UNBOUND_BINDING
+const count = signal(0);
+
+// 同种方式拒绝：正文调用的模块局部辅助函数
+function helper(): string { return 'a'; }
+```
+
+这条法则的后半段讲的是*读取*。组件正文从不触碰的模块局部声明是惰性的、无害的；构建只拒绝正文真正读到的标识符。
+
+## setup 声明状态，只有一个 return
+
+组件正文是一个 setup 函数，而不是一个通用方法。它可以声明 `signal` 与 `computed` 值、普通 `const` 绑定、箭头辅助函数，以及生命周期内置函数——然后以一个 `return` 结束，返回一个 JSX 元素。嵌套的 `function` 声明、`if` 语句或提前 return，都在被承认的语句文法之外。
+
+```tsx
+import { computed, signal } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
+
+export const openElement = defineIslandConfig({ tag: 'my-profile', properties: { name: { default: '' } } });
+
+export default function MyProfile(props: { name: string }) {
+  // 信号住在 setup 作用域：运行时在整个元素生命周期里保留这份记录，
+  // 所以重新连接会重读同一个来源。
+  const visits = signal(0);
+  const greeting = computed(() => `Hello, ${props.name}`);
+
+  return (
+    <section>
+      <h2>{greeting.value}</h2>
+      <p>visits: {visits.value}</p>
+    </section>
+  );
+}
+```
+
+```text
+// 拒绝：嵌套的函数声明 —— OEC9041
+export default function MyProfile() { function fmt(v: number) { return String(v); } return <p>{fmt(1)}</p>; }
+
+// 拒绝：return 之前的控制流 —— OEC9041
+export default function MyProfile() { if (ready) return <b>a</b>; return <i>b</i>; }
+
+// 拒绝：根本没有 JSX 返回 —— OEC9040
+export default function MyProfile() { return 'hello'; }
+```
+
+注意这里*没有*被限制的东西：return 之前由 props 算出的 `const` 是被承认的（`const text = props.label + '!'`），箭头辅助函数也被承认，而 `function` 声明不被承认。两条前端在这里是有意不同的——函数前端承认表达式形态的 setup，而不是语句形态的 setup。
+
+## JSX 按标签组合
+
+标记里写的是 HTML 标签、自定义元素宿主和同模块组件。自定义元素宿主按它注册的标签查找，所以宿主模块要导入子组件的模块来完成注册；同一文件里声明的兄弟组件按标识符被承认。但从*另一个*模块导入的组件不被承认：跨模块的组件组合不在这一片之内。
+
+```tsx
+import { defineIslandConfig } from '@openelement/router';
 import './my-counter.tsx';
 
-@element('my-dashboard', { root: 'shadow-open' })
-export class MyDashboard extends OpenElement {
-  @property({ reflect: false })
-  label = '';
+/** 同模块的子组件：就声明在这里，因此本范式能读到它的 props 形状。 */
+function ChildCard(props: { label: string }) {
+  return <b class='child'>{props.label}</b>;
+}
 
-  render() {
-    return (
-      <section>
-        <my-counter count={this.label}></my-counter>
-      </section>
-    );
-  }
+export const openElement = defineIslandConfig({ tag: 'my-dashboard', properties: { label: { default: '' } } });
+
+export default function MyDashboard(props: { label: string }) {
+  return (
+    <section>
+      <ChildCard label={props.label} />
+      <my-counter count={3}></my-counter>
+    </section>
+  );
 }
 ```
 
 ```text
-// 拒绝：类值不是标签 —— OEC9010
+// 拒绝：把从另一个模块导入的组件当作标签 ——
+// OEIR_LEAF_UNKNOWN_COMPONENT（在这里声明它，或以 <my-child-card> 承载它）
 import { ChildCard } from './child-card.tsx';
-render() { return <div><ChildCard /></div>; }
+export default function MyDashboard() { return <div><ChildCard /></div>; }
 ```
 
-## `innerHTML` 必须带显式信任手势
+## `innerHTML` 不在本范式内
 
-注入标记需要信任边界的两半：属性必须是 Object 类型并持有 `trustedHtml(...)` 值，sink 必须携带字面量 `trustedHtml` 标记。其余任何写法都打不开这个 sink——看似 HTML 的字符串不行，跨过序列化边界的值也不行（品牌是内存中的能力，不会在 JSON 中存活）。
+生成元素范式没有 `innerHTML` sink。`trustedHtml` 能力契约本是类创作的机制，函数前端则直接拒绝这个 sink，而不是发出一条更弱的信任规则。必须注入第一方标记的组件属于服务端函数页面范式——那一个范式确实承认这个 sink。
 
 ```tsx
-import { element, OpenElement, property, trustedHtml, type TrustedHtml } from '@openelement/element';
+// app/routes/post.tsx —— 服务端函数页面，承认 innerHTML 的唯一形态
+import { definePage } from '@openelement/router';
+import { type TrustedHtml } from '@openelement/element';
 
-@element('my-article', { root: 'shadow-open' })
-export class MyArticle extends OpenElement {
-  @property({ type: Object, reflect: false, attribute: false })
-  bodyHtml: TrustedHtml = trustedHtml('');
+export function PostPage(props: { title: string; html: TrustedHtml }) {
+  return (
+    <main>
+      <h1>{props.title}</h1>
+      {/* post.html 是本仓库里撰写的 markdown —— 信任决定做在
+          值被产出的地方，而不是在 sink 上。 */}
+      <article class='post-body' innerHTML={props.html} trustedHtml></article>
+    </main>
+  );
+}
 
-  render() {
-    return <div innerHTML={this.bodyHtml} trustedHtml></div>;
-  }
+export default definePage(PostPage, { head: { title: 'Post' } });
+```
+
+```text
+// 在生成组件里被拒绝 —— OEC9044，那里的 sink 不被承认
+export default function MyArticle(props: { body: TrustedHtml }) {
+  return <div innerHTML={props.body} trustedHtml></div>;
+}
+```
+
+## 文本是一个表达式
+
+文本位置承认一个表达式：属性读取、信号读取、方法调用、算术。编译器把它降级为一个跟踪槽位，于是它读取的值一变就刷新，而别的东西一概不刷新。请让这个表达式既便宜又处处有定义——它在它所读之物每次更新时都会运行，而且它不能抛出，因为更新阶段写入中的抛出会逃逸到 `onError`。
+
+```tsx
+import { signal } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
+
+export const openElement = defineIslandConfig({ tag: 'my-total', properties: { label: { default: '' }, price: { default: 0 } } });
+
+export default function MyTotal(props: { label: string; price: number }) {
+  const quantity = signal(1);
+  return (
+    <p>
+      {props.label.trim()}: {props.price * quantity.value}
+    </p>
+  );
+}
+```
+
+被承认的文本文法刻意比已退役的类范式更宽：表达式是可以的，而且它是一个*槽位*，不是对周边树的重渲染。在不止一处使用的派生值仍然更适合做成 `computed`，好让派生只跑一次。
+
+## 分支是 JSX 或 null
+
+条件会降级为一个 `when` 块，因此每个分支是一个 JSX 元素——或者 `null` 表示缺席。文本分支与嵌套三元被拒绝：两者都没有可表示的分支形状，把它们折进一个条件才是正解。
+
+```tsx
+import { defineIslandConfig } from '@openelement/router';
+
+export const openElement = defineIslandConfig({ tag: 'my-status', properties: { ready: { default: false } } });
+
+export default function MyStatus(props: { ready: boolean }) {
+  return (
+    <div>
+      {props.ready ? <b data-state='ready'>Ready</b> : <i data-state='waiting'>Waiting</i>}
+    </div>
+  );
 }
 ```
 
 ```text
-// 拒绝：String 属性无法供 sink；标记配上非 Object 的 trustedHtml 来源同样失败 —— OEC9026
-@property({ reflect: false }) bodyHtml = '<p>raw</p>';
-render() { return <div innerHTML={this.bodyHtml} trustedHtml></div>; }
+// 拒绝：文本分支不是块分支 —— OEC9042
+export default function MyStatus(props: { ready: boolean }) { return <div>{props.ready ? 'yes' : 'no'}</div>; }
+
+// 拒绝：每个块只带一个条件；嵌套三元没有可表示的形态 —— OEC9042
+export default function MyStatus(props: { ready: boolean }) { return <div>{props.ready ? (props.busy ? <b>a</b> : <b>b</b>) : <i>c</i>}</div>; }
 ```
 
-## 文本区读属性
+## 处理器是函数
 
-文本位置是一个编译 Part：属性信号变化时它重新渲染，序列化器也能在服务端求值。字面量文本、`this.<property>` 读取与许可的列表映射覆盖了这门语言；其它任何写法——方法调用、算术、模板字面量——都没有可序列化形态，都会失败关闭。请在 `computed(...)` 属性里计算。
+处理器属性取一个函数值：内联箭头函数，或从 setup 作用域读到的函数。运行时在元素 upgrade 时把它绑定，并以 DOM 事件调用它。这个值是在组件正文运行期间求值的，所以 `onClick={props.on()}` 并没有指名一个处理器——它在 setup 期间*调用*了 `props.on`，而它返回的值变成了处理器。那仍然能编译；错的是语义，所以请传引用。
 
 ```tsx
-import { computed, element, OpenElement, property, type ReadonlySignal } from '@openelement/element';
+import { signal } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
 
-@element('my-profile', { root: 'shadow-open' })
-export default class MyProfile extends OpenElement {
-  @property({ reflect: false })
-  name = '';
+export const openElement = defineIslandConfig({ tag: 'my-toggle', properties: { enabled: { default: false } } });
 
-  @property({ reflect: false, attribute: false, type: String })
-  displayName: ReadonlySignal<string> = computed(() => this.name.trim());
+export default function MyToggle(props: { enabled: boolean }) {
+  const clicks = signal(0);
 
-  render() {
-    return <p>{this.displayName}</p>;
-  }
+  const toggle = () => {
+    clicks.value = clicks.value + 1;
+  };
+
+  return (
+    <button type='button' onClick={toggle}>{props.enabled ? <b>on</b> : <i>off</i>}</button>
+  );
+}
+```
+
+名为 `on*` 的属性在这里不像在类范式里那样被保留：props 表按字面读取，所以 `on` 是个普通成员。仍然成立的是：处理器位置取一个函数——一次调用的返回值不是处理器。
+
+## 属性是字面量或受承认的通道
+
+内置元素上的属性，要么是字面量，要么是五种动态通道之一：`attribute`、`boolean`、`property`、`event` 与 `ref`。这个集合就是全部——`class` 与 `style` 仅限字面量，因为计算出来的 class 或 style 需要一条 leaf 切片并不安装的通道，请求它会以 `OEIR_LEAF_UNSUPPORTED_ATTRIBUTE` 失败关闭，而不是发出一条永远不会生效的规则。展开被拒绝的理由更深：它的键集是运行时事实，服务端与浏览器没有可达成一致的共同形态。
+
+```tsx
+import { defineIslandConfig } from '@openelement/router';
+
+export const openElement = defineIslandConfig({
+  tag: 'my-link',
+  properties: { href: { default: '/' }, active: { default: false } },
+});
+
+export default function MyLink(props: { href: string; active: boolean }) {
+  return (
+    // `class` 保持字面量；动态的事实走 `attribute` 通道。
+    // 计算出来的 class 需要一条本范式不安装的通道。
+    <a class='link' title={`See ${props.href}`} href={props.href} data-active={props.active}>
+      Docs
+    </a>
+  );
 }
 ```
 
 ```text
-// 拒绝：文本位置只能降级为属性信号之上的 Part —— 方法调用没有 Part —— OEC9013
-render() { return <p>{this.name.trim()}</p>; }
-```
+// 拒绝：展开没有可序列化的形态 —— OEC9042
+export default function MyLink(props: { href: string }) { return <a {...props}>Docs</a>; }
 
-## 分支只绑定，不行动
-
-条件降级为 `when` Block，因此每个分支必须恰好是一个静态 JSX 元素。分支元素的属性可以绑定 `this.<property>` —— 属性 sink 随分支走（SSR 序列化激活分支的值，hydration 与 CSR 把绑定挂在分支作用域上，信号翻转换支时不残留旧分支的 DOM）—— 但分支不能行动：不允许文本插值、嵌套三元，也不允许事件处理器、`ref`、内联条件 class 出现在分支内。这些留在 Block 外的外围元素上。形状依赖运行时数据的分支——三元落到非元素表达式——无法表示；修法是用一个 `computed(...)` 布尔值来测试分支。
-
-```tsx
-import { element, OpenElement, property } from '@openelement/element';
-
-@element('my-status', { root: 'shadow-open' })
-export class MyStatus extends OpenElement {
-  @property({ reflect: false, type: Boolean })
-  ready = false;
-
-  @property({ reflect: false })
-  label = 'Status';
-
-  // 处理器挂在分支块之外的外围元素上。
-  pick(): void {}
-
-  render() {
-    return (
-      <div onClick={this.pick}>
-        {this.ready ? <b data-label={this.label}>Ready</b> : <i title={this.label}>Waiting</i>}
-      </div>
-    );
-  }
+// 拒绝：`class` 与 `style` 只取字面量——动态值在 leaf 切片之外，
+// OEIR_LEAF_UNSUPPORTED_ATTRIBUTE
+export default function MyLink(props: { active: boolean }) {
+  return <a class={props.active ? 'link link-active' : 'link'}>Docs</a>;
 }
 ```
 
-```text
-// 拒绝：分支元素绑定属性，不做文本插值 —— OEC9012
-// （请把值绑成属性，例如 data-label={this.label}）
-render() { return <div>{this.ready ? <b>{this.label}</b> : <i>Waiting</i>}</div>; }
-// 拒绝：事件处理器留在块外 —— OEC9012
-render() { return <div>{this.ready ? <b onClick={this.pick}>Ready</b> : <i>Waiting</i>}</div>; }
-// 纯文本三元甚至不是 Block —— 请在 computed(...) 属性里推导文本，
-// 再以 {this.<property>} 插值：
-render() { return <div>{this.ready ? 'yes' : 'no'}</div>; }
-// 嵌套三元同样失败 —— 每个 Block 只带一个条件；在 computed(...) 属性里
-// 推导判定值再测试它：
-render() { return <div>{this.ready ? (this.busy ? <b>a</b> : <b>b</b>) : <i>c</i>}</div>; }
-```
+## 生命周期是根 setup 里的内置调用
 
-## `render()` 单 return
-
-Part Program 派生自该方法唯一 return 的元素，所以 `render()` 是单 `return`、单根的一个 JSX 元素：return 前没有局部变量，没有两个根，也没有 fragment 根。需要计算的值请放进 `computed(...)` 属性或模块作用域。
+类范式的 hook 只有一个替代品：从 `@openelement/element` 导入、并在根组件正文顶层调用的内置函数，编译器把它们降级进被保留的实例工厂。`onConnect` 同时替代 `onDsdHydrated` 与 `onCsrRendered`——一个回调，认领之后与全新挂载之后同样运行——而 `onDispose` 替代类范式的 `onDispose`。嵌套组件的 hook 只有在该组件被编译器保留为无宿主正文时才被携带；没有保留宿主者的 hook 会以 `OEIR_LEAF_INVALID_ARTIFACT` 失败关闭，所以请把元素生命周期放在拥有它的那个元素上。
 
 ```tsx
-import { element, OpenElement, property } from '@openelement/element';
+import { onConnect, onDispose, useHost } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
 
-@element('my-panel', { root: 'shadow-open' })
-export class MyPanel extends OpenElement {
-  @property({ reflect: false })
-  label = '';
+export const openElement = defineIslandConfig({ tag: 'my-probe', root: 'shadow', hydrate: 'visible', ssr: true });
 
-  render() {
-    return (
-      <section class='panel'>
-        <h2>{this.label}</h2>
-        <slot></slot>
-      </section>
-    );
-  }
+export default function MyProbe() {
+  // 宿主元素本身取代了类范式的 `this`。
+  const host = useHost();
+
+  onConnect((env) => {
+    host.setAttribute('data-ready', '1');
+    // 每次连接的信号在断开时中止，因此在这里注册的监听器会被释放，
+    // 不需要第二张记账表。
+    env.signal.addEventListener('abort', () => host.removeAttribute('data-ready'));
+  });
+
+  onDispose(() => {
+    host.removeAttribute('data-ready');
+  });
+
+  return <span class='probe'>probe</span>;
 }
 ```
 
-```text
-// 拒绝：return 前的局部变量、两个根、fragment 根 —— OEC9007
-render() { const text = this.label; return <p>{text}</p>; }
-render() { return <><div>a</div><div>b</div></>; }
-```
-
-## 事件处理器是方法引用
-
-模板处理器以 `this.<method>` 引用（或单一动作箭头函数）降级进程序，运行时无需在渲染期求值表达式即可绑定。在处理器位置上调用方法会在绑定时就执行。
+`onPropertyChange(cb)` 在声明的行提交新值之后运行，`onError(cb)` 是错误边界。`useHost()` 返回本实例所属的元素——类范式 `this` 的替代品——并且它只作为 setup 绑定（`const host = useHost()`）被擦除，所以请通过那个绑定读取宿主，而不要在处理器或文本槽位里调用它。断开期间仍须可达的状态属于 `ref`：句柄在节点挂载时填充、在卸载时清空，而编译器只在 `ref` 属性里承认它。
 
 ```tsx
-import { element, OpenElement, property } from '@openelement/element';
+import { onPropertyChange, ref } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
 
-@element('my-toggle', { root: 'shadow-open' })
-export class MyToggle extends OpenElement {
-  @property({ reflect: false, type: Boolean })
-  enabled = false;
+export const openElement = defineIslandConfig({ tag: 'my-field', properties: { value: { default: '' } } });
 
-  toggle(): void {
-    this.enabled = !this.enabled;
-  }
+export default function MyField(props: { value: string }) {
+  const input = ref<HTMLInputElement>();
 
-  render() {
-    return <button type='button' onClick={this.toggle}>{this.enabled ? <b>on</b> : <i>off</i>}</button>;
-  }
+  onPropertyChange((event) => {
+    // `name` 与 `value` 就是被提交的那一行——类范式写成属性 setter 的
+    // 那条变更通道。
+    if (event.name === 'value' && input.current) input.current.value = String(event.value);
+  });
+
+  return <input ref={input} value={props.value} />;
 }
 ```
 
-```text
-// 拒绝：处理器位置取引用而不是调用 —— OEC9016
-render() { return <button onClick={this.toggle()}>x</button>; }
-// 且以 `on*` 命名的属性保留给事件通道：
-@property({ reflect: false }) on = false;
-```
+### 错误边界是元素作用域的
 
-## 属性值是字面量或属性读取
-
-属性值由序列化器、全新挂载与认领三方共同求值，所以每个值要么是字面量，要么是单个 `this.<property>` sink（boolean/class/style 形态作为各自的 Part 被承认）。`class` 属性在内置元素上承认一种内联条件形态——`class={this.<property> ? 'on' : 'off'}`——两个分支都是字符串字面量，条件按 computed-body 文法只读已声明属性；编译器把它降级为一个绑定到 class Part 的合成 `computed(...)` 字段（自定义元素宿主保持字面量/属性形态）。展开属性与计算表达式没有共同的可序列化形态。
+`onError(cb)` 是**一个生成元素**面向作者的边界。当某个值逃出该元素自己的工作范围时它运行：连接/认领过程（挂载、认领、setup 与 `onConnect` 重放），或一次更新阶段的写入（一次跟踪槽位刷新，或编译正文内派发的一次 DOM 事件处理器）。它不是子树边界，也不跨元素捕获——跨元素围堵随类基类一同退役了，也没有包装组件替代它。
 
 ```tsx
-import { element, OpenElement, property } from '@openelement/element';
+import { onError } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
 
-@element('my-link', { root: 'shadow-open' })
-export class MyLink extends OpenElement {
-  @property({ reflect: false })
-  href = '/';
+export const openElement = defineIslandConfig({ tag: 'my-widget', hydrate: 'idle', ssr: true });
 
-  @property({ reflect: false, type: Boolean })
-  active = false;
+export default function MyWidget() {
+  onError((env) => {
+    // `env.error` 就是被抛出的那个值本身，从不包装；一个自己抛出的
+    // 处理器会取代它，成为最终浮出的那个错误。
+    env.host.setAttribute('data-failed', '1');
+  });
 
-  render() {
-    return <a class={this.active ? 'link link-active' : 'link'} href={this.href}>Docs</a>;
-  }
+  return <p>widget</p>;
 }
 ```
 
-```text
-// 拒绝：展开属性与计算属性表达式 —— OEC9011
-render() { return <a {...this.props}>Docs</a>; }
-render() { return <a title={'See ' + this.href}>Docs</a>; }
-// 拒绝：条件 class 的分支必须是字符串字面量 —— OEC9011
-render() { return <a class={this.active ? this.tone : 'link'}>Docs</a>; }
+会捕获的处理器只改变错误是否逃逸。连接阶段的失败仍然让元素停在它定义好的失败后状态（没有投影、没有监听器），之后的重连会从头重试；更新阶段的失败保留已经写下的 DOM，订阅依然存活。没有注册处理器时，抛出原样浮出。该回调由客户端所有：它被擦进编译模块，在服务端渲染期间从不运行。
+
+## 页面是服务端函数
+
+对页面而言，路由模块自己声明组件，再用 `definePage` 把它包起来。这个函数从本模块导出、以标识符传入，并由服务端函数范式降级为一个生成式 HTML 构造器——因此它在构造上就是纯服务端的，不发布任何组件状态。这正是 light root 页面使用的形态，因为 light 生成组件没有可作为页面根的 DSD 宿主生成器。
+
+```tsx
+// app/routes/about.tsx
+import { definePage } from '@openelement/router';
+
+export const loader = async () => ({ title: 'About' });
+
+export function AboutPage(props: { title: string }) {
+  return (
+    <main>
+      <h1>{props.title}</h1>
+    </main>
+  );
+}
+
+export default definePage(AboutPage, { head: { title: 'About' } });
 ```
+
+```ts
+// 描述符是数据，不是标记：head、renderIntent、props 与 error 就是
+// 全部表面——没有 render() 字段。
+export default definePage(AboutPage, {
+  head: { title: 'Hello — my-app' },
+});
+```
+
+```text
+// 拒绝：return 之前的局部 const —— 服务端函数组件是
+// 一个 JSX 元素的一次 return（OEC9032）
+export function AboutPage(props: { title: string }) { const t = props.title + '!'; return <main>{t}</main>; }
+
+// 拒绝：事件处理器是纯客户端构造——交互性属于
+// island 模块（OEC9031）
+export function AboutPage() { return <button onClick={() => {}}>x</button>; }
+
+// 拒绝：服务端函数组件按直接调用组合，而不是按对导入组件的
+// JSX 引用（OEC9032）
+export function AboutPage() { return <main><Child /></main>; }
+```
+
+需要状态、处理器或生命周期的页面不是服务端函数页面：那是一个包着编译组件的路由模块，而那个组件如果必须在浏览器里运行，就是一个 island。[Islands 与 SSR](/zh/guide/islands-and-ssr) 说明了每种形态买到的交付契约。
 
 ## 另见
 
-- [核心概念](/zh/guide/core-concepts)——这些法则降级到其上的元素与 Part 模型。
+- [核心概念](/zh/guide/core-concepts)——这些法则降级到其上的元素与槽位模型。
 - [错误处理](/zh/guide/error-handling)——上文各错误码及其契约的目录。
 - [错误码](/zh/errors)——全部 `OEC9xxx` 诊断的生成参考表。

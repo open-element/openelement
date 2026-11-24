@@ -80,9 +80,10 @@ accepted-key list. `vite.config.ts` stays Vite-only: `plugins: [...openElement()
   `static`: prerendered at build time (SSG). `/about` and `/` are static.
 - `app/routes/api/` — request-time server routes. `/api/ping` is a plain
   WinterCG-shaped handler returning `Response.json`.
-- `app/components/` — compiled page elements. Presentation is authored as
-  Tailwind utility classes in the markup; each element's `.css` sheet carries
-  only its root's box rule, which has no markup to carry it.
+- `app/components/` — where page-scope components live when you add one (the
+  shipped pages are server functions in `app/routes/`). Presentation is authored
+  as Tailwind utility classes in the markup; a SHADOW element's `.css` sheet
+  carries only its root's box rule, which has no markup to carry it.
 - `app/islands/` — client islands, the only code that ships JavaScript. Each
   island declares its hydration strategy (`idle`, `load`, `visible`,
   client-only) through `defineIslandConfig`.

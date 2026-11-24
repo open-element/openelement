@@ -31,22 +31,16 @@ test('open-ui - index exports manifest (WC Package Protocol)', async () => {
   expect(mod.manifest.declarations.map((decl) => decl.tagName)).toEqual(EXPECTED_TAGS);
 });
 
-test('open-ui - the manual registration table is empty and stays idempotent', async () => {
-  const { registerOpenUi } = await import('../src/index.ts');
-  const definitions = new Map<string, CustomElementConstructor>();
-  const registry = {
-    get: (name: string) => definitions.get(name),
-    define: (name: string, ctor: CustomElementConstructor) => definitions.set(name, ctor),
-  } as unknown as CustomElementRegistry;
-
-  registerOpenUi(registry);
-  registerOpenUi(registry);
-  // EVERY component in the frozen roster is authored as a function component:
-  // its element class is build-emitted from the manifest declaration and
-  // defined by the island entry, so the manual table has no rows left.
-  // `open-button` and `open-input` were the last two class-authored modules.
-  // The function stays published and must remain safe to call repeatedly.
-  expect(definitions.size).toEqual(0);
+test('open-ui - the bulk registration surface is RETIRED, not merely empty', async () => {
+  // `registerOpenUi` was an empty compatibility surface: it registered nothing
+  // because every first-party element migrated to the generated lane. Its own
+  // shim entry (#28) said "delete with the next breaking alpha", and alpha.16 is
+  // that alpha, so it is GONE rather than still published-and-empty.
+  const root = await import('../src/index.ts');
+  expect('registerOpenUi' in root).toEqual(false);
+  // The exit is a retirement, not a gap: every element is still exported and
+  // still registers itself through the build (the next test pins that).
+  expect(root.manifest).toBeDefined();
 });
 
 test('open-ui - every component module exports the function-component face', async () => {

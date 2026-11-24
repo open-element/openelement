@@ -34,7 +34,7 @@ test.describe('generated element page consumers (M11-2)', () => {
     const response = await request.get('/generated');
     expect(response.status()).toBe(200);
     const html = await response.text();
-    expect(html).toContain('<generated-page-card');
+    expect(html).toMatch(/<generated-page-card\b[^>]*\bdata-oe-page-root=""/);
     expect(html).toContain('<template shadowrootmode="open">');
     // Authored content comes from the loader + descriptor props projector.
     expect(html).toContain('Generated page — SSG');
@@ -55,7 +55,7 @@ test.describe('generated element page consumers (M11-2)', () => {
     const response = await request.get('/generated-live');
     expect(response.status()).toBe(200);
     const html = await response.text();
-    expect(html).toContain('<generated-page-live');
+    expect(html).toMatch(/<generated-page-live\b[^>]*\bdata-oe-page-root=""/);
     expect(html).toContain('Generated page — request time');
     expect(html).toContain('served from dist/server');
   });
@@ -66,7 +66,7 @@ test.describe('generated element page consumers (M11-2)', () => {
     const response = await request.get('/generated-boom');
     expect(response.status()).toBe(500);
     const html = await response.text();
-    expect(html).toContain('<generated-page-boom');
+    expect(html).toMatch(/<generated-page-boom\b[^>]*\bdata-oe-page-root=""/);
     expect(html).toContain('Generated page — error boundary');
     expect(html).toContain('error projector rendered');
   });
@@ -85,7 +85,7 @@ test.describe('generated element page consumers (M11-2)', () => {
     const empty = await request.post('/generated-live', { form: { value: '' } });
     expect(empty.status()).toBe(422);
     const emptyHtml = await empty.text();
-    expect(emptyHtml).toContain('<generated-page-live');
+    expect(emptyHtml).toMatch(/<generated-page-live\b[^>]*\bdata-oe-page-root=""/);
     expect(emptyHtml).toContain('generated action: value required');
 
     const filled = await request.post('/generated-live', { form: { value: 'ok' } });

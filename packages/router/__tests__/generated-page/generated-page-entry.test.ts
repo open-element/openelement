@@ -108,17 +108,6 @@ describe('generated element page build facts', () => {
     expect(entry).toContain('tagName: "profile-card"');
   });
 
-  test('streaming a generated page fails closed at build (no runtime guard emitted)', () => {
-    const streamRoute = {
-      ...GENERATED_ROUTE,
-      streamManifest: {
-        program: { version: 2, tag: 'profile-card', sha256: 'x' },
-        fields: [{ field: 'deferred' }],
-      },
-    } as unknown as RouteEntry;
-    expect(() => buildEntryDescriptor([streamRoute], options())).toThrow(/synchronous-SSR only/);
-  });
-
   test('two routes sharing one generated island fail closed (descriptor overwrite)', () => {
     const secondRoute = {
       ...GENERATED_ROUTE,
@@ -155,7 +144,8 @@ describe('generated element page build facts', () => {
         islandsDir: 'app/islands',
       }),
     );
-    expect(entry).toContain('__resolvePageTag($pageAbout, "about-page")');
+    expect(entry).toContain('let __tag = "about-page"');
+    expect(entry).not.toContain('__resolvePageTag');
     expect(entry).not.toContain('pageKind: "generated-element-page"');
     expect(entry).not.toContain('generated-page');
   });

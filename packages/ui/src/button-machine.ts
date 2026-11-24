@@ -58,21 +58,39 @@ export function activateButton(host: ButtonHost, event: Event, publishClick: () 
 /**
  * Submit `form` on behalf of the host (#637).
  *
- * The native `submit` event is NOT composed, so it never crosses a shadow
- * boundary — and open-button typically lives inside another custom element's
- * shadow root. Re-dispatching a composed, cancelable `submit` lets the
- * enhancement layer's delegated handler (form-enhance.ts onSubmit, bound per
- * document/shadow root) intercept it, and only an un-intercepted submit falls
- * through to `requestSubmit()` (which would cause native GET navigation).
+ * `requestSubmit()` runs native constraint validation and dispatches exactly
+ * one native submit event. The router's enhancement handler is attached to the
+ * form's containing shadow root, so it sees that event without a synthetic
+ * composed event from the custom control's separate shadow root.
  */
 export function submitForm(form: HTMLFormElement): void {
-  const SubmitEventCtor = (globalThis as { SubmitEvent?: typeof SubmitEvent }).SubmitEvent;
-  const submitEvent: Event = SubmitEventCtor
-    ? new SubmitEventCtor('submit', { bubbles: true, cancelable: true, composed: true })
-    : new Event('submit', { bubbles: true, cancelable: true, composed: true });
-  form.dispatchEvent(submitEvent);
-  if (submitEvent.defaultPrevented) return;
-  const formEl = form as HTMLFormElement & { requestSubmit?: () => void; submit: () => void };
-  if (typeof formEl.requestSubmit === 'function') formEl.requestSubmit();
-  else formEl.submit();
+  const formEl = form as HTMLFormElement & {
+    requestSubmit?: () => void;
+    reportValidity?: () => boolean;
+    checkValidity?: () => boolean;
+    submit: () => void;
+  };
+
+  const validForSubmit = (): boolean => {
+    if (form.noValidate) return true;
+    if (typeof formEl.reportValidity === 'function') return formEl.reportValidity();
+    if (typeof formEl.checkValidity === 'function') return formEl.checkValidity();
+    return true;
+  };
+
+  const submitWithoutEvent = (): void => {
+    // A control named "submit" masks the form's method on the instance. Call
+    // the platform method from the prototype when it is available.
+    const prototypeSubmit = Object.getPrototypeOf(form)?.submit as
+      | ((this: HTMLFormElement) => void)
+      | undefined;
+    const submit = typeof prototypeSubmit === 'function' ? prototypeSubmit : formEl.submit;
+    if (typeof submit === 'function') submit.call(form);
+  };
+
+  if (typeof formEl.requestSubmit === 'function') {
+    formEl.requestSubmit.call(form);
+    return;
+  }
+  if (validForSubmit()) submitWithoutEvent();
 }

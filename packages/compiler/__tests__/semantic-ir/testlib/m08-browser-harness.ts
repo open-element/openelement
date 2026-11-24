@@ -23,9 +23,22 @@ import { build } from 'vite';
 import { compileFunctionModule } from '../../../src/internal/compiler/semantic-core/function-frontend.ts';
 import { generateLeafModule } from '../../../src/internal/compiler/semantic-ir/generated-leaf/generate.ts';
 import * as compiledRuntime from '../../../../element/src/internal/compiled/runtime.ts';
+// ADR-0183 D-4: a generated module creates its root `signal`/`computed`
+// resources through the same narrow entry the emitted import names, so the
+// injected runtime must carry the two factories.
+import * as signalFramework from '../../../../element/src/internal/signal/framework.ts';
+// alpha16 nested-expansion: a generated `__ssr` routes every dash tag through
+// this ONE helper. The node-side instantiation needs it for the same reason the
+// browser bundle does: the emitted producer calls it at render time.
+import { nestedHost } from '../../../../element/src/internal/compiled/runtime/nested-host.ts';
 import { ELEMENT_CLASSIFIER as CLASSIFIER, REPO_ROOT } from './element-classifier.ts';
 
-const RUNTIME = { ...compiledRuntime };
+const RUNTIME = {
+  ...compiledRuntime,
+  nestedHost,
+  signal: signalFramework.signal,
+  computed: signalFramework.computed,
+};
 const SSR_EXPORT = /^export function ([\w$]+)\(/gm;
 const RUNTIME_IMPORT = /^import \{([^}]+)\} from [^;]+;$/m;
 
@@ -164,13 +177,15 @@ export async function buildRuntimeBundle(): Promise<RuntimeBundle> {
     entry,
     [
       `export { claimRecipe, createRecipe, insertRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
+      `export { reconcileEachEntries } from ${JSON.stringify(join(runtime, 'each-reconcile.ts'))};`,
       `export { bindSignalWrites, runUntracked } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
       `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
-      `export { assertEachAnchor, assertEachEndMarker, assertElementInHtmlNamespace, assertStaticAttributeSeed, assertTextSlotMarker, assertWhenAnchor, assertWhenEndMarker, entrySeedMismatch, isEachEndMarker, isWhenEndMarker, leafClaimMismatch, readEntryKeyMarker } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
+      `export { assertEachAnchor, assertEachEndMarker, assertElementInHtmlNamespace, assertNestedHostStaticAttributeSeed, assertStaticAttributeSeed, assertTextSlotMarker, assertWhenAnchor, assertWhenEndMarker, entrySeedMismatch, isEachEndMarker, isExpandedLightRootHost, isWhenEndMarker, leafClaimMismatch, readEntryKeyMarker } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
       `export { emitComment, entryKeyMarker, MARKERS, markerText, parseEachMarker, parseEntryKeyMarker, parseRangeMarker, parseTextSlotMarker, rangeMarker, textSlotMarker } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
       `export { encodeListKey, tryEncodeListKey } from ${JSON.stringify(join(runtime, 'list-key.ts'))};`,
       `export { claimStaticSiblingRange, openStaticSiblingDirectory } from ${JSON.stringify(join(runtime, 'static-sibling-ranges.ts'))};`,
       `export { runtimeProbe } from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
+      `export { nestedHost } from ${JSON.stringify(join(runtime, 'nested-host.ts'))};`,
       `export { escapeText } from ${JSON.stringify(join(element, 'compiled/escape-text.ts'))};`,
       `export { escapeAttrValue } from ${JSON.stringify(join(element, 'core/html-escape.ts'))};`,
       `export { LifetimeScope } from ${JSON.stringify(join(element, 'compiled/lifetime-scope.ts'))};`,

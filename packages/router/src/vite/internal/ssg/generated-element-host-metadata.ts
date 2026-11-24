@@ -185,7 +185,7 @@ export interface ResolveGeneratedElementHostInput {
    * Only used to name the no-producer case; the host decision itself is the
    * compiler's `ssrHostExport` result.
    */
-  readonly root: 'light' | 'shadow' | undefined;
+  readonly root: 'light' | 'shadow' | 'closed' | undefined;
   /**
    * The one host-side site fact. The host resolves it through the existing
    * `createGeneratedElementSiteResolver` identity helper; null means this host
@@ -255,7 +255,11 @@ export function resolveGeneratedElementHost(
   // `null` from an admitted module means the emitter made no host wrapper. The
   // authored root names the two lawful reasons apart: a shadow root lost the
   // `<Name>__ssr` producer, a light/absent root never had one by design.
-  return input.root === 'shadow'
+  // A CLOSED root is a shadow root (F16): it has a DSD template to carry a marked
+  // link and a host producer to wrap it, so treating it as "light, no producer by
+  // design" would report the one honest refusal reason for a module that simply
+  // lost its `<Name>__ssr`.
+  return input.root === 'shadow' || input.root === 'closed'
     ? { kind: 'missing-producer', component: compiled.component }
     : { kind: 'light-no-producer', component: compiled.component };
 }

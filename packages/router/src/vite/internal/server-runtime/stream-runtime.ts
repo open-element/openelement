@@ -48,7 +48,6 @@ import { ErrorCode, OpenElementError } from '@openelement/protocol/errors';
 import { errorToEnvelope } from '@openelement/protocol/diagnostics';
 import { isOpenElementNotFound, isOpenElementRedirect } from '../../../authoring.ts';
 import { describeError, serveError, StreamErrorCode } from '../../../internal/error-codes.ts';
-import type { DocumentStyleSink } from './renderer-runtime.ts';
 import type { StreamRouteManifest } from '@openelement/protocol/ssg';
 
 /** One declared deferred field's settlement record (the pump's queue unit). */
@@ -502,95 +501,12 @@ export function createStreamBody(config: StreamBodyConfig): StreamBodyFn {
   };
 }
 
-/**
- * The entry bindings the stream-shell gate reads. `streamManifests` is the
- * generated `__streamManifests` build data; the executor creator is the
- * entry's `createStreamShellExecutor` Element import, injected so this module
- * stays free of an Element runtime edge (#1339).
+/*
+ * The per-route shell gate (createStreamPageShell) retired with the class
+ * lane's compiled stream channel (C10, 2026-11-24): no emitted entry carries
+ * a stream manifest, and the Part-Program identity read the gate depended
+ * on is gone with the class compiler. Alpha18 owns the replacement carrier.
  */
-export interface StreamPageShellConfig {
-  /** The entry's serialized route→stream-manifest build data (`__streamManifests`). */
-  streamManifests: Record<string, StreamRouteManifest>;
-  /**
-   * The entry's `createStreamShellExecutor` import — the stream shell it
-   * produces is the pump's executor view.
-   */
-  createStreamShellExecutor: (options: {
-    componentClass: unknown;
-    props?: unknown;
-    manifest: StreamRouteManifest;
-    instanceId: string;
-    documentToken?: string;
-    /** The streamed document's stylesheet collection (alpha15 S lane, S-C1.2). */
-    documentStyles?: DocumentStyleSink;
-  }) => Promise<StreamExecutorView>;
-}
-
-/**
- * The per-route shell gate the streamed handlers await before any streamed
- * document exists: the route must resolve its build manifest, the page class
- * must carry the compiled Part Program, and both must agree on tag and
- * program version — the gate fails closed with the route before the executor
- * re-verifies the wire hash (#1276 B1.3-F1). Bound to the entry's serialized
- * manifests and its `createStreamShellExecutor` import; the returned gate is
- * the `__createStreamPageShell` call site (Amendment 1 — the last
- * runtime function body that stayed emitted for its oracle pin).
- */
-export function createStreamPageShell(
-  config: StreamPageShellConfig,
-): (
-  route: string,
-  routeModule: unknown,
-  props: unknown,
-  instanceId: string,
-  documentToken: string,
-  documentStyles?: DocumentStyleSink,
-) => Promise<StreamExecutorView> {
-  const { streamManifests, createStreamShellExecutor } = config;
-  return async function __createStreamPageShell(
-    route,
-    routeModule,
-    props,
-    instanceId,
-    documentToken,
-    documentStyles,
-  ) {
-    const manifest = streamManifests[route];
-    const Cls = (
-      routeModule as
-        | {
-            default?: { __partProgram?: { tag: unknown; version: unknown } };
-          }
-        | undefined
-        | null
-    )?.default;
-    if (
-      !manifest ||
-      !Cls?.__partProgram ||
-      Cls.__partProgram.tag !== manifest.program.tag ||
-      Cls.__partProgram.version !== manifest.program.version
-    ) {
-      throw serveError(
-        StreamErrorCode.ROUTE_PROGRAM_MISMATCH,
-        '[openElement] stream route ' + route + ' has no matching compiled route manifest/program.',
-      );
-    }
-    // `return await` (not a bare return) keeps this an async function in the
-    // linter's eyes, so the fail-closed check above rejects instead of
-    // throwing synchronously.
-    return await createStreamShellExecutor({
-      componentClass: Cls,
-      props,
-      manifest,
-      instanceId,
-      documentToken,
-      // The streamed document owns the shell's light-root stylesheets
-      // (alpha15 S lane, S-C1.2): the shell reports them into the same
-      // collection the document halves serialize from.
-      documentStyles,
-    });
-  };
-}
 
 /**
  * The browser installer bootstrap — the inline head script of every streamed

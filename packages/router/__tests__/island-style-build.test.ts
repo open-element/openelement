@@ -126,21 +126,24 @@ async function createFixture(): Promise<string> {
     generatedIslandSource(STYLED_TAG, { styles: true }),
   );
   await write(join(appDir, 'app', 'islands', `${PLAIN_TAG}.tsx`), generatedIslandSource(PLAIN_TAG));
+  // The page is a generated SHADOW page root: classification requires the
+  // compiler-emitted DSD host producer, which a light root does not have. Its
+  // tag is declared because `app/components/` is outside the islands directory,
+  // so no path convention owns it.
   await write(
     join(appDir, 'app', 'components', 'proof-page.tsx'),
     [
-      "import { element, OpenElement } from '@openelement/element';",
+      "import { defineIslandConfig } from '@openelement/router';",
       '',
-      "@element('gen-style-page', { root: 'shadow-open' })",
-      'export default class ProofPage extends OpenElement {',
-      '  render() {',
-      '    return (',
-      "      <div class='proof'>",
-      '        <gen-style-card></gen-style-card>',
-      '        <gen-style-plain></gen-style-plain>',
-      '      </div>',
-      '    );',
-      '  }',
+      "export const openElement = defineIslandConfig({ tag: 'gen-style-page', root: 'shadow' });",
+      '',
+      'export default function ProofPage() {',
+      '  return (',
+      "    <div class='proof'>",
+      '      <gen-style-card></gen-style-card>',
+      '      <gen-style-plain></gen-style-plain>',
+      '    </div>',
+      '  );',
       '}',
       '',
     ].join('\n'),
@@ -148,17 +151,19 @@ async function createFixture(): Promise<string> {
   await write(
     join(appDir, 'app', 'components', 'proof-live-page.tsx'),
     [
-      "import { element, OpenElement } from '@openelement/element';",
+      "import { defineIslandConfig } from '@openelement/router';",
       '',
-      "@element('gen-style-live-page', { root: 'shadow-open' })",
-      'export default class ProofLivePage extends OpenElement {',
-      '  render() {',
-      '    return (',
-      "      <div class='proof-live'>",
-      '        <gen-style-card></gen-style-card>',
-      '      </div>',
-      '    );',
-      '  }',
+      'export const openElement = defineIslandConfig({',
+      "  tag: 'gen-style-live-page',",
+      "  root: 'shadow',",
+      '});',
+      '',
+      'export default function ProofLivePage() {',
+      '  return (',
+      "    <div class='proof-live'>",
+      '      <gen-style-card></gen-style-card>',
+      '    </div>',
+      '  );',
       '}',
       '',
     ].join('\n'),
@@ -378,21 +383,36 @@ test('the emitted island chunks carry no CSS text (zero-inline guarantee)', () =
   }
 });
 
-test('the styles declaration adds zero JS bytes to any island or shared chunk', () => {
+test("a client-only island's styles declaration adds its sheet import — and nothing to the shared chunks", () => {
   expect(plainBuild.code).toBe(0);
-  // The two builds differ ONLY in the styled island's sidecar line: that island
-  // declares the sheet in build A and declares none in build B, with the same
-  // authored source positions. The compiled program therefore cannot depend on
-  // the declaration, and every emitted chunk except the client entry (whose
-  // island-chunk map renames with the hash) must be byte-identical — including
-  // the styled island's own chunk, the unstyled sibling's chunk and the shared
-  // runtime/services/helper chunks.
+  expect(styledBuild.code).toBe(0);
+  // 2026-11-20 (the `ssr: false` client style-adoption slice): the fixture's
+  // styled island is CLIENT-ONLY by default (`ssr: false`), so its declaration
+  // now adds the module-graph edge its sheet needs — a real `.css` import that
+  // the router's style intercept answers with the sheet adapter, plus the
+  // descriptor `styles` row the shell adopts. This test used to pin the
+  // opposite ("zero JS bytes"), which was true only while the declaration was
+  // pure build metadata: the same island rendered completely unstyled in the
+  // browser. The declaration is still ONE fact — the emitted asset, the client
+  // asset manifest entry and the server-side document link are untouched.
   const styledIslandName = islandChunkName(styledArtifacts, STYLED_TAG);
   const plainIslandName = islandChunkName(plainArtifacts, STYLED_TAG);
   expect(styledIslandName).toBeDefined();
-  expect(plainIslandName).toEqual(styledIslandName);
+  expect(plainIslandName).toBeDefined();
+  expect(plainIslandName).not.toEqual(styledIslandName);
+  const styledChunk = styledArtifacts.get(styledIslandName!)!.toString('utf8');
+  // The emitted import resolved to the ONE content-addressed asset: the adapter
+  // in the chunk fetches exactly the file the build emitted and the manifest
+  // records (no second asset, no inlined CSS text).
+  const cssFile = styledCssAssets[0]!;
+  expect(styledChunk).toContain(cssFile);
+  expect(styledChunk).not.toContain('color:#010203');
+  // Every OTHER island and shared chunk stays byte-identical: the declaration
+  // adds work to the island that declares it, never to a sibling or the
+  // runtime.
   for (const [name, bytes] of plainArtifacts) {
     if (name === 'client.js') continue; // the entry's island-chunk map names the hashes
+    if (name === plainIslandName) continue;
     expect(styledArtifacts.has(name), `${name} must exist in the styled build`).toBe(true);
     expect(styledArtifacts.get(name)!.equals(bytes), `${name} must be byte-identical`).toBe(true);
   }

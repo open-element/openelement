@@ -69,18 +69,39 @@ export function deliveredIslandStyleTags(
  */
 export function islandStyleEntryLinks(
   assets: ReadonlyMap<string, readonly string[]>,
-  shadowTags: ReadonlySet<string>,
+  /**
+   * Every styled generated island's tag — shadow AND light (F16).
+   *
+   * This used to be the SHADOW set only, because the entry seeded these URLs into
+   * DSD templates. A LIGHT child nested inside a shadow tree needs its urls here
+   * too: it owns no template, so its sheets belong to the ENCLOSING template, and
+   * the enclosing producer finds them through this map (the runtime lift channel).
+   * The shadow-only row was the reason a nested light card rendered unstyled.
+   */
+  styledTags: ReadonlySet<string>,
   utilitySheetUrls: readonly string[],
   utilityRequiredTags: ReadonlySet<string>,
 ): Array<[string, readonly string[]]> {
   const entries: Array<[string, readonly string[]]> = [];
   for (const [tag, urls] of assets) {
-    if (!shadowTags.has(tag)) continue;
+    if (!styledTags.has(tag)) continue;
     const links =
       utilityRequiredTags.has(tag) && utilitySheetUrls.length > 0
         ? [...urls, ...utilitySheetUrls]
         : [...urls];
     entries.push([tag, links]);
+  }
+  // A shadow component whose ONLY styling is utility classes has no authored
+  // asset to appear in `assets` (P-2, 2026-11-21 — measured on the TSX-only
+  // Tailwind probe). Its DSD template still needs the shared component sheet, so
+  // the tag's entry is created here instead of being dropped for lack of an
+  // authored URL.
+  if (utilitySheetUrls.length > 0) {
+    const emitted = new Set(entries.map(([tag]) => tag));
+    for (const tag of utilityRequiredTags) {
+      if (!styledTags.has(tag) || emitted.has(tag)) continue;
+      entries.push([tag, [...utilitySheetUrls]]);
+    }
   }
   return entries;
 }
@@ -139,6 +160,15 @@ export interface BuildRouteDocumentStyleLinksInput {
    * plain JSX reference to an unrelated custom element contributes nothing.
    */
   lightIslandTags: ReadonlySet<string>;
+  /**
+   * Route path -> the sheets a PAGE MODULE declares for itself (P-2b, 2026-11-21).
+   *
+   * A generated light page's own box rule is not an island's sheet, and no JSX
+   * reference can carry it: the page module IS the root. The build registers that
+   * declaration under the page's tag, so this map is the resolved form and the
+   * route's link list starts from it instead of from a reference walk.
+   */
+  pageModuleStyleUrls?: ReadonlyMap<string, readonly string[]>;
   /** Delivered tag → emitted, base-joined stylesheet URLs from Phase 2. */
   islandStyleUrls: ReadonlyMap<string, readonly string[]>;
   /** The walk's module bound (production default when omitted). */
@@ -217,9 +247,15 @@ export async function buildRouteDocumentStyleLinks(
   for (const route of pageRoutes) {
     const seed = resolve(routeRoot, route.filePath);
     const tags = referencedLightTags(seed, edges, referencedTags, input.lightIslandTags);
-    if (tags.length === 0) continue;
+    const pageModuleUrls = input.pageModuleStyleUrls?.get(route.path) ?? [];
+    if (tags.length === 0 && pageModuleUrls.length === 0) continue;
     const urls: string[] = [];
     const seen = new Set<string>();
+    for (const url of input.pageModuleStyleUrls?.get(route.path) ?? []) {
+      if (seen.has(url)) continue;
+      seen.add(url);
+      urls.push(url);
+    }
     for (const tag of tags) {
       const tagUrls = input.islandStyleUrls.get(tag);
       if (tagUrls === undefined || tagUrls.length === 0) {

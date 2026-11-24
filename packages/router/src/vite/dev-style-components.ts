@@ -36,18 +36,31 @@
  */
 
 import process from 'node:process';
+import { join, resolve } from 'pathe';
 import type { Plugin, ViteDevServer } from 'vite';
 import { createLogger } from '@openelement/element';
+import { readComponentDeclaration } from './internal/component-declaration.ts';
 import { collectShadowClassCandidates } from './internal/collect-shadow-candidates.ts';
 import { STYLE_LINKS_VIRTUAL_ID } from './internal/element-style-links.ts';
-import { islandStyleDeclarations } from './internal/island-style-declarations.ts';
+import {
+  islandStyleDeclarationFor,
+  islandStyleDeclarations,
+  type IslandStyleDeclaration,
+} from './internal/island-style-declarations.ts';
+import { DEFAULT_ISLANDS_DIR } from './internal/paths.ts';
 import { devAuthoredIslandStyleUrls } from './internal/style-assets.ts';
+import { compileGeneratedElementIfAdmitted } from '@openelement/compiler';
+import { readFileSync } from 'node:fs';
 import type { DevStyleSession } from './internal/dev-style-session.ts';
 import { reportRecoveryFailure } from './internal/build-diagnostics.ts';
 import { devClientModulePath } from './internal/dev-client-path.ts';
+import { serverComponentAdmissionTags } from './internal/server-component-host.ts';
 import type { OpenPluginState } from './plugin-config.ts';
 
 const log = createLogger('router-vite:style-components-dev');
+
+/** Module-graph id for the dev provider of `virtual:open-element-style-links`. */
+export const DEV_STYLE_LINKS_MODULE_ID = '\0open-element-style-links-dev.js';
 
 /**
  * The public dev URL of the served component stylesheet.
@@ -99,20 +112,162 @@ function devSheetAdapterModule(url: string): string {
   ].join('\n');
 }
 
+/**
+ * One generated island's dev style facts: the declaration carrier's record when
+ * the island declares `styles`, otherwise the island scan's identity plus the
+ * sidecar root it reads (F16).
+ *
+ * A SHADOW island whose only styling is TSX utilities declares no `styles` — the
+ * carrier only carries DECLARED sheets — so building the DSD link list from the
+ * carrier alone dropped the component-sheet link for exactly the host that
+ * needs it. The class lane gets the fact from its `__oeUtilityClasses` static;
+ * the generated lane's only equivalent is the compiler-proven class tokens, and
+ * the island scan is the authoritative inventory of modules to ask.
+ */
+interface DevIslandStyleFacts {
+  /** The island's delivery tag (the DSD map key). */
+  readonly tagName: string;
+  /** The module's absolute id (`islandStyleDeclarationFor`'s spelling). */
+  readonly moduleId: string;
+  /** The descriptor root the island declares (the shell's light default when absent). */
+  readonly root: 'light' | 'shadow' | 'closed';
+  /** The carrier record, when the island declares sheets. */
+  readonly declaration?: IslandStyleDeclaration;
+}
+
+/**
+ * Every generated island the dev channel can carry a style fact for: the
+ * declaration carrier UNIONED with the island scan (F16).
+ *
+ * The union is what makes the class-only shadow island reachable: it has no
+ * carrier record, so the carrier alone can never name it. The scan's answer is
+ * the same inventory the build's Phase 1 discovery uses — this module adds no
+ * second scan, it asks the one scan for the modules it already found.
+ */
+function devIslandStyleFacts(root: string, state: OpenPluginState): DevIslandStyleFacts[] {
+  const facts: DevIslandStyleFacts[] = islandStyleDeclarations().map((declaration) => ({
+    tagName: declaration.tagName,
+    moduleId: declaration.moduleId,
+    root: declaration.root,
+    declaration,
+  }));
+  const islandsDir = state.resolvedOptions.islandsDir || DEFAULT_ISLANDS_DIR;
+  const islandFiles = state.ctx.phase1.islandFiles ?? [];
+  const islandTagNames = state.ctx.phase1.islandTagNames ?? [];
+  for (const [index, file] of islandFiles.entries()) {
+    const tagName = islandTagNames[index];
+    if (tagName === undefined) continue;
+    const moduleId = join(root, islandsDir, file);
+    // The carrier is AUTHORITATIVE for an island it knows: its record carries the
+    // scan-resolved root and the validated specifiers, and re-deriving them here
+    // would be the second interpretation this channel's design forbids.
+    if (islandStyleDeclarationFor(moduleId) !== undefined) continue;
+    let source: string;
+    try {
+      source = readFileSync(moduleId, 'utf8');
+    } catch {
+      // A deleted island: the registry removal owns that fact (the watcher
+      // forgets the module); this list must not invent a sheet for it.
+      continue;
+    }
+    // The path-derived tag is the reader's fallback identity: a generated island
+    // carries no `tag` in its sidecar.
+    const reading = readComponentDeclaration(source, tagName);
+    // `declared` is the generated lane's own admission. `absent` means another
+    // lane owns the module; `invalid` is the transform's diagnostic to report.
+    if (reading.kind !== 'declared') continue;
+    facts.push({ tagName, moduleId, root: reading.declaration.root ?? 'light' });
+  }
+  // Page-reachable generated sidecars are registered in the SSR entry but are
+  // not necessarily under islandsDir. Include their compiler-scanned roots in
+  // the same DSD style map so a static shadow layout can declare the shared
+  // component sheet and a nested light sidecar can lift any authored sheets.
+  for (const component of state.ctx.phase1.staticComponents ?? []) {
+    if (component.generatedHostExport === undefined) continue;
+    if (facts.some((fact) => fact.tagName === component.tagName)) continue;
+    facts.push({
+      tagName: component.tagName,
+      moduleId: resolve(root, component.modulePath.replace(/^\/+/, '')),
+      root: component.root ?? 'light',
+    });
+  }
+  return facts;
+}
+
+/** Whether one island's authored source statically admits any class token. */
+function islandSourceHasClassTokens(moduleId: string, tagName: string): boolean {
+  try {
+    const source = readFileSync(moduleId, 'utf8');
+    // The same compile the transform runs: the module's own sidecar is the root
+    // fact, so a class-only shadow island's utility channel is emitted exactly as
+    // the SSR module was emitted (the `site` fact names the tag only).
+    const compiled = compileGeneratedElementIfAdmitted(source, moduleId, {
+      site: { tag: tagName },
+    });
+    return compiled !== null && compiled.classCandidates.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether a generated shadow island needs the shared component sheet at all.
+ *
+ * The dev DSD's link list must not depend on WHEN the candidate registry was
+ * filled: the SSR pass and the transform race, so a link list built before the
+ * registration would drop a sheet that exists. The authored module decides, and
+ * the sheet endpoint re-compiles from the live registry on every request — so
+ * this only answers "does this host need the component sheet?".
+ */
+function generatedIslandHasClasses(moduleId: string, state: OpenPluginState): boolean {
+  if (state.classCandidates.forModule(moduleId).length > 0) return true;
+  const declaration = islandStyleDeclarationFor(moduleId);
+  if (declaration === undefined) return false;
+  return islandSourceHasClassTokens(declaration.moduleId, declaration.tagName);
+}
+
 export function devStyleComponentsPlugin(state: OpenPluginState, session: DevStyleSession): Plugin {
   let root = process.cwd();
   let base = '/';
-  const styleLinksId = '\0open-element-style-links-dev.js';
+  const styleLinksId = DEV_STYLE_LINKS_MODULE_ID;
   const adapterId = '\0oe-style-components-dev.js';
   const engine = (): string => session.current()?.provider.id ?? 'style';
   const currentCss = async (): Promise<string> => {
     const provider = session.current()?.provider;
     if (provider === undefined) return '';
+    // Registration is the transform's job, but a sheet request can arrive before
+    // the module holding the declaring component has been transformed (a DSD
+    // link is fetched as soon as the document parses). Answering from a partial
+    // registry would serve an empty sheet under a URL the browser keeps — so a
+    // declared SHADOW island with no registered tokens is registered here first,
+    // through the SAME collector the watcher and the build use (one writer, no
+    // second parser).
+    //
+    // The same pass also repairs the class-only shadow island's SCOPE (F16): the
+    // dev transform registers that module's tokens with the site fact's root,
+    // and the site fact states the root only for a module the declaration carrier
+    // knows — so a TSX-only shadow island's utilities were registered LIGHT and
+    // `allShadow()` below compiled nothing. Re-registering it here, with the
+    // island scan's path tag as the declaration reader's fallback, puts the
+    // tokens in the scope the component sheet compiles from. The collector is
+    // authoritative per module, so this is a correction, not a duplicate fact.
+    for (const facts of devIslandStyleFacts(root, state)) {
+      if (facts.root === 'light') continue;
+      await collectShadowClassCandidates({
+        root,
+        modules: [{ path: facts.moduleId, tag: facts.tagName }],
+        candidates: state.classCandidates,
+      });
+    }
     // Always compile for the CURRENT candidate set and the CURRENT generator,
     // never from a cache: the served URL is stable by design (see the URL's
     // note), so the response is the only place the compiled sheet can be
     // fresh — including after the engine's configuration has been rebuilt.
     return await provider.compileComponents({
+      // Every admitted candidate, matching the build's component sheet. A
+      // light-root generated child can render inside a shadow tree, where the
+      // document sheet cannot reach; the enclosing DSD's shared sheet must carry
+      // its utilities too.
       candidates: state.classCandidates.all(),
       sources: new Map(),
     });
@@ -273,6 +428,15 @@ export function devStyleComponentsPlugin(state: OpenPluginState, session: DevSty
     },
 
     resolveId(id) {
+      // The style-links id is answered FIRST and WITHOUT a provider (F16). The
+      // generated dev entry imports the production `STYLE_LINKS_VIRTUAL_ID`
+      // unconditionally, and the build-path plugin answers it with an EMPTY list —
+      // so a fixture with no style engine declared its sheets, got no URLs, and the
+      // renderer failed closed on `OEIR_LEAF_MISSING_VALUE: styleLinks`. Requiring
+      // a provider here is what let the empty answer win: an island's `styles`
+      // declaration is authored regardless of which style engine, if any, is
+      // configured.
+      if (id === STYLE_LINKS_VIRTUAL_ID) return styleLinksId;
       const current = session.current();
       if (current === undefined) return null;
       // The sheet never enters Vite's module graph: it is served as a plain
@@ -280,13 +444,16 @@ export function devStyleComponentsPlugin(state: OpenPluginState, session: DevSty
       // would make Vite wrap the sheet in its dev style-injector, which writes
       // a <style> node at runtime — exactly what this lane forbids.
       if (id === current.provider.componentSheetSpecifier) return adapterId;
-      if (id === STYLE_LINKS_VIRTUAL_ID) return styleLinksId;
       return null;
     },
 
     load(id) {
-      const current = session.current();
-      if (current === undefined) return null;
+      // No `session.current()` read here: the style-links module does NOT depend on
+      // the configured style provider —
+      // it answers "which declared sheets do these islands have", and an island's
+      // `styles` declaration is authored regardless. Requiring a provider here made
+      // every declared sheet vanish in a fixture with no style engine, and the
+      // renderer then failed closed on `OEIR_LEAF_MISSING_VALUE: styleLinks` (F16).
       if (id === styleLinksId) {
         // M09-2e / #1803: a generated SHADOW island's declared sheets are
         // declared inside its DSD template. Dev has no emitted asset, so the
@@ -295,28 +462,98 @@ export function devStyleComponentsPlugin(state: OpenPluginState, session: DevSty
         // CSS processing, a stable dev URL per edge. The renderer therefore
         // gets real URLs in dev instead of the explicit `null` it fails closed
         // on.
-        const devIslandStyles = islandStyleDeclarations()
-          .filter((declaration) => declaration.root === 'shadow')
-          .map(
-            (declaration) =>
-              [declaration.tagName, [...devAuthoredIslandStyleUrls(base, declaration)]] as const,
-          );
+        // BOTH roots (F16). A shadow host's urls seed its own DSD template; a LIGHT
+        // host's urls are needed here because a light child nested inside a shadow
+        // tree cannot declare anything itself — its content lands in the ENCLOSING
+        // template, which resolves the urls through this map. Filtering to shadow
+        // was why a light-root generated island got no dev URL at all: no document
+        // link, no adoption, unstyled in dev only (the build path delivered it).
+        // P-1c (2026-11-21): a GENERATED shadow island's class tokens compile into
+        // the one shared component sheet, and its DSD template must declare that
+        // endpoint beside its authored assets. The class lane gets this for free
+        // (its `static styles` and its utility fact both point at that sheet); the
+        // generated lane has no class static, so the DECLARATION + the compiler's
+        // static class tokens are the facts that say "this host needs it". Build
+        // and dev must agree — a component styled in one and not the other is the
+        // drift KR-4 forbids.
+        //
+        // The facts come from the carrier UNIONED with the island scan (F16). A
+        // class-only shadow island declares no `styles`, so the carrier alone can
+        // never name it: its tokens live in the shared component sheet and its DSD
+        // template had no link parameter at all. The scan's inventory is the only
+        // source that can name it, and the class tokens are the compiler's own
+        // fact (the same `compileGeneratedElementIfAdmitted` the transform ran).
+        //
+        // Only when a style engine is CONFIGURED: with no provider there is no
+        // shared component sheet at that URL, and publishing it put a URL in the
+        // declared-sheet channel that nothing serves — measured as
+        // `style-components.current.css` sitting where the fixture's own authored
+        // edge should have been.
+        const providerActive = session.current() !== undefined;
+        const devIslandStyles: Array<readonly [string, readonly string[]]> = [];
+        for (const facts of devIslandStyleFacts(root, state)) {
+          const urls: string[] = [];
+          if (facts.declaration !== undefined) {
+            urls.push(...devAuthoredIslandStyleUrls(base, facts.declaration));
+          }
+          const hasClasses =
+            facts.declaration === undefined
+              ? islandSourceHasClassTokens(facts.moduleId, facts.tagName)
+              : generatedIslandHasClasses(facts.moduleId, state);
+          // A scan-only fact exists because the island is NOT in the carrier, and
+          // its only possible URL is the shared component sheet. A LIGHT root's
+          // classes are the DOCUMENT sheet's business — the component sheet is
+          // compiled from the shadow view — so a light, styeless island has no
+          // per-tag resource to publish (the build links nothing for it either).
+          const componentSheet =
+            hasClasses &&
+            providerActive &&
+            (facts.declaration !== undefined || facts.root !== 'light');
+          if (componentSheet) urls.push(devComponentSheetUrl(base, engine()));
+          if (urls.length === 0) continue;
+          devIslandStyles.push([facts.tagName, [...new Set(urls)]]);
+        }
+        // A LIGHT-root island's content lands in the DOCUMENT, so its sheet is a
+        // document resource — it belongs in the global list, not only in the
+        // per-island map the DSD template reads (F16). Omitting it left a light card
+        // unstyled in dev while the build path delivered it correctly.
+        const documentSheetUrls: string[] = [
+          ...(session.current() === undefined ? [] : [devComponentSheetUrl(base, engine())]),
+          ...islandStyleDeclarations()
+            .filter((declaration) => declaration.root !== 'shadow')
+            .flatMap((declaration) => devAuthoredIslandStyleUrls(base, declaration)),
+        ];
+        // The generated entry's own pageRuntime carries this same server tag
+        // set for class-page expansion. Function-page output calls `__ssr`
+        // directly, so the dev style-links module also has to seed the element
+        // runtime with the descriptor's final admission set. Use the descriptor
+        // rather than the raw Phase 1 scan so collisions and other descriptor
+        // filtering match the registrations the entry actually emits.
+        const ssrRenderableTags = serverComponentAdmissionTags(
+          state.entryDescriptor?.staticComponents,
+          state.entryDescriptor?.ssrAdmissionPlan.renderableTags,
+        );
+        const ssrAdmissionLines = [
+          "import { __setSsrRenderableTags } from '@openelement/element/server';",
+          // Always write the current set, including []: the setter replaces the
+          // process-global list, and an HMR rescan that removes every reachable
+          // static tag must clear the previous descriptor's admission.
+          `__setSsrRenderableTags(${JSON.stringify(ssrRenderableTags)});`,
+        ];
         if (devIslandStyles.length === 0) {
           return [
             '// <generated by open:style-components-dev — dev sheet URLs; do not edit>',
             "import { __setRequestTimeStyleSheetUrls } from '@openelement/element';",
-            `__setRequestTimeStyleSheetUrls(${JSON.stringify([
-              devComponentSheetUrl(base, engine()),
-            ])});`,
+            `__setRequestTimeStyleSheetUrls(${JSON.stringify(documentSheetUrls)});`,
+            ...ssrAdmissionLines,
             '',
           ].join('\n');
         }
         return [
           '// <generated by open:style-components-dev — dev sheet URLs; do not edit>',
           "import { __setRequestTimeStyleSheetUrls } from '@openelement/element';",
-          `__setRequestTimeStyleSheetUrls(${JSON.stringify([
-            devComponentSheetUrl(base, engine()),
-          ])}, ${JSON.stringify(devIslandStyles)});`,
+          `__setRequestTimeStyleSheetUrls(${JSON.stringify(documentSheetUrls)}, ${JSON.stringify(devIslandStyles)});`,
+          ...ssrAdmissionLines,
           '',
         ].join('\n');
       }

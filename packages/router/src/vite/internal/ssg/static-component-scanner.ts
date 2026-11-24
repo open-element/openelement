@@ -1,12 +1,16 @@
 /** Discover compiled static components reachable from local route imports. */
+import { existsSync, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { isAbsolute, relative, resolve } from 'pathe';
+import { dirname, isAbsolute, relative, resolve } from 'pathe';
 import type { RouteEntry } from '../../framework.ts';
 import type { StaticComponentDecl } from '@openelement/protocol/ssg';
 import { normalizeSeparators } from '@openelement/element/build-utils';
 import { analyzeModuleSemantics } from '@openelement/compiler';
 import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
-import { readIslandConfig } from './island-scanner.ts';
+import { readComponentDeclaration, type ComponentDeclaration } from '../component-declaration.ts';
+import type { IslandStyleDeclaration } from '../island-style-declarations.ts';
+import { readPageArgument, readPageModuleFacts } from './page-classification.ts';
+import { resolveGeneratedElementHost } from './generated-element-host-metadata.ts';
 import {
   walkModuleGraph,
   type ModuleWalkDiagnostic,
@@ -57,6 +61,14 @@ export interface StaticComponentScanResult {
   /** The compiled static components the walk reached, sorted by tag name. */
   readonly declarations: StaticComponentDecl[];
   /**
+   * The page-local GENERATED components' declared sheets (P-2). The island scan
+   * resets the build's style-declaration carrier — it owns that carrier's
+   * authority for ISLANDS — so these records must be handed back to the caller
+   * and re-registered after that reset, or a page-local component's sheet would
+   * be dropped by an unrelated scan.
+   */
+  readonly styleDeclarations: IslandStyleDeclaration[];
+  /**
    * The walk's reported exclusions: its own per-module diagnostics, plus one
    * graph-level bound record when the walk stopped at `maxModules`.
    */
@@ -72,6 +84,181 @@ export interface StaticComponentScanResult {
  * package's components are admitted through its manifest, not through this
  * scan.
  */
+/**
+ * The compiler-owned host producer for a page-local GENERATED component, or
+ * undefined when the lane emits none (a light/absent root, or a module the lane
+ * declines).
+ *
+ * Read through the SAME `resolveGeneratedElementHost` the island scan uses, so a
+ * page-local component and an island cannot disagree about which export is the
+ * host. A refusal is not thrown here: this scanner must not abort route
+ * discovery for the whole app, and the transform remains the authoritative
+ * reporter of the authored diagnostic.
+ */
+function generatedHostExportFor(source: string, file: string, tagName: string): string | undefined {
+  const identity = resolveGeneratedElementHost({
+    source,
+    moduleId: file,
+    filePath: file,
+    root: undefined,
+    site: { tag: tagName },
+  });
+  return identity.kind === 'producer' ? identity.ssrHostExport : undefined;
+}
+
+/**
+ * A page-local GENERATED component's declaration: the ONE read this scanner
+ * needs, and the two facts it feeds.
+ *
+ * A page-local component is neither an island (no islands-dir path) nor a route
+ * (its host is a nested tag), so its sidecar is its whole identity. The root
+ * decides where its class candidates belong; the specifiers are what the build's
+ * style carrier serves.
+ */
+interface PageLocalDeclaration {
+  readonly declaration: ComponentDeclaration;
+  readonly styleDeclaration: IslandStyleDeclaration | undefined;
+  readonly root: 'light' | 'shadow' | 'closed';
+}
+
+/**
+ * Read a page-local generated component's declaration, or undefined when the
+ * module is a class component (its sheets already travel through `static styles`
+ * imports, and its root fact comes from the compiled program).
+ *
+ * A malformed sidecar reads as undefined here: the transform is the authoritative
+ * reporter of that diagnostic, and one bad module must not abort route discovery
+ * for the whole app.
+ */
+function pageLocalDeclaration(
+  source: string,
+  file: string,
+  islandsRoot: string,
+  tagName: string,
+  semantics: { readonly defaultCompiledTag?: string; readonly hasGeneratedElementSidecar: boolean },
+): PageLocalDeclaration | undefined {
+  if (semantics.defaultCompiledTag !== undefined || !semantics.hasGeneratedElementSidecar) {
+    return undefined;
+  }
+  const reading = readComponentDeclaration(source, tagName);
+  if (reading.kind !== 'declared') return undefined;
+  const declaration = reading.declaration;
+  const root: 'light' | 'shadow' | 'closed' = declaration.root ?? 'light';
+  return {
+    declaration,
+    root,
+    styleDeclaration:
+      declaration.styles.length === 0
+        ? undefined
+        : {
+            tagName: declaration.tag ?? tagName,
+            root,
+            moduleId: file,
+            // Not islands-relative: a page-local component has no islands-dir
+            // path. The module id is the identity every consumer reads.
+            filePath: file,
+            islandsDir: islandsRoot,
+            specifiers: declaration.styles,
+          },
+  };
+}
+
+/**
+ * The style declaration a PAGE MODULE carries, or undefined.
+ *
+ * A generated light page's sheet is a document resource, and the page has no
+ * islands-dir entry and no static-component record — so its declaration is
+ * registered here, keyed by the page's OWN tag, and the route's document link
+ * fact resolves it from the route module rather than from a JSX reference.
+ */
+function pageModuleStyleDeclaration(
+  file: string,
+  islandsRoot: string,
+): IslandStyleDeclaration | undefined {
+  let source: string;
+  try {
+    source = readFileSync(file, 'utf8');
+  } catch {
+    return undefined;
+  }
+  const reading = readComponentDeclaration(source);
+  if (reading.kind !== 'declared') return undefined;
+  const declaration = reading.declaration;
+  // A page module must pin its own tag: it has no islands-dir path to derive one.
+  if (declaration.tag === undefined || declaration.styles.length === 0) return undefined;
+  return {
+    tagName: declaration.tag,
+    root: 'light',
+    // A PAGE owns no host element: its markup is the document content, so its
+    // declared sheet is delivered UNSCOPED. Scoping it to a tag that never
+    // appears would compile rules that match nothing.
+    scopeTag: null,
+    moduleId: file,
+    filePath: file,
+    islandsDir: islandsRoot,
+    specifiers: declaration.styles,
+  };
+}
+
+/**
+ * The style declaration a PAGE module carries (P-2b), or undefined.
+ *
+ * A generated light page's sheet is a document resource, and the page has no
+ * islands-dir entry and no static-component record — so its declaration is
+ * registered here, keyed by the page's OWN tag, and the route's document link
+ * fact resolves it from the route module rather than from a JSX reference.
+ */
+
+/**
+ * The component specifier one page route names in its `definePage(...)` call, or
+ * undefined when the route's page definition does not name a local module.
+ *
+ * Deliberately minimal: this asks for the FIRST argument's import specifier and
+ * nothing else. Whether the module is a generated component is decided later by
+ * the same declaration reader every other pass uses; classification owns the
+ * verdict, this scan only makes sure the module is walked.
+ */
+function readPageComponentSpecifier(
+  route: RouteEntry,
+  routeFile: string,
+): { readonly specifier: string } | undefined {
+  // The route scan already parsed the exact `definePage<Data>(Page)` argument
+  // and carries its import binding here. Reuse that fact so this reachability
+  // walk cannot disagree with the page classifier about generic calls or the
+  // imported module path.
+  const facts = readPageModuleFacts(route);
+  let argument = facts?.pageArgument;
+  if (facts === undefined) {
+    // Adapter integrations and legacy tests may hand this scanner a plain
+    // RouteEntry. Keep that input working through the same TypeScript parser
+    // that owns the route-scan fact; do not maintain a second call-shape regex.
+    let source: string;
+    try {
+      source = readFileSync(routeFile, 'utf8');
+    } catch {
+      return undefined;
+    }
+    if (
+      !analyzeModuleSemantics(source, routeFile, { vocabulary: ROUTER_MODULE_VOCABULARY })
+        .definePage
+    ) {
+      return undefined;
+    }
+    argument = readPageArgument(source, route.filePath);
+  }
+  return argument?.kind === 'import' ? { specifier: argument.specifier } : undefined;
+}
+
+/** Resolve a relative specifier against its importing module, with extension probing. */
+function resolveFrom(specifier: string, importer: string): string | undefined {
+  if (!specifier.startsWith('.')) return undefined;
+  const base = resolve(dirname(importer), specifier);
+  for (const candidate of [base, `${base}.tsx`, `${base}.ts`, `${base}/index.tsx`]) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return undefined;
+}
+
 export async function scanStaticComponents(
   options: ScanStaticComponentsOptions,
 ): Promise<StaticComponentScanResult> {
@@ -99,9 +286,50 @@ export async function scanStaticComponents(
   }
   notes.push(...walk.diagnostics);
   const byTag = new Map<string, StaticComponentDecl>();
+  const styleDeclarations: IslandStyleDeclaration[] = [];
 
-  for (const file of walk.files) {
+  // The PAGE COMPONENTS themselves are components too (P-4): a route that imports
+  // its page component passes it to `definePage`, so the module is neither a JSX
+  // reference nor an island. Keep the explicit root identity for that case; all
+  // of its reachable children, including children of a route-local function page,
+  // come from the resolver walk below.
+  const pageComponentFiles = new Set<string>();
+  for (const route of options.routes) {
+    if (route.type !== 'page' || route.special) continue;
+    const routeFile = resolve(routeRoot, route.filePath);
+    const pageFacts = readPageComponentSpecifier(route, routeFile);
+    if (pageFacts === undefined) continue;
+    const resolved = resolveFrom(pageFacts.specifier, routeFile);
+    // A route that passes a LOCAL FUNCTION it declares itself is a server
+    // function page, not an imported component: its module is the route module,
+    // and re-recording it here would make every such page a static component.
+    if (resolved === undefined || resolved === routeFile) continue;
+    pageComponentFiles.add(resolved);
+  }
+  const reachableFiles = [...new Set([...walk.files, ...pageComponentFiles])];
+  const routeFiles = new Set(
+    options.routes
+      .filter((route) => route.type === 'page' && !route.special)
+      .map((route) => resolve(routeRoot, route.filePath)),
+  );
+  const pageComponentDependencies = new Set(
+    reachableFiles.filter(
+      (file) => inside(root, file) && !routeFiles.has(file) && !pageComponentFiles.has(file),
+    ),
+  );
+  for (const file of reachableFiles) {
     if (!inside(root, file)) continue;
+    // A PAGE MODULE that declares its own sheets (P-2b, 2026-11-21). A generated
+    // light page owns a root box rule exactly like a class page's `:host`, but
+    // it is neither an island nor a static component, so nothing registered its
+    // declaration and the sheet reached no document. The declaration rides the
+    // same carrier keyed by the PAGE's own tag; the route link fact resolves it
+    // (see `deriveRouteDocumentStyleLinks`).
+    if (inside(routeRoot, file) && !inside(islandRoot, file)) {
+      const pageDeclaration = pageModuleStyleDeclaration(file, root);
+      if (pageDeclaration !== undefined) styleDeclarations.push(pageDeclaration);
+      continue;
+    }
     let source: string;
     try {
       source = await readFile(file, 'utf8');
@@ -113,31 +341,19 @@ export async function scanStaticComponents(
     });
     const collect = !inside(routeRoot, file) && !inside(islandRoot, file);
     // A CLASS static component carries its tag in the `@element` decorator
-    // (`defaultCompiledTag`). A GENERATED-lane page-local component carries it
-    // in its sidecar (`openElement.tag`) — it has no decorator at all, so
-    // without this second read the scanner reports zero components and the SSG
-    // admission set never contains the tag: the page then renders the host as a
-    // plain unknown element (`__h`) instead of the compiled output.
-    // `readIslandConfig` THROWS on a malformed sidecar (it is the authoritative
-    // reader the island scan uses). This scanner must not inherit that verdict:
-    // a component whose sidecar is broken is the transform's diagnostic to
-    // report, and one bad module here would abort route discovery for the whole
-    // app. Swallow and let the module register as "no tag" — it is reported
-    // nowhere here by design, exactly like an unparseable module in the class
-    // path above.
-    let declaredTag: string | undefined;
-    if (
-      collect &&
-      semantics.defaultCompiledTag === undefined &&
-      semantics.hasGeneratedElementSidecar
-    ) {
-      try {
-        declaredTag = readIslandConfig(source)?.tag;
-      } catch {
-        declaredTag = undefined;
-      }
-    }
-    const tagName = collect ? (semantics.defaultCompiledTag ?? declaredTag) : undefined;
+    // (`defaultCompiledTag`); a GENERATED-lane page-local component carries it in
+    // its sidecar. ONE reader answers both the tag and the rest of the
+    // declaration (component-declaration.ts), so this scanner cannot disagree
+    // with the island scan, the declared-tag scan or the style walk about whether
+    // a module is a component.
+    //
+    // A malformed sidecar reads as "not a component" here: the transform is the
+    // authoritative reporter of that diagnostic, and one bad module must not
+    // abort route discovery for the whole app.
+    const pageLocal = collect ? pageLocalDeclaration(source, file, root, '', semantics) : undefined;
+    const tagName: string | undefined = collect
+      ? (semantics.defaultCompiledTag ?? pageLocal?.declaration.tag)
+      : undefined;
     if (tagName) {
       const modulePath = `/${normalizeSeparators(relative(root, file))}`;
       const existing = byTag.get(tagName);
@@ -147,16 +363,49 @@ export async function scanStaticComponents(
             `${existing.modulePath} and ${modulePath}.`,
         );
       }
+      // A GENERATED static component's host producer (P-2): the same compiler
+      // call the island orchestrator makes, so a page-local generated component
+      // is registered as a host PAIR rather than a bare class. Without it the
+      // render reaches the class path and fails with PROGRAM_MISSING — measured:
+      // a migrated nested component rendered as an EMPTY host.
+      const generatedHostExport =
+        semantics.defaultCompiledTag === undefined
+          ? generatedHostExportFor(source, file, tagName)
+          : undefined;
       byTag.set(tagName, {
         tagName,
         modulePath,
         compilerInteractionEvents: semantics.compilerInteractionEvents,
+        ...(generatedHostExport === undefined ? {} : { generatedHostExport }),
+        ...(pageLocal === undefined ? {} : { root: pageLocal.root }),
+        // A PAGE COMPONENT marker is only meaningful for a GENERATED page: the
+        // entry must register its host pair because the route renders that host.
+        // A class page needs no pairing (its compiled program is registered
+        // through the page tag), and marking it would add an island-attribution
+        // input that the class lane never had.
+        ...(pageComponentFiles.has(file) && generatedHostExport !== undefined
+          ? { pageComponent: true }
+          : {}),
+        ...(pageComponentDependencies.has(file) && pageLocal !== undefined
+          ? { pageComponentDependency: true }
+          : {}),
       });
+      // A page-local GENERATED component's `styles` declaration rides the SAME
+      // build-time carrier an island's does: the declaration is the demand fact
+      // the style-edge registry turns into a content-addressed asset, the SSG
+      // render reports a light root's sheet to the document sink and a shadow
+      // root's rides its DSD template.
+      if (pageLocal?.styleDeclaration !== undefined) {
+        styleDeclarations.push({
+          ...pageLocal.styleDeclaration,
+          tagName,
+        });
+      }
     }
   }
 
   const declarations = [...byTag.values()].sort(
     (a, b) => a.tagName.localeCompare(b.tagName) || a.modulePath.localeCompare(b.modulePath),
   );
-  return { declarations, notes };
+  return { declarations, styleDeclarations, notes };
 }

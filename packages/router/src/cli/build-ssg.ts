@@ -26,11 +26,18 @@ import type {
   RouteEntry,
 } from '../vite/framework.ts';
 import type { EntryDescriptor, IslandDecl, StaticComponentDecl } from '@openelement/protocol/ssg';
+import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
 import type { OpenElementBuildContext } from '../vite/build-context.ts';
 import { elementStyleLinksPlugin } from '../vite/internal/element-style-links.ts';
 import { findBuildWorkspaceRootOrUndefined } from '../vite/workspace-alias.ts';
-import { clientIslandStyleAssets } from '../vite/internal/island-style-build-assets.ts';
-import { islandStyleDeclarations } from '../vite/internal/island-style-declarations.ts';
+import {
+  clientIslandStyleAssets,
+  clientIslandUtilityTags,
+} from '../vite/internal/island-style-build-assets.ts';
+import {
+  islandStyleDeclarations,
+  registerIslandStyleDeclaration,
+} from '../vite/internal/island-style-declarations.ts';
 import {
   buildRouteDocumentStyleLinks,
   deliveredIslandStyleTags,
@@ -68,7 +75,6 @@ import {
   collectPackageIslandModuleSites,
   createGeneratedElementSiteResolver,
 } from '../vite/generated-element-site.ts';
-import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
 import { serverStyleAssetPlugin } from '../vite/internal/style-assets.ts';
 import {
   createServerComponentSourceResolver,
@@ -278,6 +284,25 @@ async function deriveRouteDocumentStyleLinks(input: {
         'fails instead.',
     );
   }
+  // A page module's OWN declared sheets (P-2b): resolved here from the carrier the
+  // static scan filled, keyed by the page's tag, and reported per ROUTE because
+  // that is where the document link list is consumed.
+  const pageModuleStyleUrls = new Map<string, readonly string[]>();
+  const pageTags = new Map<string, string>();
+  const routeRoot = resolve(input.root, input.routesDir);
+  for (const route of input.routes) {
+    if (route.type !== 'page' || route.special) continue;
+    pageTags.set(resolve(routeRoot, route.filePath), route.path);
+  }
+  for (const declaration of declarations) {
+    // The declaration's `filePath` is the module's absolute id (a page module has
+    // no islands-relative path), while a route is spelled project-relative. Both
+    // are the same file, so the join normalizes through `resolve`.
+    const routePath = pageTags.get(resolve(declaration.filePath));
+    if (routePath === undefined) continue;
+    const urls = clientIslandStyleAssets(input.ctx).get(declaration.tagName);
+    if (urls !== undefined) pageModuleStyleUrls.set(routePath, urls);
+  }
   const result = await buildRouteDocumentStyleLinks({
     root: input.root,
     routes: input.routes,
@@ -285,6 +310,7 @@ async function deriveRouteDocumentStyleLinks(input: {
     resolve: input.resolve,
     lightIslandTags: tags.light,
     islandStyleUrls: clientIslandStyleAssets(input.ctx),
+    ...(pageModuleStyleUrls.size === 0 ? {} : { pageModuleStyleUrls }),
   });
   for (const note of result.notes) {
     const envelope = {
@@ -345,6 +371,8 @@ export function buildSsgEntryDescriptor(
     upgradeStrategy: inputs.upgradeStrategy,
     layout: inputs.layout,
     layouts: inputs.layouts,
+    declaredElementTags: ctx.phase1.declaredElementTags,
+    declaredElementHostExports: ctx.phase1.declaredElementHostExports,
     renderer: inputs.renderer,
     i18n: inputs.i18n,
     routeDocumentStyleLinks: inputs.routeDocumentStyleLinks,
@@ -394,26 +422,54 @@ async function buildSSG(
   const componentStyleSheetUrls = ctx.componentStyleSheet
     ? [`${options.base}client/${ctx.componentStyleSheet.fileName}`]
     : [];
-  // The element style-links channel carries generated SHADOW hosts only: a
-  // light root's sheet rides the per-route document fact, and the Phase 2 map
-  // now records both roots. Filtering here keeps the channel's documented
-  // contract (tag -> shadow DSD URLs) intact.
-  const styledShadowTags = deliveredIslandStyleTags(
-    islandStyleDeclarations(),
-    ctx.phase1.islandMeta as Record<
-      string,
-      { tags?: readonly string[]; tagNames?: readonly string[] } | undefined
-    >,
-  ).shadow;
+  // Every styled generated island, BOTH roots (F16). A shadow host's urls seed its
+  // own DSD template; a LIGHT host's urls are also needed here because a light
+  // child nested inside a shadow tree cannot declare anything itself — its content
+  // lands in the ENCLOSING template, which finds the urls through this map. The
+  // shadow-only filter that used to be here is what left a nested light card
+  // unstyled.
+  const styledShadowTags = new Set([
+    ...deliveredIslandStyleTags(
+      islandStyleDeclarations(),
+      ctx.phase1.islandMeta as Record<
+        string,
+        { tags?: readonly string[]; tagNames?: readonly string[] } | undefined
+      >,
+    ).shadow,
+    ...deliveredIslandStyleTags(
+      islandStyleDeclarations(),
+      ctx.phase1.islandMeta as Record<
+        string,
+        { tags?: readonly string[]; tagNames?: readonly string[] } | undefined
+      >,
+    ).light,
+    // A page-local GENERATED shadow component (P-2) has no island declaration —
+    // its identity is the sidecar's own tag — but its DSD template is a shadow
+    // root that must declare its sheets like any other. Admitted here so the
+    // entry seeds an island-entry row for it (an authored `styles` list when it
+    // has one, the shared component sheet when it does not).
+    ...(ctx.phase1.staticComponents ?? [])
+      .filter((component) => component.root === 'shadow')
+      .map((component) => component.tagName),
+    // ...and its LIGHT page-local counterpart, whose sheet is lifted into whatever
+    // template it is nested in.
+    ...(ctx.phase1.staticComponents ?? [])
+      .filter((component) => component.root === 'light')
+      .map((component) => component.tagName),
+  ]);
   // A generated shadow host has no emitted class static to carry the class
   // lane's `__oeUtilityClasses` fact, so the manifest declaration is the
   // build-time authority for "this component's shadow tree needs the app's
   // shared utility sheet".
-  const utilityRequiredTags = new Set(
-    admittedTailwindDeclarations(ctx.phase1.packageManifests, ctx.phase1.packageIslandDecls)
+  const utilityRequiredTags = new Set([
+    // A page-local GENERATED shadow component (P-2) declares no `styles`: the
+    // class-candidate registry is the only fact saying its utilities live in the
+    // shared sheet. Phase 2 recorded it, so this channel carries it too.
+    ...clientIslandUtilityTags(ctx),
+    ...admittedTailwindDeclarations(ctx.phase1.packageManifests, ctx.phase1.packageIslandDecls)
       .filter((fact) => fact.required)
       .map((fact) => fact.tagName),
-  );
+  ]);
   if (componentStyleSheetUrls.length > 0) {
     log.info(`Component stylesheet linked into DSD: ${componentStyleSheetUrls.join(', ')}`);
   }
@@ -468,6 +524,14 @@ async function buildSSG(
   const ssgIslandMeta: Record<string, Partial<IslandDecl>> = Object.keys(islandMeta).length > 0
     ? islandMeta
     : await scanIslandMeta(islandsRoot, ssgIslandFiles, root);
+  // The SSG host may run its OWN island scan (the standalone `build` path passes no
+  // pre-scanned meta), and that scan RESETS the style-declaration carrier — so the
+  // PAGE-LOCAL generated components' declarations (P-2) are put back AFTER it. They
+  // have no islands-dir entry for that scan to rediscover, so the reset would
+  // otherwise drop a page-local component's sheet silently.
+  for (const declaration of ctx.phase1.pageLocalStyleDeclarations ?? []) {
+    registerIslandStyleDeclaration(declaration);
+  }
   // Per-route document stylesheet links for generated LIGHT-root islands
   // (Alpha16 retained stylesheet delivery): ONE module walk + in-memory closure,
   // derived before the descriptor so the entry's literal data channel is never
@@ -511,6 +575,15 @@ async function buildSSG(
       i18n: ctx.plugins.i18nOptions ?? undefined,
     },
     ctx,
+  );
+  // This is the exact server admission set the emitted entry registers: its
+  // SSR-admitted islands plus its retained static components. Function-page
+  // composition, the runtime nested-host expander, and the compiler must all
+  // see the same set or a generated child can compile but remain an empty host
+  // at render time.
+  const ssrRenderableTags = serverComponentAdmissionTags(
+    ssgDescriptor.staticComponents,
+    ssgDescriptor.ssrAdmissionPlan.renderableTags,
   );
 
   // The native banner imports StyleSheet from @openelement/element.
@@ -629,6 +702,11 @@ async function buildSSG(
             componentStyleSheetUrls,
             utilityRequiredTags,
           ),
+          // A server function page's compiled `render` calls `__ssr` directly and
+          // so had no nested-host expander (F16). This is the same admission plan
+          // the server-component compile uses, so a tag expandable there is
+          // expandable at render time — one fact, one list.
+          ssrRenderableTags,
         ),
         // MDX route support must mirror the outer plugin list (plugin.ts),
         // otherwise .mdx routes fail Phase 3 parse (the oxc transform treats
@@ -651,7 +729,6 @@ async function buildSSG(
           workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
           // Route/island sources carry the island delivery policy statement;
           // the compiler admits it only through the injected descriptor.
-          staticSidecars: [ISLAND_ADMISSION],
           resolveServerComponentModule: createServerComponentSourceResolver({
             root,
             workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
@@ -661,10 +738,7 @@ async function buildSSG(
           // entry-orchestrator binds as the render's ssrRenderableTags), so a
           // function page's nested host rides the expansion a class page's
           // does.
-          compiledTags: serverComponentAdmissionTags(
-            staticComponents,
-            ssgDescriptor.ssrAdmissionPlan.renderableTags,
-          ),
+          compiledTags: ssrRenderableTags,
           // The generated Native Custom Element site (M09-1b): the SSR build
           // must lower an admitted island's function default export to the
           // same generated class the client build emits.
@@ -686,6 +760,8 @@ async function buildSSG(
             // (alpha16 tag-source slice): the SSR half must lower the very
             // modules the client half compiled, so the source order is shared.
             ctx.phase1.declaredElementTags,
+            // An .mdx route's tag derives from its route-relative path.
+            routesDir,
           ),
         }),
         // serves the server half of the style edge protocol — the

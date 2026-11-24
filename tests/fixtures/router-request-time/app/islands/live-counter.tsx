@@ -1,31 +1,29 @@
 /**
- * live-counter — minimal counter island (v0.44 compiled, ADR-0143).
+ * live-counter — minimal counter island.
  *
- * Hydrates on load; clicking the button increments the count through the
- * compiled event Part. Used on the request-time /live page to prove
- * hydration is identical to static pages. The shadow root keeps the island
- * a DSD citizen (nested-DSD morph tests assert shadowRoot presence).
+ * GENERATED lane (2026-11-21 Alpha16 closeout). Hydrates on load; clicking the
+ * button increments a signal. `root: 'shadow'` matches the class lane's
+ * `shadow-open`: the island's content lives in the shadow tree, which is also
+ * what makes the morph client's light-DOM comparison see it as intact.
  */
-import { element, OpenElement, property } from '@openelement/element';
+import { signal } from '@openelement/element';
 import { defineIslandConfig } from '@openelement/router';
 
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true, dsd: true });
+export const openElement = defineIslandConfig({
+  hydrate: 'load',
+  ssr: true,
+  dsd: true,
+  root: 'shadow',
+});
 
-@element('live-counter', { root: 'shadow-open' })
-export default class LiveCounter extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  count = 0;
-
-  increment(): void {
-    this.count++;
-  }
-
-  render() {
-    return (
-      <div class='counter-row'>
-        <button id='increment' type='button' onClick={this.increment}>+</button>
-        <span id='count'>{this.count}</span>
-      </div>
-    );
-  }
+export default function LiveCounter() {
+  const count = signal(0);
+  return (
+    <div class="counter-row">
+      <button id="increment" type="button" onClick={() => (count.value = count.value + 1)}>
+        +
+      </button>
+      <span id="count">{count.value}</span>
+    </div>
+  );
 }

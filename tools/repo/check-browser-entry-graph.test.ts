@@ -87,8 +87,14 @@ const RUNTIME_CHUNK = 'islands/element-runtime-ABC.js';
 const ISLAND_CHUNK = 'islands/island-open-probe-ABC.js';
 const ISLAND_MODULE_ID = 'www/app/islands/open-probe.tsx';
 const LEAF_MODULE_ID = 'packages/element/src/internal/compiled/runtime/recipe.ts';
-const FACADE_HOST_MODULE_ID = 'packages/element/src/internal/compiled/facade-host.ts';
-const KERNEL_MODULE_ID = 'packages/element/src/internal/compiled/runtime/kernel.ts';
+// Two surviving gate entries, used as the synthetic roles this suite needs:
+// `PARSED_ONLY_ENTRY_MODULE_ID` is parsed but never loaded (MET with a residue),
+// `LOADED_ENTRY_MODULE_ID` is loaded (VIOLATED). They were the deleted
+// `facade-host.ts` / `runtime/kernel.ts`, which the F16 class-lane retirement
+// removed from the gate table — a fixture naming a module the table no longer
+// gates would assert nothing.
+const PARSED_ONLY_ENTRY_MODULE_ID = 'packages/element/src/internal/compiled/runtime-program.ts';
+const LOADED_ENTRY_MODULE_ID = 'packages/element/src/internal/compiled/runtime/program-kernel.ts';
 const PARTS_MODULE_ID = 'packages/element/src/internal/compiled/runtime/parts.ts';
 const SERIALIZER_MODULE_ID =
   'packages/element/src/internal/compiled/serializer/serialize-program.ts';
@@ -148,7 +154,12 @@ function makeCore(): BrowserEntryGraphCore {
         modules: [{ id: ISLAND_MODULE_ID, renderedLength: 240 }],
       },
     ],
-    parsedModuleIds: [ENTRY_MODULE_ID, LEAF_MODULE_ID, ISLAND_MODULE_ID, FACADE_HOST_MODULE_ID],
+    parsedModuleIds: [
+      ENTRY_MODULE_ID,
+      LEAF_MODULE_ID,
+      ISLAND_MODULE_ID,
+      PARSED_ONLY_ENTRY_MODULE_ID,
+    ],
   };
 }
 
@@ -175,7 +186,7 @@ function metArtifact(): BrowserEntryGraphArtifact {
 /** VIOLATED: the executor kernel is rendered in the runtime chunk the entry/island load. */
 function violatedArtifact(): BrowserEntryGraphArtifact {
   const core = makeCore();
-  core.chunks[1]!.modules.push({ id: KERNEL_MODULE_ID, renderedLength: 900 });
+  core.chunks[1]!.modules.push({ id: LOADED_ENTRY_MODULE_ID, renderedLength: 900 });
   return seal(core);
 }
 
@@ -254,7 +265,7 @@ async function writeArtifact(root: string, name: string, value: unknown): Promis
 test('the path validator rejects every non-canonical spelling (exact-match bypass)', () => {
   const valid = [
     'a/b.ts',
-    'packages/element/src/internal/compiled/facade-host.ts',
+    'packages/element/src/internal/compiled/runtime-program.ts',
     'node_modules/@scope/pkg/dist/index.js',
     '.tmp-fixture/app/islands/x.tsx',
     '.vite/oe-browser-entry-graph.json',
@@ -380,7 +391,8 @@ test('non-canonical gate spellings and unknown virtual schemes are malformed, ne
   // same module under a different string must fail the artifact closed.
   const nonCanonicalGate = metArtifact();
   nonCanonicalGate.chunks[1]!.modules.push({
-    id: 'packages//element/src/internal/compiled/runtime/kernel.ts',
+    // A real gate entry, misspelled: the double slash is what must fail closed.
+    id: 'packages//element/src/internal/compiled/runtime/program-kernel.ts',
     renderedLength: 900,
   });
   const nonCanonicalEvaluation = evaluateBrowserEntryGraphArtifact(nonCanonicalGate);
@@ -407,7 +419,7 @@ test('a MET artifact exits 0, prints one summary line, and reports the picture v
 
   const evaluation = evaluateBrowserEntryGraphArtifact(metArtifact());
   expect(evaluation.verdict).toBe('MET');
-  expect(evaluation.parsedOnlyExecutorResidues).toContain(FACADE_HOST_MODULE_ID);
+  expect(evaluation.parsedOnlyExecutorResidues).toContain(PARSED_ONLY_ENTRY_MODULE_ID);
 
   const reportPath = join(root, 'report.txt');
   const human = await runCheckerInProcess([artifactPath, '--report', reportPath]);
@@ -420,7 +432,7 @@ test('a MET artifact exits 0, prints one summary line, and reports the picture v
   // lives in the --report artifact, not on stdout.
   const reportText = await readFile(reportPath, 'utf8');
   expect(reportText).toContain('parsed-only executor residues');
-  expect(reportText).toContain(FACADE_HOST_MODULE_ID);
+  expect(reportText).toContain(PARSED_ONLY_ENTRY_MODULE_ID);
   expect(human.stdout).not.toContain('parsed-only executor residues');
 
   const json = await runCheckerInProcess(['--json', artifactPath]);
@@ -445,7 +457,7 @@ test('a VIOLATED artifact exits 1 and names module, chunk and island attribution
   expect(evaluation.verdict).toBe('VIOLATED');
   expect(evaluation.violations).toHaveLength(1);
   expect(evaluation.violations[0]).toMatchObject({
-    moduleId: KERNEL_MODULE_ID,
+    moduleId: LOADED_ENTRY_MODULE_ID,
     chunkFile: RUNTIME_CHUNK,
     islands: ['open-probe'],
   });
@@ -455,7 +467,7 @@ test('a VIOLATED artifact exits 1 and names module, chunk and island attribution
   expect(human.code, human.stderr).toBe(1);
   // Failing artifacts name their modules on stderr; stdout stays a data channel.
   expect(human.stderr).toContain('VIOLATED');
-  expect(human.stderr).toContain(KERNEL_MODULE_ID);
+  expect(human.stderr).toContain(LOADED_ENTRY_MODULE_ID);
   expect(human.stderr).toContain(RUNTIME_CHUNK);
   expect(human.stdout).toBe('');
 });
@@ -496,17 +508,17 @@ test('implicitly loaded chunk edges count as loaded — they are never ignored',
   loadedCore.chunks[0]!.imports = [];
   loadedCore.chunks[0]!.implicitlyLoadedBefore = [RUNTIME_CHUNK];
   loadedCore.chunks[2]!.imports = [];
-  loadedCore.chunks[1]!.modules.push({ id: KERNEL_MODULE_ID, renderedLength: 800 });
+  loadedCore.chunks[1]!.modules.push({ id: LOADED_ENTRY_MODULE_ID, renderedLength: 800 });
   const violatedImplicit = seal(loadedCore);
   const evaluation = evaluateBrowserEntryGraphArtifact(violatedImplicit);
   expect(evaluation.verdict).toBe('VIOLATED');
-  expect(evaluation.violations[0]!.moduleId).toBe(KERNEL_MODULE_ID);
+  expect(evaluation.violations[0]!.moduleId).toBe(LOADED_ENTRY_MODULE_ID);
 });
 
 test('the executor-entry gate list stays frozen: a renamed table is drift, not a verdict', async () => {
   // A moved clock: a checker from another revision must refuse to judge.
   expect(browserEntryGraphGateListDigest()).toBe(
-    'sha256:626686d67c13c6708f7faec4a53862a43a268d61b2aedf445f7a4cc34d268ba7',
+    'sha256:db632836f1e28bbfd8f4b5c876bb4d8c1eceffe4ccdd25a90bff44c8548631b2',
   );
   const root = await makeTemporaryRoot();
   const artifact = metArtifact();

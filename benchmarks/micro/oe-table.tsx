@@ -1,195 +1,82 @@
 /**
- * Keyed-table fixture for the micro suite (issue #1219), modeled on the
- * upstream js-framework-benchmark keyed implementation.
+ * Keyed-list fixture for the micro suite (issue #1219), modeled on the upstream
+ * js-framework-benchmark keyed implementation.
  *
- * One meaningful component boundary manages ordinary table DOM: the rows are
- * plain <tr> nodes owned by a single keyed `each` Block — NOT one custom
- * element per row. Row select/remove use one delegated click handler on the
- * table because grammar v1 admits no per-item event handlers; selection is
- * carried in row data (`cls`) so the keyed diff writes exactly the affected
- * class attributes, matching stock select semantics (vanillajs touches
- * two rows). The jumbotron buttons are part of the component, matching the
- * stock page structure.
+ * WHY THIS IS A GENERATED ELEMENT, NOT A CLASS. The suite measures compiler
+ * throughput over one realistic component and then runs the compiled result
+ * through the real runtime. The class/decorator lane and its `@element` /
+ * `@property` author form were deleted with the Alpha16 closeout, so the
+ * fixture is authored in the lane that ships: one `defineIslandConfig` sidecar
+ * carrying the element facts (light root, one non-primitive `rows` property)
+ * plus one default-exported function component. `micro.ts` compiles this file
+ * with `compileGeneratedElementIfAdmitted` and drives the emitted mount/claim
+ * functions; nothing here is executed uncompiled.
+ *
+ * WHY THE ROWS COME IN AS A PROP. The old fixture owned `rows` as a class
+ * property and the benchmark wrote a host signal to drive it. The generated
+ * lane's root setup can only be seeded from the element's props (the sidecar
+ * `properties` row), so `rows` is a declared non-primitive prop: the benchmark
+ * supplies the 1 000 rows for the mount/SSR phases, and the component copies
+ * them into a local signal once so the block-op phases can write that signal
+ * in place (a prop read is not a writable channel from inside the component).
+ *
+ * WHY `<ul>`/`<li>` INSTEAD OF `<table>`/`<tbody>`/`<tr>`. A keyed list is
+ * claimable and SSR-producible only in a flow parser context: the generated
+ * lane's list slice excludes the table contexts (a list under `<tbody>` emits
+ * mount only). The suite reports serialize, fresh, claim and the block ops at
+ * 1 000 rows, so the row list lives in the flow context that admits all four;
+ * the row's DOM shape (id text, label anchor, remove anchor, empty cell) is
+ * kept from the old fixture.
+ *
+ * WHY THE DELEGATED CLICK HANDLER STAYS. The old fixture installed one
+ * delegated click handler on the table; the stability probe asserts that a
+ * created-and-disposed instance retains zero listeners. The handler body is
+ * intentionally empty: the old body selected/removed a row by mutating the
+ * row data and a dynamic `class`, and a dynamic class is outside the generated
+ * lane's attribute slice, so porting the selection would measure a DOM the
+ * lane cannot render. The listener's existence and cleanup ownership are the
+ * measured facts.
  */
-import { element, OpenElement, property } from '@openelement/element';
-import { buildData, type BenchRow } from './row-data.ts';
+import { defineIslandConfig } from '@openelement/router';
+import { signal } from '@openelement/element';
 
-@element('oe-bench-table')
-export class OeBenchTable extends OpenElement {
-  @property({ reflect: false })
-  rows: BenchRow[] = [];
+export const openElement = defineIslandConfig({
+  root: 'light',
+  properties: {
+    // A non-primitive row list has no attribute wire, so the row must declare
+    // `attribute: false` explicitly; the literal array default is the lane's
+    // required shape for a non-primitive row and leaves the empty list as the
+    // element's initial value.
+    rows: { attribute: false, default: [] },
+  },
+});
 
-  run(): void {
-    this.rows = buildData(1000);
-  }
-
-  runLots(): void {
-    this.rows = buildData(10000);
-  }
-
-  add(): void {
-    this.rows = this.rows.concat(buildData(1000));
-  }
-
-  update(): void {
-    const data = this.rows.slice();
-    for (let i = 0; i < data.length; i += 10) {
-      const row = data[i];
-      data[i] = { id: row.id, label: `${row.label} !!!`, cls: row.cls };
-    }
-    this.rows = data;
-  }
-
-  clear(): void {
-    this.rows = [];
-  }
-
-  swapRows(): void {
-    if (this.rows.length > 998) {
-      const data = this.rows.slice();
-      const tmp = data[1];
-      data[1] = data[998];
-      data[998] = tmp;
-      this.rows = data;
-    }
-  }
-
-  select(id: number): void {
-    const data = this.rows.slice();
-    for (let i = 0; i < data.length; i++) {
-      const row = data[i];
-      if (row.id === id && row.cls !== 'danger') {
-        data[i] = { id: row.id, label: row.label, cls: 'danger' };
-      } else if (row.id !== id && row.cls === 'danger') {
-        data[i] = { id: row.id, label: row.label, cls: '' };
-      }
-    }
-    this.rows = data;
-  }
-
-  remove(id: number): void {
-    const idx = this.rows.findIndex((row) => row.id === id);
-    this.rows = this.rows.slice(0, idx).concat(this.rows.slice(idx + 1));
-  }
-
-  handleTableClick(event: unknown): void {
-    let node = (event as Event).target as HTMLElement | null;
-    let action: 'select' | 'remove' | undefined;
-    while (node) {
-      if (node.tagName === 'A') {
-        action =
-          node.parentElement?.tagName === 'TD' &&
-          node.parentElement.previousElementSibling !== null &&
-          node.parentElement.previousElementSibling.previousElementSibling === null
-            ? 'select'
-            : 'remove';
-        break;
-      }
-      if (node.tagName === 'TABLE') return;
-      node = node.parentElement;
-    }
-    let row = (event as Event).target as HTMLElement | null;
-    while (row && row.tagName !== 'TR') row = row.parentElement;
-    if (!action || !row) return;
-    const id = Number(row.getAttribute('data-id'));
-    if (action === 'remove') this.remove(id);
-    else this.select(id);
-  }
-
-  render() {
-    return (
-      <div class='container'>
-        <div class='jumbotron'>
-          <div class='row'>
-            <div class='col-md-6'>
-              <h1>OpenElement keyed</h1>
-            </div>
-            <div class='col-md-6'>
-              <div class='row'>
-                <div class='col-sm-6 smallpad'>
-                  <button
-                    type='button'
-                    class='btn btn-primary btn-block'
-                    id='run'
-                    onClick={this.run}
-                  >
-                    Create 1,000 rows
-                  </button>
-                </div>
-                <div class='col-sm-6 smallpad'>
-                  <button
-                    type='button'
-                    class='btn btn-primary btn-block'
-                    id='runlots'
-                    onClick={this.runLots}
-                  >
-                    Create 10,000 rows
-                  </button>
-                </div>
-                <div class='col-sm-6 smallpad'>
-                  <button
-                    type='button'
-                    class='btn btn-primary btn-block'
-                    id='add'
-                    onClick={this.add}
-                  >
-                    Append 1,000 rows
-                  </button>
-                </div>
-                <div class='col-sm-6 smallpad'>
-                  <button
-                    type='button'
-                    class='btn btn-primary btn-block'
-                    id='update'
-                    onClick={this.update}
-                  >
-                    Update every 10th row
-                  </button>
-                </div>
-                <div class='col-sm-6 smallpad'>
-                  <button
-                    type='button'
-                    class='btn btn-primary btn-block'
-                    id='clear'
-                    onClick={this.clear}
-                  >
-                    Clear
-                  </button>
-                </div>
-                <div class='col-sm-6 smallpad'>
-                  <button
-                    type='button'
-                    class='btn btn-primary btn-block'
-                    id='swaprows'
-                    onClick={this.swapRows}
-                  >
-                    Swap Rows
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <table class='table table-hover table-striped test-data' onClick={this.handleTableClick}>
-          <tbody id='tbody'>
-            {this.rows.map((row) => (
-              <tr key={row.id} data-id={row.id} class={row.cls}>
-                <td class='col-md-1'>{row.id}</td>
-                <td class='col-md-4'>
-                  <a>{row.label}</a>
-                </td>
-                <td class='col-md-1'>
-                  <a>
-                    <span class='glyphicon glyphicon-remove' aria-hidden='true'></span>
-                  </a>
-                </td>
-                <td class='col-md-6'></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <span class='preloadicon glyphicon glyphicon-remove' aria-hidden='true'></span>
-      </div>
-    );
-  }
+function OeBenchTable(props: { rows: { id: number; label: string; cls: string }[] }) {
+  const rows = signal(props.rows);
+  const handleTableClick = (): void => {
+    // See the module comment: the listener is the measured resource, not the
+    // selection behavior the retired class fixture implemented here.
+  };
+  return (
+    <div class='container'>
+      <ul class='table test-data' onClick={handleTableClick}>
+        {rows.value.map((row) => (
+          <li key={row.id} data-id={row.id}>
+            <span class='col-md-1'>{row.id}</span>
+            <span class='col-md-4'>
+              <a>{row.label}</a>
+            </span>
+            <span class='col-md-1'>
+              <a>
+                <span class='glyphicon glyphicon-remove' aria-hidden='true'></span>
+              </a>
+            </span>
+            <span class='col-md-6'></span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
+
+export default OeBenchTable;

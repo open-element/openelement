@@ -56,11 +56,17 @@ all three now do, and each is recorded in its own amendment below:
 - `16b-LC` (lifecycle) remains **PARTIAL**: the generated-element ROOT author
   lifecycle hooks are delivered, while nested/hostless hooks and the
   connection-scope helper channel are still OWED.
-- `16b-EB` (error boundary) — delivered (`ee0434c9f`): `onError` with the
-  shell's capture points (the 2026-11-20 later reading in the EB amendment below
-  corrects the count to **two** — the connect/claim pass, plus update/refresh and
-  event dispatch through one `guardUpdate` sink; no SSR fallback exists, deferred
-  to Alpha17 by plan §18.3).
+- `16b-EB` (error boundary) — **PARTIAL** (`ee0434c9f` + `9e494db63`): `onError`
+  with the shell's **two** capture points (the connect/claim pass, plus
+  update/refresh and event dispatch through one `guardUpdate` sink), AND — since
+  2026-11-20 — the **SSR fallback's condition 1** of execution plan §19.2: a
+  failing descendant producer renders the enclosing boundary's fallback bytes, the
+  failure is carried out to `onNestedFailure` instead of failing the whole render,
+  and with no boundary the original error still propagates. **The "no SSR fallback
+  exists, deferred to Alpha17 by plan §18.3" wording that stood here is CLOSED** —
+  the owner reversed that deferral in §19.2. Conditions 2–4 of §19.2 remain open
+  (client claim adoption of the fallback bytes, the one-SHA consumer-form bundle,
+  and the remainder of the row-by-row move), so this row is not MIGRATED.
 - `16b-REF` (refs) — delivered (`d135576d0`): `ref(cb?)` is a compiler-erased
   declaration intrinsic riding the EXISTING `ref` JSX channel, so no second
   attachment mechanism exists; lifetime is proven across mount, claim,
@@ -97,6 +103,14 @@ above flips to closed and no milestone, P5 or release claim changes. It is not
 clean-SHA evidence.
 
 ### 16b-LC — PARTIAL: root author lifecycle delivered, the rest OWED
+
+> **Superseded 2026-11-21: `16b-LC` is MIGRATED.** Depth >= 2 retention landed
+> (ADR-0181's cross-ledger transaction amendment): a retained body that retains
+> its own children joins the root attempt's transaction, keeps its record across
+> reconnect, and an aborted attempt never commits a child pass. What stays
+> refused is PLACEMENT (recipe/list bodies, components no retained body
+> references) — a boundary of a compiled setup, not missing depth. The text below
+> is the 2026-11-15 state and stays as history.
 
 The generated-element lane now admits author `onConnect` / `onDispose` as
 compiler-erased intrinsics in the generated element ROOT setup only (binding
@@ -145,16 +159,23 @@ There is no second style pipeline, hash or emitter. The seam is registered in
 
 Owed, and the reason this is PARTIAL, not delivered:
 
-- document-level application of the emitted sheet on a light root (the class
-  lane's head `<link>` is not wired to the generated-element render path);
-- shadow-root adoption: no DSD style-link carrier until M09-2e, so a shadow-root
-  declaration is refused at build with the coded
-  `OE_ISLAND_STYLE_SHADOW_UNWIRED` diagnostic instead of being silently lost;
+- ~~document-level application of the emitted sheet on a light root~~ —
+  **DELIVERED (2026-11-20)**: a light-root render reports the island's declared
+  sheets to the render's document sink;
+- ~~shadow-root adoption: no DSD style-link carrier until M09-2e~~ — **the carrier
+  exists and the declaration is ADMITTED**: the compiler emits the typed
+  `styleLinks` channel and the serializer writes the canonical marked `<link>`
+  inside the template. The `OE_ISLAND_STYLE_SHADOW_UNWIRED` refusal now fires only
+  for the honest case (a shadow island whose leaf emitted no producer, so there is
+  no template to declare the sheet in). What remains owed is the CLIENT-side
+  shadow adoption slice, not the carrier;
 - a non-generated/class-lane module declaring `styles` is refused with
   `OE_ISLAND_STYLE_LANE_UNSUPPORTED`; its sheets belong to `static styles`.
 
-The adoption surface is carried by GH issue #1800 (Alpha17) and the shadow
-carrier by M09-2e; M11 still re-verifies the deferred client style declaration
+The adoption surface was carried by GH issue #1800 (originally scheduled as an
+Alpha17 item; that milestone number was retired on 2026-11-21 and its scope folded
+into the Alpha16 closeout — see the plan's §19.10) and the shadow carrier by
+M09-2e; M11 still re-verifies the deferred client style declaration
 obligation on a real build. The two lanes' test files are untracked in this
 working tree and their LOCAL results are dirty-tree development feedback, not
 clean-SHA evidence.
@@ -1600,3 +1621,178 @@ of the same date).
   lane and never the root three-argument host form inside a compiled setup.
 - **`useHost` is FUTURE/OWED.** It is listed in ADR-0182 D-18b-4 and execution
   plan §17.1 but not implemented; `env.host` is the only delivered host access.
+
+## 2026-11-20 amendment note — one props record, and where `computed` stands
+
+Two facts replace the 2026-11-18 ruling's premise; the ruling's text stays above
+as history (amend-never-rewrite).
+
+1. **One props record.** The generated-element shell no longer carries a second
+   props record. `createTrackedProps` (`internal/compiled/runtime/props.ts`) is
+   the one owner; its getters read one version signal, so a read inside an
+   effect tracks; the shell's `Map` + plain getters + hand-written
+   `propsChanged` counter are deleted (the emitted ABI name `propsChanged` now
+   names the primitive's version signal). Guard:
+   `packages/element/__tests__/compiled-server/shell-props-single-owner.test.ts`
+   plus the seam row in `seams.md`. Record: ADR-0183 D-5.
+2. **`computed` is admitted and lowered; it is blocked on the binding source,
+   not on reactivity.** `OEIR_GENERATED_ELEMENT_UNBOUND_BINDING` still refuses a
+   module whose root requires host bindings (`signal`/`computed`), because no
+   production bindings source exists on the generated root yet. Pinned by
+   `packages/compiler/__tests__/semantic-ir/generated-element.computed-boundary.test.ts`.
+   Migrating a component with `computed` therefore stays blocked until that
+   source lands (ADR-0183 D-4 slice), and inlining to work around it is still
+   refused as a migration shape.
+
+The migration rule for authors is unchanged in the meantime: a component that
+needs derived state waits for D-4; a component that only reads its rows migrates
+now.
+
+## 2026-11-20 amendment — client-only shadow styles land; a silent hook drop is fixed (facts only)
+
+This closes the last row the 2026-11-15/2026-11-16 style amendments left OWED.
+It rewrites nothing above; the OWED text stays as history.
+
+**The measured gap.** The generated lane replaced the class lane's
+`import sheet from './x.css'` + `static styles = [sheet]` with the sidecar STRING
+list `styles: ['./x.css']`. That list is build metadata: the scan turns it into
+an emitted asset plus (for SSR) a DSD `<link>`, and it produces no module-graph
+edge. An `ssr: false` shadow island has no DSD template and its root is created
+by the browser, so nothing delivered the sheet and the island rendered completely
+unstyled. Measured on an emitted island module: `has css import: false`,
+`styleLinks` present (server-only), no descriptor `styles` key.
+
+**The delivery (three parts, one fact).**
+
+1. The sidecar reader exposes the client-only phase as `clientOnly`: explicit
+   `ssr: false` or `hydrate: 'only'` (the same `resolveIslandSsrDsd` coercion the
+   router scanner applies). `ssr: true`/absent stay the SSR case. A dynamic or
+   duplicate `ssr` refuses with `OEIR_GENERATED_ELEMENT_SSR_INVALID`.
+2. For a client-only island with declared styles, the emitter writes one real
+   `import sheetN from '<specifier>';` per specifier and a descriptor
+   `styles: [sheetN, …]` row. The identifiers join the tail collision list. An
+   SSR island changes no byte. If a client-only island declares styles but no
+   static specifier reaches the emitter, the build fails closed with
+   `OEIR_GENERATED_ELEMENT_CLIENT_STYLES_UNWIRED` — an unstyled render is never
+   silent.
+3. The generated-element shell carries the row, validates every entry is a real
+   sheet object (`replaceSync` callable; no `cssRules` read, so the Firefox
+   still-loading race stays closed), and adopts through the class lane's SAME
+   `CompiledStyleScope` into the root it created. It releases on disconnect and
+   re-adopts on reconnect; an adopted DSD root (a marked link already in its
+   template) is never a target, and a light root adopts into its containing tree.
+
+**Scan admission follows the same fact.** A `missing-producer` shadow island used
+to be refused because there was no template and no client adoption channel. It
+stays refused for a server-rendered island; it is now ADMITTED when the island is
+client-only, because the emitted import plus the shell adoption is a complete
+delivery. `OE_ISLAND_STYLE_SHADOW_UNWIRED` therefore names exactly the
+server-rendered no-producer case.
+
+**The path is proven three ways locally.** A Node row set compiles the emitted
+bytes (`generated-element.client-styles.test.ts`, 12 rows). The real Router CLI
+build in `island-style-build.test.ts` shows the client-only island's chunk
+carrying the ONE content-addressed asset URL the manifest records (the test that
+used to pin "zero JS bytes" now pins the intended import instead — the old
+premise was only true while the island rendered unstyled). The element-browser
+suite compiles a `ssr: false` fixture through the lane and asserts the host's
+COMPUTED `display` is `inline-block` from `:host{display:inline-block}`.
+
+**Prerequisite defect fixed on the way (same slice, measured).** An
+`onConnect`/`onDispose` callback that read a root `signal`/`computed` was
+classified as a host-binding read and dropped SILENTLY: no diagnostic, no emitted
+hook, a green build and dead author code. ADR-0183 D-4 makes those resources the
+retained factory's own declarations, so the hook reads them as sibling closure
+captures. `generated-element.imports.test.ts` and the A11 row now assert the
+emitted callback, not just the signal declaration. The target `live-timer`
+template needs this combination (a ticking `signal` written from `onConnect`).
+
+**Not claimed.** No CI evidence (this line has none), no M12/M13/M14, no P5
+sign-off, no lane deletion. The nested-light-root-inside-a-shadow-template case
+stays a written rule, not a capability (see §"Two gaps that are NOT the same
+thing" in the handoff and the migration matrix).
+
+## 2026-11-21 amendment — `16b-LC` depth >= 2 lands: the cross-ledger transaction (facts only)
+
+This closes the "depth ≥ 2 OWED behind a cross-ledger transaction protocol" reading
+that the 2026-11-15/16 amendments recorded. It rewrites nothing above; the OWED
+text stays as history and this is the current state.
+
+**The protocol (runtime).** `beginInstancePass(owner)` now returns an
+`InstanceTransaction` token. A retained body that itself retains children calls
+`joinInstancePass(ownScope, token)`: it opens a NORMAL pass on its own ledger and
+registers as a member; it never commits or aborts. The root's `endInstancePass`
+commits the root pass first and then every surviving member (shallow-first, and a
+member whose ledger was released or whose pass number moved is skipped — the
+idempotent form of "its subtree is already gone"); `abortInstancePass` aborts
+members deepest-first and then the root pass, so an attempt that never happened
+leaves pre-existing entries intact with their previous structural index. Evicting
+ANY entry first releases that scope's own ledger, so grandchild bookkeeping can
+never outlive its owner, and an explicit owner teardown closes a live
+transaction's member passes before deleting the ledger. Failure identities grow by
+the same two internal codes the depth-1 slice already used (`STATE` for a
+mis-ordered bracket, `DISPOSED` for a joined owner that went away); a joined pass
+cannot be ended/aborted by its child body, and a closed token cannot be joined.
+
+**The emission (compiler).** The eligibility plan is the same monotone fixpoint
+with one more owner class: a site is retention-eligible when its owner EMITS
+retain calls (the root, or a retained component that itself retains children).
+`RetentionPlan` gains `retainingBodies` and `transaction`. A retaining body emits
+`const __oe_txn = beginInstancePass(host.instance)`; a retained retaining body
+emits `const __oe_txn = host.txn; if (__oe_txn !== undefined) joinInstancePass(
+host.instance, __oe_txn);`. The token travels in the compiler-private child host
+literal (`txn:`), emitted only for targets that retain children, so a depth-1
+module keeps exactly its pre-change bytes and graph.
+
+**What is proven (LOCAL Chromium + Node; measured commit `6fc34e713`).** Chromium `R8`: retained grandchild
+across a reconnect (both setups stay 1, the retained snapshot renders instead of
+the live prop). `R10`: a failed reconnect claim aborts the attempt, commits no
+child pass, surfaces exactly one `OEIR_LEAF_CLAIM_MISMATCH` and converges with
+both records intact. `R11`: `dispose(true)` releases the whole subtree once and a
+later connect re-runs BOTH setups on a new instance. Node artifact rows:
+`nested-instance-wiring.artifact.test.ts` (depth-2 site counts, no child bracket,
+one join per retaining child body) and `instance-ledger.test.ts` (40 rows, five of
+them the transaction). Suites: compiler 102 files / 1421 tests, element 136 /
+1063.
+
+**What this does NOT claim.** No §4.1d subtree contract, no recipe/list placement
+retention (still refused), no keep-alive, no scope-identity promise, no
+M12/M13/M14 or P5 evidence. The milestone-level exit claims stay where the
+closeout puts them.
+
+## 2026-11-21 amendment — the generated lane replays pre-hydration interactions (facts only)
+
+The generated lane captured a pre-hydration click (the entry installs
+`ensurePreHydrationClickCapture` through `document-services`) but never replayed
+it: the replay pair lived in `pre-upgrade-events.ts`, which the generated shell's
+P1 closure test lists among the old-backend modules the emitted bundle must not
+reach. Measured on the packed starter: `#942 click before idle hydration is
+replayed` and `third-party pressure does not block idle replay` were RED on
+chromium, firefox and webkit.
+
+**Delivery.** A new import-free module,
+`internal/compiled/runtime/pre-upgrade-replay-hook.ts`, holds one function slot.
+The capture module publishes its own `replay`/`release` pair into that slot when
+`ensurePreHydrationClickCapture` installs (the call the generated entry already
+makes), and the shell calls `replayPreUpgradeCaptures(this)` after a successful
+claim/mount and `releasePreUpgradeCapturesFor(this)` in the connect `finally` —
+the same two points the class facade uses. The hook's functions ARE the
+registry's, so there is one bucket map, one capture and one implementation; a
+page that never installs the capture keeps a null hook and both shell calls are
+honest no-ops.
+
+**Rejected shapes (measured).** (1) Importing the capture module from the shell
+fails the P1 closure row immediately. (2) Splitting the bucket registry into a
+separate module the shell imports was implemented and REVERTED: the capture
+module's `CompileHydrationOptions` type import becomes a value edge under a real
+bundler, so the split dragged the old backend in and the same row went red.
+
+**Evidence (LOCAL).** Packed starter `pnpm --dir tests/e2e/starter-smoke run
+test`: **33 passed (33)** across chromium, firefox and webkit, including both
+previously-red rows and the client-only computed-style row. Unit:
+`pre-upgrade-retention.test.ts` (4 rows, one for the hook). The shell's P1 closure
+row (26 tests) still passes.
+
+**Not claimed.** No M12/M13/M14 or P5 evidence; the hook is not a second capture
+or a second registry, and no new public symbol exists (the module is
+internal-only and reaches nothing).

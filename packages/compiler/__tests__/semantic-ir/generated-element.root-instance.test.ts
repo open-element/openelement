@@ -40,11 +40,9 @@ import {
   compileFunctionModule,
   type FunctionModelModule,
 } from '../../src/internal/compiler/semantic-core/function-frontend.ts';
-import { CompiledElementError } from '../../src/internal/compiler/semantic-core/compiler-diagnostics.ts';
 import { generateLeafModule } from '../../src/internal/compiler/semantic-ir/generated-leaf/generate.ts';
 import { compileGeneratedElementIfAdmitted } from '../../src/internal/compiler/semantic-ir/generated-element/compile.ts';
 import {
-  GENERATED_ELEMENT_DIAGNOSTIC,
   GENERATED_ELEMENT_IMPORT_CLASSIFIER,
   type GeneratedElementSite,
 } from '../../src/internal/compiler/semantic-ir/generated-element/contract.ts';
@@ -161,10 +159,6 @@ function functionText(module: string, name: string): string {
     .split('\n')
     .slice(range.start, range.end + 1)
     .join('\n');
-}
-
-function codes(error: CompiledElementError): string[] {
-  return error.diagnostics.map((diagnostic) => diagnostic.code);
 }
 
 describe('T3 root generated setup retention (Node)', () => {
@@ -406,27 +400,15 @@ describe('T3 root generated setup retention (Node)', () => {
     expect(setupPlacements).toBeGreaterThanOrEqual(2);
   });
 
-  test('R6 a root reading a host binding still fails closed at the lane gate', () => {
-    expect(() => compileGeneratedElementIfAdmitted(SIGNAL_SOURCE, FILE, { site: SITE })).toThrow(
-      CompiledElementError,
-    );
-    try {
-      compileGeneratedElementIfAdmitted(SIGNAL_SOURCE, FILE, { site: SITE });
-    } catch (error) {
-      expect(error).toBeInstanceOf(CompiledElementError);
-      expect(codes(error as CompiledElementError)).toContain(
-        GENERATED_ELEMENT_DIAGNOSTIC.UNBOUND_BINDING,
-      );
-    }
-    // The split adds no binding channel: a setup that reads a host binding
-    // cannot be served by the instance record (`instanceHostFor` carries props
-    // only), so the emitter keeps the pre-change text and reports no factory
-    // instead of writing a factory that references an undeclared name. The
-    // lane gate above remains the refusal authority.
+  test('R6 a root `signal` resource is created by the retained factory (ADR-0183 D-4)', () => {
+    // The retained setup factory is the module's production bindings source: it
+    // creates the resource and returns it in the record the shell keeps.
+    const compiled = compileGeneratedElementIfAdmitted(SIGNAL_SOURCE, FILE, { site: SITE });
+    expect(compiled).not.toBeNull();
     const module = frontModule(SIGNAL_SOURCE);
     const emitted = generateElementModule(module, SITE, { rootComponent: 'SignalCard' });
-    expect(emitted.rootInstanceFactory).toBeNull();
-    expect(emitted.tail).not.toContain('createInstance');
-    expect(emitted.module!.startsWith(generateLeafModule(module).module!)).toBe(true);
+    expect(emitted.rootInstanceFactory).not.toBeNull();
+    expect(emitted.tail).toContain('createInstance:');
+    expect(emitted.module).toContain('signal((');
   });
 });

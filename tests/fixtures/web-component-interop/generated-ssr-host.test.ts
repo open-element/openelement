@@ -10,13 +10,14 @@
  *   (`transformIslandSource`, the same call the router site resolver makes);
  * - the compiler admits it and returns the compiler-owned host export identity
  *   (`InteropGeneratedSsrCard__ssrHost`);
- * - the emitted shadow tail has the M11 host-producer ABI: the third
+ * - the emitted shadow tail has the current host-producer ABI: the third
  *   `attributes` parameter, the canonical property-seeding call over the
- *   descriptor rows, and the conditional `attributes` forwarding — the producer
- *   is what seeds literal/static host attributes into content props;
+ *   descriptor rows, the conditional `attributes` forwarding, and the
+ *   `nestedHost` light-child parameter — the producer is what seeds
+ *   literal/static host attributes into content props;
  * - the module executes no registration (registration stays the entry's one
  *   guard-owned decision);
- * - the REAL class page nests the host with literal attributes and a light
+ * - the REAL generated page nests the host with literal attributes and a light
  *   child, which is the standard SSR shape the vertical renders.
  *
  * The executable end-to-end bytes (real compiler + real guard + real serializer
@@ -28,7 +29,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
 import { transformIslandSource } from '@openelement/element/build-utils';
-import { compileElementProgram, compileGeneratedElementIfAdmitted } from '@openelement/compiler';
+import { compileGeneratedElementIfAdmitted } from '@openelement/compiler';
 
 const fixtureRoot = new URL('./', import.meta.url);
 
@@ -69,8 +70,9 @@ test('the real ssr:true generated shadow island compiles to the host-producer AB
   // seeding over the SAME descriptor rows, conditional host-attribute forwarding.
   expect(code).toContain(
     // M09-2e / #1803: the island declares a stylesheet on its shadow root, so
-    // the emitted host producer grows the typed styleLinks channel.
-    'export function InteropGeneratedSsrCard__ssrHost(props, lightChildren, attributes, styleLinks) {',
+    // the emitted host producer grows the typed styleLinks channel. The trailing
+    // `nestedHost` parameter is the nested light-child composition seam.
+    'export function InteropGeneratedSsrCard__ssrHost(props, lightChildren, attributes, styleLinks, nestedHost) {',
   );
   expect(code).toContain(
     'seedGeneratedElementHostProperties(__oeElementDescriptor.properties, props, attributes)',
@@ -89,7 +91,7 @@ test('the real ssr:true generated shadow island compiles to the host-producer AB
   expect(code).toContain('document.createElement("slot")');
 });
 
-test('the real class page nests the ssr:true host with literal attributes and light children', async () => {
+test('the real generated page nests the ssr:true host with literal attributes and light children', async () => {
   const page = await readFixtureFile('app/components/page-interop-home.tsx');
 
   // The standard SSR shape: literal/static attributes on the generated host.
@@ -103,39 +105,33 @@ test('the real class page nests the ssr:true host with literal attributes and li
   expect(page).toContain("import '../islands/interop-generated-ssr-card.tsx'");
 });
 
-test('the real class page compiles with the literal host attributes and light child', async () => {
+test('the real generated page compiles with the literal host attributes and light child', async () => {
   const pageSource = await readFixtureFile('app/components/page-interop-home.tsx');
-  const compiled = compileElementProgram(pageSource, 'app/components/page-interop-home.tsx');
-  expect(compiled.program.root.kind).toBe('shadow-open');
+  // The page is a generated function page (F16 class → function), so the
+  // surviving lane compiles it like any island module.
+  const compiled = compileGeneratedElementIfAdmitted(
+    pageSource,
+    'app/components/page-interop-home.tsx',
+    { site: { tag: 'index-page' } },
+  );
+  expect(compiled).not.toBeNull();
+  const code = compiled!.code;
+  expect(code).toContain('root: "shadow-open"');
   // The authored literal/static attributes ARE the standard SSR input: they are
-  // static template attributes, not a fabricated dynamic property channel.
-  const host = findTemplateElement(compiled.program.template, tag);
-  expect(host).toBeDefined();
-  expect(host!.attrs).toEqual([
-    ['id', 'generated-ssr-host'],
-    ['title', 'a "b" <c>'],
-    ['note', '<script>alert(1)</script>'],
-  ]);
-  expect(host!.children.map((child) => (child as { tag?: string }).tag)).toEqual(['span']);
+  // static template attributes carried as the nested host's attribute pairs, not
+  // a fabricated dynamic property channel.
+  const idAt = code.indexOf('.push(["id", "generated-ssr-host"]);');
+  const titleAt = code.indexOf('.push(["title", "a \\"b\\" <c>"]);');
+  const noteAt = code.indexOf('.push(["note", "<script>alert(1)</script>"]);');
+  expect(idAt).toBeGreaterThan(-1);
+  expect(titleAt).toBeGreaterThan(idAt);
+  expect(noteAt).toBeGreaterThan(titleAt);
+  expect(code).toContain('tag: "interop-generated-ssr-card"');
+  // The light child is carried as the host call's kid pushes, slot channel first.
+  expect(code).toContain('.push("<span");');
+  expect(code).toContain('.push(" slot=\\"", escapeAttrValue("x"), "\\"");');
+  expect(code).toContain('.push(escapeText("light & child"));');
 });
-
-/** First template element with the tag, depth-first (test helper). */
-function findTemplateElement(
-  nodes: readonly unknown[],
-  wantedTag: string,
-): { attrs?: Array<[string, string]>; children: readonly unknown[] } | undefined {
-  for (const node of nodes) {
-    const element = node as { tag?: string; children?: readonly unknown[] };
-    if (element.tag === wantedTag) {
-      return element as { attrs?: Array<[string, string]>; children: readonly unknown[] };
-    }
-    if (Array.isArray(element.children)) {
-      const found = findTemplateElement(element.children, wantedTag);
-      if (found !== undefined) return found;
-    }
-  }
-  return undefined;
-}
 
 test('the pre-M11 client-only generated host boundary is unchanged', async () => {
   const source = await readFixtureFile('app/islands/interop-generated-host.tsx');
@@ -148,7 +144,15 @@ test('the pre-M11 client-only generated host boundary is unchanged', async () =>
       site: { tag: 'interop-generated-host' },
     },
   );
-  // The emitter still appends the shadow host producer for a shadow root; the
-  // admission decision (ssr:false) is why the entry never pairs it.
-  expect(compiled?.ssrHostExport).toEqual('InteropGeneratedHost__ssrHost');
+  expect(compiled).not.toBeNull();
+  expect(compiled?.tag).toEqual('interop-generated-host');
+  // A styleless client-only island is PRODUCERLESS: the emitter appends no
+  // `<Name>__ssrHost` wrapper (emit.ts `producerlessClientOnly`) — the ssr:false
+  // admission is exactly why the entry has no host producer to pair.
+  expect(compiled?.ssrHostExport).toBeNull();
+  expect(compiled!.code).not.toContain('__ssrHost');
+  // The descriptor and its no-registration boundary are unchanged.
+  expect(compiled!.code).toContain('root: "shadow-open"');
+  expect(compiled!.code).toContain('properties: []');
+  expect(compiled!.code).not.toContain('customElements.define');
 });

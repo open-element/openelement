@@ -73,16 +73,23 @@ export default class ProfileCard extends HTMLElement {
 `;
 
 /**
- * A shadow root whose leaf emits no `<Field>__ssr`: the declared `value`
- * property channel keeps the component mount-only, so the emitter has no host
- * wrapper to append. The compiler admits the module and reports `null` — the
+ * A shadow root whose leaf emits no `<Field>__ssr`: a condition branch inside a
+ * restricted parser context (`<table>`) stays mount-only, because the branch
+ * markers are comments that the table parser would relocate, making the claim
+ * wire unreadable. The component is admitted and emits no producer — the
  * carrier must keep that "admitted, but no host producer" state distinct from a
  * light root and from a declined module.
+ *
+ * The shape used to be the declared `value` property channel, which kept the
+ * component mount-only until F16 admitted it (a server render has no live DOM to
+ * preserve, and `value="x"` is the honest server artifact). The property shape
+ * therefore has a producer now and can no longer stand in for this state.
  */
 const SHADOW_WITHOUT_SSR = `import { defineIslandConfig } from '@openelement/router';
-export const openElement = defineIslandConfig({ root: 'shadow', properties: { value: { default: '' } }, hydrate: 'idle' });
-function Field(props: { value: string }) {
-  return <input value={props.value} />;
+export const openElement = defineIslandConfig({ root: 'shadow', hydrate: 'idle' });
+function Field() {
+  const on = true;
+  return <table><tbody>{on ? <tr><td>y</td></tr> : <tr><td>n</td></tr>}</tbody></table>;
 }
 export default Field;
 `;
@@ -110,9 +117,14 @@ export default Field;
  * A shadow-root island with a real host producer that is still `ssr: false`
  * (client-only). Admission does not change the compiler fact: the scan must
  * record the producer, not hide it behind the client-only policy.
+ *
+ * The declared sheet is what keeps the producer: since F16 a client-only island
+ * is producerless only when it declares NO sheet (its `styleLinks` channel is the
+ * one thing a `<link>`-less island still needs a template for). Without the
+ * sheet this fixture would be the `missing-producer` shape, not a producer.
  */
 const SHADOW_PRODUCER_CLIENT_ONLY = `import { defineIslandConfig } from '@openelement/router';
-export const openElement = defineIslandConfig({ root: 'shadow', hydrate: 'only' });
+export const openElement = defineIslandConfig({ root: 'shadow', hydrate: 'only', styles: ['./client-card.css'] });
 function ClientCard() {
   return <div class="card"><slot></slot></div>;
 }

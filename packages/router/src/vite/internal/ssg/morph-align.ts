@@ -5,6 +5,7 @@
  * enhance-client.ts (#908).
  */
 
+import { PAGE_ROOT_ATTRIBUTE } from '../page-root-marker.ts';
 import type { IslandLifecycle } from './island-lifecycle.ts';
 import type { MorphFocusRestore } from './morph-focus-restore.ts';
 import type { MorphScrollRestore } from './morph-scroll-restore.ts';
@@ -67,10 +68,24 @@ export function createMorphAlign(deps: MorphAlignDeps): MorphAlign {
     return Boolean((el as unknown as Record<string, unknown>)[name]) !== el.hasAttribute(name);
   }
 
+  /**
+   * The compiler-owned host attribute the claim consumes on connect
+   * (`GENERATED_PROP_SEED`). Transport, not identity: the rival wire keeps it
+   * in the incoming document while the live host has already had it removed.
+   */
+  const CONSUMED_TRANSPORT_ATTRIBUTE = 'data-oe-prop-seed';
+
   function syncAttrs(oldEl: Element, newEl: Element): void {
     const skip = STATE_ATTRS[oldEl.tagName];
     const control = CONTROL_ATTRS[oldEl.tagName];
     const skipAttr = (name: string): boolean =>
+      // Compiler-owned TRANSPORT attribute: the generated host's SSR→claim prop
+      // seed (GENERATED_PROP_SEED in the element runtime; the literal is repeated
+      // here because the morph client is a standalone emitted chunk). The claim
+      // consumes it on connect, so the incoming document still carries it while
+      // the live host does not. Writing it back would resurrect a value the claim
+      // already took, so the morph neither adds nor removes it.
+      name === CONSUMED_TRANSPORT_ATTRIBUTE ||
       (skip !== undefined && skip[name] === 1) ||
       (control !== undefined && control[name] === 1 && controlDirty(oldEl, name));
     for (let i = oldEl.attributes.length - 1; i >= 0; i--) {
@@ -229,7 +244,9 @@ export function createMorphAlign(deps: MorphAlignDeps): MorphAlign {
       return;
     }
     if (oldElement.hasAttribute('data-open-preserve')) return;
-    const isIsland = tags.indexOf(oldElement.tagName.toLowerCase()) !== -1;
+    const isPageRoot =
+      oldElement.hasAttribute(PAGE_ROOT_ATTRIBUTE) && newElement.hasAttribute(PAGE_ROOT_ATTRIBUTE);
+    const isIsland = !isPageRoot && tags.includes(oldElement.tagName.toLowerCase());
     if (isIsland) {
       const newTemplate = shadowTemplate(newElement);
       if (

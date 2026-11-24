@@ -1,0 +1,6 @@
+/* The one rule the browser row observes through computed style: the host's box.
+   A custom element's default `display` is `inline`, so `inline-block` here is
+   only reachable if the declared sheet was actually adopted. */
+:host {
+  display: inline-block;
+}

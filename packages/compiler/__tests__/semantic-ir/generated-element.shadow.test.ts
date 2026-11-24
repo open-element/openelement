@@ -82,7 +82,10 @@ const FORBIDDEN_MODULE_SUFFIXES = [
   '/internal/compiled/runtime/parts.ts',
   '/internal/compiled/runtime/hydrate.ts',
   '/internal/compiled/runtime/fresh-dom.ts',
-  '/internal/compiled/runtime/props.ts',
+  // `runtime/props.ts` is deliberately NOT listed: ADR-0183 D-5 makes it the
+  // ONE props record, and the shell (props owner) consults it. It is a neutral
+  // primitive (its only import is the signal framework), not part of the old
+  // Part Program backend this list exists to keep out.
   '/internal/compiled/runtime/blocks.ts',
   '/internal/compiled/runtime/revive.ts',
   '/internal/compiled/runtime/error-boundary.ts',
@@ -201,6 +204,7 @@ async function buildBundle(module: string, dir: string): Promise<BundleResult> {
     shim,
     [
       `export { claimRecipe, createRecipe, insertRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
+      `export { reconcileEachEntries } from ${JSON.stringify(join(runtime, 'each-reconcile.ts'))};`,
       `export { bindSignalWrites, runUntracked } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
       `export { runtimeProbe } from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
       `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
