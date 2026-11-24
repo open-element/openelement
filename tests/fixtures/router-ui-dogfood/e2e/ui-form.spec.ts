@@ -66,6 +66,66 @@ test.describe('open-input / open-button form participation', () => {
     );
   });
 
+  test('open-button preserves constraint validation before a form submit event', async ({
+    page,
+  }) => {
+    await page.locator('#submit-open button').click();
+    const state = await page.evaluate(`(() => {
+      const form = ${deepFirstExpr('#dogfood-form')};
+      return { valid: form?.checkValidity() ?? true };
+    })()`);
+    expect(state).toEqual({ valid: false });
+    await expect(page.locator('#form-output')).toHaveText('');
+  });
+
+  test('open-button delivers one native submit event for an ordinary form', async ({ page }) => {
+    await page.evaluate(`(() => {
+      const form = ${deepFirstExpr('#single-delivery-form')};
+      window.__singleDeliverySubmits = 0;
+      form?.addEventListener('submit', () => { window.__singleDeliverySubmits++; });
+    })()`);
+    await page.locator('#single-delivery-submit button').click();
+
+    const state = await page.evaluate(`(() => ({
+      submits: window.__singleDeliverySubmits,
+      dialogOpen: ${deepFirstExpr('#single-delivery-dialog')}?.hasAttribute('open') ?? false,
+    }))()`);
+    expect(state).toEqual({ submits: 1, dialogOpen: false });
+  });
+
+  test('open-button validates enhanced forms before dispatching from a shadow root', async ({
+    page,
+  }) => {
+    let posts = 0;
+    await page.route('**/form', async (route) => {
+      if (route.request().method() === 'POST') posts++;
+      await route.continue();
+    });
+
+    await page.locator('#enhanced-submit button').click();
+    expect(await page.evaluate(`${deepFirstExpr('#enhanced-form')}?.checkValidity() ?? true`)).toBe(
+      false,
+    );
+    expect(posts).toBe(0);
+  });
+
+  test('open-button enhancement intercepts one valid submit inside page shadow DOM', async ({
+    page,
+  }) => {
+    let posts = 0;
+    await page.route('**/form', async (route) => {
+      if (route.request().method() !== 'POST') return route.continue();
+      posts++;
+      const html = await page.locator('html').evaluate((element) => element.outerHTML);
+      await route.fulfill({ status: 200, contentType: 'text/html', body: html });
+    });
+
+    await page.locator('#enhanced-required').fill('ready');
+    await page.locator('#enhanced-submit button').click();
+    await expect.poll(() => posts).toBe(1);
+    await expect(page).toHaveURL(/\/form$/);
+  });
+
   test('required + empty maps to valueMissing and blocks native submission', async ({ page }) => {
     await page.locator('#submit-native').click();
     const validity = await page.evaluate<{ invalid: boolean; formValid: boolean }>(`(() => {

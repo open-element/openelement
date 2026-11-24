@@ -37,6 +37,15 @@ export default function FormPage() {
         <button id="submit-native" type="submit">Native submit</button>
         <button id="reset-native" type="reset">Native reset</button>
       </form>
+      <dialog id="single-delivery-dialog" open>
+        <form id="single-delivery-form" method="dialog">
+          <open-button id="single-delivery-submit" type="submit">Close dialog</open-button>
+        </form>
+      </dialog>
+      <form id="enhanced-form" action="/form" method="post" data-open-enhance="">
+        <input id="enhanced-required" name="required" required />
+        <open-button id="enhanced-submit" type="submit">Enhanced submit</open-button>
+      </form>
       <open-input id="invalid" label="Invalid" error="Required field"></open-input>
       <open-input id="native-disabled" label="Off" disabled></open-input>
       {/* open-button's disabled contract, BOTH shapes, as real SSR entities

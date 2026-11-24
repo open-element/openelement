@@ -92,6 +92,24 @@ export interface IslandStyleDeclaration {
   readonly scopeTag?: string | null;
 }
 
+/**
+ * The canonical style scope for a generated island declaration.
+ *
+ * Light-root components use their tag as an `@scope` boundary. Pages opt out
+ * explicitly with `scopeTag: null`, while both open and closed shadow roots
+ * rely on their root boundary and therefore ship unscoped authored CSS.
+ */
+export function islandStyleScopeTag(declaration: IslandStyleDeclaration): string | undefined {
+  if (
+    declaration.root === 'shadow' ||
+    declaration.root === 'closed' ||
+    declaration.scopeTag === null
+  ) {
+    return undefined;
+  }
+  return declaration.scopeTag ?? declaration.tagName;
+}
+
 /** moduleId → declaration. Module ids are unique per island module. */
 const declarations = new Map<string, IslandStyleDeclaration>();
 

@@ -73,7 +73,6 @@ interface PageRenderIntent {
 
 interface NormalizedPageRenderIntent {
   mode: PageRenderingMode;
-  stream?: { defer: readonly string[] };
 }
 
 export interface PageRouteContext {
@@ -622,28 +621,16 @@ export function definePage<
           'or remove stream to keep the existing render path.',
       );
     }
-    // Streaming is a compiled-Part-Program channel: the deferred-field front
-    // gate rides the compiled program's Part owners. A server function page
-    // owns no program, so the declaration is rejected HERE — at the authoring
-    // surface, naming the real reason — instead of surfacing later as an
-    // unrelated scan/compile diagnostic.
-    if (!isClass) {
-      throw authoringError(
-        PageErrorCode.RENDER_MODE,
-        `${ERROR_PREFIX} renderIntent.stream is not supported on a server function page: ` +
-          'streaming is a compiled-Part-Program channel (the deferred-field front gate rides ' +
-          'the compiled program), and a server function page has none. Remove stream, or move ' +
-          'the page to a compiled @element class route for a streamed page.',
-      );
-    }
+    throw authoringError(
+      PageErrorCode.RENDER_MODE,
+      `${ERROR_PREFIX} renderIntent.stream is not supported on page routes. ` +
+        'Remove the stream declaration.',
+    );
   }
   const sharedDescriptor = {
     ...(descriptor?.route !== undefined ? { route: descriptor.route } : {}),
     ...(descriptor?.head !== undefined ? { head: descriptor.head } : {}),
-    renderIntent: {
-      mode: renderMode,
-      ...(stream === undefined ? {} : { stream: { defer: [...stream.defer] } }),
-    },
+    renderIntent: { mode: renderMode },
     ...(descriptor?.props !== undefined ? { props: descriptor.props } : {}),
     ...(descriptor?.error !== undefined ? { error: descriptor.error } : {}),
   };

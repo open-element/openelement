@@ -132,15 +132,20 @@ test('definePage(Class) without a descriptor defaults renderIntent to static', a
   expect(descriptor.error).toEqual(undefined);
 });
 
-test('definePage() validates the opt-in stream.defer authoring shape', async () => {
-  const Page = await makeCompiledPageClass('stream-authoring-page', 'Hello');
-  definePage(Page, {
-    renderIntent: { mode: 'dynamic', stream: { defer: ['first', 'second'] } },
-  });
-  expect(
-    (Page as unknown as { openElementPage: { renderIntent: unknown } }).openElementPage
-      .renderIntent,
-  ).toEqual({ mode: 'dynamic', stream: { defer: ['first', 'second'] } });
+test('a compiled generated page rejects the retired dynamic stream.defer channel', async () => {
+  // This is the actual generated page class a route import receives. A route
+  // such as `definePage(ProfileCard, { renderIntent: { mode: 'dynamic', stream:
+  // { defer: ['first'] } } })` reaches this authoring entry while SSG imports
+  // the server bundle, even though route scanning no longer emits a manifest.
+  const Page = await makeCompiledPageClass('profile-card', 'Profile');
+  assertThrowsIncludes(
+    () =>
+      definePage(Page, {
+        renderIntent: { mode: 'dynamic', stream: { defer: ['first', 'second'] } },
+      }),
+    OpenElementError,
+    'renderIntent.stream is not supported on page routes',
+  );
   const invalid = [
     { mode: 'static', stream: { defer: ['first'] } },
     { mode: 'dynamic', stream: { defer: [] } },
@@ -157,6 +162,14 @@ test('definePage() validates the opt-in stream.defer authoring shape', async () 
       'renderIntent.stream requires mode',
     );
   }
+
+  const streamIntent = { mode: 'dynamic' as const, stream: { defer: ['first'] } };
+  const overwrittenIntent = { ...streamIntent, stream: undefined };
+  definePage(Page, { renderIntent: overwrittenIntent });
+  expect(
+    (Page as unknown as { openElementPage: { renderIntent: unknown } }).openElementPage
+      .renderIntent,
+  ).toEqual({ mode: 'dynamic' });
 });
 
 test('definePage() descriptor renders through the compiled serializer', async () => {

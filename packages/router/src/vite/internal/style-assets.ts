@@ -77,7 +77,7 @@ import {
 } from '@openelement/compiler';
 import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
 import { createServerComponentSourceResolver } from './server-component-host.ts';
-import type { IslandStyleDeclaration } from './island-style-declarations.ts';
+import { islandStyleScopeTag, type IslandStyleDeclaration } from './island-style-declarations.ts';
 import { walkModuleGraph } from './module-graph-walk.ts';
 import { registerArtifactCandidates } from './collect-shadow-candidates.ts';
 import { findBuildWorkspaceRootOrUndefined } from '../workspace-alias.ts';
@@ -904,11 +904,7 @@ function registerDeclaredIslandStyleEdges(): Map<string, RegisteredStyleRequest>
     registerStyleEdges(
       declaration.moduleId,
       declaration.specifiers,
-      declaration.root === 'shadow'
-        ? undefined
-        : declaration.scopeTag === null
-          ? undefined
-          : (declaration.scopeTag ?? declaration.tagName),
+      islandStyleScopeTag(declaration),
     );
     for (const request of styleRequestsForImporter(declaration.moduleId)) {
       edges.set(request.moduleId, request);
@@ -1233,7 +1229,7 @@ export function devAuthoredIslandStyleKeys(declaration: IslandStyleDeclaration):
   registerStyleEdges(
     declaration.moduleId,
     declaration.specifiers,
-    declaration.root === 'shadow' ? undefined : declaration.tagName,
+    islandStyleScopeTag(declaration),
   );
   // Join by the registry KEY the registration above used, not by importer
   // attribution: a shadow sheet shared with a class island's authored import
@@ -1241,11 +1237,7 @@ export function devAuthoredIslandStyleKeys(declaration: IslandStyleDeclaration):
   // importer registered last, so the per-importer request list would drop
   // the shared sheet from this island's declared dev links.
   return declaration.specifiers.map((specifier) =>
-    styleRequestModuleId(
-      declaration.moduleId,
-      specifier,
-      declaration.root === 'shadow' ? undefined : declaration.tagName,
-    ),
+    styleRequestModuleId(declaration.moduleId, specifier, islandStyleScopeTag(declaration)),
   );
 }
 

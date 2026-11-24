@@ -742,18 +742,6 @@ export function classifyPageRoute(
     if (classification.pageKind !== 'generated-element-page') {
       return { pageKind: classification.pageKind };
     }
-    // M11-2 bounded lane: a generated host is synchronous-SSR only (ADR-0181
-    // A6 structurally refuses the stream executor), so a stream declaration is
-    // refused at build instead of emitting a guard the runtime cannot serve.
-    if ((route as { readonly streamManifest?: unknown }).streamManifest !== undefined) {
-      throw buildError(
-        PageClassificationCode.GENERATED_ELEMENT_PAGE_UNSUPPORTED,
-        `[openElement] page route ${route.path} (${route.filePath}) is a generated element page ` +
-          'and declares renderIntent.stream; generated element hosts are synchronous-SSR only, ' +
-          'so streaming/deferred DSD for them is not supported. Remove the stream declaration, ' +
-          'or move the page to a compiled @element class page.',
-      );
-    }
     const generatedElementPage = classification.generatedElementPage;
     if (generatedElementPage === undefined) {
       throw buildError(

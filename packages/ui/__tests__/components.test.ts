@@ -47,16 +47,23 @@ function buttonHost(rows: Partial<ButtonHost> = {}): ButtonHost {
   }) as unknown as ButtonHost;
 }
 
-function fakeForm(events: string[], prevent = false): HTMLFormElement {
+function fakeForm(
+  events: string[],
+  options: { enhanced?: boolean; valid?: boolean; requestSubmit?: boolean } = {},
+): HTMLFormElement {
   return {
     tagName: 'FORM',
-    dispatchEvent: (event: Event) => {
-      if (prevent) event.preventDefault();
-      events.push(event.type);
-      return true;
+    noValidate: false,
+    hasAttribute: (name: string) => name === 'data-open-enhance' && options.enhanced === true,
+    reportValidity: () => {
+      events.push('reportValidity');
+      return options.valid !== false;
     },
     reset: () => events.push('reset'),
-    requestSubmit: () => events.push('requestSubmit'),
+    ...(options.requestSubmit === false
+      ? {}
+      : { requestSubmit: () => events.push('requestSubmit') }),
+    submit: () => events.push('nativeSubmit'),
   } as unknown as HTMLFormElement;
 }
 
@@ -70,14 +77,37 @@ test('open-button: click dispatches open-click and submits an associated form', 
   const publish = () => host.dispatchEvent(new Event('open-click'));
   activateButton(host, new Event('click'), publish);
   expect(openClickSeen, 'open-click must fire').toBeTruthy();
-  expect(events).toEqual(['submit', 'requestSubmit']);
+  expect(events).toEqual(['requestSubmit']);
 });
 
-test('open-button: a prevented submit skips requestSubmit', () => {
+test('open-button: enhanced forms use the same native requestSubmit path', () => {
   const events: string[] = [];
-  const host = buttonHost({ type: 'submit', closest: () => fakeForm(events, true) });
+  const host = buttonHost({
+    type: 'submit',
+    closest: () => fakeForm(events, { enhanced: true }),
+  });
   activateButton(host, new Event('click'), () => {});
-  expect(events).toEqual(['submit']);
+  expect(events).toEqual(['requestSubmit']);
+});
+
+test('open-button: the native fallback validates before direct submission', () => {
+  const events: string[] = [];
+  const host = buttonHost({
+    type: 'submit',
+    closest: () => fakeForm(events, { valid: false, requestSubmit: false }),
+  });
+  activateButton(host, new Event('click'), () => {});
+  expect(events).toEqual(['reportValidity']);
+});
+
+test('open-button: a valid native fallback submits after validation', () => {
+  const events: string[] = [];
+  const host = buttonHost({
+    type: 'submit',
+    closest: () => fakeForm(events, { requestSubmit: false }),
+  });
+  activateButton(host, new Event('click'), () => {});
+  expect(events).toEqual(['reportValidity', 'nativeSubmit']);
 });
 
 test('open-button: type=reset resets the form; anchor branch never touches forms (#637)', () => {
