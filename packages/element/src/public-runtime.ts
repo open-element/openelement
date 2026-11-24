@@ -547,17 +547,7 @@ function createNestedHostExpander(
   };
   // The enclosing producer reads the lifted sheets back off the expander it was
   // given, so the collector never widens the producer's signature.
-  attachNestedStyleSink(expander, nestedStyleSink);
-  return expander;
-}
-
-/**
- * Attach the ONE live sheet list to a render's expander. A host with no expander
- * (a render that admits no nested tag) has no lift channel and needs none.
- */
-function attachNestedStyleSink(expander: unknown, sink: NestedStyleLinkSink): void {
-  if (expander === null || expander === undefined) return;
-  (expander as { nestedStyleSink?: NestedStyleLinkSink }).nestedStyleSink = sink;
+  return Object.assign(expander, { nestedStyleSink });
 }
 
 /** The live sink a render's expander carries, or undefined when it has none. */

@@ -10,6 +10,7 @@
  *
  * GENERATED lane (F16: class → function).
  */
+import { signal } from '@openelement/element';
 import { defineIslandConfig } from '@openelement/router';
 
 export const openElement = defineIslandConfig({
@@ -29,6 +30,7 @@ interface FormPageProps {
 }
 
 export default function FormPage(props: FormPageProps) {
+  const count = signal(0);
   return (
     <main>
       <h1>request-time form</h1>
@@ -47,6 +49,9 @@ export default function FormPage(props: FormPageProps) {
         <span data-error="none"></span>
       )}
       <p id="echo">{props.echoText}</p>
+      <button id="page-increment" type="button" onClick={() => (count.value += 1)}>
+        {count.value}
+      </button>
       <live-counter></live-counter>
     </main>
   );

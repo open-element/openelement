@@ -203,7 +203,7 @@ export function projectArticlePage(
  *    A genuinely missing article renders the visible block with the model's
  *    message and slug.
  */
-export interface ArticleViewProps {
+export type ArticleViewProps = {
   articleHidden: boolean;
   metadata: ReadingMetadata & { lede: string };
   navigation: {
@@ -214,7 +214,7 @@ export interface ArticleViewProps {
   locale: string;
   articleHtml: TrustedHtml;
   notFoundRows: Array<{ key: string; label: string }>;
-}
+};
 
 export function projectArticleView(
   collection: ArticleCollection,

@@ -155,18 +155,23 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   // build-time `routeInfo.pageKind` fact (M11-1), not the page descriptor's
   // runtime `kind`.
   const hasFunctionPages = desc.pageRoutes.some((route) => pageKindOf(route) === 'function-page');
+  const generatedRootOption = desc.pageRoutes.some(
+    (route) => pageKindOf(route) === 'generated-element-page',
+  )
+    ? ', generatedPageRoot: info.pageKind === "generated-element-page"'
+    : '';
   lines.push('    let content;');
   if (hasFunctionPages) {
     lines.push('    if (info.pageKind === "function-page") {');
     lines.push('      content = await __renderFunctionPageAwaited(page, props);');
     lines.push('    } else {');
     lines.push(
-      '      content = __ssr(info.tagName, props, { route: routePath, documentStyles: __documentStyles });',
+      `      content = __ssr(info.tagName, props, { route: routePath, documentStyles: __documentStyles${generatedRootOption} });`,
     );
     lines.push('    }');
   } else {
     lines.push(
-      '    content = __ssr(info.tagName, props, { route: routePath, documentStyles: __documentStyles });',
+      `    content = __ssr(info.tagName, props, { route: routePath, documentStyles: __documentStyles${generatedRootOption} });`,
     );
   }
   lines.push('    for (const renderer of __matchingRenderers(routePath)) {');
@@ -278,12 +283,12 @@ export function renderSsgSection(desc: EntryDescriptor): string {
     );
     lines.push('        } else {');
     lines.push(
-      '          __errorPageHtml = __ssr(info.tagName, __pageErrorProps(info.module, error, __errorPageContext), { route: routePath, documentStyles: __documentStyles });',
+      `          __errorPageHtml = __ssr(info.tagName, __pageErrorProps(info.module, error, __errorPageContext), { route: routePath, documentStyles: __documentStyles${generatedRootOption} });`,
     );
     lines.push('        }');
   } else {
     lines.push(
-      '        const __errorPageHtml = __ssr(info.tagName, __pageErrorProps(info.module, error, __errorPageContext), { route: routePath, documentStyles: __documentStyles });',
+      `        const __errorPageHtml = __ssr(info.tagName, __pageErrorProps(info.module, error, __errorPageContext), { route: routePath, documentStyles: __documentStyles${generatedRootOption} });`,
     );
   }
   lines.push(

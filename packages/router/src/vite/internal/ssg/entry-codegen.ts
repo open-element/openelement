@@ -13,7 +13,7 @@
  */
 
 import type { PageRouteDecl, RendererDecl } from '@openelement/protocol/ssg';
-import { isFunctionPage } from './page-classification.ts';
+import { isFunctionPage, pageKindOf } from './page-classification.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import {
   documentWrapOptionsLines,
@@ -187,7 +187,8 @@ function routeRenderStatement(
     // fact (M11-1), never a runtime module-shape check.
     return `${indent}let __content = await __renderFunctionPageAwaited(__page, ${propsExpr})`;
   }
-  return `${indent}let __content = __ssr(__tag, ${propsExpr}, { route: ${ctx.pathLiteral}, documentStyles: __documentStyles })`;
+  const pageRoot = pageKindOf(ctx.route) === 'generated-element-page';
+  return `${indent}let __content = __ssr(__tag, ${propsExpr}, { route: ${ctx.pathLiteral}, documentStyles: __documentStyles${pageRoot ? ', generatedPageRoot: true' : ''} })`;
 }
 
 /** Emissions shared by the success path and the error-boundary channel. */
@@ -325,7 +326,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
       );
     } else {
       lines.push(
-        `        let __errorHtml = __ssr(__tag, __pageErrorProps(${ctx.route.varName}, err, __pageContext), { route: ${pathLiteral}, documentStyles: __documentStyles })`,
+        `        let __errorHtml = __ssr(__tag, __pageErrorProps(${ctx.route.varName}, err, __pageContext), { route: ${pathLiteral}, documentStyles: __documentStyles${pageKindOf(ctx.route) === 'generated-element-page' ? ', generatedPageRoot: true' : ''} })`,
       );
     }
     if (matchingRenderers.length > 0) {

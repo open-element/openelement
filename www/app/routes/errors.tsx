@@ -156,7 +156,7 @@ export function PageErrors(props: {
     // pagefind stops indexing every page that lacks the attribute. The shell
     // already renders the one <main> landmark (#main-content).
     <div class='page-errors text-foreground' data-pagefind-body>
-      <open-reading-shell rail footer metadata={props.metadata} locale={props.locale}>
+      <open-reading-shell meta rail footer metadata={props.metadata} locale={props.locale}>
         <div slot='rail'>
           <open-page-rail items={props.railItems} locale={props.locale}></open-page-rail>
         </div>

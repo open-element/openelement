@@ -110,10 +110,9 @@ test.describe('Link Navigation', () => {
     await page.getByRole('link', { name: 'Start building', exact: true }).first().click();
 
     await page.waitForURL(/\/guide\/getting-started\/?$/);
-    // The route page element is slotted into the compiled light-root shell.
+    // The route's reading shell is projected into the compiled light-root layout.
     await expect(page.locator('app-layout')).toHaveAttribute('data-oe-light', '');
-    await expect(page.locator('guide-getting-started')).toHaveCount(1);
-    await expect(page.locator('guide-getting-started open-article-view')).toHaveCount(1);
+    await expect(page.locator('open-reading-shell .article-content')).toHaveCount(1);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   });
 
@@ -129,7 +128,7 @@ test.describe('Link Navigation', () => {
     // page body — the first is the shell's).
     await expect(page.locator('app-layout')).toHaveCount(1);
     await expect(page.getByRole('main').first()).toBeVisible();
-    await expect(page.locator('guide-islands-and-ssr')).toHaveCount(1);
+    await expect(page.getByRole('heading', { level: 1, name: 'Islands and SSR' })).toBeVisible();
   });
 });
 

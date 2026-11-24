@@ -61,7 +61,18 @@ runs:
           if timeout --kill-after=10 600 ./node_modules/.bin/playwright install ${deps_flag} ${ENGINES}; then
             exit 0
           fi
+          if [ "${attempt}" -eq 3 ]; then break; fi
           echo "::warning::playwright install attempt ${attempt}/3 failed; retrying"
+          # GitHub's Ubuntu runner can keep returning successful but very slow
+          # downloads from its regional EC2 mirror (#1805). Switch to Ubuntu's
+          # primary archive on retry, keeping the image's other mirror entries
+          # and the existing signed source configuration.
+          mirror_list=/etc/apt/apt-mirrors.txt
+          if [ "${WITH_DEPS}" = "true" ] && [ -f "${mirror_list}" ] &&
+             grep -q '\.ec2\.archive\.ubuntu\.com/ubuntu' "${mirror_list}"; then
+            echo "Retrying Ubuntu dependencies via archive.ubuntu.com"
+            sudo sed -Ei 's@https?://[[:alnum:]-]+\.ec2\.archive\.ubuntu\.com/ubuntu@https://archive.ubuntu.com/ubuntu@g' "${mirror_list}"
+          fi
           sleep 10
         done
         echo "::error::playwright install failed after 3 attempts (${ENGINES})"

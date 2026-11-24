@@ -245,6 +245,8 @@ export interface StaticComponentDecl {
    * reference to the tag exists anywhere.
    */
   pageComponent?: boolean;
+  /** A generated host reached through a page component’s side-effect imports. */
+  pageComponentDependency?: boolean;
 }
 
 /** The build-time SSR admission decisions per component tag. */

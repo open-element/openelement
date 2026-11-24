@@ -301,6 +301,7 @@ export async function scanStaticComponents(
   // generated page root then has no host-producer fact for the entry to pair.
   // Reading them here keeps ONE record shape for "a component the server renders".
   const pageComponentFiles = new Set<string>();
+  const pageComponentDependencies = new Set<string>();
   for (const route of options.routes) {
     if (route.type !== 'page' || route.special) continue;
     const routeFile = resolve(routeRoot, route.filePath);
@@ -317,10 +318,14 @@ export async function scanStaticComponents(
     // page module. Without this expansion a page's nested components were never
     // scanned, so a closed-root child got no host-producer record and rendered as
     // a bare tag (measured on ui-dogfood's /boundaries).
-    for (const nested of staticImportsOfModule(resolved)) pageComponentFiles.add(nested);
+    for (const nested of staticImportsOfModule(resolved)) pageComponentDependencies.add(nested);
     pageComponentFiles.add(resolved);
   }
-  for (const file of [...walk.files, ...pageComponentFiles]) {
+  for (const file of new Set([
+    ...walk.files,
+    ...pageComponentFiles,
+    ...pageComponentDependencies,
+  ])) {
     if (!inside(root, file)) continue;
     // A PAGE MODULE that declares its own sheets (P-2b, 2026-11-21). A generated
     // light page owns a root box rule exactly like a class page's `:host`, but
@@ -388,6 +393,9 @@ export async function scanStaticComponents(
         // input that the class lane never had.
         ...(pageComponentFiles.has(file) && generatedHostExport !== undefined
           ? { pageComponent: true }
+          : {}),
+        ...(pageComponentDependencies.has(file) && generatedHostExport !== undefined
+          ? { pageComponentDependency: true }
           : {}),
       });
       // A page-local GENERATED component's `styles` declaration rides the SAME

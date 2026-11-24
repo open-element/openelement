@@ -143,7 +143,9 @@ test.describe('valid article pages carry no not-found fallback text', () => {
 
       // The retired block was the article shell's only hidden
       // data-pagefind-ignore node; no valid page may keep one.
-      await expect(page.locator('open-article-view [data-pagefind-ignore][hidden]')).toHaveCount(0);
+      await expect(
+        page.locator('[data-pagefind-body] ~ [data-pagefind-ignore][hidden]'),
+      ).toHaveCount(0);
 
       expect(await leakedFallbackTexts(page, trailingSlug(route))).toEqual([]);
 

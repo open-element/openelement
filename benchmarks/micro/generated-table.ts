@@ -22,7 +22,7 @@ import { compileGeneratedElementIfAdmitted } from '../../packages/compiler/src/i
 import type { GeneratedElementSite } from '../../packages/compiler/src/internal/compiler/semantic-ir/generated-element/contract.ts';
 import * as leafRuntime from '../../packages/element/src/internal/compiled/leaf-runtime.ts';
 import { LifetimeScope } from '../../packages/element/src/internal/compiled/lifetime-scope.ts';
-import { FDocument, toHtml, type FElement } from './counting-dom.ts';
+import { FDocument, FElement, FText, type FNode } from './counting-dom.ts';
 
 /** The generated-lane keyed table: the same rows/ops the retired input drove. */
 export const GENERATED_TABLE_SOURCE = `
@@ -152,16 +152,18 @@ export interface GeneratedTableFacts {
   readonly removeLeftRowCount: number;
 }
 
-/** Count `<tr` occurrences in the rendered HTML (no querySelector on the fake DOM). */
-function rowCount(html: string): number {
-  return html.split('<tr').length - 1;
+function elementsByTag(root: FElement, tagName: string): FElement[] {
+  return root.childNodes.flatMap((node) => {
+    if (!(node instanceof FElement)) return [];
+    if (node.tagName === tagName) return [node];
+    return elementsByTag(node, tagName);
+  });
 }
 
-/** The `td` text contents of the rendered rows, in document order. */
-function rowCells(html: string): string[] {
-  return [...html.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((match) =>
-    match[1]!.replace(/<[^>]*>/g, ''),
-  );
+function textContent(node: FNode): string {
+  if (node instanceof FText) return node.data;
+  if (node instanceof FElement) return node.childNodes.map(textContent).join('');
+  return '';
 }
 
 /**
@@ -187,7 +189,7 @@ export function runGeneratedTableBenchmark(): GeneratedTableFacts {
     for (const node of mounted) root.appendChild(node);
     const rows = record.rows as { value: GeneratedBenchRow[] };
     rows.value = buildGeneratedRows(1000);
-    const mountedRowCount = rowCount(toHtml(root));
+    const mountedRowCount = elementsByTag(root, 'TR').length;
     const mountedElements = doc.counts.elements;
     const mountTextWrites = doc.counts.textWrites;
 
@@ -214,19 +216,22 @@ export function runGeneratedTableBenchmark(): GeneratedTableFacts {
     swapped[998] = first;
     rows.value = swapped;
     const swapInsertions = doc.counts.insertions;
-    const cells = rowCells(toHtml(root));
-    const swappedIds = [String(cells[2] ?? ''), String(cells[998 * 2] ?? '')] as const;
     // The FULL order follows the keys — the identity contract #1455 pins on
     // the retained runtime, asserted row by row, not just at the two named
     // positions.
-    const swappedOrderIds = cells.filter((_, index) => index % 2 === 0).map(String);
+    const swappedOrderIds = elementsByTag(root, 'TR').map((row) => {
+      const idCell = elementsByTag(row, 'TD')[0];
+      if (!idCell) throw new Error('generated benchmark row is missing its ID cell');
+      return textContent(idCell);
+    });
+    const swappedIds = [swappedOrderIds[1] ?? '', swappedOrderIds[998] ?? ''] as const;
     const expectedSwappedOrderIds = swapped.map((row) => String(row.id));
 
     // Remove one row: exactly one <tr> leaves the document.
     doc.resetCounts();
     rows.value = rows.value.filter((row) => row.id !== 5);
     const removeRemovals = doc.counts.removals;
-    const removeLeftRowCount = rowCount(toHtml(root));
+    const removeLeftRowCount = elementsByTag(root, 'TR').length;
 
     return {
       compiledBytes: bench.compiledBytes,

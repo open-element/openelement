@@ -5,7 +5,6 @@ import { stableModuleId } from '@openelement/compiler';
 import { runtimeModulePath } from '../runtime-module-path.ts';
 import { findBuildWorkspaceRootOrUndefined } from '../../workspace-alias.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
-import { isPageRootAdmission } from './client-admission.ts';
 import {
   type AdmittedClientIslandEntry,
   type AdmittedIslandModuleSpecifier,
@@ -634,18 +633,6 @@ var __oeAttachDevLiveStyles = function (Ctor, tag) {
     .join(',\n');
 
   const tags = admittedIslands.map((i) => quoteGeneratedJavaScriptValue(i.tagName)).join(', ');
-  // Morph-survival tags: every admitted island EXCEPT a page root. A page root's
-  // real content is its DSD shadow tree, so the enhance morph must take the
-  // page-level DSD branch in place (state survives); inside the island-survival
-  // list it would either be judged intact and freeze, or be replaced because the
-  // claim consumed its data-oe-prop-seed transport attribute — both drop user
-  // state on every enhanced submit. Emitted only for the enhanced entry, so an
-  // entry without forms keeps its pinned bytes.
-  const pageRootsAdmitted = admittedIslands.some((island) => isPageRootAdmission(island.reason));
-  const morphTags = admittedIslands
-    .filter((island) => !isPageRootAdmission(island.reason))
-    .map((island) => quoteGeneratedJavaScriptValue(island.tagName))
-    .join(', ');
   const loadTags = admittedIslands
     .filter((i) => i.strategy === 'load')
     .map((i) => quoteGeneratedJavaScriptValue(i.tagName))
@@ -863,10 +850,10 @@ ${
 // which is where page content lives under DSD. Without JavaScript the same
 // form is a native POST (303/422 HTML), so behavior degrades to the browser
 // by construction. Runtime: enhance-client.ts (bundled via #868).
-${pageRootsAdmitted ? `var __morphTags = [${morphTags}];\n` : ''}var __enhance = createEnhanceClient({
+var __enhance = createEnhanceClient({
   log: log,
   // Islands only: a page root is morphed through its DSD shadow tree below.
-  tags: ${pageRootsAdmitted ? '__morphTags' : '__tags'},
+  tags: __tags,
   actionHeader: ${quoteGeneratedJavaScriptValue(ACTION_FETCH_HEADER)},
   win: window,
   doc: document,

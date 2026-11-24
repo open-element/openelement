@@ -112,7 +112,7 @@ test('buildSidebarRows flattens the filtered section tree into heading and link 
     '/guide/api/',
   ]);
   // Heading rows carry no link affordance; link rows carry no heading.
-  expect(rows[0].href).toEqual(false);
+  expect(rows[0].href).toBeNull();
   expect(rows[2].heading).toEqual('');
   // Row keys are unique and stable for the keyed Block.
   expect(new Set(rows.map((row) => row.key)).size).toEqual(rows.length);
@@ -152,7 +152,7 @@ test('buildSidebarRows guards unsafe hrefs and marks external links', () => {
   );
   const evil = rows.find((row) => row.label === 'Evil');
   const external = rows.find((row) => row.label === 'External');
-  expect(evil?.href).toEqual(false);
+  expect(evil?.href).toBeNull();
   expect(external?.href).toEqual('https://example.com/x');
   expect(external?.rel).toEqual('noopener noreferrer');
 });

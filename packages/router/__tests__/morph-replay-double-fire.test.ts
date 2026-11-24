@@ -550,7 +550,8 @@ function buildLiveFormPage(options: LiveCounterOptions): FormPageTree {
   );
   const host = new FakeElement('form-page');
   // The claim consumed the SSR prop-seed transport attribute: the live host
-  // carries no attributes (see morph-align.ts CONSUMED_TRANSPORT_ATTRIBUTE).
+  // still carries the route-instance marker for enhanced morphs.
+  host.setAttribute('data-oe-page-root', '');
   const shadow = new FakeShadowRoot(host);
   host.shadowRoot = shadow;
   shadow.appendChild(main);
@@ -595,6 +596,7 @@ function buildIncomingErrorFormPage(): FakeElement {
     incomingIsland,
   );
   const host = new FakeElement('form-page');
+  host.setAttribute('data-oe-page-root', '');
   host.setAttribute('data-oe-prop-seed', '{"hasError":1}');
   host.appendChild(shadowTemplate(main));
   return host;
@@ -628,9 +630,7 @@ function makeMorphHarness(): MorphHarness {
     log: { warn: () => {} },
     win: win as unknown as Win,
     doc: doc as unknown as Document,
-    // The fixture's generated client entry emits its morph tag list WITHOUT page
-    // roots (page-root admission, F16 §8) and with the generated islands.
-    tags: ['live-counter'],
+    tags: ['form-page', 'live-counter'],
     webkit: {
       instantiateDsd: (node: unknown) => {
         instantiated.push(node as FakeNode);
@@ -698,6 +698,21 @@ test('morph: the 422 error-branch shift moves a hydrated island that islandIntac
   expect(errorParagraph?.childNodes[0] && (errorParagraph.childNodes[0] as FakeText).data).toBe(
     'message is required',
   );
+});
+
+test('morph: an unmarked instance of the page tag keeps island survival behavior', () => {
+  const model = createReplayModel();
+  const { doc, align, queue } = makeMorphHarness();
+  const tree = buildLiveFormPage({ count: 3, replayModel: model, replayOnEveryConnect: true });
+  const incoming = buildIncomingErrorFormPage();
+  tree.host.removeAttribute('data-oe-page-root');
+  incoming.removeAttribute('data-oe-page-root');
+  doc.body.appendChild(tree.host);
+
+  queue(incoming);
+  expect(align.morphDocument('<html></html>', null, null)).toBe(true);
+  // The changed seed calls for replacement when this tag is used as an island.
+  expect(doc.body.childNodes).toEqual([incoming]);
 });
 
 test('replay: capture installed BEFORE the island activation -> the morph reconnect replays nothing', () => {

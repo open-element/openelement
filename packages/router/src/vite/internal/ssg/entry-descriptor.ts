@@ -743,15 +743,14 @@ export function buildEntryDescriptor(
     ...(layout.default ? [layout.default.tagName] : []),
     ...Object.values(layout.layouts).flatMap((shell) => (shell ? [shell.tagName] : [])),
   ]);
-  // A PAGE COMPONENT is in BOTH lists by construction: its declaration provides
-  // the SSR admission + host-producer identity, and the route names it as the
-  // page. Filtering it out here left the entry with no `generatedHostExport` for
-  // the tag it must pair — the page then rendered through the class path and
-  // failed with PROGRAM_MISSING (measured on `router-ui-dogfood`'s /dialog).
-  // The reserved set keeps suppressing a genuine duplicate (two modules claiming
-  // one tag); a page component is not a duplicate of itself.
+  // Keep the compiler's host producer for page components and the generated
+  // hosts discovered through their side-effect imports. Entry rendering uses
+  // this metadata to pair those admitted tags with their server producer.
   const staticComponents = (options.staticComponents ?? []).filter(
-    (component) => component.pageComponent === true || !reservedTags.has(component.tagName),
+    (component) =>
+      component.pageComponent === true ||
+      component.pageComponentDependency === true ||
+      !reservedTags.has(component.tagName),
   );
 
   const descriptor: EntryDescriptor = {

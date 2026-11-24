@@ -5,6 +5,7 @@
  * enhance-client.ts (#908).
  */
 
+import { PAGE_ROOT_ATTRIBUTE } from '../page-root-marker.ts';
 import type { IslandLifecycle } from './island-lifecycle.ts';
 import type { MorphFocusRestore } from './morph-focus-restore.ts';
 import type { MorphScrollRestore } from './morph-scroll-restore.ts';
@@ -243,7 +244,9 @@ export function createMorphAlign(deps: MorphAlignDeps): MorphAlign {
       return;
     }
     if (oldElement.hasAttribute('data-open-preserve')) return;
-    const isIsland = tags.indexOf(oldElement.tagName.toLowerCase()) !== -1;
+    const isPageRoot =
+      oldElement.hasAttribute(PAGE_ROOT_ATTRIBUTE) && newElement.hasAttribute(PAGE_ROOT_ATTRIBUTE);
+    const isIsland = !isPageRoot && tags.includes(oldElement.tagName.toLowerCase());
     if (isIsland) {
       const newTemplate = shadowTemplate(newElement);
       if (

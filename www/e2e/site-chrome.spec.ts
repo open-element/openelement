@@ -318,7 +318,9 @@ test.describe('Site chrome: header repository link', () => {
     await page.waitForLoadState('networkidle');
 
     const banner = page.getByRole('banner');
-    await expect(banner.getByRole('link', { name: 'GitHub 仓库（在新标签页打开）' })).toBeVisible();
+    const link = banner.getByRole('link', { name: 'GitHub 仓库（在新标签页打开）' });
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute('href', REPOSITORY);
   });
 
   test('mobile viewports keep the repository link in the header cluster', async ({ page }) => {

@@ -246,3 +246,52 @@ test('scanStaticComponents reports the walk bound instead of shipping a partial 
     await rm(root, { recursive: true });
   }
 });
+
+test('only the definePage component is marked as the root of its generated host tree', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-page-components-'));
+  try {
+    await write(root, 'package.json', JSON.stringify({ name: 'proof', type: 'module' }));
+    await write(
+      root,
+      'app/routes/index.tsx',
+      `import { definePage } from '@openelement/router';
+import Page from '../components/page.tsx';
+export default definePage(Page);`,
+    );
+    await write(
+      root,
+      'app/components/page.tsx',
+      `import { defineIslandConfig } from '@openelement/router';
+import './nested.tsx';
+export const openElement = defineIslandConfig({ tag: 'x-page', root: 'shadow' });
+export default function Page() { return <x-nested></x-nested>; }`,
+    );
+    await write(
+      root,
+      'app/components/nested.tsx',
+      `import { defineIslandConfig } from '@openelement/router';
+export const openElement = defineIslandConfig({ tag: 'x-nested', root: 'shadow' });
+export default function Nested() { return <span>nested</span>; }`,
+    );
+
+    const { declarations } = await scanStaticComponents({
+      root,
+      routesDir: 'app/routes',
+      islandsDir: 'app/islands',
+      routes: ROUTES,
+      resolve: resolverFor(root),
+    });
+
+    expect(declarations).toMatchObject([
+      {
+        tagName: 'x-nested',
+        pageComponentDependency: true,
+        generatedHostExport: expect.any(String),
+      },
+      { tagName: 'x-page', pageComponent: true, generatedHostExport: expect.any(String) },
+    ]);
+    expect(declarations[0]).not.toHaveProperty('pageComponent');
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});

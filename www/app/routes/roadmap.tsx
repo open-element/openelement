@@ -412,7 +412,7 @@ export function RoadmapPage(props: {
     // as the `text-foreground` utility — site-chrome.css keeps only the
     // timeline/truth rules under this page hook class.
     <div class='page-roadmap text-foreground' data-pagefind-body>
-      <open-reading-shell rail footer metadata={props.metadata} locale={props.locale}>
+      <open-reading-shell meta rail footer metadata={props.metadata} locale={props.locale}>
         <div slot='rail'>
           <open-page-rail items={props.railItems} locale={props.locale}></open-page-rail>
         </div>

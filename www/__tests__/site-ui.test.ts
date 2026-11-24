@@ -55,17 +55,17 @@ test('no www site-ui module remains on the class lane', async () => {
   ).toEqual([]);
 });
 
-test('app/layout.tsx is the generated site shell with all 30 derived nodes', async () => {
+test('app/layout.tsx is the generated site shell with all 31 derived nodes', async () => {
   const url = new URL('../app/layout.tsx', import.meta.url);
   const source = await readFile(url, 'utf8');
   // Generated lane (2026-11-20 migration): the class became a function component
   // whose sidecar keeps the convention tag (the router constant, D-M1) and whose
-  // 30 `computed` fields became the lane's `computed` intrinsic — derived nodes
+  // `computed` calls use the lane's intrinsic to declare derived nodes
   // the compiler creates in the retained setup factory (ADR-0183 D-4). The entry
   // registers it through the generated host PAIR channel (layout-pair slice).
   expect(source).not.toContain('extends OpenElement');
   expect(source).toContain("tag: 'app-layout'");
-  expect(source.match(/const \w+ = computed\(/g)?.length).toEqual(30);
+  expect(source.match(/const \w+ = computed\(/g)?.length).toEqual(31);
   const compiled = compileGeneratedElementIfAdmitted(source, url.pathname, {
     site: { tag: 'app-layout' },
   });

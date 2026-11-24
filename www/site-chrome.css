@@ -651,8 +651,8 @@ open-reading-shell .meta {
   display: none;
 }
 
-open-reading-shell[meta] .meta,
-open-reading-shell[metadata] .meta {
+/* Route authors enable chrome through the reflected meta and footer booleans. */
+open-reading-shell[meta] .meta {
   display: block;
 }
 
@@ -668,23 +668,19 @@ open-reading-shell .footer {
   display: none;
 }
 
-open-reading-shell[footer] .footer,
-open-reading-shell[navigation] .footer {
+open-reading-shell[footer] .footer {
   display: block;
 }
 
 /* The footer is a rule plus padding, so a pager with no visible link would
    leave an empty 21px bar. Collapse the chrome (not the footer box): the
    pager nav must stay in the accessibility tree, zero-height, exactly as it
-   already renders with its links hidden (#page-structure pins this). Both
-   :has() forms must stay single-level — nesting :not(:has()) inside :has()
+   already renders with its links hidden (#page-structure pins this). The
+   :has() expressions must stay single-level — nesting :not(:has()) inside :has()
    is an invalid selector and Chromium drops the whole rule. Scoping to
    "> slot > [data-pager]" keeps custom footer slot content (changelog, roadmap)
    untouched. */
-open-reading-shell[footer] .footer:has(> slot > [data-pager]):not(:has(> slot > [data-pager] a:not([hidden]))),
-open-reading-shell[navigation] .footer:has(> slot > [data-pager]):not(
-    :has(> slot > [data-pager] a:not([hidden]))
-  ) {
+open-reading-shell[footer] .footer:has(> slot > [data-pager]):not(:has(> slot > [data-pager] a:not([hidden]))) {
   margin-block-start: 0;
   padding-block-start: 0;
   border-block-start: 0;

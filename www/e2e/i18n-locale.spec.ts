@@ -76,7 +76,7 @@ test.describe('Locale Routes', () => {
     // The guide tsx routes are the single source of truth for both locales;
     // the zh render must contain real Chinese copy, not the English fallback.
     await expect(page.locator('open-reading-shell').locator('h1')).toContainText('快速开始');
-    await expect(page.locator('guide-getting-started')).toContainText('安装');
+    await expect(page.locator('open-reading-shell .article-content')).toContainText('安装');
   });
 });
 

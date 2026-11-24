@@ -39,6 +39,7 @@ import {
   localeSwitchLabel,
   localeSwitchPath,
   localeSwitchScopeNote,
+  REPOSITORY_URL,
   type SidebarRow,
 } from './site-ui/open-layout-navigation.ts';
 import { searchChromeStrings } from './site-ui/chrome-strings.ts';
@@ -50,7 +51,7 @@ import './islands/open-search.tsx';
  *
  * The convention layout keeps its tag from the router constant
  * (`CONVENTION_LAYOUT_TAG`, D-M1), and the entry registers it through the
- * generated host PAIR channel (the layout-pair slice). The 30 `computed` fields
+ * generated host PAIR channel (the layout-pair slice). The `computed` fields
  * are the lane's `computed` intrinsic — derived nodes the compiler creates in the
  * retained setup factory (ADR-0183 D-4).
  *
@@ -95,6 +96,8 @@ function Layout(props: {
   const legal = footerColumn(props.locale, props.locales, 'legal');
   const sidebar = buildSidebarRows(navSections, props.currentPath, props.locale, props.locales);
 
+  const repositoryHref = computed(() => REPOSITORY_URL);
+
   // The header canonical href: the router hands the localized form ("/zh"), the
   // outward canonical form is "/zh/" (owner decision D-02).
   const homeHrefCanonical = computed(() => normalizeSiteHref(props.homeHref));
@@ -125,13 +128,13 @@ function Layout(props: {
   const searchResultsLabel = computed(() => searchChrome.resultsLabel);
   const searchEmptyMessage = computed(() => searchChrome.emptyMessage);
   const footerProductLabel = computed(() => product.label);
-  const footerProductLinks = computed((): FooterLink[] => () => product.links);
+  const footerProductLinks = computed((): FooterLink[] => product.links);
   const footerResourcesLabel = computed(() => resources.label);
-  const footerResourcesLinks = computed((): FooterLink[] => () => resources.links);
+  const footerResourcesLinks = computed((): FooterLink[] => resources.links);
   const footerCompanyLabel = computed(() => company.label);
-  const footerCompanyLinks = computed((): FooterLink[] => () => company.links);
+  const footerCompanyLinks = computed((): FooterLink[] => company.links);
   const footerLegalLabel = computed(() => legal.label);
-  const footerLegalLinks = computed((): FooterLink[] => () => legal.links);
+  const footerLegalLinks = computed((): FooterLink[] => legal.links);
 
   return (
     <div class='flex min-h-screen flex-col bg-background font-sans text-foreground antialiased oe-shell'>
@@ -200,7 +203,7 @@ function Layout(props: {
             <open-theme-toggle></open-theme-toggle>
             <a
               class='inline-flex h-9 w-9 items-center justify-center rounded-full border-0 p-0 text-foreground transition-all hover:bg-primary/[5.44%] hover:text-primary focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[3px]'
-              href={props.repositoryHref}
+              href={repositoryHref.value}
               target='_blank'
               rel='noopener noreferrer'
               aria-label={repositoryLabel.value}

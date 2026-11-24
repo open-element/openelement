@@ -335,7 +335,6 @@ export async function scanRoutes(
         // module declares — an inline arrow or an unexported local never
         // admits (a shape whose JSX would escape to runtime).
         let functionPageName: string | undefined;
-        let streamManifest: StreamRouteManifest | undefined;
         let pageModule: PageModuleFacts | undefined;
         if (routeType === 'page') {
           // The compiler semantic core reads route meaning without executing the module.
@@ -365,13 +364,6 @@ export async function scanRoutes(
               compiledElement: semantics.compiledElementDecorator,
               functionPage: semantics.pageComponentName,
             });
-            // Streaming RETIRED with the class lane (owner decision, 2026-11-22).
-            // `renderIntent.stream` was a compiled-Part-Program channel: a function
-            // page has no program to defer against, and a generated page is refused
-            // by the bounded-lane check. The scanner no longer looks for it, so a
-            // route that still declares `stream` is refused by the lanes rather than
-            // carrying an artifact nothing can serve. Alpha18 owns the replacement.
-            streamManifest = undefined;
             // .mdx routes never carry a tagName export either — the entry
             // wraps their function component itself (#954), like definePage.
             if (tagName === undefined && !isDefinePage && !fullPath.endsWith('.mdx')) {
@@ -444,7 +436,6 @@ export async function scanRoutes(
           tagName,
           ...(isDefinePage ? { definePage: true } : {}),
           ...(functionPageName === undefined ? {} : { functionPage: functionPageName }),
-          ...(streamManifest ? { streamManifest } : {}),
           // #569: page sources carrying data-open-enhance require the client
           // enhancement layer even when the app has zero islands. The match
           // requires attribute shape (= or >) so prose mentioning the

@@ -568,10 +568,15 @@ test('a deleted component module stops contributing its candidates (defect C)', 
   const original = await readFile(cardPath, 'utf8');
   try {
     rmSync(cardPath);
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    const served = await fetchEntryCss(handle, '', href);
-    expect(served, 'the deleted module contributes nothing').not.toMatch(/\.p-8\s*\{/);
-    expect(served, 'nor any of its other rules').not.toMatch(/\.rounded-xl\s*\{/);
+    await expect
+      .poll(
+        async () => {
+          const served = await fetchEntryCss(handle, '', href);
+          return served.match(/\.(?:p-8|rounded-xl)\s*\{/g) ?? [];
+        },
+        { message: 'the deleted module contributes neither rule', timeout: 5_000 },
+      )
+      .toEqual([]);
   } finally {
     await writeFile(cardPath, original);
   }

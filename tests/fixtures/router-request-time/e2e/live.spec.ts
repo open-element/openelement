@@ -202,7 +202,7 @@ test.describe('fetch middleware module contract (ADR-0123, #858, Alpha.1)', () =
 });
 
 test.describe('revalidation continuity (0.42.0-alpha.3)', () => {
-  test('422 morph keeps a hydrated island alive and shows the failure echo', async ({ page }) => {
+  test('422 morph preserves the interactive page root and nested island', async ({ page }) => {
     await page.goto('/form');
     const button = page.locator('live-counter #increment');
     const count = page.locator('live-counter #count');
@@ -211,8 +211,25 @@ test.describe('revalidation continuity (0.42.0-alpha.3)', () => {
     await button.click();
     await expect(count).toHaveText('3');
 
+    const pageButton = page.locator('#page-increment');
+    await pageButton.click();
+    await expect(pageButton).toHaveText('1');
+    await page.evaluate(() => {
+      (window as Window & { originalFormPage?: Element | null }).originalFormPage =
+        document.querySelector('form-page');
+    });
+
     await page.click('#submit');
     await expect(page.locator('#error')).toHaveText('message is required');
+    expect(
+      await page.evaluate(
+        () =>
+          (window as Window & { originalFormPage?: Element | null }).originalFormPage ===
+          document.querySelector('form-page'),
+      ),
+    ).toBe(true);
+    await pageButton.click();
+    await expect(pageButton).toHaveText('2');
     // The island survived the morph: its shadow state was not reset.
     await expect(count).toHaveText('3');
   });

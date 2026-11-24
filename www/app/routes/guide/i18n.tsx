@@ -28,6 +28,7 @@ export function GuideI18nPage(props: {
     <div>
       <div hidden={props.articleHidden} data-pagefind-body>
         <open-reading-shell
+          meta
           rail
           footer
           metadata={props.metadata}

@@ -85,23 +85,23 @@ What we measure, and the commands that reproduce each row.
 
 ### Output size
 
-Numbers measured on 2026-10-29 from the docs site's own build (`www/dist`, built with `pnpm run site:build`). Total static output is the byte sum of every regular file under `www/dist` (hidden build metadata included) — the command below prints it, and `check:doc-figures` gates it at ±1%; it is deliberately not `du` accounting, which differs between machines while the byte sum of an identical tree does not. The figure is self-referential by a few bytes: the page that prints it, and the search index built from that page, are both inside the tree it measures, so a rebuild can move the total by single-digit bytes. The commands below reproduce each row; page and URL counts follow the route set, so re-run them after content changes. The figures moved five times since alpha6: the alpha6 build made client asset injection manifest-driven with exact package-island identity (#1471, ADR-0160); the alpha8 B2 manifest conversion (pnpm workspaces, no `deno.json` workspace marker) re-cut the app-side island chunks; the alpha8 client build now resolves each package island's declared identity to its real module id before chunk grouping (#1471 fail-closed), so every island chunk is named `island-open-<tag>-<hash>.js` and the shared compiled-element runtime ships as one chunk that `client.js` loads eagerly on every island page; the alpha9 styling train seated the site on the @theme role sheet with the Zag-powered open-search island (#1502), which grows the island chunks and route payloads measured below; and the alpha10 train minified the island component styles (#1543), gave the shared compiled-element runtime its own `element-runtime-<hash>.js` chunk instead of a berth inside an island chunk (#1544), and then extracted the island stylesheets out of the chunks entirely as content-addressed `client/assets/*.css` resources (#1553, ADR-0164). The alpha.11 style train (#1558, ADR-0164) has since moved the package islands' and the site pages' remaining inline style sheets onto the same `.css` import form. The alpha15 candidate re-cut the island chunks when presentation moved from authored sheets into the markup as utility classes: the `@openelement/ui` components first (`island-open-button`, `island-open-code-block`), and this round the site's own islands (`island-open-page-rail`, `island-open-dragon-live-gaze`), whose class strings are longer than the class names they replaced — the same trade the components made. Every row below is re-measured from that build. The 2026-10-28 site-quality pass re-measured every row again: the homepage hero and evidence links, the restructured Getting Started, the Docs-hub Examples section and the search-dialog accessibility fix moved the route payloads and the total static output. The 2026-10-29 reference restructure then replaced the single 491k-px export page with grouped fixed-height panes, which is why the total static output dropped while page, URL and manifest counts stayed the same. Route payloads below are measured as the eager import closure of the route's manifest chunk set, so they stay honest no matter which chunk file hosts shared code.
+Numbers measured on 2026-11-24 from the docs site's own build (`www/dist`, built with `vp run site:build`). Total static output is the byte sum of every regular file under `www/dist` (hidden build metadata included) — the command below prints it, and `check:doc-figures` gates it at ±1%; it is deliberately not `du` accounting, which differs between machines while the byte sum of an identical tree does not. The figure is self-referential by a few bytes: the page that prints it, and the search index built from that page, are both inside the tree it measures, so a rebuild can move the total by single-digit bytes. The commands below reproduce each row; page and URL counts follow the route set, so re-run them after content changes. The figures moved five times since alpha6: the alpha6 build made client asset injection manifest-driven with exact package-island identity (#1471, ADR-0160); the alpha8 B2 manifest conversion (pnpm workspaces, no `deno.json` workspace marker) re-cut the app-side island chunks; the alpha8 client build now resolves each package island's declared identity to its real module id before chunk grouping (#1471 fail-closed), so every island chunk is named `island-open-<tag>-<hash>.js` and the shared compiled-element runtime ships as one chunk that `client.js` loads eagerly on every island page; the alpha9 styling train seated the site on the @theme role sheet with the Zag-powered open-search island (#1502), which grows the island chunks and route payloads measured below; and the alpha10 train minified the island component styles (#1543), gave the shared compiled-element runtime its own `element-runtime-<hash>.js` chunk instead of a berth inside an island chunk (#1544), and then extracted the island stylesheets out of the chunks entirely as content-addressed `client/assets/*.css` resources (#1553, ADR-0164). The alpha.11 style train (#1558, ADR-0164) has since moved the package islands' and the site pages' remaining inline style sheets onto the same `.css` import form. The alpha15 candidate re-cut the island chunks when presentation moved from authored sheets into the markup as utility classes: the `@openelement/ui` components first (`island-open-button`, `island-open-code-block`), and this round the site's own islands (`island-open-page-rail`, `island-open-dragon-live-gaze`), whose class strings are longer than the class names they replaced — the same trade the components made. Every row below is re-measured from that build. The 2026-10-28 site-quality pass re-measured every row again: the homepage hero and evidence links, the restructured Getting Started, the Docs-hub Examples section and the search-dialog accessibility fix moved the route payloads and the total static output. The 2026-10-29 reference restructure then replaced the single 491k-px export page with grouped fixed-height panes, which is why the total static output dropped while page, URL and manifest counts stayed the same. Route payloads below are measured as the eager import closure of the route's manifest chunk set, so they stay honest no matter which chunk file hosts shared code.
 
 | Metric                 | Value                                              |
 | ---------------------- | -------------------------------------------------- |
-| Pre-rendered documents | 74 HTML files                                      |
-| URLs in `sitemap.xml`  | 72                                                 |
-| Total static output    | 11.5 MiB (12,083,906 B)                            |
-| Island manifests       | 74 — one per page                                  |
-| Search index           | 36 pages per locale (en, zh), 72 fragments, 1.6 MiB |
+| Pre-rendered documents | 78 HTML files                                      |
+| URLs in `sitemap.xml`  | 76                                                 |
+| Total static output    | 13.0 MiB (13,661,337 B)                            |
+| Island manifests       | 78 — one per page                                  |
+| Search index           | 38 pages per locale (en, zh), 76 fragments, 1.8 MiB |
 
 ```bash
-pnpm run site:build                         # regenerate everything below first
-find www/dist -name '*.html' | wc -l        # 74
-grep -c '<loc>' www/dist/sitemap.xml        # 72
-find www/dist -type f -exec wc -c {} + | tail -1   # 12,083,906 B total (the byte sum above)
-ls www/dist/island-manifests | wc -l        # 74
-cat www/dist/pagefind/pagefind-entry.json   # page_count 36 per language
+vp run site:build                         # regenerate everything below first
+find www/dist -name '*.html' | wc -l        # 78
+grep -c '<loc>' www/dist/sitemap.xml        # 76
+find www/dist -type f -exec wc -c {} + | tail -1   # 13,661,337 B total (the byte sum above)
+ls www/dist/island-manifests | wc -l        # 78
+cat www/dist/pagefind/pagefind-entry.json   # page_count 38 per language
 ```
 
 ### Island bundles
@@ -110,31 +110,31 @@ The docs site is a normal openElement app, islands included, so its client outpu
 
 | Chunk                          | Raw bytes | gzip -9 |
 | ------------------------------ | --------- | ------- |
-| `element-runtime`              | 95,311 | 29,690 |
-| `island-open-button`           | 13,508 | 2,721 |
-| `island-open-dragon-live-gaze` | 12,721 | 4,380 |
-| `island-open-page-rail`        | 11,221 | 3,074 |
-| `island-open-cinematic-scroll` | 7,509 | 2,923 |
-| `island-open-code-block`       | 4,120 | 1,574 |
-| `island-open-hero-polish`      | 5,312 | 2,148 |
-| `client.js`                    | 9,629 | 2,955 |
+| `element-runtime`              | 66,573 | 21,162 |
+| `island-open-button`           | 16,045 | 3,643 |
+| `island-open-dragon-live-gaze` | 26,188 | 5,772 |
+| `island-open-page-rail`        | 34,911 | 6,551 |
+| `island-open-cinematic-scroll` | 3,989 | 1,524 |
+| `island-open-code-block`       | 8,123 | 2,595 |
+| `island-open-hero-polish`      | 6,254 | 2,390 |
+| `client.js`                    | 9,049 | 2,852 |
 
 ```bash
 ls -l www/dist/client/islands/*.js
 gzip -9 -c www/dist/client/islands/client.js | wc -c
 ```
 
-The island entry (`client.js`) carries the island import factories and error strings, so its bytes move with the admitted island set; since the #1367 fix anchored module ids on the workspace segment it no longer embeds checkout-absolute paths, so it is pinned like every other row. Since the alpha10 chunk re-grouping (#1544), the shared compiled-element runtime rides its own `element-runtime-<hash>.js` chunk instead of homing inside an island chunk — `client.js` and every island chunk statically import it, so its bytes ride along on every island page regardless of route. Two emitted surfaces stay out of the table: the ~101 KB (≈33 KB gzip) search combobox runtime is a dynamic chunk fetched on the first search open, and the component stylesheets are not island JS at all — they emit as content-addressed `client/assets/*.css` resources under the island style-asset protocol (#1553, ADR-0164) and are adopted in the browser, which is why the island rows above dropped sharply against the previous baseline. Per-chunk raw rows tolerate ±1% and gzip rows ±3% for the same class of cross-platform byte variance, route payloads below tolerate ±1%, and chunk counts stay exact.
+The island entry (`client.js`) carries the island import factories and error strings, so its bytes move with the admitted island set; since the #1367 fix anchored module ids on the workspace segment it no longer embeds checkout-absolute paths, so it is pinned like every other row. Since the alpha10 chunk re-grouping (#1544), the shared compiled-element runtime rides its own `element-runtime-<hash>.js` chunk instead of homing inside an island chunk — island chunks statically import it, so the manifest closure includes it. Two emitted surfaces stay out of the table: the ~101 KB (≈33 KB gzip) search combobox runtime is a dynamic chunk fetched on the first search open, and the component stylesheets are not island JS at all — they emit as content-addressed `client/assets/*.css` resources under the island style-asset protocol (#1553, ADR-0164) and are adopted in the browser, which is why the island rows above dropped sharply against the previous baseline. Per-chunk raw rows tolerate ±1% and gzip rows ±3% for the same class of cross-platform byte variance, route payloads below tolerate ±1%, and chunk counts stay exact.
 
 What a page actually downloads follows from its island manifest plus the entry's eager (static) imports — the payload rows are measured as that import closure, so they do not depend on which chunk file hosts shared code:
 
 | Route                    | Client payload (raw) | Distinct chunks |
 | ------------------------ | -------------------- | --------------- |
-| `/guide/mdx`             | 172,552 B            | 10              |
-| `/guide/getting-started` | 172,552 B            | 10              |
-| `/`                      | 190,585 B            | 12              |
+| `/guide/mdx`             | 196,659 B            | 9               |
+| `/guide/getting-started` | 196,659 B            | 9               |
+| `/`                      | 229,101 B            | 11              |
 
-Across all 74 page manifests the site declares 8 island tags in 278 entries: the chrome islands (`open-search`, `open-theme-toggle`) on every page, `open-page-rail` on 64, `open-code-block` on 52, `open-button` on 8, and `open-cinematic-scroll` / `open-dragon-live-gaze` / `open-hero-polish` on 2 pages each. The alpha.15 layout-convention migration retired the `open-layout` island (the chrome became the compiled `app/layout.tsx` shell); The #1557 B8 retirement removed the `open-badge` package island (its roadmap usage is a plain HTML+CSS recipe now), and the reference page documents the two new split packages, which moved the payload rows.
+Across all 78 page manifests the site declares 8 island tags in 294 entries: the chrome islands (`open-search`, `open-theme-toggle`) on every page, `open-page-rail` on 68, `open-code-block` on 56, `open-button` on 8, and `open-cinematic-scroll` / `open-dragon-live-gaze` / `open-hero-polish` on 2 pages each. The alpha.15 layout-convention migration retired the `open-layout` island (the chrome became the compiled `app/layout.tsx` shell); The #1557 B8 retirement removed the `open-badge` package island (its roadmap usage is a plain HTML+CSS recipe now), and the reference page documents the two new split packages, which moved the payload rows.
 
 ```bash
 cat www/dist/island-manifests/page-<hash>.json   # one page's island set: tag, chunk, strategy, layer

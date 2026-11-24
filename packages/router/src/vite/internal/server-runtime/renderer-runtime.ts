@@ -17,6 +17,7 @@
  * (entry-render-runtime.ts).
  */
 
+import { PAGE_ROOT_ATTRIBUTE } from '../page-root-marker.ts';
 import { RendererErrorCode, serveError } from '../../../internal/error-codes.ts';
 
 /** Opaque capability marking HTML the application has explicitly vetted as trusted. */
@@ -40,6 +41,7 @@ export interface DocumentStyleSink {
 export interface PageSsrSourceInfo {
   route?: string;
   source?: string;
+  generatedPageRoot?: boolean;
   /**
    * The render's document stylesheet collection. It rides this per-render
    * object because every emitted `__ssr` call site already builds one, and the
@@ -86,6 +88,7 @@ export interface NativePageRendererDeps {
       projectedChildren?: ProjectedChildren;
       documentStyles?: DocumentStyleSink;
       hostChildren?: TrustedHtmlValue;
+      hostAttrs?: readonly (readonly [string, unknown])[];
     },
   ) => string;
   /** The SSR registry (the runtime's `customElements` global). */
@@ -138,7 +141,7 @@ export function createNativePageRenderer(deps: NativePageRendererDeps): PageSsrR
     // The collection is a render-side channel, not render diagnostics: it is
     // split out of sourceInfo so the serializer's source attribution stays
     // exactly what the call site declared (alpha15 S lane, S-C1.2).
-    const { documentStyles, ...diagnostics } = sourceInfo ?? {};
+    const { documentStyles, generatedPageRoot, ...diagnostics } = sourceInfo ?? {};
     return renderToString(tag, {
       componentClass: Cls,
       props,
@@ -146,6 +149,7 @@ export function createNativePageRenderer(deps: NativePageRendererDeps): PageSsrR
       documentStyles,
       ssrRenderableTags,
       projectedChildren,
+      ...(generatedPageRoot ? { hostAttrs: [[PAGE_ROOT_ATTRIBUTE, '']] } : {}),
       ...(hostChildren === undefined ? {} : { hostChildren }),
     });
   };
