@@ -12,6 +12,7 @@ import {
   cdnAvailabilityDecision,
   classifyRegistryResponse,
   fail,
+  NODE_ELEMENT_SMOKE_SOURCE,
   NODE_RUNTIME_SMOKE_SOURCE,
   nodeConsumerManifest,
   npmAvailabilityDecision,
@@ -327,7 +328,7 @@ test('consumer-smoke: no hostile CDN input maps to PASS or SKIP — every uncert
   }
 });
 
-test('node runtime smoke stays on the plain-Node core surface', () => {
+test('published Node smoke sources use the cross-release public runtime surface', () => {
   // The plain-Node smoke covers the framework core only; the `router/vite`
   // build entry has its own smoke surface (vite-entry.mjs, run on the same
   // node host) and must not be pulled in here — and no node-side smoke may
@@ -341,6 +342,37 @@ test('node runtime smoke stays on the plain-Node core surface', () => {
     NODE_RUNTIME_SMOKE_SOURCE.includes("from '@openelement/router'"),
     'node smoke covers the router core',
   ).toBeTruthy();
+  for (const source of [NODE_ELEMENT_SMOKE_SOURCE, NODE_RUNTIME_SMOKE_SOURCE]) {
+    expect(
+      source.includes("from '@openelement/element'"),
+      'node smoke covers Element',
+    ).toBeTruthy();
+    expect(
+      source.includes('@element/property'),
+      'node smoke imports the retired property package',
+    ).toBeFalsy();
+    expect(
+      source.includes('class extends OpenElement'),
+      'node smoke imports retired class authoring',
+    ).toBeFalsy();
+    for (const assertion of [
+      'doubled.value !== 42',
+      "escapeHtml('<b>&</b>')",
+      'HTML quote escaping failed',
+      'escapeAttr(',
+      'attribute escaping failed',
+      "isValidTagName('my-counter')",
+      "HYDRATION_STRATEGIES.includes('load')",
+      "HYDRATION_STRATEGIES.includes('visible')",
+    ]) {
+      expect(source.includes(assertion), `node smoke is missing ${assertion}`).toBeTruthy();
+    }
+  }
+  expect(
+    NODE_RUNTIME_SMOKE_SOURCE.includes('renderToString'),
+    'node smoke covers renderToString',
+  ).toBeTruthy();
+  expect(NODE_RUNTIME_SMOKE_SOURCE.includes('signal'), 'node smoke exercises signal').toBeTruthy();
   expect(
     VITE_SMOKE_SOURCE.includes("from '@openelement/router/vite'"),
     'vite smoke covers the vite entry',

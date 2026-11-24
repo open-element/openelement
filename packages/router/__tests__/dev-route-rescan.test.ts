@@ -11,6 +11,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { expect, test } from 'vitest';
 import { join } from 'node:path';
+import { DEV_STYLE_LINKS_MODULE_ID } from '../src/vite/dev-style-components.ts';
 import { createOpenPlugin } from '../src/vite/plugin.ts';
 import { TestFileWatcher } from './test-watcher.ts';
 
@@ -68,6 +69,13 @@ test('openPlugin: route file added during dev triggers descriptor rescan (#1028)
 
     await core.buildStart!();
 
+    const devStyles = plugins.find(
+      (plugin) => (plugin as { name?: string }).name === 'open:style-components-dev',
+    )!;
+    expect(String(devStyles.load!(DEV_STYLE_LINKS_MODULE_ID))).toContain(
+      '__setSsrRenderableTags([]);',
+    );
+
     const entryBefore = String(virtualEntry.load!(RESOLVED_ENTRY_ID));
     expect(entryBefore).toContain('index.tsx');
     expect(entryBefore.includes('about.tsx')).toEqual(false);
@@ -92,7 +100,7 @@ test('openPlugin: route file added during dev triggers descriptor rescan (#1028)
 
     await waitFor(() => sent.length === 1, 'full-reload after route rescan');
     expect(sent[0]).toEqual({ type: 'full-reload' });
-    expect(invalidated).toEqual([RESOLVED_ENTRY_ID]);
+    expect(invalidated).toEqual([RESOLVED_ENTRY_ID, DEV_STYLE_LINKS_MODULE_ID]);
 
     // load() must render from the re-scanned descriptor.
     const entryAfter = String(virtualEntry.load!(RESOLVED_ENTRY_ID));

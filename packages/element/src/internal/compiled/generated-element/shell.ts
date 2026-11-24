@@ -200,6 +200,7 @@ import {
 } from '../runtime/pre-upgrade-replay-hook.ts';
 import { createTrackedProps, type TrackedProps } from '../runtime/props.ts';
 import { CompiledProgramValidationError, removeNodes } from '../runtime/values.ts';
+import { isExpandedLightRootHost } from '../runtime/claim-invariants.ts';
 import { CompiledContextService, contextChannelFor } from '../runtime/context.ts';
 import type { WritableSignal } from '../../signal/types.ts';
 import {
@@ -2742,6 +2743,11 @@ export function createGeneratedElementClass<P extends object = Record<string, un
     connectedCallback(): void {
       const state = stateOf(this);
       if (state.projection !== null || state.connecting) return;
+      // The projected-region guard needs no connection resources and runs
+      // before the shell or a recipe can observe this cross-owner claim.
+      if (typeof this.hasAttribute === 'function') {
+        isExpandedLightRootHost(this);
+      }
       // Join the document-theme broadcast before any paint decision: the shared
       // component sheet carries `:root, :host` light defaults, and its dark
       // overrides key off `[data-theme]` on the host. Without the mirror a
@@ -3088,6 +3094,14 @@ export function createGeneratedElementClass<P extends object = Record<string, un
   Object.defineProperty(GeneratedElementShell, 'observedAttributes', {
     configurable: true,
     value: observedAttributes,
+  });
+  // `renderToString(constructor)` needs the descriptor's authoritative tag to
+  // serialize a generated light root. The class name is compiler-minted and
+  // cannot stand in for the registered custom-element name.
+  Object.defineProperty(GeneratedElementShell, '__oeTag', {
+    configurable: false,
+    enumerable: false,
+    value: descriptor.tag,
   });
 
   if (normalized.delegatesFocus) {

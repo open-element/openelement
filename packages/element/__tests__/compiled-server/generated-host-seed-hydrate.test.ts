@@ -38,7 +38,10 @@ import {
   seedGeneratedElementHostProperties,
   type GeneratedElementProperty,
 } from '../../src/internal/compiled/generated-element/shell.ts';
-import { GENERATED_RUNTIME_ONLY_ATTRIBUTES } from '../../src/internal/compiled/generated-element/runtime-only-host-attributes.ts';
+import {
+  DATA_OE_LIGHT_PROJECTION,
+  GENERATED_RUNTIME_ONLY_ATTRIBUTES,
+} from '../../src/internal/compiled/generated-element/runtime-only-host-attributes.ts';
 import {
   hydrateExistingDom,
   PartProgramHydrationError,
@@ -177,7 +180,7 @@ test('hydrate exempts every name in the ONE runtime-only fact (and nothing else)
   // that adds a name to the leaf without teaching hydration would fail here on
   // the FIRST assertion, and an over-broad exemption would fail the second.
   expect([...GENERATED_RUNTIME_ONLY_ATTRIBUTES].sort()).toEqual(
-    [DATA_OE_LIGHT, THEME_ATTRIBUTE, SEED].sort(),
+    [DATA_OE_LIGHT, DATA_OE_LIGHT_PROJECTION, THEME_ATTRIBUTE, SEED].sort(),
   );
   for (const name of GENERATED_RUNTIME_ONLY_ATTRIBUTES) {
     const onHost = parseHtml(dom.document, parentHtml());

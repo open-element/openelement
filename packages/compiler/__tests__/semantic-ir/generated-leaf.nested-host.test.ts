@@ -39,6 +39,17 @@ test('a nested custom-element host routes through nestedHost with a literal fall
   expect(code).toContain('__oe_nestedAttrs');
 });
 
+test('nested-host requests retain direct children in authored named-slot groups', () => {
+  const code = module(`function Wrapper(props) {
+  return <main><oe-light><span slot="title">{props.title}</span><p>{props.body}</p></oe-light></main>;
+}
+`);
+  expect(code).toContain('groups: __oe_nestedGroups');
+  expect(code).toMatch(/let __oe_nestedChildSlot\d+ = "title";/);
+  expect(code).toContain('nestedGroups');
+  expect(code).toContain('nestedChildSlot');
+});
+
 test('a STATIC nested host still expands (the static producer declines dash tags)', () => {
   // A fully static producer is a compile-time string with no expansion call, so a
   // static host would silently stay inert. The static path therefore declines any

@@ -34,6 +34,8 @@ export {
   attributeValueOf,
   displayValue,
   removeNodes,
+  selectOptionSelected,
+  selectOptionValue,
 } from './runtime/values.ts';
 // The escaping pair lives in the shared core (one HTML-escape contract with
 // the server serializer); `escapeText` is its text-node half.

@@ -487,7 +487,7 @@ function resolvePageArgumentIdentifier(name: string, sourceFile: ts.SourceFile):
  * adds the argument binding the `ModuleSemanticFacts` do not carry. It is a
  * bounded, syntax-only parse: no execution, no type-checking, no resolution.
  */
-function readPageArgument(source: string, filePath: string): PageArgument | undefined {
+export function readPageArgument(source: string, filePath: string): PageArgument | undefined {
   const sourceFile = ts.createSourceFile(
     filePath,
     source,

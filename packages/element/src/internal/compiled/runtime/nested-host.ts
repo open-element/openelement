@@ -35,6 +35,13 @@ export interface NestedHostRequest {
   readonly open: string;
   /** The caller's already-serialized children (may be empty). */
   readonly children: string;
+  /**
+   * Authored-order direct child groups for light-root projection. Older emitted
+   * producers omit this field and retain the one-default-slot `children` form.
+   */
+  readonly groups?: ReadonlyArray<readonly [slotName: string, html: string]>;
+  /** True when the authored child list can project content after a later update. */
+  readonly hasChildren?: boolean;
   /** The caller's literal markup for the whole element. */
   readonly fallback: string;
 }

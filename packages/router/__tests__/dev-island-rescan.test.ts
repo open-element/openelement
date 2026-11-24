@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os';
 import process from 'node:process';
 import { expect, test } from 'vitest';
 import { join } from 'node:path';
+import { DEV_STYLE_LINKS_MODULE_ID } from '../src/vite/dev-style-components.ts';
 import { createOpenPlugin } from '../src/vite/plugin.ts';
 import { OpenElementBuildContext } from '../src/vite/build-context.ts';
 import { TestFileWatcher } from './test-watcher.ts';
@@ -140,7 +141,11 @@ test('openPlugin: island file added during dev triggers descriptor + client map 
     expect(sent[0]).toEqual({ type: 'full-reload' });
     // Both virtual entries must be invalidated: the SSR entry carries the
     // island map/admission plan, the client entry the hydration map.
-    expect(invalidated).toEqual([RESOLVED_ENTRY_ID, RESOLVED_CLIENT_ENTRY_ID]);
+    expect(invalidated).toEqual([
+      RESOLVED_ENTRY_ID,
+      DEV_STYLE_LINKS_MODULE_ID,
+      RESOLVED_CLIENT_ENTRY_ID,
+    ]);
 
     // The rescan reached the descriptor inputs (SSR admission plan source)
     // and both rendered entries.

@@ -7,8 +7,8 @@
  * WHY A SEPARATE LEAF: two consumers need exactly these names and neither may
  * import the other.
  *
- * - The generated-element shell WRITES them: its host seeder writes the JSON
- *   prop seed, the DSD producer marks light roots, and the document-theme
+ * - The generated-element shell writes the JSON prop seed; the SSR writers mark
+ *   light-root ownership and projected light children; the document-theme
  *   broadcaster mirrors the broadcast attribute on every connected host.
  * - `internal/compiled/runtime/hydrate.ts` must EXEMPT them from its
  *   "unexpected attribute" drift check: a class-lane parent can claim a nested
@@ -66,6 +66,13 @@ import { THEME_ATTRIBUTE } from '../../../open-element-theme.ts';
 export const GENERATED_PROP_SEED = 'data-oe-prop-seed';
 
 /**
+ * SSR marker that caller-owned children were projected into a generated light
+ * root's slot anchors. The generated parent and child cannot both claim that
+ * region under the current ownership contract, so either upgrade fails closed.
+ */
+export const DATA_OE_LIGHT_PROJECTION = 'data-oe-light-projected';
+
+/**
  * The runtime-only host attributes as one owner fact. Members are the WRITERS'
  * own constants, never restated literals:
  *
@@ -76,9 +83,12 @@ export const GENERATED_PROP_SEED = 'data-oe-prop-seed';
  *   connected compiled host at that host's own connect;
  * - `GENERATED_PROP_SEED` — the JSON seed the shell's host seeder writes and
  *   its claim removes.
+ * - `DATA_OE_LIGHT_PROJECTION` — the SSR renderer marks a generated light host
+ *   whose slot anchors received caller-owned children; both claim sides guard
+ *   this unsupported cross-owner shape.
  *
- * The generated-element shell writes these; the compiled hydration executor
- * derives its exemption from this set. A writer that adds an attribute here
+ * The shell, SSR writers and theme broadcaster own these; the compiled
+ * hydration executor derives its exemption from this set. A writer that adds an attribute here
  * and a hydrator that consumes it are updated together because there is only
  * one list.
  */
@@ -86,4 +96,5 @@ export const GENERATED_RUNTIME_ONLY_ATTRIBUTES: ReadonlySet<string> = new Set([
   DATA_OE_LIGHT,
   THEME_ATTRIBUTE,
   GENERATED_PROP_SEED,
+  DATA_OE_LIGHT_PROJECTION,
 ]);

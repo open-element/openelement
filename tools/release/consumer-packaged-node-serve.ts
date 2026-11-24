@@ -106,6 +106,17 @@ try {
         hono: '4.12.0',
         nitro: NITRO_VERSION,
       },
+      // npm otherwise queries the registry for the packed packages' exact
+      // cross-workspace version edges even though those packages are direct
+      // file: dependencies. Each `$name` reuses that root file: specifier, so
+      // every transitive framework edge resolves to the same tarball under
+      // test instead of an absent or already-published registry copy.
+      overrides: {
+        '@openelement/router': '$@openelement/router',
+        '@openelement/element': '$@openelement/element',
+        '@openelement/protocol': '$@openelement/protocol',
+        '@openelement/compiler': '$@openelement/compiler',
+      },
     }),
   );
   // The pinned Nitro line formally supports the Alpha Vite major in its
@@ -178,17 +189,16 @@ import HomePage from '../components/page-home.tsx';
 
 export default definePage(HomePage, { head: { title: 'packed serve proof — home' } });
 `,
-    'app/components/page-home.tsx': `import { element, OpenElement } from '@openelement/element';
+    'app/components/page-home.tsx': `import { defineIslandConfig } from '@openelement/router';
 
-@element('packed-home', { root: 'shadow-open' })
-export default class PackedHome extends OpenElement {
-  render() {
-    return (
-      <main>
-        <h1 id='home-marker'>packed-node-serve home</h1>
-      </main>
-    );
-  }
+export const openElement = defineIslandConfig({ tag: 'packed-home', root: 'shadow' });
+
+export default function PackedHome() {
+  return (
+    <main>
+      <h1 id='home-marker'>packed-node-serve home</h1>
+    </main>
+  );
 }
 `,
     'app/routes/live.tsx': `import { definePage, type LoaderContext } from '@openelement/router';
@@ -206,21 +216,22 @@ export default definePage<{ x: string }>(LivePage, {
   },
 });
 `,
-    'app/components/page-live.tsx': `import { element, OpenElement, property } from '@openelement/element';
+    'app/components/page-live.tsx': `import { defineIslandConfig } from '@openelement/router';
 
-@element('packed-live', { root: 'shadow-open' })
-export default class PackedLive extends OpenElement {
-  @property({ reflect: false, attribute: false })
-  xText = 'x=';
+export const openElement = defineIslandConfig({
+  tag: 'packed-live',
+  root: 'shadow',
+  properties: { xText: { attribute: false, default: 'x=' } },
+});
 
-  render() {
-    return (
-      <main>
-        <h1>packed-node-serve live</h1>
-        <p id='x-value'>{this.xText}</p>
-      </main>
-    );
-  }
+export default function PackedLive(props: { xText: string }) {
+  const xText = props.xText ?? 'x=';
+  return (
+    <main>
+      <h1>packed-node-serve live</h1>
+      <p id='x-value'>{xText}</p>
+    </main>
+  );
 }
 `,
   };

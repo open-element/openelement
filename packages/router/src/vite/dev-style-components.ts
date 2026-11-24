@@ -36,7 +36,7 @@
  */
 
 import process from 'node:process';
-import { join } from 'pathe';
+import { join, resolve } from 'pathe';
 import type { Plugin, ViteDevServer } from 'vite';
 import { createLogger } from '@openelement/element';
 import { readComponentDeclaration } from './internal/component-declaration.ts';
@@ -54,9 +54,13 @@ import { readFileSync } from 'node:fs';
 import type { DevStyleSession } from './internal/dev-style-session.ts';
 import { reportRecoveryFailure } from './internal/build-diagnostics.ts';
 import { devClientModulePath } from './internal/dev-client-path.ts';
+import { serverComponentAdmissionTags } from './internal/server-component-host.ts';
 import type { OpenPluginState } from './plugin-config.ts';
 
 const log = createLogger('router-vite:style-components-dev');
+
+/** Module-graph id for the dev provider of `virtual:open-element-style-links`. */
+export const DEV_STYLE_LINKS_MODULE_ID = '\0open-element-style-links-dev.js';
 
 /**
  * The public dev URL of the served component stylesheet.
@@ -174,6 +178,19 @@ function devIslandStyleFacts(root: string, state: OpenPluginState): DevIslandSty
     if (reading.kind !== 'declared') continue;
     facts.push({ tagName, moduleId, root: reading.declaration.root ?? 'light' });
   }
+  // Page-reachable generated sidecars are registered in the SSR entry but are
+  // not necessarily under islandsDir. Include their compiler-scanned roots in
+  // the same DSD style map so a static shadow layout can declare the shared
+  // component sheet and a nested light sidecar can lift any authored sheets.
+  for (const component of state.ctx.phase1.staticComponents ?? []) {
+    if (component.generatedHostExport === undefined) continue;
+    if (facts.some((fact) => fact.tagName === component.tagName)) continue;
+    facts.push({
+      tagName: component.tagName,
+      moduleId: resolve(root, component.modulePath.replace(/^\/+/, '')),
+      root: component.root ?? 'light',
+    });
+  }
   return facts;
 }
 
@@ -212,7 +229,7 @@ function generatedIslandHasClasses(moduleId: string, state: OpenPluginState): bo
 export function devStyleComponentsPlugin(state: OpenPluginState, session: DevStyleSession): Plugin {
   let root = process.cwd();
   let base = '/';
-  const styleLinksId = '\0open-element-style-links-dev.js';
+  const styleLinksId = DEV_STYLE_LINKS_MODULE_ID;
   const adapterId = '\0oe-style-components-dev.js';
   const engine = (): string => session.current()?.provider.id ?? 'style';
   const currentCss = async (): Promise<string> => {
@@ -247,14 +264,11 @@ export function devStyleComponentsPlugin(state: OpenPluginState, session: DevSty
     // note), so the response is the only place the compiled sheet can be
     // fresh — including after the engine's configuration has been rebuilt.
     return await provider.compileComponents({
-      // The SHADOW view, not `all()`. The component stylesheet exists for shadow
-      // roots; a light root's classes are the document sheet's business, and the
-      // build already compiles from `allShadow()`-equivalent facts (its discovery
-      // pass registers a class module's shadow-ness and a generated island's
-      // declared root). Dev used `all()` and so compiled a sheet that carried the
-      // PAGE's utilities too — which is why a migrated shadow island's own
-      // utilities went missing when its tokens were registered as shadow-only.
-      candidates: state.classCandidates.allShadow(),
+      // Every admitted candidate, matching the build's component sheet. A
+      // light-root generated child can render inside a shadow tree, where the
+      // document sheet cannot reach; the enclosing DSD's shared sheet must carry
+      // its utilities too.
+      candidates: state.classCandidates.all(),
       sources: new Map(),
     });
   };
@@ -509,11 +523,29 @@ export function devStyleComponentsPlugin(state: OpenPluginState, session: DevSty
             .filter((declaration) => declaration.root !== 'shadow')
             .flatMap((declaration) => devAuthoredIslandStyleUrls(base, declaration)),
         ];
+        // The generated entry's own pageRuntime carries this same server tag
+        // set for class-page expansion. Function-page output calls `__ssr`
+        // directly, so the dev style-links module also has to seed the element
+        // runtime with the descriptor's final admission set. Use the descriptor
+        // rather than the raw Phase 1 scan so collisions and other descriptor
+        // filtering match the registrations the entry actually emits.
+        const ssrRenderableTags = serverComponentAdmissionTags(
+          state.entryDescriptor?.staticComponents,
+          state.entryDescriptor?.ssrAdmissionPlan.renderableTags,
+        );
+        const ssrAdmissionLines = [
+          "import { __setSsrRenderableTags } from '@openelement/element/server';",
+          // Always write the current set, including []: the setter replaces the
+          // process-global list, and an HMR rescan that removes every reachable
+          // static tag must clear the previous descriptor's admission.
+          `__setSsrRenderableTags(${JSON.stringify(ssrRenderableTags)});`,
+        ];
         if (devIslandStyles.length === 0) {
           return [
             '// <generated by open:style-components-dev — dev sheet URLs; do not edit>',
             "import { __setRequestTimeStyleSheetUrls } from '@openelement/element';",
             `__setRequestTimeStyleSheetUrls(${JSON.stringify(documentSheetUrls)});`,
+            ...ssrAdmissionLines,
             '',
           ].join('\n');
         }
@@ -521,6 +553,7 @@ export function devStyleComponentsPlugin(state: OpenPluginState, session: DevSty
           '// <generated by open:style-components-dev — dev sheet URLs; do not edit>',
           "import { __setRequestTimeStyleSheetUrls } from '@openelement/element';",
           `__setRequestTimeStyleSheetUrls(${JSON.stringify(documentSheetUrls)}, ${JSON.stringify(devIslandStyles)});`,
+          ...ssrAdmissionLines,
           '',
         ].join('\n');
       }

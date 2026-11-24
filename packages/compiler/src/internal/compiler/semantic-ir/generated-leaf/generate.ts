@@ -327,6 +327,14 @@ const OPTIONAL_RUNTIME_IMPORTS: readonly {
   { symbol: 'claimRecipe', predicate: (_body, usesClaimRecipe) => usesClaimRecipe },
   { symbol: 'leafClaimMismatch', predicate: (body) => body.includes('leafClaimMismatch(') },
   { symbol: 'leafRuntimeError', predicate: (body) => body.includes('leafRuntimeError(') },
+  {
+    symbol: 'selectOptionSelected',
+    predicate: (body) => body.includes('selectOptionSelected('),
+  },
+  {
+    symbol: 'selectOptionValue',
+    predicate: (body) => body.includes('selectOptionValue('),
+  },
   // alpha16 nested-expansion: the emitted producer routes every custom-element
   // tag through this ONE helper, which asks the render's host to expand it.
   { symbol: 'nestedHost', predicate: (body) => body.includes('nestedHost(') },
@@ -5722,29 +5730,18 @@ function emitClaimInto(
       const ranges = directoryParentAllowed(node.tag)
         ? staticElementDirectory(node.children)
         : null;
-      if (ranges !== null) emitClaimedDirectory(state, name, ranges);
-      else if (isNestedHost && node.children.length === 0) {
-        // A childless nested host's interior is NOT the parent's to claim:
-        //   - an expanded LIGHT-root child wrote its content as this element's
-        //     children (`data-oe-light` is the ownership marker), so the child's
-        //     own element claim consumes them and the parent must treat the
-        //     interior as opaque;
-        //   - with no marker the host owns no light region, so the strict empty
-        //     child check stays: a foreign node injected there is still drift.
-        emitClaimMismatch(
-          state,
-          `!isExpandedLightRootHost(${name}) && ${name}.firstChild !== null`,
-          `extra node at ${here}`,
-          node.span,
-        );
-      } else {
+      const emitClaimChildren = (): void => {
+        if (ranges !== null) {
+          emitClaimedDirectory(state, name, ranges);
+          return;
+        }
         const childCursor = nextName(state, 'cursor');
         push(state, `const ${childCursor} = { node: ${name}.firstChild };`);
         const saved = state.claimCursorShared ? nextName(state, 'savedCursor') : null;
         // Shared-cursor interiors are a `try` block. Child node bindings are
-        // block-scoped, so their refresh closures must be emitted in that
-        // same block; flushing them on the parent phase2 would name a binding
-        // the refresh cannot see.
+        // block-scoped, so their refresh closures must be emitted in that same
+        // block; flushing them on the parent phase2 would name a binding the
+        // refresh cannot see.
         const childPhase2: Array<() => void> = [];
         if (saved !== null) {
           push(state, `const ${saved} = __oe_claimCursor;`);
@@ -5771,6 +5768,35 @@ function emitClaimInto(
           state.indent -= 1;
           push(state, `} finally { __oe_claimCursor = ${saved}; }`);
         }
+      };
+      if (isNestedHost && node.children.length === 0) {
+        // A childless nested host's interior is NOT the parent's to claim:
+        //   - an expanded LIGHT-root child wrote its content as this element's
+        //     children (`data-oe-light` is the ownership marker), so the child's
+        //     own element claim consumes them and the parent must treat the
+        //     interior as opaque;
+        //   - with no marker the host owns no light region, so the strict empty
+        //     child check stays: a foreign node injected there is still drift.
+        emitClaimMismatch(
+          state,
+          `!isExpandedLightRootHost(${name}) && ${name}.firstChild !== null`,
+          `extra node at ${here}`,
+          node.span,
+        );
+      } else if (isNestedHost) {
+        // An expanded light child owns its whole interior, including its
+        // fallback when the caller produced no visible children. If it received
+        // caller content, the shared marker makes both upgrade orders fail
+        // closed before either side can claim through the other.
+        push(state, `if (isExpandedLightRootHost(${name})) { /* child-owned fallback */ } else {`);
+        state.indent += 1;
+        emitClaimChildren();
+        state.indent -= 1;
+        push(state, '}');
+      } else if (ranges !== null) {
+        emitClaimedDirectory(state, name, ranges);
+      } else {
+        emitClaimChildren();
       }
       adopt(name);
     }
@@ -7139,6 +7165,8 @@ function emitSsrDynamicAttribute(
    * the expander's props read that one evaluation — no second getter read.
    */
   pairsVar?: string,
+  slotCaptureVar?: string,
+  valueCaptureVar?: string,
 ): boolean {
   if (CLIENT_ONLY_ATTRIBUTE_CHANNELS.has(attribute.channel)) return false;
   if (!ADMITTED_ATTRIBUTE_CHANNELS.has(attribute.channel)) return false;
@@ -7180,6 +7208,12 @@ function emitSsrDynamicAttribute(
   if (attribute.channel !== 'attribute' && attribute.channel !== 'property') return false;
   const valueVar = nextName(state, 'value');
   pushParts(state, [`const ${valueVar} = attributeValueOf((`, { record }, '));'], attribute.span);
+  if (valueCaptureVar !== undefined) {
+    push(state, `${valueCaptureVar} = ${valueVar};`, attribute.span);
+  }
+  if (slotCaptureVar !== undefined && attribute.name.toLowerCase() === 'slot') {
+    push(state, `${slotCaptureVar} = ${valueVar} ?? \"\";`, attribute.span);
+  }
   push(state, `if (${valueVar} !== null) {`, attribute.span);
   push(state, `  assertSafeUrlAttribute(${literal}, ${valueVar});`, attribute.span);
   push(
@@ -7431,6 +7465,27 @@ function emitSsrRecipeHelpers(
  * interior recurses with markers suppressed, so the SSR output is what the
  * M07b directory parser accepts.
  */
+function staticCompositionSlotName(node: FunctionModelNode): string | null {
+  if (node.kind !== 'element') return '';
+  const slot = node.attributes.find((attribute) => attribute.name.toLowerCase() === 'slot');
+  return slot === undefined ? '' : slot.kind === 'static' ? slot.value : null;
+}
+
+interface SsrSelectContext {
+  readonly value: string;
+  readonly multiple: string;
+  readonly state: string;
+}
+
+interface SsrFormContext {
+  readonly select?: SsrSelectContext;
+  readonly optionText?: string;
+}
+
+interface SsrCompositionGroups {
+  readonly groups: string;
+}
+
 function emitDynamicSsrNodes(
   state: EmitState,
   nodes: readonly FunctionModelNode[],
@@ -7438,15 +7493,74 @@ function emitDynamicSsrNodes(
   markers: boolean,
   records: ReadonlyMap<string, LoweredExpressionRecord>,
   slots: SlotAnchors | null,
+  slotCaptureVar?: string,
+  formContext?: SsrFormContext,
+  composition?: SsrCompositionGroups,
 ): boolean {
   const list = state.emitTextBoundaries ? normalizeTextRuns(nodes) : nodes;
   for (const node of list) {
+    // A dynamic condition/list can produce different top-level roots at render
+    // time. Keep each selected root as its own group so a static or dynamic
+    // `slot` attribute on that root still controls projection into a nested
+    // light host. Fragments and control-flow nodes recurse with this context;
+    // the root itself is rendered without it so descendants do not become
+    // separate projection groups.
+    if (
+      composition !== undefined &&
+      node.kind !== 'fragment' &&
+      node.kind !== 'condition' &&
+      node.kind !== 'list'
+    ) {
+      const childHtmlVar = nextName(state, 'nestedChild');
+      const childSlotVar = nextName(state, 'nestedChildSlot');
+      const staticSlot = staticCompositionSlotName(node);
+      push(state, `const ${childHtmlVar} = [];`, node.span);
+      push(
+        state,
+        `let ${childSlotVar} = ${staticSlot === null ? '""' : literalText(staticSlot)};`,
+        node.span,
+      );
+      if (
+        !emitDynamicSsrNodes(
+          state,
+          [node],
+          childHtmlVar,
+          markers,
+          records,
+          slots,
+          childSlotVar,
+          formContext,
+        )
+      )
+        return false;
+      const childHtmlTextVar = nextName(state, 'nestedChildText');
+      push(state, `const ${childHtmlTextVar} = ${childHtmlVar}.join("");`, node.span);
+      push(state, `${outVar}.push(${childHtmlTextVar});`, node.span);
+      push(state, `${composition.groups}.push([${childSlotVar}, ${childHtmlTextVar}]);`, node.span);
+      continue;
+    }
     if (node.kind === 'text') {
+      if (formContext?.optionText !== undefined) {
+        push(state, `${formContext.optionText}.push(${literalText(node.value)});`, node.span);
+      }
       push(state, `${outVar}.push(escapeText(${literalText(node.value)}));`, node.span);
       continue;
     }
     if (node.kind === 'fragment') {
-      if (!emitDynamicSsrNodes(state, node.children, outVar, markers, records, slots)) return false;
+      if (
+        !emitDynamicSsrNodes(
+          state,
+          node.children,
+          outVar,
+          markers,
+          records,
+          slots,
+          slotCaptureVar,
+          formContext,
+          composition,
+        )
+      )
+        return false;
       continue;
     }
     if (node.kind === 'dynamic-text') {
@@ -7454,16 +7568,27 @@ function emitDynamicSsrNodes(
       if (record === null || !declareReads(state, record)) return false;
       const ordinal = textOrdinal(state, node);
       if (ordinal === null) return false;
+      const optionTextCaptureVar = formContext?.optionText;
+      const textValueVar =
+        optionTextCaptureVar === undefined ? undefined : nextName(state, 'ssrTextValue');
+      if (textValueVar !== undefined) {
+        pushParts(state, [`const ${textValueVar} = displayValue((`, { record }, '));'], node.span);
+        push(state, `${optionTextCaptureVar}.push(${textValueVar});`, node.span);
+      }
       push(
         state,
         `${outVar}.push("<!--", markerText(textSlotMarker(${ordinal})), "-->");`,
         node.span,
       );
-      pushParts(
-        state,
-        [`${outVar}.push(escapeText(displayValue((`, { record }, '))));'], // displayValue((expr))
-        node.span,
-      );
+      if (textValueVar !== undefined) {
+        push(state, `${outVar}.push(escapeText(${textValueVar}));`, node.span);
+      } else {
+        pushParts(
+          state,
+          [`${outVar}.push(escapeText(displayValue((`, { record }, '))));'], // displayValue((expr))
+          node.span,
+        );
+      }
       push(
         state,
         `${outVar}.push("<!--", markerText(textSlotMarker(${ordinal}, true)), "-->");`,
@@ -7478,13 +7603,28 @@ function emitDynamicSsrNodes(
       // request-time fact, so a static branch body still needs this producer.
       const testVar = nextName(state, 'whenTest');
       pushParts(state, [`const ${testVar} = (`, { record }, ');'], node.span);
+      // Keep the control markers in `outVar`, the caller's raw fallback bytes.
+      // A selected branch may project roots into different slot parents, so a
+      // single when range cannot be copied into the expanded groups safely.
       push(state, `${outVar}.push("<!--", markerText(MARKERS.when), "-->");`, node.span);
       push(state, `if (${testVar}) {`, node.span);
       state.indent += 1;
       const thenOrdinals = state.textOrdinals;
       const preparedThen = emissionNodes(state, node.consequent);
       state.textOrdinals = textSlotOrdinals(preparedThen);
-      if (!emitDynamicSsrNodes(state, preparedThen, outVar, markers, records, slots)) {
+      if (
+        !emitDynamicSsrNodes(
+          state,
+          preparedThen,
+          outVar,
+          markers,
+          records,
+          slots,
+          slotCaptureVar,
+          formContext,
+          composition,
+        )
+      ) {
         state.textOrdinals = thenOrdinals;
         return false;
       }
@@ -7496,7 +7636,19 @@ function emitDynamicSsrNodes(
         const elseOrdinals = state.textOrdinals;
         const preparedElse = emissionNodes(state, node.alternate);
         state.textOrdinals = textSlotOrdinals(preparedElse);
-        if (!emitDynamicSsrNodes(state, preparedElse, outVar, markers, records, slots)) {
+        if (
+          !emitDynamicSsrNodes(
+            state,
+            preparedElse,
+            outVar,
+            markers,
+            records,
+            slots,
+            slotCaptureVar,
+            formContext,
+            composition,
+          )
+        ) {
           state.textOrdinals = elseOrdinals;
           return false;
         }
@@ -7515,6 +7667,10 @@ function emitDynamicSsrNodes(
       }
       const itemsVar = nextName(state, 'eachItems');
       pushParts(state, [`const ${itemsVar} = (`, { record: itemsRecord }, ');'], node.span);
+      // List and entry markers remain in `outVar`, which is also the raw
+      // unexpanded fallback. Projected groups are individual slot-owned roots;
+      // placing one each range around roots in different slots would split its
+      // start/end markers across unrelated parent nodes.
       push(state, `${outVar}.push("<!--", markerText(MARKERS.each), "-->");`, node.span);
       const indexVar = nextName(state, 'eachIndex');
       push(state, `for (let ${indexVar} = 0; ${indexVar} < ${itemsVar}.length; ${indexVar}++) {`);
@@ -7550,7 +7706,17 @@ function emitDynamicSsrNodes(
       // A component reference inside an entry cannot re-read props on a keyed
       // reuse (M06b1b), so the SSR walk keeps mount's refusal.
       state.listDepth += 1;
-      const entriesEmitted = emitDynamicSsrNodes(state, prepared, outVar, markers, records, slots);
+      const entriesEmitted = emitDynamicSsrNodes(
+        state,
+        prepared,
+        outVar,
+        markers,
+        records,
+        slots,
+        slotCaptureVar,
+        formContext,
+        composition,
+      );
       state.listDepth -= 1;
       state.textOrdinals = outerOrdinals;
       if (!outerEntryName) state.entryNames.delete(node.parameter);
@@ -7561,10 +7727,28 @@ function emitDynamicSsrNodes(
       continue;
     }
     if (node.kind === 'component-ref') {
+      if (formContext?.select !== undefined || formContext?.optionText !== undefined) {
+        diag(
+          state,
+          'OEIR_LEAF_UNSUPPORTED_NODE',
+          'a controlled select cannot determine option selectedness across a component reference',
+          node.span,
+        );
+        return false;
+      }
       if (!emitSsrComponentRef(state, node, outVar, records)) return false;
       continue;
     }
     if (node.kind === 'insertion-site') {
+      if (formContext?.select !== undefined || formContext?.optionText !== undefined) {
+        diag(
+          state,
+          'OEIR_LEAF_UNSUPPORTED_NODE',
+          'a controlled select cannot determine option selectedness across a reusable JSX value',
+          node.span,
+        );
+        return false;
+      }
       if (!state.declaredRecipeIds.has(node.recipeId)) {
         diag(
           state,
@@ -7588,6 +7772,15 @@ function emitDynamicSsrNodes(
       continue;
     }
     if (node.kind === 'children-projection') {
+      if (formContext?.select !== undefined || formContext?.optionText !== undefined) {
+        diag(
+          state,
+          'OEIR_LEAF_UNSUPPORTED_NODE',
+          'a controlled select cannot determine option selectedness across children projection',
+          node.span,
+        );
+        return false;
+      }
       if (state.recipeDepth > 0) {
         diag(
           state,
@@ -7624,6 +7817,66 @@ function emitDynamicSsrNodes(
       );
       return false;
     }
+    const tagName = node.tag.toLowerCase();
+    const attributeOf = (name: string): FunctionModelAttribute | undefined =>
+      node.attributes.find((attribute) => attribute.name.toLowerCase() === name);
+    const selectValueAttribute = tagName === 'select' ? attributeOf('value') : undefined;
+    let activeSelect = formContext?.select;
+    let selectValueVar: string | undefined;
+    let selectMultipleVar: string | undefined;
+    if (selectValueAttribute !== undefined) {
+      selectValueVar = nextName(state, 'selectValue');
+      selectMultipleVar = nextName(state, 'selectMultiple');
+      push(state, `let ${selectValueVar};`, node.span);
+      push(state, `let ${selectMultipleVar} = false;`, node.span);
+      const stateVar = nextName(state, 'selectState');
+      push(state, `const ${stateVar} = { selected: false };`, node.span);
+      activeSelect = { value: selectValueVar, multiple: selectMultipleVar, state: stateVar };
+    }
+
+    const textareaValueAttribute = tagName === 'textarea' ? attributeOf('value') : undefined;
+    let textareaValueVar: string | undefined;
+    if (textareaValueAttribute !== undefined) {
+      textareaValueVar = nextName(state, 'textareaValue');
+      push(state, `let ${textareaValueVar};`, node.span);
+    }
+
+    const controlledOption = tagName === 'option' && activeSelect !== undefined;
+    const optionOpenVar = controlledOption ? nextName(state, 'optionOpen') : undefined;
+    const optionChildrenVar = controlledOption ? nextName(state, 'optionChildren') : undefined;
+    const optionTextVar = controlledOption ? nextName(state, 'optionText') : undefined;
+    const optionValueVar = controlledOption ? nextName(state, 'optionValue') : undefined;
+    if (controlledOption) {
+      push(state, `const ${optionOpenVar} = [];`, node.span);
+      push(state, `const ${optionChildrenVar} = [];`, node.span);
+      push(state, `const ${optionTextVar} = [];`, node.span);
+      push(state, `let ${optionValueVar} = null;`, node.span);
+      const staticValue = attributeOf('value');
+      if (staticValue?.kind === 'static') {
+        push(state, `${optionValueVar} = ${literalText(staticValue.value)};`, staticValue.span);
+      }
+    }
+    const childFormContext: SsrFormContext | undefined =
+      controlledOption && activeSelect !== undefined
+        ? { select: activeSelect, optionText: optionTextVar }
+        : activeSelect === undefined
+          ? formContext
+          : {
+              select: activeSelect,
+              ...(formContext?.optionText === undefined
+                ? {}
+                : { optionText: formContext.optionText }),
+            };
+
+    if (formContext?.select !== undefined && node.tag.includes('-')) {
+      diag(
+        state,
+        'OEIR_LEAF_UNSUPPORTED_NODE',
+        'a controlled select cannot determine option selectedness across a custom-element host',
+        node.span,
+      );
+      return false;
+    }
     // A light-root `<slot>` anchor: the pair brackets the slot element's
     // INTERIOR (after the open tag, around the fallback content), so the
     // serializer substitutes the caller's children for the fallback while the
@@ -7644,16 +7897,100 @@ function emitDynamicSsrNodes(
     // these same literal bytes when nothing admits the tag. An intrinsic tag
     // keeps direct pushes (byte-identical).
     const isNestedHost = node.tag.includes('-');
-    const bytesVar = isNestedHost ? nextName(state, 'nestedOpen') : outVar;
+    const bytesVar = isNestedHost ? nextName(state, 'nestedOpen') : (optionOpenVar ?? outVar);
     const pairsVar = isNestedHost ? nextName(state, 'nestedAttrs') : undefined;
     const kidsVar = isNestedHost ? nextName(state, 'nestedKids') : undefined;
+    const groupsVar = isNestedHost ? nextName(state, 'nestedGroups') : undefined;
     if (isNestedHost) {
       push(state, `const ${bytesVar} = [];`, node.span);
       push(state, `const ${pairsVar} = [];`, node.span);
       push(state, `const ${kidsVar} = [];`, node.span);
+      push(state, `const ${groupsVar} = [];`, node.span);
     }
     push(state, `${bytesVar}.push(${literalText(`<${node.tag}`)});`, node.span);
     for (const attribute of node.attributes) {
+      const attributeName = attribute.name.toLowerCase();
+      if (tagName === 'select' && selectValueAttribute !== undefined && attributeName === 'value') {
+        if (attribute.kind === 'static') {
+          push(state, `${selectValueVar} = ${literalText(attribute.value)};`, attribute.span);
+        } else {
+          const record = recordFor(state, attribute.expression, records);
+          if (record === null || !declareReads(state, record)) return false;
+          pushParts(state, [`${selectValueVar} = (`, { record }, ');'], attribute.span);
+        }
+        continue;
+      }
+      if (
+        tagName === 'textarea' &&
+        textareaValueAttribute !== undefined &&
+        attributeName === 'value'
+      ) {
+        if (attribute.kind === 'static') {
+          push(state, `${textareaValueVar} = ${literalText(attribute.value)};`, attribute.span);
+        } else {
+          const record = recordFor(state, attribute.expression, records);
+          if (record === null || !declareReads(state, record)) return false;
+          pushParts(state, [`${textareaValueVar} = (`, { record }, ');'], attribute.span);
+        }
+        continue;
+      }
+      if (controlledOption && attributeName === 'selected') {
+        continue;
+      }
+      if (
+        tagName === 'select' &&
+        selectValueAttribute !== undefined &&
+        attributeName === 'multiple' &&
+        attribute.kind === 'dynamic' &&
+        attribute.channel === 'boolean'
+      ) {
+        const record = recordFor(state, attribute.expression, records);
+        if (record === null || !declareReads(state, record)) return false;
+        const multipleValueVar = nextName(state, 'selectMultipleValue');
+        pushParts(
+          state,
+          [`const ${multipleValueVar} = Boolean((`, { record }, '));'],
+          attribute.span,
+        );
+        push(state, `${selectMultipleVar} = ${multipleValueVar};`, attribute.span);
+        push(
+          state,
+          `if (${selectMultipleVar}) ${bytesVar}.push(${JSON.stringify(' multiple=""')});`,
+          attribute.span,
+        );
+        continue;
+      }
+      if (
+        tagName === 'select' &&
+        selectValueAttribute !== undefined &&
+        attributeName === 'multiple' &&
+        attribute.kind === 'dynamic' &&
+        attribute.channel !== 'boolean'
+      ) {
+        const record = recordFor(state, attribute.expression, records);
+        if (record === null || !declareReads(state, record)) return false;
+        const multipleValueVar = nextName(state, 'selectMultipleValue');
+        pushParts(
+          state,
+          [`const ${multipleValueVar} = attributeValueOf((`, { record }, '));'],
+          attribute.span,
+        );
+        push(state, `${selectMultipleVar} = ${multipleValueVar} !== null;`, attribute.span);
+        push(
+          state,
+          `if (${multipleValueVar} !== null) ${bytesVar}.push(${JSON.stringify(' multiple="')}, escapeAttrValue(${multipleValueVar}), ${JSON.stringify('"')});`,
+          attribute.span,
+        );
+        continue;
+      }
+      if (
+        tagName === 'select' &&
+        selectValueAttribute !== undefined &&
+        attributeName === 'multiple' &&
+        attribute.kind === 'static'
+      ) {
+        push(state, `${selectMultipleVar} = true;`, attribute.span);
+      }
       if (
         attribute.kind === 'dynamic' &&
         (CONSUMED_ATTRIBUTE_CHANNELS.has(attribute.channel) ||
@@ -7685,14 +8022,26 @@ function emitDynamicSsrNodes(
         }
         continue;
       }
-      if (!emitSsrDynamicAttribute(state, attribute, bytesVar, records, pairsVar)) return false;
+      if (
+        !emitSsrDynamicAttribute(
+          state,
+          attribute,
+          bytesVar,
+          records,
+          pairsVar,
+          slotCaptureVar,
+          controlledOption && attributeName === 'value' ? optionValueVar : undefined,
+        )
+      )
+        return false;
     }
-    push(state, `${bytesVar}.push(">");`, node.span);
+    if (!controlledOption) push(state, `${bytesVar}.push(">");`, node.span);
     if (isVoid) {
-      if (isNestedHost) pushNestedHostExpansion(state, outVar, bytesVar, pairsVar!, kidsVar!, node);
+      if (isNestedHost)
+        pushNestedHostExpansion(state, outVar, bytesVar, pairsVar!, kidsVar!, groupsVar!, node);
       continue;
     }
-    const childVar = kidsVar ?? outVar;
+    const childVar = kidsVar ?? optionChildrenVar ?? outVar;
     if (slotOrdinal !== null && slotName !== null) {
       push(
         state,
@@ -7700,29 +8049,106 @@ function emitDynamicSsrNodes(
         node.span,
       );
     }
-    // A nested custom-element host never uses the sibling-directory shape: its
-    // content is not a directory over a keyed list, and the expander owns the
-    // interior. Emitting the plain walk into the children buffer is the
-    // additive behaviour (the same bytes, one array over).
+    // A nested light host needs caller child groups as well as their concatenated
+    // fallback bytes: its own <slot> anchors route each authored child to the
+    // right named region. The composition context flattens fragments and walks
+    // selected condition/list roots at producer time, rendering each root once
+    // into both channels.
     const directory =
-      !isNestedHost && markers && directoryParentAllowed(node.tag)
+      !isNestedHost && textareaValueVar === undefined && markers && directoryParentAllowed(node.tag)
         ? staticElementDirectory(node.children)
         : null;
-    if (directory !== null) {
+    if (isNestedHost) {
+      if (
+        !emitDynamicSsrNodes(
+          state,
+          node.children,
+          kidsVar!,
+          markers,
+          records,
+          slots,
+          undefined,
+          undefined,
+          {
+            groups: groupsVar!,
+          },
+        )
+      )
+        return false;
+    } else if (directory !== null) {
       for (const [ordinal, range] of directory.entries()) {
         push(
           state,
           `${childVar}.push("<!--", markerText(rangeMarker(${ordinal})), "-->");`,
           range.span,
         );
-        if (!emitDynamicSsrNodes(state, [range], childVar, false, records, slots)) return false;
+        if (
+          !emitDynamicSsrNodes(
+            state,
+            [range],
+            childVar,
+            false,
+            records,
+            slots,
+            undefined,
+            childFormContext,
+          )
+        )
+          return false;
         push(
           state,
           `${childVar}.push("<!--", markerText(rangeMarker(${ordinal}, true)), "-->");`,
           range.span,
         );
       }
-    } else if (!emitDynamicSsrNodes(state, node.children, childVar, markers, records, slots)) {
+    } else if (textareaValueVar !== undefined) {
+      const textareaTextVar = nextName(state, 'textareaText');
+      push(
+        state,
+        `if (${textareaValueVar} !== null && ${textareaValueVar} !== undefined) {`,
+        node.span,
+      );
+      state.indent += 1;
+      push(
+        state,
+        `const ${textareaTextVar} = displayValue(${textareaValueVar}).replace(/\\r\\n?/g, "\\n");`,
+        node.span,
+      );
+      push(
+        state,
+        `${outVar}.push(escapeText(${textareaTextVar}.startsWith("\\n") ? "\\n" + ${textareaTextVar} : ${textareaTextVar}));`,
+        node.span,
+      );
+      state.indent -= 1;
+      push(state, '} else {', node.span);
+      state.indent += 1;
+      if (
+        !emitDynamicSsrNodes(
+          state,
+          node.children,
+          childVar,
+          markers,
+          records,
+          slots,
+          undefined,
+          childFormContext,
+        )
+      )
+        return false;
+      state.indent -= 1;
+      push(state, '}');
+    } else if (
+      !emitDynamicSsrNodes(
+        state,
+        node.children,
+        childVar,
+        markers,
+        records,
+        slots,
+        undefined,
+        childFormContext,
+      )
+    ) {
       return false;
     }
     if (slotOrdinal !== null && slotName !== null) {
@@ -7733,7 +8159,27 @@ function emitDynamicSsrNodes(
       );
     }
     if (isNestedHost) {
-      pushNestedHostExpansion(state, outVar, bytesVar, pairsVar!, kidsVar!, node);
+      pushNestedHostExpansion(state, outVar, bytesVar, pairsVar!, kidsVar!, groupsVar!, node);
+      continue;
+    }
+    if (controlledOption && activeSelect !== undefined) {
+      const optionEffectiveValue = nextName(state, 'optionEffectiveValue');
+      push(
+        state,
+        `const ${optionEffectiveValue} = ${optionValueVar} === null ? selectOptionValue(${optionTextVar}.join("")) : ${optionValueVar};`,
+        node.span,
+      );
+      push(
+        state,
+        `if (selectOptionSelected(${activeSelect.value}, ${optionEffectiveValue}, ${activeSelect.multiple}, ${activeSelect.state})) ${optionOpenVar}.push(${JSON.stringify(' selected=""')});`,
+        node.span,
+      );
+      push(state, `${optionOpenVar}.push(">");`, node.span);
+      push(
+        state,
+        `${outVar}.push(${optionOpenVar}.join(""), ${optionChildrenVar}.join(""), ${literalText(`</${node.tag}>`)});`,
+        node.span,
+      );
       continue;
     }
     push(state, `${outVar}.push(${literalText(`</${node.tag}>`)});`, node.span);
@@ -7761,7 +8207,12 @@ function pushNestedHostExpansion(
   openVar: string,
   pairsVar: string,
   kidsVar: string,
-  node: { readonly tag: string; readonly span: SpanLike },
+  groupsVar: string,
+  node: {
+    readonly tag: string;
+    readonly span: SpanLike;
+    readonly children: readonly FunctionModelNode[];
+  },
 ): void {
   const htmlVar = nextName(state, 'nestedHtml');
   const kidsHtmlVar = nextName(state, 'nestedKids');
@@ -7769,7 +8220,7 @@ function pushNestedHostExpansion(
   push(state, `const ${kidsHtmlVar} = ${kidsVar}.join("");`, node.span);
   push(
     state,
-    `${outVar}.push(nestedHost(${state.hostVar}, { tag: ${JSON.stringify(node.tag)}, attributes: ${pairsVar}, open: ${htmlVar}, children: ${kidsHtmlVar}, fallback: ${htmlVar} + ${kidsHtmlVar} + ${JSON.stringify(`</${node.tag}>`)} }));`,
+    `${outVar}.push(nestedHost(${state.hostVar}, { tag: ${JSON.stringify(node.tag)}, attributes: ${pairsVar}, open: ${htmlVar}, children: ${kidsHtmlVar}, groups: ${groupsVar}, hasChildren: ${node.children.length > 0}, fallback: ${htmlVar} + ${kidsHtmlVar} + ${JSON.stringify(`</${node.tag}>`)} }));`,
     node.span,
   );
 }

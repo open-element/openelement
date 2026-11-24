@@ -71,6 +71,33 @@ export function attributeValueOf(value: unknown): string | null {
   return value === null || value === undefined ? null : String(value);
 }
 
+/** The value an HTML option exposes when its value attribute is absent. */
+export function selectOptionValue(value: unknown): string {
+  return displayValue(value)
+    .replace(/[\t\n\f\r ]+/g, ' ')
+    .replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, '');
+}
+
+/** Whether one option is selected by a controlled select value. */
+export function selectOptionSelected(
+  selectValue: unknown,
+  optionValue: unknown,
+  multiple: boolean,
+  state?: { selected: boolean },
+): boolean {
+  if (selectValue === null || selectValue === undefined) return false;
+  const value = attributeValueOf(optionValue) ?? '';
+  const candidates = multiple && Array.isArray(selectValue) ? selectValue : [selectValue];
+  const matches = candidates.some(
+    (candidate) =>
+      candidate !== null && candidate !== undefined && attributeValueOf(candidate) === value,
+  );
+  if (multiple || !matches || state === undefined) return matches;
+  if (state.selected) return false;
+  state.selected = true;
+  return true;
+}
+
 function cssName(name: string): string {
   if (name.startsWith('--')) return name;
   const vendor = /^(Webkit|Moz|ms|O)([A-Z].*)$/.exec(name);

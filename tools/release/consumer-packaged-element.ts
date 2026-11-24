@@ -1,5 +1,5 @@
-// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the packed-Element consumer proof is ONE qualification lifecycle — fresh-tarball assertion, one hermetic npm install, one scratch author project, one packed-declaration walk, then the class-authored, generated-CE and packed-shadow legs whose real-browser assertions all read that same installed tree through one local HTTP server — so splitting per leg would fork the install, freshness, teardown and boundary scans; the boundary is that it qualifies the PACKED tarballs only (no workspace source, no router installed) and each leg states its own scope limits instead of claiming the M12/M13 matrices.
-/** Packed Element author -> Vite compile -> separate plain-HTML browser proof (#1338). */
+// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the packed-Element consumer proof is ONE qualification lifecycle — fresh-tarball assertion, one hermetic npm install, one scratch author project, one packed-declaration walk, then the generated Vite, generated-CE and packed-shadow legs whose real-browser assertions all read that same installed tree through one local HTTP server — so splitting per leg would fork the install, freshness, teardown and boundary scans; the boundary is that it qualifies the PACKED tarballs only (no workspace source, no router installed) and each leg states its own scope limits instead of claiming the M12/M13 matrices.
+/** Packed Element generated author -> Vite compile -> separate plain-HTML browser proof (#1338). */
 import { tmpdir } from 'node:os';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { strict as assert } from 'node:assert/strict';
@@ -62,23 +62,25 @@ try {
   );
   await writeFile(
     join(author, 'counter.tsx'),
-    `import {element,property,OpenElement} from '@openelement/element';
-@element('proof-counter')
-export class Counter extends OpenElement {
-  @property({reflect:true}) count = 0;
-  increment() { this.count++; }
-  render() { return <button title={this.count} onClick={this.increment}>Count: {this.count}</button>; }
+    `import { signal } from '@openelement/element';
+
+function defineIslandConfig<T>(config: T): T { return config; }
+export const openElement = defineIslandConfig({ tag: 'proof-counter', hydrate: 'only', root: 'shadow' });
+
+export default function Counter() {
+  const count = signal(0);
+  return <button title={count.value} onClick={() => { count.value = count.value + 1; }}>Count: {count.value}</button>;
 }
 `,
   );
   await writeFile(
     join(author, 'register.js'),
-    `import {Counter} from './counter.tsx'; customElements.define('proof-counter',Counter);`,
+    `import Counter from './counter.tsx'; customElements.define('proof-counter',Counter);`,
   );
   await writeFile(
     join(author, 'vite.config.js'),
     `import {element} from '@openelement/compiler/vite';
-export default {plugins:[element(), {name:'proof-module-boundary',generateBundle(){for(const id of this.getModuleIds()){if(/compiler|router\\/src\\/(?:vite|cli)|node:/.test(id))this.error('Browser tooling leak: '+id)}}}],build:{sourcemap:true,lib:{entry:'register.js',formats:['es'],fileName:'counter'}}};`,
+export default {plugins:[element({generatedElementSite:(id)=>id==='counter.tsx'?{tag:'proof-counter',root:'shadow'}:null}), {name:'proof-module-boundary',generateBundle(){for(const id of this.getModuleIds()){if(/compiler|router\\/src\\/(?:vite|cli)|node:/.test(id))this.error('Browser tooling leak: '+id)}}}],build:{sourcemap:true,lib:{entry:'register.js',formats:['es'],fileName:'counter'}}};`,
   );
   await runConsumerOrThrow(
     'npm',
@@ -134,10 +136,10 @@ export default {plugins:[element(), {name:'proof-module-boundary',generateBundle
     '<!doctype html><proof-counter></proof-counter><script type="module" src="/counter.js"></script>',
   );
 
-  // ---- M09-1b: the first packed generated Native Custom Element consumer ----
+  // ---- M09-1b: a second packed generated Native Custom Element consumer ----
   //
-  // The class-authored leg above proves the packed authoring path. This leg
-  // proves the generated path end to end on the SAME installed tarballs: the
+  // This leg proves the generated page-component path end to end on the SAME
+  // installed tarballs: the
   // packed compiler's generated-element lane emits the CE tail for an
   // island-shaped module, the emitted module's
   // `@openelement/element/internal/compiled/generated-element/shell` specifier
@@ -152,12 +154,11 @@ export default {plugins:[element(), {name:'proof-module-boundary',generateBundle
 // router, so the factory is local; the lane checks the statement shape
 // (\`export const openElement = defineIslandConfig({ ... })\`), not the binding.
 function defineIslandConfig(config) { return config; }
-export const openElement = defineIslandConfig({ hydrate: 'only' });
+export const openElement = defineIslandConfig({ tag: 'proof-profile', hydrate: 'only', root: 'light' });
 
-function ProofProfile() {
+export default function ProofProfile() {
   return <article id="proof-profile">generated native element</article>;
 }
-export default ProofProfile;
 `,
   );
   await writeFile(
@@ -260,17 +261,21 @@ export default {
         assert.strictEqual(await button.textContent(), 'Count: 0');
         assert.strictEqual(await button.getAttribute('title'), '0');
         await button.click();
-        await page.waitForFunction('document.querySelector("proof-counter").count === 1');
+        await page.waitForFunction(
+          () =>
+            document.querySelector('proof-counter')?.shadowRoot?.querySelector('button')
+              ?.textContent === 'Count: 1',
+        );
         assert.strictEqual(await button.textContent(), 'Count: 1');
         assert.strictEqual(await button.getAttribute('title'), '1');
         console.log(
-          `PASS ${type.name()} ${browser.version()}: packed Element registration, attribute and event update`,
+          `PASS ${type.name()} ${browser.version()}: packed generated Element registration and signal update`,
         );
       } finally {
         await browser.close();
       }
     }
-    // M09-1b is LOCAL evidence on one engine: the packed generated class
+    // M09-1b is LOCAL evidence on one engine: the packed generated component
     // registers and upgrades from plain HTML. A multi-engine matrix is M13.
     const generatedBrowser = await chromium.launch({ headless: true });
     try {
@@ -315,7 +320,8 @@ export default {
       `// The generated lane's island policy statement (no router is installed).
 function defineIslandConfig(config) { return config; }
 export const openElement = defineIslandConfig({
-  hydrate: 'only',
+  tag: 'proof-shadow',
+  hydrate: 'load',
   ssr: true,
   root: 'shadow',
   properties: {
@@ -333,7 +339,7 @@ export const openElement = defineIslandConfig({
   },
 });
 
-function ProofShadow(props: {
+export default function ProofShadow(props: {
   title: string;
   count: number;
   open: boolean;
@@ -353,7 +359,6 @@ function ProofShadow(props: {
     </article>
   );
 }
-export default ProofShadow;
 `,
     );
     const probeFile = join(

@@ -562,9 +562,9 @@ export function PageHome(props: {
               {props.floodServer}
             </small>
             <code class='block overflow-x-auto text-(length:--text-xs) leading-[1.8] whitespace-pre'>
-              {`<open-counter count="0">
+              {`<open-counter>
   <template shadowrootmode="open">
-    <button>0</button>
+    <button type="button">Count: 0</button>
   </template>`}
             </code>
           </div>

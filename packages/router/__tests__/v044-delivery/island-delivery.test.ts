@@ -47,6 +47,12 @@ test('v0.44 compiler behavior metadata controls exact client output', () => {
         compilerInteractionEvents: [],
       },
       {
+        tagName: 'oe-page-static-child',
+        modulePath: '/app/components/page-static-child.tsx',
+        compilerInteractionEvents: [],
+        pageComponentDependency: true,
+      },
+      {
         tagName: 'oe-menu-button',
         modulePath: '/app/components/menu-button.tsx',
         compilerInteractionEvents: ['click', 'keydown'],

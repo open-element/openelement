@@ -576,6 +576,15 @@ async function buildSSG(
     },
     ctx,
   );
+  // This is the exact server admission set the emitted entry registers: its
+  // SSR-admitted islands plus its retained static components. Function-page
+  // composition, the runtime nested-host expander, and the compiler must all
+  // see the same set or a generated child can compile but remain an empty host
+  // at render time.
+  const ssrRenderableTags = serverComponentAdmissionTags(
+    ssgDescriptor.staticComponents,
+    ssgDescriptor.ssrAdmissionPlan.renderableTags,
+  );
 
   // The native banner imports StyleSheet from @openelement/element.
   const ssgEntryCode = generateSsrPolyfillBanner() + '\n' + renderEntry(ssgDescriptor);
@@ -697,7 +706,7 @@ async function buildSSG(
           // so had no nested-host expander (F16). This is the same admission plan
           // the server-component compile uses, so a tag expandable there is
           // expandable at render time — one fact, one list.
-          ssgDescriptor.ssrAdmissionPlan.renderableTags,
+          ssrRenderableTags,
         ),
         // MDX route support must mirror the outer plugin list (plugin.ts),
         // otherwise .mdx routes fail Phase 3 parse (the oxc transform treats
@@ -729,10 +738,7 @@ async function buildSSG(
           // entry-orchestrator binds as the render's ssrRenderableTags), so a
           // function page's nested host rides the expansion a class page's
           // does.
-          compiledTags: serverComponentAdmissionTags(
-            staticComponents,
-            ssgDescriptor.ssrAdmissionPlan.renderableTags,
-          ),
+          compiledTags: ssrRenderableTags,
           // The generated Native Custom Element site (M09-1b): the SSR build
           // must lower an admitted island's function default export to the
           // same generated class the client build emits.

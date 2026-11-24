@@ -30,13 +30,10 @@
  *   - static `slot` children project into the matching `<slot name>` of a
  *     light root and are appended in authored order after the DSD template of
  *     a shadow root;
- *   - a dynamic Block (`.map()` / conditional) is ONE composition group: the
- *     shared walk attributes a Block to the default slot
- *     (`serialize-program.ts` `serializeNode` returns `slotName: ''` for every
- *     part node — the class lane behaved identically, pinned below by
- *     comparison), and the named `slot` attributes on the elements INSIDE the
- *     block ride the emitted markup, where native slot distribution reads them
- *     (shadow-root hosts);
+ *   - generated LIGHT hosts route every selected conditional/list root by its
+ *     own static or dynamic `slot` value, including roots in fragments;
+ *   - generated SHADOW hosts keep caller markup in authored order after the DSD
+ *     template, where native slot distribution reads the element's `slot`;
  *   - a dynamic per-child `slot` value crosses the boundary with the
  *     serializer's canonical attribute-value coercion
  *     (`attributeValueOf`: null/undefined → the default slot, anything else →
@@ -59,6 +56,8 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import ts from 'typescript';
+import { chromium } from 'playwright';
+import { build } from 'vite';
 import {
   compileServerComponentModule,
   type ServerComponentCompileOptions,
@@ -66,6 +65,13 @@ import {
 import { CompiledElementError } from '../src/internal/compiler/semantic-core/compiler-diagnostics.ts';
 import { typeCheckEmittedModule } from '../src/compiler.ts';
 import { compileGeneratedElementIfAdmitted } from '../src/internal/compiler/semantic-ir/generated-element/compile.ts';
+import { renderToString } from '@openelement/element';
+import {
+  MARKERS,
+  entryKeyMarker,
+  markerText,
+  textSlotMarker,
+} from '../../element/src/internal/compiled/runtime/markers.ts';
 import { SSR_REGISTRY_GENERATED_HOSTS } from '@openelement/protocol/registry-markers';
 
 const FILE = '/proj/app/routes/panel.tsx';
@@ -100,6 +106,7 @@ type GeneratedHostRenderer = (
 interface GeneratedHost {
   readonly element: CustomElementConstructor;
   readonly ssrHost: GeneratedHostRenderer | undefined;
+  readonly code: string;
 }
 
 /**
@@ -193,10 +200,19 @@ async function importEmitted(code: string, fileName: string): Promise<Record<str
  * host fact. The site fact carries only the tag, so the tag is restated here the
  * way a real island authors it.
  */
-function islandSource(tag: string, root: 'light' | 'shadow', jsx: string): string {
+function islandSource(
+  tag: string,
+  root: 'light' | 'shadow',
+  jsx: string,
+  parameters = '',
+  setup = '',
+  imports = '',
+): string {
   return `import { defineIslandConfig } from '@openelement/router';
+${imports}
 export const openElement = defineIslandConfig({ tag: '${tag}', root: '${root}' });
-export default function Host() {
+export default function Host(${parameters}) {
+${setup}
   return (
     <>
 ${jsx}
@@ -234,7 +250,11 @@ async function generatedHost(source: string, tag: string): Promise<GeneratedHost
     throw new Error(`the emitted module for <${tag}> did not export its element class as default`);
   }
   if (compiled.ssrHostExport === null) {
-    return { element: element as CustomElementConstructor, ssrHost: undefined };
+    return {
+      element: element as CustomElementConstructor,
+      ssrHost: undefined,
+      code: compiled.code,
+    };
   }
   const ssrHost = mod[compiled.ssrHostExport];
   if (typeof ssrHost !== 'function') {
@@ -245,6 +265,7 @@ async function generatedHost(source: string, tag: string): Promise<GeneratedHost
   return {
     element: element as CustomElementConstructor,
     ssrHost: ssrHost as GeneratedHostRenderer,
+    code: compiled.code,
   };
 }
 
@@ -262,6 +283,10 @@ async function generatedHost(source: string, tag: string): Promise<GeneratedHost
  */
 function withClaimRange(ordinal: number, markup: string): string {
   return `<!--oe:r:${ordinal}-->${markup}<!--oe:/r:${ordinal}-->`;
+}
+
+function withTextSlot(value: string, ordinal = 0): string {
+  return `<!--${markerText(textSlotMarker(ordinal))}-->${value}<!--${markerText(textSlotMarker(ordinal, true))}-->`;
 }
 
 describe('A1 — the compiled children channel', () => {
@@ -380,7 +405,7 @@ describe('A1 — the compiled children channel', () => {
       { compiledTags: ['oe-shell'] },
     );
     expect(html).toBe(
-      '<oe-shell data-oe-light>' +
+      '<oe-shell data-oe-light data-oe-light-projected>' +
         withClaimRange(
           0,
           '<header><slot name="title"><h2 slot="title">Title</h2></slot></header>',
@@ -421,7 +446,7 @@ describe('A1 — the compiled children channel', () => {
       { compiledTags: ['oe-shell'] },
     );
     expect(html).toBe(
-      '<oe-shell data-oe-light>' +
+      '<oe-shell data-oe-light data-oe-light-projected>' +
         withClaimRange(
           0,
           '<header><slot name="title"><h2 slot="title">Title</h2></slot></header>',
@@ -456,7 +481,7 @@ describe('A1 — the compiled children channel', () => {
       compiledTags: ['oe-shell'],
     });
     expect(html).toBe(
-      '<oe-shell data-oe-light>' +
+      '<oe-shell data-oe-light data-oe-light-projected>' +
         withClaimRange(
           0,
           '<header><slot name="title"><h2 slot="title">Title</h2></slot></header>',
@@ -520,7 +545,7 @@ describe('A1 — the compiled children channel', () => {
       { compiledTags: ['oe-shell'] },
     );
     expect(html).toBe(
-      '<oe-shell data-oe-light>' +
+      '<oe-shell data-oe-light data-oe-light-projected>' +
         withClaimRange(0, '<header><slot name="title">FB-title</slot></header>') +
         withClaimRange(1, '<slot name="rows"><span slot="rows">x</span></slot>') +
         withClaimRange(2, '<slot>FB-default</slot>') +
@@ -540,7 +565,7 @@ describe('A1 — the compiled children channel', () => {
       }
     `;
     const expected =
-      '<oe-shell data-oe-light>' +
+      '<oe-shell data-oe-light data-oe-light-projected>' +
       withClaimRange(0, '<header><slot name="title">FB-title</slot></header>') +
       withClaimRange(1, '<slot name="rows">FB-rows</slot>') +
       withClaimRange(2, '<slot><span>x</span></slot>') +
@@ -571,7 +596,7 @@ describe('A1 — the compiled children channel', () => {
     // `String(0)` is the attribute text the slot element carries ("0"), so the
     // child projects into `<slot name="0">` — not into the default slot.
     expect(html).toBe(
-      '<oe-numbered data-oe-light>' +
+      '<oe-numbered data-oe-light data-oe-light-projected>' +
         withClaimRange(0, '<slot name="0"><span slot="0">x</span></slot>') +
         withClaimRange(1, '<slot>FB-default</slot>') +
         '</oe-numbered>',
@@ -590,7 +615,7 @@ describe('A1 — the compiled children channel', () => {
       { compiledTags: ['oe-shell'] },
     );
     expect(html).toBe(
-      '<oe-shell data-oe-light>' +
+      '<oe-shell data-oe-light data-oe-light-projected>' +
         withClaimRange(0, '<header><slot name="title">FB-title</slot></header>') +
         withClaimRange(1, '<slot name="rows">FB-rows</slot>') +
         withClaimRange(2, '<slot><span slot="">x</span></slot>') +
@@ -616,7 +641,7 @@ describe('A1 — the compiled children channel', () => {
     );
     expect(html).not.toContain('<li');
     expect(html).toBe(
-      '<oe-shell data-oe-light>' +
+      '<oe-shell data-oe-light data-oe-light-projected>' +
         withClaimRange(0, '<header><slot name="title">FB-title</slot></header>') +
         withClaimRange(1, '<slot name="rows">FB-rows</slot>') +
         withClaimRange(2, '<slot><p>off</p></slot>') +
@@ -699,6 +724,297 @@ describe('A1 — the compiled children channel', () => {
     );
     expect(error.code).toBe('OPEN_ELEMENT_COMPILED_PROGRAM_INVALID');
     expect(error.message).toContain('missing slot');
+  });
+});
+
+describe('generated SSR nested light-host slot groups', () => {
+  const childTag = 'oe-generated-slot-projection-child';
+  const childSource = islandSource(
+    childTag,
+    'light',
+    `<main><slot name="title">title fallback</slot><slot>default fallback</slot><slot name="footer">footer fallback</slot></main>`,
+  );
+
+  async function renderPair(
+    parentTag: string,
+    parentSource: string,
+    props: Props = {},
+    ssrRenderableTags: readonly string[] = [childTag],
+  ): Promise<string> {
+    const child = await generatedHost(childSource, childTag);
+    const parent = await generatedHost(parentSource, parentTag);
+    const entries = new Map<string, GeneratedHost>([
+      [parentTag, parent],
+      [childTag, child],
+    ]);
+    return withRegistry(entries, () => renderToString(parentTag, { props, ssrRenderableTags }));
+  }
+
+  async function connectInChromium(
+    parentTag: string,
+    parentSource: string,
+    html: string,
+    mode: 'both' | 'parent' | 'child' = 'both',
+  ): Promise<readonly { code: string | undefined; message: string }[]> {
+    const parentCompiled = compileGeneratedElementIfAdmitted(
+      parentSource,
+      `/proj/app/islands/${parentTag}.tsx`,
+      { site: { tag: parentTag } },
+    );
+    const childCompiled = compileGeneratedElementIfAdmitted(
+      childSource,
+      `/proj/app/islands/${childTag}.tsx`,
+      { site: { tag: childTag } },
+    );
+    if (parentCompiled === null || childCompiled === null)
+      throw new Error('a generated-light fixture did not compile');
+
+    const parentFile = join(scratch, 'browser-parent.mjs');
+    const childFile = join(scratch, 'browser-child.mjs');
+    const entryFile = join(scratch, 'browser-entry.ts');
+    await writeFile(parentFile, parentCompiled.code);
+    await writeFile(childFile, childCompiled.code);
+    await writeFile(
+      entryFile,
+      `${mode === 'child' ? '' : `import Parent from './browser-parent.mjs';\n`}` +
+        `${mode === 'parent' ? '' : `import Child from './browser-child.mjs';\n`}` +
+        `${mode === 'child' ? '' : `customElements.define(${JSON.stringify(parentTag)}, Parent);\n`}` +
+        `${mode === 'parent' ? '' : `customElements.define(${JSON.stringify(childTag)}, Child);\n`}`,
+    );
+    const result = await build({
+      configFile: false,
+      root: scratch,
+      logLevel: 'silent',
+      build: {
+        write: false,
+        minify: false,
+        lib: {
+          entry: entryFile,
+          formats: ['iife'],
+          name: '__oeGeneratedSlotProjection',
+          fileName: () => 'slot-projection.js',
+        },
+      },
+    });
+    const output = Array.isArray(result)
+      ? result[0]!.output
+      : (result as { output: unknown[] }).output;
+    const chunk = (output as Array<{ type: string; code?: string }>).find(
+      (item) => item.type === 'chunk',
+    );
+    if (chunk?.code === undefined) throw new Error('browser bundle produced no chunk');
+
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage();
+      await page.setContent(html);
+      await page.evaluate(() => {
+        const observedWindow = window as Window & {
+          __oeClaimErrors: { code: string | undefined; message: string }[];
+        };
+        observedWindow.__oeClaimErrors = [];
+        window.addEventListener('error', (event) => {
+          const candidate = (event as ErrorEvent).error as
+            | { code?: unknown; message?: unknown }
+            | undefined;
+          observedWindow.__oeClaimErrors.push({
+            code: typeof candidate?.code === 'string' ? candidate.code : undefined,
+            message:
+              typeof candidate?.message === 'string'
+                ? candidate.message
+                : (event as ErrorEvent).message,
+          });
+        });
+      });
+      await page.addScriptTag({ content: chunk.code });
+      await page.waitForTimeout(25);
+      return await page.evaluate(
+        () =>
+          (
+            window as Window & {
+              __oeClaimErrors: { code: string | undefined; message: string }[];
+            }
+          ).__oeClaimErrors,
+      );
+    } finally {
+      await browser.close();
+    }
+  }
+
+  test('static named, default, and labeled children project; projected claims fail closed in Chromium', async () => {
+    const parentTag = 'oe-generated-slot-projection-static-parent';
+    const parentSource = islandSource(
+      parentTag,
+      'light',
+      `<${childTag}><h2 slot="title">Title</h2><p>Body</p><strong slot="footer">Footer</strong></${childTag}>`,
+    );
+    const html = await renderPair(parentTag, parentSource);
+
+    expect(html).toContain('<slot name="title"><h2 slot="title">Title</h2></slot>');
+    expect(html).toContain('<slot><p>Body</p></slot>');
+    expect(html).toContain('<slot name="footer"><strong slot="footer">Footer</strong></slot>');
+    expect(html).toContain(`<${childTag} data-oe-light data-oe-light-projected>`);
+    expect(html).not.toContain('title fallback');
+    expect(html).not.toContain('default fallback');
+    expect(html).not.toContain('footer fallback');
+    const childErrors = await connectInChromium(parentTag, parentSource, html, 'child');
+    const parentErrors = await connectInChromium(parentTag, parentSource, html, 'parent');
+    const bothErrors = await connectInChromium(parentTag, parentSource, html);
+    const unsupported = 'OEIR_LEAF_UNSUPPORTED_LIGHT_SLOT_PROJECTION';
+    for (const errors of [childErrors, parentErrors, bothErrors]) {
+      expect(errors.length).toBeGreaterThan(0);
+      for (const error of errors) {
+        expect(`${error.code ?? ''} ${error.message}`).toContain(unsupported);
+        expect(error.message).toContain('use a shadow-root child with native slots');
+      }
+    }
+
+    const unexpanded = await renderPair(parentTag, parentSource, {}, []);
+    expect(unexpanded).toContain(
+      `<${childTag}><h2 slot="title">Title</h2><p>Body</p><strong slot="footer">Footer</strong></${childTag}>`,
+    );
+
+    const emptyParentTag = 'oe-generated-slot-projection-empty-parent';
+    const emptyParentSource = islandSource(emptyParentTag, 'light', `<${childTag}></${childTag}>`);
+    const empty = await renderPair(emptyParentTag, emptyParentSource);
+    expect(empty).not.toContain('data-oe-light-projected');
+    expect(empty).toContain('<slot name="title">title fallback</slot>');
+    expect(empty).toContain('<slot>default fallback</slot>');
+    expect(empty).toContain('<slot name="footer">footer fallback</slot>');
+    expect(await connectInChromium(emptyParentTag, emptyParentSource, empty)).toEqual([]);
+  });
+
+  test('the selected conditional branch uses its own static slot and keeps fallback markers raw', async () => {
+    const parentTag = 'oe-generated-slot-projection-branch-parent';
+    const parentSource = (active: boolean) =>
+      islandSource(
+        parentTag,
+        'light',
+        `<${childTag}>{active.value ? <h2 slot="title">active</h2> : <h3 slot="title">inactive</h3>}</${childTag}>`,
+        '',
+        `const active = signal(${String(active)});`,
+        `import { signal } from '@openelement/element';`,
+      );
+    const open = `<!--${markerText(MARKERS.when)}-->`;
+    const close = `<!--${markerText(MARKERS.whenEnd)}-->`;
+
+    const active = await renderPair(parentTag, parentSource(true));
+    expect(active).toContain('<slot name="title"><h2 slot="title">active</h2></slot>');
+    expect(active).toContain('<slot>default fallback</slot>');
+    expect(active).not.toContain(open);
+    expect(active).not.toContain(close);
+    expect(active).not.toContain('inactive');
+
+    const inactive = await renderPair(parentTag, parentSource(false));
+    expect(inactive).toContain('<slot name="title"><h3 slot="title">inactive</h3></slot>');
+    expect(inactive).not.toContain(open);
+    expect(inactive).not.toContain(close);
+    expect(inactive).not.toContain('active</h2>');
+
+    const fallback = await renderPair(parentTag, parentSource(true), {}, []);
+    expect(fallback).toContain(
+      `<${childTag}>${open}<h2 slot="title">active</h2>${close}</${childTag}>`,
+    );
+
+    const emptyBranchTag = 'oe-generated-slot-projection-empty-branch-parent';
+    const emptyBranchSource = islandSource(
+      emptyBranchTag,
+      'light',
+      `<${childTag}>{active.value ? <h2 slot="title">active</h2> : <></>}</${childTag}>`,
+      '',
+      'const active = signal(false);',
+      `import { signal } from '@openelement/element';`,
+    );
+    const emptyBranch = await renderPair(emptyBranchTag, emptyBranchSource);
+    expect(emptyBranch).toContain('<slot name="title">title fallback</slot>');
+    expect(emptyBranch).toContain('data-oe-light-projected');
+    const emptyBranchErrors = await connectInChromium(
+      emptyBranchTag,
+      emptyBranchSource,
+      emptyBranch,
+    );
+    expect(emptyBranchErrors.length).toBeGreaterThan(0);
+    expect(`${emptyBranchErrors[0]?.code ?? ''} ${emptyBranchErrors[0]?.message}`).toContain(
+      'OEIR_LEAF_UNSUPPORTED_LIGHT_SLOT_PROJECTION',
+    );
+  });
+
+  test('each list item captures its own dynamic slot, including an unlabeled item', async () => {
+    const parentTag = 'oe-generated-slot-projection-list-parent';
+    const parentSource = islandSource(
+      parentTag,
+      'light',
+      `<${childTag}>{items.value.map((item) => <span slot={item.slot}>{item.label}</span>)}</${childTag}>`,
+      '',
+      `const items = signal([{ slot: 'title', label: 'A' }, { label: 'B' }, { slot: 'footer', label: 'C' }]);`,
+      `import { signal } from '@openelement/element';`,
+    );
+    const open = `<!--${markerText(MARKERS.each)}-->`;
+    const close = `<!--${markerText(MARKERS.eachEnd)}-->`;
+
+    const html = await renderPair(parentTag, parentSource);
+    expect(html).toContain(
+      `<slot name="title"><span slot="title">${withTextSlot('A')}</span></slot>`,
+    );
+    expect(html).toContain(`<slot><span>${withTextSlot('B')}</span></slot>`);
+    expect(html).toContain(
+      `<slot name="footer"><span slot="footer">${withTextSlot('C')}</span></slot>`,
+    );
+    expect(html).not.toContain(open);
+    expect(html).not.toContain(close);
+    for (const token of ['n:0', 'n:1', 'n:2']) {
+      expect(html).not.toContain(markerText(entryKeyMarker(token)));
+    }
+    expect(html).toContain('data-oe-light-projected');
+    expect(html).not.toContain('title fallback');
+    expect(html).not.toContain('default fallback');
+    expect(html).not.toContain('footer fallback');
+
+    const fallback = await renderPair(parentTag, parentSource, {}, []);
+    expect(fallback).toContain(
+      `<${childTag}>${open}<!--${markerText(entryKeyMarker('n:0'))}--><span slot="title">${withTextSlot('A')}</span>` +
+        `<!--${markerText(entryKeyMarker('n:1'))}--><span>${withTextSlot('B')}</span>` +
+        `<!--${markerText(entryKeyMarker('n:2'))}--><span slot="footer">${withTextSlot('C')}</span>${close}</${childTag}>`,
+    );
+  });
+
+  test('a homogeneous single-slot list keeps item order and empty-list fallback', async () => {
+    const parentTag = 'oe-generated-slot-projection-single-slot-parent';
+    const open = `<!--${markerText(MARKERS.each)}-->`;
+    const close = `<!--${markerText(MARKERS.eachEnd)}-->`;
+    const parentSource = (items: string) =>
+      islandSource(
+        parentTag,
+        'light',
+        `<${childTag}>{items.value.map((label) => <span slot="title">{label}</span>)}</${childTag}>`,
+        '',
+        `const items = signal(${items});`,
+        `import { signal } from '@openelement/element';`,
+      );
+    const populatedSource = parentSource("['A', 'B']");
+    const populated = await renderPair(parentTag, populatedSource);
+    expect(populated).toContain(
+      `<slot name="title"><span slot="title">${withTextSlot('A')}</span>` +
+        `<span slot="title">${withTextSlot('B')}</span></slot>`,
+    );
+    expect(populated).not.toContain('<!--oe:each-->');
+    expect(populated).not.toContain('<!--oe:/each-->');
+
+    const emptySource = parentSource('[]');
+    const empty = await renderPair(parentTag, emptySource);
+    expect(empty).toContain('<slot name="title">title fallback</slot>');
+    expect(empty).toContain('data-oe-light-projected');
+    const emptyErrors = await connectInChromium(parentTag, emptySource, empty);
+    expect(emptyErrors.length).toBeGreaterThan(0);
+    expect(`${emptyErrors[0]?.code ?? ''} ${emptyErrors[0]?.message}`).toContain(
+      'OEIR_LEAF_UNSUPPORTED_LIGHT_SLOT_PROJECTION',
+    );
+
+    const fallback = await renderPair(parentTag, populatedSource, {}, []);
+    expect(fallback).toContain(
+      `<${childTag}>${open}<!--${markerText(entryKeyMarker('n:0'))}--><span slot="title">${withTextSlot('A')}</span>` +
+        `<!--${markerText(entryKeyMarker('n:1'))}--><span slot="title">${withTextSlot('B')}</span>${close}</${childTag}>`,
+    );
   });
 });
 

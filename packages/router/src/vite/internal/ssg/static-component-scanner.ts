@@ -9,6 +9,7 @@ import { analyzeModuleSemantics } from '@openelement/compiler';
 import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
 import { readComponentDeclaration, type ComponentDeclaration } from '../component-declaration.ts';
 import type { IslandStyleDeclaration } from '../island-style-declarations.ts';
+import { readPageArgument, readPageModuleFacts } from './page-classification.ts';
 import { resolveGeneratedElementHost } from './generated-element-host-metadata.ts';
 import {
   walkModuleGraph,
@@ -217,43 +218,35 @@ function pageModuleStyleDeclaration(
  * the same declaration reader every other pass uses; classification owns the
  * verdict, this scan only makes sure the module is walked.
  */
-/**
- * The local modules one module imports for their side effects.
- *
- * Only RELATIVE specifiers resolve here, and only to an existing file: this is a
- * bounded expansion of the page-component seed set, not a second module walk. A
- * package specifier's components are admitted through its manifest, and the
- * transform reports an unresolvable one.
- */
-function staticImportsOfModule(file: string): readonly string[] {
-  let source: string;
-  try {
-    source = readFileSync(file, 'utf8');
-  } catch {
-    return [];
+function readPageComponentSpecifier(
+  route: RouteEntry,
+  routeFile: string,
+): { readonly specifier: string } | undefined {
+  // The route scan already parsed the exact `definePage<Data>(Page)` argument
+  // and carries its import binding here. Reuse that fact so this reachability
+  // walk cannot disagree with the page classifier about generic calls or the
+  // imported module path.
+  const facts = readPageModuleFacts(route);
+  let argument = facts?.pageArgument;
+  if (facts === undefined) {
+    // Adapter integrations and legacy tests may hand this scanner a plain
+    // RouteEntry. Keep that input working through the same TypeScript parser
+    // that owns the route-scan fact; do not maintain a second call-shape regex.
+    let source: string;
+    try {
+      source = readFileSync(routeFile, 'utf8');
+    } catch {
+      return undefined;
+    }
+    if (
+      !analyzeModuleSemantics(source, routeFile, { vocabulary: ROUTER_MODULE_VOCABULARY })
+        .definePage
+    ) {
+      return undefined;
+    }
+    argument = readPageArgument(source, route.filePath);
   }
-  const found: string[] = [];
-  for (const match of source.matchAll(/^\s*import\s+['"]([^'"]+)['"];?\s*$/gm)) {
-    const specifier = match[1]!;
-    if (!specifier.startsWith('.')) continue;
-    const resolved = resolveFrom(specifier, file);
-    if (resolved !== undefined) found.push(resolved);
-  }
-  return found;
-}
-
-function readPageComponentSpecifier(routeFile: string): { readonly specifier: string } | undefined {
-  let source: string;
-  try {
-    source = readFileSync(routeFile, 'utf8');
-  } catch {
-    return undefined;
-  }
-  const match = /definePage\(\s*([A-Za-z_$][\w$]*)/.exec(source);
-  if (match === null) return undefined;
-  const name = match[1]!;
-  const importMatch = new RegExp(`import\\s+${name}\\s+from\\s+['"]([^'"]+)['"]`).exec(source);
-  return importMatch === null ? undefined : { specifier: importMatch[1]! };
+  return argument?.kind === 'import' ? { specifier: argument.specifier } : undefined;
 }
 
 /** Resolve a relative specifier against its importing module, with extension probing. */
@@ -297,35 +290,34 @@ export async function scanStaticComponents(
 
   // The PAGE COMPONENTS themselves are components too (P-4): a route that imports
   // its page component passes it to `definePage`, so the module is neither a JSX
-  // reference nor an island — nothing else in this walk would record it, and a
-  // generated page root then has no host-producer fact for the entry to pair.
-  // Reading them here keeps ONE record shape for "a component the server renders".
+  // reference nor an island. Keep the explicit root identity for that case; all
+  // of its reachable children, including children of a route-local function page,
+  // come from the resolver walk below.
   const pageComponentFiles = new Set<string>();
-  const pageComponentDependencies = new Set<string>();
   for (const route of options.routes) {
     if (route.type !== 'page' || route.special) continue;
     const routeFile = resolve(routeRoot, route.filePath);
-    const pageFacts = readPageComponentSpecifier(routeFile);
+    const pageFacts = readPageComponentSpecifier(route, routeFile);
     if (pageFacts === undefined) continue;
     const resolved = resolveFrom(pageFacts.specifier, routeFile);
     // A route that passes a LOCAL FUNCTION it declares itself is a server
     // function page, not an imported component: its module is the route module,
     // and re-recording it here would make every such page a static component.
     if (resolved === undefined || resolved === routeFile) continue;
-    // A page component reaches its nested components through SIDE-EFFECT imports
-    // (`import './boundary-closed.tsx'`), which the resolver walk does not follow
-    // as a value edge — and `resolveLocalIsland` below only seeds the route's own
-    // page module. Without this expansion a page's nested components were never
-    // scanned, so a closed-root child got no host-producer record and rendered as
-    // a bare tag (measured on ui-dogfood's /boundaries).
-    for (const nested of staticImportsOfModule(resolved)) pageComponentDependencies.add(nested);
     pageComponentFiles.add(resolved);
   }
-  for (const file of new Set([
-    ...walk.files,
-    ...pageComponentFiles,
-    ...pageComponentDependencies,
-  ])) {
+  const reachableFiles = [...new Set([...walk.files, ...pageComponentFiles])];
+  const routeFiles = new Set(
+    options.routes
+      .filter((route) => route.type === 'page' && !route.special)
+      .map((route) => resolve(routeRoot, route.filePath)),
+  );
+  const pageComponentDependencies = new Set(
+    reachableFiles.filter(
+      (file) => inside(root, file) && !routeFiles.has(file) && !pageComponentFiles.has(file),
+    ),
+  );
+  for (const file of reachableFiles) {
     if (!inside(root, file)) continue;
     // A PAGE MODULE that declares its own sheets (P-2b, 2026-11-21). A generated
     // light page owns a root box rule exactly like a class page's `:host`, but
@@ -394,7 +386,7 @@ export async function scanStaticComponents(
         ...(pageComponentFiles.has(file) && generatedHostExport !== undefined
           ? { pageComponent: true }
           : {}),
-        ...(pageComponentDependencies.has(file) && generatedHostExport !== undefined
+        ...(pageComponentDependencies.has(file) && pageLocal !== undefined
           ? { pageComponentDependency: true }
           : {}),
       });

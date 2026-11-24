@@ -40,7 +40,7 @@
  *              of a document reset the application did not ask for
  *
  * The shadow layout is the scenario the two-sheet division exists for: a
- * `shadow-open` layout renders a `light`-root page INSIDE its shadow tree, and
+ * `shadow` layout renders a `light`-root page INSIDE its shadow tree, and
  * a document-head stylesheet can never match an element there. The nested
  * page's utility (`p-9` → 36px) appears in no other app source — the probe's
  * token-uniqueness guard enforces that at staging time — so a green measurement
@@ -131,78 +131,85 @@ export default defineConfig({
  * and a shadow-root component whose utilities belong to the COMPONENT sheet.
  */
 const PAGE = `import { definePage } from '@openelement/router';
-import Lab from '../components/lab.tsx';
+// The light-root component remains a real generated island in the DOM. The
+// server function route owns the page root and composes generated elements by
+// tag, as required by the compiler's server-component boundary.
+import '../islands/packed-lab.tsx';
 
-export default definePage(Lab, { head: { title: 'Packed UnoCSS consumer' } });
+export function PackedPage() {
+  return <packed-lab></packed-lab>;
+}
+
+export default definePage(PackedPage, { head: { title: 'Packed UnoCSS consumer' } });
 `;
 
-// One compiled element class per module (OEC9001), so the shadow component and
-// the page component are two modules.
-const CARD = `import { element, OpenElement } from '@openelement/element';
-import { defineIslandConfig } from '@openelement/router';
-import cardStyles from './probe-card.css';
+// One generated element per module. Keep the card and light-root page as
+// separate compiler inputs, then let the server page compose both by tag.
+const CARD = `import { defineIslandConfig } from '@openelement/router';
 
-// An island, so the build emits the client chunk that defines it: a component
-// the browser never upgrades can be styled and still unmeasurable.
-export const openElement = defineIslandConfig({ hydrate: 'load', ssr: true });
+// An island, so the build emits the client chunk that defines it; the browser
+// probe verifies its upgrade and computed styles.
+export const openElement = defineIslandConfig({
+  tag: 'probe-card',
+  hydrate: 'load',
+  ssr: true,
+  root: 'shadow',
+  styles: ['./probe-card.css'],
+});
 
-@element('probe-card', { root: 'shadow-open' })
-export default class ProbeCard extends OpenElement {
-  // The current contract for a component's own sheet: bind the .css import and
-  // array it (OEC9029 refuses the side-effect form).
-  static override styles = [cardStyles];
-
-  render() {
-    return (
-      <div class='probe-card gap-2'>
-        <span class='probe-shadow-utility p-4'>shadow utilities</span>
-      </div>
-    );
-  }
+export default function ProbeCard() {
+  return (
+    <div class='probe-card gap-2'>
+      <span class='probe-shadow-utility p-4'>shadow utilities</span>
+    </div>
+  );
 }
 `;
 
-const LAB = `import { element, OpenElement } from '@openelement/element';
+const LAB = `import { defineIslandConfig } from '@openelement/router';
 // Same registration path: the shadow layout is an intrinsic JSX tag here.
-import './probe-shadow-layout.tsx';
+import '../components/probe-shadow-layout.tsx';
 
-@element('packed-lab', { root: 'light' })
-export default class PackedLab extends OpenElement {
-  render() {
-    return (
-      <div class='packed-lab p-6 bg-paper text-ink'>
-        <h1 class='text-2xl font-semibold'>Packed UnoCSS consumer</h1>
-        <p class='probe-document-utility mt-3'>document utilities</p>
-        <probe-card></probe-card>
-        <probe-shadow-layout></probe-shadow-layout>
-        <open-button variant='primary'>packed button</open-button>
-      </div>
-    );
-  }
+export const openElement = defineIslandConfig({
+  tag: 'packed-lab',
+  root: 'light',
+  hydrate: 'load',
+  ssr: true,
+});
+
+export default function PackedLab() {
+  return (
+    <div class='packed-lab p-6 bg-paper text-ink'>
+      <h1 class='text-2xl font-semibold'>Packed UnoCSS consumer</h1>
+      <p class='probe-document-utility mt-3'>document utilities</p>
+      <probe-card></probe-card>
+      <probe-shadow-layout></probe-shadow-layout>
+      <open-button variant='primary'>packed button</open-button>
+    </div>
+  );
 }
 `;
 
 /**
- * The shadow layout: a `shadow-open` component that renders a light-root page
+ * The shadow layout: a `shadow` component that renders a light-root page
  * INSIDE its own shadow tree (no slot — the child is part of this component's
  * template, so the child's DOM lands in the enclosing shadow). Its shell
  * utility (`p-5` → 20px) must reach this shadow tree, and its DSD template is
  * the delivery that carries the sheets the nested light page consumes.
  */
-const SHADOW_LAYOUT = `import { element, OpenElement } from '@openelement/element';
-// The nested page's module must load for its @element registration to exist
+const SHADOW_LAYOUT = `import { defineIslandConfig } from '@openelement/router';
+// The nested page's module must load for its generated registration to exist
 // (the JSX tag is intrinsic; the import is the registration path).
 import './probe-nested-page.tsx';
 
-@element('probe-shadow-layout', { root: 'shadow-open' })
-export default class ProbeShadowLayout extends OpenElement {
-  render() {
-    return (
-      <div class='probe-layout-shell p-5'>
-        <probe-nested-page></probe-nested-page>
-      </div>
-    );
-  }
+export const openElement = defineIslandConfig({ tag: 'probe-shadow-layout', root: 'shadow' });
+
+export default function ProbeShadowLayout() {
+  return (
+    <div class='probe-layout-shell p-5'>
+      <probe-nested-page></probe-nested-page>
+    </div>
+  );
 }
 `;
 
@@ -213,15 +220,12 @@ export default class ProbeShadowLayout extends OpenElement {
  * enclosing shadow can only come from a rule delivered there — never from a
  * rule the parent component happened to carry.
  */
-const NESTED_PAGE = `import { element, OpenElement } from '@openelement/element';
+const NESTED_PAGE = `import { defineIslandConfig } from '@openelement/router';
 
-@element('probe-nested-page', { root: 'light' })
-export default class ProbeNestedPage extends OpenElement {
-  render() {
-    return (
-      <div class='probe-nested-utility p-9 bg-paper'>nested light page</div>
-    );
-  }
+export const openElement = defineIslandConfig({ tag: 'probe-nested-page', root: 'light' });
+
+export default function ProbeNestedPage() {
+  return <div class='probe-nested-utility p-9 bg-paper'>nested light page</div>;
 }
 `;
 
@@ -264,7 +268,30 @@ try {
   page.on('pageerror', (error) => failures.push('page error: ' + error.message));
   await page.goto(baseUrl + '/', { waitUntil: 'load' });
   await page.evaluate(DEEP);
-  await page.waitForFunction(() => customElements.get('probe-card') !== undefined);
+  await page.waitForFunction(
+    () => {
+      const lab = globalThis.__deepFind('packed-lab');
+      const card = globalThis.__deepFind('probe-card');
+      const layout = globalThis.__deepFind('probe-shadow-layout');
+      const nestedPage = layout?.shadowRoot?.querySelector('probe-nested-page');
+      return (
+        lab !== null &&
+        lab.constructor === customElements.get('packed-lab') &&
+        lab.querySelector('.packed-lab') !== null &&
+        card !== null &&
+        card.constructor === customElements.get('probe-card') &&
+        card.shadowRoot !== null &&
+        card.shadowRoot.querySelector('.probe-shadow-utility') !== null &&
+        layout !== null &&
+        layout.shadowRoot !== null &&
+        layout.shadowRoot.querySelector('.probe-layout-shell') !== null &&
+        nestedPage !== null &&
+        nestedPage.querySelector('.probe-nested-utility') !== null
+      );
+    },
+    undefined,
+    { timeout: 60000 },
+  );
 
   const measured = await page.evaluate(() => {
     const lab = globalThis.__deepFind('packed-lab');
@@ -295,8 +322,9 @@ try {
       };
     };
     return {
-      // The host element carries no utilities of its own: the compiled root is
-      // the div it renders.
+      // The generated light-root island upgrades as a real custom element;
+      // measure its compiled DOM root inside the host.
+      labUpgraded: lab !== null && lab.constructor === customElements.get('packed-lab'),
       labRoot: read(lab?.shadowRoot?.querySelector('div') ?? lab?.querySelector('div') ?? lab),
       documentUtility: read(documentUtility),
       shadowUtility: read(shadowUtility),
@@ -399,6 +427,7 @@ try {
 
   // The light root's own utility: p-6 in a build whose default preset is
   // presetWind4.
+  if (measured.labUpgraded !== true) failures.push('the light-root packed-lab island never upgraded');
   expect('light root p-6 padding', measured.labRoot?.paddingTop, '24px');
   // A utility on a plain child of that root.
   expect('document utility mt-3 margin', measured.documentUtility?.marginTop, '12px');
@@ -552,13 +581,41 @@ try {
     try {
       await page.goto(baseUrl + '/', { waitUntil: 'load' });
       await page.evaluate(DEEP);
-      await page.waitForFunction(() => customElements.get('probe-card') !== undefined, undefined, { timeout: 60000 });
+      await page.waitForFunction(
+        () => {
+          const lab = globalThis.__deepFind('packed-lab');
+          const card = globalThis.__deepFind('probe-card');
+          const layout = globalThis.__deepFind('probe-shadow-layout');
+          const nestedPage = layout?.shadowRoot?.querySelector('probe-nested-page');
+          return (
+            lab !== null &&
+            lab.constructor === customElements.get('packed-lab') &&
+            lab.querySelector('.packed-lab') !== null &&
+            card !== null &&
+            card.constructor === customElements.get('probe-card') &&
+            card.shadowRoot !== null &&
+            card.shadowRoot.querySelector('.probe-shadow-utility') !== null &&
+            layout !== null &&
+            layout.shadowRoot !== null &&
+            layout.shadowRoot.querySelector('.probe-layout-shell') !== null &&
+            nestedPage !== null &&
+            nestedPage.querySelector('.probe-nested-utility') !== null
+          );
+        },
+        undefined,
+        { timeout: 60000 },
+      );
       measured = await page.evaluate(() => {
+        const lab = globalThis.__deepFind('packed-lab');
         const card = globalThis.__deepFind('probe-card');
         const shadowUtility = card?.shadowRoot?.querySelector('.probe-shadow-utility') ?? null;
         const layout = globalThis.__deepFind('probe-shadow-layout');
         const nestedUtility = layout?.shadowRoot?.querySelector('.probe-nested-utility') ?? null;
         return {
+          lightUpgraded: lab !== null && lab.constructor === customElements.get('packed-lab'),
+          lightPadding: lab?.querySelector('.packed-lab')
+            ? getComputedStyle(lab.querySelector('.packed-lab')).paddingTop
+            : null,
           // The island UPGRADED: the SSR DSD was claimed by the packed runtime.
           upgraded: card !== null && card.shadowRoot !== null,
           shadowPadding: shadowUtility ? getComputedStyle(shadowUtility).paddingTop : null,
@@ -578,6 +635,10 @@ try {
       if (attempt === 2) throw error;
       await new Promise((resolveWait) => setTimeout(resolveWait, 2000));
     }
+  }
+  if (measured.lightUpgraded !== true) failures.push('the light-root packed-lab island never upgraded in dev');
+  if (measured.lightPadding !== '24px') {
+    failures.push('dev light utility p-6 = ' + JSON.stringify(measured.lightPadding) + ' (expected 24px)');
   }
   if (measured.upgraded !== true) failures.push('the probe-card island never upgraded in dev');
   if (measured.shadowPadding !== '16px') {
@@ -749,7 +810,7 @@ async function devConsumptionSession(app: string): Promise<string> {
     new TextDecoder().decode(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))));
 
   const configPath = join(app, 'uno.config.ts');
-  const labPath = join(app, 'app', 'components', 'lab.tsx');
+  const labPath = join(app, 'app', 'islands', 'packed-lab.tsx');
   const configOriginal = await readFile(configPath, 'utf8');
   const labOriginal = await readFile(labPath, 'utf8');
   try {
@@ -1053,7 +1114,7 @@ async function main(): Promise<void> {
     await writeFile(join(app, 'app', 'styles', 'tokens.css'), TOKENS, 'utf8');
     await writeFile(join(app, 'app', 'routes', 'index.tsx'), PAGE, 'utf8');
     await mkdir(join(app, 'app', 'islands'), { recursive: true });
-    await writeFile(join(app, 'app', 'components', 'lab.tsx'), LAB, 'utf8');
+    await writeFile(join(app, 'app', 'islands', 'packed-lab.tsx'), LAB, 'utf8');
     await writeFile(
       join(app, 'app', 'components', 'probe-shadow-layout.tsx'),
       SHADOW_LAYOUT,
@@ -1076,7 +1137,7 @@ async function main(): Promise<void> {
       'app/vite.config.ts': VITE_CONFIG,
       'app/styles/tokens.css': TOKENS,
       'app/routes/index.tsx': PAGE,
-      'app/components/lab.tsx': LAB,
+      'app/islands/packed-lab.tsx': LAB,
       'app/components/probe-shadow-layout.tsx': SHADOW_LAYOUT,
       'app/components/probe-nested-page.tsx': NESTED_PAGE,
       'app/islands/probe-card.tsx': CARD,
@@ -1130,7 +1191,7 @@ async function main(): Promise<void> {
     // The page rendered the package component by tag; with the package gone the
     // tag would be an unknown element, so the page drops it too.
     await writeFile(
-      join(app, 'app', 'components', 'lab.tsx'),
+      join(app, 'app', 'islands', 'packed-lab.tsx'),
       LAB.replace("        <open-button variant='primary'>packed button</open-button>\n", ''),
       'utf8',
     );
@@ -1171,10 +1232,12 @@ async function main(): Promise<void> {
         ? html.slice(layoutStart, layoutStart + 8000)
         : html.slice(layoutStart, layoutEnd);
     if (!layoutHtml.includes('<template shadowrootmode="open"')) {
-      throw new Error('the shadow layout rendered no DSD template');
+      throw new Error(`the shadow layout rendered no DSD template:\n${layoutHtml.slice(0, 1600)}`);
     }
     if (!layoutHtml.includes('probe-nested-page') || !layoutHtml.includes('probe-nested-utility')) {
-      throw new Error('the light-root page did not render inside the enclosing shadow template');
+      throw new Error(
+        `the light-root page did not render inside the enclosing shadow template:\n${layoutHtml.slice(0, 4000)}`,
+      );
     }
 
     // The engine probes run against the packed `oe start`, on every engine.

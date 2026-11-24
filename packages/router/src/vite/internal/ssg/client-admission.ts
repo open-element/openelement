@@ -12,8 +12,9 @@ import type { IslandDecl, StaticComponentDecl } from '@openelement/protocol/ssg'
  *
  * Generated page hosts also need structural admission so the route can
  * render their compiler-emitted host producers, even without interaction
- * events. Side-effect dependencies reached from a page component keep the
- * delivery the scanner assigned to their generated hosts.
+ * events. Reachability from a page is an SSR registration fact, not a reason
+ * to ship browser JavaScript; nested components only get client delivery when
+ * the compiler proves interactions or the app declares them as islands.
  */
 export function compilerBehaviorDeclarations(
   components: readonly StaticComponentDecl[],
@@ -26,7 +27,6 @@ export function compilerBehaviorDeclarations(
       (component) =>
         component.compilerInteractionEvents.length > 0 ||
         component.pageComponent === true ||
-        component.pageComponentDependency === true ||
         structurallyRenderable.has(component.tagName),
     )
     .map((component) => ({
@@ -42,8 +42,6 @@ export function compilerBehaviorDeclarations(
           ? `compiler-proven interaction events: ${component.compilerInteractionEvents.join(', ')}`
           : component.pageComponent === true
             ? 'page component (route renders its host producer)'
-            : component.pageComponentDependency === true
-              ? 'generated component imported by a page component'
-              : 'generated page root (compiler-emitted host producer)',
+            : 'generated page root (compiler-emitted host producer)',
     }));
 }

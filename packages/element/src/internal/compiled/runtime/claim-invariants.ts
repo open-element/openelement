@@ -35,7 +35,10 @@ import { DATA_OE_LIGHT } from '@openelement/protocol/part-program';
 // or the C-1 defect class returns as a fourth hand-written list. The leaf is
 // DOM-free (it only names strings), so importing it here cannot pull the shell
 // or the executor into a generated island chunk.
-import { GENERATED_RUNTIME_ONLY_ATTRIBUTES } from '../generated-element/runtime-only-host-attributes.ts';
+import {
+  DATA_OE_LIGHT_PROJECTION,
+  GENERATED_RUNTIME_ONLY_ATTRIBUTES,
+} from '../generated-element/runtime-only-host-attributes.ts';
 import { LIST_KEY_UNSUPPORTED } from './list-key.ts';
 import {
   parseEachMarker,
@@ -113,6 +116,22 @@ export function leafRuntimeError(
   origin?: ClaimOrigin,
 ): OpenElementError {
   return frameworkError(code, locatedDetail(detail, origin), { phase: 'csr' });
+}
+
+/** Internal identity for caller-owned content projected through a light root. */
+const LIGHT_SLOT_PROJECTION_UNSUPPORTED = 'OEIR_LEAF_UNSUPPORTED_LIGHT_SLOT_PROJECTION';
+
+/**
+ * The current generated-light contract gives the child's template and the
+ * caller's authored children different owners. The SSR renderer can place the
+ * bytes correctly, but neither claim path can safely adopt the shared region.
+ */
+function unsupportedLightSlotProjectionClaim(origin?: ClaimOrigin): OpenElementError {
+  return leafRuntimeError(
+    LIGHT_SLOT_PROJECTION_UNSUPPORTED,
+    'caller content under a generated light root cannot be claimed interactively because the projected nodes cross parent and child ownership; use a shadow-root child with native slots or keep this composition non-interactive',
+    origin,
+  );
 }
 
 export function leafClaimMismatch(detail: string, origin?: ClaimOrigin): OpenElementError {
@@ -232,11 +251,16 @@ export function assertNestedHostStaticAttributeSeed(
  * child's claim. The parent's claim must therefore consume that interior
  * opaquely (see the generated element claim) instead of walking it.
  *
- * No marker means no owned light subtree — the parent keeps its strict empty
- * child check, so a foreign node injected into a non-light nested host is still
- * a claim mismatch. The predicate is DOM-only and names no component.
+ * The projection marker names an unsupported cross-owner claim. It is checked
+ * here so generated modules keep using the established runtime helper surface;
+ * the same predicate is called by the generated shell and parent claim.
+ * Without the light-root marker there is no child-owned subtree, so a foreign
+ * node inside a non-light host still reaches the parent's strict claim check.
  */
 export function isExpandedLightRootHost(element: Element): boolean {
+  if (element.hasAttribute(DATA_OE_LIGHT_PROJECTION)) {
+    throw unsupportedLightSlotProjectionClaim();
+  }
   return element.hasAttribute(DATA_OE_LIGHT);
 }
 

@@ -27,11 +27,15 @@ import {
   raiseFrameworkError,
 } from './internal/core/errors.ts';
 import { MAX_COMPOSITION_DEPTH } from '@openelement/protocol/policy';
-import type { NestedHostFallback } from './internal/compiled/runtime/nested-host.ts';
+import type {
+  NestedHostFallback,
+  NestedHostRequest,
+} from './internal/compiled/runtime/nested-host.ts';
 import type { CompiledSignalLike } from './internal/compiled/server/index.ts';
 import { type TrustedHtml, trustedHtmlValue } from './internal/core/security.ts';
 import { substituteSlotAnchors } from './internal/compiled/slot-anchors.ts';
 import { CompiledProgramValidationError } from './internal/compiled/runtime/values.ts';
+import { DATA_OE_LIGHT_PROJECTION } from './internal/compiled/generated-element/runtime-only-host-attributes.ts';
 
 export { collectPublicProps } from './internal/core/props-utils.ts';
 export type { SsrAdmissionDecision } from '@openelement/protocol/render';
@@ -118,6 +122,8 @@ type CompiledSignalRecord = Record<string, CompiledSignalLike<unknown>>;
 
 /** Compiled class statics consumed by the server-render entry. */
 interface CompiledComponentConstructor extends CustomElementConstructor {
+  /** The descriptor's authoritative custom-element name for constructor-form SSR. */
+  __oeTag?: string;
   __partProgram?: PartProgram;
   __compiledProperties?: CompiledPropertyMetadata[];
   __elementMetadata?: CompiledElementMetadata;
@@ -209,16 +215,14 @@ interface InternalRenderToStringOptions extends Omit<
 > {
   hostAttrs?: readonly (readonly [string, unknown])[];
   projectedChildren?: ReadonlyMap<string, string>;
+  /** Caller authored a child list that may project after a later update. */
+  lightProjectionIntent?: boolean;
   /** The brand-checked, reserved form of {@linkcode RenderToStringOptions.hostChildren}. */
   hostChildren?: string;
-  /**
-   * Whether the markup being rendered lands inside a SHADOW TREE — the DSD
-   * template of an ancestor component. A light-root component's sheets are
-   * delivered by the tree its content lands in, and a document-head link
-   * cannot reach a shadow tree, so the nested call carries the fact instead of
-   * assuming `ownerDocument`.
-   */
-  enclosingShadowRoot?: boolean;
+  /** The resource tree that owns styles discovered by this render. */
+  styleDestination?: NestedStyleDestination;
+  /** Live stylesheet destination inherited while composing nested light roots. */
+  nestedStyleLinkSink?: NestedStyleLinkSink;
 }
 
 function classNameOf(ctor: object): string {
@@ -327,6 +331,7 @@ function serializeLightGeneratedHost(
   content: string,
   authoredAttributes: readonly (readonly [string, unknown])[] | undefined,
   projectedChildren?: ReadonlyMap<string, string>,
+  lightProjectionIntent = false,
 ): string {
   const pairs =
     authoredAttributes === undefined
@@ -345,7 +350,11 @@ function serializeLightGeneratedHost(
   // marker last), so a consumer keying off attribute order — a snapshot, a
   // string patch, a CSS attribute selector list — sees one spelling.
   const children = projectSlotAnchors(content, projectedChildren);
-  return `<${tag}${attributes} data-oe-light>${children}</${tag}>`;
+  const hasProjectedChildren =
+    lightProjectionIntent ||
+    [...(projectedChildren?.values() ?? [])].some((html) => html.length > 0);
+  const projectionMarker = hasProjectedChildren ? ` ${DATA_OE_LIGHT_PROJECTION}` : '';
+  return `<${tag}${attributes} data-oe-light${projectionMarker}>${children}</${tag}>`;
 }
 
 /**
@@ -366,6 +375,26 @@ function projectSlotAnchors(
     throw new CompiledProgramValidationError(result.path, result.message);
   }
   return result.html;
+}
+
+function compiledTagOf(ctor: CompiledComponentConstructor): string | undefined {
+  if (typeof ctor.__oeTag === 'string' && ctor.__oeTag !== '') return ctor.__oeTag;
+  const registry = typeof customElements === 'undefined' ? undefined : customElements;
+  const getName = (
+    registry as unknown as
+      | { getName?: (value: CustomElementConstructor) => string | null }
+      | undefined
+  )?.getName;
+  if (typeof getName !== 'function') return undefined;
+  const name = getName.call(registry, ctor);
+  return typeof name === 'string' && name !== '' ? name : undefined;
+}
+
+function compositionDepthError(): OpenElementError {
+  return new OpenElementError(
+    '[openElement] nested element expansion exceeded the depth bound; cyclic component composition is not renderable.',
+    { code: FacadeErrorCode.COMPOSITION_DEPTH, phase: 'ssr' },
+  );
 }
 
 function failUncompiled(ctor: object, tag: string): never {
@@ -506,29 +535,18 @@ function createNestedStyleLinkSink(): NestedStyleLinkSink {
  * (`F16` trap: a producer is a string builder, so the list cannot be amended
  * after it returns). A shadow host's own content starts a fresh sink.
  */
+type NestedStyleDestination = 'document' | 'shadow';
+
 function createNestedHostExpander(
   options: InternalRenderToStringOptions,
   depth: number,
   sharedStyleSink?: NestedStyleLinkSink,
-):
-  | ((request: {
-      readonly tag: string;
-      readonly attributes: ReadonlyArray<readonly [string, string]>;
-      readonly open: string;
-      readonly children: string;
-      readonly fallback: string;
-    }) => string | undefined | NestedHostFallback)
-  | undefined {
+  styleDestination: NestedStyleDestination = 'shadow',
+): ((request: NestedHostRequest) => string | undefined | NestedHostFallback) | undefined {
   const admittedNested = new Set(options.ssrRenderableTags ?? []);
   if (admittedNested.size === 0) return undefined;
   const nestedStyleSink = sharedStyleSink ?? createNestedStyleLinkSink();
-  const expander = (request: {
-    readonly tag: string;
-    readonly attributes: ReadonlyArray<readonly [string, string]>;
-    readonly open: string;
-    readonly children: string;
-    readonly fallback: string;
-  }): string | undefined | NestedHostFallback => {
+  const expander = (request: NestedHostRequest): string | undefined | NestedHostFallback => {
     if (!admittedNested.has(request.tag)) return undefined;
     // `16b-EB` (execution plan §19.2): a descendant producer that throws is owned
     // by the enclosing error boundary, so the throw must not fail the whole
@@ -538,7 +556,7 @@ function createNestedHostExpander(
     // render with NO boundary keeps the pre-`16b-EB` behaviour because this
     // re-raises when the host supplies no reporter.
     try {
-      return expandNestedHostOnce(options, depth, request, nestedStyleSink);
+      return expandNestedHostOnce(options, depth, request, nestedStyleSink, styleDestination);
     } catch (error) {
       if (options.onNestedFailure === undefined) throw error;
       options.onNestedFailure(error);
@@ -559,34 +577,25 @@ function nestedStyleSinkOf(expander: unknown): NestedStyleLinkSink | undefined {
 function expandNestedHostOnce(
   options: InternalRenderToStringOptions,
   depth: number,
-  request: {
-    readonly tag: string;
-    readonly attributes: ReadonlyArray<readonly [string, string]>;
-    readonly open: string;
-    readonly children: string;
-    readonly fallback: string;
-  },
+  request: NestedHostRequest,
   /**
    * The enclosing template's live sheet list (F16): a nested LIGHT child's
    * sheets cannot live in the child, which has no template, so they are
    * appended to the template being built.
    */
   nestedStyleSink: NestedStyleLinkSink,
+  styleDestination: NestedStyleDestination,
 ): string | undefined {
-  return expandNestedHostInner(options, depth, request, nestedStyleSink);
+  if (depth + 1 > MAX_COMPOSITION_DEPTH) throw compositionDepthError();
+  return expandNestedHostInner(options, depth, request, nestedStyleSink, styleDestination);
 }
 
 function expandNestedHostInner(
   options: InternalRenderToStringOptions,
   depth: number,
-  request: {
-    readonly tag: string;
-    readonly attributes: ReadonlyArray<readonly [string, string]>;
-    readonly open: string;
-    readonly children: string;
-    readonly fallback: string;
-  },
+  request: NestedHostRequest,
   nestedStyleSink: NestedStyleLinkSink,
+  styleDestination: NestedStyleDestination,
 ): string | undefined {
   const nestedGenerated = registeredGeneratedHostRenderer(request.tag);
   if (nestedGenerated !== undefined) {
@@ -614,6 +623,7 @@ function expandNestedHostInner(
         options,
         depth + 1,
         liftsIntoEnclosingTemplate ? nestedStyleSink : undefined,
+        liftsIntoEnclosingTemplate ? styleDestination : 'shadow',
       ),
     );
   }
@@ -623,26 +633,32 @@ function expandNestedHostInner(
   if (nestedClass === undefined) return undefined;
   const nestedLightSsr = (nestedClass as { __ssr?: unknown }).__ssr;
   if (typeof nestedLightSsr === 'function') {
-    // A LIGHT-root child owns no template, so its declared sheets cannot be
-    // declared where its content lands — they belong to the ENCLOSING template
-    // (F16, the class lane's `declaredStyleLinks` had this by construction). Append
-    // them to the one live list the enclosing producer will read.
-    nestedStyleSink.add(requestTimeIslandStyleLinks(request.tag));
-    const nestedRendered = (
-      nestedLightSsr as (input?: unknown, attributes?: unknown, nestedHost?: unknown) => unknown
-    ).call(
-      nestedClass,
-      undefined,
-      request.attributes,
-      // This light child's content lands in the SAME enclosing template, so its
-      // own nested light descendants lift into the same live list.
-      createNestedHostExpander(options, depth + 1, nestedStyleSink),
-    );
-    const nestedLight = lightResult(nestedRendered, 'nested light-root', request.tag);
-    return serializeLightGeneratedHost(
+    // A generated light root owns no template. Its caller children must enter
+    // through the same anchored projection channel as a page-root light host,
+    // including each authored named slot group. Its descendants keep the
+    // enclosing style destination: document head for a light page, DSD template
+    // for a shadow parent.
+    const groups =
+      request.groups ?? (request.children === '' ? [] : [['', request.children] as const]);
+    const projectedChildren = new Map<string, string>();
+    for (const [slotName, html] of groups) {
+      projectedChildren.set(slotName, (projectedChildren.get(slotName) ?? '') + html);
+    }
+    return renderToStringAtDepth(
       request.tag,
-      nestedLight.content,
-      mergeHostAttributes(request.attributes, nestedLight.hostAttributes, nestedLight.seedRows),
+      {
+        componentClass: nestedClass,
+        props: {},
+        hostAttrs: request.attributes,
+        projectedChildren,
+        lightProjectionIntent: request.hasChildren === true || request.children !== '',
+        ssrRenderableTags: options.ssrRenderableTags,
+        documentStyles: options.documentStyles,
+        nestedStyleLinkSink: nestedStyleSink,
+        styleDestination,
+        onNestedFailure: options.onNestedFailure,
+      },
+      depth + 1,
     );
   }
   // A class nested host expands through the class serializer, which owns its own
@@ -650,7 +666,15 @@ function expandNestedHostInner(
   // dispatcher.
   return renderToStringAtDepth(
     request.tag,
-    { componentClass: nestedClass, props: {}, ssrRenderableTags: options.ssrRenderableTags },
+    {
+      componentClass: nestedClass,
+      props: {},
+      ssrRenderableTags: options.ssrRenderableTags,
+      documentStyles: options.documentStyles,
+      nestedStyleLinkSink: nestedStyleSink,
+      styleDestination,
+      onNestedFailure: options.onNestedFailure,
+    },
     depth + 1,
   );
 }
@@ -753,12 +777,7 @@ function renderToStringAtDepth(
   options: InternalRenderToStringOptions = {},
   depth = 0,
 ): string {
-  if (depth > MAX_COMPOSITION_DEPTH) {
-    throw new OpenElementError(
-      '[openElement] nested element expansion exceeded the depth bound; cyclic component composition is not renderable.',
-      { code: FacadeErrorCode.COMPOSITION_DEPTH, phase: 'ssr' },
-    );
-  }
+  if (depth > MAX_COMPOSITION_DEPTH) throw compositionDepthError();
   // M11-2 generated page root: a generated element page carries no
   // `__partProgram`; its server artifact is the compiler-emitted host producer
   // the entry paired with the tag through the ONE registry guard. Dispatch
@@ -813,6 +832,8 @@ function renderToStringAtDepth(
       { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
     );
   }
+  const resolvedTag = typeof input === 'string' ? input : compiledTagOf(resolvedClass);
+  const tagForDiagnostics = resolvedTag ?? '<unknown>';
   const program = resolvedClass.__partProgram;
   if (!program) {
     // A LIGHT-root generated element serializes its own children, so its
@@ -822,6 +843,13 @@ function renderToStringAtDepth(
     // wrapper: the host's children ARE the region, exactly as on the client.
     const lightSsr = (resolvedClass as { __ssr?: unknown }).__ssr;
     if (typeof lightSsr === 'function') {
+      if (resolvedTag === undefined) {
+        throw new OpenElementError(
+          '[openElement] renderToString(class) cannot derive the custom-element tag for this generated light root; ' +
+            'render it by its registered tag or use a constructor emitted by the generated-element runtime.',
+          { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+        );
+      }
       // #1800 (alpha16 closeout): a LIGHT-root generated element's declared
       // sheets are a DOCUMENT resource — the asset is emitted and its URL
       // recorded by the client build (`island-style-declarations.ts`), but until
@@ -832,12 +860,11 @@ function renderToStringAtDepth(
       // `documentStyleResourcesOf`). `null` keeps the shadow primitive's explicit
       // "declared but carrier unavailable" refusal: a dev render with no emitted
       // assets must fail loudly rather than emit an unstyled island.
-      const declaredLightSheets =
-        typeof input === 'string' ? requestTimeIslandStyleLinks(input) : undefined;
+      const declaredLightSheets = requestTimeIslandStyleLinks(resolvedTag);
       if (declaredLightSheets === null) {
         throw new OpenElementError(
           `[openElement] admitted generated light host <${
-            typeof input === 'string' ? input : '<unknown>'
+            resolvedTag
           }> declares IslandConfig.styles, but this render has no emitted asset ` +
             'carrier for it (the dev server emits no style assets). Run a production ' +
             'build, or remove the declaration; rendering it unstyled would silently ' +
@@ -846,7 +873,9 @@ function renderToStringAtDepth(
         );
       }
       if (declaredLightSheets !== undefined && declaredLightSheets.length > 0) {
-        options.documentStyles?.add(declaredLightSheets);
+        if (options.styleDestination === 'shadow')
+          options.nestedStyleLinkSink?.add(declaredLightSheets);
+        else options.documentStyles?.add(declaredLightSheets);
       }
       // alpha16 nested-expansion: a generated light-root host's `__ssr` is a
       // string builder, so a custom-element tag inside its markup would stay an
@@ -865,7 +894,13 @@ function renderToStringAtDepth(
       // host (page root and nested), and the class lane's own nested walk. It was
       // inline here only, which is why a shadow page's inner components stayed
       // unexpanded tags.
-      const nestedHost = createNestedHostExpander(options, depth);
+      const styleDestination: NestedStyleDestination = options.styleDestination ?? 'document';
+      const nestedHost = createNestedHostExpander(
+        options,
+        depth,
+        options.nestedStyleLinkSink,
+        styleDestination,
+      );
 
       // Pass the host attribute pairs: the class static now folds them through
       // the shell's own seeder/resolver so a declared row gets its server value.
@@ -879,30 +914,30 @@ function renderToStringAtDepth(
       const rendered = (
         lightSsr as (input?: unknown, attributes?: unknown, nestedHost?: unknown) => unknown
       ).call(resolvedClass, options.props, options.hostAttrs, nestedHost);
-      const light = lightResult(
-        rendered,
-        'light-root',
-        typeof input === 'string' ? input : '<unknown>',
-      );
+      const light = lightResult(rendered, 'light-root', resolvedTag);
       const renderedContent = light.content;
+      if (styleDestination === 'document') {
+        options.documentStyles?.add(nestedStyleSinkOf(nestedHost)?.links ?? []);
+      }
       // The producer is content-only (the shadow lane's `<Name>__ssrHost` wraps
       // its own DSD template). A light root's region IS the host's children, so
       // the serializer owns the host element: the tag plus the canonical
       // attribute pairs, then the compiled content with the caller's projections
       // substituted into the producer's anchored slots.
       return serializeLightGeneratedHost(
-        typeof input === 'string' ? input : '<unknown>',
+        resolvedTag,
         renderedContent,
         mergeHostAttributes(options.hostAttrs, light.hostAttributes, light.seedRows),
         options.projectedChildren,
+        options.lightProjectionIntent,
       );
     }
-    failUncompiled(resolvedClass, typeof input === 'string' ? input : '<unknown>');
+    failUncompiled(resolvedClass, tagForDiagnostics);
   }
   // The class lane is deleted: a resolved class that carries a `__partProgram` is
   // no longer renderable here. Failing with the same coded error the compiler
   // surface uses keeps a stale artifact from rendering silently.
-  failUncompiled(resolvedClass, typeof input === 'string' ? input : '<unknown>');
+  failUncompiled(resolvedClass, tagForDiagnostics);
 }
 
 /** Server-render one compiled element through canonical Element composition:

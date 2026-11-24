@@ -16,13 +16,13 @@ The terms that run through this guide are not competing defaults: they answer tw
 | SSR | rendering a page to HTML on the server: at build time for static routes, per request for `renderIntent: { mode: 'dynamic' }` routes | what the first response contains |
 | Islands | a per-module opt-in for client delivery, declared next to the component | whether and when a component's chunk is fetched and its behavior binds |
 
-**Root: light or shadow.** `@element(tag, { root })` chooses where the component's content renders. Light DOM is the current compiled default; `root: 'shadow-open'` and `'shadow-closed'` are explicitly declared modes, and a component that declares one is served as Declarative Shadow DOM. That is one compiler and one Part Program either way: the choice changes styling reach, not the rendering machinery — and neither mode is "the interactive one".
+**Root: light or shadow.** A generated element pairs a default-exported function component with a `defineIslandConfig` sidecar. Its `root` field chooses where the content renders: `light` is the default, `shadow` declares an open shadow root, and `closed` declares an encapsulated shadow root. Shadow roots are delivered as Declarative Shadow DOM; the compiler produces the component either way, while the choice changes styling reach — neither mode is “the interactive one.”
 
-**DSD is a browser format, not a client framework.** Declarative Shadow DOM is a platform HTML format: `<template shadowrootmode="open">` is parsed into a real shadow root by the HTML parser, without script. openElement uses it as the wire format for shadow-root components, which is why their markup is readable and styled before any client module is fetched. DSD says nothing about interactivity: a DSD component can be completely static.
+**DSD is a browser format, not a client framework.** Declarative Shadow DOM is a platform HTML format: `<template shadowrootmode="open">` is parsed into a real shadow root by the HTML parser, without script; a closed root uses `shadowrootmode="closed"`. The generated markup uses DSD as the wire format for shadow-root components, so it is readable and styled before any client module is fetched. DSD says nothing about interactivity: a DSD component can be completely static.
 
-**Server HTML, then browser upgrade.** The server serializes the compiled class to HTML — build time for static routes, per request for dynamic ones, one program either way. Light DOM is already the document; DSD is parsed into a shadow root. Then, when the generated client entry defines the class, the browser's own Custom Element upgrade runs: the compiled claim replays the same program against the DOM that is already there, binds the handlers the template declared, and fills `@property` fields from host attributes. No tree is rebuilt, no binding is looked up by string, and no event is synthesized from a `data-*` attribute. Because upgrade only binds behavior the template declared, an element whose class never loads keeps its markup and its styling.
+**Server HTML, then browser upgrade.** The server serializes the compiled component to HTML — at build time for static routes, per request for dynamic ones. Light DOM is already part of the document; DSD is parsed into a shadow root. For a declared island, the generated client module defines its Custom Element and the browser upgrades it: the compiled claim applies the same program to the DOM that is already there and binds the handlers the template declared. The sidecar's `properties` rows define any host-facing property and attribute channels. No tree is rebuilt, no binding is looked up by string, and no event is synthesized from a `data-*` attribute. Components without a client module keep their server-rendered markup and styling.
 
-**Islands are WHERE and WHEN, not a rendering mode.** An island is a module that opts into client delivery with `defineIslandConfig({ hydrate, ssr, dsd })`; `hydrate` selects when the browser imports it — `load`, `idle`, `visible`, `media` or `only` — and the build records which islands each page reaches, so a page fetches only the chunks its own manifest names. An island renders through the same compiled class as a static component and can be a light root or a DSD shadow root; `ssr` and `dsd` say whether the server serializes it at all, and `only` skips SSR. What the island adds is the part that needs the browser: state, handlers, lifecycle.
+**Islands are WHERE and WHEN, not a rendering mode.** An island is a module that opts into client delivery with `defineIslandConfig({ hydrate, ssr, dsd })`; `hydrate` selects when the browser imports it — `load`, `idle`, `visible`, `media` or `only` — and the build records which islands each page reaches, so a page fetches only the chunks its own manifest names. An island uses the same generated function-component form as a static component and can render into light DOM or a DSD shadow root; `ssr` and `dsd` say whether the server serializes it at all, and `only` skips SSR. What the island adds is the part that needs the browser: state, handlers, lifecycle.
 
 The whole path, one stage per line:
 
@@ -42,9 +42,9 @@ The whole path, one stage per line:
    root with no script
    │
    ▼
-5  Custom Element upgrade — only for elements
-   whose class ships: the claim replays the
-   compiled program against the existing DOM
+5  Custom Element upgrade — only for an island
+   whose generated client module ships: the
+   claim reuses its existing DOM
    │
    ▼
 6  interaction — the island chunk loads per
@@ -52,7 +52,7 @@ The whole path, one stage per line:
    handlers run
 ```
 
-Steps 1–4 reuse what the server produced: no client work, and the HTML is already the page. Step 5 needs a client module only for the components whose class is delivered — and it reuses the existing DOM rather than rebuilding it, which is why one compiled program can serve the static artifact, a request-time render and the browser. Step 6 is the only island-specific step: it runs where a module declared a `hydrate` strategy, and a page with no interactive island executes no island chunk of its own.
+Steps 1–4 reuse what the server produced: no client work, and the HTML is already the page. Step 5 needs a client module only for a declared island — and it reuses the existing DOM rather than rebuilding it. Step 6 is the only island-specific step: it runs where a module declared a `hydrate` strategy, and a page with no interactive island executes no island chunk of its own.
 
 The honest caveats: "no client work" means none needed to render or read the page, not that zero bytes are ever executed — while an app declares any island or enhanced form, one small app-wide claim bootstrap still runs on static pages, and a page whose manifest carries a client-activatable island also preloads the shared element-runtime chunk ([Small runtime](#small-runtime) below prices both). And "no rebuild" describes the upgrade path, not a promise that nothing ever updates: after upgrade, a signal change re-renders only the compiled Parts that read the changed value.
 
@@ -60,7 +60,7 @@ The honest caveats: "no client work" means none needed to render or read the pag
 
 Every route renders to HTML at build time by default. The output is ordinary declarative markup: content components are serialized as light DOM by default, or as shadow roots the browser parses without script when the component declares a shadow mode; style sheets are inlined (scoped with `@scope(<tag>)` for light roots), and the document is styled and readable before a single client module is fetched. A page whose markup is static therefore stays static even if the network is slow, the module fails to load or JavaScript is disabled.
 
-Page-scope components — compiled modules that live outside the islands directory and are composed into pages by tag — are server-rendered only, and that is the contract, not a degradation. None of their code ships to the client: the browser receives their serialized shadow roots and never upgrades them, so they have no lifecycle, handlers or context at runtime. Anything that must react in the browser takes the island form and pays for exactly that boundary. The [compiled module grammar](/guide/compiled-grammar) covers how each form is discovered — page-scope components through the route import chain as default exports, islands through the page/island template scan with no import needed.
+Page-scope components — compiled modules that live outside the islands directory and are composed into pages by tag — are server-rendered only, and that is the contract, not a degradation. None of their component code ships to the client: the browser receives their server-rendered markup, in light DOM or DSD according to the sidecar root, and never upgrades them, so they have no lifecycle, handlers or context at runtime. Anything that must react in the browser takes the island form and pays for exactly that boundary. The [compiled module grammar](/guide/compiled-grammar) covers how each form is discovered — page-scope components through the route import chain as default exports, islands through the page/island template scan with no import needed.
 
 A page that genuinely cannot be prerendered declares `renderIntent: { mode: 'dynamic' }` and renders per request through the generated `dist/server` entry. It is still the same compiled program — a loader supplies the data instead of the build — so moving a page between static and dynamic changes where it renders, not how the markup is produced. A page that keeps a static GET but exports an action stays prerendered and dispatches only its POSTs to the server.
 
@@ -69,14 +69,30 @@ A page that genuinely cannot be prerendered declares `renderIntent: { mode: 'dyn
 Client behavior is opt-in per module and visible in metadata, never inferred. An island declares its delivery next to the component it exports:
 
 ```tsx
+import { signal } from '@openelement/element';
 import { defineIslandConfig } from '@openelement/router';
 
-export const openElement = defineIslandConfig({ hydrate: 'visible', ssr: true, dsd: true });
+export const openElement = defineIslandConfig({
+  tag: 'profile-counter',
+  hydrate: 'visible',
+  ssr: true,
+  dsd: true,
+  root: 'shadow',
+});
+
+export default function ProfileCounter() {
+  const count = signal(0);
+  return (
+    <button type='button' onClick={() => (count.value = count.value + 1)}>
+      Views: {count.value}
+    </button>
+  );
+}
 ```
 
-`hydrate` selects when the module is imported — `'load'` for first-screen controls, imported and upgraded as early as possible, `'idle'` for work that can wait, `'visible'` for components that matter as they approach the viewport, `'media'` for capability-gated loading (the chunk loads only while the query declared in the island's `media` field matches), and `'only'` for browser-only components that skip SSR. `'none'` retires an island's client side entirely: the server still serializes the component, but the build never emits its chunk, so the component costs zero client JavaScript while keeping its island manifest entry. `ssr` and `dsd` state whether the server serializes the component at all. The build records the result per page, so an island that a page never reaches is never executed. These two settings do not apply on a [streaming](/guide/streaming) route: its shell admits no nested renderer, so every island and nested compiled component is emitted there as an opaque empty host and activates in the browser.
+The default export is a function component; the `defineIslandConfig` sidecar declares its tag, root, host properties and delivery policy. `hydrate` selects when the module is imported — `'load'` for first-screen controls, imported and upgraded as early as possible, `'idle'` for work that can wait, `'visible'` for components that matter as they approach the viewport, `'media'` for capability-gated loading (the chunk loads only while the query declared in the island's `media` field matches), and `'only'` for browser-only components that skip SSR. `'none'` retires an island's client side entirely: the server still serializes the component, but the build never emits its chunk, so the component costs zero client JavaScript while keeping its island manifest entry. `ssr` and `dsd` state whether the server serializes the component at all. The build records the result per page, so an island that a page never reaches is never executed. These two settings do not apply on a [streaming](/guide/streaming) route: its shell admits no nested renderer, so every island and nested compiled component is emitted there as an opaque empty host and activates in the browser.
 
-The upgrade itself is the browser's Custom Element mechanism. The server serializes the compiled Part Program as Declarative Shadow DOM; when the class is defined the generated claim artifact runs the same program against the DOM that is already there, binding the handlers the template declared and restoring `@property` fields from host attributes. No tree is rebuilt, no binding is discovered by string lookup, and no event is synthesized from an attribute. A [streaming](/guide/streaming) route is the exception to that serialization promise — see above.
+The upgrade itself is the browser's Custom Element mechanism. The server serializes the compiled program as Declarative Shadow DOM; when the generated island module is defined, its claim artifact applies the program to the DOM that is already there and binds the handlers the template declared. Attribute-backed values come from the sidecar's `properties` declarations. No tree is rebuilt, no binding is discovered by string lookup, and no event is synthesized from an attribute. A [streaming](/guide/streaming) route is the exception to that serialization promise — see above.
 
 ## Late hosts
 
@@ -86,13 +102,19 @@ Both strategies that otherwise get a single chance are covered. After an `'idle'
 
 ## Light islands
 
-An island's root is decided by its component: `@element(tag, { root: 'light' })` compiles a program whose children live in the document tree, while a component that declares a shadow root (`shadow-open` or `shadow-closed`) is served as Declarative Shadow DOM. The island config may restate the family the module belongs to:
+An island's root is declared in its `defineIslandConfig` sidecar: `root: 'light'` puts its children in the document tree, while `root: 'shadow'` or `root: 'closed'` delivers them in Declarative Shadow DOM with an open or closed shadow boundary. The same setting controls the component's style boundary:
 
 ```tsx
-export const openElement = defineIslandConfig({ hydrate: 'visible', root: 'light' });
+export const openElement = defineIslandConfig({
+  tag: 'status-panel',
+  hydrate: 'visible',
+  root: 'light',
+});
 ```
 
-That declaration is checked, not obeyed. The decorator stays the single source of truth, and a config that contradicts it fails the build with `OEC9030`; declaring it just makes the island's root readable next to its delivery policy, without opening the component.
+The sidecar is the authored root declaration used by the generated-element compiler and the Router's island delivery path, so the build stages share one tag and root fact.
+
+Generated light roots can project named and default children during SSR, including the selected output of a conditional or list. That server HTML is correct, and an unexpanded nested host keeps the original `oe:when` and `oe:each` fallback markers. Interactive projection through a generated light root is not supported yet: the parent and child claims would both need to adopt the same nodes. SSR marks the projected host, and either island upgrade stops with `OEIR_LEAF_UNSUPPORTED_LIGHT_SLOT_PROJECTION` before claiming it. The guard also applies when a conditional or list is initially empty but can produce children after an update. For interactive projected content, give the child a shadow root and use native `<slot>` elements; otherwise keep the composition server-rendered only.
 
 Light islands are the practical route for utility-first styling. A shadow root is a style boundary — class selectors authored outside it do not reach the component's children — so a shadow island needs compiler-side utility extraction to bridge it, while a light island's children are ordinary document nodes that the page's compiled sheet already styles. What it gives up in exchange is the isolation the shadow root would have provided.
 
