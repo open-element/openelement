@@ -15,7 +15,7 @@
  * bootstrap string).
  */
 import { expect, test } from 'vitest';
-import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
+import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import {
   STREAM_FRAME_FORBIDDEN_TAGS,
   STREAM_FRAME_UNSAFE_URL,
@@ -27,7 +27,6 @@ import {
   STREAM_MAX_SEED_PROPERTIES,
 } from '@openelement/element/authoring';
 import {
-  createStreamPageShell,
   createStreamBody,
   createStreamRequestScope,
   STREAM_BROWSER_BOOTSTRAP,
@@ -157,71 +156,6 @@ test('stream front gate attaches both observers per declared field', async () =>
   expect(records.map((record) => record.failed)).toEqual([false, true]);
   expect(records[0].value).toEqual('ok');
   expect((records[1].error as Error).message).toEqual('no');
-});
-
-test('deferred-shell gate fails closed when the route has no build manifest', async () => {
-  const gate = createStreamPageShell({
-    streamManifests: {},
-    createStreamShellExecutor: () => Promise.resolve(executor()),
-  });
-  const error = await assertRejectsIncludes(
-    () => gate('/', { default: { __partProgram: { tag: 'oe-unit', version: 1 } } }, {}, 'i', 't'),
-    Error,
-  );
-  expect(error.message).toEqual(
-    '[openElement] stream route / has no matching compiled route manifest/program.',
-  );
-});
-
-test('deferred-shell gate fails closed on a program tag or version mismatch', async () => {
-  const gate = createStreamPageShell({
-    streamManifests: { '/': manifest(1) },
-    createStreamShellExecutor: () => Promise.resolve(executor()),
-  });
-  const routeModule = { default: { __partProgram: { tag: 'other-unit', version: 1 } } };
-  await assertRejectsIncludes(
-    () => gate('/', routeModule, {}, 'i', 't'),
-    Error,
-    'no matching compiled',
-  );
-  const wrongVersion = {
-    default: { __partProgram: { tag: 'oe-unit', version: manifest(1).program.version + 1 } },
-  };
-  await assertRejectsIncludes(
-    () => gate('/', wrongVersion, {}, 'i', 't'),
-    Error,
-    'no matching compiled',
-  );
-  // A page module without a compiled program fails the same gate.
-  await assertRejectsIncludes(
-    () => gate('/', { default: {} }, {}, 'i', 't'),
-    Error,
-    'no matching compiled',
-  );
-});
-
-test('deferred-shell gate delegates to the entry executor import on a match', async () => {
-  const routeModule = { default: { __partProgram: { tag: 'oe-unit', version: 1 } } };
-  const calls: unknown[] = [];
-  const produced = executor();
-  const gate = createStreamPageShell({
-    streamManifests: { '/': manifest(1) },
-    createStreamShellExecutor: (options) => {
-      calls.push(options);
-      return Promise.resolve(produced);
-    },
-  });
-  const executorView = await gate('/', routeModule, { first: 'v' }, 'instance-9', 'token-9');
-  expect(executorView).toEqual(produced);
-  expect(calls).toEqual([
-    {
-      componentClass: routeModule.default,
-      props: { first: 'v' },
-      manifest: manifest(1),
-      instanceId: 'instance-9',
-      documentToken: 'token-9',
-    },
-  ]);
 });
 
 test('stream body commits the shell with its typed seed attribute first', async () => {

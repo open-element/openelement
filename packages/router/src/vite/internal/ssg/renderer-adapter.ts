@@ -16,8 +16,9 @@ type RendererMode = 'native';
 interface RuntimeSeam {
   /** Pure helper functions the emitted call sites reference by name. */
   imports: ImportDecl[];
-  /** The adapter's startup stream guard, imported as `__assertStreamRoute`. */
-  streamGuard: ImportDecl;
+  // The startup stream guard (`__assertStreamRoute`) retired with the class
+  // lane's compiled stream channel (C09, 2026-11-24): no emitted page kind
+  // carries a stream manifest, so the seam has no guard to declare.
   /**
    * The renderer-specific lines of the entry's `pageRuntime` factory config:
    * mode plus the Element functions this renderer's entry imports. The
@@ -29,8 +30,7 @@ interface RuntimeSeam {
 interface RendererAdapter {
   readonly mode: RendererMode;
   readonly hydration: 'compiled-hydration';
-  readonly supportsCompiledStream: boolean;
-  serverImports(hasStreamRoute: boolean): ImportDecl[];
+  serverImports(): ImportDecl[];
   runtimeSeam(): RuntimeSeam;
 }
 
@@ -39,15 +39,18 @@ const RUNTIME_MODULE = '@openelement/router/server-runtime';
 const native: RendererAdapter = {
   mode: 'native',
   hydration: 'compiled-hydration',
-  supportsCompiledStream: true,
-  serverImports(hasStreamRoute) {
+  // The compiled stream channel (supportsCompiledStream) retired with the
+  // class lane's Part Program (owner decision 2026-11-22): a function page
+  // has no program to defer against, the scanner never emits a stream
+  // manifest, and the deferred-shell executor that read
+  // `componentClass.__partProgram` is gone. Alpha18 owns the replacement
+  // carrier.
+  serverImports() {
     return [
       {
         from: '@openelement/element',
         names: [
           'createDocumentStyleResources',
-          'createStreamShellExecutor',
-          ...(hasStreamRoute ? ['documentStreamParts', 'escapeAttr'] : []),
           'renderToString',
           'trustedHtml',
           'escapeHtml',
@@ -59,16 +62,10 @@ const native: RendererAdapter = {
   runtimeSeam() {
     return {
       imports: [
-        { from: RUNTIME_MODULE, names: ['resolveCompiledPageTag'], alias: '__resolvePageTag' },
         { from: RUNTIME_MODULE, names: ['pageDefinition'], alias: '__pageDefinition' },
         { from: RUNTIME_MODULE, names: ['routeMeta'], alias: '__routeMeta' },
         { from: RUNTIME_MODULE, names: ['localeFromPath'], alias: '__localeFromPath' },
       ],
-      streamGuard: {
-        from: RUNTIME_MODULE,
-        names: ['assertCompiledStreamRoute'],
-        alias: '__assertStreamRoute',
-      },
       pageRuntimeLines: [
         `mode: 'native',`,
         `renderToString,`,

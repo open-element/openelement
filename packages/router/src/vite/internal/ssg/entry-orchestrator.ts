@@ -347,31 +347,9 @@ export function renderEntry(desc: EntryDescriptor): string {
 
   // --- Stream manifests (stream routes; consumed by the handlers, the
   // deferred-shell gate, and the SSG routeInfo) ---
-  const streamManifests = Object.fromEntries(
-    desc.pageRoutes
-      .filter((route) => route.streamManifest)
-      .map((route) => [route.path, route.streamManifest]),
-  );
-  if (Object.keys(streamManifests).length > 0) {
-    lines.push(
-      `export const __streamManifests = ${quoteGeneratedJavaScriptValue(streamManifests)};`,
-    );
-    lines.push('');
-    // Stream pump runtime (#1470 block d): the pump, the browser bootstrap,
-    // and (Amendment 1) the deferred-shell gate are imported runtime; the
-    // entry binds the pump to its escapeAttr import and the gate to its
-    // serialized manifests + createStreamShellExecutor import.
-    lines.push("// Stream pump runtime, bound to the entry's escapeAttr import.");
-    lines.push('const __streamBody = __createStreamBody({ escapeAttr });');
-    lines.push(
-      "// The deferred-shell gate (Amendment 1), bound to the entry's",
-      '// serialized stream manifests and its createStreamShellExecutor import.',
-    );
-    lines.push(
-      'const __createStreamPageShell = __createStreamPageShellGate({ streamManifests: __streamManifests, createStreamShellExecutor });',
-    );
-    lines.push('');
-  }
+  // The streamed-page manifests retired with the class lane (owner decision
+  // 2026-11-22): the scanner emits none, so there is nothing to serialize and
+  // no deferred-shell gate to bind. Alpha18 owns the replacement carrier.
 
   // --- Generated-app assembly (#1470 block e) ---
   // One factory call owns what the entry template used to emit as assembly
@@ -497,7 +475,7 @@ export function renderEntry(desc: EntryDescriptor): string {
       // pairs the class and its compiler-emitted host producer atomically).
       // Registering it here again would clear that pair (ADR-0181 A4).
       if (isFunctionPage(route) || pageKindOf(route) === 'generated-element-page') continue;
-      const tagNameExpr = pageRouteTagExpr(route.varName, route.tagName, pageKindOf(route));
+      const tagNameExpr = pageRouteTagExpr(route.varName, route.tagName);
       lines.push(
         `try { __registerSsrComponent(${tagNameExpr}, ${route.varName}.default); } catch (err) { console.error('[ssg] Failed to register route custom element ${tagNameExpr}:', err); throw err; }`,
       );
@@ -577,28 +555,9 @@ export function renderEntry(desc: EntryDescriptor): string {
   lines.push('');
 
   // --- Startup stream guards ---
-  // The adapter-selected assertion is imported from
-  // @openelement/router/server-runtime; the entry emits only the per-route
-  // call sites. A stream declaration that has no matching compiled route
-  // manifest/program fails the entry at load, not at request time.
-  if (desc.pageRoutes.length > 0) {
-    for (const route of desc.pageRoutes) {
-      // Generated element pages are synchronous-SSR only; the classifier
-      // refuses a stream declaration at build, so no guard is emitted for the
-      // bounded lane (defensive, keeps the runtime contract unchanged).
-      if (pageKindOf(route) === 'generated-element-page') continue;
-      lines.push(
-        `__assertStreamRoute(${route.varName}, ${quoteGeneratedJavaScriptValue(route.path)}, ${quoteGeneratedJavaScriptValue(
-          route.filePath,
-        )}, ${
-          route.streamManifest
-            ? `__streamManifests[${quoteGeneratedJavaScriptValue(route.path)}]`
-            : 'undefined'
-        });`,
-      );
-    }
-    lines.push('');
-  }
+  // The class lane's startup stream assertion and its Part-Program read
+  // retired with the lane (C09, 2026-11-24): no emitted page kind carries a
+  // stream manifest, so there is no declaration left to guard.
 
   // --- App middleware ---
   for (const mw of desc.middleware) {

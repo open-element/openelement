@@ -151,22 +151,11 @@ export function createNativePageRenderer(deps: NativePageRendererDeps): PageSsrR
   };
 }
 
-/**
- * Compiled page-tag resolution (#1276, B1.3-F1): the compiled Part Program is
- * the one canonical source for the route→program tag binding. A definePage
- * route module default-exports the compiled page class, whose
- * `__partProgram.tag` carries the @element(...) decorator tag; the route FILE
- * name derives the ROUTE, not the element's identity, so the bare
- * path-derived tag must never reach the serializer when the program declares
- * a different one. The path-derived fallback remains for classes without a
- * compiled program — the serializer fails closed on those exactly as before.
+/*
+ * Compiled page-tag resolution (#1276, B1.3-F1; C08 closed 2026-11-24): the
+ * runtime `__partProgram.tag` read retired with the class compiler. Every
+ * page kind this lane emits resolves its tag at BUILD time — a generated
+ * element page from the island scan's tag, a server function page from the
+ * path itself — and the emitted entry evaluates a literal (see
+ * entry-route-helpers.ts). No runtime reader remains.
  */
-export function resolveCompiledPageTag(routeModule: unknown, fallbackTag: string): string {
-  const module = routeModule as
-    | { default?: { __partProgram?: { tag?: unknown } } }
-    | undefined
-    | null;
-  const program = module?.default?.__partProgram;
-  if (program && typeof program.tag === 'string' && program.tag.includes('-')) return program.tag;
-  return fallbackTag;
-}

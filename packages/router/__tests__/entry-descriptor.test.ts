@@ -226,7 +226,7 @@ test('renderEntry: produces valid module code', () => {
   // v0.44 (ADR-0143): the sync compiled renderToString is the only serializer
   // import — the legacy VNode tree renderer is gone.
   expect(code).toContain(
-    "import { createDocumentStyleResources, createStreamShellExecutor, renderToString, trustedHtml, escapeHtml, wrapInDocument } from '@openelement/element'",
+    "import { createDocumentStyleResources, renderToString, trustedHtml, escapeHtml, wrapInDocument } from '@openelement/element'",
   );
   expect(code.includes('renderToStringTree')).toEqual(false);
   expect(code).toContain('export default app');
@@ -609,16 +609,14 @@ test('renderEntry: definePage route binds its tag through the compiled program, 
   ];
   const code = renderEntry(buildEntryDescriptor(routes));
 
-  // Registration and the page handler resolve the tag from the route module's
-  // compiled Part Program at entry evaluation (#1276); the path-derived
-  // fallback tag is the resolver's fallback argument only, and the exported
-  // content-element tag never appears — a module-self-registered content
-  // element can no longer shadow the definePage render (the #960 failure
-  // mode).
-  expect(code).toContain('__registerSsrComponent(__resolvePageTag($pageIndex, "index-page")');
+  // C08 (2026-11-24): the tag is a build fact — the emitted consumers carry a
+  // literal, and no runtime program read remains. The #960 failure mode stays
+  // closed: the exported content-element tag never appears, so a module-self-
+  // registered content element cannot shadow the definePage render.
+  expect(code).toContain('__registerSsrComponent("index-page", $pageIndex.default)');
   expect(code.includes('__registerSsrComponent("home-page"')).toEqual(false);
-  expect(code.includes('__resolvePageTag($pageIndex, "home-page"')).toEqual(false);
-  expect(code).toContain('let __tag = __resolvePageTag($pageIndex, "index-page")');
+  expect(code.includes('__resolvePageTag')).toEqual(false);
+  expect(code).toContain('let __tag = "index-page"');
 });
 
 test('renderEntry: plain element route binds its tag through the compiled program too (#1276)', () => {
@@ -627,8 +625,8 @@ test('renderEntry: plain element route binds its tag through the compiled progra
   ];
   const code = renderEntry(buildEntryDescriptor(routes));
 
-  // One canonical binding for every page route: the scanner's tagName export
-  // is the fallback argument; the compiled program tag wins at evaluation.
-  expect(code).toContain('__registerSsrComponent(__resolvePageTag($pageIndex, "home-page")');
-  expect(code).toContain('let __tag = __resolvePageTag($pageIndex, "home-page")');
+  // One canonical binding for every page route: the build fact is the literal.
+  expect(code).toContain('__registerSsrComponent("home-page", $pageIndex.default)');
+  expect(code).toContain('let __tag = "home-page"');
+  expect(code.includes('__resolvePageTag')).toEqual(false);
 });

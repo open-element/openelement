@@ -182,7 +182,7 @@ export function buildEntryDescriptor(
   // the entry keeps imports + descriptor data + wiring. It replaces the
   // entry-emitted `new Hono()` and the bridge import.
   imports.push({ from: '@openelement/router/server-runtime', names: ['createGeneratedApp'] });
-  imports.push(...adapter.serverImports(routes.some((route) => route.streamManifest)));
+  imports.push(...adapter.serverImports());
   // #1326: page meaning is resolved through the one Document seam before
   // wrapInDocument serializes it.
   imports.push({
@@ -246,54 +246,15 @@ export function buildEntryDescriptor(
       names: ['actionErrorResponse'],
       alias: '__actionErrorResponse',
     });
-    if (routes.some((route) => route.streamManifest)) {
-      imports.push({
-        from: '@openelement/router/server-runtime',
-        names: ['createStreamHeaderChannel'],
-        alias: '__streamHeaderChannel',
-      });
-      // The streaming pump (#1470 block d): the request scope, the
-      // deferred-field front gate, the bound body builder, and the browser
-      // bootstrap string are the imported runtime module;
-      // the entry keeps the call sites and binds escapeAttr at wiring time.
-      imports.push({
-        from: '@openelement/router/server-runtime',
-        names: ['createStreamRequestScope'],
-        alias: '__streamRequestScope',
-      });
-      imports.push({
-        from: '@openelement/router/server-runtime',
-        names: ['streamFields'],
-        alias: '__streamFields',
-      });
-      imports.push({
-        from: '@openelement/router/server-runtime',
-        names: ['createStreamBody'],
-        alias: '__createStreamBody',
-      });
-      imports.push({
-        from: '@openelement/router/server-runtime',
-        names: ['STREAM_BROWSER_BOOTSTRAP'],
-        alias: '__streamBrowserBootstrap',
-      });
-      // The deferred-shell gate (Amendment 1): the typed runtime
-      // factory the entry binds to its serialized stream manifests and its
-      // createStreamShellExecutor import; the handlers keep the call site.
-      imports.push({
-        from: '@openelement/router/server-runtime',
-        names: ['createStreamPageShell'],
-        alias: '__createStreamPageShellGate',
-      });
-    }
-    // The page-render seam: page tag resolution and the
+    // The page-render seam: the
     // page-definition/route-meta/locale extractors are pure helpers the
     // emitted call sites reference; the runtime binding itself (renderer,
     // props projection, status pages, layout) happens inside the
-    // generated-app factory per the renderer adapter (#1470 block e). The
-    // adapter's startup stream guard is imported under the `__assertStreamRoute`
-    // binding. Same page-handler gate as the channel.
+    // generated-app factory per the renderer adapter (#1470 block e).
+    // The class lane's startup stream guard and its program read retired
+    // with the lane (C09, 2026-11-24): no emitted page kind carries a
+    // stream manifest.
     imports.push(...adapter.runtimeSeam().imports);
-    imports.push(adapter.runtimeSeam().streamGuard);
   }
 
   // Conditional middleware imports (#1560): the built-ins are the
@@ -573,24 +534,9 @@ export function buildEntryDescriptor(
       };
     })
     .sort((a, b) => b.depth - a.depth);
-  for (const route of pageRoutes) {
-    if (
-      route.streamManifest &&
-      renderers.some(
-        (entry) =>
-          entry.scope === '/' ||
-          route.path === entry.scope ||
-          route.path.startsWith(entry.scope + '/'),
-      )
-    ) {
-      throw buildError(
-        DescriptorErrorCode.STREAM_RENDERER,
-        `[openElement] stream route ${route.path}, field ${
-          route.streamManifest.fields[0].field
-        }: opaque renderer wrapper is not admitted. Keep the field front-gate or disable streaming.`,
-      );
-    }
-  }
+  // The streamed-page renderer/layout refusals retired with the class lane's
+  // stream channel (2026-11-22): the scanner emits no stream manifest, so no
+  // descriptor can carry one. Alpha18 owns the replacement carrier.
 
   const middlewareScopes = specialRoutes
     .filter((r) => r.special === 'middleware')
@@ -791,23 +737,6 @@ export function buildEntryDescriptor(
   // the whole project instead of admitting a descriptor that would only fail
   // at request time. The generated route guard (entry-codegen.ts) keeps the
   // route-level check for descriptors that reach the runtime by another path.
-  if (
-    pageRoutes.some((route) => route.streamManifest) &&
-    (layout.default !== false || Object.values(layout.layouts).some((shell) => shell !== false))
-  ) {
-    const streamRoutes = pageRoutes
-      .filter((route) => route.streamManifest)
-      .map((route) => `${route.path} (${route.filePath})`)
-      .join(', ');
-    throw buildError(
-      DescriptorErrorCode.STREAM_LAYOUT,
-      '[openElement] streaming requires the compiled layout wrapper to be off for the ' +
-        'whole project: a streamed document is flushed in parts and cannot be wrapped by a layout. ' +
-        'Set openElement({ layout: false }) and remove every layouts entry, or leave streaming ' +
-        'off. A per-route route: { layout: false } cannot satisfy this gate — the build cannot see ' +
-        `a stream route's own layout. Streaming routes: ${streamRoutes}.`,
-    );
-  }
   const reservedTags = new Set([
     ...pageRoutes.map((route) => route.tagName),
     ...islands.map((island) => island.tagName),

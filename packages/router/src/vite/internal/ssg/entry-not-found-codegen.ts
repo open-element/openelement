@@ -6,7 +6,7 @@
  * the plain status page — the fallback itself never 500s.
  */
 import type { PageRouteDecl, RendererDecl } from '@openelement/protocol/ssg';
-import { isFunctionPage, pageKindOf } from './page-classification.ts';
+import { isFunctionPage } from './page-classification.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import {
   documentWrapOptionsLines,
@@ -43,7 +43,7 @@ export function renderNotFoundRoute(
   lines.push('  const c = __requestScope(request);');
   lines.push(`  const __responseHeaders = new Headers();`);
   lines.push(`  return __mergeChannelHeaders(await (async () => {`);
-  lines.push(`  let __tag = ${pageRouteTagExpr(route.varName, route.tagName, pageKindOf(route))};`);
+  lines.push(`  let __tag = ${pageRouteTagExpr(route.varName, route.tagName)};`);
   lines.push(`  let __page = ${pageDefinitionExpr(route.varName)};`);
   lines.push(`  let __params = {};`);
   lines.push(`  let __routeMetaValue = ${routeMetaExpr(route.varName)};`);

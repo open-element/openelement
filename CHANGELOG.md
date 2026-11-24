@@ -76,6 +76,17 @@ validates the wire format on revive.
   framework mirrors `required → valueMissing` and hands the author the complete
   `ElementInternals` seam, because a shell-side mirror of type/email/pattern would
   be a second validation model.
+- **The last `__partProgram` runtime reads are gone (migration matrix C08–C11).**
+  The route→element tag binding is a build fact for every page kind the lane
+  emits, so the entry evaluates a literal and imports no program-tag resolver;
+  the streamed-page startup assertion, the deferred-shell gate and the public
+  `createStreamShellExecutor` (+ its three types) are deleted with their
+  `OE_STREAM_ROUTE_PROGRAM_MISMATCH` / `OE_DISPATCH_STREAM_DECLARATION` codes.
+  The stream *pump* (`createStreamBody`, `streamFields`,
+  `createStreamRequestScope`, `STREAM_BROWSER_BOOTSTRAP`) is deliberately
+  retained as an internal substrate with no emitted consumer — it is the piece
+  the Alpha18 streaming carrier is built on, and it is covered by its own
+  tests rather than left dangling.
 
 ## 1.0.0-alpha.15
 

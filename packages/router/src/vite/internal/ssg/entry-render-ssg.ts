@@ -44,7 +44,7 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   // --- routeInfo: structured route metadata ---
   lines.push('export const routeInfo = [');
   for (const r of desc.pageRoutes) {
-    const tagNameExpr = pageRouteTagExpr(r.varName, r.tagName, pageKindOf(r));
+    const tagNameExpr = pageRouteTagExpr(r.varName, r.tagName);
     // M11-1: the build-time page-kind fact. Emitted only for a non-class page,
     // so a class-page-only project's routeInfo stays byte-identical; the
     // renderRoute branches read this fact instead of the page descriptor's

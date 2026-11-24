@@ -155,7 +155,8 @@ describe('generated element page build facts', () => {
         islandsDir: 'app/islands',
       }),
     );
-    expect(entry).toContain('__resolvePageTag($pageAbout, "about-page")');
+    expect(entry).toContain('let __tag = "about-page"');
+    expect(entry).not.toContain('__resolvePageTag');
     expect(entry).not.toContain('pageKind: "generated-element-page"');
     expect(entry).not.toContain('generated-page');
   });

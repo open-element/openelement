@@ -1,25 +1,31 @@
 /**
- * #1276 (B1.3-F1): definePage route SSR tag-mismatch repair.
+ * #1276 (B1.3-F1), re-anchored on C08 (2026-11-24): definePage route tag
+ * binding.
  *
- * The route→program tag binding follows the element's declared tag — the
- * compiled Part Program is the one canonical source. The route FILE name
- * derives the ROUTE (path/fallback wiring), never the element's identity:
- * entry codegen resolves the SSR registration/render tag from the route
- * module's compiled program (`default.__partProgram.tag`) at generated-entry
- * evaluation time, with the path-derived tag kept only as the fallback for
- * classes that carry no compiled program (renderToString still fails closed on
- * those, exactly as before).
+ * The route→element tag binding follows the element's declared identity. When
+ * the class lane existed, that identity arrived at RUNTIME through the
+ * compiled Part Program (`default.__partProgram.tag`) because a definePage
+ * route module default-exported a compiled class; the entry called
+ * `__resolvePageTag(module, pathTag)` and the program tag won.
  *
- * Pre-fix, definePage routes registered/rendered under the bare path-derived
- * tag, so a page element whose @element tag differed from the file-derived
- * tag (e.g. routes/workspace-records.tsx -> @element('workspace-records-page'))
- * failed closed at REQUEST time: renderToString tag "workspace-records" does not
- * match the compiled program tag "workspace-records-page" (OE_PROGRAM_MISSING)
- * → HTTP 500. Covered by the request-time and framework-mode fixtures.
+ * C08 retired that runtime read with the class compiler: the tag is now a
+ * BUILD fact for every page kind the lane emits — a generated element page
+ * takes the island scan's tag, a server function page takes the path-derived
+ * tag (it has no element of its own) — and the emitted entry evaluates a
+ * literal. The behaviour the #1276 repair existed for is preserved by
+ * construction: no runtime negotiation can disagree with the module the
+ * builder emitted under.
+ *
+ * The rows below pin exactly that: every emitted consumer (SSR registration,
+ * the page handler, the SSG routeInfo, the styled 404) carries the literal,
+ * the runtime seam exports no program-tag resolver, and the adapter's import
+ * list no longer names one.
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect, test } from 'vitest';
 import { buildEntryDescriptor, renderEntry } from '../src/vite/internal/ssg/index.ts';
-import { resolveCompiledPageTag } from '../src/vite/internal/server-runtime/renderer-runtime.ts';
+import * as serverRuntime from '../src/vite/internal/server-runtime/mod.ts';
 import type { RouteEntry } from '@openelement/protocol/framework';
 
 const definePageRoutes: RouteEntry[] = [
@@ -32,31 +38,32 @@ const definePageRoutes: RouteEntry[] = [
   },
 ];
 
-const RESOLUTION_EXPR = '__resolvePageTag($pageWorkspaceRecords, "workspace-records")';
+/** The C08 build fact the emitted consumers read: a literal, never a resolver call. */
+const TAG_LITERAL = '"workspace-records"';
 
-test('renderEntry: definePage route registers through the compiled-program tag resolution (#1276)', () => {
+test('renderEntry: definePage route registration carries the tag literal (C08)', () => {
   const code = renderEntry(buildEntryDescriptor(definePageRoutes));
 
-  // Registration resolves the tag from the route module's compiled program;
-  // the path-derived tag survives only as the resolver's fallback argument.
-  expect(code).toContain(
-    `__registerSsrComponent(${RESOLUTION_EXPR}, $pageWorkspaceRecords.default)`,
-  );
+  expect(code).toContain(`__registerSsrComponent(${TAG_LITERAL}, $pageWorkspaceRecords.default)`);
+  // The runtime program read is gone: no emitted consumer calls a resolver.
+  expect(code).not.toContain('__resolvePageTag');
 });
 
-test('renderEntry: definePage route handler renders through the compiled-program tag resolution (#1276)', () => {
+test('renderEntry: definePage route handler renders the tag literal (C08)', () => {
   const code = renderEntry(buildEntryDescriptor(definePageRoutes));
 
-  expect(code).toContain(`let __tag = ${RESOLUTION_EXPR}`);
+  expect(code).toContain(`let __tag = ${TAG_LITERAL}`);
+  expect(code).not.toContain('__resolvePageTag');
 });
 
-test('renderEntry: SSG routeInfo resolves the tag from the compiled program (#1276)', () => {
+test('renderEntry: SSG routeInfo carries the tag literal (C08)', () => {
   const code = renderEntry(buildEntryDescriptor(definePageRoutes, { ssg: true }));
 
-  expect(code).toContain(`tagName: ${RESOLUTION_EXPR},`);
+  expect(code).toContain(`tagName: ${TAG_LITERAL},`);
+  expect(code).not.toContain('__resolvePageTag');
 });
 
-test('renderEntry: styled 404 route renders through the compiled-program tag resolution (#1276)', () => {
+test('renderEntry: styled 404 route renders the tag literal (C08)', () => {
   const routes: RouteEntry[] = [
     ...definePageRoutes,
     {
@@ -69,57 +76,27 @@ test('renderEntry: styled 404 route renders through the compiled-program tag res
   ];
   const code = renderEntry(buildEntryDescriptor(routes));
 
-  expect(code).toContain('let __tag = __resolvePageTag($pageNotFound, "el-404");');
+  expect(code).toContain('let __tag = "el-404";');
+  expect(code).not.toContain('__resolvePageTag');
 });
 
-// The generated entry imports the resolver from
-// @openelement/router/server-runtime and binds it through the renderer adapter
-// (ADR-0160 rule a); the assertions below execute the shipped module directly.
-test('resolveCompiledPageTag: compiled program tag wins over the path-derived fallback (#1276)', () => {
-  // The definePage route module default-exports the compiled page class
-  // (definePage returns the class), whose __partProgram.tag is the @element
-  // tag — this is the mismatch shape from the B1.3 qualification.
-  const routeModule = { default: { __partProgram: { tag: 'workspace-records-page' } } };
-  expect(resolveCompiledPageTag(routeModule, 'workspace-records')).toEqual(
-    'workspace-records-page',
-  );
+test('the runtime seam no longer exports a program-tag resolver (C08 negative)', () => {
+  expect('resolveCompiledPageTag' in serverRuntime).toBe(false);
 });
 
-test('resolveCompiledPageTag: matching program and fallback tags resolve identically', () => {
-  const routeModule = { default: { __partProgram: { tag: 'login' } } };
-  expect(resolveCompiledPageTag(routeModule, 'login')).toEqual('login');
+test('the renderer adapter imports no program-tag resolver (C08 negative)', () => {
+  const adapter = readFileSync(
+    join(import.meta.dirname, '../src/vite/internal/ssg/renderer-adapter.ts'),
+    'utf8',
+  );
+  expect(adapter).not.toContain('resolveCompiledPageTag');
+  expect(adapter).not.toContain('__resolvePageTag');
 });
 
-test('resolveCompiledPageTag: no compiled program keeps the path-derived fallback (#1276)', () => {
-  expect(resolveCompiledPageTag({ default: class {} }, 'workspace-records')).toEqual(
-    'workspace-records',
-  );
-  expect(resolveCompiledPageTag({ default: undefined }, 'workspace-records')).toEqual(
-    'workspace-records',
-  );
-  expect(resolveCompiledPageTag(undefined, 'workspace-records')).toEqual('workspace-records');
-});
+test('the emitted entry declares no stream machinery (C09/C10 negative)', () => {
+  const code = renderEntry(buildEntryDescriptor(definePageRoutes));
 
-test('resolveCompiledPageTag: malformed program tags keep the path-derived fallback (#1276)', () => {
-  // Not a custom-element tag (no hyphen) or not a string at all: never let a
-  // malformed program tag reach the registration/render call sites.
-  expect(
-    resolveCompiledPageTag({ default: { __partProgram: { tag: 'nohyphen' } } }, 'x-page'),
-  ).toEqual('x-page');
-  expect(resolveCompiledPageTag({ default: { __partProgram: { tag: 42 } } }, 'x-page')).toEqual(
-    'x-page',
-  );
-});
-
-test('the generated entry imports the one compiled tag resolver and never forks its call sites', () => {
-  const entry = renderEntry(buildEntryDescriptor(definePageRoutes));
-  expect(entry).toContain(
-    "import { resolveCompiledPageTag as __resolvePageTag } from '@openelement/router/server-runtime'",
-  );
-  // Registration, handler and routeInfo all use one canonical
-  // `__resolvePageTag(module, fallback)` expression.
-  expect(entry).toContain(`let __tag = ${RESOLUTION_EXPR}`);
-  expect(entry).toContain(
-    `__registerSsrComponent(${RESOLUTION_EXPR}, $pageWorkspaceRecords.default)`,
-  );
+  expect(code).not.toContain('__assertStreamRoute');
+  expect(code).not.toContain('__streamManifests');
+  expect(code).not.toContain('__createStreamPageShell');
 });

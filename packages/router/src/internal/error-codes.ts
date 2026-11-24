@@ -324,19 +324,6 @@ export const StreamErrorCode = {
   DEFERRED_TIMEOUT: 'OE_STREAM_DEFERRED_TIMEOUT',
   /** A resolved deferred range serializes past the payload bound. */
   RANGE_BOUND: 'OE_STREAM_RANGE_BOUND',
-  /** The route, its build manifest, and its compiled Part Program disagree. */
-  ROUTE_PROGRAM_MISMATCH: 'OE_STREAM_ROUTE_PROGRAM_MISMATCH',
-} as const;
-
-/**
- * Stable codes for the dispatch-table startup guards
- * (`vite/internal/server-runtime/route-dispatch.ts`). Phase `ssr`: these
- * reject a route whose compiled shape contradicts its renderer or its build
- * manifest while the generated entry wires its dispatch table.
- */
-export const DispatchErrorCode = {
-  /** A stream route's literal declaration has no matching build manifest/program. */
-  STREAM_DECLARATION_MISMATCH: 'OE_DISPATCH_STREAM_DECLARATION',
 } as const;
 
 /**

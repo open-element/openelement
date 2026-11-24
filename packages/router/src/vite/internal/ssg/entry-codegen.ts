@@ -13,7 +13,7 @@
  */
 
 import type { PageRouteDecl, RendererDecl } from '@openelement/protocol/ssg';
-import { isFunctionPage, pageKindOf } from './page-classification.ts';
+import { isFunctionPage } from './page-classification.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
 import {
   documentWrapOptionsLines,
@@ -220,88 +220,47 @@ function renderRouteContentLines(
 function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitContext): void {
   const { isAction, matchingRenderers, docConfig, pathLiteral, headExtrasExpr } = ctx;
 
-  if (!isAction && ctx.route.streamManifest) {
-    const manifest = `__streamManifests[${pathLiteral}]`;
-    lines.push(`    const __records = __streamFields(__data, ${manifest});`);
-    lines.push(`    const __frontData = { ...__data };`);
-    lines.push(`    for (const __record of __records) delete __frontData[__record.entry.field];`);
-    lines.push(`    await Promise.resolve();`);
-    lines.push(`    for (const __record of __records) if (__record.failed) throw __record.error;`);
-    requestTimePageContextLines(lines, {
-      dataExpr: '__frontData',
-      actionDataExpr: 'undefined',
-      indent: '    ',
-      ...(ctx.routeStyleLinksSeed ? { routePathExpr: pathLiteral } : {}),
-    });
-    // Per-property og dedup: the streamed document serializes the route's
-    // __doc.meta, so the baked site string drops the og tags it owns.
-    lines.push(...routeHeadExtrasStatements(headExtrasExpr, '    '));
-    lines.push(`    const __token = crypto.randomUUID();`);
-    lines.push(`    const __instance = crypto.randomUUID();`);
-    lines.push(
-      `    const __executor = await __createStreamPageShell(${pathLiteral}, ${ctx.route.varName}, __pageProps(${ctx.route.varName}, __pageContext), __instance, __token, __documentStyles);`,
-    );
-    lines.push(
-      `    if (__resolveLayout(__routeMetaValue)) throw new Error('stream route ' + ${pathLiteral} + ' resolved a compiled layout, and a streamed document is flushed in parts so it cannot be wrapped: build the project with layout: false and no layouts entries, or leave streaming off for this route.');`,
-    );
-    lines.push(`    const __document = documentStreamParts({`);
-    lines.push(`      streamBootstrap: __streamBrowserBootstrap,`);
-    for (const optionLine of documentWrapOptionsLines({
-      titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
-      langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
-      headExtrasExpr: '__routeHeadExtras',
-      allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
-      cspNonce: true,
-    }))
-      lines.push(`      ${optionLine}`);
-    lines.push(`    });`);
-    lines.push(`    for (const __record of __records) if (__record.failed) throw __record.error;`);
-    lines.push(`    c.header('Cache-Control', 'private, no-cache');`);
-    lines.push(
-      `    const __body = __streamBody({ scope: __streamScope, route: ${pathLiteral}, manifest: ${manifest}, executor: __executor, records: __records, document: __document, token: __token });`,
-    );
-    lines.push(`    __headerChannel.commit();`);
-    lines.push(`    return c.body(__body, 200, { 'Content-Type': 'text/html; charset=UTF-8' });`);
-  } else {
-    // #1326: one request-scoped context object feeds both the props projector
-    // and the resolved-Document seam.
-    requestTimePageContextLines(lines, {
-      dataExpr: '__data',
-      actionDataExpr: isAction ? '__actionData' : 'undefined',
-      indent: '    ',
-      ...(ctx.routeStyleLinksSeed ? { routePathExpr: pathLiteral } : {}),
-    });
-    // Per-property og dedup: this wrap serializes the route's __doc.meta, so
-    // the baked site string drops the og tags the route declares.
-    lines.push(...routeHeadExtrasStatements(headExtrasExpr, '    '));
+  // The streamed-page channel retired with the class lane (owner decision
+  // 2026-11-22): no emitted route carries a stream manifest. Alpha18 owns
+  // the replacement carrier.
+  // #1326: one request-scoped context object feeds both the props projector
+  // and the resolved-Document seam.
+  requestTimePageContextLines(lines, {
+    dataExpr: '__data',
+    actionDataExpr: isAction ? '__actionData' : 'undefined',
+    indent: '    ',
+    ...(ctx.routeStyleLinksSeed ? { routePathExpr: pathLiteral } : {}),
+  });
+  // Per-property og dedup: this wrap serializes the route's __doc.meta, so
+  // the baked site string drops the og tags the route declares.
+  lines.push(...routeHeadExtrasStatements(headExtrasExpr, '    '));
 
-    renderRouteContentLines(lines, ctx, `__pageProps(${ctx.route.varName}, __pageContext)`, '    ');
-    lines.push('');
-    if (!isAction) {
-      // #943: successful GET pages relax no-store to private,no-cache so the UA
-      // can bfcache/scroll-restore them. The
-      // override is emitted only AFTER the shell render succeeded: a
-      // redirect/notFound()/throw out of render lands in the catch below, and
-      // every error/redirect response (and every POST response) keeps the
-      // no-store baseline.
-      lines.push(`    c.header('Cache-Control', 'private, no-cache');`);
-    }
-    // #951/#1471: the island client script rides the resolved document's
-    // clientScripts descriptors (the dev URL, or the request-time/SSG src
-    // handed in through the setter seam), so a CSP nonce reaches it and the
-    // static render pass embeds the same tag at document time.
-    lines.push(`    return c.html(wrapInDocument(content, {`);
-    for (const optionLine of documentWrapOptionsLines({
-      titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
-      langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
-      headExtrasExpr: '__routeHeadExtras',
-      allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
-      cspNonce: true,
-    })) {
-      lines.push(`      ${optionLine}`);
-    }
-    lines.push(`    })${isAction ? ', __actionStatus' : ''})`);
+  renderRouteContentLines(lines, ctx, `__pageProps(${ctx.route.varName}, __pageContext)`, '    ');
+  lines.push('');
+  if (!isAction) {
+    // #943: successful GET pages relax no-store to private,no-cache so the UA
+    // can bfcache/scroll-restore them. The
+    // override is emitted only AFTER the shell render succeeded: a
+    // redirect/notFound()/throw out of render lands in the catch below, and
+    // every error/redirect response (and every POST response) keeps the
+    // no-store baseline.
+    lines.push(`    c.header('Cache-Control', 'private, no-cache');`);
   }
+  // #951/#1471: the island client script rides the resolved document's
+  // clientScripts descriptors (the dev URL, or the request-time/SSG src
+  // handed in through the setter seam), so a CSP nonce reaches it and the
+  // static render pass embeds the same tag at document time.
+  lines.push(`    return c.html(wrapInDocument(content, {`);
+  for (const optionLine of documentWrapOptionsLines({
+    titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
+    langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
+    headExtrasExpr: '__routeHeadExtras',
+    allowHeadExtrasScripts: docConfig.allowHeadExtrasScripts,
+    cspNonce: true,
+  })) {
+    lines.push(`      ${optionLine}`);
+  }
+  lines.push(`    })${isAction ? ', __actionStatus' : ''})`);
 
   lines.push(`  } catch (err) {`);
   if (!isAction && ctx.route.streamManifest) lines.push(`    __streamScope?.cancel();`);
@@ -430,9 +389,8 @@ export function renderRouteHandler(
     matchingRenderers: renderers.filter((r) => rendererScopeMatches(route.path, r.scope)),
     docConfig,
     pathLiteral: quoteGeneratedJavaScriptValue(route.path),
-    // M11-2: a generated element page's tag is the compiler-owned build fact
-    // (island tag); the class lane keeps the runtime program-tag resolver.
-    tagNameExpr: pageRouteTagExpr(route.varName, route.tagName, pageKindOf(route)),
+    // C08 (2026-11-24): the tag binding is a build fact for every page kind.
+    tagNameExpr: pageRouteTagExpr(route.varName, route.tagName),
     routeStyleLinksSeed:
       routeDocumentStyleLinks !== undefined && routeDocumentStyleLinks[route.path] !== undefined,
     pageDefExpr: pageDefinitionExpr(route.varName),

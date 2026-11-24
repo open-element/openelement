@@ -1,74 +1,18 @@
 /**
  * @openelement/router/server-runtime — route dispatch.
  *
- * The generated entry's dispatch-table assembly: the
- * startup stream-route assertions, the per-path page handler table, and the
- * 405 responder the WinterCG route middleware invokes for non-GET/POST page
- * requests. The dispatch seam lives in this real module rather than inside a
- * codegen template string, so it is directly unit-testable (#1470 block e).
+ * The generated entry's dispatch-table assembly: the per-path page handler
+ * table, and the 405 responder the WinterCG route middleware invokes for
+ * non-GET/POST page requests. The dispatch seam lives in this real module
+ * rather than inside a codegen template string, so it is directly
+ * unit-testable (#1470 block e). The startup stream-route assertion retired
+ * with the class lane's compiled stream channel (C09, 2026-11-24): no
+ * emitted page kind carries a stream manifest, and the Part-Program read
+ * the guard depended on is gone with the class compiler.
  */
 
 import { ACTION_FETCH_HEADER } from './action-runtime.ts';
 import { boundRequestScope } from './wintercg.ts';
-import { DispatchErrorCode, serveError } from '../../../internal/error-codes.ts';
-import type { PageRouteModule, StreamRouteManifestLike } from './types.ts';
-
-/**
- * Startup guard for a page route under the compiled stream runtime: the
- * route's literal stream declaration must match the build-time manifest
- * (field list, program tag, program version) and the module must carry the
- * compiled Part Program the manifest was derived from. Moved verbatim from
- * the emitted `__assertStreamRoute` body.
- */
-export function assertCompiledStreamRoute(
-  module: unknown,
-  route: string,
-  file: string,
-  manifest: StreamRouteManifestLike | undefined,
-): void {
-  const stream = readStreamIntent(module);
-  if (stream === undefined && manifest === undefined) return;
-  const defer = (stream as { defer?: unknown[] } | undefined)?.defer;
-  const expected = manifest?.fields.map((field) => field.field);
-  const program = readPartProgram(module);
-  // Key-order-safe manifest compare (M-R4): the defer list is an authored
-  // SET of deferred fields, and the manifest projects it in program order —
-  // two orders of the same set must not trip STREAM_DECLARATION_MISMATCH.
-  // Sorted copies (never in-place: both arrays are caller-owned).
-  const sortedDefer = Array.isArray(defer) ? [...defer].sort() : defer;
-  const sortedExpected = Array.isArray(expected) ? [...expected].sort() : expected;
-  if (
-    !manifest ||
-    !Array.isArray(defer) ||
-    JSON.stringify(sortedDefer) !== JSON.stringify(sortedExpected) ||
-    !program ||
-    program.version !== manifest.program.version ||
-    program.tag !== manifest.program.tag
-  ) {
-    throw serveError(
-      DispatchErrorCode.STREAM_DECLARATION_MISMATCH,
-      '[openElement] stream route ' +
-        route +
-        ', field ' +
-        (defer?.[0] ?? expected?.[0] ?? 'defer') +
-        ' at ' +
-        file +
-        ': stream declaration has no matching compiled route manifest/program. Use a literal descriptor and renderIntent, or disable streaming.',
-    );
-  }
-}
-
-/** `module.default.openElementPage?.renderIntent?.stream` of an opaque route module. */
-function readStreamIntent(module: unknown): unknown {
-  return (module as PageRouteModule | undefined)?.default?.openElementPage?.renderIntent?.stream;
-}
-
-/** The compiled Part Program a page class carries, if any. */
-function readPartProgram(module: unknown): { version: unknown; tag: unknown } | undefined {
-  return (module as PageRouteModule | undefined)?.default?.__partProgram as
-    | { version: unknown; tag: unknown }
-    | undefined;
-}
 
 /**
  * Creates the per-path page handler table the generated GET/POST wiring

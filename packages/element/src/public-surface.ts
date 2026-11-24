@@ -31,12 +31,11 @@ export { collectPublicProps } from './public-runtime.ts';
 // renderToString serializes a compiled class to deterministic HTML for generated
 // server entries; ensurePreHydrationClickCapture installs the pre-upgrade
 // capture that the compiled hydration replays after upgrade (generated client
-// entries call it).
-export {
-  createStreamShellExecutor,
-  ensurePreHydrationClickCapture,
-  renderToString,
-} from './public-runtime.ts';
+// entries call it). The streamed-page shell executor (createStreamShellExecutor
+// and its three types) is DELETED with the class lane's compiled stream
+// channel: its one identity input was `componentClass.__partProgram`, and
+// every consumer retired with renderIntent.stream (2026-11-24).
+export { ensurePreHydrationClickCapture, renderToString } from './public-runtime.ts';
 // alpha15 S lane: the component-stylesheet URL channel the router's generated
 // SSR/SSG entry feeds before rendering (the DSD templates of components whose
 // classes were statically admitted declare the emitted assets as external
@@ -53,11 +52,6 @@ export { __setRequestTimeStyleSheetUrls } from './internal/compiled/server/style
 export { createDocumentStyleResources } from './public-runtime.ts';
 export type { DocumentStyleResources } from './public-runtime.ts';
 export type { RenderToStringOptions } from './public-runtime.ts';
-export type {
-  CreateStreamShellOptions,
-  StreamShellExecutor,
-  StreamShellManifest,
-} from './public-runtime.ts';
 
 // Explicit type-only surface for build adapters (#488).
 export type { SsrAdmissionDecision } from './public-runtime.ts';
