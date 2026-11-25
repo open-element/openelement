@@ -1,10 +1,10 @@
 ---
 title: 'Deploy to Cloudflare'
-lede: 'One build decision picks the Cloudflare target: a pure-static `dist/` uploads to Pages as files, request-time routes deploy to Workers through the Nitro mount.'
+lede: 'One build decision picks the Cloudflare target: a pure-static `dist-public/` uploads to Pages as files, request-time routes deploy to Workers through the Nitro mount.'
 order: 101
 ---
 
-`npm run build` decides the target for you. When it emits no `dist/server/`, the output is a plain file tree — upload it to Cloudflare Pages and no server code is involved. When any route stays request-time (a `'dynamic'` route or an action), the build also emits `dist/server/index.js`: the same `fetch(Request) -> Response` handler that `npm start` runs locally. That is the whole server contract — one handler, deployable to any fetch-native host — so moving from Pages to Workers is a host decision, not a rewrite.
+Run `npm run build`, then upload the verified `dist-public/` to Cloudflare Pages for a static app. When routes or actions run at request time, the build also emits `dist/server/index.js`. Deploy that handler and the public assets to Cloudflare Workers through Nitro.
 
 ## Pure static: Cloudflare Pages
 
@@ -18,19 +18,22 @@ export default definePage(NotFoundPage, {
 });
 ```
 
-That one line is why a starter build emits `dist/server/`: the request-time server renders the page with a real 404 status for unmatched paths, so no static 404 file is written. Delete the `renderIntent` line and the route becomes prerenderable — a build with no other request-time route then produces a pure-static `dist/`:
+That one line is why a starter build emits `dist/server/`: the request-time server renders the page with a real 404 status for unmatched paths, so no static 404 file is written. Delete the `renderIntent` line and the route becomes prerenderable — a build with no other request-time route then produces a pure-static `dist-public/`:
 
 ```bash
 npm run build
-ls dist/
+ls dist-public/
 # 404.html  assets/  index.html
 ```
 
-The build itself confirms the mode (`Pure-static build: removed build-time SSR bundle (dist/server)`), and no `dist/server/` directory exists to leak server code into the upload. Upload the directory as a Pages project:
+Verify the public directory before uploading it.
 
 ```bash
-npx wrangler pages deploy dist
+npx oe publish --check
+npx wrangler pages deploy dist-public
 ```
+
+For Git integration, set the Pages build command to `npm run build && npx oe publish --check` and the build output directory to `dist-public`. The OpenElement website keeps its existing `www/dist` destination. Its Pages build replaces that directory with verified public files after generating search assets, redirects, and the sitemap.
 
 The first deploy creates the project (name it with `--project-name` or let the CLI prompt); later deploys upload new files and the site updates. Pages' static-asset convention serves a top-level `404.html` — with its 404 status — for any path that matches no file, so the styled prerendered 404 is the site's not-found page with zero server code.
 

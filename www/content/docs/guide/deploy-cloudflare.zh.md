@@ -1,10 +1,10 @@
 ---
 title: '部署到 Cloudflare'
-lede: '一个构建决策决定 Cloudflare 目标：纯静态的 `dist/` 以文件形式直传 Pages，请求时路由经 Nitro 挂载部署到 Workers。'
+lede: '一个构建决策决定 Cloudflare 目标：纯静态的 `dist-public/` 以文件形式直传 Pages，请求时路由经 Nitro 挂载部署到 Workers。'
 order: 101
 ---
 
-`npm run build` 会替你决定目标。当它不产出 `dist/server/` 时，产物就是一棵普通文件树——上传到 Cloudflare Pages 即可，完全不涉及服务端代码。当任何路由保持请求时行为（`'dynamic'` 路由或 action）时，构建还会产出 `dist/server/index.js`：与 `npm start` 本地运行的同一个 `fetch(Request) -> Response` 处理器。这就是全部服务器契约——一个处理器，可部署到任何 fetch 原生宿主——因此从 Pages 换到 Workers 是宿主决策，不是重写。
+运行 `npm run build` 后，可以把已经校验的 `dist-public/` 上传到 Cloudflare Pages。应用有请求时路由或 action 时，构建还会生成 `dist/server/index.js`。使用 Nitro 将这个处理器与公开资源部署到 Cloudflare Workers。
 
 ## 纯静态：Cloudflare Pages
 
@@ -18,19 +18,22 @@ export default definePage(NotFoundPage, {
 });
 ```
 
-这一行正是 starter 构建产出 `dist/server/` 的原因：请求时服务器对未匹配路径以真实 404 状态渲染该页，因此不会写出静态 404 文件。删掉 `renderIntent` 一行，该路由即变为可预渲染——没有其它请求时路由的构建随之产出纯静态的 `dist/`：
+这一行正是 starter 构建产出 `dist/server/` 的原因：请求时服务器对未匹配路径以真实 404 状态渲染该页，因此不会写出静态 404 文件。删掉 `renderIntent` 一行，该路由即变为可预渲染——没有其它请求时路由的构建随之产出纯静态的 `dist-public/`：
 
 ```bash
 npm run build
-ls dist/
+ls dist-public/
 # 404.html  assets/  index.html
 ```
 
-构建自身会确认该模式（`Pure-static build: removed build-time SSR bundle (dist/server)`），且不存在会被带进上传的 `dist/server/` 目录。把这个目录作为 Pages 项目上传：
+上传前验证公开目录：
 
 ```bash
-npx wrangler pages deploy dist
+npx oe publish --check
+npx wrangler pages deploy dist-public
 ```
+
+使用 Git 集成时，把 Pages 的构建命令设为 `npm run build && npx oe publish --check`，将构建输出目录设为 `dist-public`。OpenElement 官网的旧配置继续使用 `www/dist`。官网在 Cloudflare Pages 的构建环境中生成搜索、重定向和站点地图后，将这个目录替换为通过校验的公开产物。
 
 首次部署会创建项目（用 `--project-name` 命名，或让 CLI 交互提示）；后续部署上传新文件，站点随之更新。Pages 的静态资源约定会对任何未匹配文件的路径伺服顶层 `404.html`——带 404 状态——因此带样式的预渲染 404 就是站点的 not-found 页，零服务端代码。
 

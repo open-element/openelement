@@ -20,7 +20,7 @@
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 
 import { join, resolve } from 'node:path';
 import { formatJson } from '@openelement/element/build-utils';
@@ -28,6 +28,10 @@ import { PACKAGE_VERSION } from '../repo/project-constants.ts';
 import { VITE_DEV_PIN } from '../repo/deps-vite-check.ts';
 import { NITRO_VERSION } from './nitro-compatibility.ts';
 import { assertPackedTarballsFresh, reservePort, runProcess } from './consumer-packaged-shared.ts';
+import {
+  checkPackagedPublicFiles,
+  checkPublishOutput,
+} from '../../packages/router/src/vite/internal/publish-manifest.ts';
 
 const repoRoot = resolve(import.meta.dirname!, '../..');
 const INSTALL_TIMEOUT_MS = 10 * 60_000;
@@ -212,12 +216,17 @@ export default function PackedCounter() {
   return <p>browser marker</p>;
 }
 `,
+    'app/lib/server-label.ts': `import '@openelement/protocol/server-only';
+
+export const serverLabel = (value: string) => value;
+`,
     'app/routes/live.tsx': `import { basename } from 'node:path';
+import { serverLabel } from '../lib/server-label.ts';
 import { definePage, type LoaderContext } from '@openelement/router';
 import LivePage from '../components/page-live.tsx';
 
 export function loader(ctx: LoaderContext): { x: string } {
-  return { x: basename(new URL(ctx.request.url).searchParams.get('x') ?? '') };
+  return { x: serverLabel(basename(new URL(ctx.request.url).searchParams.get('x') ?? '')) };
 }
 
 export default definePage<{ x: string }>(LivePage, {
@@ -292,20 +301,11 @@ export default function PackedLive(props: { xText: string }) {
     `PASS packed-serve-${runtime} nitro — ${nitroPreset} output built from the packed app`,
   );
 
-  const publicFiles = JSON.parse(
-    readFileSync(join(tmp, 'dist', 'publish-manifest.json'), 'utf8'),
-  ) as { files: { path: string }[] };
-  const actual = readdirSync(join(tmp, '.output-serve', 'public'), {
-    recursive: true,
-    withFileTypes: true,
-  })
-    .filter((entry) => entry.isFile())
-    .map((entry) => resolve(entry.parentPath, entry.name));
-  const expected = publicFiles.files.map(({ path }) => join(tmp, '.output-serve', 'public', path));
-  if (actual.length !== expected.length || expected.some((path) => !actual.includes(path))) {
-    throw new Error('Nitro did not package the manifest-listed public file set.');
-  }
-  console.log(`PASS packed-serve-${runtime} public inventory — ${actual.length} listed files`);
+  const publicOutput = checkPublishOutput(join(tmp, 'dist'));
+  checkPackagedPublicFiles(join(tmp, '.output-serve', 'public'), publicOutput.files);
+  console.log(
+    `PASS packed-serve-${runtime} public inventory — ${publicOutput.files.size} listed files`,
+  );
 
   // Reserve a loopback port with the shared bind-and-close probe.
   const port = await reservePort();
@@ -386,32 +386,49 @@ export default function PackedLive(props: { xText: string }) {
   );
   if (runtime === 'node') {
     const islandPath = join(tmp, 'app', 'islands', 'packed-counter.tsx');
-    const prefix = files['app/islands/packed-counter.tsx']!;
-    const builtin = "import { basename as readMarker } from 'node:path';\n";
-    writeFileSync(
-      join(tmp, 'app', 'islands', 'browser-boundary-helper.ts'),
-      builtin + 'export { readMarker };\n',
-    );
-    for (const importLine of [
-      builtin,
-      "import { readMarker } from './browser-boundary-helper.ts';\n",
+    const islandSource = files['app/islands/packed-counter.tsx']!;
+    const diagnostic = 'OE_CLIENT_BUILD_BROWSER_ENTRY_SERVER_ONLY';
+    const devProbe = `
+      import { createServer } from 'vite';
+      const dev = await createServer({ configLoader: 'native', server: { middlewareMode: true } });
+      try {
+        for (const path of process.argv.slice(1)) await dev.transformRequest(path);
+      } finally {
+        await dev.close();
+      }
+    `;
+    const islandUrl = '/app/islands/packed-counter.tsx';
+    const helperUrl = '/app/lib/server-label.ts';
+    for (const { source, browserRequests } of [
+      {
+        source: "import '@openelement/protocol/server-only';\n" + islandSource,
+        browserRequests: [islandUrl],
+      },
+      {
+        source:
+          "import { serverLabel } from '../lib/server-label.ts';\n" +
+          islandSource.replace('browser marker', "{serverLabel('ordinary marker')}"),
+        browserRequests: [islandUrl, helperUrl],
+      },
     ]) {
-      writeFileSync(
-        islandPath,
-        importLine + prefix.replace('browser marker', "{readMarker('ordinary marker')}"),
-      );
+      writeFileSync(islandPath, source);
       const refused = await run(process.execPath, ['build.mjs'], tmp, {}, BUILD_TIMEOUT_MS);
-      if (
-        refused.success ||
-        !refused.output.includes('OE_CLIENT_BUILD_BROWSER_ENTRY_NODE_BUILTIN')
-      ) {
-        throw new Error(
-          `Packed browser boundary did not reject the island import:\n${refused.output}`,
-        );
+      if (refused.success || !refused.output.includes(diagnostic)) {
+        throw new Error(`Packed build accepted a server-only island import:\n${refused.output}`);
+      }
+      const devRefused = await run(
+        process.execPath,
+        ['--input-type=module', '-e', devProbe, ...browserRequests],
+        tmp,
+        {},
+        BUILD_TIMEOUT_MS,
+      );
+      if (devRefused.success || !devRefused.output.includes(diagnostic)) {
+        throw new Error(`Packed dev accepted a server-only island import:\n${devRefused.output}`);
       }
     }
     console.log(
-      'PASS packed browser boundary — dynamic Node loader allowed, direct and transitive browser imports rejected',
+      'PASS packed browser boundary — marked helper works on the server and is refused by direct and transitive browser imports in build and dev',
     );
   }
 } finally {

@@ -14,7 +14,7 @@ order: 95
 
 `dist-public/` 是独立的公开文件目录。`oe start` 和静态预览会在启动时验证其中的文件与 `dist/publish-manifest.json` 完全一致，并在响应静态 GET 或 HEAD 前检查真实路径和内容。Nitro、Workers 和通用静态宿主在打包前运行 `npx oe publish --check`，只上传 `dist-public/`。应用环境持有 `dist/server/` 及清单。这份清单验证文件是否属于公开集合，应用仍负责内容和授权。[部署指南](/zh/guide/deployment)
 
-浏览器构建和开发服务器的浏览器模块环境拒绝 island 直接或间接引入 `node:*` 内建模块。只有服务端使用的 loader 或路由可以继续使用这些模块。
+浏览器构建和开发服务器的浏览器模块环境拒绝 island 直接或间接引入 `node:*` 内建模块。只有服务端使用的 loader 或路由可以继续使用这些模块。要保护应用自己的服务端模块，请添加同版本的 `@openelement/protocol` 依赖，并在模块中写入 `import '@openelement/protocol/server-only';`。服务端导入和纯类型导入仍可使用。浏览器代码在运行时依赖该模块时，Router 报出 `OE_CLIENT_BUILD_BROWSER_ENTRY_SERVER_ONLY`。
 
 ## 隐式身份验证
 

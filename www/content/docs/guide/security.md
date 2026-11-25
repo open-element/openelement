@@ -14,7 +14,7 @@ Generated action POST handlers ship with a fail-closed same-origin floor: a requ
 
 `dist-public/` is the isolated public file tree. `oe start` and static preview compare the directory with `dist/publish-manifest.json` before listening and check the canonical path and bytes before serving static GET or HEAD. Run `npx oe publish --check` before packaging `dist-public/` for Nitro, Workers, or a generic static host. Keep `dist/server/` and the manifest with the application. The manifest verifies public file membership and integrity. The application owns content safety and authorization. [Deployment guide](/guide/deployment)
 
-Production browser builds and the development browser module environment reject direct and transitive `node:*` imports. Server loaders and routes can use those modules.
+Production browser builds and the development browser module environment reject direct and transitive `node:*` imports. Server loaders and routes can use those modules. To protect an application module, add the matching `@openelement/protocol` dependency and put `import '@openelement/protocol/server-only';` in that module. Server imports and type-only imports remain valid. If browser code reaches the module at runtime, the Router reports `OE_CLIENT_BUILD_BROWSER_ENTRY_SERVER_ONLY`.
 
 ## Ambient authentication
 

@@ -22,6 +22,7 @@
         "./registry-markers": "./src/registry-markers.ts",
         "./render": "./src/render.ts",
         "./runtime": "./src/runtime.ts",
+        "./server-only": "./src/server-only.ts",
         "./signal": "./src/signal.ts",
         "./ssg": "./src/ssg.ts",
         "./stream-frame-policy": "./src/stream-frame-policy.ts",
@@ -494,6 +495,10 @@
             "RuntimeAdapterOptions=type:{fetch:{call:(request:Request,context:union(undefined|{env?:union(Env|undefined);params?:union(Record<string, string>|undefined);platform?:unknown}))=>union(Promise<Response>|Response)};name:string;prerender?:union(undefined|{call:()=>union(AsyncIterable<RuntimePrerenderResult>|Iterable<RuntimePrerenderResult>)})}",
             "RuntimeContext=type:{env?:union(Env|undefined);params?:union(Record<string, string>|undefined);platform?:unknown}"
           ]
+        },
+        "./server-only": {
+          "publicShapeSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "publicSymbols": []
         },
         "./signal": {
           "publicShapeSha256": "9b31fccbd7fd4a0ed6d4daff502e6001ed207bd4480ca404e10a0e373a280ab4",

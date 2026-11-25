@@ -146,3 +146,17 @@ export function checkPublishOutput(outDir: string): { root: string; files: Publi
     });
   }
 }
+
+/** Compare the bytes a host packaged with the build's verified public file set. */
+export function checkPackagedPublicFiles(
+  root: string,
+  publicFiles: PublicFiles,
+  emptyHostControlFile?: string,
+): void {
+  const actual = inventory(root).filter(
+    (file) => file.path !== emptyHostControlFile || file.size !== 0 || publicFiles.has(file.path),
+  );
+  if (serialize(actual) !== serialize([...publicFiles.values()])) {
+    throw new Error(`Packaged public files in ${root} differ from the verified build manifest`);
+  }
+}
