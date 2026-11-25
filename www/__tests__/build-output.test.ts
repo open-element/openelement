@@ -8,6 +8,7 @@
 import { expect, test } from 'vitest';
 
 import { join } from 'node:path';
+import { installCommand } from '../app/data/_generated-install-command.ts';
 import { SITE_BUDGET } from '../site-budget.ts';
 import { PAGEFIND_UI_SUITE_FILES } from '../build-pagefind.ts';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
@@ -20,11 +21,14 @@ import {
 
 const DIST = join(import.meta.dirname ?? '.', '..', 'dist');
 
-test('build output: the landing page includes rendered light-island contents', () => {
-  const html = readFileSync(join(DIST, 'index.html'), 'utf8');
-  expect(html).toContain('<open-cinematic-scroll data-oe-light><span aria-hidden="true">');
-  expect(html).toContain('<open-hero-polish data-oe-light><span aria-hidden="true">');
-  expect(html).toContain('<open-dragon-live-gaze data-oe-light><figure class="stage');
+test('build output: both homepages ship readable code and the canonical install command', () => {
+  for (const route of ['index.html', 'zh/index.html']) {
+    const html = readFileSync(join(DIST, route), 'utf8');
+    expect(html).toContain(`<code>${installCommand}</code>`);
+    expect(html).toMatch(/<open-code-block\b/);
+    expect(html).toContain('open-counter.tsx');
+    expect(html).toMatch(/<open-counter [^>]*><template shadowrootmode="open"/);
+  }
 });
 
 test.each([
@@ -149,9 +153,6 @@ test('build output: artifact scan — no vendored highlighter, no CDN font refer
 
   const islandsDir = join(DIST, 'client', 'islands');
   const cssTextMarkers: Array<[string, string]> = [
-    // dragon-live-gaze's sheet lives in client/assets/ — a hit means the
-    // extraction path regressed and the sheet re-inlined into the chunk.
-    ['dragon-enter', 'extracted dragon-live-gaze sheet'],
     // The DSD static-styles marker is the server serializer's write; an island
     // copy would be a second writer. A styled generated shadow island's CLAIM
     // legitimately READS the marked prefix it skips (`hasAttribute(...)`), so
@@ -430,10 +431,8 @@ test('build output: the element runtime ships as the one shared chunk islands ne
   ).toBe('complete');
   expect(graph.islands.map(({ tag }) => tag).sort()).toEqual([
     'open-button',
-    'open-cinematic-scroll',
     'open-code-block',
-    'open-dragon-live-gaze',
-    'open-hero-polish',
+    'open-counter',
     'open-page-rail',
     'open-search',
     'open-theme-toggle',

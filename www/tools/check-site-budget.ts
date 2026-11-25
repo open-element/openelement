@@ -4,9 +4,8 @@
  * The enforced SLO (www/site-budget.ts `SITE_BUDGET`) covers island and client
  * JS only. The 2026-10-18 audit showed where the rest of a page load actually
  * goes — CSS is the largest single bucket (~43 KB gzipped per page, two
- * stylesheets), the generated /reference page is 15x the median HTML, and the
- * home page's off-origin hero media is ~10 MB — none of which had a number the
- * build could compare against.
+ * stylesheets), the generated /reference page is 15x the median HTML, and
+ * the build had no baseline for page media.
  *
  * This tool measures the built tree and prints actual vs
  * `SITE_BUDGET_REPORT_ONLY`. It exits 0 by default: the figures are single
@@ -20,9 +19,7 @@
  *   - a page's CSS is every `rel=stylesheet` it links, gzipped and summed;
  *   - fonts are every font binary the artifact ships, raw (woff2 is already
  *     compressed, so gzip would only report container overhead);
- *   - media counts only what a built page references; the hero media lives on
- *     assets.openelement.org and is reported from the pinned baseline, never
- *     fetched here.
+ *   - media counts only same-origin files referenced by built pages.
  *
  * Usage:
  *   node www/tools/check-site-budget.ts [--dist www/dist] [--strict] [--json out.json]
@@ -45,7 +42,7 @@ export interface SiteBudgetMetrics {
   cssBytes: number;
   /** Raw bytes of every font file in the artifact. */
   fontBytes: number;
-  /** Raw bytes of media referenced by built pages (off-origin hero excluded). */
+  /** Raw bytes of same-origin media referenced by built pages. */
   mediaBytes: number;
 }
 

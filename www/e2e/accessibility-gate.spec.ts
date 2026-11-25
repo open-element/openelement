@@ -10,46 +10,11 @@
  * so an exclusion is a reviewed decision, not a shrug.
  */
 import { AxeBuilder } from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { observeWithTimeoutClassification } from './helpers.ts';
-import { HOME_AXE_EXCLUSIONS } from './axe-home-exclusions.ts';
 
 /** Routes the gate scans: one per page template, plus the zh variant. */
 const SCANNED_ROUTES = ['/', '/guide/getting-started/', '/docs/', '/reference/'] as const;
-
-/**
- * Node exclusions per route (selector under the route page), each with the
- * reason the page layer cannot own the finding. Kept minimal by design: an
- * exclusion here is a standing accessibility decision.
- *
- * `axe-home-exclusions.ts` shares the policy with the English and Chinese
- * coverage sweep. The excluded contrast nodes use animated entry opacity or
- * the flood scene's pseudo-element backdrop, which axe cannot composite.
- * `cinematic-home.spec.ts` measures the settled flood scene's painted contrast.
- */
-const EXCLUSIONS: Partial<Record<(typeof SCANNED_ROUTES)[number], string[]>> = {
-  '/': [...HOME_AXE_EXCLUSIONS],
-};
-
-/**
- * Scroll the route end to end, then settle: the homepage scenes ride
- * scroll-timeline entry animations (animation-fill-mode: both), so a static
- * top-of-page snapshot would read sub-fold copy at its entry opacity instead
- * of the final state a reader sees. Walking the page pushes every view()
- * timeline to its end; the pause gives the time-based hero reveals their
- * (≤ ~3s) completion window.
- */
-async function scrollThroughAndSettle(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    const step = globalThis.innerHeight / 2;
-    for (let y = 0; y <= document.body.scrollHeight; y += step) {
-      window.scrollTo(0, y);
-      await new Promise((resolve) => setTimeout(resolve, 60));
-    }
-    window.scrollTo(0, 0);
-  });
-  await page.waitForTimeout(3_000);
-}
 
 test.describe('Accessibility gate (axe)', () => {
   for (const route of SCANNED_ROUTES) {
@@ -65,13 +30,9 @@ test.describe('Accessibility gate (axe)', () => {
       // timeout, never an assertion failure (FR-05C).
       await observeWithTimeoutClassification({ phase: 'axe-gate', url: route }, async () => {
         await page.waitForLoadState('networkidle');
-        await scrollThroughAndSettle(page);
       });
 
-      let builder = new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']);
-      for (const selector of EXCLUSIONS[route] ?? []) {
-        builder = builder.exclude(selector);
-      }
+      const builder = new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']);
       const { violations } = await observeWithTimeoutClassification(
         { phase: 'axe-gate', url: route },
         () => builder.analyze(),
@@ -93,7 +54,6 @@ test.describe('Accessibility gate (axe)', () => {
   test('the zh article template passes the same scan', async ({ page }) => {
     await page.goto('/zh/guide/getting-started/');
     await page.waitForLoadState('networkidle');
-    await scrollThroughAndSettle(page);
     const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
     const report = violations.map((violation) => ({
       id: violation.id,

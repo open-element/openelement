@@ -12,8 +12,7 @@ const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const SITE_ISLANDS_DIR = join(REPO_ROOT, 'www', 'app', 'islands');
 
 const REQUIRED_LOCAL_ISLANDS = {
-  'open-cinematic-scroll': { hydrate: 'load', ssr: true },
-  'open-dragon-live-gaze': { hydrate: 'idle', ssr: true },
+  'open-counter': { hydrate: 'visible', ssr: true },
   'open-search': { hydrate: 'load', ssr: true },
 } as const;
 

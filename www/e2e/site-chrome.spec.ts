@@ -21,8 +21,8 @@ import { expect, test } from '@playwright/test';
 const DESKTOP = { width: 1280, height: 900 };
 const MOBILE = { width: 390, height: 844 };
 
-const FOOTER_COLUMNS_EN = ['Product', 'Resources', 'Company', 'Legal'] as const;
-const FOOTER_COLUMNS_ZH = ['产品', '资源', '项目', '法律'] as const;
+const FOOTER_COLUMNS_EN = ['Framework', 'Documentation', 'Project', 'Legal'] as const;
+const FOOTER_COLUMNS_ZH = ['框架', '文档', '项目', '法律'] as const;
 
 test.describe('Site chrome: docs sidebar', () => {
   test('guide pages render the filtered section sidebar with the active page marked', async ({
@@ -196,23 +196,25 @@ test.describe('Site chrome: footer', () => {
       }
       // Column link targets resolve to real routes; externals are explicit.
       await expect(
-        footer.getByRole('navigation', { name: 'Resources' }).getByRole('link', { name: 'Guide' }),
+        footer
+          .getByRole('navigation', { name: 'Documentation' })
+          .getByRole('link', { name: 'Guide' }),
       ).toHaveAttribute('href', '/guide/getting-started/');
       // The footer's API entry points are explicit: the reference table and the
       // API-routes guide are different destinations (they used to share the
       // bare label "API", which disagreed with the header's /reference entry).
       await expect(
         footer
-          .getByRole('navigation', { name: 'Resources' })
+          .getByRole('navigation', { name: 'Documentation' })
           .getByRole('link', { name: 'API Reference' }),
       ).toHaveAttribute('href', '/reference/');
       await expect(
         footer
-          .getByRole('navigation', { name: 'Resources' })
+          .getByRole('navigation', { name: 'Documentation' })
           .getByRole('link', { name: 'API Routes' }),
       ).toHaveAttribute('href', '/guide/api/');
       await expect(
-        footer.getByRole('navigation', { name: 'Company' }).getByRole('link', { name: 'GitHub' }),
+        footer.getByRole('navigation', { name: 'Project' }).getByRole('link', { name: 'GitHub' }),
       ).toHaveAttribute('href', 'https://github.com/open-element/openelement');
       await expect(
         footer.getByRole('navigation', { name: 'Legal' }).getByRole('link', {
@@ -233,11 +235,14 @@ test.describe('Site chrome: footer', () => {
       await expect(footer.getByRole('navigation', { name: column })).toBeVisible();
     }
     await expect(
-      footer.getByRole('navigation', { name: '资源' }).getByRole('link', { name: '指南' }),
+      footer.getByRole('navigation', { name: '文档' }).getByRole('link', { name: '指南' }),
     ).toHaveAttribute('href', '/zh/guide/getting-started/');
     await expect(
       footer.getByRole('navigation', { name: '项目' }).getByRole('link', { name: '路线图' }),
     ).toHaveAttribute('href', '/zh/roadmap/');
+    await expect(
+      footer.getByRole('navigation', { name: '项目' }).getByRole('link', { name: '参与贡献' }),
+    ).toHaveAttribute('href', '/zh/contributing/');
   });
 
   test('mobile viewports keep the full footer chrome', async ({ page }) => {

@@ -90,9 +90,9 @@ function Layout(props: {
   // captured by the derived nodes below.
   const chrome = layoutChromeStrings(props.locale);
   const searchChrome = searchChromeStrings(props.locale);
-  const product = footerColumn(props.locale, props.locales, 'product');
-  const resources = footerColumn(props.locale, props.locales, 'resources');
-  const company = footerColumn(props.locale, props.locales, 'company');
+  const framework = footerColumn(props.locale, props.locales, 'framework');
+  const docs = footerColumn(props.locale, props.locales, 'docs');
+  const project = footerColumn(props.locale, props.locales, 'project');
   const legal = footerColumn(props.locale, props.locales, 'legal');
   const sidebar = buildSidebarRows(navSections, props.currentPath, props.locale, props.locales);
 
@@ -127,12 +127,12 @@ function Layout(props: {
   const searchPlaceholder = computed(() => searchChrome.placeholder);
   const searchResultsLabel = computed(() => searchChrome.resultsLabel);
   const searchEmptyMessage = computed(() => searchChrome.emptyMessage);
-  const footerProductLabel = computed(() => product.label);
-  const footerProductLinks = computed((): FooterLink[] => product.links);
-  const footerResourcesLabel = computed(() => resources.label);
-  const footerResourcesLinks = computed((): FooterLink[] => resources.links);
-  const footerCompanyLabel = computed(() => company.label);
-  const footerCompanyLinks = computed((): FooterLink[] => company.links);
+  const footerFrameworkLabel = computed(() => framework.label);
+  const footerFrameworkLinks = computed((): FooterLink[] => framework.links);
+  const footerDocsLabel = computed(() => docs.label);
+  const footerDocsLinks = computed((): FooterLink[] => docs.links);
+  const footerProjectLabel = computed(() => project.label);
+  const footerProjectLinks = computed((): FooterLink[] => project.links);
   const footerLegalLabel = computed(() => legal.label);
   const footerLegalLinks = computed((): FooterLink[] => legal.links);
 
@@ -149,29 +149,32 @@ function Layout(props: {
         class='sticky top-0 z-[100] border-b border-border bg-(--nav-bg) backdrop-blur-[18px] backdrop-saturate-150 transition-[background,border-color,box-shadow,padding] duration-[320ms] ease-out print:hidden!'
         data-pagefind-ignore
       >
-        <div class='mx-auto flex min-h-(--nav-height) items-center gap-1 px-3 min-[481px]:gap-2 min-[481px]:px-4 min-[901px]:gap-3 min-[1121px]:gap-6 min-[1121px]:px-[clamp(1.25rem,3.5vw,2.25rem)]'>
+        <div class='oe-header-inner mx-auto flex w-full max-w-[1312px] min-h-(--nav-height) items-center gap-1 px-3 min-[481px]:gap-2 min-[481px]:px-4 min-[901px]:gap-3 min-[1121px]:gap-6 min-[1121px]:px-[clamp(1.25rem,3.5vw,2.25rem)]'>
           <a
-            class='group inline-flex min-h-10 w-13 min-w-[52px] max-w-[52px] shrink-0 items-center gap-3 bg-transparent text-(length:--text-2xl) font-extrabold tracking-normal text-foreground no-underline whitespace-nowrap focus-visible:rounded-lg focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[3px]'
+            class='group inline-flex min-h-10 w-fit shrink-0 items-center gap-2 bg-transparent text-(length:--text-sm) font-extrabold tracking-[-0.045em] text-foreground no-underline whitespace-nowrap focus-visible:rounded-lg focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[3px]'
             href={homeHrefCanonical.value}
             aria-label={props.siteName}
           >
             <span
-              class='inline-flex h-12 w-12 max-w-full items-center justify-center self-center font-mono text-(length:--text-xs) leading-none font-extrabold tracking-[-0.09em] text-foreground whitespace-nowrap transition-[transform] [view-transition-name:open-brand-mark] group-hover:-translate-y-px'
+              class='inline-flex h-9 w-9 shrink-0 items-center justify-center self-center rounded-md border border-border font-mono text-(length:--text-xs) leading-none font-extrabold tracking-[-0.09em] text-foreground whitespace-nowrap transition-[transform] [view-transition-name:open-brand-mark] group-hover:-translate-y-px'
               aria-hidden='true'
             >
-              {'<open'}
-              <span class='text-primary'>/</span>
+              {'<'}
+              <span class='font-mono text-primary'>/</span>
               {'>'}
+            </span>
+            <span class='hidden min-[521px]:inline' aria-hidden='true'>
+              {props.siteName}
             </span>
           </a>
           <nav
-            class='mx-auto hidden w-fit max-w-fit min-w-0 flex-1 justify-center gap-3 rounded-full border border-[color-mix(in_srgb,var(--color-border)_78%,var(--color-primary))] bg-popover/68 p-1 shadow-[inset_0_1px_0_var(--edge-highlight)] min-[1041px]:flex min-[1121px]:gap-1'
+            class='hidden items-center justify-center gap-1 min-[1041px]:flex'
             aria-label={primaryNavLabel.value}
           >
             {headerNavItems.value.map((link) => (
               <a
                 key={link.key}
-                class='rounded-full px-4 py-2 font-mono text-(length:--text-xs) tracking-[0.02em] font-medium text-(--nav-link-color) no-underline transition-[color,background,transform] duration-200 ease-out hover:-translate-y-px hover:bg-primary/10 hover:text-(--nav-link-hover) aria-[current=page]:bg-[color-mix(in_srgb,var(--color-primary)_18%,var(--color-popover))] aria-[current=page]:font-extrabold aria-[current=page]:text-foreground aria-[current=page]:shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-primary)_44%,transparent)]'
+                class='rounded-md px-4 py-2 font-mono text-(length:--text-xs) tracking-[0.02em] font-medium text-(--nav-link-color) no-underline transition-[color,background,transform] duration-200 ease-out hover:-translate-y-px hover:bg-primary/10 hover:text-(--nav-link-hover) aria-[current=page]:bg-[color-mix(in_srgb,var(--color-primary)_18%,var(--color-popover))] aria-[current=page]:font-extrabold aria-[current=page]:text-foreground aria-[current=page]:shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-primary)_44%,transparent)]'
                 href={link.href}
                 aria-current={link.current}
                 rel='noopener noreferrer'
@@ -315,11 +318,11 @@ function Layout(props: {
       </div>
       <footer class='border-t border-border bg-popover/58 print:hidden!' data-pagefind-ignore>
         <div class='mx-auto grid max-w-(--site-container-wide) grid-cols-2 gap-8 px-4 py-12 min-[901px]:grid-cols-4 min-[901px]:px-8 min-[901px]:py-16'>
-          <nav aria-label={footerProductLabel.value}>
+          <nav aria-label={footerFrameworkLabel.value}>
             <span class='mb-4 block text-(length:--font-size-button) font-semibold text-foreground'>
-              {footerProductLabel.value}
+              {footerFrameworkLabel.value}
             </span>
-            {footerProductLinks.value.map((link) => (
+            {footerFrameworkLinks.value.map((link) => (
               <a
                 key={link.key}
                 class='block py-1 text-(length:--font-size-body-sm) text-muted-foreground no-underline transition-[color] duration-150 ease-[ease] hover:text-foreground'
@@ -330,11 +333,11 @@ function Layout(props: {
               </a>
             ))}
           </nav>
-          <nav aria-label={footerResourcesLabel.value}>
+          <nav aria-label={footerDocsLabel.value}>
             <span class='mb-4 block text-(length:--font-size-button) font-semibold text-foreground'>
-              {footerResourcesLabel.value}
+              {footerDocsLabel.value}
             </span>
-            {footerResourcesLinks.value.map((link) => (
+            {footerDocsLinks.value.map((link) => (
               <a
                 key={link.key}
                 class='block py-1 text-(length:--font-size-body-sm) text-muted-foreground no-underline transition-[color] duration-150 ease-[ease] hover:text-foreground'
@@ -345,11 +348,11 @@ function Layout(props: {
               </a>
             ))}
           </nav>
-          <nav aria-label={footerCompanyLabel.value}>
+          <nav aria-label={footerProjectLabel.value}>
             <span class='mb-4 block text-(length:--font-size-button) font-semibold text-foreground'>
-              {footerCompanyLabel.value}
+              {footerProjectLabel.value}
             </span>
-            {footerCompanyLinks.value.map((link) => (
+            {footerProjectLinks.value.map((link) => (
               <a
                 key={link.key}
                 class='block py-1 text-(length:--font-size-body-sm) text-muted-foreground no-underline transition-[color] duration-150 ease-[ease] hover:text-foreground'

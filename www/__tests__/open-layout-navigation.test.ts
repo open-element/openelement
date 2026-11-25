@@ -183,24 +183,26 @@ test('decorateHeaderNav marks the current section and never external links', () 
 });
 
 test('footerColumn restores the four-column link structure with localized targets', () => {
-  const product = footerColumn('en', ['en', 'zh'], 'product');
-  expect(product.label).toEqual('Product');
+  const product = footerColumn('en', ['en', 'zh'], 'framework');
+  expect(product.label).toEqual('Framework');
   expect(product.links.map((link) => link.href)).toEqual([
     '/guide/core-concepts/',
     '/architecture/design-system/',
     '/architecture/',
     '/architecture/dsd/',
   ]);
-  const zhProduct = footerColumn('zh', ['en', 'zh'], 'product');
-  expect(zhProduct.label).toEqual('产品');
+  const zhProduct = footerColumn('zh', ['en', 'zh'], 'framework');
+  expect(zhProduct.label).toEqual('框架');
   expect(zhProduct.links.every((link) => link.href.startsWith('/zh/'))).toBeTruthy();
-  const company = footerColumn('en', ['en', 'zh'], 'company');
-  const github = company.links.find((link) => link.label === 'GitHub');
+  const project = footerColumn('en', ['en', 'zh'], 'project');
+  const github = project.links.find((link) => link.label === 'GitHub');
   expect(github?.href).toEqual('https://github.com/open-element/openelement');
   expect(github?.rel).toEqual('noopener noreferrer');
+  expect(project.label).toBe('Project');
+  expect(project.links.find((link) => link.label === 'Contributing')?.href).toBe('/contributing/');
   const legal = footerColumn('zh', ['en', 'zh'], 'legal');
   expect(legal.label).toEqual('法律');
-  expect(legal.links.map((link) => link.label)).toEqual(['MIT 许可证', '参与贡献']);
+  expect(legal.links.map((link) => link.label)).toEqual(['MIT 许可证']);
 });
 
 test('layoutChromeStrings carries the bilingual shell chrome copy', () => {

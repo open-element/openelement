@@ -93,14 +93,6 @@ html[data-theme="light"],
   --site-container: 70rem; /* 1120px */
   --site-container-wide: 77.5rem; /* 1240px */
   --site-container-reading: 47.5rem; /* 760px */
-  /* Cinematic hero palette: the homepage hero is always dark, independent of
-     the site theme. Defined once here (this layer) so components never
-     carry raw hex literals (site theme-token gate). */
-  --hero-ink: #000;
-  --hero-paper: #f4f1ea;
-  --hero-gold: #e3cf9f;
-  --hero-gold-muted: #b9ad93;
-  --hero-gold-line: #d8c49a;
   /* Theme-invariant inks the linked authored layer (www/site-chrome.css)
      consumes by name. That sheet is scanned by the site theme-token gate, so
      its bare palette citations live HERE, in the site alias layer, never at
@@ -159,13 +151,13 @@ body {
 open-code-block pre {
   max-width: 100%;
   margin: 0;
-  padding: calc(var(--spacing) * 4);
-  border: 0.5px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  padding: var(--code-block-padding, calc(var(--spacing) * 4));
+  border: var(--code-block-border, 0.5px solid var(--color-border));
+  border-radius: var(--code-block-radius, var(--radius-lg));
   background: var(--surface-code);
   color: var(--surface-code-foreground);
   overflow-x: auto;
-  font-size: var(--text-sm);
+  font-size: var(--code-block-font-size, var(--text-sm));
   line-height: 1.6;
 }
 /* Build-time syntax highlighting palette (www/lib/markdown.ts, issue #1552).

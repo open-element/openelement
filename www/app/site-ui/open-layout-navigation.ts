@@ -227,7 +227,7 @@ export interface FooterColumnModel {
   links: FooterLink[];
 }
 
-export type FooterColumnId = 'product' | 'resources' | 'company' | 'legal';
+export type FooterColumnId = 'framework' | 'docs' | 'project' | 'legal';
 
 const EXTERNAL_REL = 'noopener noreferrer';
 
@@ -335,32 +335,32 @@ interface FooterColumnSource {
 }
 
 const FOOTER_COLUMNS: Record<FooterColumnId, FooterColumnSource> = {
-  product: {
-    labels: { en: 'Product', zh: '产品' },
+  framework: {
+    labels: { en: 'Framework', zh: '框架' },
     links: [
-      { path: '/guide/core-concepts', en: 'Elements', zh: '元素' },
-      { path: '/architecture/design-system', en: 'UI', zh: '设计体系' },
-      { path: '/architecture', en: 'Framework', zh: '框架' },
-      { path: '/architecture/dsd', en: 'Protocols', zh: '协议' },
+      { path: '/guide/core-concepts', en: 'Core concepts', zh: '核心概念' },
+      { path: '/architecture/design-system', en: 'Design system', zh: '设计体系' },
+      { path: '/architecture', en: 'Architecture', zh: '架构' },
+      { path: '/architecture/dsd', en: 'Declarative Shadow DOM', zh: '声明式 Shadow DOM' },
     ],
   },
-  resources: {
-    labels: { en: 'Resources', zh: '资源' },
+  docs: {
+    labels: { en: 'Documentation', zh: '文档' },
     links: [
       { path: '/guide/getting-started', en: 'Guide', zh: '指南' },
       { path: '/reference', en: 'API Reference', zh: 'API 参考' },
       { path: '/guide/api', en: 'API Routes', zh: 'API 路由' },
       { path: '/errors', en: 'Error Codes', zh: '错误码' },
-      { path: '/architecture', en: 'Architecture', zh: '架构' },
-      { path: '/blog', en: 'Blog', zh: '博客' },
     ],
   },
-  company: {
-    labels: { en: 'Company', zh: '项目' },
+  project: {
+    labels: { en: 'Project', zh: '项目' },
     links: [
       { path: REPOSITORY_URL, en: 'GitHub', zh: 'GitHub' },
       { path: '/roadmap', en: 'Roadmap', zh: '路线图' },
       { path: '/changelog', en: 'Changelog', zh: '更新日志' },
+      { path: '/blog', en: 'Blog', zh: '博客' },
+      { path: '/contributing', en: 'Contributing', zh: '参与贡献' },
     ],
   },
   legal: {
@@ -371,7 +371,6 @@ const FOOTER_COLUMNS: Record<FooterColumnId, FooterColumnSource> = {
         en: 'MIT License',
         zh: 'MIT 许可证',
       },
-      { path: '/contributing', en: 'Contributing', zh: '参与贡献' },
     ],
   },
 };

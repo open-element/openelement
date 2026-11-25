@@ -10,19 +10,11 @@
  * This spec is the coverage half — it walks the same templates plus the zh
  * pages the resident gate never reached, on the built site, and asserts WCAG
  * 2.1 A+AA with axe. Measured cost of the whole set: ~52 s (2026-10-18, the
- * date the list was chosen), of which `/reference` is ~12 s — the resident
- * spec's 2.8-minute `/reference` scan is dominated by its scroll-and-settle
- * walk, which this sweep deliberately does not repeat: these routes carry no
- * scroll-timeline copy, so a settled snapshot is the load state.
- *
- * The home exception list is shared with the resident gate rather than copied:
- * a second list would drift, and `/zh` needs exactly the same exceptions the
- * English home page does (66 nodes there against 62 on `/` — the zh home had
- * never been scanned, so nobody had seen them).
+ * date the list was chosen). All representative pages are scanned at their
+ * loaded state.
  */
 import { AxeBuilder } from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
-import { HOME_AXE_EXCLUSIONS } from './axe-home-exclusions.ts';
+import { expect, test } from '@playwright/test';
 
 /** One route per template plus the zh pages the resident gate never scanned. */
 const SWEPT_ROUTES = [
@@ -45,9 +37,6 @@ const SWEPT_ROUTES = [
   '/zh/404',
 ] as const;
 
-/** Both locale roots render the same scroll-animated home template. */
-export const HOME_ROUTES: ReadonlySet<string> = new Set(['/', '/zh/']);
-
 /**
  * zh pages must not announce untranslated English chrome. The sweep scans every
  * aria-label on a zh page and fails on an ASCII-only one that is not listed
@@ -61,14 +50,6 @@ const ZH_ARIA_ALLOWLIST: Readonly<Record<string, string>> = {
     'component exposes no label input (T10 register B4, framework lane)',
 };
 
-function scan(page: Page, route: string) {
-  let builder = new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']);
-  if (HOME_ROUTES.has(route)) {
-    for (const selector of HOME_AXE_EXCLUSIONS) builder = builder.exclude(selector);
-  }
-  return builder.analyze();
-}
-
 // The two generated mega-pages (2.09 MB each) are scanned by
 // accessibility-mega-pages.spec.ts instead of here: Firefox intermittently
 // stops making progress on them under a full three-engine run, and Playwright
@@ -80,7 +61,9 @@ test.describe('Accessibility coverage sweep (axe)', () => {
     test(`axe meets WCAG 2.1 A+AA on ${route}`, async ({ page }) => {
       await page.goto(route);
       await page.waitForLoadState('networkidle');
-      const { violations } = await scan(page, route);
+      const { violations } = await new AxeBuilder({ page })
+        .withTags(['wcag2a', 'wcag2aa'])
+        .analyze();
       const report = violations.map((violation) => ({
         id: violation.id,
         impact: violation.impact,

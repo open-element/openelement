@@ -29,7 +29,7 @@ test.describe('SEO Meta Tags', () => {
 
   test('has Open Graph title', async ({ page }) => {
     const content = await page.locator('meta[property="og:title"]').getAttribute('content');
-    expect(content).toBe('openElement — The Web, composed.');
+    expect(content).toBe('openElement — The Web Components framework');
   });
 
   test('has Open Graph description', async ({ page }) => {

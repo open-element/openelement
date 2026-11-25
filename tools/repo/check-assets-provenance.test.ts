@@ -6,7 +6,6 @@ import {
   scanAssetsProvenance,
   toHex,
 } from './check-assets-provenance.ts';
-import { readFile } from 'node:fs/promises';
 
 const SHA_A = 'a'.repeat(64);
 const SHA_B = 'b'.repeat(64);
@@ -208,25 +207,4 @@ test('toHex renders lowercase hex', () => {
 
 test('the committed assets tree passes the provenance gate', async () => {
   expect(await scanAssetsProvenance()).toEqual([]);
-});
-
-test('dragon consumers stay bound to the external provenance keys', async () => {
-  const committed = JSON.parse(await readFile('www/public/assets/manifest.json', 'utf8')) as {
-    assets: Array<{
-      path: string;
-      remote?: { origin: string; key: string };
-    }>;
-  };
-  const frames = committed.assets.find((asset) => asset.path === 'dragon-frames/');
-  const video = committed.assets.find((asset) => asset.path === 'dragon-idle.mp4');
-  if (!frames?.remote) throw new Error('dragon frame delivery must be declared');
-  if (!video?.remote) throw new Error('dragon video delivery must be declared');
-
-  const frameBase = `${frames.remote.origin}/${frames.remote.key}`;
-  const videoUrl = `${video.remote.origin}/${video.remote.key}`;
-  const controller = await readFile('www/app/site-ui/open-dragon-live-gaze-controller.ts', 'utf8');
-  const island = await readFile('www/app/islands/open-dragon-live-gaze.tsx', 'utf8');
-  expect(controller.includes(frameBase.replace('/frames/', ''))).toBeTruthy();
-  expect(island.includes(`${frameBase}f27.webp`)).toBeTruthy();
-  expect(island.includes(videoUrl)).toBeTruthy();
 });

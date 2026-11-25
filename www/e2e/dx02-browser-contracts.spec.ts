@@ -10,8 +10,8 @@
  *   - keyboard focus rings on the UI components of `/contributing`:
  *     `ui-behaviour-matrix.spec.ts` ("focus-visible rings on a real keyboard
  *     path");
- *   - scroll/timing of the cinematic hero scenes and marquee:
- *     `cinematic-home.spec.ts`;
+ *   - localized homepage content and code surface:
+ *     `home.spec.ts`;
  *   - theme toggle semantics: `theme-system.spec.ts`;
  *   - lazy island chunk gating: `search.spec.ts`.
  *
@@ -246,7 +246,7 @@ test.describe('DX-02 390px: viewport behaviour', () => {
     await expect(headerDisclosure.locator('summary')).toBeVisible();
   });
 
-  test('home inner surface does not clip the sources caption at 320px', async ({ page }) => {
+  test('home inner surface fits a 320px viewport', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 640 });
     await page.goto('/');
     await page.waitForLoadState('networkidle');
@@ -261,8 +261,6 @@ test.describe('DX-02 390px: viewport behaviour', () => {
     });
     // No page-level scrollbar at the 320 floor.
     expect(metrics.documentScrollWidth).toBe(320);
-    // The page root clips decorative overflow by design, but its own scroll box
-    // must stay flush: the sources caption used to poke 3px past it.
     expect(metrics.rootScrollWidth, '.page-home scrollWidth vs clientWidth at 320px').toBe(
       metrics.rootClientWidth,
     );
@@ -293,9 +291,7 @@ test.describe('DX-02 keyboard: chrome path', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
-    // Stop at the banner boundary: engine-specific media focus stops below the
-    // chrome (Firefox tabs to the hero video) are not site chrome and are
-    // outside this row.
+    // Stop at the banner boundary to measure only the shared chrome.
     const stops: FocusStop[] = [];
     for (let index = 0; index < 16; index += 1) {
       const stop = await pressTab(page);
