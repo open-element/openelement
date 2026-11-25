@@ -13,8 +13,8 @@ Working-tree additions on 2026-11-15 (the Alpha16b capability train) are
 authorized by [ADR-0180](../adr/ADR-0180-function-component-lifecycle-intrinsics.md)
 and [ADR-0181](../adr/ADR-0181-generated-element-ssr-and-retention.md), and
 registered in [execution plan §16](./alpha16-18-execution-plan.md). Evidence for
-them lives in the [2026-11-15 appendix](./alpha16b-evidence-20261115.md). No row
-below is closed by that train; each keeps the state it records.
+them lives in the [historical 2026-11-15 appendix](https://github.com/open-element/openelement/blob/03e1e07e2eb87d703a9e8efbc56e6108f91472e9/docs/architecture/alpha16b-evidence-20261115.md). The
+[capability inventory](./alpha16-capability-inventory.md) carries the current status.
 
 ## Status and scope
 

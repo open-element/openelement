@@ -134,8 +134,9 @@ carried by GH #1800.
 >    the latter measured this session by porting `site-light-probe` and reverting
 >    it.
 >
-> Evidence for each is in `alpha16-class-migration-matrix.md` and the capability
-> inventory; this note exists so the ADR does not contradict them.
+> See the [historical migration log](https://github.com/open-element/openelement/blob/03e1e07e2eb87d703a9e8efbc56e6108f91472e9/docs/architecture/alpha16-class-migration-matrix.md)
+> and the [capability inventory](../architecture/alpha16-capability-inventory.md)
+> for the measured evidence and current disposition.
 
 ## Enumerated interface deltas (diff this against the snapshot)
 

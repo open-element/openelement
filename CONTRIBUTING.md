@@ -32,9 +32,6 @@ completion evidence.
   failing job/step and its error, why the failure is environmental rather than a
   product regression, the rerun's attempt, and the result. A rerun changes the
   evidence; it does not erase the failure from the record.
-- **Make verification reproducible.** Cite the candidate commit, command,
-  environment and observed result. For release claims, identify the gate and
-  retain its required evidence with the release.
 
 ## Tracking work
 
@@ -68,125 +65,40 @@ An ADR is NOT required for an ordinary fix, a refactor that leaves the decisions
 
 Mechanics: the file is `docs/adr/ADR-NNNN-<slug>.md` with NNNN = the highest existing number + 1, and its entry in `docs/adr/README.md` lands in the same change. `@openelement/tools-repo#adr-index:check` (in `gate:source`) fails when a record is unlisted, a link dangles, or an entry's status annotation disagrees with the record; a record that no longer governs is archived in `docs/legacy/adr/` and annotated `SUPERSEDED` / `RETIRED` / `EXECUTED` in `docs/adr/README.md`, and `AMENDED` marks a partial change.
 
-Permission note (deliberate): the test suites run on the node host under vitest (B3), and the whole toolchain is Node/pnpm end to end after the S2 release-lane port, so there is no Deno permission surface to scope. Supply-chain hygiene (minimum dependency age, lockfiles, provenance checks) remains load-bearing.
-
 ## Development
 
-Use the Node version pinned in `.node-version` (24.18) and the pnpm version
-pinned by `packageManager`. After cloning, materialize `node_modules` first:
+Use the Node version in `.node-version` and the pnpm version pinned by
+`packageManager`. Install from the lockfile before running workspace commands.
+The workspace's `prepare` task installs the shared Git hooks.
 
 ```sh
-pnpm install
+pnpm install --frozen-lockfile
+pnpm exec vp run check
+pnpm exec vp run --no-cache --fail-if-no-match --filter @openelement/element test
 ```
 
-Then install the shared git hooks — `core.hooksPath` is unset in a fresh
-clone, so the `fmt`/`lint` pre-commit and fuller pre-push gates stay
-inactive until you run:
+Use `vp` with a package's exact name to select a workspace task. A test file
+path after the task narrows its Vitest target. The
+[development contract](./docs/agent-contract.md#the-canonical-task-entry)
+lists the canonical commands, generated files, source gates and packed gates.
 
-```sh
-pnpm --dir tools/repo run hooks:install
-```
-
-```sh
-pnpm run fmt:check
-pnpm run lint
-pnpm run typecheck
-pnpm test
-pnpm run build
-```
-
-Use public package boundaries rather than private workspace imports. Prefer Web Platform primitives and established tools. Remove displaced implementations, tests, tasks, and documentation together.
-
-## Task map
-
-The root `package.json` scripts are the task surface (`pnpm run <task>`); workspace tasks dispatch
-package-qualified through the vp CLI (`vp run --no-cache --fail-if-no-match --filter <@scope/pkg> <task>`),
-which selects by exact package name:
-
-| Task                                          | Purpose                                                                                                   |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `check`                                       | `fmt:check` + `lint` + `typecheck` + markdown lint, run serially through `gate.ts`                        |
-| `test`                                        | Full vitest suite across every workspace project (see the Architecture review permission note)            |
-| `test:e2e`                                    | Site build plus browser end-to-end suites (www, router fixtures)                                          |
-| `build`                                       | Build the six public packages (protocol, element, compiler, router, create, ui)                           |
-| `vp run --no-cache --fail-if-no-match --filter @openelement/tools-release pack` | Pack release tarballs through `tools/release`                                                            |
-| `verify`                                      | Full repository verification, including SaaS                                                              |
-| `verify:core`                                 | Element/Router Alpha candidate verification (no SaaS steps)                                               |
-| `release:check`                               | Registry check plus the release train (`gate:release`) plus packed qualification plus npm publish dry-run |
-| `site:build` / `site:verify`                  | Build / fully verify the documentation site                                                               |
-| `saas:verify` / `saas:workers`                | The independently governed SaaS application (`vp run --no-cache --fail-if-no-match --filter @openelement/saas build` builds it) |
-| `clean` / `clean:deep`                        | Remove generated artifacts                                                                                |
-| `bench`                                       | Benchmark self-checks under `benchmarks/` (deterministic assertions, no browsers)                         |
-| `fmt` / `fmt:check` / `lint` / `typecheck`    | Format, lint, and type-check the workspace                                                                |
-| `gate:release`                                | Source gate's trimmed-out steps plus packed gate (the release train)                                      |
-
-The gates are split in two layers. CI's fast PR layer is the `lint`, `test`,
-`e2e`, and `pack` jobs in `.github/workflows/autoflow-ci.yml`, and it runs on
-every pull request targeting `main` and on pushes to `main`.
-`tools/repo#gate:source` (20 steps: 19 `@`-qualified tasks plus `check:dep-age`)
-is the LOCAL source gate: no workflow invokes the aggregate task, and
-`pnpm run verify` and `pnpm run verify:core` are its entry points.
-Sixteen of those steps also run in CI through the fast jobs — the
-`@openelement/www#check:theme-init` byte check, `generate:all`,
-`@openelement/tools-repo#typecheck` (the `tools/` project), the dependency-age
-quarantine, markdown lint (inside `vp run check`), the vp-selector flags check,
-the seams registry, the output-discipline guard, the constitution parity check,
-the docs-index drift check, the doc-claims gate, the content-date manifest, the
-interface snapshot, and the Element/Router unit suites plus the Chromium
-browser gate. The request-time and base-path fixture gates stay outside the
-fast layer, in the `e2e-full` full-qualification layer (a
-`full_qualification` dispatch only), and `shims:check` and `adr-index:check`
-are local-only until a workflow adopts them — so run `pnpm run verify:core`
-before relying on those. The steps that need a built Site, coverage, deploy
-fixtures, or three-engine browser matrices live in `tools/repo#gate:release`
-and run on the release train via `release:check` before anything is published.
-
-```bash
-# fmt + lint + typecheck + markdown
-vp run check
-# one directory-scoped task
-vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo release:registry-check
-# one task in one workspace member
-vp run --no-cache --fail-if-no-match --filter @openelement/router test
-# core candidate verification (no SaaS)
-vp run verify:core
-# full repository (including SaaS)
-vp run verify
-# the release train (trimmed-out steps)
-vp run gate:release
-```
-
-Subtask areas: `tools/repo` (gates, release-state checks, coverage, hooks), `tools/release` (pack, publish dry-run, packaged consumers), `www` (site generation, content/link/theme checks, browser e2e), `apps/saas` (`check`, `test`, Nitro builds — separately governed, never blocking).
-
-## gate.ts usage
-
-`gate.ts` runs steps serially and stops at the first failure:
-
-```bash
-node tools/repo/gate.ts <step...>
-```
-
-A step is a root task name (`check`) or a package-qualified task (`@openelement/tools-repo#release:registry-check`); each step dispatches through `vp run --no-cache --fail-if-no-match --filter <package> <task>`, so a selector that names no package fails the gate instead of silently skipping. `parseGateStep` (`tools/repo/gate.ts`) rejects the path-shaped `dir#task` selector form (it cannot be dispatched), `..` segments and absolute paths, so steps can never escape the repository.
-
-## Hooks
-
-```bash
-pnpm --dir tools/repo run hooks:install    # git config core.hooksPath .githooks + chmod pre-commit/pre-push
-pnpm --dir tools/repo run hooks:uninstall  # unset core.hooksPath
-```
-
-## Single-package and single-file tests
-
-```bash
-pnpm --filter @openelement/router run test
-pnpm exec vitest run --project element packages/element/__tests__/compiled-escape-parity.test.ts
-```
-
-Package test tasks run vitest on the node host; a single file runs through the same vitest invocation narrowed by the file path (see the permission note in the Architecture review section).
+Use public package boundaries and Web Platform primitives. Remove displaced
+implementations, tests, tasks and documentation together. Changes to
+cross-system boundaries need a consumer test and an entry in the
+[seams registry](./docs/architecture/seams.md).
 
 ## Locating CI failures
 
-`autoflow-ci.yml` runs a `sha-guard` job first, then the fast PR layer (`lint`, `test`, `e2e`, `pack`); the heavy qualification jobs — `e2e-full` (two instances: the three-engine site E2E suite and the fixture gates), `bfcache`, `node-serve-smoke` (Node 24 and 26), `packed-consumer-matrix` (Linux and macOS), and `fresh-install` — run only through a `full_qualification` dispatch on the candidate SHA: a `main` push runs the base layer only, and a Base-only run is never qualification evidence. There is no aggregation job: each required check is the job itself, so read the failing job's log directly. The Release workflow's `ci-evidence` job separately requires the exact-SHA `full_qualification` dispatch (a pre-split `main` push run is the fallback) to list every one of the nine qualification job IDs (twelve instances) as `success`; a Base-only run is not evidence, and `apps/saas` is never part of the candidate.
+Open the failed job in [AutoFlow CI](./.github/workflows/autoflow-ci.yml).
+Base CI checks pull requests and pushes to `main`. The local
+`tools/repo#gate:source` (20 steps: 19 `@`-qualified tasks plus `check:dep-age`)
+runs through `vp run verify:core`. Sixteen of those steps also
+run in CI through the fast jobs. The request-time and base-path fixture gates
+run in Full qualification. Run `shims:check` and `adr-index:check` locally.
+
+The [release qualification contract](./tools/repo/ci-qualification.ts)
+requires the exact-candidate Full dispatch with a successful SHA guard and
+every one of the nine qualification job IDs (twelve instances) successful.
 
 ## Commits
 
