@@ -92,7 +92,6 @@ function OpenButton(props: {
   // There is no `:state(disabled)` write here either: the shell already seats
   // `authorDisabled || effectiveDisabled` as the host custom state, and the
   // sheet selects `:host(:state(disabled))`. The class lane's
-  // `syncDisabledState(this._internals, ...)` was a second writer of that fact.
   //
   // The `open-click` dispatch is authored HERE, not only inside the helper: the
   // manifest's event recognizer is a module-local scan of dispatch sites, so a
@@ -111,8 +110,8 @@ function OpenButton(props: {
       }}
     >
       {props.href === '' ? (
-        // eslint-disable-next-line button-has-type -- type is deliberately unbound: the generated element is not a native submit/reset button (see the note above), and button-machine.ts owns the form action
         <button
+          type='button'
           class='btn inline-flex items-center justify-center gap-2 font-sans font-extrabold no-underline cursor-pointer rounded-md whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-ring disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none aria-disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:pointer-events-none'
           part='control'
           disabled={props.disabled}

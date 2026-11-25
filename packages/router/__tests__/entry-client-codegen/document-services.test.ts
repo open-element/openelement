@@ -92,6 +92,21 @@ test('the generated-lane entry still carries NO lazy element-runtime loader', ()
   expect(entry).not.toContain('element-services');
 });
 
+test.each([false, true])(
+  'enhanced forms use document services with generated islands: %s',
+  (withIsland) => {
+    const entry = generateClientEntry(withIsland ? [generatedLaneEntry()] : [], {
+      enhancedForms: true,
+    });
+    expect(entry).toContain(ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER);
+    expect(entry).toContain('__installDeepFragments();');
+    expect(entry).toContain('__installPreHydrationCapture(document, __tags);');
+    expect(entry).toContain('createEnhanceClient');
+    expect(entry).not.toContain('__loadElementRuntime');
+    expect(entry).not.toContain('element-services');
+  },
+);
+
 test('the class-lane entry is byte-identical to its pinned ABI hash', () => {
   // Its lazy `element-services` import remains the single installer there. The
   // hash is the guardrail: any accidental static document-services import on

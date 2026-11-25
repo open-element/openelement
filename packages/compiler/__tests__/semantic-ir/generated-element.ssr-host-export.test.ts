@@ -252,6 +252,7 @@ export default Card;
       'classCandidates',
       'code',
       'component',
+      'lightSsr',
       'map',
       'ssrHostExport',
       'tag',
@@ -287,10 +288,12 @@ export default Card;
     expect(compiled!.code).not.toContain('static ');
   });
 
-  test('a light root compiles with null metadata and no host export in the AST', () => {
+  test('a light root reports the producer attached to its constructor', () => {
     const compiled = compileGeneratedElementIfAdmitted(LIGHT_ISLAND, FILE, { site: SITE });
     expect(compiled).not.toBeNull();
     expect(compiled!.ssrHostExport).toBeNull();
+    expect(compiled!.lightSsr).toBe(true);
+    expect(compiled!.code).toContain('ssrProducer: Card__ssr');
     expect(emittedHostExports(compiled!.code)).toEqual([]);
     expect(compiled!.code).not.toContain('__ssrHost');
     // The light tail keeps the M09-1a shape: the leaf producer still exists.

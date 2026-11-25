@@ -63,6 +63,8 @@ export interface CompiledGeneratedElement {
    * read; callers must not re-derive the name from the emitted text.
    */
   readonly ssrHostExport: string | null;
+  /** Whether emission attached the light-root SSR producer to the constructor. */
+  readonly lightSsr: boolean;
   /**
    * The module's admitted STATIC class tokens (deletion prerequisite P-1): the
    * component stylesheet's candidate set, collected from the same function model
@@ -267,6 +269,7 @@ export function compileGeneratedElementIfAdmitted(
     // Additive build metadata from the emitter's one hostWrapper decision; the
     // module text and map above are unchanged by this field.
     ssrHostExport: emitted.ssrHostExport,
+    lightSsr: emitted.lightSsr,
     classCandidates: emitted.classCandidates,
     usesBlocks: componentUsesBlocks(root),
   };

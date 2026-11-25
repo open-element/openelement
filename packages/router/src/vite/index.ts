@@ -24,7 +24,7 @@ import { build as viteBuild, type InlineConfig, type Plugin } from 'vite';
 import type { FrameworkOptions } from './framework.ts';
 import { createOpenPlugin } from './plugin.ts';
 import { resetBuildExitRecords } from './internal/build-diagnostics.ts';
-import { DEFAULT_ISLANDS_DIR, DEFAULT_ROUTES_DIR } from './paths.ts';
+import { DEFAULT_ISLANDS_DIR, DEFAULT_ROUTES_DIR } from './internal/paths.ts';
 
 /** Options for the low-level {@linkcode openPipeline} Vite plugin pipeline. */
 export interface OpenPipelineConfig {

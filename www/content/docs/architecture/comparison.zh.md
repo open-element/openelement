@@ -13,7 +13,7 @@ order: 20
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 架构     | Custom Elements + Declarative Shadow DOM 是一等公民；标准 Custom Elements 即应用契约；Router 掌管路由与渲染；Vite 和 Nitro 是官方构建路径。                                               |
 | 渲染     | 默认 SSG；DSD/shadow 为显式选择的一等模式（当前编译默认 light DOM），按需升级元素；无需交互时输出不含任何框架 JavaScript 的纯静态内容。                                                   |
-| DX       | JSX + 编译型 Custom Element 类，`@element` / `definePage` / `buildApp`。                                                                                                                  |
+| DX       | TSX 页面函数和编译器生成的 Custom Element，使用 `definePage`、`defineIslandConfig` 和 `buildApp`。                                                                                                                  |
 | 适用     | 以 Web Components 为原生组件契约、static-first 的应用框架，用于以标准 Custom Element 契约交付 DSD-first 应用；当前范围是 static-first，而非与 Next.js、Nuxt 或 SvelteKit 的泛全栈对齐。   |
 | 全栈路径 | OpenElement × Supabase × Cloudflare：OpenElement 负责应用 UX，Supabase 负责数据/Auth/RLS/Storage/Realtime，Cloudflare 负责边缘/安全/缓存/异步执行。它们是服务提供方，绝不是框架内建功能。 |
 
@@ -89,7 +89,7 @@ OpenElement × Supabase × Cloudflare 是第一方全栈交付路径，所有权
 | -------------------- | ------------------------------------------------ |
 | 预渲染文档           | 78 个 HTML 文件                                  |
 | `sitemap.xml` URL 数 | 76                                               |
-| 静态产物总量         | 13.2 MiB（13,845,573 B）                         |
+| 静态产物总量         | 13.2 MiB（13,849,212 B）                         |
 | island manifest      | 78 份——每页一份                                  |
 | 搜索索引             | 每个语言 38 页（en、zh），76 个 fragment，1.8 MiB |
 
@@ -98,7 +98,7 @@ OpenElement × Supabase × Cloudflare 是第一方全栈交付路径，所有权
 vp run site:build
 find www/dist -name '*.html' | wc -l        # 78
 grep -c '<loc>' www/dist/sitemap.xml        # 76
-find www/dist -type f -exec wc -c {} + | tail -1   # 合计 13,845,573 B（上表字节总和）
+find www/dist -type f -exec wc -c {} + | tail -1   # 合计 13,849,212 B（上表字节总和）
 ls www/dist/island-manifests | wc -l        # 78
 cat www/dist/pagefind/pagefind-entry.json   # 每种语言 page_count 38
 ```
@@ -109,14 +109,14 @@ docs 站点就是一个普通的 openElement 应用（同样有 island），所�
 
 | Chunk                          | 原始字节 | gzip -9 |
 | ------------------------------ | -------- | ------- |
-| `element-runtime`              | 66,573 | 21,162 |
-| `island-open-button`           | 16,045 | 3,643 |
+| `element-runtime`              | 67,356 | 21,442 |
+| `island-open-button`           | 16,432 | 3,805 |
 | `island-open-dragon-live-gaze` | 26,188 | 5,772 |
-| `island-open-page-rail`        | 34,911 | 6,551 |
+| `island-open-page-rail`        | 35,269 | 6,678 |
 | `island-open-cinematic-scroll` | 3,989 | 1,524 |
 | `island-open-code-block`       | 8,123 | 2,595 |
-| `island-open-hero-polish`      | 6,254 | 2,390 |
-| `client.js`                    | 9,049 | 2,852 |
+| `island-open-hero-polish`      | 6,254 | 2,391 |
+| `client.js`                    | 9,049 | 2,855 |
 
 ```bash
 ls -l www/dist/client/islands/*.js
@@ -129,9 +129,9 @@ island 入口（`client.js`）承载 island import 工厂与错误串，字节�
 
 | 路由                     | 客户端载荷（原始） | 不同 chunk 数 |
 | ------------------------ | ------------------ | ------------- |
-| `/guide/mdx`             | 196,659 B          | 9             |
-| `/guide/getting-started` | 196,659 B          | 9             |
-| `/`                      | 229,101 B          | 11            |
+| `/guide/mdx`             | 197,800 B          | 9             |
+| `/guide/getting-started` | 197,800 B          | 9             |
+| `/`                      | 230,242 B          | 11            |
 
 78 份页面 manifest 合计声明了 8 个 island 标签、294 条记录：外壳 island（`open-search`、`open-theme-toggle`）出现在每一页，`open-page-rail` 出现在 68 页，`open-code-block` 出现在 56 页，`open-button` 出现在 8 页，`open-cinematic-scroll` / `open-dragon-live-gaze` / `open-hero-polish` 各出现在 2 页。alpha.15 的布局约定迁移退役了 `open-layout` island（外壳改为编译后的 `app/layout.tsx`）；#1557 的 B8 退役移除了 `open-badge` 包 island（roadmap 上的用法已改为纯 HTML+CSS recipe），而参考页新增了两个拆分包的文档，使载荷行发生移动。
 

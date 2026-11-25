@@ -218,6 +218,30 @@ test('buildEntryDescriptor: no-producer identities keep the existing class-only 
   }
 });
 
+test('explicit light SSR requires a render producer and uses the constructor when present', () => {
+  const absent = { kind: 'light-no-producer', component: 'LightCard' } as const;
+  const refused = buildLocalDescriptor({
+    'profile-card': { generatedElementHost: absent, ssr: true },
+  });
+  expect(() => renderEntry(refused)).toThrow(
+    expect.objectContaining({
+      code: 'OE_DESCRIPTOR_MODULE_IMPORT',
+      message: expect.stringContaining('no compiler-emitted render producer'),
+    }),
+  );
+  const clientOnly = buildLocalDescriptor({
+    'profile-card': { generatedElementHost: absent, ssr: false },
+  });
+  expect(renderEntry(clientOnly)).not.toContain('__island_profile_card');
+  const supported = buildLocalDescriptor({
+    'profile-card': {
+      generatedElementHost: { kind: 'light-producer', component: 'LightCard' },
+      ssr: true,
+    },
+  });
+  expect(renderEntry(supported)).toContain('__registerSsrComponent("profile-card"');
+});
+
 test('buildEntryDescriptor: an ssr-admitted missing producer fails closed with the coded build refusal', () => {
   const desc = buildLocalDescriptor({
     'profile-card': { generatedElementHost: { kind: 'missing-producer', component: 'ShadowCard' } },

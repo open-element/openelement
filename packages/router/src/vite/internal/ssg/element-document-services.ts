@@ -42,7 +42,7 @@
  * `element-services-*` import, so nothing else would install the two services;
  * this static import and its two calls are the one installer there. The
  * reverse is what must not be written: on the needs-runtime shape (a
- * class-lane island, or the enhanced-form layer) the entry deliberately does
+ * class-lane island) the entry deliberately does
  * NOT static-import this module — the lazy loader already fetches the chunk
  * and installs both services, so a static edge would duplicate the installer
  * for no service, and `requireEntryStaticGraphFreeOfRuntime` fails the build

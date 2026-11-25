@@ -474,8 +474,7 @@ interface GenerateClientEntryOptions {
  * This is the executor lane question (defect D / M11-3), not the "is there any
  * client JS" question — that one is {@linkcode clientEntryHasClientJs}. A
  * generated Native Custom Element island defines/claims through the
- * compiler-emitted shell, so it does not need the executor runtime; a class-lane
- * island (or the form-enhancement layer) does. The generator emits
+ * compiler-emitted shell. Form enhancement uses the document services. The generator emits
  * `__loadElementRuntime`/the element-services dynamic import only when this
  * returns true, and the client build's element-runtime chunk guard consumes the
  * same fact instead of inferring a runtime requirement from the emission shape.
@@ -483,13 +482,7 @@ interface GenerateClientEntryOptions {
  */
 export function clientEntryNeedsElementRuntime(
   islands: readonly ClientIslandDeliveryInput[],
-  options: GenerateClientEntryOptions = {},
 ): boolean {
-  if (options.enhancedForms === true) return true;
-  // M11-3: an island owned by the generated Native Custom Element lane defines
-  // and claims through the compiler-emitted shell, so it is not a reason to
-  // load the legacy compiled executor runtime. Any class-lane island (and the
-  // form-enhancement layer) still is.
   return expandClientIslandEntries(islands).some(
     (island) => island.strategy !== 'none' && island.generatedLane !== true,
   );
@@ -703,7 +696,7 @@ var __oeAttachDevLiveStyles = function (Ctor, tag) {
   // existing host, while island chunks still download in parallel.
   // Island-bearing pages keep their warm start through the build's per-page
   // `<link rel="modulepreload">` projection of the island manifest.
-  const needsElementRuntime = clientEntryNeedsElementRuntime(islands, options);
+  const needsElementRuntime = clientEntryNeedsElementRuntime(islands);
   const runtimeLoader = needsElementRuntime
     ? `var __elementRuntimePromise = null;
 var __loadElementRuntime = function () {
@@ -805,11 +798,8 @@ ${devLiveMapAndHelper}${documentServicesInstall}${
     // `__loadElementRuntime` — is emitted above in importsBlock. The 88bda88bf
     // regression class was a shared block calling a binding that one emission
     // shape did not define; generated-entry-gate.test.ts pins that shape check.
-    options.enhancedForms === true
-      ? `// B2: the form-enhancement layer is a document-level enhancement that uses
-// the element runtime's services (pre-upgrade capture, deep fragment
-// navigation), so its presence is a genuine trigger for the lazy runtime
-// import — a page with enhanced forms but no islands still gets the runtime.
+    options.enhancedForms === true && needsElementRuntime
+      ? `// Install document services before enhancing forms in this entry.
 __loadElementRuntime();
 `
       : ''

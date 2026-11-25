@@ -43,9 +43,16 @@ test('release-preflight: the plan binds the evidence to the exact SHA', () => {
   const binder = plan.find((step) => step.id === 'evidence-bind')!;
   expect(binder.command).toContain(SHA);
   expect(binder.command).toContain('--require-main-push');
+  expect(binder.command).toContain(
+    `--json --out /tmp/release-evidence/${SHA.slice(0, 7)}-release-evidence.json`,
+  );
   expect(binder.command).toContain('--codeql-repo open-element/openelement');
   const prBinder = plan.find((step) => step.id === 'evidence-bind-pr')!;
   expect(prBinder.command).not.toContain('--require-main-push');
+  const dispatch = plan.find((step) => step.id === 'qualification-dispatch')!;
+  expect(dispatch.command).toContain(`--repo ${input.repository} --ref main`);
+  expect(dispatch.command).toContain(`-f expected_sha=${SHA}`);
+  expect(plan.indexOf(dispatch)).toBeLessThan(plan.indexOf(binder));
 });
 
 test('release-preflight: every published-state change is an owner-gated step', () => {
@@ -230,6 +237,11 @@ test('release-preflight: the dry-run rendering says nothing destructive ran', ()
   expect(rendered).toContain('This was a dry run: no destructive action ran');
   expect(rendered).toContain('[OWNER GATE] Publish dispatch');
   expect(rendered).toContain('[GATE] Gate: release:check');
+  const dispatch = rendered.indexOf('Full qualification CI on the exact SHA');
+  const evidence = rendered.indexOf('Exact-SHA release evidence bound');
+  expect(dispatch).toBeGreaterThanOrEqual(0);
+  expect(evidence).toBeGreaterThan(dispatch);
+  expect(rendered.indexOf('Publish dispatch')).toBeGreaterThan(evidence);
 });
 
 test('release-preflight: the execute rendering lists the refusals', () => {

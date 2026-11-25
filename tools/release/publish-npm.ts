@@ -28,6 +28,7 @@ import { assertCleanWorktree } from '../lib/git-cleanliness.ts';
 import { fileURLToPath } from 'node:url';
 import { formatJson } from '@openelement/element/build-utils';
 import { buildDeclarationClosure, packageRootDeclarationIo } from '../lib/declaration-closure.ts';
+import { writePackedGeneratedElements } from '../lib/packed-generated-elements.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
 import { createDeterministicTarGz, readTreeEntries } from '../lib/deterministic-tar.ts';
 import {
@@ -239,14 +240,6 @@ export async function packPackage(
   const out = tarballPath(pkg);
   const sourceManifest = readPackageSourceManifest(pkg.dir);
 
-  // #1301: a package shipping compiled-element sources (.tsx modules with a
-  // canonically bound @element decorator) must run the open:compiled-element
-  // intrinsic transform BEFORE the generator transpiles — decorator lowering
-  // erases the compile-time-only intrinsics, and the packed artifact would
-  // register no Part Program (packageIslands SSR fails closed with
-  // OE_PROGRAM_MISSING). The admission contract is unchanged: staging only
-  // replaces module contents with the same compiler output a consumer's own
-  // build would produce from workspace source.
   // The staged workspace mirrors the pnpm workspace 1:1: every package is
   // staged and symlinked under node_modules/@openelement/, so cross-package
   // declaration emit resolves types from source exactly like the real
@@ -323,6 +316,7 @@ export async function packPackage(
         publishInclude: sourceManifest.publish?.include ?? [],
         publishExclude: sourceManifest.publish?.exclude ?? [],
       });
+      await writePackedGeneratedElements(pkg, pkgRoot);
       const pkgJsonPath = `${pkgRoot}/package.json`;
       const rawManifest = await hashFileTree(tmp);
       const rawPackageJson = JSON.parse(readFileSync(pkgJsonPath, 'utf8')) as Record<

@@ -13,7 +13,7 @@ order: 20
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Architecture   | Custom Elements + Declarative Shadow DOM are first-class; standard Custom Elements remain the application contract; Router owns routes and rendering; Vite and Nitro are the official build path.                                       |
 | Rendering      | SSG by default, DSD/shadow as an explicit first-class mode (light DOM is the current compiled default), selective element upgrades, and static output with no framework JavaScript when interaction is unnecessary.                     |
-| DX             | JSX + compiled Custom Element classes, `@element` / `definePage` / `buildApp`.                                                                                                                                                          |
+| DX             | TSX page functions and compiler-generated Custom Elements with `definePage`, `defineIslandConfig` and `buildApp`.                                                                                                                                                          |
 | Fit            | The Web Components-native, static-first application framework for delivering DSD-first applications on a standard Custom Element contract; current scope is static-first, not generic fullstack parity with Next.js, Nuxt or SvelteKit. |
 | Fullstack path | OpenElement × Supabase × Cloudflare: OpenElement owns the application UX, Supabase owns data/Auth/RLS/Storage/Realtime, Cloudflare owns edge/security/cache/async. Providers, never built-in framework features.                        |
 
@@ -91,7 +91,7 @@ Numbers measured on 2026-11-25 from the docs site's own build (`www/dist`, built
 | ---------------------- | -------------------------------------------------- |
 | Pre-rendered documents | 78 HTML files                                      |
 | URLs in `sitemap.xml`  | 76                                                 |
-| Total static output    | 13.2 MiB (13,845,573 B)                            |
+| Total static output    | 13.2 MiB (13,849,212 B)                            |
 | Island manifests       | 78 — one per page                                  |
 | Search index           | 38 pages per locale (en, zh), 76 fragments, 1.8 MiB |
 
@@ -100,7 +100,7 @@ Numbers measured on 2026-11-25 from the docs site's own build (`www/dist`, built
 vp run site:build
 find www/dist -name '*.html' | wc -l        # 78
 grep -c '<loc>' www/dist/sitemap.xml        # 76
-find www/dist -type f -exec wc -c {} + | tail -1   # 13,845,573 B total (the byte sum above)
+find www/dist -type f -exec wc -c {} + | tail -1   # 13,849,212 B total (the byte sum above)
 ls www/dist/island-manifests | wc -l        # 78
 cat www/dist/pagefind/pagefind-entry.json   # page_count 38 per language
 ```
@@ -111,14 +111,14 @@ The docs site is a normal openElement app, islands included, so its client outpu
 
 | Chunk                          | Raw bytes | gzip -9 |
 | ------------------------------ | --------- | ------- |
-| `element-runtime`              | 66,573 | 21,162 |
-| `island-open-button`           | 16,045 | 3,643 |
+| `element-runtime`              | 67,356 | 21,442 |
+| `island-open-button`           | 16,432 | 3,805 |
 | `island-open-dragon-live-gaze` | 26,188 | 5,772 |
-| `island-open-page-rail`        | 34,911 | 6,551 |
+| `island-open-page-rail`        | 35,269 | 6,678 |
 | `island-open-cinematic-scroll` | 3,989 | 1,524 |
 | `island-open-code-block`       | 8,123 | 2,595 |
-| `island-open-hero-polish`      | 6,254 | 2,390 |
-| `client.js`                    | 9,049 | 2,852 |
+| `island-open-hero-polish`      | 6,254 | 2,391 |
+| `client.js`                    | 9,049 | 2,855 |
 
 ```bash
 ls -l www/dist/client/islands/*.js
@@ -131,9 +131,9 @@ What a page actually downloads follows from its island manifest plus the entry's
 
 | Route                    | Client payload (raw) | Distinct chunks |
 | ------------------------ | -------------------- | --------------- |
-| `/guide/mdx`             | 196,659 B            | 9               |
-| `/guide/getting-started` | 196,659 B            | 9               |
-| `/`                      | 229,101 B            | 11              |
+| `/guide/mdx`             | 197,800 B            | 9               |
+| `/guide/getting-started` | 197,800 B            | 9               |
+| `/`                      | 230,242 B            | 11              |
 
 Across all 78 page manifests the site declares 8 island tags in 294 entries: the chrome islands (`open-search`, `open-theme-toggle`) on every page, `open-page-rail` on 68, `open-code-block` on 56, `open-button` on 8, and `open-cinematic-scroll` / `open-dragon-live-gaze` / `open-hero-polish` on 2 pages each. The alpha.15 layout-convention migration retired the `open-layout` island (the chrome became the compiled `app/layout.tsx` shell); The #1557 B8 retirement removed the `open-badge` package island (its roadmap usage is a plain HTML+CSS recipe now), and the reference page documents the two new split packages, which moved the payload rows.
 

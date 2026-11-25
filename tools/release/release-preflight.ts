@@ -30,7 +30,12 @@ import { spawn } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import process from 'node:process';
-import { evaluateDocument, RELEASE_PACKAGES, type EvidenceDocument } from './evidence-bind.ts';
+import {
+  evaluateDocument,
+  parseEvidenceDocument,
+  RELEASE_PACKAGES,
+  type EvidenceDocument,
+} from './evidence-bind.ts';
 
 /** Gate entry points: package.json script name -> why it runs. */
 export const GATE_ENTRY_POINTS: readonly { script: string; purpose: string }[] = [
@@ -95,17 +100,6 @@ export function buildReleasePlan(input: PlanInput): PlanStep[] {
     note: 'pinned sha256 + 503 member hashes + 86/22 assertions + JFB recomputation; obtain the bytes from the handoff prerelease first',
   });
   steps.push({
-    id: 'evidence-bind',
-    title: 'Exact-SHA evidence block bound',
-    kind: 'local-verify',
-    command:
-      `node tools/release/evidence-bind.ts --sha ${input.sha}` +
-      (input.pullRequest ? ` --pr ${input.pullRequest}` : '') +
-      ` --repo ${input.repository} --codeql-repo ${input.codeqlRepository} --tag ${input.tag} --require-main-push --out /tmp/release-evidence/${sha7}-release-evidence.md`,
-    destructive: false,
-    note: 'release lane: requires the successful push/main run; cancelled or failed runs are history, never qualification',
-  });
-  steps.push({
     id: 'evidence-bind-pr',
     title: 'PR evidence block bound (pre-merge)',
     kind: 'local-verify',
@@ -138,9 +132,20 @@ export function buildReleasePlan(input: PlanInput): PlanStep[] {
     id: 'qualification-dispatch',
     title: 'Full qualification CI on the exact SHA',
     kind: 'owner-gated',
-    command: `gh workflow run autoflow-ci.yml --ref alpha15 -f full_qualification=true -f expected_sha=${input.sha}`,
+    command: `gh workflow run autoflow-ci.yml --repo ${input.repository} --ref main -f full_qualification=true -f expected_sha=${input.sha}`,
     destructive: false,
-    note: 'starts CI only; evidence qualification is the run conclusions, bound by the evidence binder',
+    note: 'wait for the Full qualification result and the Base main push on this SHA',
+  });
+  steps.push({
+    id: 'evidence-bind',
+    title: 'Exact-SHA release evidence bound',
+    kind: 'local-verify',
+    command:
+      `node tools/release/evidence-bind.ts --sha ${input.sha}` +
+      (input.pullRequest ? ` --pr ${input.pullRequest}` : '') +
+      ` --repo ${input.repository} --codeql-repo ${input.codeqlRepository} --tag ${input.tag} --require-main-push --json --out /tmp/release-evidence/${sha7}-release-evidence.json`,
+    destructive: false,
+    note: 'checks the Full dispatch and main push on the candidate SHA, or one historical Full main push',
   });
   steps.push({
     id: 'publish',
@@ -148,7 +153,7 @@ export function buildReleasePlan(input: PlanInput): PlanStep[] {
     kind: 'owner-gated',
     command: `gh workflow run autoflow-release.yml --ref main -f operation=publish -f version=${input.version}`,
     destructive: true,
-    note: 'runs only after same-SHA main push CI evidence + release gate; environment openelement-release requires a human reviewer',
+    note: 'runs after same-SHA Full qualification and main push evidence, plus the release gate and human environment approval',
   });
   steps.push({
     id: 'release-asset',
@@ -309,7 +314,7 @@ export function assessEvidence(
   refusals: string[];
   skips: string[];
 } {
-  const verdict = evaluateDocument(document, sha);
+  const verdict = evaluateDocument(document, sha, true);
   return { qualified: verdict.qualified, refusals: verdict.refusals, skips: verdict.skips };
 }
 
@@ -351,30 +356,31 @@ export function renderPreflight(report: PreflightReport): string {
     for (const skip of report.evidence.skips) lines.push(`  SKIP: ${skip}`);
     lines.push('');
   }
-  const sections: { kind: StepKind; title: string }[] = [
-    { kind: 'local-verify', title: 'Read-only verification commands' },
-    { kind: 'gate', title: 'Gates (run by the Lead, serialized)' },
-    { kind: 'owner-gated', title: 'Owner-gated actions (never executed by this tool)' },
-    { kind: 'read-back', title: 'Read-backs after publication' },
-  ];
-  for (const section of sections) {
-    const steps = report.steps.filter((step) => step.kind === section.kind);
-    if (steps.length === 0) continue;
-    lines.push(`${section.title}:`);
-    for (const step of steps) {
-      const label = step.destructive
-        ? report.mode === 'execute' && report.authorizedForOwner.includes(step.id)
-          ? 'AUTHORIZED (owner applies)'
-          : 'OWNER GATE'
-        : section.kind === 'gate'
-          ? 'GATE'
-          : 'OK';
-      lines.push(`  [${label}] ${step.title}`);
-      if (step.command) lines.push(`      $ ${step.command}`);
-      lines.push(`      ${step.note}`);
+  const headings: Record<StepKind, string> = {
+    'local-verify': 'Read-only verification commands',
+    gate: 'Gates (run by the Lead, serialized)',
+    'owner-gated': 'Owner-gated actions (never executed by this tool)',
+    'read-back': 'Read-backs after publication',
+  };
+  let kind: StepKind | undefined;
+  for (const step of report.steps) {
+    if (kind !== step.kind) {
+      if (kind) lines.push('');
+      kind = step.kind;
+      lines.push(`${headings[kind]}:`);
     }
-    lines.push('');
+    const label = step.destructive
+      ? report.mode === 'execute' && report.authorizedForOwner.includes(step.id)
+        ? 'AUTHORIZED (owner applies)'
+        : 'OWNER GATE'
+      : step.kind === 'gate'
+        ? 'GATE'
+        : 'OK';
+    lines.push(`  [${label}] ${step.title}`);
+    if (step.command) lines.push(`      $ ${step.command}`);
+    lines.push(`      ${step.note}`);
   }
+  if (kind) lines.push('');
   if (report.ownerGateRefusals.length > 0) {
     lines.push('REFUSED destructive actions:');
     for (const refusal of report.ownerGateRefusals) lines.push(`  REFUSAL: ${refusal}`);
@@ -564,7 +570,7 @@ async function main(): Promise<void> {
   const localChecks = options.runLocal ? await runLocalChecks(input) : [];
   let evidence: PreflightReport['evidence'] = null;
   if (options.evidence) {
-    const document = JSON.parse(await readFile(options.evidence, 'utf8')) as EvidenceDocument;
+    const document = parseEvidenceDocument(await readFile(options.evidence, 'utf8'));
     evidence = assessEvidence(document, sha);
   }
   const authorization: Authorization = {

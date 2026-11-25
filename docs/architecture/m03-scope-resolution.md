@@ -8,7 +8,7 @@ summary: Design for BindingId vs classification, scope semantics, captures/depen
 
 Date: 2026-11-03. Milestone: **Alpha16a M03-D (design)**. Base:
 `017bd3e8775e8d74fc8778b6321bbbe5d74486c6` (M02 merged). Revised after owner
-review (see [the corrections register](./m03-review-corrections.md)).
+review (see [the corrections register](https://github.com/open-element/openelement/blob/8d50588914ea32f7b76ad8280d66496449273f29/docs/architecture/m03-review-corrections.md)).
 
 Status: **DESIGN PROPOSAL — NOT IMPLEMENTED.** No codegen, no runtime, no public
 API, no ABI. Claims are marked *source-verified* (read from the repository or the

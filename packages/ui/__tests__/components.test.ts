@@ -36,6 +36,8 @@ function buttonHost(rows: Partial<ButtonHost> = {}): ButtonHost {
     href: '',
     type: 'button',
     closest: () => null,
+    getAttribute: () => null,
+    matches: () => false,
     ...rows,
     addEventListener: (type: string, listener: (event: Event) => void) => {
       if (type === 'open-click') listeners.add(listener);

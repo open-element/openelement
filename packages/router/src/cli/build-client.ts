@@ -662,9 +662,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
   // the JS drop below consume, asked of the generator with the exact inputs it
   // will be called with (defect D: an entry that imports only the document
   // stylesheet must not be held to the island entry's runtime contract).
-  const entryNeedsElementRuntime = clientEntryNeedsElementRuntime(islandEntries, {
-    enhancedForms,
-  });
+  const entryNeedsElementRuntime = clientEntryNeedsElementRuntime(islandEntries);
   // M11-3: client JS and the legacy executor runtime are two facts. A page whose
   // only islands are generated-lane islands keeps its island entry (and JS) but
   // must not be held to the executor runtime's chunk contract.

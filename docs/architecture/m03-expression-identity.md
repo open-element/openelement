@@ -8,7 +8,7 @@ summary: Design for the lowering route, registry/IR separation, source maps and 
 
 Date: 2026-11-03. Milestone: **Alpha16a M03-D (design)**. Base:
 `017bd3e8775e8d74fc8778b6321bbbe5d74486c6` (M02 merged). Revised after owner
-review (see [the corrections register](./m03-review-corrections.md)).
+review (see [the corrections register](https://github.com/open-element/openelement/blob/8d50588914ea32f7b76ad8280d66496449273f29/docs/architecture/m03-review-corrections.md)).
 
 Status: **DESIGN PROPOSAL — NOT IMPLEMENTED.** No codegen, no runtime, no ABI.
 
@@ -174,7 +174,7 @@ Candidate mechanisms, all requiring prototype evidence in M03-I:
 | Mechanism | How offsets arise | Cost / risk |
 | --- | --- | --- |
 | ~~M1 — segmented printer (SUPERSEDED)~~ | *print each sub-node separately and concatenate* | **SUPERSEDED by M03-I-0**: the caller would own syntax glue, which is where a hand-written printer drifts. History only. |
-| **M1 — marker-based anchor printing (ADOPTED)** | print the **whole expression once**; attach a namespaced synthetic comment before/after each expression/JSX node; build a marker index in one pass; strip through **prefix sums + binary search**; record one **anchor** per node start | public APIs only, one print, no glue; verified in [M03-I-0](./m03-i0-sourcemap-prototype.md) |
+| **M1 — marker-based anchor printing (ADOPTED)** | print the **whole expression once**; attach a namespaced synthetic comment before/after each expression/JSX node; build a marker index in one pass; strip through **prefix sums + binary search**; record one **anchor** per node start | public APIs only, one print, no glue; verified in [M03-I-0](https://github.com/open-element/openelement/blob/8d50588914ea32f7b76ad8280d66496449273f29/docs/architecture/m03-i0-sourcemap-prototype.md) |
 | M2 — TypeScript emit source maps (FALLBACK) | let `program.emit` produce the map | accurate, but needs `ts.createProgram`; fallback only |
 | M3 — printer-handler offsets (CLOSED) | wrap `PrintHandlers.onEmitNode` | **impossible with public APIs**: `Printer` exposes no writer, so offsets are unobservable `typescript.d.ts:8104-8124` |
 | **M2 — TypeScript emit source maps** | let `program.emit` (or a transform-then-emit route) produce the map from the same `SourceFile` | accurate and battle-tested; requires a program, which is the constraint Route 3 exists to avoid |
@@ -215,7 +215,7 @@ const result =
 Settlement: **node anchors are proven, and a Source Map v3 built from them decodes
 correctly**. What remains OPEN is the **end-to-end production map through codegen**
 (M05), plus the erasure visitor and large-expression behaviour. See
-[the prototype decision](./m03-i0-sourcemap-prototype.md).
+[the prototype decision](https://github.com/open-element/openelement/blob/8d50588914ea32f7b76ad8280d66496449273f29/docs/architecture/m03-i0-sourcemap-prototype.md).
 
 ## 6. Correction E — nested JSX and evaluation order
 

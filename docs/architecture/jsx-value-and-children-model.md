@@ -406,7 +406,7 @@ contract is asserted as phase-labelled counts, never forced equal: a
 handler-only setup side effect is **0 in SSR** and **1 per client mount/claim**;
 a surviving local's side effect is 1 in SSR too and keeps its authored order.
 The tracked record and tests are
-[`m09-2c-intrinsic-event-ref.md`](./m09-2c-intrinsic-event-ref.md).
+[`m09-2c-intrinsic-event-ref.md`](https://github.com/open-element/openelement/blob/8d50588914ea32f7b76ad8280d66496449273f29/docs/architecture/m09-2c-intrinsic-event-ref.md).
 
 The consequence authors will notice is row 2 + 3: `step={next()}` is **not**
 evaluated once when the JSX value is created. Two insertions can observe

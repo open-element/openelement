@@ -1,22 +1,9 @@
-/**
- * /workspace-records — request-time qualification-fixture route (thin
- * wrapper). The compiled page element lives in
- * app/components/page-workspace-records.tsx, the loader logic in
- * app/route-logic/workspace-records.ts.
- */
-import { definePage } from '@openelement/router';
-import { defineIslandConfig } from '@openelement/router';
+/** Request-time workspace records page with filtered keyset pagination. */
+import { defineIslandConfig, definePage } from '@openelement/router';
 import {
   createWorkspaceRecordsLoader,
   workspaceRecordsPageProps,
 } from '../route-logic/workspace-records.ts';
-
-/**
- * The page component is declared IN THIS MODULE (execution-plan §19.9): the
- * server function page lane records `pageComponentName` only for an exported
- * component function the route module declares itself, so an imported class
- * could not be admitted. Was `app/components/page-workspace-records.tsx`.
- */
 
 export const openElement = defineIslandConfig({
   tag: 'workspace-records-page',
@@ -26,6 +13,7 @@ export const openElement = defineIslandConfig({
     invalid: { default: 0 },
     errorText: { default: '' },
     nextCursor: { default: '' },
+    noNextPage: { attribute: false, default: true },
     filterWorkspaceId: { default: '' },
     filterStatus: { default: '' },
     filterTitlePrefix: { default: '' },
@@ -36,6 +24,7 @@ export function WorkspaceRecordsPage(props: {
   invalid: number;
   errorText: string;
   nextCursor: string;
+  noNextPage: boolean;
   filterWorkspaceId: string;
   filterStatus: string;
   filterTitlePrefix: string;
@@ -45,12 +34,12 @@ export function WorkspaceRecordsPage(props: {
     <main>
       <h1>Workspace records</h1>
       <p id='error'>{props.errorText}</p>
-      <form method='get' action='/workspace-records'>
+      <form method='get' action='/workspace-records' hidden={props.noNextPage}>
         <input type='hidden' name='workspace' value={props.filterWorkspaceId} />
         <input type='hidden' name='status' value={props.filterStatus} />
         <input type='hidden' name='q' value={props.filterTitlePrefix} />
         <input type='hidden' name='cursor' value={props.nextCursor} />
-        <button id='next-page' type='submit'>
+        <button id='next-page' type='submit' disabled={props.noNextPage}>
           {'Next page'}
         </button>
       </form>

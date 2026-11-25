@@ -11,7 +11,7 @@
   here.
 - Related: ADR-0173, ADR-0174, ADR-0176, ADR-0180, ADR-0181,
   [the TSX author candidate contract](../architecture/tsx-author-candidate-contract.md),
-  [the M09-2d property record](../architecture/m09-2d-nonprimitive-properties.md)
+  [the M09-2d property record](https://github.com/open-element/openelement/blob/8d50588914ea32f7b76ad8280d66496449273f29/docs/architecture/m09-2d-nonprimitive-properties.md)
 
 ## Context
 
@@ -31,7 +31,7 @@ surface is still partial, and three gaps are the reason this direction exists:
    records the ref-timing boundary, and TSX-13 and TSX-19 carry OPEN items
    (context representation/lifetime/reactivity; boundary reset policy). The generated
    lane does not wire context today
-   ([`m09-generated-element-shell.md`](../architecture/m09-generated-element-shell.md):199),
+   ([`m09-generated-element-shell.md`](https://github.com/open-element/openelement/blob/8d50588914ea32f7b76ad8280d66496449273f29/docs/architecture/m09-generated-element-shell.md):199),
    and the public context primitives that exist are the host-side
    `provideContext` / `consumeContext` pair, not a generated-component scope
    tree.
@@ -39,7 +39,7 @@ surface is still partial, and three gaps are the reason this direction exists:
    `attribute: false` rows are property-only, with no attribute/JSON wire and no
    server-to-client seed; non-primitive seed parity is deliberately NOT proved
    and M11 owns a future transport
-   ([`m09-2d-nonprimitive-properties.md`](../architecture/m09-2d-nonprimitive-properties.md):126,148).
+   ([`m09-2d-nonprimitive-properties.md`](https://github.com/open-element/openelement/blob/8d50588914ea32f7b76ad8280d66496449273f29/docs/architecture/m09-2d-nonprimitive-properties.md):126,148).
    On top of that, the islands the docs site consumes from `@openelement/ui`
    (`open-button`, `open-code-block`, `open-theme-toggle`) are class-lane
    package components, while generated-lane admission today admits only island
@@ -145,7 +145,7 @@ Boundaries recorded by this direction:
   exclusion from the seed) is a separate decision.
 - The exact transport and wire encoding are **not decided here**. The existing
   record already assigns a future transport to M11
-  ([`m09-2d-nonprimitive-properties.md`](../architecture/m09-2d-nonprimitive-properties.md):126);
+  ([`m09-2d-nonprimitive-properties.md`](https://github.com/open-element/openelement/blob/8d50588914ea32f7b76ad8280d66496449273f29/docs/architecture/m09-2d-nonprimitive-properties.md):126);
   this direction selects a JSON seed shape for the property-only rows, not a
   transport implementation.
 - Claim acceptance: an equal seed writes nothing during claim, and a

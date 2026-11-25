@@ -89,11 +89,12 @@ export type GeneratedElementHostIdentity =
       readonly kind: 'missing-producer';
       readonly component: string;
     }
-  /**
-   * The lane admitted the module and the emitter appended no host producer
-   * because the descriptor root is light (or absent, which the shell defaults
-   * to light). No host binding exists for this module by design.
-   */
+  /** A light descriptor whose emitted constructor supplies its static SSR producer. */
+  | {
+      readonly kind: 'light-producer';
+      readonly component: string;
+    }
+  /** A light descriptor whose leaf emitted no SSR producer. */
   | {
       readonly kind: 'light-no-producer';
       readonly component: string;
@@ -140,6 +141,7 @@ export const GENERATED_LANE_OWNED_KINDS: ReadonlySet<GeneratedElementHostIdentit
   new Set<GeneratedElementHostIdentity['kind']>([
     'producer',
     'missing-producer',
+    'light-producer',
     'light-no-producer',
   ]);
 
@@ -259,6 +261,7 @@ export function resolveGeneratedElementHost(
   // link and a host producer to wrap it, so treating it as "light, no producer by
   // design" would report the one honest refusal reason for a module that simply
   // lost its `<Name>__ssr`.
+  if (compiled.lightSsr) return { kind: 'light-producer', component: compiled.component };
   return input.root === 'shadow' || input.root === 'closed'
     ? { kind: 'missing-producer', component: compiled.component }
     : { kind: 'light-no-producer', component: compiled.component };

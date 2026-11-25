@@ -3,7 +3,7 @@
 type RailHost = HTMLElement;
 
 interface RailState {
-  observer: IntersectionObserver | null;
+  stop: (() => void) | null;
   links: HTMLAnchorElement[];
   intersecting: Set<string>;
 }
@@ -27,11 +27,11 @@ function markCurrent(state: RailState, hash: string): void {
   }
 }
 
-/** Deep-link-aware seed: the last rail target at or above the band top wins. */
-function seedCurrent(state: RailState, targets: Map<string, Element>, firstHash: string): void {
+/** The last rail target at or above the band top wins in the gaps. */
+function markSectionAboveBand(state: RailState, targets: Map<string, Element>): void {
   // Same band the observer watches: top = 15% of viewport height.
   const bandTop = globalThis.innerHeight * 0.15;
-  let current = firstHash;
+  let current = targets.keys().next().value ?? '';
   for (const [hash, target] of targets) {
     // Map insertion order is rail order is document order: stop at the
     // first target below the band. (If rail order ever decouples from
@@ -43,7 +43,6 @@ function seedCurrent(state: RailState, targets: Map<string, Element>, firstHash:
 }
 
 function refreshFromIntersections(state: RailState, targets: Map<string, Element>): void {
-  if (state.intersecting.size === 0) return; // keep the last mark, never flash blank
   let best: string | null = null;
   let bestTop = Infinity;
   for (const hash of state.intersecting) {
@@ -54,6 +53,7 @@ function refreshFromIntersections(state: RailState, targets: Map<string, Element
     }
   }
   if (best) markCurrent(state, best);
+  else markSectionAboveBand(state, targets);
 }
 
 function viteDevMode(): boolean {
@@ -66,19 +66,17 @@ export function installRailScrollspy(host: RailHost): void {
   if (states.has(host) || typeof IntersectionObserver === 'undefined') return;
   const links = railLinks(host);
   const targets = new Map<string, Element>();
-  let firstHash = '';
   for (const link of links) {
     const hash = link.getAttribute('href') ?? '';
     const id = hash.slice(1);
     if (!id || targets.has(hash)) continue;
-    if (!firstHash) firstHash = hash;
     // Sections live in the article light DOM (or the shell for #start).
     // getElementById does not pierce shadow roots: if article content ever
     // moves into one, the rail silently dies — hence the dev warning below.
     const target = document.getElementById(id);
     if (target) targets.set(hash, target);
   }
-  const state: RailState = { observer: null, links, intersecting: new Set() };
+  const state: RailState = { stop: null, links, intersecting: new Set() };
   // Register before any early return: an empty target set is deterministic
   // for this host, so re-entering must stay a no-op rather than rescanning.
   states.set(host, state);
@@ -94,6 +92,7 @@ export function installRailScrollspy(host: RailHost): void {
   for (const [hash, target] of targets) byTarget.set(target, hash);
   const observer = new IntersectionObserver(
     (entries) => {
+      if (states.get(host) !== state) return;
       for (const entry of entries) {
         const hash = byTarget.get(entry.target);
         if (!hash) continue;
@@ -104,21 +103,44 @@ export function installRailScrollspy(host: RailHost): void {
     },
     { rootMargin: '-15% 0px -70% 0px' },
   );
+  // A fragment jump can move a heading entirely across the observer band
+  // without producing an intersection entry. Recheck geometry on scroll.
+  let frame: number | null = null;
+  const onScroll = (): void => {
+    if (frame !== null) return;
+    frame = globalThis.requestAnimationFrame(() => {
+      frame = null;
+      if (states.get(host) === state) refreshFromIntersections(state, targets);
+    });
+  };
+  const onHashChange = (): void => {
+    const hash = globalThis.location.hash;
+    if (targets.has(hash)) markCurrent(state, hash);
+    else refreshFromIntersections(state, targets);
+  };
+  globalThis.addEventListener('scroll', onScroll, { passive: true });
+  globalThis.addEventListener('hashchange', onHashChange);
+  state.stop = () => {
+    observer.disconnect();
+    globalThis.removeEventListener('scroll', onScroll);
+    globalThis.removeEventListener('hashchange', onHashChange);
+    if (frame !== null) globalThis.cancelAnimationFrame(frame);
+  };
   for (const target of targets.values()) observer.observe(target);
-  state.observer = observer;
-  seedCurrent(state, targets, firstHash);
+  onHashChange();
 }
 
 export function uninstallRailScrollspy(host: RailHost): void {
   const state = states.get(host);
   if (!state) return;
-  state.observer?.disconnect();
-  // Every `aria-current` mark this install wrote goes with it. A disconnect
-  // keeps the generated DOM (LC-0), so a surviving runtime-written mark would
-  // meet the next claim's static-seed check as an attribute the template never
-  // declared — the claim then fails closed and the rail goes inert for the rest
-  // of the page's life. Teardown restores the declared seed: no mark at all.
-  // The removed mark is exactly what `markCurrent` writes ('location').
-  for (const link of state.links) link.removeAttribute('aria-current');
   states.delete(host);
+  state.stop?.();
+  // Teardown must UNDO the marks, not just stop the observer: a disconnect
+  // keeps the generated DOM (the LC-0 retained-region scope), so a leftover
+  // `aria-current` survives into the next connect's claim and fails its
+  // static-attribute-seed check (the marks are outside the authored seed).
+  // Restoring the declared state here makes the retained DOM re-claimable
+  // exactly like the first activation.
+  markCurrent(state, '');
+  state.intersecting.clear();
 }

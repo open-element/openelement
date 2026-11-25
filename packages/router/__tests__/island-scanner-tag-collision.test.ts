@@ -67,8 +67,8 @@ test('scanIslandMeta: two files deriving one tag fail ISLAND_TAG_DUPLICATE namin
     {
       // about.tsx -> 'about-page' via the -page fallback; about-page.tsx -> the
       // same tag directly. Both are ordinary island files.
-      'about.tsx': islandSource(`hydrate: 'idle'`),
-      'about-page.tsx': islandSource(`hydrate: 'idle'`),
+      'about.tsx': islandSource(`hydrate: 'idle', tags: ['island-first']`),
+      'about-page.tsx': islandSource(`hydrate: 'idle', tags: ['island-second']`),
     },
     async (islandsDir, islandFiles) => {
       let thrown: unknown;
@@ -88,10 +88,9 @@ test('scanIslandMeta: two files deriving one tag fail ISLAND_TAG_DUPLICATE namin
       expect(error.message).toContain('"about-page"');
       expect(error.message).toContain('"about.tsx"');
       expect(error.message).toContain('"about-page.tsx"');
-      // The one-line hint: the tag came from the path, so the author can
-      // rename one file or pin the tag in the sidecar.
       expect(error.message).toContain('derives its tag from its path');
-      expect(error.message).toContain('tags/tagNames');
+      expect(error.message).toContain('rename one file');
+      expect(error.message).not.toContain('tags/tagNames');
     },
   );
 });

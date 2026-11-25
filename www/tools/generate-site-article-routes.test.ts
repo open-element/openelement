@@ -29,7 +29,7 @@ const entry = (slug: string, order: number, locale?: string) => ({
   frontmatter: { order },
 });
 
-test('article routes: a slug maps to its route, binding and class names', () => {
+test('article routes: a slug maps to its route file and exported page function', () => {
   expect(pascalCase('web-component-admission')).toEqual('WebComponentAdmission');
   expect(pascalCase('i18n')).toEqual('I18n');
   expect(pascalCase('mdx')).toEqual('Mdx');
@@ -39,9 +39,6 @@ test('article routes: a slug maps to its route, binding and class names', () => 
     collection: 'guide',
     slug: 'getting-started',
     routeFile: 'getting-started.tsx',
-    componentFile: 'guide-getting-started.tsx',
-    elementTag: 'guide-getting-started',
-    className: 'GuideGettingStartedPage',
     order: 1,
   });
 
@@ -49,8 +46,7 @@ test('article routes: a slug maps to its route, binding and class names', () => 
   // route file is index.tsx — the one place the file name is not the slug.
   const [overview] = routeSetFor('architecture', [entry('architecture', 10)]);
   expect(overview.routeFile).toEqual('index.tsx');
-  expect(overview.componentFile).toEqual('architecture-architecture.tsx');
-  expect(overview.className).toEqual('ArchitecturePage');
+  expect(renderRouteModule(overview)).toContain('export function ArchitecturePage(');
 });
 
 test('article routes: a zh locale suffix folds into the English route', () => {
@@ -91,7 +87,9 @@ test('article routes: content that cannot become a route module fails closed', (
     );
   }
   // A digit-only or hyphen-joined slug is still a legal module name.
-  expect(routeSetFor('guide', [entry('a-2', 1)])[0].className).toEqual('GuideA2Page');
+  expect(renderRouteModule(routeSetFor('guide', [entry('a-2', 1)])[0])).toContain(
+    'export function GuideA2Page(',
+  );
   // A route with no navigation order cannot be placed in the sidebar.
   assertThrowsIncludes(
     () =>
@@ -140,7 +138,6 @@ test('article routes: the plan covers only managed article paths', () => {
   for (const file of files) {
     expect(
       file.rel.startsWith('app/routes/guide/') ||
-        file.rel.startsWith('app/components/article-routes/') ||
         file.rel === 'app/data/_generated-article-routes.ts',
       `unmanaged output path: ${file.rel}`,
     ).toBeTruthy();
@@ -189,8 +186,7 @@ test('article routes: every route on disk is generated from the collection', asy
   for (const route of articleRoutes) {
     const path = join(siteRoot, 'app/routes', route.collection, route.routeFile);
     const source = await readFile(path, 'utf8');
-    expect(source).toContain(route.className);
-    expect(source).toContain(`export function ${route.className}(props: {`);
+    expect(source).toBe(renderRouteModule(route));
     // The content file the header names must exist — the route is not orphaned.
     const contentPath = join(siteRoot, 'content/docs', route.collection, `${route.slug}.md`);
     const stats = await stat(contentPath);

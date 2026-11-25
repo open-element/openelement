@@ -30,33 +30,6 @@ export function nextInstanceId(): number {
 }
 
 /**
- * Reflect the `disabled` attribute into ElementInternals custom states
- * (:state(disabled)/:state(enabled)). Shared by the form-associated
- * primitives (open-button, open-input).
- */
-export function syncDisabledState(
-  internals: ElementInternals | undefined,
-  disabled: boolean,
-): void {
-  if (!internals?.states) return;
-  if (disabled) {
-    internals.states.delete('enabled');
-    internals.states.add('disabled');
-  } else {
-    internals.states.delete('disabled');
-    internals.states.add('enabled');
-  }
-}
-
-/**
- * Compiled modules may not carry helper functions at top level (OEC9008), so
- * the form lookup shared by the form-associated primitives lives here.
- */
-export function closestFormOf(element: Element): HTMLFormElement | null {
-  return typeof element.closest === 'function' ? element.closest('form') : null;
-}
-
-/**
  * Deepest focused element, descending through open shadow roots (OEC9008:
  * shared helpers live in plain .ts modules, not compiled component modules).
  */

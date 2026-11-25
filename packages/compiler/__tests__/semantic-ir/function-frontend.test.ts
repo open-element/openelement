@@ -453,14 +453,4 @@ describe('T rows — TypeScript truthfulness of the authored fixtures (asserted)
     // the checker; T− parity is recorded from the TypeScript authority, not
     // from a compiler diagnostic (documented, not a silent pass).
   });
-
-  test('NOT asserted in A4a (owned by A4b): source maps and the full security matrix', () => {
-    // A4b owns: expression-level source maps via @jridgewell/trace-mapping,
-    // the per-new-position security negative matrix, the semantic-test-matrix
-    // rows and the M03 ledger exit flip. Recording the boundary here keeps the
-    // harness honest: A4a asserts diagnostics only. The third former item —
-    // "breakage of the class default path" — retired with the class frontend
-    // (Alpha16 closeout): there is no class default path left to break.
-    expect(true).toBe(true);
-  });
 });

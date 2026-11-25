@@ -20,6 +20,25 @@ import {
 
 const DIST = join(import.meta.dirname ?? '.', '..', 'dist');
 
+test('build output: the landing page includes rendered light-island contents', () => {
+  const html = readFileSync(join(DIST, 'index.html'), 'utf8');
+  expect(html).toContain('<open-cinematic-scroll data-oe-light><span aria-hidden="true">');
+  expect(html).toContain('<open-hero-polish data-oe-light><span aria-hidden="true">');
+  expect(html).toContain('<open-dragon-live-gaze data-oe-light><figure class="stage');
+});
+
+test.each([
+  ['getting-started', 'Getting Started', '#install', '#before-you-start'],
+  ['tutorial', 'Tutorial: Your First App', '#before-you-start', '#install'],
+])('build output: guide/%s renders its own heading and outline', (slug, title, href, otherHref) => {
+  const html = readFileSync(join(DIST, 'guide', slug, 'index.html'), 'utf8');
+  expect(html).toContain(`<title>${title} — openElement</title>`);
+  expect(html.match(/<h1\b[\s\S]*?<\/h1>/)?.[0]).toContain(title);
+  const rail = html.match(/<open-page-rail\b[\s\S]*?<\/open-page-rail>/)?.[0];
+  expect(rail).toContain(`href="${href}"`);
+  expect(rail).not.toContain(`href="${otherHref}"`);
+});
+
 test('build output: no Hono virtual entry in public assets', () => {
   expect(existsSync(DIST), `Build output is missing: ${DIST}`).toBeTruthy();
   const assetsDir = join(DIST, 'assets');
@@ -409,6 +428,16 @@ test('build output: the element runtime ships as the one shared chunk islands ne
     graph.status,
     `B2 (a): the browser-entry graph artifact is not complete (status: ${String(graph.status)})`,
   ).toBe('complete');
+  expect(graph.islands.map(({ tag }) => tag).sort()).toEqual([
+    'open-button',
+    'open-cinematic-scroll',
+    'open-code-block',
+    'open-dragon-live-gaze',
+    'open-hero-polish',
+    'open-page-rail',
+    'open-search',
+    'open-theme-toggle',
+  ]);
   expect(
     graph.predicate.loadedViolations,
     `B2 (a): the page floor loads executor entry modules: ${graph.predicate.loadedViolations
