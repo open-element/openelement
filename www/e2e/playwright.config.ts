@@ -47,6 +47,7 @@ const FIREFOX_SKIPPED_SPECS = ['**/accessibility-mega-pages.spec.ts'];
 
 export default defineConfig({
   testDir: '.',
+  tsconfig: './tsconfig.json',
   testMatch: '*.spec.ts',
   // fullyParallel and workers must agree (#1232): fullyParallel with a single
   // worker was a contradiction — parallelism was declared but never allowed.

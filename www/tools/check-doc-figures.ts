@@ -20,6 +20,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import process from 'node:process';
+import type { Manifest } from 'vite';
+import { clientImportGraph, payloadClosure } from '../../tools/release/payload-closure.ts';
 import { spawnCommand } from '../../tools/repo/node-command.ts';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -119,71 +121,17 @@ function chunkStem(docName: string): string {
   return hits[0] ?? docName;
 }
 
-/**
- * The client build's Vite manifest (dist/client/.vite/manifest.json), read as
- * a static-import graph over site-absolute chunk URLs. `client.js` and the
- * island chunks carry static imports (shared runtime chunks, chunk-level
- * de-duplication), so a route's real download is its manifest chunk set plus
- * everything those files eagerly import — measured as the closure, the number
- * stays honest no matter which chunk file the bundler hosts shared code in.
- * Dynamic imports are deliberately not followed: the strategy loader's
- * dynamic edges are exactly the manifest chunkUrls, already seeds here.
- */
-interface ViteManifestEntry {
-  file?: string;
-  imports?: string[];
-}
-const eagerImports = new Map<string, string[]>();
-{
-  const manifestPath = join(dist, 'client/.vite/manifest.json');
-  let parsed: Record<string, ViteManifestEntry>;
-  try {
-    parsed = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, ViteManifestEntry>;
-  } catch (cause) {
-    failures.push(
-      `client build manifest unreadable: ${manifestPath} (${(cause as Error).message})`,
-    );
-    parsed = {};
-  }
-  const urlByKey = new Map<string, string>();
-  for (const [key, entry] of Object.entries(parsed)) {
-    if (entry.file) urlByKey.set(key, `/client/${entry.file}`);
-  }
-  for (const [key, entry] of Object.entries(parsed)) {
-    const url = urlByKey.get(key);
-    if (!url) continue;
-    const deps: string[] = [];
-    for (const dep of entry.imports ?? []) {
-      const depUrl = urlByKey.get(dep);
-      if (!depUrl) {
-        failures.push(`client manifest import target missing: ${key} -> ${dep}`);
-        continue;
-      }
-      deps.push(depUrl);
-    }
-    eagerImports.set(url, deps);
-  }
-}
-function eagerClosure(seeds: string[]): Set<string> {
-  const closure = new Set<string>(seeds);
-  const queue = [...closure];
-  while (queue.length > 0) {
-    for (const dep of eagerImports.get(queue.pop() ?? '') ?? []) {
-      if (!closure.has(dep)) {
-        closure.add(dep);
-        queue.push(dep);
-      }
-    }
-  }
-  return closure;
-}
+const eagerImports = clientImportGraph(
+  JSON.parse(await readFile(join(dist, 'client/.vite/manifest.json'), 'utf8')) as Manifest,
+);
+
 async function routePayload(route: string): Promise<{ bytes: number; chunks: number }> {
   const manifest = manifests.find((item) => item.route === route);
   if (!manifest) {
     failures.push(`no island manifest for route ${route}`);
     return { bytes: -1, chunks: -1 };
   }
-  const urls = eagerClosure([
+  const urls = payloadClosure(eagerImports, [
     ...(manifest.islands as Array<{ chunkUrl: string }>).map((island) => island.chunkUrl),
     '/client/islands/client.js',
   ]);

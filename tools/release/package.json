@@ -19,6 +19,7 @@
     "consumer:packaged-router": "node ../repo/run-in.ts --root ../.. -- node tools/release/consumer-packaged-router.ts",
     "consumer:packaged-ui": "node ../repo/run-in.ts --root ../.. -- node tools/release/consumer-packaged-ui.ts",
     "consumer:packaged-ui-app": "node ../repo/run-in.ts --root ../.. -- node tools/release/consumer-packaged-ui-app.ts",
+    "reference-payload:check": "node ../repo/run-in.ts --root ../.. -- node tools/release/check-reference-payload.ts",
     "graph:check": "node ../repo/run-in.ts --root ../.. -- node tools/release/check-package-graph.ts",
     "consumer:packaged-app": "node ../repo/run-in.ts --root ../.. -- node tools/release/consumer-packaged-native.ts",
     "gate:packed": "node ../repo/gate.ts @openelement/tools-repo#generate:all @openelement/tools-release#typecheck @openelement/tools-release#pack:dry-run @openelement/tools-release#package-artifacts:check:prepacked @openelement/tools-release#pack-surface:check @openelement/tools-release#consumer:packaged @openelement/tools-release#consumer:packaged-app @openelement/tools-release#consumer:packaged-router @openelement/tools-release#consumer:packaged-element @openelement/tools-release#consumer:packaged-ui @openelement/tools-release#consumer:packaged-unocss @openelement/fixture-third-party-web-components#typecheck @openelement/fixture-third-party-web-components#smoke",

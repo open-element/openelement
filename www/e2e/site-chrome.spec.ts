@@ -391,10 +391,11 @@ test.describe('Site chrome: reading rail scrollspy', () => {
     const result = await rail.evaluate(async (host) => {
       const callbacks = (
         window as Window & {
-          railObserverCallbacks: Array<(target: Element) => void>;
+          railObserverCallbacks?: Array<(target: Element) => void>;
         }
       ).railObserverCallbacks;
-      const stale = callbacks[0]!;
+      const stale = callbacks?.[0];
+      if (!callbacks || !stale) throw new Error('The rail observer was not installed');
       const target = document.getElementById('install')!;
       const root = host.shadowRoot ?? host;
       const anchor = root.querySelector('a[href="#start"]');

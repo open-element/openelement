@@ -1,93 +1,47 @@
-/**
- * check-www-routes-types.ts — derived typecheck gate for www/app/routes.
- *
- * The vite build only transpiles route modules, so no other gate type-checks
- * them (the retired www#check task pinned a hand-maintained __tests__ list and
- * rotted). This gate derives the route entry list from the framework's own
- * route scanner — the same module the dev server and SSG build enumerate with
- * — then type-checks the route modules with the workspace TypeScript compiler
- * under the compiler options the routes are written against
- * (allowImportingTsExtensions, strict, bundler resolution; see the flags
- * passed to tsc below).
- * Derivation means a new route file joins the gate automatically.
- *
- * Fail-closed invariants:
- *   - generated modules are produced by `generate:all`, which both gate:source
- *     (the PR layer) and gate:release (the release train) run first; a missing
- *     one is diagnosed from the compiler's own TS2307
- *     output (see below), so the hint can never go stale;
- *   - a zero-entry scan is an error, never a vacuous pass;
- *   - any compiler failure fails the gate.
- *
- * `--types node,@openelement/element/css-modules` (KR-1): the routes and the
- * components/islands they import carry `import sheet from './x.css'` style
- * imports through the style-asset protocol (#1553/#1558), whose ambient module
- * declaration lives in the element package's `./css-modules` export — the same
- * entry the www vite config consumes. Without it the gate reported 22 TS2307
- * "Cannot find module './*.css'" findings and called them generated-module
- * drift, which buried any real type error behind that noise.
- *
- * Usage:
- *   node www/tools/check-www-routes-types.ts
- */
-
-import { dirname, join, relative, resolve } from 'node:path';
+/** Check all authored www/app sources, including islands outside the route graph. */
+import { readdir } from 'node:fs/promises';
+import { join, relative, sep } from 'node:path';
+import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { scanRoutes } from '../../packages/router/src/vite/internal/ssg/route-scanner.ts';
-import process from 'node:process';
 import { spawnCommand } from '../../tools/repo/node-command.ts';
 
-const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
-const routesDir = join(repoRoot, 'www/app/routes');
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
+const appDir = join(repoRoot, 'www/app');
+const routesDir = join(appDir, 'routes');
+const sourceFile = /\.(?:[cm]?[jt]s|[jt]sx)$/;
+const trackedAndUnignored = await spawnCommand('git', {
+  args: ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', 'www/app'],
+  cwd: repoRoot,
+  stdin: 'null',
+  stdout: 'piped',
+  stderr: 'inherit',
+});
+if (trackedAndUnignored.code !== 0) throw new Error('Could not enumerate www/app sources with Git');
 
-const entries = await scanRoutes(routesDir);
-const files = [...new Set(entries.map((entry) => join(routesDir, entry.filePath)))]
-  .filter((file) => /\.(ts|tsx|js|jsx)$/.test(file))
-  .sort();
-
-if (files.length === 0) {
-  console.error(
-    `routes typecheck: route scan of ${routesDir} returned zero entries — ` +
-      'the scanner or the routes directory is broken; refusing to vacuously pass.',
-  );
-  process.exit(1);
+const gitFiles = new Set(new TextDecoder().decode(trackedAndUnignored.stdout).split('\0'));
+const files = new Set<string>();
+for (const entry of await readdir(appDir, { recursive: true, withFileTypes: true })) {
+  if (!entry.isFile() || !sourceFile.test(entry.name)) continue;
+  const file = relative(repoRoot, join(entry.parentPath, entry.name)).replaceAll(sep, '/');
+  if (gitFiles.has(file)) files.add(file);
 }
 
-/**
- * A missing generated module surfaces as TS2307. The compiler reports the
- * culprit as an absolute file:// URL (or, rarely, the source-relative
- * specifier); normalize either to an absolute path. When git ignores it, it is a
- * generated module that was never produced — say so, naming generate:all.
- * Returns the repo-relative path when that diagnosis fires, else null.
- */
-async function generatedModuleHint(output: string, importerFile: string): Promise<string | null> {
-  if (!output.includes('TS2307')) return null;
-  for (const match of output.matchAll(/Cannot find module '([^']+)'/g)) {
-    const specifier = match[1];
-    const abs = specifier.startsWith('file://')
-      ? fileURLToPath(specifier)
-      : specifier.startsWith('.')
-        ? resolve(dirname(importerFile), specifier)
-        : null;
-    if (!abs) continue;
-    const check = await spawnCommand('git', {
-      args: ['check-ignore', '-q', abs],
-      cwd: repoRoot,
-      stdin: 'null',
-      stdout: 'null',
-      stderr: 'null',
-    });
-    const { code } = check;
-    if (code === 0) return relative(repoRoot, abs);
-  }
-  return null;
+// Cross-check the application walk against the framework's route discovery.
+const routes = (await scanRoutes(routesDir))
+  .map((entry) => relative(repoRoot, join(routesDir, entry.filePath)).replaceAll(sep, '/'))
+  .filter((file) => sourceFile.test(file));
+if (routes.length === 0) throw new Error('www app typecheck found zero route modules');
+for (const route of routes) {
+  if (!files.has(route)) throw new Error(`www app typecheck omitted discovered route: ${route}`);
 }
 
-const tsc = join(repoRoot, 'node_modules', 'typescript', 'bin', 'tsc');
 const check = await spawnCommand(process.execPath, {
   args: [
-    tsc,
+    join(repoRoot, 'node_modules/typescript/bin/tsc'),
     '--noEmit',
+    '--allowJs',
+    '--checkJs',
     '--allowImportingTsExtensions',
     '--strict',
     '--skipLibCheck',
@@ -107,47 +61,20 @@ const check = await spawnCommand(process.execPath, {
     '--noImplicitOverride',
     '--types',
     'node,@openelement/element/css-modules',
-    ...files,
+    ...[...files].sort(),
   ],
   cwd: repoRoot,
-  // Fail closed on a prompt rather than hanging (gate invariant).
   stdin: 'null',
   stdout: 'piped',
   stderr: 'piped',
 });
-const text = new TextDecoder().decode(check.stdout) + new TextDecoder().decode(check.stderr);
-// Preserve the historical pass-through log shape.
-await process.stdout.write(new TextEncoder().encode(text));
-
+const decoder = new TextDecoder();
+const output = decoder.decode(check.stdout) + decoder.decode(check.stderr);
+process.stdout.write(output);
 if (check.code !== 0) {
-  // Attribute each diagnostic to its route module for the per-file FAIL log;
-  // errors from transitively checked sources still fail the gate.
-  const failedRoutes = new Set<string>(
-    files.filter((file) => text.includes(relative(repoRoot, file))),
-  );
-  let failures = 0;
-  for (const file of files) {
-    if (failedRoutes.has(file)) {
-      console.error(`FAIL ${relative(repoRoot, file)}`);
-      const hinted = await generatedModuleHint(text, file);
-      if (hinted) {
-        console.error(
-          `hint: ${hinted} is a generated module (gitignored). Run ` +
-            '`pnpm --filter @openelement/tools-repo run generate:all` first.',
-        );
-      }
-      failures++;
-    } else {
-      console.log(`PASS ${relative(repoRoot, file)}`);
-    }
+  if (/TS2307: Cannot find module '[^']*_generated-[^']+'/.test(output)) {
+    console.error('Run `vp run generate:all` to materialize the required site modules.');
   }
-  if (failures === 0) {
-    // Diagnostics outside the route modules themselves: still fail closed.
-    console.error('FAIL routes typecheck (errors in transitively checked sources)');
-    failures = 1;
-  }
-  console.error(`routes typecheck failed: ${failures}/${files.length} route module(s)`);
   process.exit(1);
 }
-console.log(`routes typecheck ok: ${files.length} route module(s) checked`);
-process.exit(0);
+console.log(`www app typecheck ok: ${files.size} source modules (${routes.length} route modules)`);

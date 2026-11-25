@@ -9,9 +9,9 @@ import {
   installSearch,
   openSearch,
   searchFromInput,
-  type SearchHost,
   uninstallSearch,
 } from '../site-ui/open-search-controller.ts';
+import type { SearchHost } from '../site-ui/open-search-shared.ts';
 
 /**
  * One rendered hit row, admitted to the props record.

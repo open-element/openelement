@@ -133,8 +133,10 @@ task by design: the repo vitest `tools` project (`vitest.config.ts`) owns
 | Build the docs site into `www/dist` | `vp run site:build` |
 | Site verification (links, tokens, content) | `vp run site:verify` |
 | Full release precheck (local writes + network; not read-only) | `vp run release:check` |
+| Site app and Playwright typecheck (after generation) | `vp run --no-cache --fail-if-no-match --filter @openelement/www typecheck` |
 | Content dates (read-only validation) | `vp run --no-cache --fail-if-no-match --filter @openelement/www check:content-dates` |
 | Interface snapshot (check / write) | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot` / `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot:write` |
+| Packed starter JS budget (after starter setup) | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-release reference-payload:check` |
 | Doc figures (measured-output gate) | `vp run --no-cache --fail-if-no-match --filter @openelement/www check:doc-figures` |
 | Version bump (one knob, twelve release-line points + four member stamps) | `pnpm --dir tools/repo run version-bump <version> [--write]` |
 | Workflow lint (after any `.github` touch) | `zizmor --offline .` |
@@ -211,7 +213,8 @@ graph; it does not execute the gate.
 Layers, not just lists:
 
 - **PR layer** (`.github/workflows/autoflow-ci.yml`): fast checks
-  (`vp run check`), `vp run generate:all`, the interface snapshot,
+  (`vp run check`), `vp run generate:all`, the Site app and Playwright typecheck,
+  the interface snapshot,
   governance boundaries, every package's tests (element, router, compiler,
   ui, create, www, the tools project), the chromium browser gate, the site
   build + e2e, and pack + packed-consumer verification.
@@ -223,6 +226,30 @@ Layers, not just lists:
   typecheck, the release dependency-graph check, the pack-surface check and
   the export-files check. The hooks are a courtesy — the gates above are the
   contract.
+
+## Packed starter JavaScript budget
+
+The release train measures the production build made by the packed starter
+smoke setup (`vp run --no-cache --fail-if-no-match --filter @openelement/e2e-starter-smoke setup`).
+The checker uses the starter home document, the home island manifest, the Vite
+import graph, and the router's emitted module graph. It attributes deferred
+imports to the page that can load them and counts each JavaScript file once
+per reported closure. Cross-page prefetches, HTML and CSS are outside the
+reference JavaScript budget.
+
+- Shared runtime includes the client bootstrap and its dependencies, plus
+  common imports of multiple active islands. It has a 4,500-byte gzip limit.
+- Reference island is the starter's `my-counter` and its dependencies, after
+  removing files already charged to shared runtime. It has a 2,000-byte gzip
+  limit. The report also shows the island with its own dependency closure.
+- Reference home includes the document's scripts and module preloads, both
+  islands and their reachable dependencies. It has a 10,000-byte gzip limit.
+
+The checker uses Node zlib to compress each emitted response separately at
+gzip level 9 and adds the results. It also reports raw and Brotli level 11 bytes, plus
+bundler-reported module sizes for attribution. A missing input or an exceeded
+limit fails the release. The official Site figures still use their eager
+static-import closure and their existing tolerance.
 
 ## Reading build failures: the diagnostics envelope (#1612)
 

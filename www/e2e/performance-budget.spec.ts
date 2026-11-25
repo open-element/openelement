@@ -88,6 +88,18 @@ const baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) as PerfBaseline
 /** The routes the baseline pins: one per template, both locales. */
 const ROUTES = Object.keys(baseline.routes);
 
+interface LayoutShiftEntry extends PerformanceEntry {
+  hadRecentInput: boolean;
+  value: number;
+}
+
+declare global {
+  var __vitals: Pick<Measurement, 'cls' | 'longTaskMs' | 'longTasks'> & {
+    lcp: number;
+    inp: number;
+  };
+}
+
 const VITALS_SCRIPT = () => {
   globalThis.__vitals = { lcp: 0, cls: 0, inp: 0, longTasks: 0, longTaskMs: 0 };
   try {
@@ -101,7 +113,7 @@ const VITALS_SCRIPT = () => {
   }
   try {
     new PerformanceObserver((list) => {
-      for (const entry of list.getEntries()) {
+      for (const entry of list.getEntries() as LayoutShiftEntry[]) {
         if (!entry.hadRecentInput) globalThis.__vitals.cls += entry.value;
       }
     }).observe({ type: 'layout-shift', buffered: true });
@@ -109,11 +121,16 @@ const VITALS_SCRIPT = () => {
     // Entry type unsupported in this engine: that metric stays 0.
   }
   try {
+    const options: PerformanceObserverInit & { durationThreshold: number } = {
+      type: 'event',
+      buffered: true,
+      durationThreshold: 40,
+    };
     new PerformanceObserver((list) => {
       for (const entry of list.getEntries()) {
         globalThis.__vitals.inp = Math.max(globalThis.__vitals.inp, entry.duration ?? 0);
       }
-    }).observe({ type: 'event', buffered: true, durationThreshold: 40 });
+    }).observe(options);
   } catch {
     // Entry type unsupported in this engine: that metric stays 0.
   }
