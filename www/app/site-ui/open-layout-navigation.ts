@@ -25,7 +25,6 @@ export const SECTION_MAP: Readonly<Record<string, readonly string[]>> = {
   // The error-code reference is the second Reference page (#1413): its sidebar
   // keeps the same single group so the two reference tables read as one family.
   '/errors': ['Reference'],
-  '/blog': ['Project'],
   '/roadmap': ['Project'],
   '/changelog': ['Project'],
   '/contributing': ['Project'],
@@ -129,7 +128,7 @@ export function localeSwitchPath(
   const bare = normalizeLocalePath(currentPath, { locales, defaultLocale }).path;
   // A route pattern (/:slug) can arrive when the resolved request path is
   // unavailable; a literal ":slug" must never land in an href, so the switch
-  // target degrades to the deepest static ancestor (/blog/:slug -> /blog).
+  // target degrades to the deepest static ancestor (/articles/:slug -> /articles).
   const segments = bare.split('/').filter(Boolean);
   const staticSegments: string[] = [];
   for (const segment of segments) {
@@ -160,9 +159,7 @@ export function localeSwitchLabel(currentLocale: string): string {
  * Each branch now states, in its own language, what the target edition covers.
  */
 export function localeSwitchScopeNote(currentLocale: string): string {
-  return currentLocale === 'zh'
-    ? '英文版本为全站原文；博文与 CHANGELOG 归档仅以英文发布。'
-    : 'The Chinese edition covers every page; blog posts and the CHANGELOG archive stay in the English original.';
+  return currentLocale === 'zh' ? '查看本页的英文版本。' : 'View this page in Chinese.';
 }
 
 export function filterNavSections(items: NavSection[], currentPath: string): NavSection[] {
@@ -358,8 +355,7 @@ const FOOTER_COLUMNS: Record<FooterColumnId, FooterColumnSource> = {
     links: [
       { path: REPOSITORY_URL, en: 'GitHub', zh: 'GitHub' },
       { path: '/roadmap', en: 'Roadmap', zh: '路线图' },
-      { path: '/changelog', en: 'Changelog', zh: '更新日志' },
-      { path: '/blog', en: 'Blog', zh: '博客' },
+      { path: '/changelog', en: 'Releases', zh: '发布状态' },
       { path: '/contributing', en: 'Contributing', zh: '参与贡献' },
     ],
   },

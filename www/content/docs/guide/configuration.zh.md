@@ -68,7 +68,7 @@ export default defineConfig({
 
 可接受的键——其余任何键都会以这份列表报错并让构建失败：
 
-- `renderer`——只接受 `'native'`（默认：编译后的 Part Program 序列化器）。渲染器选择保持显式、绝不推断。已退役的 `'lit'` 值仍被识别，因此会以显式迁移错误失败（`CONFIG_INVALID`；ADR-0152 2026-11-08 以零兼容窗口、无适配器地执行该退役）；其余任何值都是类型错误。
+- `renderer`——原生渲染后端，接受 `'native'`（默认值）。
 - `dirs`——`{ routes, islands, components }`。
 - `layout`——`false` 表示退出约定，或 `{ import, props }`。标签名由 import 的文件名推导，因此不可配置。
 - `packageIslands`——组件包如何被接纳。省略或 `'auto'`（默认）：构建在 scan 期推导被接纳的集合——应用的路由、页面、布局、岛与组件真正导入的每一个包属主元素模块（经打包器解析）都按其属主包归因，拥有有效 OpenElement manifest 的包无需任何配置即被接纳。数组在推导之外追加显式条目（如 `['@openelement/ui']`）；两个包声明同名标签时，显式条目优先于推导条目。`'manual'` 关闭推导：只接纳列出的包，导入未列出组件包的行为会以显式声明的修法被报告。应用导入了某包的元素模块、而该包没有有效 manifest 时，它永远不会被接纳（无可接纳之物）并被报告——这是 auto 下保留的唯一真实失误类报告。推导还会把每个被接纳的包并入 SSR 外部化列表（被接纳的包被打包而非运行时导入），因此没有 `ssr.noExternal` 键。
@@ -98,125 +98,11 @@ export default [
 
 ## 内容 collection 归站点所有
 
-1.0 的 router 提供路由、locale/渲染上下文、SSG descriptor 与 Document 归属——不是 CMS，也不是内容数据库。站点的 Markdown 管线由站点自己拥有。本仓库的参考站点用声明式 schema 校验 frontmatter、用 `marked` 渲染、把渲染结果视为第一方可信内容（`www/lib/content.ts` 的 `trustCollectionHtml`，`trustedHtml` 信任级别——非可信来源请先在你自己的边界消毒），在 `www/lib/blog.ts` 中定义 collection，并用 `www/tools/generate-site-content-data.ts` 写出带类型的数据模块：
+参考站点在 [`www/content-collections.ts`](https://github.com/open-element/openelement/blob/main/www/content-collections.ts) 定义指南和架构文档的 frontmatter schema。构建先校验并渲染 Markdown，再为每份指南生成共享的服务端文章视图所用的数据。传入 `trustedHtml` 的外部内容需要先经过清理。
 
-```sh
-pnpm --dir www run generate:content   # site:build 会在 router 构建前先运行
-```
+## 代码块语法高亮
 
-生成模块通过站点自己的 package import 消费——即站点 `package.json` 的 `imports` 字段，不存在框架虚拟模块：
-
-```json
-{
-  "imports": {
-    "#generated/blog-data": "./app/data/_generated-blog-data.ts"
-  }
-}
-```
-
-每篇 `content/blog/*.md` 编译为一个 post；draft 文章在 production 构建中被排除。frontmatter 支持 `title`、`date`、`draft`、`tags`、`excerpt`、`type`、`lang`。
-
-collection 声明自己的目录、base path 与 schema：
-
-```ts
-import type { CollectionOptions } from '../lib/content.ts';
-
-export const blogCollection: CollectionOptions = {
-  contentDir: 'content/blog',
-  basePath: '/blog',
-  schema: {
-    fields: {
-      title: 'string',
-      date: 'string',
-      draft: 'boolean',
-      tags: 'string[]',
-    },
-  },
-};
-```
-
-### app/routes/blog/[slug].tsx —— 使用模式
-
-```tsx
-// app/routes/blog/[slug].tsx —— scanner 发现的路由模块
-import { definePage, notFound } from '@openelement/router';
-import { getPostBySlug, posts } from '#generated/blog-data';
-import { type TrustedHtml } from '@openelement/element';
-
-// 这个页面是一个没有客户端行为的模块，因此由服务端函数形态承载它：
-// 浏览器永远收不到这个函数。
-export function BlogPostPage(props: { title: string; html: TrustedHtml }) {
-  return (
-    <main>
-      <h1>{props.title}</h1>
-      {/* post.html is markdown authored in this repo — explicit trust boundary */}
-      <article class='post-body' innerHTML={props.html} trustedHtml></article>
-    </main>
-  );
-}
-
-export function getStaticPaths(): Array<Record<string, string>> {
-  return posts.map((post) => ({ slug: post.slug }));
-}
-
-export default definePage(BlogPostPage, {
-  renderIntent: { mode: 'static' },
-  props({ params }) {
-    const post = getPostBySlug(params.slug);
-    if (!post) notFound(`Post not found: ${params.slug}`);
-    return { title: post.frontmatter.title, html: post.html };
-  },
-});
-```
-
-`getStaticPaths()` 预渲染每个 slug；`innerHTML` + `trustedHtml` 是渲染 markdown HTML 的显式信任边界。
-
-## 代码块语法高亮（构建期）
-
-站点自有的 collection loader 在构建机的 generate 步骤里把围栏代码块编译为 Shiki token span——高亮器是 devDependency，永不进入客户端 bundle，页面携带的是静态 token 标记：没有高亮 script，也没有高亮闪烁。token 颜色是 `var(--shiki-token-*)` 引用，由站点样式表里唯一的调色板表解析，两套配色随 `data-theme` 与站点其他颜色一起切换。collection 的 `markdown` 选项可以替换 renderer；其输出仍是第一方可信内容。路由/页面里的代码块用 `<open-code-block>`（`@openelement/ui`）包裹——它只拥有 copy 按钮；高亮是构建期编译进 slot light DOM 的部分，没有 token span 的代码块也照常渲染（可复制）为纯文本。
-
-### lib/blog.ts —— 语法高亮配方
-
-```ts
-import { marked } from 'marked';
-import {
-  createCssVariablesTheme,
-  createHighlighter,
-  createJavaScriptRegexEngine,
-} from 'shiki';
-import type { CollectionOptions } from '../lib/content.ts';
-
-// 构建期高亮：token 颜色是 CSS 变量，由站点样式表解析；严格的 JavaScript
-// regex 引擎不加载 WASM，遇到不兼容 grammar 直接让构建失败。不在已加载
-// 集合内的语言回落到 marked 的纯文本 <pre><code> 路径。
-const theme = createCssVariablesTheme({ variablePrefix: '--shiki-' });
-const highlighter = await createHighlighter({
-  themes: [theme],
-  langs: ['typescript', 'tsx', 'javascript', 'json', 'bash', 'css', 'html'],
-  engine: createJavaScriptRegexEngine(),
-});
-const langs = new Set(['typescript', 'tsx', 'javascript', 'json', 'bash', 'css', 'html']);
-
-const markdown = (content: string) =>
-  marked(content, {
-    renderer: {
-      code(code: string, lang: string | undefined) {
-        const grammar = ({ ts: 'typescript', js: 'javascript', sh: 'bash' })[lang ?? ''] ?? lang;
-        return grammar && langs.has(grammar)
-          ? highlighter.codeToHtml(code, { lang: grammar, theme })
-          : false;
-      },
-    },
-  });
-
-export const blogCollection: CollectionOptions = {
-  contentDir: 'content/blog',
-  basePath: '/blog',
-  markdown,
-};
-```
-
-自定义 renderer 的输出保持在同一第一方信任边界内。
+参考站点在构建期间使用 Shiki 高亮有语言标签的代码块。高亮后的 HTML 和主题样式随页面交付。向 Markdown 围栏添加语言标签，例如 `tsx` 或 `bash`，即可启用高亮。
 
 ## middleware.use
 

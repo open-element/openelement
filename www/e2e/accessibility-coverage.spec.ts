@@ -28,7 +28,6 @@ const SWEPT_ROUTES = [
   '/roadmap/',
   '/errors/',
   '/404',
-  '/blog/1-0-0-alpha-1-baseline/',
   '/zh/',
   '/zh/docs/',
   '/zh/changelog/',
@@ -108,7 +107,7 @@ test.describe('Accessibility coverage sweep (axe)', () => {
     // (changelog register, package graph) must not leak the zh copy into the
     // English tree.
     for (const [route, forbidden] of [
-      ['/changelog/', '发布登记表'],
+      ['/changelog/', '发布状态'],
       ['/roadmap/', '包依赖图'],
     ] as const) {
       await page.goto(route);

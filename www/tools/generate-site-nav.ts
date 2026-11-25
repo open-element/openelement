@@ -16,7 +16,7 @@
  *     the section, `section` groups the entry (defaulted per collection) and
  *     `navLabel` (falling back to `title`) labels it. zh entries supply
  *     `labelZh` from the same fields.
- *   the remaining static routes (/docs, /blog, …) — `export const meta =
+ *   the remaining static routes (/docs, /changelog, …) — `export const meta =
  *     { section, label, order }` in the route module.
  *
  * Two generation-time guards, both fail-closed:
@@ -49,7 +49,7 @@ const outFile = join(siteRoot, 'app/data/_generated-nav-data.ts');
  * (/docs hub + /guide/*), Core the guide's framework-api page, Principles and
  * Reference the architecture notes and the api list, and the nameless group
  * ('', rendered as FALLBACK_SECTION "Project") the project's own pages
- * (blog/changelog/roadmap/contributing). Any section missing here is appended
+ * (changelog/roadmap/contributing). Any section missing here is appended
  * deterministically by `render`, so a new section cannot silently disappear.
  */
 const SECTION_ORDER = ['Guide', 'Core', 'Recipes', 'Principles', 'Reference', ''];
@@ -67,16 +67,13 @@ const SECTION_ZH: Readonly<Record<string, string>> = {
 /**
  * Curated header links; each must resolve to a scanned static route.
  *
- * Four entries: the two trees (Docs hub, Blog stream) plus the two pages a
- * reader looks for by name (the API reference and the Roadmap). Changelog and
- * Contributing stay in the footer — they are project history rather than
- * navigation a reader needs beside the content.
+ * Docs, API reference, roadmap and the current release status are top-level destinations.
  */
 const HEADER_NAV: ReadonlyArray<{ path: string; label: string }> = [
   { path: '/docs', label: 'Docs' },
   { path: '/reference', label: 'API' },
   { path: '/roadmap', label: 'Roadmap' },
-  { path: '/blog', label: 'Blog' },
+  { path: '/changelog', label: 'Releases' },
 ];
 
 /** zh header labels keyed by path (they name sections, not page titles). */
@@ -84,7 +81,7 @@ const HEADER_NAV_ZH: Readonly<Record<string, string>> = {
   '/docs': '文档',
   '/reference': 'API',
   '/roadmap': '路线图',
-  '/blog': '博客',
+  '/changelog': '发布状态',
 };
 
 /**
@@ -96,9 +93,8 @@ const ROUTE_LABEL_ZH: Readonly<Record<string, string>> = {
   '/docs': '文档',
   '/reference': 'API 参考',
   '/errors': '错误码',
-  '/blog': '博客',
   '/roadmap': '路线图',
-  '/changelog': '更新日志',
+  '/changelog': '发布状态',
   '/contributing': '参与贡献',
 };
 

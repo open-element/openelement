@@ -41,11 +41,11 @@ Two consequences worth writing down: never let a loader return a DOM node, a cla
 
 `renderIntent.mode` selects where a page renders: `'static'` (default) prerenders at build; `'dynamic'` skips prerendering and renders per request through the generated `dist/server` entry, running the route loader on every request. A page that exports an action may stay `'static'` — a hybrid page: its GET is prerendered and served from the static artifact, while its action POST is dispatched to the generated server entry at request time. Choose `'dynamic'` when the GET itself must run per request (per-request loaders, response headers, non-repeatable content). This behavior is frozen.
 
-`renderIntent.stream` — the deferred-field streaming channel — is **not available in this release**. It belonged to the retired class lane's compiled Part Program, and the function lane that replaces it has no carrier for it yet; Alpha18 owns the replacement. Until then, a route that needs data resolves it in the loader or the front gate, like any other page. [Streaming](/guide/streaming) states the whole boundary.
+Pages send a complete HTML response. Resolve page data in the loader before rendering, and set headers or cookies through the loader’s `responseHeaders` channel. Include content needed without JavaScript in the server render.
 
 ## Server function pages
 
-When a page is one-shot static text — a legal notice, a landing section — the compiled-component machinery is more than it needs. A **server function page** is the route module's own exported TSX component function wrapped in `definePage(Component, descriptor?)`: the compiler lowers the function into a generative HTML constructor (the same semantic checks and the same escaping as every compiled component — text crosses one escape channel, attributes another), and the render output is server-only by construction. A server function page produces no compiled program, no property state machinery, and never reaches the island, static-component, or client-chunk surfaces; with no island composed, the page ships zero client JS.
+When a page is one-shot static text — a legal notice, a landing section — the compiled-component machinery is more than it needs. A **server function page** is the route module's own exported TSX component function wrapped in `definePage(Component, descriptor?)`: the compiler lowers the function into a generative HTML constructor (the same semantic checks and the same escaping as every compiled component — text crosses one escape channel, attributes another), and the render output is server-only by construction. A server function page produces no compiled program, no property state machinery, and never reaches the island, static-component, or client-chunk surfaces; the function itself adds no client module, while the application may still load a shared bootstrap for layout or island delivery.
 
 ```tsx
 // app/routes/about.tsx
@@ -205,4 +205,3 @@ Request-time (`'dynamic'`) loaders/actions run on the server with the Web-standa
 - [Core Concepts](/guide/core-concepts) — the components and islands these routes compose.
 - [Error Handling](/guide/error-handling) — the failure channels an action's return value feeds.
 - [API Routes](/guide/api) — routes that answer requests without pages.
-- [Streaming](/guide/streaming) — why `renderIntent.stream` is not part of this release.

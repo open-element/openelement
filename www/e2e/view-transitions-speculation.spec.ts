@@ -22,7 +22,7 @@ import { expect, test } from '@playwright/test';
 const OPT_IN_MARKER = '@view-transition { navigation: auto; }';
 
 test.describe('View Transitions', () => {
-  const pages = ['/', '/guide/getting-started/', '/architecture/', '/blog/', '/changelog/'];
+  const pages = ['/', '/guide/getting-started/', '/architecture/', '/changelog/'];
 
   for (const path of pages) {
     test(`"${path}" carries the cross-document opt-in exactly once`, async ({ page }) => {

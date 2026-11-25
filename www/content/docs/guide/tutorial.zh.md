@@ -96,7 +96,7 @@ export default definePage(HelloPage, {
 
 关于这个模块，现在就该知道两件事：
 
-- 它是一个**服务端函数页**：编译器把导出的函数降级成一个生成式 HTML 构造器，所以这个页面在构造上就在服务端渲染——没有 Part Program、没有属性机制，浏览器永远收不到这个函数。
+- 它是一个**服务端函数页**：编译器把导出的函数降级成一个生成式 HTML 构造器，所以这个页面在构造上就在服务端渲染，页面函数本身不进入客户端模块。
 - `definePage` 只接受 `route`、`head`、`renderIntent`、`props` 和 `error`。没有 `render()` 字段，也没有 `route.path`——URL 由文件名决定。
 
 预期结果：dev server 不需要重启就会接管新文件。打开 http://localhost:5173/hello，或者直接看响应：

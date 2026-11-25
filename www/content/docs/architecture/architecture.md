@@ -22,9 +22,6 @@ Dependency direction — consumers point at what they use.
 | `@openelement/ui`        | optional primitives   | optional `@openelement/element`                              |
 | `@openelement/create`    | starter · build time  | —                                                             |
 
-> Retired: `core` · `signal` · `content` · `ssg` · `app` · `adapter-vite` ·
-> `app/preact` · `app/spa`.
-
 ## Deep modules hide implementation complexity.
 
 Authors use product interfaces. Renderer, router, signal, content and
@@ -32,12 +29,12 @@ build-phase details stay internal until real variation proves a public seam.
 
 | Layer       | Package                                           | Scope                                                                                            |
 | ----------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| contracts   | `@openelement/protocol`                           | Shared contract types both products build on: Part Program IR, error dialect, diagnostics.        |
+| contracts   | `@openelement/protocol`                           | Shared contracts for rendering, routing, and diagnostics.        |
 | element     | `@openelement/element`                            | One authoring surface for Custom Elements, JSX, DSD, hydration and signals.                      |
-| build       | `@openelement/compiler`                           | TSX-to-Part-Program compilation behind the compiler's Vite seam; the only TypeScript host dep.    |
+| build       | `@openelement/compiler`                           | Compiles TSX into server renderers and Custom Element lifecycle functions.    |
 | application | `@openelement/router`                             | Pages, routes, islands, render semantics and build orchestration for complete applications.      |
 | output      | `@openelement/router`                             | Vite integration, static generation and deployable Nitro output behind one build boundary.       |
-| adoption    | `@openelement/create`, optional `@openelement/ui` | Starter-first adoption and optional primitives; neither exposes retired implementation packages. |
+| adoption    | `@openelement/create`, optional `@openelement/ui` | Starter scaffolding and optional primitives. |
 
 ## Web Components are the application architecture.
 
@@ -46,10 +43,7 @@ complete application loops and portable operations—not a growing package count
 
 ### WC SSR
 
-The current line classifies admitted standard, Lit, FAST and Stencil elements
-for DSD, light DOM or client-only rendering with actionable diagnostics and
-corpus evidence — a contract first shipped on the 0.43 line and kept green by CI
-on the compiled line.
+The build classifies admitted components for DSD, light DOM or client-only rendering. Browser tests exercise the upgrade of standard, Lit, FAST and Stencil elements.
 
 ### Application loop
 
@@ -64,13 +58,12 @@ remain unassigned and require a future decision record.
 
 ## Current truth is checked mechanically.
 
-Package surface, docs truth, artifacts, critical paths and browser tests reject
-a return to the retired product graph.
+Release checks cover package exports, documentation, deployable artifacts and application behavior in browsers.
 
 | Gate         | Requirement                                                                            |
 | ------------ | -------------------------------------------------------------------------------------- |
 | {{PACKAGE_COUNT}} packages | Current consumer surface (protocol/element/compiler/router/create/ui), starter and docs agree. |
-| output split | The static/request-time output split is frozen; the 0.41.x static freeze is untouched. |
+| output split | Static HTML and browser assets are public. Request-time modules stay on the server. |
 | 3 browsers   | Candidate releases require Chromium, Firefox and WebKit proof.                         |
 | packed proof | Consumers build from public artifacts, not workspace aliases.                          |
 
@@ -80,19 +73,15 @@ OpenElement treats third-party Custom Elements as standards-based dependencies. 
 
 ### Current contract
 
-`@openelement/element` owns authoring; the `router` package keeps application and build behavior behind one boundary.
+Compiler generates renderers and lifecycle functions. Element supplies the Custom Element runtime, and Router owns application and build behavior.
 
 ### Explicit admission
 
-Known packages can be configured as package islands and use available CEM metadata without importing retired package surfaces.
+Known packages can be configured as package islands and use available CEM metadata.
 
 ### Current diagnostics
 
-The current line ships Universal DSD/light/client-only classification,
-hydration-mismatch diagnostics and the tracked third-party WC SSR corpus —
-first shipped on the 0.43 line and kept green by CI on the compiled line.
-Admission still depends on explicit package-island configuration and observed
-metadata; it is not a blanket certification of every third-party component.
+The build reports DSD, light DOM or client-only classification and hydration mismatches. Admission depends on the package-island configuration and the metadata available for that package.
 
 ## See also
 

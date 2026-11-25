@@ -1,7 +1,7 @@
 /**
  * DX-02 browser automation — the site-level timing / 390px / keyboard contracts.
  *
- * This file exists because the alpha15 review's manual browser checklist (timing,
+ * The manual browser checklist (timing,
  * morph, preserve, 390px, keyboard) had no repeatable automated counterpart on
  * the Site. Coverage that already exists and is deliberately NOT repeated here:
  *   - 390px long-form overflow: `page-structure.spec.ts` ("long-form pages do not
@@ -27,9 +27,7 @@
  *      keyboard and its links are reachable and activatable.
  *
  * Automation is NOT screen-reader testing. These assertions are DOM/geometry/
- * computed-style facts; screen-reader verification stays manual (see
- * `docs/release/evidence/alpha15/dx02-browser-automation.md`). The morph/
- * preserve half of the same checklist lives in the native fixture's
+ * computed-style facts; screen-reader verification requires human evaluation. The morph/preserve half of the same checklist lives in the native fixture's
  * `e2e/dx02-morph-preserve.spec.ts`.
  *
  * Engine capability note: the macOS WebKit build's default Tab path visits only

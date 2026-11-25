@@ -25,13 +25,13 @@ order: 40
 
 ## 渐进式行为
 
-claim 对已经存在的 DOM 重放编译后的 Part Program：模板声明过的处理器被绑定，`@property` 字段由宿主 attribute 填充，`pure-island` 首次渲染。未被触及的节点从不重渲染，没有按字符串查找的绑定发现，也不会从 `data-*` attribute 合成事件。
+生成的 claim 函数把模板声明的处理器绑定到现有 DOM，并读取 sidecar 中声明的宿主 attribute。仅客户端 island 首次挂载。未被触及的节点从不重渲染，没有按字符串查找的绑定发现，也不会从 `data-*` attribute 合成事件。
 
 策略决定 chunk 何时被拉取——`load`、`idle`、`visible`、`media` 或 `only`。`media` island 在 island 的 `media` 字段声明查询，chunk 只在该查询匹配期间拉取。在它到达之前，元素保留服务端标记与样式：页面从不依赖任何 island 已经加载，而永远到不了的 island 除了自己的 chunk 之外不付出任何代价。
 
 ## 升级模型
 
-island 是 openElement 中唯一的客户端 JavaScript 单元。公开模型是编译后的元素类：服务端序列化、新建 DOM 与已有 DOM 的 claim 共享同一份 Part Program。
+编译器从同一个组件生成服务端渲染器和浏览器端的挂载与 claim 函数。每个 island 各自安排加载时机。应用也可能加载共享的引导脚本。
 
 openElement 使用浏览器的 Custom Element upgrade 机制。SSG 先写出 HTML，然后生成的客户端入口只导入当前页面用到的 island 模块并注册其编译类。
 
@@ -43,7 +43,7 @@ openElement 使用浏览器的 Custom Element upgrade 机制。SSG 先写出 HTM
 
 ### 第 2 层 — `dsd-interactive` — DSD 加编译 claim
 
-服务端把 island 的编译 Part Program 序列化为 DSD。upgrade 时，生成的 claim 构件按同一份程序对照既有 DOM，并绑定模板声明的事件处理器——没有 binding 发现遍历，没有字符串方法查找，也没有 `data-on-*` 事件属性。
+编译生成的服务端渲染器输出 DSD。upgrade 时，生成的 claim 函数将模板声明的事件处理器绑定到现有 DOM——没有 binding 发现遍历，没有字符串方法查找，也没有 `data-on-*` 事件属性。
 
 ### 第 3 层 — `pure-island` — 客户端拥有的 shadow root
 

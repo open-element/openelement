@@ -184,12 +184,6 @@ export const ALLOWLIST: readonly AllowEntry[] = [
     reason:
       'a generated (gitignored) module: it exists after generate:all, never in a fresh checkout; check:content-data owns its content',
   },
-  {
-    rule: 'parity',
-    value: 'www/content/blog/2026-09-13-1-0-0-alpha-1-baseline.md',
-    reason:
-      'the release-note blog post ships in English only by decision; it is not a docs article pair',
-  },
 ];
 
 /** Check the allowlist itself: every entry carries a reason a reviewer can judge. */

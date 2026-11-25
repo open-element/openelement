@@ -10,8 +10,8 @@ test('scanSiteRoutes maps index, nested, and dynamic route files', async () => {
     for (const file of [
       'index.tsx',
       'guide/configuration.tsx',
-      'blog/index.tsx',
-      'blog/[slug].tsx',
+      'articles/index.tsx',
+      'articles/[slug].tsx',
     ]) {
       const target = join(dir, file);
       await mkdir(target.split('/').slice(0, -1).join('/'), { recursive: true });
@@ -19,8 +19,8 @@ test('scanSiteRoutes maps index, nested, and dynamic route files', async () => {
     }
     expect(await scanSiteRoutes(dir)).toEqual([
       { path: '/', type: 'page' },
-      { path: '/blog', type: 'page' },
-      { path: '/blog/:slug', type: 'page' },
+      { path: '/articles', type: 'page' },
+      { path: '/articles/:slug', type: 'page' },
       { path: '/guide/configuration', type: 'page' },
     ]);
   } finally {

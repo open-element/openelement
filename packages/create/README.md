@@ -4,11 +4,7 @@ Project scaffolding CLI for openElement applications.
 
 Docs and guides: <https://openelement.org>.
 
-> 1.0 line: the supported creation entry for Element and Router. The published
-> npm versions and dist-tags are registry truth (query them with
-> `npm view @openelement/create dist-tags`); `latest` rides the 1.0 line since
-> the alpha.11 ruling, so a versionless install resolves the current 1.0
-> prerelease.
+Use `npm view @openelement/create dist-tags` to check the published versions.
 
 `@openelement/create` generates a new openElement project from ONE template —
 the showcase starter: a static-first landing page with two islands, a fully
@@ -23,7 +19,7 @@ package explicitly.) The repository's own
 development flow (Vite+ / `vp`) stays in this repository and appears nowhere in
 the generated manifest or scripts.
 
-## Usage (1.0 Alpha)
+## Usage
 
 ```bash
 npm create @openelement my-app
@@ -70,23 +66,8 @@ Non-interactive runs (CI, packed consumers) behave identically.
 npx @openelement/create my-app --no-install --no-git -t showcase
 ```
 
-`npm create @openelement` rides npm's initializer alias: a bare `@scope`
-resolves to `@scope/create` at the scope's default dist-tag — with no tag in
-the command, that is `latest`, which the 1.0 line rides — so the canonical
-spelling names no tag, and npm runs this package's generator. The version a
-versionless install resolves is registry truth: read it from the live registry
-(`npm view @openelement/create dist-tags`), and from the framework's tracked
-release-state manifest, which records the version each dist-tag was last
-verified to serve. The 1.0 line is a new baseline — not a 0.x upgrade, with no
-migration path from 0.x. Pin an exact version when reproducibility matters:
-
-```bash
-npm create @openelement@1.0.0-alpha.15 my-app
-```
-
-The generated starter depends on `@openelement/*` through caret ranges over
-the release it was generated from, so a dependency update picks up later `1.0.0`
-prereleases without a manifest edit.
+`npm create @openelement` resolves the npm `latest` tag. The starter writes
+caret ranges for the OpenElement packages based on the scaffold's release.
 
 The canonical install command is exported from `@openelement/create/install-command` (one builder, every documented copy derives from it).
 
@@ -108,16 +89,6 @@ The scaffolded project runs on Node.js 24.2+ under npm, pnpm, yarn, or bun.
 Keep using the package manager that installed its dependencies. For a checkout
 whose source version is ahead of npm, the [source preview](../../README.md#preview-the-source-checkout)
 builds the starter against the checkout’s packages.
-
-## Stable 0.43 (maintenance line)
-
-The stable 0.43 line is still published, but it is not the 1.0 install path.
-A versionless install resolves the npm `latest` dist-tag to the 1.0 line; pin
-the maintenance line explicitly instead:
-
-```bash
-npm create @openelement@0.43 my-app
-```
 
 ## Requirements
 

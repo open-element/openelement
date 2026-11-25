@@ -63,19 +63,5 @@ export default [
   },
   { link: { rel: 'icon', type: 'image/svg+xml', href: '/assets/open-favicon.svg' } },
   { link: { rel: 'apple-touch-icon', href: '/assets/open-avatar.svg' } },
-  // One feed for the whole site: dispatches are single-language originals (the
-  // blog collection's `lang` field names the original), so /zh/blog lists the
-  // same posts and a per-locale feed would be an empty duplicate. `title` must
-  // match the feed's channel <title> (tools/lib/site-rss.ts SITE_FEED_TITLE);
-  // the href is site-root-relative like every other asset here, and resolves
-  // the same on locale-prefixed pages.
-  {
-    link: {
-      rel: 'alternate',
-      type: 'application/rss+xml',
-      title: 'openElement Blog',
-      href: '/blog/rss.xml',
-    },
-  },
   { style: documentStyle },
 ];

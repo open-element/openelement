@@ -9,7 +9,7 @@
  * sources (www/content/docs/{guide,architecture}/*.md, paired en/zh)
  * to appear in the sitemap in both locales, so a source-level route that
  * never reached the built public surface is a CI failure here as well. Blog
- * post URLs are slug-rewritten by the blog plugin at build time, so the
+ * article files also generate route modules at build time, so the
  * built sitemap is their only mechanical source of truth (they are covered
  * by the enumeration itself).
  *
@@ -122,7 +122,7 @@ test.describe('Public IA route coverage', () => {
       await expect(page.locator('html')).toHaveAttribute('lang', expectedLocale(route));
       // Nested mains exist (layout + page body); the first is the layout's.
       await expect(page.getByRole('main').first()).toBeVisible();
-      // Some pages render more than one level-1 heading (blog posts carry the
+      // Some pages render more than one level-1 heading (articles carry the
       // post header h1 plus the article body h1) — assert one is visible.
       await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
       expect(pageErrors).toEqual([]);

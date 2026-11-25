@@ -25,12 +25,10 @@ describe('canonicalRoutePath', () => {
     expect(canonicalRoutePath('/docs/')).toBe('/docs/');
     expect(canonicalRoutePath('/guide/getting-started')).toBe('/guide/getting-started/');
     expect(canonicalRoutePath('/architecture/comparison')).toBe('/architecture/comparison/');
-    expect(canonicalRoutePath('/blog/1-0-0-alpha-1-baseline')).toBe(
-      '/blog/1-0-0-alpha-1-baseline/',
-    );
+    expect(canonicalRoutePath('/articles/how-to-build')).toBe('/articles/how-to-build/');
     // A slug that merely contains a dot is still a directory route: the static
     // rule is an explicit extension whitelist, not "the segment has a dot".
-    expect(canonicalRoutePath('/blog/v1.2')).toBe('/blog/v1.2/');
+    expect(canonicalRoutePath('/articles/v1.2')).toBe('/articles/v1.2/');
   });
 
   test('flat routes and static assets are not slashed', () => {

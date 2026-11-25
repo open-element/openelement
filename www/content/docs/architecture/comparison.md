@@ -54,9 +54,7 @@ order: 20
 
 OpenElement × Supabase × Cloudflare is the first-party fullstack delivery path, with explicit ownership boundaries: OpenElement owns the application UX; Supabase owns data, Auth, RLS, Storage and Realtime; Cloudflare owns edge delivery, security, cache and async execution. Supabase and Cloudflare are composed providers — never built-in framework features — and the package-graph boundary gate keeps provider code out of the framework packages.
 
-First shipped on the 0.43 line together with Universal WC SSR and carried by the current compiled line. Framework-owned
-production-runtime recovery and cache semantics remain outside the current
-contract and have no assigned release version.
+Configure recovery and caching with the deployment provider.
 
 - [First-party SaaS consumer](https://github.com/open-element/openelement/tree/main/apps/saas)
 
@@ -89,20 +87,20 @@ Measured on 2026-11-25 from the docs site's own build (`vp run site:build`). Tot
 
 | Metric                 | Value                                               |
 | ---------------------- | --------------------------------------------------- |
-| Pre-rendered documents | 78 HTML files                                       |
-| URLs in `sitemap.xml`  | 76                                                  |
-| Total static output    | 13.0 MiB (13,665,658 B)                             |
-| Island manifests       | 78 — one per page                                   |
-| Search index           | 38 pages per locale (en, zh), 76 fragments, 1.8 MiB |
+| Pre-rendered documents | 68 HTML files                                       |
+| URLs in `sitemap.xml`  | 66                                                  |
+| Total static output    | 11.6 MiB (12,164,849 B)                             |
+| Island manifests       | 68 — one per page                                   |
+| Search index           | 33 pages per locale (en, zh), 66 fragments, 1.5 MiB |
 
 ```bash
 # Regenerate everything below first.
 vp run site:build
-find www/dist -name '*.html' | wc -l        # 78
-grep -c '<loc>' www/dist/sitemap.xml        # 76
-find www/dist -type f -exec wc -c {} + | tail -1   # 13,665,658 B total (the byte sum above)
-ls www/dist/island-manifests | wc -l        # 78
-cat www/dist/pagefind/pagefind-entry.json   # page_count 38 per language
+find www/dist -name '*.html' | wc -l        # 68
+grep -c '<loc>' www/dist/sitemap.xml        # 66
+find www/dist -type f -exec wc -c {} + | tail -1   # 12,164,849 B total (the byte sum above)
+ls www/dist/island-manifests | wc -l        # 68
+cat www/dist/pagefind/pagefind-entry.json   # page_count 33 per language
 ```
 
 ### Island bundles
@@ -135,7 +133,7 @@ What a page actually downloads follows from its island manifest plus the entry's
 | `/guide/getting-started` | 194,075 B            | 8               |
 | `/`                      | 199,201 B            | 9               |
 
-Across 78 page manifests the site declares 6 island tags in 290 entries. There is an `open-search` and an `open-theme-toggle` on every page, `open-page-rail` on 68 pages, `open-code-block` on 56 pages `open-button` on 8 pages and `open-counter` on both language versions of the homepage.
+Across 68 page manifests the site declares 6 island tags in 254 entries. There is an `open-search` and an `open-theme-toggle` on every page, `open-page-rail` on 58 pages, `open-code-block` on 50 pages, `open-button` on 8 pages and `open-counter` on both language versions of the homepage.
 
 ```bash
 cat www/dist/island-manifests/page-<hash>.json   # one page's island set: tag, chunk, strategy, layer

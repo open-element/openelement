@@ -55,9 +55,7 @@ Inputs stay utilitarian and inherit the same Open Props token system.
 ### Status + motion
 
 Status labels and motion states are readable text first and color second.
-Zero-interaction shapes are plain HTML + CSS recipes, not custom elements —
-the retired `open-badge` lives on as a documented recipe in the create
-starter's `app/styles/recipes.css` (#1557):
+Use the starter’s HTML and CSS recipes for status labels.
 
 ```html
 <span class="badge badge-brand">current</span>

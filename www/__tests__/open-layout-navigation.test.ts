@@ -36,14 +36,14 @@ test('open-layout navigation localizes and switches canonical paths', () => {
 
 test('localeSwitchPath degrades unresolved route params to the static ancestor', () => {
   // A pattern path must never put a literal ":slug" into the switcher href.
-  expect(localeSwitchPath('/blog/:slug', 'en', ['en', 'zh'], 'en')).toEqual('/zh/blog/');
-  expect(localeSwitchPath('/zh/blog/:slug', 'zh', ['en', 'zh'], 'en')).toEqual('/blog/');
+  expect(localeSwitchPath('/articles/:slug', 'en', ['en', 'zh'], 'en')).toEqual('/zh/articles/');
+  expect(localeSwitchPath('/zh/articles/:slug', 'zh', ['en', 'zh'], 'en')).toEqual('/articles/');
   // A leading param collapses to the locale home.
   expect(localeSwitchPath('/:slug', 'en', ['en', 'zh'], 'en')).toEqual('/zh/');
   // The sr-only note completes the target-locale label in the READER's language
   // (the branches were swapped: a zh page carried an English sentence).
-  expect(localeSwitchScopeNote('zh')).toContain('英文版本为全站原文');
-  expect(localeSwitchScopeNote('en')).toContain('The Chinese edition covers');
+  expect(localeSwitchScopeNote('zh')).toContain('查看本页的英文版本');
+  expect(localeSwitchScopeNote('en')).toContain('View this page in Chinese');
 });
 
 test('open-layout navigation filters only the active section family', () => {
@@ -57,7 +57,7 @@ test('open-layout navigation filters only the active section family', () => {
   // A guide page sees the manual (the docs hub's group) and nothing else.
   expect(filterNavSections(sections, '/guide/api')).toEqual([sections[0], sections[1]]);
   expect(filterNavSections(sections, '/architecture/dsd')).toEqual([sections[2], sections[3]]);
-  expect(filterNavSections(sections, '/blog')).toEqual([sections[4]]);
+  expect(filterNavSections(sections, '/changelog')).toEqual([sections[4]]);
   expect(mobileSectionRoot('/zh/guide/api', ['en', 'zh'])).toEqual('/guide');
 });
 
@@ -76,8 +76,8 @@ test('open-layout navigation labels the nameless generated group as Project', ()
     'Project',
   ]);
   expect(filterNavSections(sections, '/roadmap').map((s) => s.section)).toEqual(['Project']);
-  // The blog is a project page, not a stream of its own.
-  expect(filterNavSections(sections, '/blog').map((s) => s.section)).toEqual(['Project']);
+  // Release status belongs to the project section.
+  expect(filterNavSections(sections, '/changelog').map((s) => s.section)).toEqual(['Project']);
   expect(filterNavSections(sections, '/reference').map((s) => s.section)).toEqual(['Reference']);
 });
 
@@ -160,25 +160,23 @@ test('buildSidebarRows guards unsafe hrefs and marks external links', () => {
 test('decorateHeaderNav marks the current section and never external links', () => {
   const links = [
     { href: '/docs', label: 'Docs' },
-    { href: '/blog', label: 'Blog' },
+    { href: '/changelog', label: 'Releases' },
     { href: 'https://github.com/open-element/openelement', label: 'GitHub' },
   ];
   expect(decorateHeaderNav(links, '/docs', 'en', ['en', 'zh']).map((link) => link.current)).toEqual(
     ['page', false, false],
   );
-  // Section roots stay current on nested routes (blog posts keep Blog current).
-  expect(
-    decorateHeaderNav(links, '/blog/1-0-0-alpha-1-baseline', 'en', ['en', 'zh'])[1].current,
-  ).toEqual('page');
+  // Section roots stay current on nested routes.
+  expect(decorateHeaderNav(links, '/docs/nested', 'en', ['en', 'zh'])[0].current).toEqual('page');
   // Router 1.0 does not pre-localize shell nav; the Site builder localizes
   // bare hrefs, and current marking must still land for non-default locales.
-  const zhNav = decorateHeaderNav(links, '/blog', 'zh', ['en', 'zh']);
+  const zhNav = decorateHeaderNav(links, '/changelog', 'zh', ['en', 'zh']);
   expect(zhNav.map((link) => link.current)).toEqual([false, 'page', false]);
   expect(zhNav[0].href).toEqual('/zh/docs/');
   expect(zhNav[2].href).toEqual('https://github.com/open-element/openelement');
   // A locale-prefixed request-time path normalizes to the same result.
   expect(
-    decorateHeaderNav(links, '/zh/blog', 'zh', ['en', 'zh']).map((link) => link.current),
+    decorateHeaderNav(links, '/zh/changelog', 'zh', ['en', 'zh']).map((link) => link.current),
   ).toEqual([false, 'page', false]);
 });
 
@@ -262,15 +260,15 @@ test('readingChromeStrings carries the bilingual reading chrome copy', () => {
 test('decorateHeaderNav projects zh labels and keeps the en default', () => {
   const links = [
     { href: '/docs', label: 'Docs', labelZh: '文档' },
-    { href: '/blog', label: 'Blog' },
+    { href: '/changelog', label: 'Releases' },
   ];
   expect(decorateHeaderNav(links, '/docs', 'zh', ['en', 'zh']).map((link) => link.label)).toEqual([
     '文档',
-    'Blog', // no labelZh: falls back to the English label
+    'Releases', // no labelZh: falls back to the English label
   ]);
   expect(decorateHeaderNav(links, '/docs', 'en', ['en', 'zh']).map((link) => link.label)).toEqual([
     'Docs',
-    'Blog',
+    'Releases',
   ]);
 });
 

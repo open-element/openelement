@@ -126,9 +126,7 @@ echo 'artifact answers: static 200, private 404, action 422'
 
 ## Artifact compatibility
 
-Generated modules carry two version stamps in their header banner: the Part Program format version and the generated-module ABI version. A runtime refuses an artifact whose version it does not implement — validation fails closed with an expected-vs-actual diagnostic (`version must be 2 (got 1) … v1 artifacts are refused, never coerced`) rather than reading the artifact under the wrong grammar.
-
-Deploy one build. The version check catches an artifact compiled against a different format version than the runtime executing it, but it cannot tell two builds of the *same* version apart: mixing browser assets from one build with a request-time server entry from another is neither supported nor detected. Regenerate the whole output (`npm run build`) and ship `dist/` as one unit.
+Deploy the complete output of one `npm run build`. Update prerendered HTML, browser assets and the request-time server entry together. Give a static host only the public output, and keep server modules and their manifest in the application environment.
 
 ## See also
 

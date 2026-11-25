@@ -36,7 +36,7 @@ const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
  *
  * CHANGELOG.md is deliberately absent: it is a dated record of what shipped,
  * so an older command in it is history, not current guidance (the same reason
- * blog dispatches are excluded from the content gate).
+ * only maintained guides are checked).
  *
  * `packages/create/templates/README.tmpl` is the starter README every scaffold
  * ships; it was outside this list when it silently hardened to a pinned old

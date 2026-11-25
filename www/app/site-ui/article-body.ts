@@ -1,17 +1,4 @@
-/**
- * article-body.ts — shared long-form article treatment for site routes.
- *
- * Extracted from routes/blog/[slug].tsx so the blog and the guide section
- * render identical prose typography (the guide redesign references the blog
- * as its layout model). `prepareArticle` post-processes compiled markdown
- * HTML: stable heading ids + rail outline, and <pre> → <open-code-block>
- * wrapping (copy button; the token highlighting is already in the fence HTML
- * from the build-time markdown pipeline).
- *
- * The prose sheets themselves ship as .css files (#1558): blog-content.css
- * and article-content.css carry the typography scoped to each container
- * class.
- */
+/** Shared article-body projection for guide and architecture Markdown. */
 
 import { readingChromeStrings } from './chrome-strings.ts';
 
@@ -308,7 +295,7 @@ export function prepareArticle(
   // output carries `tabindex="0"` itself; the plain-fence path (marked's
   // unhighlighted `<pre><code>`, driven by PLAIN_FENCE_LANGS in
   // www/lib/markdown.ts — e.g. the directory-tree `text` fence) does not, so
-  // normalize it here, where every article/blog `<pre>` is already rewritten.
+  // normalize it here, where every article `<pre>` is already rewritten.
   const withCodeBlocks = withIds.replace(
     /(<pre[\s\S]*?<\/pre>)/gi,
     (block) =>
@@ -316,7 +303,7 @@ export function prepareArticle(
         /^<pre[^>]*\stabindex=/i.test(block) ? block : block.replace(/^<pre/i, '<pre tabindex="0"')
       }</open-code-block>`,
   );
-  // The linked document stylesheet turns article/blog tables into their own
+  // The linked document stylesheet turns article tables into their own
   // horizontal scroll container (display:block + overflow:auto), so a table
   // that overflows is a scrollable region and needs keyboard access
   // (axe `scrollable-region-focusable`, WCAG 2.1.1). The width is only known

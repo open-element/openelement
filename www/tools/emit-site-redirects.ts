@@ -2,7 +2,7 @@
  * Emit the Cloudflare Pages redirect table from site-redirects.json.
  *
  * Deliberately NOT named generate-*: the output lands in www/dist (rebuilt
- * every site:build, never committed), like site:sitemap and site:rss — so it
+ * every site:build, never committed), like the sitemap — so it
  * stays outside the generator-gates drift rule, which covers only committed
  * mirrors. Reads the same table check-retired-urls.ts validates; locale
  * prefixes expand from SITE_LOCALES (never written in the table).

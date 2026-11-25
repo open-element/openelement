@@ -10,15 +10,11 @@ section: 'Core'
 
 ### Custom Element
 
-The browser's component contract: a class registered for a hyphenated tag name. In openElement it is also the application component contract — pages, islands and primitives are all Custom Elements authored once and rendered on the server.
+A browser component registered by a hyphenated tag name. OpenElement compiles a function component and its `defineIslandConfig` declaration into a Custom Element. Server function pages can compose those elements.
 
-### `@element`
+### Signal
 
-The class decorator that registers a Custom Element and declares its root mode (light DOM by default, an explicit shadow root where declared).
-
-### `@property`
-
-The field decorator that declares reactive state: attribute reflection, type conversion and re-render on change. Host attributes restore into `@property` fields on upgrade.
+A reactive value used for component state. The compiler tracks the template sites that read it and updates their DOM slots when the value changes.
 
 ### Shadow root
 
@@ -38,15 +34,15 @@ Static site generation: routes render to HTML at build time. openElement is stat
 
 The browser mechanism that turns a parsed host element into a live component instance. The claim binds the compiled template's handlers against the already-present DOM instead of re-rendering it.
 
-### Part Program
+### Generated renderer
 
-The compiled per-component program shared by server serialization and client claim: one description of DOM, bindings and handlers, executed twice, written once.
+The compiler emits a server renderer and browser mount, claim and update functions from the same component.
 
 ## Islands
 
 ### Island
 
-A client component that needs runtime state or framework interop. Everything else ships as static DSD with no client module. Islands are the only client JavaScript units.
+A component whose browser activation can be scheduled independently. The application can also load a shared bootstrap.
 
 ### `defineIslandConfig`
 
@@ -68,19 +64,7 @@ One JSON artifact per page, emitted next to the HTML, carrying the route and eac
 
 ### `trustedHtml`
 
-The explicit boundary for pre-sanitized, non-interactive HTML injection into a compiled template. Dynamic island content otherwise comes from signal-driven `@property` state.
-
-## Alpha15 renames
-
-Public names consolidated in alpha15 (no backward-compatible aliases):
-
-- `renderDsd()` → `renderToString()` (`@openelement/element`; same string contract).
-- `PartProgramV1` → `PartProgramV2` (`PartProgram` is the current V2 type; `PART_PROGRAM_VERSION` is 2; v1 artifacts are refused, never coerced).
-- `FacadeErrorCode.DEFERRED_*` → `STREAM_*` (code strings `OE_DEFERRED_*` → `OE_STREAM_*`).
-- `createDeferredDsdExecutor` → `createStreamShellExecutor`; `createDeferredServerExecutor` → `createStreamServerExecutor` (option/executor/manifest types follow the same `Stream*` names).
-- `createDeferredPageShell` → `createStreamPageShell` (`@openelement/router/server-runtime`).
-
-Unchanged: wire values (`owner.kind: 'region'`, block ids `rN`) and the deferred-field lifecycle vocabulary (`defer` intent, pending/resolved/missing seed states).
+The explicit trust boundary for inserting pre-sanitized HTML during server rendering.
 
 ## See also
 

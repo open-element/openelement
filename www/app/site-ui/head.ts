@@ -20,7 +20,6 @@
  * before either serializer runs; there is no post-build head rewrite anymore.
  */
 import type { PageHead, StructuredDataEntry } from '@openelement/router';
-import { getPostBySlug } from '#generated/blog-data';
 import { contentLocale } from './locale.ts';
 import { SITE_DEFAULT_LOCALE, SITE_LOCALES } from '../../site-config.ts';
 import { SITE_ORIGIN, siteHref } from './site-url.ts';
@@ -71,45 +70,6 @@ export function siteHead(input: SiteHeadInput): PageHead {
       },
     ],
   };
-  // Blog dispatches are articles (D-9): derive og:type and the article
-  // fields from the same generated blog truth the route body projects, so the
-  // head cannot drift from the post. Route meta serializes BEFORE the
-  // site-wide vite.config.ts inject.headFragments (wrapInDocument emits
-  // metaBlock ahead of headExtras), so on dispatch pages og:type=article
-  // precedes the static og:type=website boilerplate — OG consumers honor the
-  // first og:type, and non-article pages keep only the website tag.
-  const blogMatch = /^\/blog\/([^/]+)$/.exec(input.route);
-  if (blogMatch && !input.error) {
-    const post = getPostBySlug(blogMatch[1]);
-    if (post) {
-      head.meta?.push(
-        { property: 'og:type', content: 'article' },
-        { property: 'article:published_time', content: post.frontmatter.date },
-        { property: 'article:author', content: BRAND },
-      );
-      // BlogPosting: only the post's own truth — the raw headline (the
-      // branded <title> stays the document title), its excerpt as rendered
-      // copy, its frontmatter date and language. No image, logo, sameAs or
-      // social profile is invented: the site has no such data to declare.
-      head.structuredData = [
-        {
-          '@context': 'https://schema.org',
-          '@type': 'BlogPosting',
-          headline: post.frontmatter.title,
-          description: input.description,
-          datePublished: post.frontmatter.date,
-          inLanguage: post.frontmatter.lang ?? 'en',
-          url: canonical,
-          mainEntityOfPage: { '@type': 'WebPage', '@id': canonical },
-          author: organizationNode(),
-          publisher: organizationNode(),
-          ...(post.frontmatter.tags && post.frontmatter.tags.length > 0
-            ? { keywords: [...post.frontmatter.tags] }
-            : {}),
-        },
-      ];
-    }
-  }
   // The front page declares the site itself: WebSite (name/url/description/
   // language, published by the organization) plus the Organization node.
   if (!input.error && input.route === '/') {

@@ -90,7 +90,7 @@ test.describe('Localized layout', () => {
     expect(state.homeHref).toBe('/');
     // The header carries the same four entrances in every locale (E2 §4):
     // Docs / API / Roadmap / Blog, unprefixed on the default locale.
-    expect(state.navHrefs).toEqual(['/docs/', '/reference/', '/roadmap/', '/blog/']);
+    expect(state.navHrefs).toEqual(['/docs/', '/reference/', '/roadmap/', '/changelog/']);
     expect(state.navHrefs?.some((href) => href?.startsWith('/zh/'))).toBe(false);
   });
 
@@ -101,7 +101,12 @@ test.describe('Localized layout', () => {
     const state = await readShellState(page);
     expect(state.htmlLang).toBe('zh');
     expect(state.homeHref).toBe('/zh/');
-    expect(state.navHrefs).toEqual(['/zh/docs/', '/zh/reference/', '/zh/roadmap/', '/zh/blog/']);
+    expect(state.navHrefs).toEqual([
+      '/zh/docs/',
+      '/zh/reference/',
+      '/zh/roadmap/',
+      '/zh/changelog/',
+    ]);
   });
 
   test('switching locale via URL changes page language', async ({ page }) => {
@@ -133,41 +138,16 @@ test.describe('Localized layout', () => {
 });
 
 test.describe('i18n SSG Output', () => {
-  test('both locale versions of blog exist', async ({ page }) => {
-    // Check Chinese blog
-    const zhRes = await page.goto('/zh/blog/');
-    expect(zhRes?.ok()).toBe(true);
-
-    // Check English blog
-    const enRes = await page.goto('/blog/');
-    expect(enRes?.ok()).toBe(true);
-  });
-
-  test('English blog post pages contain no /zh/ links', async ({ page }) => {
-    const res = await page.goto('/blog/1-0-0-alpha-1-baseline/');
-    expect(res?.status()).toBeLessThan(400);
-    await page.waitForLoadState('networkidle');
-
-    // getByRole('link') pierces open shadow roots and matches every anchored
-    // link; no hand-rolled shadow walk needed. The query is scoped to the
-    // main landmark: the header language switcher legitimately links to the
-    // zh twin, while the regression was post content/navigation linking into
-    // /zh/blog.
-    const hrefs = await page
-      .getByRole('main')
-      .first()
-      .getByRole('link')
-      .evaluateAll((links) => links.map((link) => link.getAttribute('href')));
-    const zhHrefs = hrefs.filter((href) => href?.startsWith('/zh/blog/'));
-    expect(zhHrefs).toEqual([]);
-  });
-
-  test('both locale versions of changelog exist', async ({ page }) => {
+  test('release status and its guide link are localized', async ({ page }) => {
     const zhRes = await page.goto('/zh/changelog/');
     expect(zhRes?.ok()).toBe(true);
-
+    await expect(page.getByRole('heading', { level: 1, name: '发布状态' })).toBeVisible();
+    await expect(
+      page.locator('.page-changelog').getByRole('link', { name: '快速开始' }),
+    ).toHaveAttribute('href', '/zh/guide/getting-started/');
     const enRes = await page.goto('/changelog/');
     expect(enRes?.ok()).toBe(true);
+    await expect(page.getByRole('heading', { level: 1, name: 'Release Status' })).toBeVisible();
   });
 
   test('both locale versions of roadmap exist', async ({ page }) => {

@@ -11,6 +11,7 @@
     { "from": "/architecture/islands-deep", "to": "/architecture/islands", "status": 301 },
     { "from": "/architecture/package-compatibility", "to": "/architecture", "status": 301 },
     { "from": "/architecture/standards-registry", "to": "/architecture/dsd", "status": 301 },
+    { "from": "/blog", "to": "/roadmap", "status": 301 },
     { "from": "/guide/architecture", "to": "/architecture", "status": 301 },
     { "from": "/guide/comparison", "to": "/architecture/comparison", "status": 301 }
   ]

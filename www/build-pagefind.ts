@@ -13,7 +13,7 @@
  * Chrome exclusion is NOT done by string surgery here: the layout renders
  * light-DOM (there is no layout DSD template to drop), so repeated chrome —
  * header/sidebar/footer, skip link, search overlay, the hidden 404 blocks —
- * carries `data-pagefind-ignore` in the source components, and article/blog
+ * carries `data-pagefind-ignore` in the source components, and article
  * prose is scoped with `data-pagefind-body` (which also makes pagefind take
  * the page title from the real h1 instead of the hidden not-found h1).
  * The transform only touches the throwaway staging copy; www/dist itself

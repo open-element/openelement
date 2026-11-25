@@ -10,15 +10,11 @@ section: 'Core'
 
 ### Custom Element
 
-浏览器的组件契约：为带连字符的标签名注册的类。在 openElement 中它同时是应用组件契约——页面、island 与原语都是 Custom Elements，只写一次，在服务端渲染。
+浏览器通过带连字符的标签名注册组件。OpenElement 从函数组件及其 `defineIslandConfig` 声明生成 Custom Element。服务端函数页面可以组合这些元素。
 
-### `@element`
+### Signal
 
-注册 Custom Element 并声明其 root 模式的类装饰器（默认 light DOM，声明处可用显式 shadow root）。
-
-### `@property`
-
-声明响应式状态的字段装饰器：attribute 反射、类型转换与变更重渲染。upgrade 时宿主 attribute 恢复到 `@property` 字段。
+用于组件状态的响应式值。编译器追踪读取它的模板位置，值变化时只更新相应的 DOM slot。
 
 ### Shadow root
 
@@ -38,15 +34,15 @@ Custom Element 拥有的封装 DOM 子树。服务端输出把它装进 DSD 模�
 
 浏览器把已解析的宿主元素变为存活组件实例的机制。claim 把编译模板的处理器绑定到已存在的 DOM 上，而不是重渲染它。
 
-### Part Program
+### 生成的渲染器
 
-服务端序列化与客户端 claim 共享的编译期单组件程序：同一份 DOM、绑定与处理器的描述，写一次，执行两次。
+编译器根据同一个组件生成服务端渲染函数和浏览器端的挂载、claim 和更新逻辑。
 
 ## Island
 
 ### Island
 
-需要运行时状态或框架互操作的客户端组件。其余一切以静态 DSD 发货，不带客户端模块。island 是唯一的客户端 JavaScript 单元。
+可以在浏览器中激活的组件，可独立安排加载时机。应用也可能加载共享的引导脚本。
 
 ### `defineIslandConfig`
 
@@ -68,19 +64,7 @@ island 的 chunk 何时拉取：`load`（立即，用于首屏控件）、`idle`
 
 ### `trustedHtml`
 
-向编译模板注入已消毒、非交互 HTML 的显式边界。除此之外，动态 island 内容来自 signal 驱动的 `@property` 状态。
-
-## Alpha15 改名
-
-alpha15 收敛的公开名（无向后兼容别名）：
-
-- `renderDsd()` → `renderToString()`（`@openelement/element`；同样的字符串契约）。
-- `PartProgramV1` → `PartProgramV2`（`PartProgram` 即当前 V2 类型；`PART_PROGRAM_VERSION` 为 2；v1 产物直接拒绝，不做兼容）。
-- `FacadeErrorCode.DEFERRED_*` → `STREAM_*`（码字符串 `OE_DEFERRED_*` → `OE_STREAM_*`）。
-- `createDeferredDsdExecutor` → `createStreamShellExecutor`；`createDeferredServerExecutor` → `createStreamServerExecutor`（选项/执行器/manifest 类型同随 `Stream*` 改名）。
-- `createDeferredPageShell` → `createStreamPageShell`（`@openelement/router/server-runtime`）。
-
-保持不变：线格式值（`owner.kind: 'region'`、block id `rN`）与 deferred 字段生命周期词汇（`defer` 意图、pending/resolved/missing seed 状态）。
+将已清理的 HTML 交给服务端渲染的显式信任边界。
 
 ## 另见
 
