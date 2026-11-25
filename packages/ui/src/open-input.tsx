@@ -2,8 +2,8 @@
  * @openelement/ui - open-input
  *
  * Form-associated text input with a label, an inline error slot, and native
- * constraint validation (required -> valueMissing through the shell's M09-2d
- * form mapping).
+ * constraint validation (required and email constraints through the shell's
+ * M09-2d form mapping).
  *
  * Experimental (owner ruling C1, #1468): internal implementation may change or
  * be removed before 1.0; the declared `::part` names follow the
@@ -12,7 +12,7 @@
  * Generated authoring. The declared rows drive the compiled sinks; the derived
  * visibility/ARIA surface is authored as inline JSX expressions (the generated
  * lane has no authoring `computed`), and the FORM CONTRACT (setFormValue,
- * required validity, reset/restore, fieldset states) is the SHELL's mapping.
+ * validity, reset/restore, fieldset states) is the SHELL's mapping.
  * `input-machine.ts` only projects the live value and the disabled surface.
  *
  * TWO CONSTRAINTS SHAPE THIS TEMPLATE, and both come from the generated lane:
@@ -49,7 +49,7 @@ import { syncInputDisabled, syncInputValue, type InputHost } from './input-machi
 
 /**
  * Platform facts for the generated element: shadow root with delegated focus,
- * form association (value publication, required→valueMissing, reset/restore and
+ * form association (value publication, required and email validity, reset/restore and
  * the fieldset-effective disabled state are the SHELL's mapping), the authored
  * stylesheet, and the eight declared property rows. Only `value` has no
  * attribute wire — it is the live property the form contract and the compiled
@@ -135,6 +135,7 @@ function OpenInput(props: {
         class='control w-full px-3 py-2 font-sans text-base text-foreground rounded-md outline-none transition-[border-color,box-shadow] duration-200 ease-out placeholder:text-muted-foreground'
         part='control'
         id='open-input-control'
+        data-form-validation='email'
         type={props.type}
         placeholder={props.placeholder}
         name={props.name}

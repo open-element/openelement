@@ -9,7 +9,7 @@ import { encodeCompiledArtifactClassCandidates } from '../../packages/compiler/s
 import type { PackageInfo } from './package-graph.ts';
 
 export async function writePackedGeneratedElements(
-  pkg: PackageInfo,
+  pkg: Pick<PackageInfo, 'dir' | 'exports' | 'name'>,
   packedRoot: string,
 ): Promise<void> {
   const manifestFile = join(pkg.dir, 'src/generated-manifest.json');

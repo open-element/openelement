@@ -40,12 +40,8 @@ test('packed native islands preserve authored exports and deliver the manifest h
     await writePackedGeneratedElements(
       {
         name,
-        version: '1.0.0',
         dir: root,
         exports: { './card': './src/card.tsx' },
-        deps: [],
-        importKeys: new Set(),
-        importValues: {},
       },
       packed,
     );

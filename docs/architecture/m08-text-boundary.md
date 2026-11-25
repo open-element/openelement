@@ -369,7 +369,7 @@ command exits are recorded in the landing review, not in this protocol record.
 
 - [M07-5 protocol record](./m07-5-protocol-record.md) — the signed leaf-range
   protocol this record extends.
-- [Alpha16–18 progress ledger](./alpha16-18-progress.md) — M08 status and exit
+- [Alpha16–18 progress ledger](https://github.com/open-element/openelement/blob/fc55986d7966da2c2e67cae253e536ca4b898e6e/docs/architecture/alpha16-18-progress.md) — M08 status and exit
   gap.
 - [Alpha16–18 semantic test matrix](./alpha16-18-semantic-test-matrix.md) —
   the M08 text-boundary and condition annexes; the grid cells stay `R`.

@@ -63,11 +63,16 @@ import {
 import { PACKAGE_VERSION, RETAINED_PACKAGE_NAMES } from '../repo/project-constants.ts';
 import { readPackages } from '../lib/package-graph.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
+import { writePackedGeneratedElements } from '../lib/packed-generated-elements.ts';
 import { CREATE_BIN } from './npm-manifest.ts';
 import { PW_PROBE_PIN } from './consumer-packaged-starter.ts';
 import ts from 'typescript';
-import { compileGeneratedElementIfAdmitted } from '@openelement/compiler';
 import { CREATE_VERSION } from '../../packages/create/src/version.ts';
+import {
+  formatGeneratedElementRefusals,
+  readGeneratedElementFacts,
+} from '../../packages/ui/tools/generated-element-facts.ts';
+import type { OpenElementPackageManifest } from '../../packages/protocol/src/manifest.ts';
 
 async function readJson<T = unknown>(path: string | URL): Promise<T> {
   return JSON.parse(await readFile(path, 'utf8')) as T;
@@ -134,34 +139,70 @@ export default function UtilityWidget() {
 `;
 
 /**
- * Compile the probe component with the workspace compiler (the same emission
- * the release pack pipeline stages), write it as a real package and pack it
- * with npm — the appliance installs that tarball, never workspace source.
+ * Stage the probe through the production generated-element packer, then
+ * install the resulting npm tarball in the appliance.
  */
 async function packUtilityWidget(dir: string): Promise<string> {
-  const compiled = compileGeneratedElementIfAdmitted(
-    UTILITY_WIDGET_COMPONENT,
-    'utility-widget.tsx',
-    {
-      site: { tag: UTILITY_WIDGET_TAG },
-    },
-  );
-  if (compiled === null) {
-    throw new Error('the utility-widget probe did not compile as an openElement island module');
+  const name = '@acme/utility-widget';
+  const file = 'utility-widget.tsx';
+  const read = readGeneratedElementFacts({
+    file,
+    source: UTILITY_WIDGET_COMPONENT,
+    tag: UTILITY_WIDGET_TAG,
+  });
+  if (read.kind !== 'admitted') {
+    const detail = read.kind === 'refused' ? formatGeneratedElementRefusals(read.diagnostics) : '';
+    throw new Error(`the utility-widget probe did not compile (${read.kind})\n${detail}`);
   }
+  const { className, exportName, root, ssrHostExport } = read.facts;
+  if (ssrHostExport === undefined) {
+    throw new Error('the utility-widget probe emitted no SSR host producer');
+  }
+  const manifest = {
+    schemaVersion: '1.0.0',
+    packageName: name,
+    version: '1.0.0',
+    description: 'Packed shadow component styled only by dependency Tailwind utilities.',
+    declarations: [
+      {
+        tagName: UTILITY_WIDGET_TAG,
+        className,
+        openElement: {
+          ssr: true,
+          dsd: true,
+          hydrate: 'load',
+          status: 'experimental',
+          module: `${name}/utility-widget`,
+          export: exportName,
+          root,
+          ssrHostExport,
+          tailwind: { required: true, sources: [PROBE_THEME_SOURCE] },
+        },
+      },
+    ],
+  } satisfies OpenElementPackageManifest;
+  const sourceDir = join(dir, 'utility-widget-source');
   const pkgDir = join(dir, 'acme-utility-widget');
+  await mkdir(join(sourceDir, 'src'), { recursive: true });
   await mkdir(join(pkgDir, 'src'), { recursive: true });
+  await writeFile(join(sourceDir, 'src', file), UTILITY_WIDGET_COMPONENT);
+  const manifestJson = JSON.stringify(manifest, null, 2);
+  await writeFile(join(sourceDir, 'src', 'generated-manifest.json'), `${manifestJson}\n`);
   await writeFile(
     join(pkgDir, 'package.json'),
     `${JSON.stringify(
       {
-        name: '@acme/utility-widget',
-        version: '1.0.0',
+        name,
+        version: manifest.version,
         type: 'module',
         exports: {
           '.': './src/utility-widget.js',
           './manifest': './src/manifest.js',
           './utility-widget': './src/utility-widget.js',
+        },
+        dependencies: {
+          '@openelement/element': PACKAGE_VERSION,
+          '@openelement/router': PACKAGE_VERSION,
         },
         files: ['src'],
       },
@@ -169,57 +210,23 @@ async function packUtilityWidget(dir: string): Promise<string> {
       2,
     )}\n`,
   );
-  // The compiler's emission is TypeScript (the release pack pipeline transpiles
-  // it while packing); a shipped package module must be plain JS. Transpile with
-  // the repo's own TypeScript — the same tool the packer's step uses — rather
-  // than hand-stripping annotations.
-  const emittedJs = ts.transpileModule(compiled.code, {
+  // The release packer adds compiled bindings and their candidate footer to a
+  // staged authored module, the same boundary it receives from vp pack.
+  const authoredJs = ts.transpileModule(UTILITY_WIDGET_COMPONENT, {
+    fileName: file,
     compilerOptions: {
       target: ts.ScriptTarget.ES2022,
       module: ts.ModuleKind.ESNext,
       jsx: ts.JsxEmit.ReactJSX,
+      jsxImportSource: '@openelement/element',
     },
   }).outputText;
-  await writeFile(join(pkgDir, 'src', 'utility-widget.js'), emittedJs);
-  await writeFile(
-    join(pkgDir, 'src', 'manifest.js'),
-    `export const manifest = ${JSON.stringify(
-      {
-        schemaVersion: '1.0.0',
-        packageName: '@acme/utility-widget',
-        version: '1.0.0',
-        description:
-          'Packed utility-candidate probe for the alpha15 S lane (S-C2/S-13): a shadow component styled only by Tailwind utilities.',
-        declarations: [
-          {
-            tagName: UTILITY_WIDGET_TAG,
-            className: 'UtilityWidget',
-            superclassName: 'OpenElement',
-            description: 'Shadow-root component styled only by Tailwind utility classes.',
-            attributes: [],
-            events: [],
-            slots: [{ name: '' }],
-            cssParts: [],
-            openElement: {
-              ssr: true,
-              dsd: true,
-              hydrate: 'load',
-              status: 'experimental',
-              module: '@acme/utility-widget/utility-widget',
-              export: 'UtilityWidget',
-              // ADR-0167: the package declares that its component cannot be
-              // styled without the Tailwind compile and owns the theme source
-              // that compile needs. The appliance therefore carries NO Tailwind
-              // configuration: this declaration alone enables the pipeline.
-              tailwind: { required: true, sources: [PROBE_THEME_SOURCE] },
-            },
-          },
-        ],
-      },
-      null,
-      2,
-    )};\n`,
+  await writeFile(join(pkgDir, 'src', 'utility-widget.js'), authoredJs);
+  await writePackedGeneratedElements(
+    { dir: sourceDir, name, exports: { './utility-widget': `./src/${file}` } },
+    pkgDir,
   );
+  await writeFile(join(pkgDir, 'src', 'manifest.js'), `export const manifest = ${manifestJson};\n`);
   // The package-owned theme source, shipped in the tarball (`files: ['src']`).
   await writeFile(
     join(pkgDir, 'src', 'theme.css'),

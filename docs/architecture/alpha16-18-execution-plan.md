@@ -752,7 +752,7 @@ slices landed; it is superseded here:
   browser executor is unreachable from every applicable production browser
   entry graph). The evidence carrier is the
   [p1 applicability record](./p1-applicability-record.md) **2026-11-20
-  re-record** and the head re-recorded [progress ledger](./alpha16-18-progress.md);
+  re-record** and the head re-recorded [progress ledger](https://github.com/open-element/openelement/blob/fc55986d7966da2c2e67cae253e536ca4b898e6e/docs/architecture/alpha16-18-progress.md);
   this amendment records only the status and its authority, and asserts no
   measurement number of its own.
 

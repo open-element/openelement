@@ -40,6 +40,7 @@
  * Attributes:
  * - `open` - Presence opens the dialog (reflected into :state(open))
  * - `label` - Title text and aria-label of the dialog
+ * - `close-label` - Accessible name of the close button (defaults to `Close`)
  * - `mode` - `modal` (default, showModal()) or `non-modal` (show()); read at open time
  */
 import { onConnect, onPropertyChange } from '@openelement/element/lifecycle';
@@ -54,9 +55,8 @@ import {
 
 /**
  * Platform facts for the generated element: shadow root with delegated focus,
- * the authored package stylesheets, and the declared `open`/`label` property
- * rows (`open` reflects; `label` keeps its observable attribute without
- * reflection — the class lane's exact surface).
+ * the authored package stylesheets, and the declared property rows. Only
+ * `open` reflects property updates back to the attribute.
  */
 export const openElement = defineComponentConfig({
   root: 'shadow',
@@ -65,11 +65,12 @@ export const openElement = defineComponentConfig({
   properties: {
     open: { default: false, reflect: true },
     label: { default: '' },
+    closeLabel: { default: 'Close', attribute: 'close-label' },
   },
 });
 
 /** Dialog component using native <dialog> element + popover API. */
-function OpenDialog(props: { open: boolean; label: string }) {
+function OpenDialog(props: { open: boolean; label: string; closeLabel: string }) {
   /** The host the inline handler's currentTarget belongs to. */
   const hostOf = (event: Event): DialogHost =>
     ((event.currentTarget as HTMLElement).getRootNode() as ShadowRoot).host as DialogHost;
@@ -114,7 +115,7 @@ function OpenDialog(props: { open: boolean; label: string }) {
             type='button'
             class='dialog-close cursor-pointer rounded-md border-0 bg-transparent p-1 text-xl leading-tight text-muted-foreground transition-colors duration-150 ease-out'
             part='close'
-            aria-label='Close'
+            aria-label={props.closeLabel.trim() || 'Close'}
             onClick={(event: Event) => {
               // The user-facing close path: the change channel applies the
               // states and the top-layer exit, then the component's event

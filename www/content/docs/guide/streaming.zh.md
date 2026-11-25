@@ -1,17 +1,17 @@
 ---
 title: '流式渲染'
-lede: '延迟字段流式渲染不属于本次发布。本页说明什么退役了、为什么退役，以及现在该怎么做。'
+lede: '当前源码预览不支持延迟字段流式渲染。本页说明什么退役了、为什么退役，以及现在该怎么做。'
 navLabel: '流式渲染'
 order: 45
 ---
 
-> **本次发布不提供。** `renderIntent.stream` 是 class 通道的延迟字段通道，随 class 通道一起退役。它的替代载体归 Alpha18 所有。不要写它，也不要从旧文档里抄流式配方：该声明在模块求值时就会被拒绝（`OE_PAGE_RENDER_MODE`），页面无法构建。
+> **当前源码预览不提供。** `renderIntent.stream` 是 class 通道的延迟字段通道，随 class 通道一起退役。它的替代载体归 Alpha18 所有。不要写它，也不要从旧文档里抄流式配方：该声明在模块求值时就会被拒绝（`OE_PAGE_RENDER_MODE`），页面无法构建。
 
 ## 退役的模式是什么
 
 已接受的设计（[ADR-0158](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0158-streaming-server-executor.md)、[ADR-0159](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0159-part-backfill-and-late-claim.md)，2026-09-25）允许 `'dynamic'` 页面先冲刷壳，再回填那些取值仍在解析中的 loader 字段。它从来不是第二个渲染器：同一份编译程序既产出壳也产出回填帧，而延迟的值焊死在编译程序的 **Part owner** 上——也就是该程序声明的锚点、文本 part 与 block。
 
-正因如此它无法存活。载体是 class 通道的编译 Part Program。取代 class 通道的函数通道没有 Part Program 可以挂延迟字段，如今也没有任何通道会产出它。因此创作在模块求值时即以 `OE_PAGE_RENDER_MODE` 拒绝该声明——"streaming is a compiled-Part-Program channel … and a server function page has none"——而不是接受一条没有任何东西能伺服其帧的路由。（构建还保留了一个更晚的拒绝（`OE_ROUTE_SCAN_GENERATED_ELEMENT_PAGE_UNSUPPORTED`），针对万一走到那一步的生成页面；实践中创作检查总是先触发，因为存续的两种页面形态都是函数组件。）
+延迟字段由 class 通道的 Part Program 管理。函数页面采用不同的编译产物。Router 在求值路由模块时拒绝 `renderIntent.stream`，报出 `OE_PAGE_RENDER_MODE`，并提示移除该声明。
 
 退役的声明长这样，它只作为历史展示，不是 API：
 

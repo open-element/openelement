@@ -37,6 +37,78 @@ function dropdownContent(host: DropdownHost): HTMLElement | null {
   return (content as HTMLElement | null) ?? null;
 }
 
+type TriggerAria = {
+  readonly triggers: Map<Element, { expanded: string | null; controls: string | null }>;
+  readonly generatedIds: Map<Element, string>;
+};
+
+function dropdownTriggerAria(host: DropdownHost): TriggerAria {
+  return readInstanceState(host, 'triggerAria', () => ({
+    triggers: new Map(),
+    generatedIds: new Map(),
+  }));
+}
+
+function applyAttribute(element: Element, name: string, value: string | null): void {
+  if (element.getAttribute(name) === value) return;
+  if (value === null) element.removeAttribute(name);
+  else element.setAttribute(name, value);
+}
+
+function syncDropdownTriggerAria(host: DropdownHost, disconnected = false): void {
+  const content = dropdownContent(host);
+  const aria = dropdownTriggerAria(host);
+  const triggers = disconnected
+    ? []
+    : (host.shadowRoot
+        ?.querySelector<HTMLSlotElement>('slot[name="trigger"]')
+        ?.assignedElements() ?? []);
+  const panels =
+    disconnected || triggers.length === 0
+      ? []
+      : (content?.querySelector<HTMLSlotElement>('slot')?.assignedElements() ?? []);
+
+  for (const [trigger, original] of aria.triggers) {
+    if (triggers.includes(trigger)) continue;
+    applyAttribute(trigger, 'aria-expanded', original.expanded);
+    applyAttribute(trigger, 'aria-controls', original.controls);
+    aria.triggers.delete(trigger);
+  }
+  for (const [panel, id] of aria.generatedIds) {
+    if (panels.includes(panel)) continue;
+    if (panel.id === id) panel.removeAttribute('id');
+    aria.generatedIds.delete(panel);
+  }
+
+  // The trigger and the projected panels share a tree. An ID reference to the
+  // shadow popover wrapper would be invisible to the trigger's tree scope.
+  const controlIds = panels.map((panel) => {
+    if (panel.id !== '') return panel.id;
+    const tree = panel.getRootNode() as Document | DocumentFragment;
+    let id: string;
+    do id = `open-dropdown-content-${nextInstanceId()}`;
+    while (tree.getElementById(id));
+    panel.id = id;
+    aria.generatedIds.set(panel, id);
+    return id;
+  });
+  const expanded = String(content?.matches(':popover-open') ?? false);
+  for (const trigger of triggers) {
+    if (!aria.triggers.has(trigger)) {
+      aria.triggers.set(trigger, {
+        expanded: trigger.getAttribute('aria-expanded'),
+        controls: trigger.getAttribute('aria-controls'),
+      });
+    }
+    applyAttribute(trigger, 'aria-expanded', expanded);
+    applyAttribute(trigger, 'aria-controls', controlIds.length ? controlIds.join(' ') : null);
+  }
+}
+
+export function clearDropdownTriggerAria(host: DropdownHost): void {
+  syncDropdownTriggerAria(host, true);
+}
+
 /**
  * Assign the realm-unique anchor name and apply the HOST half (`anchor-name`).
  * Idempotent: an author-assigned name (a public property write re-entering
@@ -155,11 +227,10 @@ export function watchDropdownFocusReturn(host: DropdownHost, signal?: AbortSigna
     writeInstanceState(host, 'popoverHadFocus', false);
     writeInstanceState(host, 'previouslyFocused', deepActiveElement());
   };
-  const onToggleClosed = (event: Event) => {
+  const onToggle = (event: Event) => {
     const toggle = event as ToggleEvent;
     const content = event.target;
     if (!(content instanceof HTMLElement) || content !== dropdownContent(host)) return;
-    if (toggle.newState !== 'closed') return;
     // Toggle events are QUEUED tasks: the task for a close that happened before
     // a disconnect can land AFTER the reconnect claim and re-drop the content
     // half the new connection just re-seeded (observed: activation cleared the
@@ -167,6 +238,8 @@ export function watchDropdownFocusReturn(host: DropdownHost, signal?: AbortSigna
     // gated on the connection generation the listener was wired for, so a task
     // from a dead connection is a no-op.
     if (readInstanceState(host, 'connectionGeneration', () => 0) !== generation) return;
+    if (host.isConnected) syncDropdownTriggerAria(host);
+    if (toggle.newState !== 'closed') return;
     dropContentPositionAnchor(content);
     const hadFocus = readInstanceState(host, 'popoverHadFocus', () => false);
     const previous = readInstanceState(host, 'previouslyFocused', () => null as HTMLElement | null);
@@ -201,7 +274,13 @@ export function watchDropdownFocusReturn(host: DropdownHost, signal?: AbortSigna
   const listeners: DropdownFocusListener[] = [
     ['focusin', onFocusIn],
     ['beforetoggle', onBeforeToggle],
-    ['toggle', onToggleClosed],
+    ['toggle', onToggle],
+    [
+      'slotchange',
+      () => {
+        if (host.isConnected) syncDropdownTriggerAria(host);
+      },
+    ],
   ];
   for (const [type, listener] of listeners) root.addEventListener(type, listener, true);
   writeInstanceState(host, 'focusListeners', listeners);
@@ -264,6 +343,7 @@ export function activateDropdown(host: DropdownHost, signal?: AbortSignal): void
   clearDropdownPositionAnchor(host);
   syncDropdownAnchor(host);
   watchDropdownFocusReturn(host, signal);
+  if (host.isConnected) syncDropdownTriggerAria(host);
 }
 
 /**

@@ -535,9 +535,9 @@ export function PageHome(props: {
         </div>
       </section>
 
-      <section class='scene flood relative isolate overflow-clip bg-[linear-gradient(135deg,var(--color-primary),var(--color-secondary-foreground))] text-primary-foreground px-[clamp(1.5rem,5vw,4.5rem)] py-[clamp(4rem,10vh,8rem)] @container/band'>
+      <section class='scene flood relative isolate overflow-clip bg-[linear-gradient(135deg,var(--color-primary),var(--color-secondary-foreground))] text-primary-foreground px-[clamp(1.5rem,5vw,4.5rem)] py-[clamp(4rem,10vh,8rem)] @container/band forced-colors:bg-background forced-colors:bg-none forced-colors:text-foreground'>
         <div class='flex items-center justify-between gap-4'>
-          <p class='text-(length:--text-xs) font-extrabold tracking-[.24em] text-secondary uppercase [&:lang(zh)]:normal-case [&:lang(zh)]:tracking-[.08em] [&:lang(zh)]:leading-[1.9]'>
+          <p class='text-(length:--text-xs) font-extrabold tracking-[.24em] text-secondary uppercase forced-colors:text-foreground [&:lang(zh)]:normal-case [&:lang(zh)]:tracking-[.08em] [&:lang(zh)]:leading-[1.9]'>
             {props.sceneDsdIndex}
           </p>
           <figure
@@ -549,11 +549,11 @@ export function PageHome(props: {
         </div>
         <h2 class='text-[clamp(2.2rem,3.6vw,3.2rem)] font-extrabold leading-none tracking-[-.03em]'>
           {props.sceneDsdLead}
-          <span class='block font-serif text-[1.15em] font-normal italic text-violet-300'>
+          <span class='block font-serif text-[1.15em] font-normal italic text-secondary forced-colors:text-foreground'>
             {props.sceneDsdAccent}
           </span>
         </h2>
-        <div class='scene-copy max-w-[34rem] leading-[1.75] text-secondary [&_p+p]:mt-3'>
+        <div class='scene-copy max-w-[34rem] leading-[1.75] text-secondary forced-colors:text-foreground [&_p+p]:mt-3'>
           <p class='[&:lang(zh)]:leading-[1.9]'>{props.sceneDsdCopy}</p>
         </div>
         <div class='mt-[clamp(2rem,5vh,3.5rem)] grid grid-cols-1 items-center gap-[clamp(1rem,3vw,2.5rem)] min-[901px]:grid-cols-[1fr_auto_1fr]'>
@@ -569,16 +569,16 @@ export function PageHome(props: {
             </code>
           </div>
           <span
-            class='flood-arrow rotate-90 justify-self-center text-(length:--text-5xl) text-primary-foreground min-[901px]:rotate-0 min-[901px]:justify-self-auto'
+            class='flood-arrow rotate-90 justify-self-center text-(length:--text-5xl) min-[901px]:rotate-0 min-[901px]:justify-self-auto'
             aria-hidden='true'
           >
             {'⟶'}
           </span>
-          <div class='flood-panel solid rounded-lg border-[1.5px] border-primary-foreground bg-primary-foreground p-5 text-violet-950'>
+          <div class='flood-panel solid rounded-lg border-[1.5px] border-primary-foreground bg-primary-foreground p-5 text-primary forced-colors:border-foreground forced-colors:text-foreground'>
             <small class='mb-3 block text-(length:--font-size-micro) font-bold tracking-[.14em] uppercase'>
               {props.floodBrowser}
             </small>
-            <span class='mb-2 inline-block rounded-md border-[1.5px] border-dashed border-primary px-3 py-1 text-(length:--text-xs) text-primary'>
+            <span class='mb-2 inline-block rounded-md border-[1.5px] border-dashed border-primary px-3 py-1 text-(length:--text-xs)'>
               #shadow-root (open)
             </span>
             <code class='block overflow-x-auto text-(length:--text-xs) leading-[1.8] whitespace-pre'>

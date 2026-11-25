@@ -14,23 +14,11 @@
 
 English | [简体中文](./README.zh.md)
 
-OpenElement is a Web Platform-first core for two products: **Element** and **Router**.
-Element compiles JSX-authored Custom Elements into a Part Program used by server serialization, fresh DOM, and existing-DOM hydration. Router owns route selection, HTTP semantics, navigation, loaders, actions, and the shared Framework Mode application contract (one compiled-native renderer, selected explicitly).
+OpenElement is a Web Platform-first framework built around **Element** and **Router**.
+Element compiles TSX for server-rendered HTML and interactive Custom Elements. Router owns route selection, HTTP semantics, navigation, loaders, and actions.
 
-The source tree is `1.0.0-alpha.16`, a new public baseline for Element and Router. It is not a compatibility migration from historic 0.x snapshots. From this release the six packages (`protocol`, `element`, `compiler`, `router`, `create`, `ui`) publish as one line, and npm `latest` points at that line — `npm install @openelement/router` resolves to the current 1.0 prerelease. Since #1557 the Element monolith is three packages: `@openelement/protocol` (cross-system contracts, zero dependencies), `@openelement/element` (pure runtime), and `@openelement/compiler` (build-time TSX-to-Part-Program compiler + Vite plugin).
-
-The description above is the current alpha.15 implementation. The [accepted target](./docs/architecture/product-model.md)
-is HTML-first Full TSX with explicit Signals and an explicit CE boundary. On
-2026-11-03 the owner ended the independent OhMyLit initiative and initiated
-first-party Lit renderer retirement; the 2026-11-08 owner ruling
-([ADR-0152](./docs/adr/ADR-0152-product-router-and-alpha-convergence.md)) executes
-that retirement with no compatibility window. The current source line no longer
-ships the first-party Lit renderer — its public entry points, runtime branch,
-tests and fixtures are removed, and `renderer: 'lit'` fails with an explicit
-migration error — while the published alpha.15 artifact still contains it.
-Third-party Lit WC client-only use remains, without automatic SSR or Lit DSD
-hydration guarantees. The [candidate author samples](./docs/architecture/tsx-author-candidate-contract.md)
-are unreleased and unverified, not the Quick Start API.
+The npm `latest` line is **`1.0.0-alpha.15`**, with class-based Custom Element authoring.
+This checkout previews `1.0.0-alpha.16` with server function pages and compiler-generated Custom Elements. The preview uses packages built from this checkout. [Release state](./docs/release/release-state.json) · [Product model](./docs/architecture/product-model.md)
 
 ## Evidence & recognition
 
@@ -41,13 +29,9 @@ These references are reproducible and verifiable by third parties.
 - [deps.dev package view](https://deps.dev/npm/%40openelement%2Frouter) and npm provenance attestations on [npm](https://www.npmjs.com/package/@openelement/router)
 - Bundle size via [Bundlephobia](https://bundlephobia.com/package/@openelement/element)
 
-## Quick Start
+## Quick Start from npm
 
-Requires **Node.js 24.2+ (24.18.0 recommended)** and a package manager: npm,
-pnpm, yarn, or bun (the scaffolder prefers the invoking package manager, then
-probes `PATH` in pnpm/npm/yarn/bun order; the generated project is package-manager neutral). Create, run, and
-build — the generator installs the dependencies itself, so there is no separate
-install step:
+Use **Node.js 24.2+ (24.18.0 recommended)**. The scaffolder installs dependencies with npm when invoked as shown. Open the URL printed by `npm run dev`. Stop the server with Ctrl+C before running the build.
 
 ```bash
 npm create @openelement my-app
@@ -84,24 +68,43 @@ export default definePage(HelloPage, {
 });
 ```
 
-Re-run `npm run dev`, open the URL Vite prints plus `/hello`, and `npm run build` emits the static-first `dist/` output. Full walkthrough: <https://openelement.org/guide/getting-started>.
+Open `/hello` in the dev server. `npm run build` writes the prerendered pages and the request-time server to `dist/`. [Alpha 15 getting-started guide](https://github.com/open-element/openelement/blob/v1.0.0-alpha.15/www/content/docs/guide/getting-started.md)
 
-**Build-time host:** Framework Mode development and builds run on Node.js
-24.2+ through application package scripts (ADR-0161, superseding the Deno-native decision in
-ADR-0108): the `@openelement/router` tooling subpaths (`./vite`, `./cli/*`)
-are consumed through the starter's own dependency pins as plain Node
-programs. The request-time output uses standard ESM and Web
-`Request`/`Response`; deployment support is limited to the runtimes and Nitro
-targets actually covered by the qualification matrix, not every runtime that
-can load ESM. Element remains independently consumable in npm-only projects.
+## Preview the current source
+
+From the repository root, use the packed-starter setup to build and install the preview packages into a disposable app.
+
+```sh
+pnpm install --frozen-lockfile
+export STARTER_SMOKE_WORK_DIR="$(mktemp -d)"
+pnpm exec vp run --no-cache --fail-if-no-match --filter @openelement/e2e-starter-smoke setup
+cd "$STARTER_SMOKE_WORK_DIR/my-blog"
+pnpm run dev
+```
+
+Add `app/routes/hello.tsx` to the preview app, then open `/hello`.
+
+```tsx
+import { definePage } from '@openelement/router';
+
+export function HelloPage() {
+  return <h1>Hello from OpenElement</h1>;
+}
+
+export default definePage(HelloPage, {
+  head: { title: 'Hello' },
+});
+```
+
+After stopping the dev server, use `pnpm test` and `pnpm run build` to verify the preview app. [Starter package guide](./packages/create/README.md)
 
 ## Features
 
 - Declarative Shadow DOM plus SSR, existing-DOM hydration, and islands that hydrate only where needed.
-- Authoring JSX is compiled to a Part Program at build time; there is no runtime virtual-DOM contract.
+- Build-time TSX compilation for server function pages and compiler-generated Custom Elements in the source preview.
 - Route Mode for explicit route records and Framework Mode for file routes, loaders, actions, and forms.
-- One compiled-native renderer behind the application contract; renderer selection stays explicit, and the retired Lit renderer is rejected with a migration error.
-- Compiled output tree-shakes so server-only modules never leak into the client bundle.
+- A native renderer built around standard Custom Elements and the Web platform.
+- Separate server and browser entry graphs keep server-only modules out of client bundles.
 
 ## Repository shape
 
@@ -109,7 +112,7 @@ can load ESM. Element remains independently consumable in npm-only projects.
   admission descriptors; zero dependencies, contracts only.
 - `packages/element` — the Element core product: the pure runtime; depends only on protocol plus
   `@preact/signals-core` at publish time.
-- `packages/compiler` — the Element compiler (#1557): the TSX-to-Part-Program semantic core and the
+- `packages/compiler` — the Element compiler (#1557): TSX analysis, code generation, and the
   Vite plugin boundary; TypeScript lives here within the Element three-package split,
   while Router tooling also depends on TypeScript.
 - `packages/router` — the Router core product: Route Mode and Framework Mode plus the application

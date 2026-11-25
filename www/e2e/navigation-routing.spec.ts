@@ -132,6 +132,25 @@ test.describe('Link Navigation', () => {
   });
 });
 
+test.describe('without JavaScript', () => {
+  test.use({ javaScriptEnabled: false });
+
+  test('the homepage links to a complete, readable guide document', async ({ page }) => {
+    const home = await page.goto('/', { waitUntil: 'domcontentloaded' });
+    expect(home?.status()).toBe(200);
+    const guideResponse = page.waitForResponse(
+      (response) =>
+        response.request().isNavigationRequest() &&
+        new URL(response.url()).pathname.replace(/\/$/, '') === '/guide/getting-started',
+    );
+    await page.getByRole('link', { name: 'Start building', exact: true }).first().click();
+    const guide = await guideResponse;
+    expect(guide.status()).toBe(200);
+    await expect(page.getByRole('heading', { level: 1, name: 'Getting Started' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: /^Install/ })).toBeVisible();
+  });
+});
+
 test.describe('404 Page', () => {
   test('404.html is accessible and shows 404 content', async ({ page }) => {
     // Static file server needs the exact file path for 404.html

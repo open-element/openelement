@@ -137,7 +137,7 @@ SSR→claim reseeding.
 ### 4.1 Permitted seed state (the single M08 definition)
 
 This subsection is the one definition of **permitted seed state** used by the
-M08 evidence; [the progress ledger](./alpha16-18-progress.md) and
+M08 evidence; [the progress ledger](https://github.com/open-element/openelement/blob/fc55986d7966da2c2e67cae253e536ca4b898e6e/docs/architecture/alpha16-18-progress.md) and
 [the semantic test matrix](./alpha16-18-semantic-test-matrix.md) reference it
 and do not restate it. It is a definition and an evidence classification, not a
 runtime mode, and it adds no marker or wire byte.
@@ -267,6 +267,6 @@ future review can revert it without reverting the queue fix.
 - **B3 (EOF truncation).** Recorded as the parsed-DOM limitation above; no
   sentinel was added.
 
-See [the progress ledger](./alpha16-18-progress.md) and
+See [the progress ledger](https://github.com/open-element/openelement/blob/fc55986d7966da2c2e67cae253e536ca4b898e6e/docs/architecture/alpha16-18-progress.md) and
 [the semantic test matrix](./alpha16-18-semantic-test-matrix.md) for the
 milestone status this record does not change.

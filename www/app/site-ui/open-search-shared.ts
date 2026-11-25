@@ -11,6 +11,9 @@
 import type { SiteLocale } from '../../site-config.ts';
 import { searchChromeStrings } from './chrome-strings.ts';
 
+/** Search intent shared with the classic head script, on the specific SSR host. */
+export const SEARCH_OPEN_INTENT_KEY = 'openelement.site.search-open-intent';
+
 export interface PagefindResultData {
   url: string;
   meta?: { title?: string };

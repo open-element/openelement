@@ -1,17 +1,17 @@
 ---
 title: 'Streaming'
-lede: 'Deferred-field streaming is not part of this release. This page states what retired, why, and what to do instead.'
+lede: 'Deferred-field streaming is unavailable in the current source preview. This page states what retired, why, and what to do instead.'
 navLabel: 'Streaming'
 order: 45
 ---
 
-> **Not available in this release.** `renderIntent.stream` was the class lane's deferred-field channel, and it retired with the class lane. Alpha18 owns the replacement carrier. Do not write it, and do not copy a streaming recipe from an older document: the declaration is refused when the module is evaluated (`OE_PAGE_RENDER_MODE`), so the page will not build.
+> **Unavailable in the current source preview.** `renderIntent.stream` was the class lane's deferred-field channel, and it retired with the class lane. Alpha18 owns the replacement carrier. Do not write it, and do not copy a streaming recipe from an older document: the declaration is refused when the module is evaluated (`OE_PAGE_RENDER_MODE`), so the page will not build.
 
 ## What the retired mode was
 
 The accepted design ([ADR-0158](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0158-streaming-server-executor.md), [ADR-0159](https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0159-part-backfill-and-late-claim.md), 2026-09-25) let a `'dynamic'` page flush its shell first and backfill the loader fields whose values were still resolving. It was never a second renderer: the same compiled program produced the shell and the backfill frames, and the deferred values were welded to the compiled program's **Part owners** — the anchors, text parts and blocks that program declared.
 
-That is exactly why it could not survive. The carrier was the class lane's compiled Part Program. The function lane that replaced the class lane has no Part Program to attach a deferred field to, and no lane produces one now. Authoring therefore refuses the declaration at module evaluation with `OE_PAGE_RENDER_MODE` — "streaming is a compiled-Part-Program channel … and a server function page has none" — instead of accepting a route whose frames nothing could ever serve. (The build keeps a second, later refusal (`OE_ROUTE_SCAN_GENERATED_ELEMENT_PAGE_UNSUPPORTED`) for a generated page that ever gets that far; in practice the authoring check fires first, because both surviving page forms are function components.)
+The class lane's Part Program owned the deferred fields. Function pages use a different compiled representation. The router rejects `renderIntent.stream` at module evaluation with `OE_PAGE_RENDER_MODE` and the instruction “Remove the stream declaration.”
 
 The retired declaration looked like this, and it is shown as history, not as an API:
 

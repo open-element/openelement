@@ -203,6 +203,7 @@ export const TEMPLATE_FILES: readonly (readonly [string, string])[] = [
   ['app/routes/about.tsx.tmpl', 'app/routes/about.tsx'],
   ['app/routes/404.tsx.tmpl', 'app/routes/404.tsx'],
   ['app/routes/api/ping.ts.tmpl', 'app/routes/api/ping.ts'],
+  ['tests/ping.test.ts.tmpl', 'tests/ping.test.ts'],
   ['app/islands/my-counter.tsx.tmpl', 'app/islands/my-counter.tsx'],
   ['app/islands/my-counter.css', 'app/islands/my-counter.css'],
   ['app/islands/live-timer.tsx.tmpl', 'app/islands/live-timer.tsx'],

@@ -998,6 +998,8 @@ interface NormalizedProperty {
  *
  * - **value shape** — `value` is the declared string row; it is the form value
  *   source and carries the required→valueMissing mirror, reset and restore.
+ *   A shadow input marked `data-form-validation="email"` opts the string
+ *   `type` row into native email validation when its value is `email`.
  * - **button shape** — `value` is null (the sidecar declared no `value` row):
  *   the element stays form-associated (`form.elements` membership and the
  *   external `form=<id>` association resolve through the one internals record)
@@ -1008,6 +1010,7 @@ interface FormMapping {
   readonly value: NormalizedProperty | null;
   readonly required?: NormalizedProperty;
   readonly disabled?: NormalizedProperty;
+  readonly type?: NormalizedProperty;
 }
 
 interface NormalizedDescriptor {
@@ -1046,6 +1049,7 @@ interface FormRuntime {
   readonly mapping: FormMapping;
   /** Platform/ancestor-fieldset effective disabled, separate from the author property. */
   effectiveDisabled: boolean;
+  emailValidator?: HTMLInputElement;
 }
 
 interface ElementState {
@@ -1530,6 +1534,7 @@ function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Normalized
     const value = byName.get('value');
     const required = byName.get('required');
     const disabled = byName.get('disabled');
+    const type = byName.get('type');
     if (required !== undefined && required.type !== 'boolean') {
       descriptorError(
         `the optional form property "required" must be boolean, got ${required.type}`,
@@ -1568,6 +1573,7 @@ function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Normalized
       value: value ?? null,
       ...(required === undefined ? {} : { required }),
       ...(disabled === undefined ? {} : { disabled }),
+      ...(type?.type === 'string' && value !== undefined ? { type } : {}),
     };
   }
 
@@ -1742,7 +1748,7 @@ function setProperty(
 ): void {
   if (!writeValue(state, property, next)) return;
   if (reflect) reflectProperty(element, state, property, next);
-  syncFormProperty(state, property);
+  syncFormProperty(element, state, property);
   notifyPropertyChange(element, state, property.name);
   // `16b-CTX`: a declared-row commit is this runtime's ONE provider-change
   // event. The providers re-read their value thunks and republish only what
@@ -2544,18 +2550,38 @@ function syncFormValue(state: ElementState): void {
   form.controller.setFormValue(formValueOf(state));
 }
 
-function syncFormValidity(state: ElementState): void {
+function syncFormValidity(element: HTMLElement, state: ElementState): void {
   const form = state.form;
   // The button shape makes no validity claim; its form.checkValidity() is the
   // platform default (valid).
   if (form === null || form.mapping.value === null) return;
   const internals = form.controller.internals;
   if (internals === undefined) return;
-  if (formRequiredOf(state) && formValueOf(state) === '') {
-    internals.setValidity({ valueMissing: true }, 'Please fill out this field.');
-  } else {
-    internals.setValidity({});
+  const value = formValueOf(state);
+  const required = formRequiredOf(state);
+  const type = form.mapping.type === undefined ? '' : state.tracked.read(form.mapping.type.name);
+  let valueMissing = required && value === '';
+  let typeMismatch = false;
+  let message = valueMissing ? 'Please fill out this field.' : '';
+  if (
+    typeof type === 'string' &&
+    type.toLowerCase() === 'email' &&
+    state.rootKind !== 'light' &&
+    state.root?.querySelector('input[data-form-validation="email"]')
+  ) {
+    // Use the platform's email grammar, sanitization, and localized message.
+    // This control stays outside the rendered tree and the outer form.
+    const input = (form.emailValidator ??= element.ownerDocument.createElement('input'));
+    input.type = 'email';
+    input.required = required;
+    input.value = value;
+    valueMissing = input.validity.valueMissing;
+    typeMismatch = input.validity.typeMismatch;
+    message = input.validationMessage;
   }
+  internals.setValidity({ valueMissing, typeMismatch }, message);
+  if (valueMissing || typeMismatch) internals.states?.add('invalid');
+  else internals.states?.delete('invalid');
 }
 
 function syncFormStates(state: ElementState): void {
@@ -2563,9 +2589,6 @@ function syncFormStates(state: ElementState): void {
   if (form === null) return;
   const states = form.controller.internals?.states;
   if (states === undefined) return;
-  if (form.mapping.value !== null && formRequiredOf(state) && formValueOf(state) === '')
-    states.add('invalid');
-  else states.delete('invalid');
   if (formAuthorDisabledOf(state) || form.effectiveDisabled) {
     states.delete('enabled');
     states.add('disabled');
@@ -2575,25 +2598,28 @@ function syncFormStates(state: ElementState): void {
   }
 }
 
-function syncFormAll(state: ElementState): void {
+function syncFormAll(element: HTMLElement, state: ElementState): void {
   if (state.form === null) return;
   syncFormValue(state);
-  syncFormValidity(state);
+  syncFormValidity(element, state);
   syncFormStates(state);
 }
 
 /** Keep the form contract in step with one accepted declared-property write. */
-function syncFormProperty(state: ElementState, property: NormalizedProperty): void {
+function syncFormProperty(
+  element: HTMLElement,
+  state: ElementState,
+  property: NormalizedProperty,
+): void {
   const form = state.form;
   if (form === null || form.controller.internals === undefined) return;
   const value = form.mapping.value;
   if (value !== null && property.name === value.name) {
-    syncFormAll(state);
+    syncFormAll(element, state);
     return;
   }
-  if (property.name === form.mapping.required?.name) {
-    syncFormValidity(state);
-    syncFormStates(state);
+  if (property === form.mapping.required || property === form.mapping.type) {
+    syncFormValidity(element, state);
     return;
   }
   if (property.name === form.mapping.disabled?.name) {
@@ -2625,7 +2651,7 @@ function resetFormValue(element: HTMLElement, state: ElementState): void {
   const form = state.form;
   if (form === null || form.mapping.value === null) return;
   writeFormValue(element, state, String(form.mapping.value.defaultValue));
-  syncFormAll(state);
+  syncFormAll(element, state);
 }
 
 function restoreFormValue(
@@ -2635,7 +2661,7 @@ function restoreFormValue(
 ): void {
   if (typeof restored !== 'string') return;
   writeFormValue(element, state, restored);
-  syncFormAll(state);
+  syncFormAll(element, state);
 }
 
 function setFormDisabled(state: ElementState, disabled: boolean): void {
@@ -2825,7 +2851,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         adoptClientStyles(state, parent, this.constructor);
         // Publish the reconciled initial value/validity/state once the root (and
         // the shared internals record used by closed discovery) is resolved.
-        syncFormAll(state);
+        syncFormAll(this, state);
         // Observe the first-connect DOM once, then keep the fact on the state.
         // A shell-created root starts empty (mount); an adopted root may carry
         // SSR/DSD content (claim); a light host's children are its generated
@@ -2885,6 +2911,9 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         state.projection = projection;
         state.ownedNodes = projection.nodes;
         state.regionState = 'present';
+        // On a fresh mount the native email opt-in cannot exist before the
+        // projection. Revalidate now, before replay can submit the form.
+        if (state.form?.mapping.type !== undefined) syncFormValidity(this, state);
         // Pre-hydration replay at the SAME point the class facade does it: after
         // the region exists and its handlers are installed. A click that landed
         // before an idle generated island hydrated was captured by the

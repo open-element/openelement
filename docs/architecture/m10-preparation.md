@@ -677,7 +677,7 @@ exact-SHA/clean-tree record backs them.
 ## Later reading (2026-11-20)
 
 **P1–P5/M10/M11 status follows the 2026-11-20 re-record in the head
-[progress ledger](./alpha16-18-progress.md) and the
+[progress ledger](https://github.com/open-element/openelement/blob/fc55986d7966da2c2e67cae253e536ca4b898e6e/docs/architecture/alpha16-18-progress.md) and the
 [P1 applicability record](./p1-applicability-record.md); the `NOT MET`
 statements in this file are the state as recorded at the time of writing.** This
 is an append-only later reading: it rewrites none of the 2026-11-15 record, is

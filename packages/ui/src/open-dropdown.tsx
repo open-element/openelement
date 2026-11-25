@@ -27,6 +27,7 @@ import { defineComponentConfig } from './component-config.ts';
 import {
   activateDropdown,
   clearDropdownPositionAnchor,
+  clearDropdownTriggerAria,
   disposeDropdownFocusWiring,
   recordDropdownPointerDown,
   syncDropdownAnchor,
@@ -65,6 +66,7 @@ function OpenDropdown(props: { anchorName: string }) {
     // interaction in the mount frame.
     const host = env.host as DropdownHost;
     activateDropdown(host);
+    return () => clearDropdownTriggerAria(host);
   });
   onDispose((env) => {
     // Element-lifetime teardown: drop the runtime content anchor (a reconnect

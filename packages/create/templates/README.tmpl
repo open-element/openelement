@@ -30,11 +30,6 @@ ranges over the `1.0.0` prerelease this starter was generated from, so a
 dependency update picks up later `1.0.0` prereleases (and the final `1.0.0`)
 without editing this file.
 
-Nothing here is tied to one package manager: the manifest declares no
-`packageManager`, every script is a plain command, and the scaffold ships no
-`pnpm-workspace.yaml`. Install with npm, pnpm, yarn, or bun — whichever one
-runs first writes its lockfile, and every command below works the same.
-
 ## The JS cost map
 
 | Surface                              | Ships JavaScript?     | Why                                               |
@@ -113,10 +108,10 @@ file spells them as `npm run …`):
 - `npm run dev` — start the Vite dev server (`oe dev`).
 - `npm run fmt` — format the sources (`oxfmt`).
 - `npm run lint` — lint the sources (`oxlint`).
-- `npm run typecheck` — type-check every route/component file (`tsc --noEmit`).
-  The check covers the whole `app/` directory (`tsconfig.json`), so new files
-  are picked up automatically.
-- `npm test` — run Node's built-in test runner (the starter ships none).
+- `npm run typecheck` — type-check the application, tests, and build configuration (`tsc --noEmit`).
+- `npm test` — run `tests/ping.test.ts` with Node’s built-in test runner. It checks
+  the status, content type, and JSON returned by `/api/ping`. Add more `*.test.ts`
+  files under `tests/`.
 - `npm run build` — production build into `dist/`: prerendered HTML for every
   static route, plus the request-time server when the app has one.
 - `npm start` — serve the production build.
@@ -138,11 +133,10 @@ a pin plus the router's own aligned dependency is what keeps the tree single.
 
 ### Package manager
 
-Install with whichever manager you prefer; the first install decides the
-lockfile and everything afterwards follows it. The manifest deliberately
-carries no `packageManager` field: with the field absent, the manager you run
-first is the one that owns the project. The commands in this file are spelled
-`npm run …` only because npm's spelling works unchanged under all four.
+Use the same manager for installs and scripts. If you scaffolded with
+`--no-install`, follow the command printed by the CLI. This README uses npm.
+With another manager, replace `npm run` with `pnpm run`, `yarn run`, or `bun run`
+and pass the same script name.
 
 ## Styling ownership
 

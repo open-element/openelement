@@ -54,6 +54,8 @@ If something goes wrong before that:
 | the install fails offline or against a private registry | dependency install is the only step that talks to the registry | scaffold without it using the generator's `--no-install` flag (pass it through your package manager), then install once the registry is reachable |
 | you use pnpm, yarn or bun | the scaffold installs with the manager it was invoked through, else the first of pnpm/npm/yarn/bun on `PATH` | keep using your manager — the scripts are manager-neutral: `pnpm run dev`, `yarn dev` and `bun run dev` all reach the same dev server |
 
+The examples below use server function pages from the current source preview. Follow the [source preview instructions](https://github.com/open-element/openelement#preview-the-current-source) to try them. If your starter came from npm Alpha 15, use the [Alpha 15 authoring guide](https://github.com/open-element/openelement/blob/v1.0.0-alpha.15/www/content/docs/guide/getting-started.md).
+
 ## Understand the project
 
 The scaffold writes one small directory. Every path has one job:
@@ -182,7 +184,7 @@ npm start      # serve the real build, including request-time routes
 
 `npm start` is the one to check a change against, because it serves the same output production does and dispatches dynamic routes and form posts to the generated server entry. Port comes from `OPEN_ELEMENT_PORT` (falling back to `PORT`, default 4173) and host from `OPEN_ELEMENT_HOST`. For a project whose build has no request-time route, the router command also carries a static-only mode — `openelement start --mode=preview` — which refuses a build that has a server side rather than silently hiding it.
 
-To deploy: upload `dist/` to a static host when the build emitted no `dist/server/`; when it did, deploy the static files plus a Node/Workers runtime pointed at `dist/server/index.js`. The full output contract — which files the build writes and what each one answers — is documented under [Deployment](/guide/deployment). Before shipping, `npm run typecheck` type-checks the app and `npm test` runs the starter's `node --test` suite — the template ships no test files yet, so add `*.test.ts` next to the code you want covered; both scripts are wired into the starter and need no extra setup.
+To deploy: upload `dist/` to a static host when the build emitted no `dist/server/`; when it did, deploy the static files plus a Node/Workers runtime pointed at `dist/server/index.js`. The full output contract — which files the build writes and what each one answers — is documented under [Deployment](/guide/deployment). Before shipping, `npm run typecheck` type-checks the app and `npm test` runs the starter's `node --test` suite — the source preview includes a test for the `/api/ping` response. Add more `*.test.ts` files under `tests/`. Both scripts need no extra setup.
 
 ## Go deeper
 

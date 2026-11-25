@@ -1666,11 +1666,11 @@
       },
       "declarations": {
         ".": {
-          "publicShapeSha256": "522a5f23777207fb4d1383278fad151a1b454e805c769830997361dd01183feb",
+          "publicShapeSha256": "fe17a5316e8501eea5765d510dbc29cadc9cc42faa7fc6030a90d8507834f8a9",
           "publicSymbols": [
             "OpenButton=value:{call:(props:{disabled:union(false|true);href:string;size:string;target:string;type:string;variant:string})=>any}",
             "OpenCodeBlock=value:{call:(props:{copyLabel:string})=>any}",
-            "OpenDialog=value:{call:(props:{label:string;open:union(false|true)})=>any}",
+            "OpenDialog=value:{call:(props:{closeLabel:string;label:string;open:union(false|true)})=>any}",
             "OpenDropdown=value:{call:(props:{anchorName:string})=>any}",
             "OpenInput=value:{call:(props:{disabled:union(false|true);error:string;label:string;name:string;placeholder:string;required:union(false|true);type:string;value:string})=>any}",
             "OpenThemeToggle=value:{call:(props:{theme:string})=>any}",
@@ -1707,10 +1707,10 @@
           ]
         },
         "./open-dialog": {
-          "publicShapeSha256": "5318c7bf69da5f9c8d39fd133f669e323306a0f11618ee620b0790e636e0a7de",
+          "publicShapeSha256": "198a123209778febb1f87f3a775e2f38eb04f3fa7d1a8b8b8723dafbfb9bfa43",
           "publicSymbols": [
-            "default=value:{call:(props:{label:string;open:union(false|true)})=>any}",
-            "openElement=value:{delegatesFocus:true;properties:{label:{default:string};open:{default:false;reflect:true}};root:\"shadow\";styles:array(string)}"
+            "default=value:{call:(props:{closeLabel:string;label:string;open:union(false|true)})=>any}",
+            "openElement=value:{delegatesFocus:true;properties:{closeLabel:{attribute:string;default:string};label:{default:string};open:{default:false;reflect:true}};root:\"shadow\";styles:array(string)}"
           ]
         },
         "./open-dropdown": {

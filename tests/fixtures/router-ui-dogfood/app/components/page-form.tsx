@@ -46,6 +46,9 @@ export default function FormPage() {
         <input id="enhanced-required" name="required" required />
         <open-button id="enhanced-submit" type="submit">Enhanced submit</open-button>
       </form>
+      <form id="initial-email-form">
+        <open-input name="email" type="email" label="Invalid email seed" value="bad-email"></open-input>
+      </form>
       <open-input id="invalid" label="Invalid" error="Required field"></open-input>
       <open-input id="native-disabled" label="Off" disabled></open-input>
       {/* open-button's disabled contract, BOTH shapes, as real SSR entities

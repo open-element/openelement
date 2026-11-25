@@ -72,6 +72,19 @@ test.describe('open-dialog', () => {
     await waitForDialogs(page);
   });
 
+  test('the close button supports a localized name and live updates', async ({ page }) => {
+    const host = page.locator('#ssr-open-dialog');
+    await expect(host.getByRole('button', { name: '关闭' })).toBeVisible();
+    await host.evaluate((node) => {
+      const dialog = node as HTMLElement & { closeLabel: string };
+      dialog.closeLabel = 'Fermer';
+    });
+    await expect(host.getByRole('button', { name: 'Fermer' })).toBeVisible();
+    await host.evaluate((node) => node.setAttribute('close-label', ' '));
+    await host.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(host).not.toHaveAttribute('open');
+  });
+
   test('SSR-rendered open attribute becomes a top-layer modal at hydration (#1030)', async ({
     page,
   }) => {

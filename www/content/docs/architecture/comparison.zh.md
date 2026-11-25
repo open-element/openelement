@@ -109,7 +109,7 @@ docs 站点就是一个普通的 openElement 应用（同样有 island），所�
 
 | Chunk                          | 原始字节 | gzip -9 |
 | ------------------------------ | -------- | ------- |
-| `element-runtime`              | 67,356 | 21,442 |
+| `element-runtime`              | 68,462 | 21,827 |
 | `island-open-button`           | 16,432 | 3,805 |
 | `island-open-dragon-live-gaze` | 26,188 | 5,772 |
 | `island-open-page-rail`        | 35,269 | 6,678 |

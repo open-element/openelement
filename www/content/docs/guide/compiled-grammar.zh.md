@@ -8,7 +8,7 @@ section: 'Core'
 
 每个编译组件都是一个模块：它默认导出一个函数组件，旁边放着一份 `defineIslandConfig` sidecar。编译器把这一对降级为一个 Native Custom Element——一个构建作者所写树的构造器，外加（对 shadow root 而言）服务端渲染所用的宿主生成器。这份文法是封闭的：编译器无法降级的写法会在构建期以带码诊断失败，而不是把运行时解释器发到浏览器。本页即速查表——先一表列出全部法则，再逐条给出可用示例与失败形态。
 
-类范式已在本版本中删除。`extends OpenElement` 与 `@element(...)` 类都不再是创作面：`OpenElement` 与 `ErrorBoundary` 不再导出，也没有任何兼容垫片替代它们。`element` 与 `property` 装饰器仍以惰性的空操作替身存在，好让旧模块能被单元测试或配置加载*求值*，但没有任何编译器会编译它们——仍然带着它们的模块不会被任何范式接纳。
+本版本移除了类范式，包括 `OpenElement`、`ErrorBoundary` 导出以及 `element`、`property` 装饰器。请将类组件迁移为默认导出的函数，并使用 `defineIslandConfig` 声明配置。
 
 ## 法则一览
 
@@ -425,7 +425,7 @@ export default function MyLink(props: { active: boolean }) {
 
 ## 生命周期是根 setup 里的内置调用
 
-类范式的 hook 只有一个替代品：从 `@openelement/element` 导入、并在根组件正文顶层调用的内置函数，编译器把它们降级进被保留的实例工厂。`onConnect` 同时替代 `onDsdHydrated` 与 `onCsrRendered`——一个回调，认领之后与全新挂载之后同样运行——而 `onDispose` 替代类范式的 `onDispose`。嵌套组件的 hook 只有在该组件被编译器保留为无宿主正文时才被携带；没有保留宿主者的 hook 会以 `OEIR_LEAF_INVALID_ARTIFACT` 失败关闭，所以请把元素生命周期放在拥有它的那个元素上。
+从 `@openelement/element` 导入生命周期内置函数，并在组件正文顶层调用。编译器会将这些调用降级到保留的实例工厂。每次连接时，`onConnect` 在生成的正文挂载新 DOM 或认领服务端标记之前运行，其返回的清理函数在断开时运行。`onDispose` 在保留的实例销毁时运行。编译器接纳保留的无宿主组件正文中的嵌套 hook，缺少保留所有者的 hook 会报 `OEIR_LEAF_INVALID_ARTIFACT`。
 
 ```tsx
 import { onConnect, onDispose, useHost } from '@openelement/element';
@@ -439,8 +439,7 @@ export default function MyProbe() {
 
   onConnect((env) => {
     host.setAttribute('data-ready', '1');
-    // 每次连接的信号在断开时中止，因此在这里注册的监听器会被释放，
-    // 不需要第二张记账表。
+    // 断开时，每次连接的信号先中止，再运行该次连接的清理函数。
     env.signal.addEventListener('abort', () => host.removeAttribute('data-ready'));
   });
 
@@ -452,7 +451,7 @@ export default function MyProbe() {
 }
 ```
 
-`onPropertyChange(cb)` 在声明的行提交新值之后运行，`onError(cb)` 是错误边界。`useHost()` 返回本实例所属的元素——类范式 `this` 的替代品——并且它只作为 setup 绑定（`const host = useHost()`）被擦除，所以请通过那个绑定读取宿主，而不要在处理器或文本槽位里调用它。断开期间仍须可达的状态属于 `ref`：句柄在节点挂载时填充、在卸载时清空，而编译器只在 `ref` 属性里承认它。
+`onPropertyChange(cb)` 在已声明属性提交新值后运行，`onError(cb)` 处理该元素的错误。通过 setup 绑定（`const host = useHost()`）读取所属元素。若要在回调中访问 DOM 节点，请将 `ref()` 句柄传给该节点的 JSX `ref` 属性。节点附着时设置 `current`，分离时清空。在回调中读取 `current` 不会建立响应式订阅。
 
 ```tsx
 import { onPropertyChange, ref } from '@openelement/element';

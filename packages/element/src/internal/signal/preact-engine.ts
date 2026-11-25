@@ -54,15 +54,8 @@ export function createPreactEngine(): BatchedSignalEngine {
     },
 
     effect(fn: () => void | (() => void)): () => void {
-      let cleanup: (() => void) | void;
-      const dispose = preactEffect(() => {
-        cleanup?.();
-        cleanup = fn();
-      });
-      return () => {
-        cleanup?.();
-        dispose();
-      };
+      const dispose = preactEffect(() => fn());
+      return () => dispose();
     },
 
     batch<T>(run: () => T): T {

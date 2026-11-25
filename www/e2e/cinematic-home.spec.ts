@@ -432,6 +432,77 @@ test.describe('Cinematic homepage', () => {
     }
   });
 
+  for (const mode of ['light', 'dark', 'forced colors'] as const) {
+    test(`the DSD scene has readable text over its painted backdrop in ${mode}`, async ({
+      page,
+    }) => {
+      const theme = mode === 'dark' ? 'dark' : 'light';
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.emulateMedia({
+        colorScheme: theme,
+        forcedColors: mode === 'forced colors' ? 'active' : 'none',
+        reducedMotion: 'reduce',
+      });
+
+      for (const path of ['/', '/zh/']) {
+        await page.goto(path);
+        await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+        expect(await page.evaluate(() => matchMedia('(forced-colors: active)').matches)).toBe(
+          mode === 'forced colors',
+        );
+        const scene = page.locator('.page-home .flood');
+        await scene.scrollIntoViewIfNeeded();
+
+        // Hide the type while leaving its layout and the painted layers in
+        // place, including the two backdrop pseudo-elements axe cannot see.
+        const samples = await scene
+          .locator('p, h2, h2 span, .flood-panel :is(small, span, code)')
+          .evaluateAll((elements) =>
+            elements.map((element) => {
+              const box = element.getBoundingClientRect();
+              const range = document.createRange();
+              const text = [...element.childNodes].filter(
+                (node) => node.nodeType === Node.TEXT_NODE,
+              );
+              range.setStartBefore(text[0]);
+              range.setEndAfter(text[text.length - 1]);
+              const bounds = range.getBoundingClientRect();
+              const x = Math.ceil(Math.max(box.left, bounds.left));
+              const y = Math.ceil(Math.max(box.top, bounds.top));
+              const right = Math.floor(Math.min(box.right, bounds.right));
+              const bottom = Math.floor(Math.min(box.bottom, bounds.bottom));
+              const ink = getComputedStyle(element).color;
+              (element as HTMLElement).style.visibility = 'hidden';
+              return {
+                label: text
+                  .map((node) => node.textContent)
+                  .join('')
+                  .trim()
+                  .slice(0, 30),
+                ink,
+                clip: { x, y, width: right - x, height: bottom - y },
+                minimum: element.matches('h2, h2 span') ? 3 : 4.5,
+              };
+            }),
+          );
+        expect(samples).toHaveLength(9);
+
+        for (const sample of samples) {
+          const ink = await inkLuminance(page, sample.ink);
+          const { min, max } = await luminanceSpan(page, sample.clip);
+          const nearestBackground = Math.max(min, Math.min(ink, max));
+          const contrast = contrastRatio(ink, nearestBackground);
+          expect
+            .soft(
+              contrast,
+              `${path} ${mode}: "${sample.label}" has ${contrast.toFixed(2)}:1 contrast`,
+            )
+            .toBeGreaterThanOrEqual(sample.minimum);
+        }
+      }
+    });
+  }
+
   test('the hero keeps horizontal scroll inside the code block only (§1)', async ({ page }) => {
     // The pre-redesign grid pinned its right column at 320px, which pushed the
     // page wide at narrow viewports and left two horizontal scrollbars in §1

@@ -61,8 +61,8 @@ test('version-bump: the named stamp sites cover the six release packages', () =>
   expect(GENERATED_MANIFEST).toEqual('packages/ui/src/generated-manifest.json');
   expect(WORKSPACE_ROOT_CONFIG).toEqual('package.json');
   expect(README_SOURCE_LINES).toEqual([
-    { path: 'README.md', anchor: 'The source tree is `' },
-    { path: 'README.zh.md', anchor: '全新公开基线 `' },
+    { path: 'README.md', anchor: 'This checkout previews `' },
+    { path: 'README.zh.md', anchor: '当前源码预览的是 `' },
   ]);
 });
 
@@ -129,27 +129,18 @@ const BETA = '0.44.0-beta.2.2';`;
   expect(rewritten).toContain("const BETA = '0.44.0-beta.2.2'");
 });
 
-test('version-bump: the README rewriter anchors the source-tree sentence', () => {
-  const en = 'The source tree is `1.0.0-alpha.2`, a baseline. Later: `1.0.0-alpha.2` again.';
-  const enRewritten = rewriteReadmeSourceLine(
-    en,
-    '1.0.0-alpha.2',
-    '1.0.0-alpha.3',
-    'The source tree is `',
-    'README.md',
-  );
-  expect(enRewritten).toContain('The source tree is `1.0.0-alpha.3`,');
-  expect(enRewritten.match(/1\.0\.0-alpha\.3/gu)?.length).toEqual(1);
-  const zh = '源码目前是全新公开基线 `1.0.0-alpha.2`。其余提及 `1.0.0-alpha.2` 不动。';
-  const zhRewritten = rewriteReadmeSourceLine(
-    zh,
-    '1.0.0-alpha.2',
-    '1.0.0-alpha.3',
-    '全新公开基线 `',
-    'README.zh.md',
-  );
-  expect(zhRewritten).toContain('全新公开基线 `1.0.0-alpha.3`。');
-  expect(zhRewritten.match(/1\.0\.0-alpha\.3/gu)?.length).toEqual(1);
+test('version-bump: README source versions change while npm examples keep the published version', () => {
+  const published = '1.0.0-alpha.15';
+  const next = '1.0.0-alpha.16';
+  const npmExample = `[Alpha 15](https://github.com/open-element/openelement/tree/v${published})`;
+  const registryLines = [`The npm latest line is ${published}.`, `npm 的 latest 是 ${published}。`];
+
+  for (const [index, { path, anchor }] of README_SOURCE_LINES.entries()) {
+    const registryLine = registryLines[index];
+    const before = `${registryLine}\n${anchor}${published}\`\n${npmExample}\n`;
+    const after = `${registryLine}\n${anchor}${next}\`\n${npmExample}\n`;
+    expect(rewriteReadmeSourceLine(before, published, next, anchor, path)).toBe(after);
+  }
 });
 
 test('version-bump: generated manifest versions are read defensively', () => {
@@ -439,8 +430,8 @@ test('version-bump: a write against a fixture tree moves all ten points and rege
       join(root, ADMITTED_TWIN_FIXTURE),
       `const PINNED_STATE = {\n  sourceVersion: '${version}',\n  activeTarget: 'v${version}',\n};\nconst VERSIONS = new Map([\n  ['@openelement/element', '${version}'],\n]);\n`,
     );
-    await writeFile(join(root, 'README.md'), `The source tree is \`${version}\`, a baseline.\n`);
-    await writeFile(join(root, 'README.zh.md'), `源码目前是全新公开基线 \`${version}\`。\n`);
+    await writeFile(join(root, 'README.md'), `This checkout previews \`${version}\`.\n`);
+    await writeFile(join(root, 'README.zh.md'), `当前源码预览的是 \`${version}\`。\n`);
     await mkdir(join(root, 'packages/ui/src'), { recursive: true });
     await writeFile(join(root, GENERATED_MANIFEST), `{\n  "version": "${version}"\n}`);
 
@@ -491,8 +482,8 @@ test('version-bump: workspace members ride the stamp on a fixture tree (#1524)',
       join(root, ADMITTED_TWIN_FIXTURE),
       `const PINNED_STATE = { sourceVersion: '${version}', activeTarget: 'v${version}' };\n`,
     );
-    await writeFile(join(root, 'README.md'), `The source tree is \`${version}\`, a baseline.\n`);
-    await writeFile(join(root, 'README.zh.md'), `源码目前是全新公开基线 \`${version}\`。\n`);
+    await writeFile(join(root, 'README.md'), `This checkout previews \`${version}\`.\n`);
+    await writeFile(join(root, 'README.zh.md'), `当前源码预览的是 \`${version}\`。\n`);
     await mkdir(join(root, 'packages/ui/src'), { recursive: true });
     await writeFile(join(root, GENERATED_MANIFEST), `{\n  "version": "${version}"\n}`);
     // The workspace: one member lagging on the train, one already at the
