@@ -60,7 +60,7 @@ all three now do, and each is recorded in its own amendment below:
   `9e494db63`, followed by the §19.2 SSR fallback). Alpha16 uses the existing
   host identity for literal SSR fallback, retries a rolled-back connect on
   reconnect and keeps the update subscription or event listener live for later
-  recovery. The [boundary entry below](#2026-11-18-amendment--16b-eb-onerror-fallback-and-recovery)
+  recovery. The [boundary entry below](#2026-11-25-policy-ssr-and-recovery)
   records the migration scope and evidence.
 - `16b-REF` (refs) — delivered (`d135576d0`): `ref(cb?)` is a compiler-erased
   declaration intrinsic riding the EXISTING `ref` JSX channel, so no second
@@ -943,7 +943,7 @@ Until a class caller can render a generated child through the child's own
 descriptor, `open-page-rail` stays class-lane, and so does `open-reading-shell`
 (its only caller relationship is the same shape).
 
-## 2026-11-18 amendment — `16b-EB`: `onError`, fallback and recovery
+## 2026-11-18 amendment — `16b-EB`: `onError` and the generated lane's three capture points
 
 `onError(cb)` is the FOURTH compiler-erased intrinsic of the generated-element
 lane. It is the author-facing error boundary; the class lane's
@@ -977,7 +977,10 @@ it), and `error` is the thrown value EXACTLY as thrown — never wrapped. The
 zero-argument form is admitted and simply ignores the env, exactly like the
 other three intrinsics.
 
-### Connect and update capture
+### The three capture points
+
+Connect and claim share the shell catch. Refresh and event dispatch share
+`guardUpdate`.
 
 | phase | capture point | what was already there | with a registered handler | with NO handler |
 | --- | --- | --- | --- | --- |
@@ -1033,21 +1036,31 @@ it is unhandled, and the platform reports it. An author who wants a boundary ove
 async work uses `env.signal` with their own `catch`. Recorded here as the
 deliberate boundary, not as an oversight.
 
-### SSR and recovery policy (confirmed 2026-11-25)
+### SSR
 
-`onError` is a client callback. At SSR, a boundary-owned descendant failure
-contributes the caller's literal host bytes and the render reports the original
-error to `onNestedFailure`. A render without the applicable boundary or report
-channel propagates the original error. The fallback has the identity of the
-existing, unexpanded host and uses normal client claim rules.
+The enclosing render handles SSR reporting and fallback through the option
+below.
 
-A connect/claim failure rolls back its attempt; disconnecting and reconnecting
-retries on the normal mount/claim path. A captured refresh or event failure leaves
-its subscription or listener live for the next update or event. An author-facing
-reset API, a separate fallback identity, cross-custom-element runtime capture
-and async rejection capture are outside the Alpha16 replacement. The
+### 2026-11-25 policy: SSR and recovery
+
+When an admitted nested host expansion throws, a render with
+`onNestedFailure` reports the original thrown value and contributes the
+caller's literal fallback markup. If the reporter returns normally, healthy
+siblings can continue expanding. If the option is omitted, the original
+exception propagates. The generated component registers `onError` during
+client activation.
+
+The fallback represents the existing unexpanded host. Normal claim adopts its
+nodes according to the existing region and ownership rules. On the client a
+connect or claim failure rolls back the attempted projection and its resources,
+preserving borrowed nodes. Reconnecting runs the normal mount or claim path
+once the cause is gone. A captured refresh or event error leaves its subscription
+or listener live. Pre-connection property reconciliation and seed validation
+take place before the shell's capture point.
+
+An author-facing reset API, a separate fallback identity, cross-custom-element
+client capture and async rejection capture are outside the Alpha16 policy.
 [ADR-0182 decision](../adr/ADR-0182-function-component-capability-api.md#amendment-2026-11-25-16b-eb-fallback-and-recovery)
-gives the policy and points to the consumer-form tests.
 
 ### Bytes
 

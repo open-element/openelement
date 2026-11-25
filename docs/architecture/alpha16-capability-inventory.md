@@ -36,11 +36,10 @@ have a full replacement: lifecycle (root scope, nested hostless hooks at any
 depth after the 2026-11-21 cross-ledger transaction, and the connection-scope
 `env` helper), context, refs, the per-component property/attribute channel and
 the client-only style channel. The error boundary is **PARTIAL BY DESIGN**.
-The owner confirmed Alpha16's
-existing-identity SSR fallback, reconnect retry after rollback and recovery on
-subsequent updates or events on 2026-11-25. The
-[ADR-0182 decision](../adr/ADR-0182-function-component-capability-api.md#amendment-2026-11-25-16b-eb-fallback-and-recovery)
-defines the policy and exclusions. This decision does not sign the P5 matrix.
+The 2026-11-25 policy keeps the existing SSR fallback identity, retries
+rolled-back connection attempts on reconnect, and keeps subscriptions and
+listeners live for later updates or events. The separate P5 signature remains
+pending. [ADR-0182 decision](../adr/ADR-0182-function-component-capability-api.md#amendment-2026-11-25-16b-eb-fallback-and-recovery)
 Form participation is **MIGRATED** (re-adjudicated 2026-11-20 / plan §19.3: the
 framework mirrors the one constraint derivable from a declared property and hands
 the author the complete `ElementInternals` seam for the rest, so constraint parity
@@ -58,7 +57,7 @@ reader holding the plan should not have to infer the correspondence.
 | Slice | Capability | Rows in this document | State |
 | --- | --- | --- | --- |
 | `16b-LC` | Class lifecycle (CAP-03) | author lifecycle: connect / disconnect / property change | **MIGRATED (2026-11-21)** — root setup/hooks, nested hostless hooks at ANY depth (the cross-ledger transaction closed the depth ≥ 2 boundary), and the connection-scope `env` helper are delivered. What stays refused is PLACEMENT, not depth: a recipe/list body and a component no retained body references have no lifecycle owner (`OEIR_LEAF_INVALID_ARTIFACT` / `OEC9041`), which is the honest boundary of a compiled setup |
-| `16b-EB` | Error boundary (CAP-05) | error boundary | **PARTIAL BY DESIGN** — the two client capture points and the §19.2 fallback use existing identity. Reconnect retries a failed connect after rollback, and the update/event path remains live. |
+| `16b-EB` | Error boundary (CAP-05) | error boundary | **PARTIAL BY DESIGN** — the render-level reporter opts into literal nested fallback under the existing identity. The client retries a rolled-back connect on reconnect, and the update/event path remains live. |
 | `16b-CTX` | Context (CAP-09) | context provider / consumer | **MIGRATED** (2026-11-19 anchor `e8ea72b95`, kept as history — off the delivery line; delivery-line row in the final-SHA matrix below) |
 | `16b-REF` | Refs (CAP-11) | node refs | **MIGRATED** (2026-11-19 anchor `d135576d0`, kept as history — off the delivery line; delivery-line row in the final-SHA matrix below) |
 | `16b-MN` | Migration note (CAP-26) | this document plus `16b-migration-note.md` | **TRACKED** — both are tracked and indexed; the owner sign-off is the remaining §13.5 item |
@@ -168,15 +167,21 @@ in the table):
 
 ## 2026-11-25 error boundary review
 
-The Alpha16 decision records the existing host identity for fallback, retry on
-normal reconnect and recovery on subsequent updates or events. The
-[migration note](./16b-migration-note.md#2026-11-18-amendment--16b-eb-onerror-fallback-and-recovery)
-records the same scope. On merged `03e1e07e2eb87d703a9e8efbc56e6108f91472e9`,
-a local consumer probe rendered actual compiled output and observed fallback
-claim retaining the parent, fallback host and healthy sibling nodes in Chromium,
-Firefox and WebKit. The focused Compiler and Element suites checked the
-independent client recovery and SSR reporting paths. These receipts concern
-that measured revision. [Landed-candidate evidence](https://github.com/open-element/openelement/pull/1812#issuecomment-7158207745)
+The Alpha16 policy uses literal SSR fallback under the existing host identity
+when the render supplies `onNestedFailure`. The client `onError` applies to
+admitted synchronous work of the element and its retained hostless setups.
+Failed connects retry on reconnect after rollback. Captured updates or events
+leave the subscription or listener live for later work. The checked-in
+Chromium regression compiles the producer, renders with the reporter, then
+claims the same nodes and updates the parent.
+[Browser regression](../../packages/compiler/__tests__/semantic-ir/generated-element.error-boundary.browser.test.ts)
+[Migration note](./16b-migration-note.md#2026-11-25-policy-ssr-and-recovery)
+
+On merged `03e1e07e2eb87d703a9e8efbc56e6108f91472e9`, a supplemental local probe
+rendered compiled output, then observed fallback claim preserving DOM identity
+in Chromium, Firefox and WebKit. The focused Compiler and Element suites checked
+the independent client recovery and SSR reporting paths at that revision.
+[Landed-candidate evidence](https://github.com/open-element/openelement/pull/1812#issuecomment-7158207745)
 
 ## Owner sign-off (2026-11-20, delegated remediation session)
 
