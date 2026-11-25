@@ -182,7 +182,7 @@ npm start      # serve the real build, including request-time routes
 
 `npm start` is the one to check a change against, because it serves the same output production does and dispatches dynamic routes and form posts to the generated server entry. Port comes from `OPEN_ELEMENT_PORT` (falling back to `PORT`, default 4173) and host from `OPEN_ELEMENT_HOST`. For a project whose build has no request-time route, the router command also carries a static-only mode — `openelement start --mode=preview` — which refuses a build that has a server side rather than silently hiding it.
 
-To deploy: upload `dist/` to a static host when the build emitted no `dist/server/`; when it did, deploy the static files plus a Node/Workers runtime pointed at `dist/server/index.js`. The full output contract — which files the build writes and what each one answers — is documented under [Deployment](/guide/deployment). Before shipping, `npm run typecheck` type-checks the app and `npm test` runs the starter's `node --test` suite — the source preview includes a test for the `/api/ping` response. Add more `*.test.ts` files under `tests/`. Both scripts need no extra setup.
+Run `npx oe publish --check` before uploading `dist-public/`. If the build emitted `dist/server/`, also deploy a Node or Workers runtime for `dist/server/index.js`. The full output contract — which files the build writes and what each one answers — is documented under [Deployment](/guide/deployment). Before shipping, `npm run typecheck` type-checks the app and `npm test` runs the starter's `node --test` suite — the source preview includes a test for the `/api/ping` response. Add more `*.test.ts` files under `tests/`. Both scripts need no extra setup.
 
 ## Go deeper
 

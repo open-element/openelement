@@ -431,7 +431,9 @@ type ViteInlineConfigWithManifest = Omit<InlineConfig, 'build'> & {
   build?: ViteBuildOptionsWithManifest;
 };
 
-async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetManifest | null> {
+async function buildClient(
+  ctx: OpenElementBuildContext,
+): Promise<{ manifest: ClientAssetManifest | null; files: string[] }> {
   // the style-request registry's bookkeeping is this build's
   // lifetime — the SSR build clears and re-registers through its own
   // transforms, and a stale entry from an earlier build in this process must
@@ -580,7 +582,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
   ) {
     await removeClientDeliveryArtifacts(root, outDir);
     log.info('No islands found - zero client JS output');
-    return null;
+    return { manifest: null, files: [] };
   }
 
   const reachableTags = reachableScan.tags;
@@ -634,7 +636,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
   ) {
     await removeClientDeliveryArtifacts(root, outDir);
     log.info('No admitted reachable islands - zero client JS output');
-    return null;
+    return { manifest: null, files: [] };
   }
 
   const totalIslands =
@@ -1194,6 +1196,11 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
 
   try {
     const outputs = await viteBuild(clientConfig);
+    const publicFiles = (Array.isArray(outputs) ? outputs : [outputs]).flatMap((result) =>
+      'output' in result
+        ? result.output.map((entry) => entry.fileName).filter((name) => !name.startsWith('.vite/'))
+        : [],
+    );
     log.info('Client bundle built -> ' + clientOutDir);
 
     // #1544, fail closed: the generated entry statically imports the element
@@ -1478,6 +1485,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
         // zero-JS shape after all, so leave no trace.
         await removeClientDeliveryArtifacts(root, outDir);
         log.info('No server-rendered style edges - zero client JS output');
+        return { manifest: null, files: [] };
       } else {
         log.info(
           `Style-only emission complete: ${emittedStyleResources} style asset(s), zero client JS`,
@@ -1486,14 +1494,21 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       // No client deliverable exists, so no client asset manifest is handed
       // back — exactly as the shortcut paths behave. Phase 3's script-tag and
       // island-manifest passes key off the manifest, and this app has neither.
-      return null;
+      return {
+        manifest: null,
+        files: publicFiles
+          .filter((name) => !name.startsWith('islands/'))
+          .map((name) => `client/${name}`),
+      };
     }
+    return {
+      manifest: ctx.clientAssetManifest,
+      files: publicFiles.map((name) => `client/${name}`),
+    };
   } catch (error) {
     log.error(`Client build failed: ${formatError(error)}`);
     throw error;
   }
-
-  return ctx.clientAssetManifest;
 }
 
 export { buildClient };

@@ -1,13 +1,16 @@
 import { NITRO_COMPATIBILITY_DATE } from '../../tools/release/nitro-compatibility.ts';
+import { checkPublishOutput } from '../../packages/router/src/vite/internal/publish-manifest.ts';
+import { fileURLToPath } from 'node:url';
 
 // The preset is selected by the caller (`pnpm nitro:build[-workers]`
 // through tools/release/nitro-build.ts `--preset`), so this config stays static and
-// free of Node-only env reads. `dist/` is mapped as public assets for the
-// client chunks; the driver prunes `public/server` afterwards so the portable
-// server bundle is never publicly served.
+// free of Node-only env reads. This check runs on the build host for both
+// presets. Nitro packages assets from the verified public snapshot.
+const { root: publicDir } = checkPublishOutput(fileURLToPath(new URL('./dist', import.meta.url)));
+
 export default defineNitroConfig({
   serverDir: 'server',
-  publicAssets: [{ dir: '../dist' }],
+  publicAssets: [{ dir: publicDir }],
   output: {
     dir: '.output',
   },

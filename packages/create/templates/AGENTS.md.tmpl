@@ -14,7 +14,7 @@ working in this project.
 
 ```sh
 npm run dev        # dev server with HMR
-npm run build      # production build into dist/
+npm run build      # production build and dist-public/ upload directory
 npm run start      # serve the built output (and request-time routes)
 npm run typecheck  # tsc --noEmit
 npm run lint       # oxlint
@@ -31,16 +31,16 @@ npm run fmt        # oxfmt
 - `app/layout.tsx` — the shared document chrome every page renders inside.
 - `app/head.tsx` — document head entries a config URL list cannot express.
 - `openelement.config.ts` — framework options (head, i18n, middleware, ...).
-- `public/` — copied verbatim into `dist/`.
+- `public/` — authored files for the public deployment.
 - `tests/` — application tests run by Node’s built-in test runner.
 
 ## Rules
 
-- Never edit `dist/` by hand: it is build output.
+- Treat `dist/` and `dist-public/` as generated build output.
 - Islands run in the browser. Importing `node:*` from an island fails the build
   by design — server-only code belongs in route loaders and actions.
 - A page that mounts no island ships no island JavaScript; keep static surfaces
   static instead of widening the island graph.
-- `dist/server/` is private server code; never publish it as a static asset.
+- Run `npx oe publish --check` before uploading `dist-public/`. Keep `dist/server/` and `dist/publish-manifest.json` in the application environment.
 - Keep `npm run typecheck`, `npm run lint`, `npm run test` and `npm run build`
   green after a change; `npm run check` is not a script in this scaffold.

@@ -52,7 +52,7 @@ When `npm run build` emits `dist/server/`, deploy the built handler to Cloudflar
 import { createOpenElementNitroHandler } from '@openelement/router/nitro-mount';
 import openElementServer from '../../dist/server/index.js';
 
-// Catch-all over the Nitro static layer (nitro-public/): prerendered files
+// Catch-all over the Nitro static layer (dist-public/): prerendered files
 // win, everything else — dynamic routes, actions, 404s — reaches the built
 // handler.
 export default createOpenElementNitroHandler({
@@ -68,7 +68,7 @@ export default createOpenElementNitroHandler({
 // nitro.config.ts
 export default defineNitroConfig({
   serverDir: 'server',
-  publicAssets: [{ dir: 'nitro-public' }],
+  publicAssets: [{ dir: 'dist-public' }],
   compatibilityDate: '2026-06-12',
   cloudflare: { nodeCompat: true },
 });
@@ -79,13 +79,7 @@ The `env` forwarding is what carries Workers bindings into your loaders and acti
 The deploy sequence:
 
 1. `npm run build`
-2. Publish the prerendered tree for Nitro's static layer. `dist/server/` is server code, not a public asset, and must never be published as one:
-
-   ```bash
-   mkdir -p nitro-public
-   cp -R dist/. nitro-public/
-   rm -rf nitro-public/server
-   ```
+2. Run `npx oe publish --check`. Nitro uses the verified `dist-public/` directory for the Workers assets binding.
 
 3. Build the Workers output with the Nitro version this repository pins for compatibility (tools/release/nitro-compatibility.ts):
 
@@ -95,7 +89,7 @@ The deploy sequence:
 
 4. Deploy `.output/`. Nitro emits `server/index.mjs` — a Workers module exporting `default fetch(request, env, context)` — plus `public/` and a generated `server/wrangler.json` (compatibility date, `nodejs_compat`, and the `ASSETS` binding pointed at `public/`). Deploy from the project root with `npx nitro deploy --prebuilt`, or from `.output/` with the wrangler command the generated `nitro.json` records (`npx wrangler --cwd ./ deploy`).
 
-Before deploying, prove the wiring on a host you can curl: the same two files build unmodified with `--preset=node-server`, and the `.output/server/index.mjs` entry boots under Node with `PORT` and `HOST` set — `curl` the static home (served from the static layer), a `'dynamic'` route (rendered by `dist/server` through the mount), and an unmatched path (the styled 404 with a real 404 status). Static files winning over the catch-all is the expected behavior, and it is also why `dist/server` must stay out of `nitro-public/`.
+Before deploying, prove the wiring on a host you can curl: the same two files build unmodified with `--preset=node-server`, and the `.output/server/index.mjs` entry boots under Node with `PORT` and `HOST` set — `curl` the static home (served from the static layer), a `'dynamic'` route (rendered by `dist/server` through the mount), and an unmatched path (the styled 404 with a real 404 status). Static files winning over the catch-all is the expected behavior, and it is also why `dist/server` must stay out of `dist-public/`.
 
 Bindings are worth one explicit check: give the Worker a test binding and read it in a loader via `ctx.env`. If it shows up, the whole channel works — Workers env → `req.runtime.cloudflare.env` → mount → `dist/server` → `ctx.env`.
 

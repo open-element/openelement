@@ -111,7 +111,7 @@ test('loader 返回条目列表', async () => {
 
 ```bash
 npm run build
-npm start      # 伺服 dist/；dist/server 存在时向它分派
+npm start      # 伺服 dist-public/；dist/server 存在时向它分派
 ```
 
 要检查产物本身，而不只是相信日志。纯静态项目应当为每个路由产出 HTML，且完全不产出 `dist/server` 目录；含 `'dynamic'` 路由或 action 的项目应当产出 `dist/server/index.js`（可移植的 `fetch(Request) -> Response` 处理器）与列出请求时路由的 `dist/server/server-manifest.json`。`npm start` 会打印它发现的是哪种模式，并且只伺服被构建出来的东西，所以在 `npm run dev` 里正常、在这里不对的页面，原因一定在构建期。

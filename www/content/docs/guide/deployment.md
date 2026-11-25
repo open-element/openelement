@@ -9,12 +9,12 @@ order: 100
 A generated project wires its scripts to the router bin — `oe` (the short alias; `openelement` is the same dispatcher):
 
 ```bash
-npm run build  # SSG + request-time server into dist/
-npm start      # serve dist/; dynamic routes and mutations dispatch to dist/server
+npm run build  # public snapshot and request-time output
+npm start      # serve dist-public/; dynamic routes and mutations dispatch to dist/server
 npm run dev    # Vite dev server
 ```
 
-`npm start` serves `dist/` statically and, when `dist/server/index.js` exists, dispatches dynamic routes and mutations to it. Port comes from `OPEN_ELEMENT_PORT` (falling back to `PORT`, default 4173) and host from `OPEN_ELEMENT_HOST`. The same command with `--mode=preview` (`openelement start --mode=preview`) is static-only and refuses to run when `dist/server` exists, pointing at start mode instead — use it only for projects without request-time routes.
+`npm start` serves `dist-public/` statically and, when `dist/server/index.js` exists, dispatches dynamic routes and mutations to it. Port comes from `OPEN_ELEMENT_PORT` (falling back to `PORT`, default 4173) and host from `OPEN_ELEMENT_HOST`. The same command with `--mode=preview` (`openelement start --mode=preview`) is static-only and refuses to run when `dist/server` exists, pointing at start mode instead — use it only for projects without request-time routes.
 
 ### Behind a proxy
 
@@ -27,14 +27,9 @@ With neither set, the origin stays `http://<Host>`, which is correct for a serve
 
 ## Static output
 
-`npm run build` writes the prerendered site into `dist/`:
+`npm run build` assembles `dist-public/` from prerendered pages, authored `public/` files, browser code and styles, and per-page island manifests. Asset URLs still use the `/client/` prefix.
 
-- `dist/<route>/index.html` for every prerendered route. A not-found route marked `renderIntent: { mode: 'dynamic' }` is served by the request-time server instead (with a real 404 status); a prerenderable one is written to `dist/404.html`.
-- Everything under `public/` copied as-is — favicon, `robots.txt`, images.
-- `dist/client/` when the app has islands or enhanced forms: the shared entry `client.js` and one chunk per island tag under `dist/client/islands/`.
-- `dist/island-manifests/page-<hash>.json`, one per page, listing each island's tag, chunk URL, strategy and layer — the built answer to "which JavaScript does this page load?".
-
-A project with no islands, no enhanced forms, no actions and no `'dynamic'` routes is exactly this directory: upload it to any static host, and no server-side code is involved. Components that need no browser behavior are plain HTML in these files, so the prerendered output stays fully styled and readable without JavaScript.
+`dist/publish-manifest.json` records each public file's relative path, size, SHA-256, and cache policy. Run `npx oe publish --check` before uploading `dist-public/` to a static host. Configure the host's directory index and error document rules for `index.html` and `404.html`. Deploy the request-time entry separately when the app uses dynamic routes or actions.
 
 ## Request-time server
 
@@ -46,11 +41,9 @@ When any route declares `renderIntent: { mode: 'dynamic' }` or any page exports 
 
 Hybrid pages (static GET + action) keep their prerendered artifact for GET; their POSTs reach the server by method dispatch. Pure-static builds emit none of these, and the output contract is frozen. Local preview is served by `npm start` (the router `start` CLI), which runs the same handler on Node's `node:http` — the only browser-independent way to exercise the request-time path before deploying.
 
-### Private `dist/server` boundary
+### Public file verification
 
-`npm start` (`oe start`) serves `dist/` as public output, and the build's private artifacts are outside the namespace it will ever serve. A GET or HEAD whose decoded, normalized path starts with `server/` — `/server/index.js`, `/Server/index.js`, `/%73erver/index.js`, `//server/index.js`, `/foo/../server/index.js` — answers `404`, and so does a request through an in-root symlink whose canonical target resolves inside `dist/server/`. The refusal reads nothing under `dist/server/` and answers a bare `404`; the request-time server is not consulted for it. The same shared static boundary answers `start` and `--mode=preview`, so there is no serving mode that publishes these artifacts.
-
-The first path segment is reserved: an author's own `public/server/` files are not published either, so keep public assets out of that name. Ordinary static output — pages, `client/` assets, `island-manifests/`, other `public/` copies — is unaffected, and the build never publishes `dist/server` through the static boundary.
+`oe start` and static preview validate the complete public file list at startup. Static GET and HEAD resolve only manifest-listed files and verify each file's canonical path and contents. Keep the build workspace `dist/` and its request-time entry under `dist/server/` in the application environment. The first public path segment `server` is reserved.
 
 ## Nitro presets
 
@@ -61,7 +54,7 @@ Nitro is the first-party production deployment adapter, and the mount is a near 
 import { createOpenElementNitroHandler } from '@openelement/router/nitro-mount';
 import openElementServer from '../../dist/server/index.js';
 
-// Catch-all over the Nitro static layer (nitro-public/): prerendered files win,
+// Catch-all over the Nitro static layer (dist-public/): prerendered files win,
 // everything else — dynamic routes, actions, 404s — reaches the built handler.
 export default createOpenElementNitroHandler({
   handler: (request, context) =>
@@ -74,14 +67,14 @@ export default createOpenElementNitroHandler({
 export default defineNitroConfig({
   serverDir: 'server',
   preset: 'node-server', // or 'cloudflare_module' for Workers
-  publicAssets: [{ dir: 'nitro-public' }],
+  publicAssets: [{ dir: 'dist-public' }],
 });
 ```
 
 The deploy sequence is:
 
 1. `npm run build`
-2. Copy everything in `dist/` **except** `server/` into `nitro-public/`. `dist/server` is server code, not a public asset, and must never be published as one. (`npm start` enforces the same rule at its static boundary, above; for Nitro the copy step is what keeps the directory out of the host's static layer.)
+2. Run `npx oe publish --check`. Nitro packages the verified `dist-public/` directory as public assets.
 3. Build the host: `npx nitro@3.0.260610-beta build` — the version this repository's Nitro proofs pin (`NITRO_VERSION`); `preset` selects `node-server` or `cloudflare_module`.
 4. Run the output (`.output/server/index.mjs` for `node-server`) with `PORT` and `HOST` set as your platform requires.
 

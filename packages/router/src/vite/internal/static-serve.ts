@@ -14,7 +14,11 @@
 import { readFileSync, realpathSync } from 'node:fs';
 import mime from 'mime';
 import { pathToFileURL } from 'node:url';
-import { basename, extname, join, normalize, resolve } from 'pathe';
+import { basename, extname, join, normalize, relative, resolve } from 'pathe';
+import { publicFileDigest, type PublicFiles } from './publish-manifest.ts';
+import { cacheControlFor } from './static-cache.ts';
+
+export { cacheControlFor } from './static-cache.ts';
 
 /** Forward-slash separator: `pathe` normalizes every path to `/`. */
 const SEP = '/';
@@ -64,7 +68,7 @@ function staticFileCandidatesFrom(decoded: string): string[] {
 /** The realpath of `<root>/server`, or null when the build shipped none. */
 function privateArtifactRoot(root: string): string | null {
   try {
-    return realpathSync(join(root, PRIVATE_ARTIFACT_DIR));
+    return normalize(realpathSync(join(root, PRIVATE_ARTIFACT_DIR)));
   } catch {
     return null;
   }
@@ -100,7 +104,7 @@ export function isPrivateArtifactRequest(distDir: string, pathname: string): boo
 
   let root: string;
   try {
-    root = realpathSync(resolve(distDir));
+    root = normalize(realpathSync(resolve(distDir)));
   } catch {
     return false;
   }
@@ -111,7 +115,7 @@ export function isPrivateArtifactRequest(distDir: string, pathname: string): boo
     if (!isWithin(root, filePath)) continue;
     let realPath: string;
     try {
-      realPath = realpathSync(filePath);
+      realPath = normalize(realpathSync(filePath));
     } catch {
       continue;
     }
@@ -127,49 +131,6 @@ export function isPrivateArtifactRequest(distDir: string, pathname: string): boo
 export function contentTypeFor(filePath: string): string {
   const type = mime.getType(extname(filePath).toLowerCase()) ?? 'application/octet-stream';
   return type.startsWith('text/') ? `${type}; charset=UTF-8` : type;
-}
-
-/**
- * The framework's content-addressed asset identity.
- *
- * Only the CLIENT build's output is content-addressed, and it is emitted under
- * `client/` (Vite's outDir for that phase): every file there carries either the
- * bundler's `<name>-<hash>` name or the style-asset protocol's bare content
- * address. That namespace is the framework's own, so anything in it that looks
- * like a hash is one.
- *
- * The top level of the output is NOT that namespace — it is the user's
- * `public/` copied verbatim, `assets/` included, because Vite copies
- * `public/assets/` to `dist/assets/`. Keying the immutable decision on a
- * top-level `assets/` therefore let a person's own file name read as a content
- * hash: `open-favicon-inverted.svg` ends in `-inverted`, eight letters of the
- * allowed alphabet, and shipped with a one-year `immutable` directive. An
- * eight-letter word is not a hash, and a deploy that changed that file would
- * have left every client on the old bytes until the cache expired.
- */
-const CONTENT_HASHED_ASSET_RE =
-  /(?:^|\/)client\/(?:assets|islands)\/(?:[^/]*-[0-9a-zA-Z_-]{8,}|[0-9a-f]{12})\.[^/]+$/;
-
-/**
- * Cache-Control baseline for static output: content-addressed build assets are
- * immutable; HTML is the deployment boundary and must be rechecked. Every
- * other (unhashed) file — the framework's own client entry (`client.js`), a
- * `public/` asset, a manifest — can change across deploys under the same URL,
- * so it must be revalidated.
- *
- * Two content-addressed name shapes are recognized: the bundler's
- * `<name>-<hash>` form, and the style-asset protocol's bare content address
- * (`<12-hex>.css`, the emitted sheet's own hash — alpha15 S lane, S-C2/S-14).
- * A sheet may legitimately be requested twice (a client adapter creates its
- * sheet `CSSStyleSheet` synchronously, so its fetch can coincide with the
- * declared link's parse); without the second shape the duplicate paid a network
- * revalidation instead of a cache hit.
- */
-export function cacheControlFor(filePath: string): string | null {
-  if (CONTENT_HASHED_ASSET_RE.test(filePath.replaceAll(SEP, '/'))) {
-    return 'public, max-age=31536000, immutable';
-  }
-  return 'no-cache';
 }
 
 /**
@@ -214,7 +175,11 @@ export function tryStatic(distDir: string, pathname: string): Response | null {
   return outcome.kind === 'response' ? outcome.response : null;
 }
 
-function tryStaticOutcome(distDir: string, pathname: string): StaticOutcome {
+function tryStaticOutcome(
+  distDir: string,
+  pathname: string,
+  publicFiles?: PublicFiles,
+): StaticOutcome {
   let candidates: string[];
   try {
     candidates = staticFileCandidates(pathname);
@@ -231,7 +196,7 @@ function tryStaticOutcome(distDir: string, pathname: string): StaticOutcome {
   if (isPrivateArtifactRequest(distDir, pathname)) return { kind: 'private' };
   let root: string;
   try {
-    root = realpathSync(resolve(distDir));
+    root = normalize(realpathSync(resolve(distDir)));
   } catch {
     return { kind: 'miss' };
   }
@@ -245,11 +210,13 @@ function tryStaticOutcome(distDir: string, pathname: string): StaticOutcome {
     if (!isWithin(root, filePath)) continue;
     let realPath: string;
     try {
-      realPath = realpathSync(filePath);
+      realPath = normalize(realpathSync(filePath));
     } catch {
       continue;
     }
     if (!isWithin(root, realPath)) continue;
+    const record = publicFiles?.get(relative(root, filePath));
+    if (publicFiles && (!record || realPath !== filePath)) continue;
     if (privateRoot !== null && isWithin(privateRoot, realPath)) return { kind: 'private' };
     let body: Uint8Array;
     try {
@@ -257,9 +224,13 @@ function tryStaticOutcome(distDir: string, pathname: string): StaticOutcome {
     } catch {
       continue;
     }
-    const headers: Record<string, string> = { 'content-type': contentTypeFor(filePath) };
-    const cacheControl = cacheControlFor(filePath);
-    if (cacheControl) headers['cache-control'] = cacheControl;
+    if (record && (body.length !== record.size || publicFileDigest(body) !== record.sha256)) {
+      continue;
+    }
+    const headers = {
+      'content-type': contentTypeFor(filePath),
+      'cache-control': record?.cacheControl ?? cacheControlFor(relative(root, filePath)),
+    };
     // basename of the CONTAINMENT-CHECKED path: it equals the real file's
     // name (the realpath check above refused symlinks out of the root, and an
     // in-root symlink's name is the served name).
@@ -292,7 +263,11 @@ function tryStaticOutcome(distDir: string, pathname: string): StaticOutcome {
  * the not-found answer by definition), and a miss with no document on disk
  * keeps the caller's bare response.
  */
-export function tryErrorDocument(distDir: string, pathname: string): Response | null {
+export function tryErrorDocument(
+  distDir: string,
+  pathname: string,
+  publicFiles?: PublicFiles,
+): Response | null {
   const segments = pathname
     .split('?')[0]
     .split('/')
@@ -301,7 +276,8 @@ export function tryErrorDocument(distDir: string, pathname: string): Response | 
   if (segments.length > 0) candidates.push(`${segments[0]}/${ERROR_DOCUMENT}`);
   candidates.push(ERROR_DOCUMENT);
   for (const candidate of candidates) {
-    const response = tryStatic(distDir, `/${candidate}`);
+    const outcome = tryStaticOutcome(distDir, `/${candidate}`, publicFiles);
+    const response = outcome.kind === 'response' ? outcome.response : null;
     // Only the error document's own status qualifies. tryStatic's other
     // outcomes (the malformed-encoding 400) are not error documents, and this
     // function's contract is exactly "the document, or null".
@@ -321,6 +297,7 @@ export interface RequestTimeServerModule {
 
 export interface DispatchRequestOptions {
   distDir: string;
+  publicFiles?: PublicFiles;
   serverMod: RequestTimeServerModule | null;
   env?: Record<string, string>;
   onHandlerError?: (error: unknown) => void;
@@ -346,7 +323,7 @@ export async function dispatchRequest(
   request: Request,
   options: DispatchRequestOptions,
 ): Promise<Response> {
-  const { distDir, serverMod, env, onHandlerError } = options;
+  const { distDir, publicFiles, serverMod, env, onHandlerError } = options;
   const url = new URL(request.url);
 
   // Malformed-% parity (M-R7): the static layer answers a malformed
@@ -387,14 +364,17 @@ export async function dispatchRequest(
     });
   }
 
-  const outcome = tryStaticOutcome(distDir, url.pathname);
+  const outcome = tryStaticOutcome(distDir, url.pathname, publicFiles);
   if (outcome.kind === 'response') return outcome.response;
   if (outcome.kind === 'private') return new Response('Not Found', { status: 404 });
   if (serverMod?.default) return await invokeServer();
   // Pure-static miss: the build's own error document when it shipped one.
   // Only reached on the GET/HEAD path (mutating methods left above), so the
   // document serves exactly the requests that can carry a body.
-  return tryErrorDocument(distDir, url.pathname) ?? new Response('Not Found', { status: 404 });
+  return (
+    tryErrorDocument(distDir, url.pathname, publicFiles) ??
+    new Response('Not Found', { status: 404 })
+  );
 }
 
 /** Import the generated request-time server entry from an absolute file path. */
@@ -404,6 +384,7 @@ export function importRequestTimeServer(entryPath: string): Promise<RequestTimeS
 
 export interface FetchHandlerOptions {
   distDir: string;
+  publicFiles?: PublicFiles;
   serverMod: RequestTimeServerModule | null;
   env: Record<string, string>;
   /** Test seam; production always uses the canonical dispatchRequest. */
@@ -425,6 +406,7 @@ export function createFetchHandler(
     try {
       return await dispatch(request, {
         distDir: options.distDir,
+        publicFiles: options.publicFiles,
         serverMod: options.serverMod,
         env: options.env,
         onHandlerError: (error) =>

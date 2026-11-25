@@ -180,7 +180,7 @@ npm start      # 起真实构建产物，包含请求时路由
 
 校验改动应该用 `npm start`：它起的是与生产一致的输出，并把动态路由与表单 POST 分派给生成的服务端入口。端口取自 `OPEN_ELEMENT_PORT`（回退到 `PORT`，默认 4173），host 取自 `OPEN_ELEMENT_HOST`。若构建产物没有请求时路由，router 命令还带一个纯静态模式——`openelement start --mode=preview`——它拒绝带服务端的构建，而不是悄悄把它藏起来。
 
-部署时：构建没有产出 `dist/server/` 就把 `dist/` 上传到任意静态托管；产出了，就把静态文件连同指向 `dist/server/index.js` 的 Node/Workers 运行时一起部署。完整的输出契约——构建写了哪些文件、每个文件回答什么——见[部署](/zh/guide/deployment)。上线前，`npm run typecheck` 对应用做类型检查，`npm test` 运行 starter 的 `node --test` 测试——源码预览包含用于检查 `/api/ping` 响应的测试。可在 `tests/` 下添加更多 `*.test.ts` 文件。两条命令都已在 starter 的脚本中配置好。
+上传 `dist-public/` 前，先运行 `npx oe publish --check`。构建产出 `dist/server/` 时，还需为 `dist/server/index.js` 部署 Node 或 Workers 运行时。完整的输出契约——构建写了哪些文件、每个文件回答什么——见[部署](/zh/guide/deployment)。上线前，`npm run typecheck` 对应用做类型检查，`npm test` 运行 starter 的 `node --test` 测试——源码预览包含用于检查 `/api/ping` 响应的测试。可在 `tests/` 下添加更多 `*.test.ts` 文件。两条命令都已在 starter 的脚本中配置好。
 
 ## 继续深入
 

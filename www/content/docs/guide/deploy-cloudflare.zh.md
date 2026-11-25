@@ -52,7 +52,7 @@ echo 'Pages artifact answers: home 200, miss 404'
 import { createOpenElementNitroHandler } from '@openelement/router/nitro-mount';
 import openElementServer from '../../dist/server/index.js';
 
-// 覆盖 Nitro 静态层（nitro-public/）的 catch-all：预渲染文件优先，
+// 覆盖 Nitro 静态层（dist-public/）的 catch-all：预渲染文件优先，
 // 其余——dynamic 路由、action、404——落到构建出的 handler。
 export default createOpenElementNitroHandler({
   handler: (request, context) =>
@@ -67,7 +67,7 @@ export default createOpenElementNitroHandler({
 // nitro.config.ts
 export default defineNitroConfig({
   serverDir: 'server',
-  publicAssets: [{ dir: 'nitro-public' }],
+  publicAssets: [{ dir: 'dist-public' }],
   compatibilityDate: '2026-06-12',
   cloudflare: { nodeCompat: true },
 });
@@ -78,13 +78,7 @@ export default defineNitroConfig({
 部署顺序：
 
 1. `npm run build`
-2. 把预渲染树发布给 Nitro 的静态层。`dist/server/` 是服务端代码，不是公开资源，绝不能作为公开资源发布：
-
-   ```bash
-   mkdir -p nitro-public
-   cp -R dist/. nitro-public/
-   rm -rf nitro-public/server
-   ```
+2. 运行 `npx oe publish --check`，由 Nitro 打包已验证的 `dist-public/`。
 
 3. 用本仓库在 tools/release/nitro-compatibility.ts 中锁定的兼容 Nitro 版本构建 Workers 产物：
 
@@ -94,7 +88,7 @@ export default defineNitroConfig({
 
 4. 部署 `.output/`。Nitro 产出 `server/index.mjs`——导出 `default fetch(request, env, context)` 的 Workers 模块——外加 `public/` 和生成的 `server/wrangler.json`（compatibility date、`nodejs_compat`，以及指向 `public/` 的 `ASSETS` 绑定）。在项目根用 `npx nitro deploy --prebuilt` 部署，或在 `.output/` 里用生成 `nitro.json` 记录的 wrangler 命令（`npx wrangler --cwd ./ deploy`）。
 
-部署之前，先在你 curl 得到的宿主上证明接线无误：同样两个文件不加修改地以 `--preset=node-server` 构建，`.output/server/index.mjs` 入口设好 `PORT` 与 `HOST` 即可在 Node 下启动——curl 静态首页（由静态层伺服）、一条 `'dynamic'` 路由（经挂载由 `dist/server` 渲染）、一条未匹配路径（带真实 404 状态的带样式 404）。静态文件优先于 catch-all 是预期行为，这也正是 `dist/server` 必须留在 `nitro-public/` 之外的原因。
+部署之前，先在你 curl 得到的宿主上证明接线无误：同样两个文件不加修改地以 `--preset=node-server` 构建，`.output/server/index.mjs` 入口设好 `PORT` 与 `HOST` 即可在 Node 下启动——curl 静态首页（由静态层伺服）、一条 `'dynamic'` 路由（经挂载由 `dist/server` 渲染）、一条未匹配路径（带真实 404 状态的带样式 404）。静态文件优先于 catch-all 是预期行为，这也正是 `dist/server` 必须留在 `dist-public/` 之外的原因。
 
 绑定值得一次显式检查：给 Worker 一个测试绑定，并在某个 loader 里经 `ctx.env` 读取。它出现了，整条通道就是通的——Workers env → `req.runtime.cloudflare.env` → 挂载 → `dist/server` → `ctx.env`。
 

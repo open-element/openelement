@@ -19,8 +19,8 @@
  */
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { cp, mkdtemp, realpath, rm } from 'node:fs/promises';
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 
 import { join, resolve } from 'node:path';
 import { formatJson } from '@openelement/element/build-utils';
@@ -148,14 +148,14 @@ try {
     'nitro.config.ts': `export default defineNitroConfig({
   serverDir: 'server',
   preset: '${nitroPreset}',
-  publicAssets: [{ dir: 'nitro-public' }],
+  publicAssets: [{ dir: 'dist-public' }],
   output: { dir: '.output-serve' },
 });
 `,
     'server/routes/[...path].ts': `import { createOpenElementNitroHandler } from '@openelement/router/nitro-mount';
 import openElementServer from '../../dist/server/index.js';
 
-// Catch-all over the Nitro static layer (nitro-public/): prerendered files
+// Catch-all over the Nitro static layer (dist-public/): prerendered files
 // win, everything else — dynamic routes, actions, 404s — falls through to
 // the packed request-time server through the standard fetch seam.
 export default createOpenElementNitroHandler({
@@ -197,15 +197,27 @@ export default function PackedHome() {
   return (
     <main>
       <h1 id='home-marker'>packed-node-serve home</h1>
+      <packed-counter></packed-counter>
     </main>
   );
 }
 `,
-    'app/routes/live.tsx': `import { definePage, type LoaderContext } from '@openelement/router';
+    'app/islands/packed-counter.tsx': `import { defineIslandConfig } from '@openelement/router';
+
+export const openElement = defineIslandConfig({
+  tag: 'packed-counter', root: 'shadow', hydrate: 'load', ssr: false, dsd: false,
+});
+
+export default function PackedCounter() {
+  return <p>browser marker</p>;
+}
+`,
+    'app/routes/live.tsx': `import { basename } from 'node:path';
+import { definePage, type LoaderContext } from '@openelement/router';
 import LivePage from '../components/page-live.tsx';
 
 export function loader(ctx: LoaderContext): { x: string } {
-  return { x: new URL(ctx.request.url).searchParams.get('x') ?? '' };
+  return { x: basename(new URL(ctx.request.url).searchParams.get('x') ?? '') };
 }
 
 export default definePage<{ x: string }>(LivePage, {
@@ -252,19 +264,15 @@ export default function PackedLive(props: { xText: string }) {
   }
   console.log(`PASS packed-serve-${runtime} build — packed CLI emitted dist + request-time server`);
 
-  // Publish the prerendered tree for Nitro's static layer. dist/server/*
-  // is server code, not a public asset, so it stays out of nitro-public/.
-  mkdirSync(join(tmp, 'nitro-public'), { recursive: true });
-  for (const entry of readdirSync(join(tmp, 'dist'), { withFileTypes: true })) {
-    if (entry.name === 'server') continue;
-    await cp(join(tmp, 'dist', entry.name), join(tmp, 'nitro-public', entry.name), {
-      force: true,
-      recursive: entry.isDirectory(),
-    });
-  }
-  if (existsSync(join(tmp, 'nitro-public', 'server'))) {
-    throw new Error('Static publish leaked dist/server into the Nitro public dir');
-  }
+  const publicCheck = await run(
+    'npx',
+    ['--no-install', 'oe', 'publish', '--check'],
+    tmp,
+    {},
+    BUILD_TIMEOUT_MS,
+  );
+  if (!publicCheck.success)
+    throw new Error(`Packed public output check failed:\n${publicCheck.output}`);
   // Nitro 3 builds on a Rolldown-based pipeline (native binding). The pinned
   // nitro CLI runs through npx (the temp consumer's own install satisfies the
   // pin without a re-download).
@@ -283,6 +291,21 @@ export default function PackedLive(props: { xText: string }) {
   console.log(
     `PASS packed-serve-${runtime} nitro — ${nitroPreset} output built from the packed app`,
   );
+
+  const publicFiles = JSON.parse(
+    readFileSync(join(tmp, 'dist', 'publish-manifest.json'), 'utf8'),
+  ) as { files: { path: string }[] };
+  const actual = readdirSync(join(tmp, '.output-serve', 'public'), {
+    recursive: true,
+    withFileTypes: true,
+  })
+    .filter((entry) => entry.isFile())
+    .map((entry) => resolve(entry.parentPath, entry.name));
+  const expected = publicFiles.files.map(({ path }) => join(tmp, '.output-serve', 'public', path));
+  if (actual.length !== expected.length || expected.some((path) => !actual.includes(path))) {
+    throw new Error('Nitro did not package the manifest-listed public file set.');
+  }
+  console.log(`PASS packed-serve-${runtime} public inventory — ${actual.length} listed files`);
 
   // Reserve a loopback port with the shared bind-and-close probe.
   const port = await reservePort();
@@ -353,9 +376,44 @@ export default function PackedLive(props: { xText: string }) {
   if (!live.includes('packed-node-serve live') || !live.includes('x=1')) {
     throw new Error('packed serve /live missing the request-time marker or loader echo');
   }
+  for (const method of ['GET', 'HEAD']) {
+    const missing = await fetch(`${baseUrl}/publish-manifest.json`, { method });
+    if (missing.status !== 404)
+      throw new Error(`Unexpected metadata status for ${method}: ${missing.status}`);
+  }
   console.log(
     `PASS packed-serve-${runtime} serve — Nitro ${nitroPreset} output: static home + request-time /live green over HTTP under ${runtime}`,
   );
+  if (runtime === 'node') {
+    const islandPath = join(tmp, 'app', 'islands', 'packed-counter.tsx');
+    const prefix = files['app/islands/packed-counter.tsx']!;
+    const builtin = "import { basename as readMarker } from 'node:path';\n";
+    writeFileSync(
+      join(tmp, 'app', 'islands', 'browser-boundary-helper.ts'),
+      builtin + 'export { readMarker };\n',
+    );
+    for (const importLine of [
+      builtin,
+      "import { readMarker } from './browser-boundary-helper.ts';\n",
+    ]) {
+      writeFileSync(
+        islandPath,
+        importLine + prefix.replace('browser marker', "{readMarker('ordinary marker')}"),
+      );
+      const refused = await run(process.execPath, ['build.mjs'], tmp, {}, BUILD_TIMEOUT_MS);
+      if (
+        refused.success ||
+        !refused.output.includes('OE_CLIENT_BUILD_BROWSER_ENTRY_NODE_BUILTIN')
+      ) {
+        throw new Error(
+          `Packed browser boundary did not reject the island import:\n${refused.output}`,
+        );
+      }
+    }
+    console.log(
+      'PASS packed browser boundary — dynamic Node loader allowed, direct and transitive browser imports rejected',
+    );
+  }
 } finally {
   try {
     server?.kill('SIGTERM');

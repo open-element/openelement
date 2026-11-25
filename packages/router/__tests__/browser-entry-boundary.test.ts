@@ -27,6 +27,7 @@ import { mkdir, mkdtemp, readdir, realpath, rm, symlink, writeFile } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, test } from 'vitest';
+import { createServer } from 'vite';
 import {
   BrowserEntryBoundaryErrorCode,
   browserEntryBoundaryPlugin,
@@ -114,7 +115,11 @@ async function makeFixture(name: string, options: FixtureOptions = {}): Promise<
       "import { openElement } from '@openelement/router/vite';",
       "import { defineConfig } from 'vite';",
       '',
-      "export default defineConfig({ base: '/', plugins: [...openElement({ layout: false })] });",
+      'export default defineConfig({',
+      "  base: '/',",
+      "  oxc: { jsx: { runtime: 'automatic', importSource: '@openelement/element' } },",
+      '  plugins: [...openElement({ layout: false })],',
+      '});',
       '',
     ].join('\n'),
   );
@@ -266,3 +271,31 @@ test('a route loader importing node:* still builds: the server graph is not the 
   );
   expect(islands.length).toBeGreaterThan(0);
 });
+
+test('development checks browser imports and admits the server loader', async () => {
+  for (const { root, file } of [
+    { root: direct.root, file: 'app/islands/probe-counter.tsx' },
+    { root: transitive.root, file: 'app/islands/probe-helper.ts' },
+    { root: loader.root, file: 'app/routes/index.tsx' },
+  ]) {
+    const dev = await createServer({
+      root,
+      configLoader: 'native',
+      server: { middlewareMode: true },
+    });
+    try {
+      if (root === loader.root) {
+        const resolved = await dev.ssrLoadModule('/' + file);
+        expect(typeof resolved.loader).toBe('function');
+      } else {
+        if (root === transitive.root) {
+          const island = await dev.transformRequest('/app/islands/probe-counter.tsx');
+          expect(island?.code).toContain('probe-helper.ts');
+        }
+        await expect(dev.transformRequest('/' + file)).rejects.toThrow(CODE);
+      }
+    } finally {
+      await dev.close();
+    }
+  }
+}, 30000);

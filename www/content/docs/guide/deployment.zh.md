@@ -9,12 +9,12 @@ order: 100
 脚手架生成的项目把脚本接到 router 的 bin——`oe`（短名；`openelement` 是同一个 dispatcher）：
 
 ```bash
-npm run build  # SSG + 请求时服务器，产出到 dist/
-npm start      # 伺服 dist/；dynamic 路由与变更请求分派给 dist/server
+npm run build  # 生成公开目录与请求时产物
+npm start      # 伺服 dist-public/；dynamic 路由与变更请求分派给 dist/server
 npm run dev    # Vite 开发服务器
 ```
 
-`npm start` 静态伺服 `dist/`，并在 `dist/server/index.js` 存在时把 dynamic 路由与变更请求分派给它。端口取 `OPEN_ELEMENT_PORT`（其次 `PORT`，默认 4173），主机取 `OPEN_ELEMENT_HOST`。同一条命令加 `--mode=preview`（`openelement start --mode=preview`）即只伺服静态产物，发现 `dist/server` 时会拒绝运行并指向 start 模式——只对没有请求时路由的项目使用它。
+`npm start` 静态伺服 `dist-public/`，并在 `dist/server/index.js` 存在时把 dynamic 路由与变更请求分派给它。端口取 `OPEN_ELEMENT_PORT`（其次 `PORT`，默认 4173），主机取 `OPEN_ELEMENT_HOST`。同一条命令加 `--mode=preview`（`openelement start --mode=preview`）即只伺服静态产物，发现 `dist/server` 时会拒绝运行并指向 start 模式——只对没有请求时路由的项目使用它。
 
 ### 部署在代理之后
 
@@ -27,14 +27,9 @@ npm run dev    # Vite 开发服务器
 
 ## 静态输出
 
-`npm run build` 把预渲染站点写入 `dist/`：
+`npm run build` 生成独立的 `dist-public/`。其中包含预渲染页面、`public/` 中的公开资源、浏览器代码和样式，以及每页的 island 清单。浏览器 URL 仍使用 `/client/` 资源前缀。
 
-- `dist/<route>/index.html`，每个预渲染路由一份。标记为 `renderIntent: { mode: 'dynamic' }` 的 not-found 路由由请求时服务器渲染（带真实 404 状态），而不是写成静态文件；可预渲染的 not-found 路由才写成 `dist/404.html`。
-- `public/` 下的内容原样拷贝——favicon、`robots.txt`、图片。
-- 应用存在 island 或增强表单时产出 `dist/client/`：共享入口 `client.js`，以及 `dist/client/islands/` 下每个 island 标签一个 chunk。
-- `dist/island-manifests/page-<hash>.json`，每页一份，列出该页每个 island 的标签、chunk URL、策略与层级——构建产物自己回答「这个页面加载哪些 JavaScript」。
-
-没有 island、没有增强表单、没有 action、也没有 `'dynamic'` 路由的项目，产物就是这样一个目录：上传到任意静态托管即可，完全不涉及服务端代码。不需要浏览器行为的组件在这些文件里就是普通 HTML，因此预渲染产物在无 JavaScript 时依然样式完整、可读。
+`dist/publish-manifest.json` 记录每个公开文件的相对路径、字节数、SHA-256 和缓存策略。上传到静态托管前，运行 `npx oe publish --check` 验证目录与清单完全一致。静态宿主只接收 `dist-public/`，可以为目录下的 `index.html` 和站点的 `404.html` 配置相应规则。需要请求时路由或 action 的应用另行部署服务端入口。
 
 ## 请求时服务器
 
@@ -46,11 +41,9 @@ npm run dev    # Vite 开发服务器
 
 混合页（静态 GET + action）的 GET 仍由预渲染产物伺服，其 POST 按方法分派到服务器。纯静态构建三者都不产出，该输出契约已冻结。本地预览由 `npm start`（router 的 start CLI）提供，它在 Node 的 `node:http` 上运行同一个处理器——这是部署前在浏览器之外演练请求时路径的唯一方式。
 
-### 私有 `dist/server` 边界
+### 公开文件校验
 
-`npm start`（`oe start`）把 `dist/` 作为公开输出伺服，构建的私有产物不在它可能伺服的命名空间内。GET 或 HEAD 的路径经解码、规范化后若以 `server/` 开头——`/server/index.js`、`/Server/index.js`、`/%73erver/index.js`、`//server/index.js`、`/foo/../server/index.js`——一律应答 `404`；请求经 in-root 符号链接、其规范化（realpath）目标落在 `dist/server/` 内时同样被拒。拒绝时不读取 `dist/server/` 下任何内容，只回一个没有响应体的 `404`，也不会把该请求交给请求时服务器。`start` 与 `--mode=preview` 走同一个共享静态边界，因此不存在会发布这些产物的伺服模式。
-
-首个路径段是保留名：作者自己放在 `public/server/` 下的文件同样不会被发布，公开资源请避开这个名称。其余静态产物——页面、`client/` 资源、`island-manifests/`、`public/` 的其他拷贝——不受影响，构建也从不通过静态边界发布 `dist/server`。
+`oe start` 和静态预览在启动时验证 `dist-public/` 的完整清单。静态 GET 和 HEAD 仅使用清单列出的文件，并检查实际路径与内容。`dist/` 是构建工作目录，`dist/server/` 是请求时服务端产物。公开路径的首段 `server` 保留给框架。
 
 ## Nitro 预设
 
@@ -61,7 +54,7 @@ Nitro 是第一方生产部署 adapter，挂载在 fetch 原生接缝上近乎�
 import { createOpenElementNitroHandler } from '@openelement/router/nitro-mount';
 import openElementServer from '../../dist/server/index.js';
 
-// 覆盖 Nitro 静态层（nitro-public/）的 catch-all：预渲染文件优先，
+// 覆盖 Nitro 静态层（dist-public/）的 catch-all：预渲染文件优先，
 // 其余——dynamic 路由、action、404——落到构建出的 handler。
 export default createOpenElementNitroHandler({
   handler: (request, context) =>
@@ -74,14 +67,14 @@ export default createOpenElementNitroHandler({
 export default defineNitroConfig({
   serverDir: 'server',
   preset: 'node-server', // Workers 用 'cloudflare_module'
-  publicAssets: [{ dir: 'nitro-public' }],
+  publicAssets: [{ dir: 'dist-public' }],
 });
 ```
 
 部署顺序：
 
 1. `npm run build`
-2. 把 `dist/` 下除 `server/` 之外的一切拷进 `nitro-public/`。`dist/server` 是服务端代码，不是公开资源，绝不能作为公开资源发布。（`npm start` 在静态边界执行同一规则，见上文；对 Nitro 而言，这一步拷贝才是把该目录挡在宿主静态层之外的操作。）
+2. 运行 `npx oe publish --check`，将已验证的 `dist-public/` 交给 Nitro 的静态层。
 3. 构建宿主：`npx nitro@3.0.260610-beta build`——本仓库 Nitro 证明锁定的版本（`NITRO_VERSION`）；`preset` 选择 `node-server` 或 `cloudflare_module`。
 4. 运行产物（`node-server` 为 `.output/server/index.mjs`），并按平台要求设置 `PORT` 与 `HOST`。
 

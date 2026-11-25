@@ -8,6 +8,11 @@
 /** Default build output directory name (relative to the app root). */
 export const DEFAULT_OUT_DIR = 'dist';
 
+/** The public deployment snapshot is a sibling of the build workspace. */
+export function publicOutputDir(outDir: string): string {
+  return `${outDir.replace(/[\\/]+$/, '')}-public`;
+}
+
 /** openElement metadata directory name (build artifacts). */
 export const OPEN_ELEMENT_DIR = '.openElement';
 

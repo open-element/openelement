@@ -111,7 +111,7 @@ The build is the second gate, and it is the only place some contracts can be che
 
 ```bash
 npm run build
-npm start      # serves dist/; dispatch to dist/server when it exists
+npm start      # serves dist-public/; dispatch to dist/server when it exists
 ```
 
 Inspect the output rather than trusting the log. A pure-static project should produce HTML for every route and no `dist/server` directory at all; a project with a `'dynamic'` route or an action should produce `dist/server/index.js` (the portable `fetch(Request) -> Response` handler) and `dist/server/server-manifest.json` listing the request-time routes. `npm start` prints which mode it found, and serves exactly what was built, so a page that looks right in `npm run dev` but wrong here has a build-time cause.

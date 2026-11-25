@@ -16,4 +16,8 @@ Maintainers aim to acknowledge reports within five business days and provide a s
 - npm publication uses Trusted Publishing/OIDC. Long-lived publication tokens are not an authorized release path.
 - Protected branches, human review, exact-SHA CI, artifact checks, and independent release verification are required boundaries.
 
+## Application deployment output
+
+Run `npx oe publish --check` before uploading `dist-public/` to a static host or packaging it for Nitro or Workers. Keep `dist/server/` and `dist/publish-manifest.json` in the application environment. `oe start` checks the public directory when it starts and checks each static file before serving it. See the [deployment guide](https://openelement.org/guide/deployment).
+
 Do not rewrite Git history during ordinary cleanup. Any history rewrite requires a separately authorized incident plan because it changes SHAs and affects collaborators and forks.

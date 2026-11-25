@@ -37,7 +37,7 @@ when other pages in the app use islands.
 - `npm test` checks the ping route with the Node.js test runner.
 - `npm run typecheck` type-checks application code, tests and configuration.
 - `npm run fmt` formats the source. `npm run lint` checks it.
-- `npm run build` writes prerendered pages and the request-time server to `dist/`.
+- `npm run build` writes the public upload directory `dist-public/` and the request-time server in `dist/server/`. Run `npx oe publish --check` before uploading public files.
 - `npm start` serves the production build.
 
 Framework options live in `openelement.config.ts`. Vite configuration lives in

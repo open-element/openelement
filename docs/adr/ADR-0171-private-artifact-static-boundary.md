@@ -214,14 +214,14 @@ this repository asks of a new surface (P5 deletability, P8 single writer):
 - **Docs** — deployment and security guides (EN + ZH) state the boundary and
   that `oe start`/`npm start` refuse the namespace.
 
-## Amendment (2026-10-31): accepted next architecture, implementation pending
+## Amendment (2026-10-31): structural separation and a publish manifest
 
 The next output-safety direction is structural separation of the browser public
 root from private server output, with a publish manifest defining the allowed
 public set. Each deployment exit must prove either runtime validation or
 packaging/upload filtering, including missing/stale manifest and traversal,
 decode, case and symlink behavior. This is accepted direction, implementation
-NOT RUN; directory names and manifest format are not frozen.
+is recorded below.
 
 Keep the implemented predicate and all evidence above until every replacement
 consumer is qualified. Hosts not using framework dispatch need their own
@@ -231,3 +231,21 @@ URL-prefix migration does not block Alpha16 structural safety. A publish
 allowlist is not HTML/serialization safety or application authorization.
 [ADR-0174](./ADR-0174-generated-code-runtime-and-compatibility.md) separates these
 proofs; rollback must preserve matched server/client artifacts.
+
+### Implementation (2026-11-25)
+
+`dist/` remains the build workspace, including the existing browser build
+under `dist/client/` and request-time runtime under `dist/server/`. The
+isolated `dist-public/` sibling is the static root for `oe start`, Nitro,
+Workers and uploads. Asset URLs retain their existing prefixes. The build
+assembles the public tree from registered prerendered routes, emitted browser
+assets, per-page island manifests and the configured Vite public directory.
+The site adds Pagefind, redirects, and the sitemap and robots files after
+its site-specific producers finish. On Cloudflare Pages that verified file
+set becomes the existing `www/dist/` upload root.
+
+`dist/publish-manifest.json` records relative path, bytes, SHA-256 and cache
+policy for each public file. `oe publish --check` verifies its equality to the
+directory before packaging. `oe start` and static preview also apply the
+manifest to every static read, including the error document. Nitro and
+Workers receive the already verified payload from the build host.

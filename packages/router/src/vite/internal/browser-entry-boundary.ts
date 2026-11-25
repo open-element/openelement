@@ -11,17 +11,17 @@
  * then ships and the feature dies at runtime with no build signal at all.
  * Lint may hint; only the build boundary can fail closed.
  *
- * The guard is a `resolveId` hook mounted in the CLIENT build only
- * (`cli/build-client.ts`, `enforce: 'pre'` so it runs before Vite's own
- * resolver turns the specifier into that stub). `resolveId` is called for
+ * The guard is a `resolveId` hook mounted in the production browser build
+ * and the Vite development browser environment. It runs before Vite's own
+ * resolver turns the specifier into a stub. `resolveId` is called for
  * every module edge the bundler follows — static and dynamic, direct and
  * transitive — so the whole client entry graph is covered by construction,
  * and the failure names both the specifier and the importing module.
  *
  * Deliberately NOT covered: the server half. A route module's `loader` (or any
  * module only the SSR graph reaches) may import `node:*` — that is the
- * zero-config server-side story — and this plugin is never mounted in the SSR
- * build, so it cannot see that graph. Bare builtin names (`fs`, `path`) are
+ * zero-config server-side story — and this plugin is scoped to browser
+ * environments. Bare builtin names (`fs`, `path`) are
  * not matched either: `node:` is the explicit, unambiguous spelling, and a
  * bare `fs` may legitimately be a package.
  */
@@ -52,8 +52,7 @@ export function isNodeBuiltinSpecifier(specifier: string): boolean {
 }
 
 /**
- * The client build's Node boundary. Mount it FIRST in the client build's plugin
- * list (see `cli/build-client.ts`); it has no state and no other hook.
+ * Resolve browser module edges before Vite's resolver can externalize them.
  */
 export function browserEntryBoundaryPlugin(): Plugin {
   return {
@@ -61,6 +60,7 @@ export function browserEntryBoundaryPlugin(): Plugin {
     // Before Vite's own resolver: the browser stub is produced by the core
     // resolve plugin, so a normal-order hook would never see the specifier.
     enforce: 'pre',
+    applyToEnvironment: (environment) => environment.config.consumer === 'client',
     resolveId(source, importer) {
       if (!isNodeBuiltinSpecifier(source)) return null;
       throw buildError(
