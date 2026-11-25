@@ -14,7 +14,7 @@
 
 English | [简体中文](./README.zh.md)
 
-OpenElement is a framework for server-rendered HTML and interactive Custom Elements. **Element** compiles TSX and runs components. **Router** handles routes, navigation, loaders and actions.
+OpenElement is a framework for server-rendered HTML and interactive Custom Elements. **Compiler** turns TSX into Custom Elements and server renderers. **Element** provides the runtime. **Router** handles routes, navigation, loaders and actions.
 
 ## Start with npm
 

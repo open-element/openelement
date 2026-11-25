@@ -14,7 +14,7 @@ Control flow throws: `redirect(location, status)` throws `OpenElementRedirect` �
 
 ## The error projector
 
-`definePage(PageComponent, { error })` declares the page-level error projector: it receives the caught `error` plus the render context and returns the error variant of the page's declared properties (the generated entry re-renders the page with those props and status 500); without it the generic status page answers. `notFound()` and unexpected loader/action throws land here; on the SPA chain a throw is normalized into the same channel instead of silently replacing loader data. On the programmatic action channel (`x-openelement-action: true`), error outcomes answer RFC 9457 Problem Details (`application/problem+json` with `type`/`title`/`status`/`detail`) instead of a bespoke JSON envelope; this wire shape is frozen.
+Declare `definePage(PageComponent, { error })` to render custom error HTML after an unexpected failure in a loader, action, or page render. The projector receives the error and render context and returns the page props for a new render with HTTP status 500. The server sends a generic status page if no projector is declared or the error render fails. The route handles `redirect()` and `notFound()` before it calls the projector. Unexpected errors in programmatic actions (`x-openelement-action: true`) use RFC 9457 Problem Details with content type `application/problem+json` and fields `type`, `title`, `status`, and `detail`.
 
 ### app/components/page-post.tsx
 
@@ -61,7 +61,6 @@ A conditional branch admits a JSX element or `null`, which is why each branch ab
 import {
   definePage,
   fail,
-  isOpenElementNotFound,
   notFound,
   type OpenElementActionFailure,
   redirect,
@@ -100,9 +99,8 @@ export default definePage(PostPage, {
       error: action?.error ?? '',
     };
   },
-  error(err) {
-    // notFound() and unexpected throws land on the error projector.
-    return { status: isOpenElementNotFound(err) ? 404 : 500 };
+  error() {
+    return { status: 500 };
   },
 });
 ```
@@ -139,11 +137,11 @@ export default function MyWidget() {
 }
 ```
 
-**State the boundary honestly: it is element-scoped.** The callback runs when a value escapes the element's own work — the connect/claim pass (mount, claim, setup and the `onConnect` replay), or an update-phase write (a tracked slot refresh, or a DOM event handler dispatched inside the compiled body). It is **not** a subtree boundary and it does **not** contain failures across elements: cross-element containment retired with the class base, and no wrapper component replaces it. There is no `ErrorBoundary` to extend and no protected `onError` hook to override — `ErrorBoundary` is not exported from `@openelement/element` at all, so a module still importing it does not evaluate.
+`onError` captures synchronous failures from the element's own work. This covers setup, mount, claim, and the `onConnect` callback, as well as tracked slot refreshes and DOM event handlers in the compiled body. A separate Custom Element owns its own errors. The earlier class-based `ErrorBoundary` export and protected hook were removed.
 
-A catching handler changes only whether the error escapes. A connect-phase failure still leaves the element in its defined post-failure state (no projection, no listeners), and a later reconnect retries from scratch; an update-phase failure leaves the previously written DOM in place with the subscription still live. With no registered handler, the throw surfaces unchanged. A handler that itself throws **replaces** the original error — that new throw is what surfaces.
+The shell rolls back a failed connect or claim before calling `onError`. A later disconnect and reconnect retries normally. An update or event failure leaves the previously written DOM in place and keeps the subscription or listener available for the next attempt. With no handler, the original error propagates. A handler that throws propagates its own error.
 
-The callback is **client-owned**: it is erased into the compiled module and never runs during a server render. A producer throw at SSR fails the render and reaches the route's error projector, exactly as before — so a server-rendered failure is never this callback's business.
+The browser runs `onError`. When you use Element's `renderToString` to expand nested Custom Elements, pass `onNestedFailure` to receive the original error if a nested component's server renderer throws. The HTML keeps the authored host for the failed component, and the server continues rendering its siblings. A render without this callback propagates a nested failure. In a Router page render, an uncaught error follows the page error handling described above.
 
 ## Build-time diagnostics
 

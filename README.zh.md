@@ -14,7 +14,7 @@
 
 [English](./README.md) | 简体中文
 
-OpenElement 是用于服务端渲染 HTML 和构建交互式 Custom Elements 的框架。**Element** 编译 TSX 并运行组件。**Router** 负责路由、导航、loader 和 action。
+OpenElement 是用于服务端渲染 HTML 和构建交互式 Custom Elements 的框架。**Compiler** 将 TSX 编译为 Custom Elements 和服务端渲染器。**Element** 提供运行时。**Router** 负责路由、导航、loader 和 action。
 
 ## 通过 npm 开始
 

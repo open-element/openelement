@@ -14,7 +14,7 @@ order: 80
 
 ## error 投影器
 
-`definePage(PageComponent, { error })` 声明页面级 error 投影器：它接收被捕获的 `error` 与渲染上下文，返回页面**声明的属性**的错误变体（生成的入口用这些 props 以 500 状态码重渲染页面）；未声明时由通用状态页应答。`notFound()` 与意外的 loader/action 抛出都会落到这里；SPA 链上 throw 会被规整进同一通道，而不是悄悄替换 loader 数据。在程序化 action 通道（`x-openelement-action: true`）上，错误结果以 RFC 9457 Problem Details 应答（`application/problem+json`，字段 `type`/`title`/`status`/`detail`），取代此前的自定义 JSON 封装；该线格式已冻结。
+通过 `definePage(PageComponent, { error })`，可以在 loader、action 或页面渲染意外失败后渲染自定义错误 HTML。投影器接收错误与渲染上下文，返回重新渲染所需的页面 props，HTTP 状态码为 500。未声明投影器或错误页面渲染失败时，服务端返回通用状态页。路由会在调用投影器之前处理 `redirect()` 和 `notFound()`。程序化 action（`x-openelement-action: true`）的意外错误使用 RFC 9457 Problem Details，响应类型为 `application/problem+json`，包含 `type`、`title`、`status` 和 `detail` 字段。
 
 ### app/components/page-post.tsx
 
@@ -61,7 +61,6 @@ export default function PostPage(props: { title: string; error: string; status: 
 import {
   definePage,
   fail,
-  isOpenElementNotFound,
   notFound,
   type OpenElementActionFailure,
   redirect,
@@ -100,9 +99,8 @@ export default definePage(PostPage, {
       error: action?.error ?? '',
     };
   },
-  error(err) {
-    // notFound() and unexpected throws land on the error projector.
-    return { status: isOpenElementNotFound(err) ? 404 : 500 };
+  error() {
+    return { status: 500 };
   },
 });
 ```
@@ -139,11 +137,11 @@ export default function MyWidget() {
 }
 ```
 
-**如实陈述这条边界：它是元素作用域的。** 当有值从元素自身的工作中逃逸时回调运行——connect/claim 阶段（mount、claim、setup 与 `onConnect` 重放），或更新阶段的写入（被追踪的 slot 刷新，或在编译正文内分派的 DOM 事件处理器）。它**不是**子树边界，也**不**跨元素遏制失败：跨元素遏制随 class 基类一起退役，没有任何包装组件替代它。没有可扩展的 `ErrorBoundary`，也没有可覆写的受保护 `onError` hook——`ErrorBoundary` 根本没有从 `@openelement/element` 导出，因此仍 import 它的模块无法求值。
+`onError` 捕获当前元素执行过程中的同步错误，包括 setup、mount、claim、`onConnect` 回调、受追踪的 slot 刷新，以及编译组件中的 DOM 事件处理器。各个 Custom Element 分别处理自身的错误。旧版基于类的 `ErrorBoundary` 导出和 protected hook 已移除。
 
-捕获型处理器只改变错误是否逃逸。connect 阶段的失败仍让元素停留在其既定的失败后状态（无投影、无监听器），之后的重新连接会从头重试；更新阶段的失败保留先前已写入的 DOM，订阅仍然存活。没有注册处理器时，throw 原样上浮。自身抛错的处理器会**替换**原始错误——上浮的就是这个新 throw。
+connect 或 claim 失败时，元素会先回滚，再调用 `onError`。断开后重新连接会按正常流程重试。更新或事件处理失败时，先前写入的 DOM 会保留，订阅或监听器可以在下一次继续执行。未注册处理器时，原始错误会向上传播。处理器自身抛错时，传播的是处理器抛出的错误。
 
-回调是**客户端拥有的**：它被擦除进编译模块，在服务端渲染期间从不运行。SSR 时的生产者 throw 会让渲染失败并落到路由的 error 投影器，与之前完全一样——因此服务端渲染的失败从来不是这个回调的事。
+浏览器运行 `onError`。使用 Element 的 `renderToString` 展开嵌套 Custom Elements 时，可以传入 `onNestedFailure`，以便在嵌套组件的服务端渲染器抛错时收到原始错误。输出的 HTML 保留该组件原先声明的宿主元素，服务端继续渲染同级组件。未传入该回调时，嵌套组件的错误会向上传播。Router 渲染页面时，未捕获的错误遵循上文所述的页面错误处理流程。
 
 ## 构建期诊断
 
