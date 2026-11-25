@@ -203,12 +203,17 @@ graph; it does not execute the gate.
 | `vp run release:check` | `@openelement/ui#ui-manifest:check` → `@openelement/ui#ui-cem:check` → `@openelement/www#check:theme-init` → `@openelement/tools-repo#generate:all` → `@openelement/tools-repo#release:registry-check` → `@openelement/tools-repo#gate:release` → `@openelement/tools-release#gate:packed` → `@openelement/tools-release#publish:npm:dry-run` |
 | `vp run saas:verify` | `@openelement/saas#check` → `@openelement/saas#test` |
 | `vp run saas:workers` | `@openelement/saas#build` → `@openelement/saas#nitro:build-workers` → `@openelement/tools-repo#workers:boundary-check` |
-| `vp run site:build` | `@openelement/tools-repo#generate:all` → `@openelement/www#build` → `@openelement/www#pagefind` → `@openelement/www#emit:redirects` → `@openelement/www#emit:sitemap` |
+| `vp run site:build` | `@openelement/www#build` |
 | `vp run site:verify` | `site:build` → `@openelement/www#check:links` → `@openelement/www#check:theme-tokens` → `@openelement/www#check:content` → `@openelement/tools-repo#retired-api:check` |
 | `vp run test:e2e` | `site:build` → `@openelement/www#e2e:browsers` → `@openelement/fixture-router-native-framework#e2e` |
 | `vp run verify` | `check` → `test` → `@openelement/tools-repo#gate:source` → `saas:verify` → `saas:workers` → `@openelement/tools-release#gate:packed` |
 | `vp run verify:core` | `@openelement/tools-repo#gate:source` → `@openelement/tools-release#gate:packed` |
 <!-- derived:gates:end -->
+
+The Site workspace's `build` task owns generation, the Router build, Pagefind,
+redirects, and the sitemap that seals the public snapshot. The root
+`site:build` and `pages:build` tasks delegate to it. On Cloudflare Pages,
+the verified snapshot occupies `www/dist` for the existing upload setting.
 
 Layers, not just lists:
 

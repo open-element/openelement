@@ -7,7 +7,8 @@
     "#site-ui/*": "./app/site-ui/*"
   },
   "scripts": {
-    "build": "node ../packages/router/src/cli/build.ts",
+    "build": "node ../tools/repo/gate.ts @openelement/tools-repo#generate:all @openelement/www#build:router @openelement/www#pagefind @openelement/www#emit:redirects @openelement/www#emit:sitemap",
+    "build:router": "node ../packages/router/src/cli/build.ts",
     "test": "vitest run --root .. --project www",
     "pagefind": "node build-pagefind.ts",
     "e2e:browsers": "node ../tools/repo/site-e2e-run.ts --retries 1",
