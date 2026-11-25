@@ -29,7 +29,6 @@
     "Tailwind source resolution (#1633; alpha15 S lane)",
     "Slotted code-block surface (alpha.13 E2)",
     "Registry truth ↔ site display ↔ publish train (alpha.13 E3)",
-    "Hero media ↔ page-ground bands (alpha.13 F)",
     "Error document: SSG emission ↔ static serve read (H lane, KR-7)",
     "Package-island externalization (alpha.13 I1, KR-10a)",
     "Package admission ↔ component delivery (alpha15 consolidation follow-up; corrects ADR-0167 §3)",
