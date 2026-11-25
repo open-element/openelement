@@ -15,7 +15,7 @@ if (
   !Number.isInteger(graceMs) ||
   graceMs <= 0
 ) {
-  throw new Error('Usage: run-attempt.mjs <timeout-ms> <grace-ms> <command> [args...]');
+  throw new Error('Usage: run-attempt.js <timeout-ms> <grace-ms> <command> [args...]');
 }
 
 // A separate process group lets cancellation reach Playwright's descendants.

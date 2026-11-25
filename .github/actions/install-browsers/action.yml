@@ -63,7 +63,7 @@ runs:
             sudo rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock || true
             sudo dpkg --configure -a || true
           fi
-          if node "${GITHUB_ACTION_PATH}/run-attempt.mjs" 600000 10000 ./node_modules/.bin/playwright install "$@"; then
+          if node "${GITHUB_ACTION_PATH}/run-attempt.js" 600000 10000 ./node_modules/.bin/playwright install "$@"; then
             exit 0
           fi
           if [ "${attempt}" -eq 3 ]; then break; fi
