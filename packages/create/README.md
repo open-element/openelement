@@ -36,6 +36,9 @@ can scaffold without any manager using `--no-install`. The handoff shows the
 commands for the selected manager. The CLI also initializes git when available
 and the target is outside an existing repository.
 
+Start the dev server from the generated project. Edit the heading in
+`app/routes/index.tsx` and save to see the home page update.
+
 Optional flags
 
 | Flag | Default | Meaning |

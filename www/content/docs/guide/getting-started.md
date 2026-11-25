@@ -42,7 +42,7 @@ Success looks like this:
 
 - The scaffold prints one `created <path>` line per generated file, then a handoff box naming the next commands in the package manager's spelling.
 - `npm run dev` prints its ready line and the local URL — `http://localhost:5173/` by default.
-- Opening that URL shows the starter's home page: the heading "Rendered before JavaScript arrives", the static badges, an interactive counter island and a client-only live timer. The page is already styled and readable; the islands wake up after it loads.
+- Open that URL and try the counter. The timer starts in the browser. Edit the heading in `app/routes/index.tsx` and save to see the home page update.
 
 If something goes wrong before that:
 
