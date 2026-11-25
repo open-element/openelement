@@ -87,6 +87,7 @@ import {
   type PropertyConversionRecord,
 } from '../../../element/src/internal/core/property-conversion.ts';
 import { ELEMENT_CLASSIFIER as CLASSIFIER, REPO_ROOT } from './testlib/element-classifier.ts';
+import { LEAF_RUNTIME_ENTRY } from './testlib/generated-claim-bundle.ts';
 
 const FILE = '/proj/src/generated-element.tsx';
 
@@ -158,40 +159,6 @@ interface ProbeSnapshot {
   unsubscribed: number;
 }
 
-interface PageRuntime {
-  defineGeneratedElement: (descriptor: unknown) => CustomElementConstructor;
-  runtimeProbe: { snapshot(): ProbeSnapshot };
-  createProfileRecipe: (owner: unknown, host: unknown) => unknown;
-  createConditionalRecipe: (owner: unknown, host: unknown) => unknown;
-  createNoClaimRecipe: (owner: unknown, host: unknown) => unknown;
-  createRecipe: (options: {
-    definitionOwner: unknown;
-    source: string;
-    mount: (scope: unknown) => Node[];
-    claim?: (scope: unknown, props: unknown, parent: Node) => Node[];
-  }) => unknown;
-  retainChildInstance: (
-    owner: unknown,
-    siteKey: string,
-    structuralOwner: unknown,
-    setup: (scope: unknown) => unknown,
-  ) => { scope: { disposed: boolean }; record: unknown };
-  beginInstancePass: (owner: unknown) => void;
-  endInstancePass: (owner: unknown) => void;
-  abortInstancePass: (owner: unknown) => void;
-  releaseChildInstance: (owner: unknown, siteKey: string) => void;
-  releaseUnderStructuralScope: (scope: unknown) => void;
-  releaseRetainedChildren: (owner: unknown) => void;
-  Profile__ssr: (props: unknown, host: unknown) => string;
-  Conditional__ssr: (props: unknown, host: unknown) => string;
-}
-
-declare global {
-  interface Window {
-    __oeM09: PageRuntime;
-  }
-}
-
 let browser: Browser;
 let bundleDir = '';
 let bundleFile = '';
@@ -238,37 +205,8 @@ async function buildBundle(module: string, dir: string): Promise<BundleResult> {
   const element = join(REPO_ROOT, 'packages/element/src/internal');
   const runtime = join(element, 'compiled/runtime');
   const leaf = join(dir, 'leaf.js');
-  const shim = join(dir, 'runtime-shim.ts');
   const entry = join(dir, 'entry.ts');
   writeFileSync(leaf, module);
-  writeFileSync(
-    shim,
-    [
-      `export { claimRecipe, createRecipe, insertRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
-      `export { reconcileEachEntries } from ${JSON.stringify(join(runtime, 'each-reconcile.ts'))};`,
-      `export { bindSignalWrites, runUntracked } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
-      `export { runtimeProbe } from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
-      `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
-      // Namespace imports keep this shim buildable on both sides of the
-      // text-slot landing: at the M08-1b baseline those two exports do not
-      // exist, and a static `export { … } from` makes the whole Vite build
-      // fail even though the generated module does not reference them.
-      `import * as claimInvariants from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
-      `export const { assertElementInHtmlNamespace, assertStaticAttributeSeed, assertWhenAnchor, assertWhenEndMarker, isWhenEndMarker, leafClaimMismatch } = claimInvariants;`,
-      `export const assertTextSlotMarker = claimInvariants.assertTextSlotMarker;`,
-      `import * as markers from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
-      `export const { emitComment, MARKERS, markerText, rangeMarker } = markers;`,
-      `export const textSlotMarker = markers.textSlotMarker;`,
-      `export { claimStaticSiblingRange, openStaticSiblingDirectory } from ${JSON.stringify(join(runtime, 'static-sibling-ranges.ts'))};`,
-      // 16b-LC retained-child owner-teardown row: the page-side descriptor fixture retains a
-      // real child instance through the SAME private ledger the generated path
-      // consumes, so the shell's release placement is observable.
-      `export { abortInstancePass, beginInstancePass, endInstancePass, joinInstancePass, releaseChildInstance, releaseRetainedChildren, releaseUnderStructuralScope, retainChildInstance } from ${JSON.stringify(join(runtime, 'instance-ledger.ts'))};`,
-      `export { escapeText } from ${JSON.stringify(join(element, 'compiled/escape-text.ts'))};`,
-      `export { escapeAttrValue } from ${JSON.stringify(join(element, 'core/html-escape.ts'))};`,
-      '',
-    ].join('\n'),
-  );
   writeFileSync(
     entry,
     [
@@ -287,7 +225,7 @@ async function buildBundle(module: string, dir: string): Promise<BundleResult> {
     configFile: false,
     root: dir,
     logLevel: 'silent',
-    resolve: { alias: { [GENERATED_LEAF_RUNTIME_SPECIFIER]: shim } },
+    resolve: { alias: { [GENERATED_LEAF_RUNTIME_SPECIFIER]: LEAF_RUNTIME_ENTRY } },
     plugins: [
       {
         name: 'oe-m09-module-graph',
@@ -356,15 +294,17 @@ afterAll(async () => {
  * syntax and no generator emitter; the descriptor is the internal compiler
  * contract the M09-1 emitter will build.
  */
+const PROFILE_PROPERTIES = JSON.stringify([
+  { name: 'label', attribute: 'label', type: 'string', reflect: true },
+  { name: 'count', attribute: 'count', type: 'number', reflect: true },
+  { name: 'enabled', attribute: 'enabled', type: 'boolean', reflect: true },
+]);
+
 const DEFINE_PROFILE = `
   const mod = window.__oeM09;
   const ctor = mod.defineGeneratedElement({
     tag: 'oe-m09-profile',
-    properties: [
-      { name: 'label', attribute: 'label', type: 'string', reflect: true },
-      { name: 'count', attribute: 'count', type: 'number', reflect: true },
-      { name: 'enabled', attribute: 'enabled', type: 'boolean', reflect: true },
-    ],
+    properties: ${PROFILE_PROPERTIES},
     createRecipe: mod.createProfileRecipe,
   });
 `;
@@ -836,6 +776,7 @@ describe('M09-0 generated-element shell — Chromium (LOCAL)', () => {
     );
     expect(has('/internal/core/property-conversion.ts'), bundleModuleIds.join('\n')).toBe(true);
     expect(parsedHas('/internal/compiled/generated-element/shell.ts')).toBe(true);
+    expect(parsedHas('/internal/compiled/leaf-runtime.ts')).toBe(true);
     expect(parsedHas('/internal/core/property-conversion.ts')).toBe(true);
     expect(has('/internal/compiled/facade-host.ts')).toBe(false);
     expect(has('/internal/compiled/runtime-program.ts')).toBe(false);
@@ -985,11 +926,7 @@ describe('M09-0 generated-element shell — Chromium (LOCAL)', () => {
         try {
           ctor = mod.defineGeneratedElement({
             tag: 'oe-m09-profile',
-            properties: [
-              { name: 'label', attribute: 'label', type: 'string', reflect: true },
-              { name: 'count', attribute: 'count', type: 'number', reflect: true },
-              { name: 'enabled', attribute: 'enabled', type: 'boolean', reflect: true },
-            ],
+            properties: ${PROFILE_PROPERTIES},
             createRecipe: (owner, host) => {
               seen.push({
                 label: host.props.label,
@@ -1063,11 +1000,7 @@ describe('M09-0 generated-element shell — Chromium (LOCAL)', () => {
         const seen = [];
         mod.defineGeneratedElement({
           tag: 'oe-m09-profile',
-          properties: [
-            { name: 'label', attribute: 'label', type: 'string', reflect: true },
-            { name: 'count', attribute: 'count', type: 'number', reflect: true },
-            { name: 'enabled', attribute: 'enabled', type: 'boolean', reflect: true },
-          ],
+          properties: ${PROFILE_PROPERTIES},
           createRecipe: (owner, host) => {
             seen.push({ label: host.props.label, count: host.props.count });
             return mod.createProfileRecipe(owner, host);
@@ -1132,11 +1065,7 @@ describe('M09-0 generated-element shell — Chromium (LOCAL)', () => {
         const seen = [];
         mod.defineGeneratedElement({
           tag: 'oe-m09-profile',
-          properties: [
-            { name: 'label', attribute: 'label', type: 'string', reflect: true },
-            { name: 'count', attribute: 'count', type: 'number', reflect: true },
-            { name: 'enabled', attribute: 'enabled', type: 'boolean', reflect: true },
-          ],
+          properties: ${PROFILE_PROPERTIES},
           createRecipe: (owner, host) => {
             seen.push(host.props.label);
             return mod.createProfileRecipe(owner, host);
@@ -1188,11 +1117,7 @@ describe('M09-0 generated-element shell — Chromium (LOCAL)', () => {
         window.addEventListener('error', onError);
         mod.defineGeneratedElement({
           tag: 'oe-m09-profile',
-          properties: [
-            { name: 'label', attribute: 'label', type: 'string', reflect: true },
-            { name: 'count', attribute: 'count', type: 'number', reflect: true },
-            { name: 'enabled', attribute: 'enabled', type: 'boolean', reflect: true },
-          ],
+          properties: ${PROFILE_PROPERTIES},
           createRecipe: mod.createProfileRecipe,
         });
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -1247,11 +1172,7 @@ describe('M09-0 generated-element shell — Chromium (LOCAL)', () => {
         window.addEventListener('error', onError);
         mod.defineGeneratedElement({
           tag: 'oe-m09-profile',
-          properties: [
-            { name: 'label', attribute: 'label', type: 'string', reflect: true },
-            { name: 'count', attribute: 'count', type: 'number', reflect: true },
-            { name: 'enabled', attribute: 'enabled', type: 'boolean', reflect: true },
-          ],
+          properties: ${PROFILE_PROPERTIES},
           createRecipe: (owner, host) => {
             seen.push({ label: host.props.label, count: host.props.count });
             return mod.createProfileRecipe(owner, host);

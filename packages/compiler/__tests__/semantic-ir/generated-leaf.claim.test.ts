@@ -5,18 +5,18 @@
  * module graph. Node DOM shim, not a browser, not SSR, not a packed consumer.
  */
 
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
-import { build } from 'vite';
 import { compileFunctionModule } from '../../src/internal/compiler/semantic-core/function-frontend.ts';
 import {
   GENERATED_LEAF_RUNTIME_SPECIFIER,
   generateLeafModule,
 } from '../../src/internal/compiler/semantic-ir/generated-leaf/generate.ts';
 import { ELEMENT_CLASSIFIER as CLASSIFIER, REPO_ROOT } from './testlib/element-classifier.ts';
+import { comment, element, text, HTML_NAMESPACE, type ClaimNode } from './testlib/claim-dom.ts';
+import { loadGeneratedClaimBundle } from './testlib/generated-claim-bundle.ts';
 
 const FILE = '/proj/src/claim.tsx';
 
@@ -35,142 +35,6 @@ function Cased(props) {
   return <p id="a" data-Mixed="V">x</p>;
 }
 `;
-
-const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
-
-interface ClaimAttribute {
-  name: string;
-  value: string;
-}
-
-interface ClaimNode {
-  nodeType: number;
-  parentNode: ClaimNode | null;
-  nodeValue?: string;
-  localName?: string;
-  tagName?: string;
-  namespaceURI?: string | null;
-  childNodes?: ClaimNode[];
-  readonly firstChild?: ClaimNode | null;
-  readonly nextSibling?: ClaimNode | null;
-  attributes?: { readonly length: number; item(index: number): ClaimAttribute | null };
-  getAttribute?(name: string): string | null;
-  hasAttribute?(name: string): boolean;
-  setAttribute?(name: string, value: string): void;
-  removeAttribute?(name: string): void;
-  toggleAttribute?(name: string, force?: boolean): boolean;
-  appendChild?(node: ClaimNode): ClaimNode;
-  insertBefore?(node: ClaimNode, reference: ClaimNode | null): ClaimNode;
-  removeChild?(node: ClaimNode): ClaimNode;
-  remove?(): void;
-}
-
-function element(tag: string, namespaceURI: string | null = HTML_NAMESPACE): ClaimNode {
-  const attrs: ClaimAttribute[] = [];
-  const attributes = {
-    get length() {
-      return attrs.length;
-    },
-    item(index: number) {
-      return attrs[index] ?? null;
-    },
-  };
-  const node: ClaimNode = {
-    nodeType: 1,
-    parentNode: null,
-    localName: tag,
-    tagName: tag.toUpperCase(),
-    namespaceURI,
-    childNodes: [],
-    attributes,
-    get firstChild() {
-      return node.childNodes![0] ?? null;
-    },
-    get nextSibling() {
-      const parent = node.parentNode;
-      if (parent === null) return null;
-      const siblings = parent.childNodes ?? [];
-      const index = siblings.indexOf(node);
-      return index < 0 ? null : (siblings[index + 1] ?? null);
-    },
-    getAttribute: (name) => attrs.find((entry) => entry.name === name)?.value ?? null,
-    hasAttribute: (name) => attrs.some((entry) => entry.name === name),
-    setAttribute: (name, value) => {
-      const found = attrs.find((entry) => entry.name === name);
-      if (found) found.value = value;
-      else attrs.push({ name, value });
-    },
-    removeAttribute: (name) => {
-      const index = attrs.findIndex((entry) => entry.name === name);
-      if (index >= 0) attrs.splice(index, 1);
-    },
-    toggleAttribute: (name, force) => {
-      const has = attrs.some((entry) => entry.name === name);
-      const on = force === undefined ? !has : force;
-      if (on) node.setAttribute!(name, '');
-      else node.removeAttribute!(name);
-      return on;
-    },
-    appendChild: (child) => {
-      child.parentNode?.removeChild?.(child);
-      child.parentNode = node;
-      node.childNodes!.push(child);
-      return child;
-    },
-    insertBefore: (child, reference) => {
-      child.parentNode?.removeChild?.(child);
-      if (reference === null) return node.appendChild!(child);
-      const index = node.childNodes!.indexOf(reference);
-      if (index < 0) throw new Error('insertBefore reference is not a child');
-      child.parentNode = node;
-      node.childNodes!.splice(index, 0, child);
-      return child;
-    },
-    removeChild: (child) => {
-      const index = node.childNodes!.indexOf(child);
-      if (index < 0) throw new Error('removeChild node is not a child');
-      node.childNodes!.splice(index, 1);
-      child.parentNode = null;
-      return child;
-    },
-    remove: () => {
-      node.parentNode?.removeChild?.(node);
-    },
-  };
-  return node;
-}
-
-function text(value: string): ClaimNode {
-  const node: ClaimNode = { nodeType: 3, parentNode: null, nodeValue: value };
-  Object.defineProperty(node, 'nextSibling', {
-    get() {
-      const parent = node.parentNode;
-      if (parent === null) return null;
-      const siblings = parent.childNodes ?? [];
-      const index = siblings.indexOf(node);
-      return index < 0 ? null : (siblings[index + 1] ?? null);
-    },
-  });
-  Object.defineProperty(node, 'firstChild', { value: null });
-  node.remove = () => node.parentNode?.removeChild?.(node);
-  return node;
-}
-
-function comment(value: string): ClaimNode {
-  const node: ClaimNode = { nodeType: 8, parentNode: null, nodeValue: value };
-  Object.defineProperty(node, 'nextSibling', {
-    get() {
-      const parent = node.parentNode;
-      if (parent === null) return null;
-      const siblings = parent.childNodes ?? [];
-      const index = siblings.indexOf(node);
-      return index < 0 ? null : (siblings[index + 1] ?? null);
-    },
-  });
-  Object.defineProperty(node, 'firstChild', { value: null });
-  node.remove = () => node.parentNode?.removeChild?.(node);
-  return node;
-}
 
 function leafDom(
   textValue: string,
@@ -229,61 +93,14 @@ beforeAll(async () => {
   expect(generated.module).toContain('function Empty__claim');
   const dir = mkdtempSync(join(tmpdir(), 'oe-m07a-'));
   bundleDir = dir;
-  const element = join(REPO_ROOT, 'packages/element/src/internal');
-  const runtime = join(element, 'compiled/runtime');
-  const shim = join(dir, 'runtime-shim.ts');
-  const leaf = join(dir, 'leaf.js');
-  const entry = join(dir, 'entry.ts');
-  // Same narrow modules the browser harness bundles. The full runtime barrel
-  // is the Part Program facade; this slice does not execute through it.
-  writeFileSync(
-    shim,
-    [
-      `export { claimRecipe, createRecipe, insertRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
-      `export { reconcileEachEntries } from ${JSON.stringify(join(runtime, 'each-reconcile.ts'))};`,
-      `export { bindSignalWrites, runUntracked } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
-      `export { runtimeProbe } from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
-      `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
-      `export { assertElementInHtmlNamespace, assertStaticAttributeSeed, assertTextSlotMarker, assertWhenAnchor, assertWhenEndMarker, isWhenEndMarker, leafClaimMismatch } from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
-      `export { emitComment, MARKERS, markerText, parseRangeMarker, parseTextSlotMarker, rangeMarker, textSlotMarker } from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
-      `export { escapeText } from ${JSON.stringify(join(element, 'compiled/escape-text.ts'))};`,
-      `export { escapeAttrValue } from ${JSON.stringify(join(element, 'core/html-escape.ts'))};`,
-      `export { OpenElementError } from ${JSON.stringify(join(REPO_ROOT, 'packages/protocol/src/errors.ts'))};`,
-      `export { LifetimeScope } from ${JSON.stringify(join(element, 'compiled/lifetime-scope.ts'))};`,
-      `export { signal } from ${JSON.stringify(join(element, 'signal/framework.ts'))};`,
-      '',
-    ].join('\n'),
-  );
-  writeFileSync(leaf, generated.module!);
-  writeFileSync(
-    entry,
-    [
-      `export { createLeafRecipe, createEmptyRecipe, createPlainRecipe, createCasedRecipe } from './leaf.js';`,
-      `export { claimRecipe, runtimeProbe, LifetimeScope, signal, OpenElementError } from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)};`,
-      '',
-    ].join('\n'),
-  );
-  const result = await build({
-    configFile: false,
-    root: dir,
-    logLevel: 'silent',
-    resolve: { alias: { [GENERATED_LEAF_RUNTIME_SPECIFIER]: shim } },
-    build: {
-      write: false,
-      minify: false,
-      lib: { entry, formats: ['es'], fileName: () => 'mod.js' },
-    },
-  });
-  const output = Array.isArray(result)
-    ? result[0]!.output
-    : (result as { output: unknown[] }).output;
-  const chunk = (output as Array<{ type: string; code?: string }>).find(
-    (item) => item.type === 'chunk',
-  );
-  if (chunk?.code === undefined) throw new Error('claim bundle produced no chunk');
-  const out = join(dir, 'mod.js');
-  writeFileSync(out, chunk.code);
-  loaded = (await import(pathToFileURL(out).href)) as Loaded;
+  const internals = join(REPO_ROOT, 'packages/element/src/internal');
+  loaded = await loadGeneratedClaimBundle<Loaded>(dir, { 'leaf.js': generated.module! }, [
+    "export { createLeafRecipe, createEmptyRecipe, createPlainRecipe, createCasedRecipe } from './leaf.js';",
+    `export { claimRecipe, signal } from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)};`,
+    `export { runtimeProbe } from ${JSON.stringify(join(internals, 'compiled/runtime/observability.ts'))};`,
+    `export { LifetimeScope } from ${JSON.stringify(join(internals, 'compiled/lifetime-scope.ts'))};`,
+    `export { OpenElementError } from ${JSON.stringify(join(REPO_ROOT, 'packages/protocol/src/errors.ts'))};`,
+  ]);
 }, 60_000);
 
 afterAll(() => {

@@ -507,14 +507,19 @@ describe('T4 depth-1 nested-instance wiring — artifact contract', () => {
     expect(occurrences(functionText(retained, 'Child__mount'), '__oe_host.setup')).toBe(1);
     expect(occurrences(functionText(retained, 'Child__claim'), '__oe_host.setup')).toBe(1);
 
-    // The shell host type carries exactly one additive optional field.
-    const shell = readFileSync(
-      join(REPO_ROOT, 'packages/element/src/internal/compiled/generated-element/shell.ts'),
-      'utf8',
+    // The shell's re-exported host type carries exactly one additive optional field.
+    const generatedElement = join(
+      REPO_ROOT,
+      'packages/element/src/internal/compiled/generated-element',
     );
-    const declaration = shell.slice(
-      shell.indexOf('export interface GeneratedElementHost'),
-      shell.indexOf('interface GeneratedElementInstanceHost'),
+    const shell = readFileSync(join(generatedElement, 'shell.ts'), 'utf8');
+    expect(shell).toMatch(
+      /export type \{[^}]*\bGeneratedElementHost\b[^}]*\} from '\.\/descriptor\.ts';/,
+    );
+    const descriptor = readFileSync(join(generatedElement, 'descriptor.ts'), 'utf8');
+    const declaration = descriptor.slice(
+      descriptor.indexOf('export interface GeneratedElementHost'),
+      descriptor.indexOf('export interface GeneratedElementInstanceHost'),
     );
     expect(declaration).toContain('readonly instance?: LifetimeScope;');
     expect(declaration).not.toContain('readonly setup');
