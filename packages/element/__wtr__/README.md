@@ -81,7 +81,7 @@ for an admitted island — driven by `tools/compile-fixtures.ts` and emitted
 into `generated/`: a pure function, hermetic, and guaranteed not to drift from
 the plugin because the plugin delegates to it. This is the ONLY compile path
 in the suite: the class/decorator lane and its `compileElementModule` entry
-were deleted with the Alpha16 closeout, so every fixture here is authored as a
+have been removed. Every fixture here is authored as a
 `defineIslandConfig` sidecar plus a default-exported function component, and
 the script fails closed when the lane declines one (no fixture is skipped).
 Not chosen: the full vite lib-mode path (`tools/consumer-packaged-element.ts`

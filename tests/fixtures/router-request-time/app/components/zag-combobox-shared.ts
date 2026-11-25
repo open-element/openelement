@@ -14,7 +14,7 @@
  *   machine and takes the host explicitly; the islands drive it from the
  *   generated lane's lifecycle intrinsics. The machine starts one macrotask
  *   after `onConnect` — the replay runs in the mount/claim PROLOGUE, before the
- *   claimed/created region exists (`16b-migration-note` R2) and before the
+ *   claimed/created region exists (the static-attribute claim contract) and before the
  *   strict claim has validated the static attribute set, so starting earlier
  *   would both query an empty tree and make Zag's attribute writes a claim
  *   mismatch. It stops from the `onConnect` cleanup, which runs at that
@@ -269,7 +269,7 @@ export function startZagCombobox(host: ZagComboboxHost, options: StartZagCombobo
       cleanups.clear();
       machine.stop();
       // Restore AFTER the machine stopped, so nothing can write over the
-      // pristine attribute order on its way out. `16b-migration-note` R2: the
+      // pristine attribute order on its way out. the static-attribute claim contract: the
       // reconnect's claim is strict, and Zag's mutations are not part of the
       // compiled program.
       restorePartsStructure(pristine);

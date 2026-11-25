@@ -85,7 +85,7 @@ export default function ZagCombobox(_props: {
     const host = env.host as ZagComboboxHost;
     // `onConnect` is replayed in the mount/claim PROLOGUE, before the generated
     // region is the rendered tree and before the strict claim validates the
-    // static attribute set (16b-migration-note R2); this callback both queries
+    // static attribute set (the static-attribute claim contract); this callback both queries
     // that region and lets Zag write attributes, so it defers one macrotask —
     // the same deferral www/app/islands/open-dialog.tsx uses for its
     // post-DOM sync. The connect handle's abort clears a pending start so a

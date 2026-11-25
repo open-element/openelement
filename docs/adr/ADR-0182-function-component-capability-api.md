@@ -199,7 +199,7 @@ Boundaries recorded by this direction:
 | Owner direction recorded | 2026-11-16 (D1 = A, D2 = experience edition, D3 = B) |
 | Owner sign-off | SisyphusZheng (verbal approval in review session, recorded 2026-11-19) |
 | Sign-off date | 2026-11-19 |
-| Formal amendment carrier | `docs/architecture/alpha16-18-execution-plan.md` §17 (draft, same pending state) |
+| Formal amendment carrier | [Historical execution plan, §17](https://github.com/open-element/openelement/blob/e655a0bab6f1396f4ed1a10208794e51e592b0ce/docs/architecture/alpha16-18-execution-plan.md) (draft at the time) |
 
 This draft does not move itself from PROPOSED to an accepted record, and the
 blank line is not a signature. A recorded owner sign-off is the only thing that
@@ -718,7 +718,7 @@ unblocks `open-search` (`hits: SearchHit[]`), `notes-live`
 
 Append-only fact record. Owner-approved 2026-11-20 under the delegated
 in-session remediation authorization recorded in
-[execution-plan §18](../architecture/alpha16-18-execution-plan.md) (§18.7 for the
+[historical execution plan §18](https://github.com/open-element/openelement/blob/e655a0bab6f1396f4ed1a10208794e51e592b0ce/docs/architecture/alpha16-18-execution-plan.md#18-dated-amendment-2026-11-20-owner-approved-remediation-of-pr-1804) (§18.7 for the
 record form). It re-decides nothing in the sections above; where they describe a
 pending state, this is the later reading.
 
@@ -924,7 +924,7 @@ static id is part of the compiled attribute seed instead of a post-claim write.
   `requiredMark`, `describedByAttr`. The label/error/ARIA surface is authored as
   inline JSX expressions so the compiler derives the `label` / `error` row
   dependencies; naming those values in locals would silently make the whole
-  error surface SSR-only (16b-migration-note R1).
+  error surface SSR-only ([reactive reads](../architecture/compiler-and-element-runtime.md#reactive-reads-and-component-ownership)).
 - The class's private form/state mirroring (`activate`, `updateStates`,
   `syncFormValue`, `syncValidity`, `handleInput`, `handleChange`, `handleFocus`,
   `handleBlur`) is retired: the shell owns the internals record and the form
@@ -1429,6 +1429,6 @@ and preserved node identity in Chromium, Firefox and WebKit. That local result
 is recorded against landed commit `03e1e07e2eb87d703a9e8efbc56e6108f91472e9`.
 [Prior landed-candidate evidence](https://github.com/open-element/openelement/pull/1812#issuecomment-7158207745)
 
-The [migration note](../architecture/16b-migration-note.md#2026-11-25-policy-ssr-and-recovery)
+The [current runtime contract](../architecture/compiler-and-element-runtime.md#errors-and-fallback)
 and [capability inventory](../architecture/alpha16-capability-inventory.md#2026-11-25-error-boundary-review)
 record the same scope and evidence.

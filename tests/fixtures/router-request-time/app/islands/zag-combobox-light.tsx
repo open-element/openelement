@@ -15,7 +15,7 @@
  * `onDsdHydrated` / `onCsrRendered` pair), but in the mount/claim PROLOGUE —
  * before the region is the rendered tree and before the strict claim has
  * validated the static attribute set — so the machine starts one macrotask
- * later (16b-migration-note R2; www/app/islands/open-dialog.tsx). The connect
+ * later (the static-attribute claim contract; www/app/islands/open-dialog.tsx). The connect
  * cleanup is the class lane's `disconnectedCallback`: reset the compiled DOM,
  * then stop the machine.
  *

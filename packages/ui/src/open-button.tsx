@@ -81,7 +81,7 @@ function OpenButton(props: {
   // Every row-derived value below is spelled INLINE at its JSX position, so the
   // compiler derives the dependency from the read it emits. An alias here would
   // make the sink a setup-time one-shot: correct at mount/claim, never again
-  // (16b-migration-note.md R1).
+  // (see Reactive reads in docs/architecture/compiler-and-element-runtime.md).
   //
   // `type` is deliberately NOT bound on the button branch. The class lane
   // rendered `type={this.type}` and let the platform's native submit happen

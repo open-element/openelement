@@ -213,7 +213,7 @@ reads" pattern that made `__partProgram` hard to retire, and it invites structur
 fields back in.
 
 Recommended field candidates, each justified by a consumer in
-[the migration matrix](./m01-consumer-migration-matrix.md):
+[the current consumer registry](./seams.md):
 
 | Field | Producer | Consumer | Purpose | Layer | Stage |
 | --- | --- | --- | --- | --- | --- |
@@ -386,21 +386,14 @@ Same stateful list.
 - ABI: client entrypoints only. Wire: markers, seed, build identity.
 - Open: marker protocol for repeated insertion ordering.
 
-## 12. Consumer migration matrix
+## 12. Artifact consumers
 
-See [m01-consumer-migration-matrix.md](./m01-consumer-migration-matrix.md) — 23
-consumers, each with file, symbol, access type, target layer, replacement, stage,
-test and retirement condition.
-
-The matrix is the single source of these counts; this document does not keep a
-second tally. What it establishes structurally:
-
-- every production consumer has a named target layer;
-- exactly **two** consumers read the emitted module as source text, in two
-  different packages;
-- every proposed ABI field lists a named consumer (the matrix is the authority);
-- fixtures, harnesses and release tooling are classified as supporting evidence,
-  not as protocol consumers.
+Give every generated field a named producer, consumer and layer. Register the
+actual artifact reader and its consumer-form guard in the [seam registry](./seams.md).
+Browser claim, server rendering and build metadata consume distinct shapes.
+Keep support tests and release tooling in the evidence chain. For the retired
+Part Program, the [M01 audit](https://github.com/open-element/openelement/blob/e655a0bab6f1396f4ed1a10208794e51e592b0ce/docs/architecture/m01-consumer-migration-matrix.md)
+records the historical readers and their dispositions.
 
 ## 13. Infrastructure reuse
 
@@ -490,7 +483,7 @@ but it may not be deferred to Alpha17 with a callback or API name.
 - Fourth-pass reassessment (approved 2026-11-03; retired into Git history on 2026-11-10)
 - [JSX value / Children model](./jsx-value-and-children-model.md)
 - [TSX author contract](./tsx-author-candidate-contract.md)
-- [Consumer migration matrix](./m01-consumer-migration-matrix.md)
+- [Artifact seams](./seams.md)
 - [Execution plan](./alpha16-18-execution-plan.md)
 - ADR-0173, ADR-0174
 

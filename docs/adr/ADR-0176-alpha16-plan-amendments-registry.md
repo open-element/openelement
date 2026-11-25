@@ -11,7 +11,7 @@
 ## Context
 
 Two owner-approved dated amendments were added to
-`docs/architecture/alpha16-18-execution-plan.md` — §13 (2026-11-13, PR #1783,
+[the historical execution plan](https://github.com/open-element/openelement/blob/e655a0bab6f1396f4ed1a10208794e51e592b0ce/docs/architecture/alpha16-18-execution-plan.md) — §13 (2026-11-13, PR #1783,
 squash `b194bb105`) and §14 (2026-11-14, PR #1787, squash `089ace0a8`, the same
 change set that landed M09-2a/2b platform metadata). Both are decisions: §13:361
 says "the amended readings below are authoritative", §14:462 says §14

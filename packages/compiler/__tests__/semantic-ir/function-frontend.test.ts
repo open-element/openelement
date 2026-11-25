@@ -1,7 +1,7 @@
 /**
  * M03-I-4a — production function-component frontend.
  *
- * Authority: `docs/architecture/alpha16-18-execution-plan.md` §1 M03 exit
+ * Authority: `docs/architecture/alpha16-18-execution-plan.md` compiler and runtime evidence
  * (diagnostics / Source Map / security parity with the Alpha15 class frontend),
  * `docs/architecture/m03-expression-identity.md` §3/§6/§8, the M02 admitted
  * grammar, and the M03-A/-B adopted decisions. This file covers the A4a half of

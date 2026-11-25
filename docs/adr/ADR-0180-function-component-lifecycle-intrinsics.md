@@ -99,7 +99,7 @@ plain disconnect or leak per-connection resources — both contradict ADR-0173.
 - The slice ships a greenfield surface, so no consumer migration is pending.
 - `16b-LC` gains a delivered root half; its nested/hostless obligation and
   connection-scope helpers remain open rows in
-  [the migration note](../architecture/16b-migration-note.md), **inside the
+  [the historical migration record](https://github.com/open-element/openelement/blob/e655a0bab6f1396f4ed1a10208794e51e592b0ce/docs/architecture/16b-migration-note.md), **inside the
   existing slice** — this record introduces no new slice label.
 
 ## Retirement conditions (P5)

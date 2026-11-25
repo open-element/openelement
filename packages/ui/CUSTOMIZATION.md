@@ -1,118 +1,26 @@
 # Customizing @openelement/ui
 
-This document is the package's **customization surface declaration** (alpha9
-C3, #1506). It lists, per component, the shadow parts (`::part(...)`) and the
-CSS custom properties the recipes consume. A test guard
-(`__tests__/customization-surface.test.ts`) pins both lists to the code and
-to the 1.0.0-alpha.8 baseline.
+The supported CSS customization surface is the per-component list of shadow
+parts and consumed custom properties below. Select a published part with
+`::part()` to style one component. Set semantic color roles at the document or
+theme scope to change related components together.
 
-## Semver contract
+```css
+open-button::part(control) {
+  border-radius: 999px;
+}
+```
 
-- **`::part` names never shrink.** Every part shipped in 1.0.0-alpha.8 exists
-  today and must exist in every later release, for every component that still
-  ships; adding a part is allowed. (`open-card`, `open-callout`, `open-badge`
-  and `open-tabs` left the package under the Alpha disclaimer and are no
-  longer part of this contract.)
-- **Consumed variables are pinned at the C3 role-direct baseline.** Adding or
-  removing a `var()` reference in a recipe is a deliberate surface change: the
-  guard fails until the pin and this document are updated in the same change.
-- Component internals are authored as **Tailwind utilities** wherever a class
-  utility is the clearest form. The compiler admits every static class token and
-  the build's shadow component stylesheet (theme + utilities) carries the
-  generated rules into the component's shadow root. What stays in the
-  component's `.css` sheet is what reads better as one owned rule — see
-  [Why the residue is CSS](#why-the-residue-is-css). **This makes a Tailwind
-  entry a requirement of the consuming app** (`tailwind: { theme: [...] }` in
-  `openelement.config.ts` — the scaffold's single default form): without it the
-  component stylesheet is not emitted and the utilities are not delivered. That
-  is the MANUAL path. A package that declares its own requirement admits the
-  entry by itself in automatic mode — this package does exactly
-  that, which is why a consumer that admits `@openelement/ui` needs no
-  `tailwind` key at all.
-- Colours still come from this role table, never from a literal — either a role
-  variable in the sheet or a utility generated from a role (`bg-primary/14`
-  compiles to `color-mix` on `--color-primary`). The guard fails on a raw
-  colour literal in a declaration, because a literal escapes the light, dark
-  and forced-colors seats the roles guarantee.
-
-### Why the residue is CSS
-
-An earlier revision of this document and of the component sheets said the
-retained rules "cannot be a class utility": a utility could not select the
-host's attribute from inside the shadow root, the compiler admitted only
-two-branch conditionals, and `color-mix` over role pairs was out of reach. That
-is **not true of the official engine**, and it is not a good reason to keep
-anything. Measured with the installed `tailwindcss` (the same compiler the build
-mounts), every one of those shapes has a real utility spelling:
-
-| Shape | Utility spelling | Compiles to |
-|---|---|---|
-| host attribute | `[:host([size='sm'])_&]:p-1` | `:host([size='sm']) .[…]\/\:p-1 { padding: var(--spacing) }` |
-| form-associated state | `[:host(:state(invalid))_&]:border-destructive` | `:host(:state(invalid)) .[…]\/\:border-destructive { border-color: var(--color-destructive) }` |
-| derived role mix | `bg-[color-mix(in_srgb,var(--color-popover)_78%,transparent)]` | the mix, with `var(--color-popover)` kept in the supported branch |
-| pseudo-class | `focus:border-primary` | `.focus\:border-primary:focus { border-color: var(--color-primary) }` |
-
-What the residue actually rests on is **readability and size**, measured on
-open-button's size matrix rather than asserted:
-
-- the retained sheet block: **444 bytes**;
-- the equivalent utilities: **998 bytes** of class attribute — the same tokens
-  are needed on both rendered controls (the anchor branch and the button
-  branch) — plus **1,881 bytes** of generated rules, each selector a mangled
-  escape (`:host(:not([size])) .\[\:host\(\:not\(\[size\]\)\)_\&\]\:min-h-\[38px\]`);
-- total **≈ 6.5×**, for the same three branches.
-
-There is no capability limit left to claim. The transition configuration this
-document used to call one — `@starting-style` and
-`transition-behavior: allow-discrete` — is expressible too, and was measured:
-`starting:opacity-0` compiles into an `@starting-style` block and
-`transition-discrete` into `transition-behavior: allow-discrete`. What the
-sheets keep is therefore a deliberate choice of clarity, size or single
-ownership in every case, never an "impossible". The guards hold both sides to
-that: every generated colour must resolve to a declared role
-(`__tests__/utility-colour-roles.test.ts`) and every class a sheet selects must
-be carried by its own markup (`__tests__/customization-surface.test.ts`).
-
-### What is NOT part of this contract
-
-The declared surface is the two lists above: **`::part` names and the consumed
-role variables.** Everything else a component class exposes on its type — its
-internal class hooks, its computed signals, its methods — sits OUTSIDE those
-lists, which is not the same as being ungoverned. Every one of them is a
-published type shape: the package's retained-interface baseline (a checked-in
-snapshot, verified by the repository's `interface:snapshot` task) fails on any
-change until the
-decision is made and the baseline is regenerated in the same change, and the
-experimental disclaimer (owner ruling C1, #1468) is what lets such a decision be
-"removed" rather than "kept forever". There is no blanket rule that exported
-types may churn; there is a per-change decision, recorded and pinned. The two
-cases below are exactly that — individual decisions, not precedents that make
-the next one free:
-
-- **Internal class hooks are not a contract.** A class a sheet selects
-  (`open-button`'s `btn`, `open-input`'s `control`) is internal: an element in a
-  shadow root can only be reached through its `::part`, so no consumer can
-  address a hook directly. The hook-name guard
-  (`__tests__/customization-surface.test.ts`) keeps the sheet and the markup
-  spelling the same hook, which is what stops a rename from silently killing
-  rules; it does not make the name public.
-- **A retired class-carrying signal is not a compatibility break.** The alpha15
-  S lane deleted `OpenInput.inputClass`, a computed whose only value was the
-  internal class string (`'control input input--error'`) and whose only
-  consumer was the `class=` binding that is now a static literal. It was never
-  an attribute (it could not be set from markup) and never part of the lists
-  above. It is retired rather than restored: re-adding a signal with no
-  behavior would keep a type shape green while telling a consumer nothing true.
-  The same change retired the `input--error` class: `:host(:state(invalid))`
-  owns that border.
+Component sheets and utility classes both resolve colors from the declared
+role table. Internal selectors belong to the component's markup and sheets.
+The package tests pin the published parts and consumed variables and check
+the generated utilities against the documented role table.
 
 ## Theming model
 
 Components read the shadcn-convention role table in
 [`src/theme.css`](./src/theme.css) directly: `--color-*` semantic roles seated
-on the Tailwind v4 default scale. There is no intermediate alias layer — the
-C1 alias sheet (`semantic-tokens.css`) was deleted in C3 under its own
-DELETION CONDITION.
+on the Tailwind v4 default scale.
 
 - **Light/dark**: the roles carry `[data-theme='dark']` pairs re-pointed at
   this repo's theme mechanism (`:root[data-theme='dark']`,
@@ -135,12 +43,8 @@ The contract a consumer may rely on:
 - each role's `[data-theme='dark']` dark pair,
 - the `forced-colors: active` tier that re-seats every role on a system color.
 
-**The package carries no scale values of its own.** Since the alpha9 C5 twin
-removal, `@openelement/ui` embeds no compiled value table and exports no
-token module — the retired `@openelement/ui/theme-tokens`
-(`themeTokenCss` / `themeTokenSheet`) is gone. Component recipes reference
-`var(--color-*)` / `var(--spacing)` / etc.; until the host supplies those
-variables the recipes resolve to nothing. Values have exactly two suppliers:
+Component recipes read values from the CSS variables supplied by the selected
+stylesheet delivery path.
 
 - **Entry ON**: a `@openelement/router` Tailwind build compiles
   `theme.css` through the official `@tailwindcss/vite` pipeline
@@ -176,12 +80,12 @@ The full role-name inventory is the `@theme` block of
 [`src/theme.css`](./src/theme.css): `--color-background`, `--color-foreground`,
 `--color-card(-foreground)`, `--color-popover(-foreground)`,
 `--color-primary(-foreground)`, `--color-secondary(-foreground)`,
-`--color-muted(-foreground)`, `--color-accent(-foreground)`,
+`--color-muted`, `--color-muted-foreground`, `--color-accent(-foreground)`,
 `--color-destructive(-foreground)`, `--color-success`, `--color-warning`,
 `--color-info`, `--color-border`, `--color-input`, `--color-ring`, and
 `--color-chart-1` … `--color-chart-5`.
 
-### Which engine compiles the components (alpha15 stage 2B)
+### Style providers
 
 This package's components author their control surfaces as **`tailwind4`-dialect
 utility tokens** and declare exactly that in their manifest entries
@@ -213,51 +117,6 @@ router refuses a `@theme` source under UnoCSS
 the roles it declares — which is why the combination above is refused instead
 of half-styled.
 
-## alpha8 → C3 variable rename map
-
-The retired alias names are gone. The notable re-seats (consumers renaming
-their overrides):
-
-| Retired (alpha8)  | C3 role expression                                        |
-| ----------------- | --------------------------------------------------------- |
-| `--bg-base`       | `--color-background`                                       |
-| `--bg-card`       | `--color-card`                                             |
-| `--bg-elevated`   | `--color-popover`                                          |
-| `--bg-surface`    | `--color-muted`                                            |
-| `--text-primary`  | `--color-foreground`                                       |
-| `--text-secondary`| `--color-muted-foreground`                                 |
-| `--text-muted`    | `--color-muted-foreground` (one ink step since C1)         |
-| `--brand`         | `--color-primary`                                          |
-| `--on-brand`      | `--color-primary-foreground`                               |
-| `--border`        | `--color-border`                                           |
-| `--error`         | `--color-destructive`                                      |
-| `--success`       | `--color-success` (new role, same AA-tuned values)         |
-| `--warning`       | `--color-warning` (new role, same AA-tuned values)         |
-| `--info`          | `--color-info` (new role, same AA-tuned values)            |
-| `--focus-ring`    | `--color-ring`                                             |
-| `--bg-code`       | static `--color-zinc-950` (code surfaces stay dark)        |
-| `--code-text`     | static `--color-zinc-200`                                  |
-| `--code-border`   | static `--color-zinc-700`                                  |
-| `--size-N`        | `calc(var(--spacing) * N)`                                 |
-| `--radius-1/2/3`  | `--radius-md` / `--radius-lg` / `--radius-xl`              |
-| `--radius-round`  | `calc(infinity * 1px)`                                     |
-| `--font-size-0..3`| `--text-sm` / `--text-base` / `--text-xl` / `--text-2xl`   |
-| `--font-weight-N` | `--font-weight-medium` … `--font-weight-black`             |
-| `--motion-fast`, `--duration-2` | `--default-transition-duration` (150ms)      |
-| `--ease-3`, `--motion-standard` | `--ease-out`                                 |
-| `--ease-2`        | `--ease-in-out`                                            |
-
-Deliberate pixel breaks to note (this is C3's contract, not a migration):
-
-- `--brand-deep` (static violet-950) became a 50/50 primary/foreground mix —
-  the default-button hover ink now tracks the theme's ink side.
-- `--violet-0/1/2/5/8/10` re-seat on flipping roles
-  (primary-foreground/secondary/border/ring/primary/secondary-foreground), so
-  coordinated surfaces (e.g. the site's flood panels) invert together with
-  the theme instead of mirroring a fixed ramp.
-- Code-block and dialog backdrop keep static zinc surfaces in both themes
-  (the retired sheet's behavior, now explicit literals-free ramp references).
-
 ## Per-component surface
 
 Variables listed are the ones each component's recipe **consumes**; all of
@@ -273,7 +132,7 @@ custom properties.
   `--shadow-sm`, `--spacing`, `--text-base`, `--text-sm`, `--text-xl`
 - The base treatment (inline flex box, gap, typography, radius, cursor,
   white-space), the focus ring and the disabled / aria-disabled states are
-  authored as Tailwind utilities (alpha15 S lane). The sheet keeps the host
+  authored as Tailwind utilities. The sheet keeps the host
   box, the `[hidden]` rule, the size and variant surfaces (host-attribute
   scoped: the utility spelling exists — `[:host([size='sm'])_&]:p-1` compiles —
   and costs ≈6.5× the bytes for the same branches; see
@@ -285,7 +144,7 @@ custom properties.
 
 - Parts: `copy`
 - Variables: `--color-destructive`, `--color-success`
-- The chip's presentation is authored as Tailwind utilities (alpha15 S lane);
+- The chip's presentation is authored as Tailwind utilities;
   the sheet keeps the host box and the `:state(copied)` / `:state(failed)`
   feedback, which paint the two status roles above.
 - Since #1552 the component owns the copy chip only: the code surface and the
@@ -300,7 +159,7 @@ custom properties.
   `--color-primary`, `--color-white`, `--color-zinc-950`, `--shadow-2xl`,
   `--spacing`
 - The dialog box and the header / title / close / body / footer presentation
-  are authored as Tailwind utilities (alpha15 S lane). The sheet keeps the
+  are authored as Tailwind utilities. The sheet keeps the
   host box, the trigger slot's cursor, the derived frame (a
   foreground/border/primary triple mix) and the close button's hover wash.
 - Shares the overlay recipe (below); the backdrop composes the zinc-950
@@ -329,7 +188,7 @@ custom properties.
   `--color-popover`, `--color-primary`, `--color-violet-400`, `--spacing`
 - The wrapper layout, the label's typography, the control's box (width,
   padding, font, radius, transition, outline) and the error message's ink are
-  authored as Tailwind utilities (alpha15 S lane). The sheet keeps the host
+  authored as Tailwind utilities. The sheet keeps the host
   box, the control's derived surfaces (the popover/border mixes, the violet
   hover border, the focus ring's box-shadow) and the disabled / invalid
   treatments scoped to the host's form state; those states use
@@ -341,8 +200,7 @@ custom properties.
 - Variables: `--color-background`, `--color-border`, `--color-popover`,
   `--color-primary`, `--color-violet-400`, `--spacing`
 - The button's element-level presentation (flex box, size, radius, cursor,
-  ink, focus ring, transition) is authored as Tailwind utilities (alpha15 S
-  lane); the sheet keeps the derived surface, its hover values and the
+  ink, focus ring, transition) is authored as Tailwind utilities; the sheet keeps the derived surface, its hover values and the
   `[data-theme]` icon display swap.
 
 ### Shared recipes (`component-recipes.ts`)
@@ -350,10 +208,9 @@ custom properties.
 - `surface-recipe.css` (`.surface`): `--color-border`, `--color-card`,
   `--color-foreground`, `--color-popover`, `--color-primary`, `--color-white`,
   `--radius-lg`, `--shadow-2xl`, `--spacing`
-- The control recipe retired with the alpha15 utility migration: open-button
-  and open-input author their control surface as utilities plus each
-  component's own irreducible residue (above), so there is one owner per
-  property instead of a shared sheet plus overrides.
+- The button and input control surfaces combine utilities with each component's
+  own stylesheet. The shared surface and overlay recipes own their respective
+  shared treatments.
 - `overlay-recipe.css` (`.overlay`) adds: `--radius-xl`
 
 ## Deep customization

@@ -702,64 +702,14 @@ export function renderArchitectureIndex(docs: DocMeta[], root = '.'): string {
   return lines.join('\n');
 }
 
-/** Render the generated block for `docs/legacy/README.md`. */
-export function renderLegacyRegister(history: HistoryFile, root = '.'): string {
-  const file = LEGACY_README_PATH;
-  const archived = history.entries
-    .filter((entry) => entry.kind === 'archived')
-    .sort((a, b) => a.path.localeCompare(b.path));
-  const removed = history.entries
-    .filter((entry) => entry.kind === 'removed')
-    .sort((a, b) => a.path.localeCompare(b.path));
-  const lines: string[] = [
-    '## Archived decision records',
-    '',
-    '| Record | Status | Carried | Recovery command |',
-    '| --- | --- | --- | --- |',
-    ...archived.map((entry) => {
-      const name = existsSync(join(root, entry.path))
-        ? `[${entry.title}](${relativeLink(file, entry.path)})`
-        : `\`${entry.path}\``;
-      return `| ${name} | ${entry.status ?? ''} | ${entry.carried} | \`git show ${entry.recovery.commit}:${entry.recovery.path}\` |`;
-    }),
-    '',
-    '## Removed process documents',
-    '',
-    '| Document | Removed | What it carried | Where that responsibility lives now | Recovery command |',
-    '| --- | --- | --- | --- | --- |',
-    ...removed.map((entry) => {
-      const successors = entry.nowLivesIn.map((path) => {
-        const doc = historySuccessorLabel(root, path);
-        return existsSync(join(root, path))
-          ? `[${doc}](${relativeLink(file, path)})`
-          : `\`${path}\``;
-      });
-      const where =
-        successors.length === 0
-          ? entry.noSuccessor === true
-            ? '**No in-tree successor**; recover from Git history'
-            : '**No successor recorded**'
-          : `${successors.join(', ')}${entry.noSuccessor === true ? ' (partial: no successor carries the full responsibility)' : ''}`;
-      return `| \`${entry.path}\` | ${entry.date} | ${entry.carried} | ${where} | \`git show ${entry.recovery.commit}:${entry.recovery.path}\` |`;
-    }),
-    '',
-    'Each recovery command uses the pre-change commit and path recorded for that entry.',
-    'The register is machine-checked by',
-    '`@openelement/tools-repo#docs-index:check`; a deletion that is not registered here fails the gate.',
-  ];
-  return lines.join('\n');
-}
-
-/** Human label for a successor path: its topic, else its H1, else the path. */
-function historySuccessorLabel(root: string, path: string): string {
-  const text = readTextIfExists(join(root, path));
-  if (text === undefined) return path;
-  const frontMatter = parseFrontMatter(text);
-  if (frontMatter !== undefined) {
-    const topic = frontMatter.data['topic'];
-    if (topic !== undefined && topic.trim() !== '') return topic;
-  }
-  return extractTitle(text) ?? path;
+/** Render the recovery index without duplicating the machine register. */
+export function renderLegacyRegister(history: HistoryFile): string {
+  const count = history.entries.length;
+  return [
+    `[The recovery register](../history.json) contains ${count} document records.`,
+    'To recover a document, use its recorded `recovery.commit` and `recovery.path`',
+    'with `git show <commit>:<path>`.',
+  ].join('\n');
 }
 
 function defaultListDeletedSince(root: string, baselineCommit: string): string[] | undefined {
@@ -876,7 +826,7 @@ export function checkDocsIndex(root = '.', deps: DocsIndexDeps = {}): DocsIndexR
   const docs = loadDocs(root, violations);
   const history = loadHistory(root, violations, deps);
   const architectureIndex = history === undefined ? '' : renderArchitectureIndex(docs, root);
-  const legacyRegister = history === undefined ? '' : renderLegacyRegister(history, root);
+  const legacyRegister = history === undefined ? '' : renderLegacyRegister(history);
 
   const checkBlock = (path: string, name: string, body: string): void => {
     const absolute = join(root, path);

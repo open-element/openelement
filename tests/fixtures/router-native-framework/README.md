@@ -1,7 +1,7 @@
 # router-native-framework
 
 Minimal openElement app proving the complete **Native Framework Mode**
-application flow (Beta.2.2, #1339): a notes app with a static home page
+application flow: a notes app with a static home page
 (build-time data), request-time list/detail/create/edit pages, the ADR-0120
 action protocol with native validation, the ADR-0129 response-header channel,
 `loader notFound()`, and a styled 404. The counter island hydrates on dynamic

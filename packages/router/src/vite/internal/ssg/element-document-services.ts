@@ -57,7 +57,7 @@
  * client-activatable island fetches no runtime". See
  * `www/__tests__/build-output.test.ts` (the direct property, its retired-proxy
  * comment and its negative controls) and
- * `docs/architecture/16b-migration-note.md` (the measured 324→328 KB raw /
+ * the historical 16b migration record at e655a0bab (the measured 324→328 KB raw /
  * 87→89 KB gzip static install cost, and why the old edge-absence assertion was
  * only a proxy for this one).
  */

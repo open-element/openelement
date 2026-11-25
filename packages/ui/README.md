@@ -81,37 +81,14 @@ copy button — an expected degradation, not a bug.
 The token layer is hand-maintained — there is no generator. One authored CSS
 source, no shipped values:
 
-- `src/theme.css` — **the single source of design roles** (P6: the only place
-  in the repository that defines them). shadcn-convention roles
-  (`--color-background`, `--color-primary`, …) seated on the Tailwind v4
-  default scale; roles reference only scale variables, dark pairs follow the
-  shadcn v4 convention with the selector re-pointed at this repo's
-  `[data-theme='dark']` mechanism, and a forced-colors layer re-seats every
-  role on a system color. Since alpha9 C2 the scale layer is the real
-  `@theme` block; role names are the migration contract. Since C3 (#1506) the
-  component recipes read these role names directly — the C1 alias layer
-  (`semantic-tokens.css`) was deleted under its own DELETION CONDITION, and
-  three non-shadcn status roles (`--color-success/-warning/-info`) joined the
-  table with the same forced-colors and dark-pair discipline.
+- `src/theme.css` defines the semantic `--color-*` roles over the Tailwind
+  scale, including dark pairs and system colors for forced-colors mode.
+- The Router Tailwind entry compiles the role table and its scale. Applications
+  with manual CSS delivery supply those variables through their own stylesheet.
 
-**The package ships no token values.** The compiled `theme-tokens` twin
-(`themeTokenCss` / `themeTokenSheet`) was deleted in alpha9 C5 — the role
-names, dark pairs and forced-colors tier are the contract; the values come
-from the `@openelement/router` Tailwind entry (ON) or a table the consumer
-writes itself (OFF). See [CUSTOMIZATION.md](./CUSTOMIZATION.md),
-"Value delivery".
-
-The ui suite fails closed on the role contract (dark
-pairs, forced-colors totality), on recipes consuming undeclared variables,
-and on WCAG floors (3:1 focus ring, 4.5:1 status inks on the background and
-their 10% recipe washes). `daisyClassSheet`, modal and step-card are retired
-and must not reappear in exports, manifests, docs or packed artifacts.
-
-The per-component customization surface (`::part` names, consumed variables,
-the alpha8 alias→role rename map) is declared in
-[CUSTOMIZATION.md](./CUSTOMIZATION.md) and pinned by test.
-
-Existing per-component imports remain stable across this layering change.
+Use [the customization surface](./CUSTOMIZATION.md) for each component's
+published `::part()` selectors and consumed variables. The UI test suite
+checks those declarations, role coverage, and focus and status contrast.
 
 ## Package Manifest
 

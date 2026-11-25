@@ -268,21 +268,14 @@ test('a valid tree round-trips: writeDocsIndex then checkDocsIndex is clean', ()
   expect(read(root, LEGACY_README_PATH)).toContain(report.legacyRegister);
 });
 
-test('the archive and removal rows use their own Git recovery commits and paths', () => {
-  const archived = archivedEntry();
-  const removed = removedEntry();
-  const laterCommit = 'b'.repeat(40);
-  const register = renderLegacyRegister({
-    schemaVersion: 1,
-    baselineCommit: COMMIT,
-    entries: [
-      archived,
-      { ...removed, recovery: { commit: laterCommit, path: 'docs/prior-path.md' } },
-    ],
-  });
-  expect(register).toContain(`git show ${COMMIT}:${archived.recovery.path}`);
-  expect(register).toContain(`git show ${laterCommit}:docs/prior-path.md`);
-  expect(register).not.toContain(`git show ${COMMIT}:docs/prior-path.md`);
+test('the recovery page points to the machine register without duplicating its records', () => {
+  const entries = [archivedEntry(), removedEntry()];
+  const page = renderLegacyRegister({ schemaVersion: 1, baselineCommit: COMMIT, entries });
+  expect(page).toContain('[The recovery register](../history.json) contains 2 document records');
+  expect(page).toContain('git show <commit>:<path>');
+  for (const entry of entries) {
+    expect(page).not.toContain(entry.path);
+  }
 });
 
 test('the generated blocks sort active rows by topic and link the external entry points', () => {
@@ -313,10 +306,10 @@ test('the generated blocks sort active rows by topic and link the external entry
   for (const path of [ADR_INDEX_PATH, LEGACY_README_PATH, RELEASE_STATE_PATH]) {
     expect(existsSync(join(root, path)), `${path} must exist for its link to resolve`).toBe(true);
   }
-  expect(written.legacyRegister).toContain(
-    '| [ADR-0001: Example decision](./adr/ADR-0001-example.md)',
+  expect(written.legacyRegister).toContain('../history.json');
+  expect(written.history?.entries.map(({ path, recovery }) => ({ path, recovery }))).toEqual(
+    [archivedEntry(), removedEntry()].map(({ path, recovery }) => ({ path, recovery })),
   );
-  expect(written.legacyRegister).toContain(`\`${REMOVED_PATH}\``);
 });
 
 test('a hand edit inside a generated block is index-drift and never becomes the authority', () => {

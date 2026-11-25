@@ -1,6 +1,6 @@
 # router-ui-dogfood
 
-`@openelement/ui` **dogfood qualification** fixture (#1226, v0.44 Beta.2). An
+`@openelement/ui` **qualification fixture**. An
 app consuming `@openelement/ui` the way an external consumer does: the package
 enters through `packageIslands` (WC Package Protocol manifest) and plain page
 markup, never through fixture-private shims. Every route is statically

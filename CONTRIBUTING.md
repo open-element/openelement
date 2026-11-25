@@ -48,7 +48,7 @@ decisions, compatibility contracts and required release evidence belong here.
 
 ## Architecture review
 
-Review every change against [docs/architecture/design-principles.md](./docs/architecture/design-principles.md): the four-question gate (P7) applies to ordinary pull requests — the fields are in the pull request template — and deviations follow the comply-or-explain rule. Current architecture belongs in `docs/architecture`; closed decision records are archived in `docs/legacy/adr/` and remain indexed and annotated in `docs/adr/README.md`. The current view of in-force documents is the generated [architecture index](./docs/architecture/README.md); documents that leave the tree are registered in [docs/history.json](./docs/history.json) and the [archive and removal register](./docs/legacy/README.md).
+Review every change against [docs/architecture/design-principles.md](./docs/architecture/design-principles.md): the four-question gate (P7) applies to ordinary pull requests — the fields are in the pull request template — and deviations follow the comply-or-explain rule. Current architecture belongs in `docs/architecture`; closed decision records remain available through fixed Git references in `docs/adr/README.md`. The current view of in-force documents is the generated [architecture index](./docs/architecture/README.md); documents that leave the tree are registered in [docs/history.json](./docs/history.json) and the [archive and removal register](./docs/legacy/README.md).
 
 ## When an ADR is required
 
@@ -63,7 +63,7 @@ An ADR is required when a change decides something the codebase cannot reverse c
 
 An ADR is NOT required for an ordinary fix, a refactor that leaves the decisions above intact, a test-only change, or documentation that restates an existing decision. When unsure, answer the four questions in the pull request first: if the fourth answer is "our difference is deliberate" and the difference is hard to reverse, write the ADR.
 
-Mechanics: the file is `docs/adr/ADR-NNNN-<slug>.md` with NNNN = the highest existing number + 1, and its entry in `docs/adr/README.md` lands in the same change. `@openelement/tools-repo#adr-index:check` (in `gate:source`) fails when a record is unlisted, a link dangles, or an entry's status annotation disagrees with the record; a record that no longer governs is archived in `docs/legacy/adr/` and annotated `SUPERSEDED` / `RETIRED` / `EXECUTED` in `docs/adr/README.md`, and `AMENDED` marks a partial change.
+Mechanics: the file is `docs/adr/ADR-NNNN-<slug>.md` with NNNN = the highest existing number + 1, and its entry in `docs/adr/README.md` lands in the same change. `@openelement/tools-repo#adr-index:check` (in `gate:source`) fails when a record is unlisted, a link dangles, or an entry's status annotation disagrees with the record; an in-tree record that declares itself superseded, retired or executed carries the matching annotation, and `AMENDED` marks an amended decision.
 
 ## Development
 

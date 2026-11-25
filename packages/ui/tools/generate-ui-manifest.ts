@@ -541,7 +541,7 @@ function readComponentSources(
         'Declare the component shape, or rename the file so it is not published. A ' +
         'function-component module needs a host-supplied generated-element site fact: under ' +
         '`src/` that is a published subpath `./open-<name>` whose target is ' +
-        '`./src/open-<name>.tsx` in package.json exports (alpha16-18-execution-plan.md §17).',
+        '`./src/open-<name>.tsx` in package.json exports; see docs/architecture/packages-and-distribution.md.',
     );
   }
   // The policy order is the published declaration order; the tag tie-break
