@@ -381,8 +381,7 @@ jobs:
   # also carries the TPL-03 fresh-scaffold quality gate (create -> typecheck ->
   # lint -> test -> build -> smoke) as a step inside THIS job, not a new job:
   # the job already pays for the packed scaffold and its install, and the
-  # qualification contract's job IDs/instance counts stay untouched (Lead
-  # ruling 2026-10-19; see docs/release/evidence/alpha15/tpl03-starter-quality-gate.md).
+  # qualification contract's job IDs and instance counts stay intact.
   pack:
     # pinned: Playwright 1.59.1 has no ubuntu-26.04 support
     needs: [sha-guard]

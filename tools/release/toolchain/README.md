@@ -1,4 +1,4 @@
-# Fixed qualification toolchain (REL-04)
+# Qualification toolchain
 
 The repository's qualification toolchain is pinned by four owner files, not by
 the machine a run happens to execute on. This directory reproduces those pins as
@@ -18,7 +18,7 @@ the CI workflows, and this README — a drift in any one file fails it.
 ## Build
 
 ```sh
-docker build -t openelement-toolchain:alpha15 tools/release/toolchain
+docker build -t openelement-toolchain:qualification tools/release/toolchain
 ```
 
 For a frozen qualification, also pin the base image by digest so the same tag
@@ -30,14 +30,12 @@ docker image inspect --format '{{index .RepoDigests 0}}' node:24.18.0-bookworm-s
 # node:24.18.0-bookworm-slim@sha256:<digest>
 docker build \
   --build-arg NODE_IMAGE=node:24.18.0-bookworm-slim@sha256:<digest> \
-  -t openelement-toolchain:alpha15 tools/release/toolchain
-docker image inspect --format '{{index .RepoDigests 0}}' openelement-toolchain:alpha15
+  -t openelement-toolchain:qualification tools/release/toolchain
+docker image inspect --format '{{index .RepoDigests 0}}' openelement-toolchain:qualification
 ```
 
-Record the two resolved digests in the qualification report (REL-08/QUAL-01) so
-"the image" names bytes, not a tag. The Dockerfile runs `node --version` and
-`pnpm --version` assertions at build time, so a moved base tag fails the build
-instead of producing a silently different image.
+Record the resolved digests in the qualification report. The Dockerfile checks
+`node --version` and `pnpm --version` during the build.
 
 ## Run the gates inside
 
@@ -46,14 +44,11 @@ workspace with the frozen lockfile (the image itself carries only the
 toolchain):
 
 ```sh
-docker run --rm -it -v "$PWD:/work" -w /work openelement-toolchain:alpha15 bash
+docker run --rm -it -v "$PWD:/work" -w /work openelement-toolchain:qualification bash
 # inside the container, once per mount:
 pnpm install --frozen-lockfile
-# then any gate; these are the ones the qualification report cites:
-pnpm run check
-pnpm exec vitest run --project element --project compiler --project router \
-  --project create --project ui --project www --project tools
-pnpm run site:build
+./node_modules/.bin/vp run check
+./node_modules/.bin/vp run test
 ```
 
 `pnpm install --frozen-lockfile` inside the image is the same command CI's
@@ -66,19 +61,4 @@ always the authority.
 node tools/release/check-toolchain-pins.ts
 ```
 
-It prints one `PASS` line per checked relationship and exits 1 on any drift. It
-is composed into the release preflight (`tools/release/release-preflight.ts`),
-not into a CI workflow: adding a CI step would change the qualification gate
-counts that the release documentation pins, and the toolchain contract is only
-meaningful if it is checked before a qualification run anyway. If the Lead wants
-it in the PR layer, that is a workflow-contract change owned by the CI lane.
-
-## Status in this batch (honest limitation)
-
-Docker is not installed on the qualification host used for alpha15
-(`which docker` → not found), so the image was **not built** here. The recipe is
-verified statically: the pin verifier passes locally, and the Dockerfile's
-build-time assertions fail closed if a base image or the pnpm install drifts.
-Building the image is a release-preflight step for the next machine that has a
-container runtime; the `pnpm install --frozen-lockfile` + gate sequence above is
-the exact content of that run.
+The release preflight uses this check and fails if the pins disagree.

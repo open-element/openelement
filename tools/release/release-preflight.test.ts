@@ -16,14 +16,21 @@ const SHA = 'ef5da43e45d887b214841a99c26d3f8d2dac358b';
 
 const input: PlanInput = {
   sha: SHA,
-  version: '1.0.0-alpha.15',
-  tag: 'v1.0.0-alpha.15',
+  version: '1.0.0-alpha.16',
+  tag: 'v1.0.0-alpha.16',
   pullRequest: 1611,
   repository: 'SisyphusZheng/openelement',
   codeqlRepository: 'open-element/openelement',
-  releaseTag: 'element-v1.0.0-alpha.15',
+  releaseTag: 'element-v1.0.0-alpha.16',
   archivePath: '.artifacts/release-evidence/alpha15-ab-jfb-evidence.tar.zst',
   evidencePath: '',
+};
+
+const historical = {
+  ...input,
+  version: '1.0.0-alpha.15',
+  tag: 'v1.0.0-alpha.15',
+  releaseTag: 'element-v1.0.0-alpha.15',
 };
 
 test('release-preflight: the plan composes every gate entry point by script name', () => {
@@ -58,23 +65,35 @@ test('release-preflight: the plan binds the evidence to the exact SHA', () => {
 test('release-preflight: every published-state change is an owner-gated step', () => {
   const plan = buildReleasePlan(input);
   const destructive = plan.filter((step) => step.destructive).map((step) => step.id);
-  expect(destructive).toEqual([
-    'handoff-prerelease',
-    'publish',
-    'release-asset',
-    'dist-tag-repoint',
-  ]);
+  expect(destructive).toEqual(['publish', 'dist-tag-repoint']);
   for (const step of plan.filter((item) => item.destructive)) {
     expect(step.kind).toEqual('owner-gated');
     expect(step.command).not.toBeNull();
   }
 });
 
-test('release-preflight: the read-backs re-verify the published archive bytes', () => {
+test('release-preflight: Alpha 15 is an explicit read-only historical audit', () => {
+  const plan = buildReleasePlan(historical);
+  expect(plan.map((step) => step.id)).toEqual(['toolchain-pins', 'evidence-archive']);
+  expect(plan.find((step) => step.id === 'evidence-archive')?.command).toContain(
+    'verify-evidence-archive.ts',
+  );
+  expect(plan.every((step) => !step.destructive)).toEqual(true);
+});
+
+test('release-preflight: current releases keep qualification and read back the package tag', async () => {
   const plan = buildReleasePlan(input);
-  const readback = plan.find((step) => step.id === 'readback-asset')!;
-  expect(readback.command).toContain('gh release download');
-  expect(readback.command).toContain('verify-evidence-archive.ts');
+  expect(plan.map((step) => step.id)).not.toContain('evidence-archive');
+  expect(plan.find((step) => step.id === 'evidence-bind')?.command).toContain(
+    '--require-main-push',
+  );
+  expect(plan.find((step) => step.id === 'readback-release')?.command).toContain(
+    'element-v1.0.0-alpha.16',
+  );
+  const checks = await runLocalChecks(input, () =>
+    Promise.resolve({ code: 0, stdout: 'ok', stderr: '' }),
+  );
+  expect(checks.map((check) => check.id)).toEqual(['toolchain-pins']);
 });
 
 test('release-preflight: a dry run refuses nothing and never authorizes an action', () => {
@@ -97,8 +116,8 @@ test('release-preflight: execute mode refuses every destructive step without aut
     { authorized: false, confirmedSha: null, approved: false },
     true,
   );
-  expect(assessment.refused).toHaveLength(4);
-  expect(assessment.refused.join('\n')).toContain('handoff-prerelease: destructive step refused');
+  expect(assessment.refused).toHaveLength(2);
+  expect(assessment.refused.join('\n')).toContain('publish: destructive step refused');
 });
 
 test('release-preflight: execute mode refuses a mismatched confirm-sha', () => {
@@ -133,12 +152,7 @@ test('release-preflight: execute mode authorizes exactly the owner steps when ev
     true,
   );
   expect(assessment.refused).toEqual([]);
-  expect(assessment.authorizedForOwner).toEqual([
-    'handoff-prerelease',
-    'publish',
-    'release-asset',
-    'dist-tag-repoint',
-  ]);
+  expect(assessment.authorizedForOwner).toEqual(['publish', 'dist-tag-repoint']);
 });
 
 test('release-preflight: an unqualified recorded evidence document fails the preflight', () => {
@@ -207,7 +221,7 @@ test('release-preflight: a missing gate script is a hard refusal, not a skipped 
 
 test('release-preflight: runLocalChecks runs only the read-only verifiers', async () => {
   const calls: string[][] = [];
-  const checks = await runLocalChecks(input, (command, args) => {
+  const checks = await runLocalChecks(historical, (command, args) => {
     calls.push([command, ...args]);
     return Promise.resolve({ code: 0, stdout: 'ok', stderr: '' });
   });

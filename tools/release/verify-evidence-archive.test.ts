@@ -18,6 +18,7 @@ import {
   recomputeJfb,
   unsafeMemberName,
   validateArchiveMembers,
+  verifyAlpha15EvidenceArchive,
   verifyEvidenceArchive,
   type ArchiveMember,
   type JfbRawResult,
@@ -134,19 +135,26 @@ test('verify-evidence: the README claim parser reads the pinned digest, bytes an
 });
 
 test('verify-evidence: a missing archive and no URL fails with the fetch path, never a pass', async () => {
-  const report = await verifyEvidenceArchive({
-    archivePath: join(ROOT, '.artifacts/release-evidence/does-not-exist.tar.zst'),
-    url: null,
-    expectedSha256: null,
-    readmePath: join(ROOT, 'docs/release/evidence/alpha15/README.md'),
-    reproducerDir: join(ROOT, 'docs/release/evidence/alpha15'),
-    abEvaluationPath: join(ROOT, 'docs/release/alpha15-ab-evaluation.md'),
-    jfbEvaluationPath: join(ROOT, 'docs/release/alpha15-jfb-runtime-evaluation.md'),
-    workDir: null,
-    keepWorkDir: false,
-  }).catch((error: unknown) => error as Error);
-  expect(report).toBeInstanceOf(Error);
-  expect((report as Error).message).toMatch(/no archive at/);
+  const root = await mkdtemp(join(tmpdir(), 'oe-evidence-fixture-'));
+  try {
+    const readmePath = join(root, 'README.md');
+    await writeFile(readmePath, 'Synthetic receipt.');
+    await expect(
+      verifyEvidenceArchive({
+        archivePath: join(root, 'does-not-exist.tar.zst'),
+        url: null,
+        expectedSha256: null,
+        readmePath,
+        reproducerDir: root,
+        abEvaluationPath: join(root, 'ab.md'),
+        jfbEvaluationPath: join(root, 'jfb.md'),
+        workDir: null,
+        keepWorkDir: false,
+      }),
+    ).rejects.toThrow(/no archive at/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('verify-evidence: argument parsing accepts the documented flags', () => {
@@ -162,14 +170,10 @@ test('verify-evidence: argument parsing accepts the documented flags', () => {
 test.skipIf(!existsSync(ARCHIVE))(
   'verify-evidence: the staged archive passes every check end to end',
   async () => {
-    const report = await verifyEvidenceArchive({
+    const report = await verifyAlpha15EvidenceArchive(ROOT, {
       archivePath: ARCHIVE,
       url: null,
       expectedSha256: null,
-      readmePath: join(ROOT, 'docs/release/evidence/alpha15/README.md'),
-      reproducerDir: join(ROOT, 'docs/release/evidence/alpha15'),
-      abEvaluationPath: join(ROOT, 'docs/release/alpha15-ab-evaluation.md'),
-      jfbEvaluationPath: join(ROOT, 'docs/release/alpha15-jfb-runtime-evaluation.md'),
       workDir: null,
       keepWorkDir: false,
     });

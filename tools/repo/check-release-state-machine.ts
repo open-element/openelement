@@ -21,7 +21,13 @@ import { compare } from 'semver';
 import { readdir, readFile } from 'node:fs/promises';
 import process from 'node:process';
 import { emitSummary } from './checker-io.ts';
-import { wwwReleaseAnchorFailures } from './www-release-anchor.ts';
+import {
+  readCommonPublishedVersion,
+  readDisplayProjection,
+  RELEASE_LINE_GENERATED,
+  VERSION_SOURCE_WWW,
+  wwwReleaseAnchorFailures,
+} from './www-release-anchor.ts';
 import { spawnCommand } from './node-command.ts';
 
 export type RegistryTags = Record<string, string>;
@@ -78,7 +84,7 @@ const ADMITTED_ACTIVE_TARGET = 'v1.0.0-alpha.16';
 export function validateReleaseState(
   state: ReleaseStateV4,
   packageVersions: Map<string, string>,
-  siteVersionSource: string,
+  releaseLineSource: string,
 ): string[] {
   const failures: string[] = [];
   if (state.schemaVersion !== 4) failures.push('unsupported release-state schema');
@@ -141,45 +147,41 @@ export function validateReleaseState(
     failures.push(`latestPrerelease.state must be ${expectedState}`);
   }
 
-  // Site copy must use the per-package model, never a fabricated shared line.
-  const commonMatch = /COMMON_PUBLISHED_VERSION:\s*string\s*\|\s*null\s*=\s*(null|'([^']+)')/.exec(
-    siteVersionSource,
-  );
-  if (!commonMatch) {
-    failures.push('www must declare COMMON_PUBLISHED_VERSION as null or a version string');
-  } else if (state.commonCompleteVersion === null) {
-    if (commonMatch[1] !== 'null') {
-      failures.push('www COMMON_PUBLISHED_VERSION must be null (no common stable version)');
+  // Compare what the site consumes with the registry model.
+  try {
+    const common = readCommonPublishedVersion(releaseLineSource);
+    if (common !== state.commonCompleteVersion) {
+      failures.push(`www COMMON_PUBLISHED_VERSION must be ${state.commonCompleteVersion}`);
     }
-  } else if (commonMatch[2] !== state.commonCompleteVersion) {
-    failures.push(`www COMMON_PUBLISHED_VERSION must be ${state.commonCompleteVersion}`);
-  }
-  const unpublished = state.packages
-    .filter((entry) => entry.status === 'unpublished')
-    .map((entry) => entry.name)
-    .sort();
-  const released = state.packages.filter((entry) => entry.status === 'published');
-  for (const entry of released) {
-    if (!siteVersionSource.includes(`'${entry.name}': 'v${entry.registry!.latest}'`)) {
-      failures.push(`www PUBLISHED_LATEST must record ${entry.name} v${entry.registry!.latest}`);
+    const { publishedLatest, unreleased } = readDisplayProjection(releaseLineSource);
+    const publishedEntries = state.packages.filter((entry) => entry.status === 'published');
+    if (
+      Object.keys(publishedLatest).sort().join(',') !==
+      publishedEntries
+        .map((entry) => entry.name)
+        .sort()
+        .join(',')
+    ) {
+      failures.push('www PUBLISHED_LATEST must list exactly the published packages');
     }
-  }
-  // The unpublished set must be explicit on the site: a package the registry
-  // does not know yet must never appear with a published latest (or silently
-  // disappear from the per-package model).
-  const unreleasedMatch = /UNRELEASED_PACKAGES[^=]*=\s*[^\[\n]*\[([^\]]*)\]/.exec(
-    siteVersionSource,
-  );
-  const listedUnreleased = (unreleasedMatch?.[1] ?? '')
-    .split(',')
-    .map((token) => /'([^']+)'/.exec(token)?.[1] ?? '')
-    .filter((token) => token !== '')
-    .sort();
-  if (listedUnreleased.join(',') !== unpublished.join(',')) {
-    failures.push(
-      `www UNRELEASED_PACKAGES must list exactly the unpublished packages: ` +
-        `${unpublished.join(', ') || 'none'}`,
-    );
+    for (const entry of publishedEntries) {
+      const version = `v${entry.registry?.latest}`;
+      if (publishedLatest[entry.name] !== version) {
+        failures.push(`www PUBLISHED_LATEST must record ${entry.name} ${version}`);
+      }
+    }
+    const unpublished = state.packages
+      .filter((entry) => entry.status === 'unpublished')
+      .map((entry) => entry.name)
+      .sort();
+    if ([...unreleased].sort().join(',') !== unpublished.join(',')) {
+      failures.push(
+        `www UNRELEASED_PACKAGES must list exactly the unpublished packages: ` +
+          `${unpublished.join(', ') || 'none'}`,
+      );
+    }
+  } catch (error) {
+    failures.push(`www release-line projection is invalid: ${String(error)}`);
   }
   return failures;
 }
@@ -307,12 +309,10 @@ async function main(): Promise<void> {
   const offline = process.argv.slice(2).includes('--offline');
   const state = await readState();
   const versions = await workspaceVersions();
-  const siteVersionSource = await readFile('www/app/data/version.ts', 'utf8');
-  const failures = validateReleaseState(state, versions, siteVersionSource);
-  // The www source-line anchor audit rides the same offline gate: version.ts
-  // must stay derived from the generated release-line module, and that module
-  // must mirror release-state.json (see www-release-anchor.ts).
-  const releaseLineSource = await readFile('www/app/data/_generated-release-line.ts', 'utf8');
+  const siteVersionSource = await readFile(VERSION_SOURCE_WWW, 'utf8');
+  const releaseLineSource = await readFile(RELEASE_LINE_GENERATED, 'utf8');
+  const failures = validateReleaseState(state, versions, releaseLineSource);
+  // The current source version must also stay derived from the same module.
   failures.push(...wwwReleaseAnchorFailures(state, siteVersionSource, releaseLineSource));
 
   if (!offline) {

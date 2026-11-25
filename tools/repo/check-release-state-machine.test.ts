@@ -44,14 +44,9 @@ const PINNED_STATE: ReleaseStateV4 = {
 };
 
 const SITE_SOURCE = `
-export const PUBLISHED_LATEST: Readonly<Record<string, string>> = {
-  '@openelement/element': 'v0.43.3',
-  '@openelement/create': 'v0.43.3',
-  '@openelement/ui': 'v0.43.3',
-  '@openelement/router': 'v0.41.0-alpha.6',
-};
+export const PUBLISHED_LATEST = {"@openelement/element":"v0.43.3","@openelement/create":"v0.43.3","@openelement/ui":"v0.43.3","@openelement/router":"v0.41.0-alpha.6"};
 export const COMMON_PUBLISHED_VERSION: string | null = null;
-export const UNRELEASED_PACKAGES: readonly string[] = ['@openelement/protocol'];
+export const UNRELEASED_PACKAGES = ["@openelement/protocol"];
 `;
 
 const VERSIONS = new Map([
@@ -96,8 +91,8 @@ test('release state: an unpublished package with a fabricated registry is reject
 
 test('release state: the site unpublished list must match the tracked set', () => {
   const drifted = SITE_SOURCE.replace(
-    "['@openelement/protocol']",
-    "['@openelement/protocol', '@openelement/compiler']",
+    '["@openelement/protocol"]',
+    '["@openelement/protocol","@openelement/compiler"]',
   );
   const failures = validateReleaseState(PINNED_STATE, VERSIONS, drifted);
   expect(
@@ -114,7 +109,7 @@ test('release state: the legacy shared-version schema is rejected', () => {
 test('release state: Site copy must not reintroduce a common version', () => {
   const reintroduced = SITE_SOURCE.replace(
     'COMMON_PUBLISHED_VERSION: string | null = null',
-    "COMMON_PUBLISHED_VERSION: string | null = 'v0.43.3'",
+    'COMMON_PUBLISHED_VERSION: string | null = "0.43.3"',
   );
   const failures = validateReleaseState(PINNED_STATE, VERSIONS, reintroduced);
   expect(failures.some((f) => f.includes('COMMON_PUBLISHED_VERSION must be null'))).toEqual(true);
@@ -122,8 +117,8 @@ test('release state: Site copy must not reintroduce a common version', () => {
 
 test('release state: per-package Site latest must match the tracked dist-tags', () => {
   const drifted = SITE_SOURCE.replace(
-    "'@openelement/router': 'v0.41.0-alpha.6'",
-    "'@openelement/router': 'v0.43.3'",
+    '"@openelement/router":"v0.41.0-alpha.6"',
+    '"@openelement/router":"v0.43.3"',
   );
   const failures = validateReleaseState(PINNED_STATE, VERSIONS, drifted);
   expect(

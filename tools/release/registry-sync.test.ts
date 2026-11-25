@@ -24,11 +24,10 @@ import {
   REGISTRY_METHOD,
   RELEASE_STATE_PATH,
   calendarDateStamp,
-  projectWwwVersionSource,
   registryLineTag,
   rewriteRegistryBlock,
   syncRegistryState,
-  WWW_VERSION_PATH,
+  SITE_CONTENT_GENERATOR,
 } from './registry-sync.ts';
 import {
   displayDriftFailures,
@@ -201,34 +200,7 @@ test('registry line tag follows the publish tag rule (1.0 rides latest, 0.x ride
   expect(registryLineTag('1.0.0')).toEqual('latest');
 });
 
-test('the www projection rewrites exactly the two registry constants', () => {
-  const document = stateDocument();
-  const answers: Record<string, RegistryEvidence> = {};
-  for (const entry of document.packages) answers[entry.name] = evidence(VERSION);
-  const synced = rewriteRegistryBlock(document, answers, '2026-10-09');
-  const source = [
-    '// header comment stays',
-    'export const PUBLISHED_LATEST: Readonly<Record<string, string>> = {',
-    `  '@openelement/element': 'v${PREVIOUS}',`,
-    '};',
-    '',
-    'export const UNRELEASED_PACKAGES: readonly string[] = [];',
-    '// trailing comment stays',
-    '',
-  ].join('\n');
-  const projected = projectWwwVersionSource(source, synced);
-  expect(projected).toContain(`  '@openelement/router': 'v${VERSION}',`);
-  expect(projected).not.toContain(PREVIOUS);
-  expect(projected).toContain('// header comment stays');
-  expect(projected).toContain('// trailing comment stays');
-  expect(projected).toContain('export const UNRELEASED_PACKAGES: readonly string[] = [];');
-  // Fail closed when the declarations are missing rather than writing garbage.
-  expect(() => projectWwwVersionSource('export const X = 1;', synced)).toThrow(
-    /PUBLISHED_LATEST declaration not found/,
-  );
-});
-
-test('the sync writes the three files from forged answers, end to end', async () => {
+test('the sync writes registry readback before running the site generator', async () => {
   const root = await mkdtemp(join(tmpdir(), 'registry-sync-'));
   try {
     await mkdir(join(root, 'docs/release'), { recursive: true });
@@ -237,16 +209,9 @@ test('the sync writes the three files from forged answers, end to end', async ()
       join(root, RELEASE_STATE_PATH),
       `${JSON.stringify(stateDocument(), null, 2)}\n`,
     );
-    await writeFile(
-      join(root, WWW_VERSION_PATH),
-      [
-        'export const PUBLISHED_LATEST: Readonly<Record<string, string>> = {',
-        `  '@openelement/element': 'v${PREVIOUS}',`,
-        '};',
-        'export const UNRELEASED_PACKAGES: readonly string[] = [];',
-        '',
-      ].join('\n'),
-    );
+    const versionPath = join(root, 'www/app/data/version.ts');
+    const versionSource = 'export { PUBLISHED_LATEST } from "./_generated-release-line.ts";\n';
+    await writeFile(versionPath, versionSource);
     const query: DriftQuery = (name) =>
       Promise.resolve(name === '@openelement/router' ? evidence(PREVIOUS) : evidence(VERSION));
     let regenerated: string | undefined;
@@ -254,18 +219,18 @@ test('the sync writes the three files from forged answers, end to end', async ()
       root,
       query,
       now: () => new Date('2026-10-09T00:00:00Z'),
-      regenerate: false,
-      runGenerator: (script) => {
+      runGenerator: async (script) => {
+        const state = JSON.parse(
+          await readFile(join(root, RELEASE_STATE_PATH), 'utf8'),
+        ) as ReleaseStateDocument;
+        expect(state.latestPrerelease.version).toEqual(VERSION);
         regenerated = script;
-        return Promise.resolve();
       },
     });
     expect(result.verifiedAt).toEqual('2026-10-09');
     expect(result.latestPrerelease).toEqual(VERSION);
     expect(result.latest['@openelement/element']).toEqual(VERSION);
-    // regenerate: false is what the test passes, so the generator never runs;
-    // the production default runs it (see the module doc).
-    expect(regenerated).toBeUndefined();
+    expect(regenerated).toEqual(SITE_CONTENT_GENERATOR);
 
     const written = JSON.parse(await readFile(join(root, RELEASE_STATE_PATH), 'utf8')) as {
       packages: Array<{ name: string; registry?: Record<string, string> }>;
@@ -278,9 +243,7 @@ test('the sync writes the three files from forged answers, end to end', async ()
       written.packages.find((entry) => entry.name === '@openelement/router')?.registry,
     ).toEqual({ latest: PREVIOUS });
 
-    const www = await readFile(join(root, WWW_VERSION_PATH), 'utf8');
-    expect(www).toContain(`  '@openelement/element': 'v${VERSION}',`);
-    expect(www).toContain(`  '@openelement/router': 'v${PREVIOUS}',`);
+    expect(await readFile(versionPath, 'utf8')).toEqual(versionSource);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -343,10 +306,8 @@ test('an offline run is a loud skip, never a pass, and a real failure still thro
   const document = stateDocument();
   const display = readDisplayProjection(
     [
-      'export const PUBLISHED_LATEST: Readonly<Record<string, string>> = {',
-      `  '@openelement/element': 'v${VERSION}',`,
-      '};',
-      'export const UNRELEASED_PACKAGES: readonly string[] = [];',
+      `export const PUBLISHED_LATEST = {"@openelement/element":"v${VERSION}"};`,
+      'export const UNRELEASED_PACKAGES = [];',
       '',
     ].join('\n'),
   );
@@ -376,10 +337,8 @@ test('a mid-run network failure never discards drift already proven (P2)', async
   const document = stateDocument();
   const display = readDisplayProjection(
     [
-      'export const PUBLISHED_LATEST: Readonly<Record<string, string>> = {',
-      `  '@openelement/element': 'v1.0.0-alpha.11',`, // stale: the registry serves alpha.12
-      '};',
-      'export const UNRELEASED_PACKAGES: readonly string[] = [];',
+      'export const PUBLISHED_LATEST = {"@openelement/element":"v1.0.0-alpha.11"};',
+      'export const UNRELEASED_PACKAGES = [];',
       '',
     ].join('\n'),
   );
@@ -400,10 +359,8 @@ test('a clean run with an unreachable package is a skip, and counts what it veri
   const document = stateDocument();
   const display = readDisplayProjection(
     [
-      'export const PUBLISHED_LATEST: Readonly<Record<string, string>> = {',
-      `  '@openelement/element': 'v${VERSION}',`,
-      '};',
-      'export const UNRELEASED_PACKAGES: readonly string[] = [];',
+      `export const PUBLISHED_LATEST = {"@openelement/element":"v${VERSION}"};`,
+      'export const UNRELEASED_PACKAGES = [];',
       '',
     ].join('\n'),
   );
@@ -426,10 +383,8 @@ test('the display projection parser fails closed on a missing constant', () => {
   );
   const parsed = readDisplayProjection(
     [
-      'export const PUBLISHED_LATEST: Readonly<Record<string, string>> = {',
-      `  '@openelement/element': 'v${VERSION}',`,
-      '};',
-      "export const UNRELEASED_PACKAGES: readonly string[] = ['@openelement/protocol'];",
+      `export const PUBLISHED_LATEST = {"@openelement/element":"v${VERSION}"};`,
+      'export const UNRELEASED_PACKAGES = ["@openelement/protocol"];',
       '',
     ].join('\n'),
   );

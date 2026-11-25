@@ -2,7 +2,7 @@
 
 - Status: ACCEPTED (implemented: `packages/router/src/vite/internal/ssg/island-scheduler.ts`)
 - Decided: 2026-10-18 (alpha15 T8 lane; the decision record with the owner's
-  G1 approval is `docs/release/late-host-island-activation-design.md`)
+  G1 approval is in [the decision record][design-record])
 - Preserves: ADR-0163 (P8 — this ADR registers the one new public seam and
   names its single writer). Does not modify ADR-0143/ADR-0148 (Part Program
   compilation) or ADR-0158/ADR-0159 (streaming claims): this is a scheduler
@@ -27,7 +27,7 @@ any application whose third-party component creates an openElement island host
 inside its own open shadow root is affected, and nothing about the fix may be
 specific to one component library.
 
-The design record (`docs/release/late-host-island-activation-design.md`) carries
+[The decision record][design-record] carries
 the alternatives (unbounded MutationObserver, per-library adapters,
 fixture-only workarounds), the G1 decision points, and the confirmed deviations
 D-1…D-4. This ADR records the decision itself and the governance facts a future
@@ -174,7 +174,7 @@ trusted. The measurements taken for this decision (2026-10-19):
   roots, light-DOM late appends into Shoelace/Material/Ionic; closed-root tag
   named by the event; unused-tag zero-fetch control with a positive control).
 - Decision record and approved deviations D-1…D-4:
-  `docs/release/late-host-island-activation-design.md`.
+  [the decision record][design-record].
 - Retired known red: KR-17 (internal working ledger, not published).
 
 ## Amendment (2026-10-19, PR #1611 review FR-02/FR-03)
@@ -241,5 +241,7 @@ activate a still-unconsumed factory.
   The file now runs 58 tests (was 50); T-18's original three-window cap case is
   unchanged.
 - Matching design-record amendment:
-  `docs/release/late-host-island-activation-design.md` ("Implementation
+  [design addendum][design-record] ("Implementation
   deviations" D-1 note and the 2026-10-19 addendum).
+
+[design-record]: https://github.com/open-element/openelement/blob/e655a0bab6f1396f4ed1a10208794e51e592b0ce/docs/release/late-host-island-activation-design.md

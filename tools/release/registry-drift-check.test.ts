@@ -183,13 +183,12 @@ test('registry drift: E404 for a tracked published package is a failure, not a s
 });
 
 test('registry drift: a missing display constant fails closed instead of an empty pass', () => {
-  expect(() => readDisplayProjection('export const PUBLISHED_LATEST = {};')).toThrow(
+  expect(() => readDisplayProjection('export const UNRELEASED_PACKAGES = [];')).toThrow(
     'PUBLISHED_LATEST declaration not found',
   );
   expect(() =>
     readDisplayProjection(
-      'export const PUBLISHED_LATEST: Readonly<Record<string, string>> = {\n};\n' +
-        'export const UNRELEASED_PACKAGES: readonly string[] = [];',
+      'export const PUBLISHED_LATEST = {};\n' + 'export const UNRELEASED_PACKAGES = [];',
     ),
   ).toThrow('carries no entries');
 });

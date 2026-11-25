@@ -5,7 +5,7 @@ release tarballs through the release toolchain (vp pack), runs the packed
 `@openelement/create` CLI under Node to generate a fresh starter, rewires its
 `@openelement/*` dependencies to those current-SHA tarballs, installs the
 starter's own dependency surface with pnpm, and builds it; the Playwright
-suites then drive that real build (B5/ADR-0161: Node/pnpm consumer surface).
+suites then drive that real build ([Node and pnpm consumer surface](../../../docs/adr/ADR-0161-node-pnpm-consumer-surface.md)).
 
 The scaffold is created **outside the repository** in a per-run `mkdtemp`
 directory (`paths.ts`, `STARTER_SMOKE_WORK_DIR` overrides the root verbatim).
@@ -34,9 +34,7 @@ lifecycle scripts against that same tree —
 `typecheck` → `lint` → `test` → `build` — then boots `oe start` and probes
 `/`, `/about` and `/api/ping` over the wire. It fails closed on any nonzero
 script or failed probe, and it never re-packs or re-installs. CI runs it as a
-named step inside the existing base-layer `pack` job (see
-`docs/release/evidence/alpha15/tpl03-starter-quality-gate.md` for why it is a
-step and not a new qualification job).
+named step in the base-layer `pack` job using that job’s packed scaffold.
 
 Guarded regression classes: unstyled page (missing `:root` baseline), dead
 island, jammed nav, clipped assets, duplicate H1 (#934); dev-mode island client

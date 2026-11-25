@@ -34,11 +34,16 @@
  */
 
 import { createHash } from 'node:crypto';
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { mkdir, mkdtemp, open, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import process from 'node:process';
+import { promisify } from 'node:util';
+
+const ALPHA15_EVIDENCE_COMMIT = 'e655a0bab6f1396f4ed1a10208794e51e592b0ce';
+const ALPHA15_EVIDENCE_DIR = 'docs/release/evidence/alpha15';
+const readGit = promisify(execFile);
 
 /** CPU/JS benchmarks in the archived aggregate.py contract. */
 export const CPU_BENCHMARKS = [
@@ -931,6 +936,9 @@ numbers recomputed from the raw per-invocation JSON against both
 jfb/metrics.json and the JFB document. Exits 1 on any failed check, on a
 missing archive, or on a failed fetch — never a silent pass.
 
+The original reports and reproducers come from the fixed Git commit
+${ALPHA15_EVIDENCE_COMMIT}. A shallow clone must fetch that history first.
+
 The archive is untrusted input: the transfer is capped (declared
 Content-Length and streamed bytes) and every member is admitted before
 extraction — absolute paths, ".." escapes, symlinks, hardlinks and device
@@ -1025,6 +1033,49 @@ function renderReport(report: VerifyReport): string {
   return `${lines.join('\n')}\n`;
 }
 
+/** Stage only the immutable files required to recompute the historical receipt. */
+export async function verifyAlpha15EvidenceArchive(
+  root: string,
+  options: Omit<
+    VerifyOptions,
+    'readmePath' | 'reproducerDir' | 'abEvaluationPath' | 'jfbEvaluationPath'
+  >,
+): Promise<VerifyReport> {
+  const source = await mkdtemp(join(tmpdir(), 'oe-alpha15-evidence-source-'));
+  async function stage(path: string): Promise<string> {
+    const target = join(source, basename(path));
+    const { stdout } = await readGit(
+      'git',
+      ['--no-replace-objects', 'show', `${ALPHA15_EVIDENCE_COMMIT}:${path}`],
+      { cwd: root, encoding: 'buffer' },
+    ).catch((error: unknown) => {
+      throw new Error(
+        `Cannot read ${path} at ${ALPHA15_EVIDENCE_COMMIT}. Obtain that commit in this Git checkout before verifying Alpha 15 evidence.`,
+        { cause: error },
+      );
+    });
+    await writeFile(target, stdout);
+    return target;
+  }
+
+  try {
+    const readmePath = await stage(`${ALPHA15_EVIDENCE_DIR}/README.md`);
+    const abEvaluationPath = await stage('docs/release/alpha15-ab-evaluation.md');
+    const jfbEvaluationPath = await stage('docs/release/alpha15-jfb-runtime-evaluation.md');
+    await stage(`${ALPHA15_EVIDENCE_DIR}/report-repro-final.js`);
+    await stage(`${ALPHA15_EVIDENCE_DIR}/three-arm-repro.js`);
+    return await verifyEvidenceArchive({
+      ...options,
+      readmePath,
+      reproducerDir: source,
+      abEvaluationPath,
+      jfbEvaluationPath,
+    });
+  } finally {
+    await rm(source, { recursive: true, force: true });
+  }
+}
+
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
@@ -1032,16 +1083,11 @@ async function main(): Promise<void> {
     return;
   }
   const root = process.cwd();
-  const evidenceDir = join(root, 'docs/release/evidence/alpha15');
-  const report = await verifyEvidenceArchive({
+  const report = await verifyAlpha15EvidenceArchive(root, {
     archivePath:
       options.archive ?? join(root, '.artifacts/release-evidence/alpha15-ab-jfb-evidence.tar.zst'),
     url: options.url,
     expectedSha256: options.sha256,
-    readmePath: join(evidenceDir, 'README.md'),
-    reproducerDir: evidenceDir,
-    abEvaluationPath: join(root, 'docs/release/alpha15-ab-evaluation.md'),
-    jfbEvaluationPath: join(root, 'docs/release/alpha15-jfb-runtime-evaluation.md'),
     workDir: options.workdir,
     keepWorkDir: options.keep || options.workdir !== null,
   });
