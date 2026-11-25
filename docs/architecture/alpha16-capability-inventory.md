@@ -19,18 +19,11 @@ migration note and the owner sign-off — and the signature is the owner's to gi
 Until it is given, P5 is not claimable and Alpha16 release qualification is not
 openable. Nothing below should be read as a release claim.
 
-**Re-record note (2026-11-20).** The final-SHA matrix and the verdict rows are
-re-recorded in the 2026-11-20 remediation (see the `p1-applicability-record`
-re-record and the `Final-SHA matrix (2026-11-20)` section below); this file
-carries the mechanisms and the capability states, and the verdict paragraph
-below carries the 2026-11-20 corrections to the 2026-11-19 reading. The
-2026-11-19 revision's header anchor `Verdict at c9dcf660f` and the slice-index
-anchors `e8ea72b95`/`d135576d0` are history, kept with their recorded values:
-they are not on the delivery line and are not the delivery-line record. The
-measured re-record is at
-`f514c1290539993f9bdbeca9b02b6f99ca0a4dff` (the later commit
-`434a624d39496eed70d29df4c1bba3fef17cca56` changes only one JSON annotation and
-one test comment; it neither changes behavior nor is re-measured).
+**Historical measurements.** The 2026-11-20 remediation preserved the
+2026-11-19 verdict at `c9dcf660f` and the slice measurements at
+`e8ea72b95` and `d135576d0`. The
+[2026-11-20 matrix](#final-sha-matrix-2026-11-20) records the scope measured at
+`f514c1290539993f9bdbeca9b02b6f99ca0a4dff`.
 
 **Evidence rule.** Every row cites the mechanism by file and the acceptance by
 test name, and the numbers are per-SHA. A capability is `MIGRATED` when the
@@ -42,23 +35,19 @@ does differently or refuses.
 have a full replacement: lifecycle (root scope, nested hostless hooks at any
 depth after the 2026-11-21 cross-ledger transaction, and the connection-scope
 `env` helper), context, refs, the per-component property/attribute channel and
-the client-only style channel. The error boundary is **PARTIAL BY DESIGN**: the
-capture points (connect/claim, plus update/refresh and event dispatch sharing the
-existing `guardUpdate` sink) and the §19.2 SSR fallback conditions 1–4 are all
-delivered; only a NEW identity for the fallback bytes is out of scope, so the
-row is not flipped. No item is deferred to a later milestone any more — the
-Alpha16 closeout absorbed the former Alpha17 boundary (owner direction
-2026-11-21).
+the client-only style channel. The error boundary is **PARTIAL BY DESIGN**.
+The owner confirmed Alpha16's
+existing-identity SSR fallback, reconnect retry after rollback and recovery on
+subsequent updates or events on 2026-11-25. The
+[ADR-0182 decision](../adr/ADR-0182-function-component-capability-api.md#amendment-2026-11-25-16b-eb-fallback-and-recovery)
+defines the policy and exclusions. This decision does not sign the P5 matrix.
 Form participation is **MIGRATED** (re-adjudicated 2026-11-20 / plan §19.3: the
 framework mirrors the one constraint derivable from a declared property and hands
 the author the complete `ElementInternals` seam for the rest, so constraint parity
 is authored policy rather than framework debt). `useHost` is **DELIVERED**
 (`useHost()` in `compile-lifecycle.ts`, exported from `lifecycle.ts` /
 `public-surface.ts` / `public-runtime.ts`; ADR-0182 carries its implementation
-amendment). Everything listed under "Still owed" is genuinely unfinished, not
-deferred paperwork. The final-SHA
-matrix and the verdict rows are re-recorded in the 2026-11-20 remediation (see
-the `p1-applicability-record` re-record); this file asserts no new numbers.
+amendment).
 
 ## Slice index (§13.2 obligation → row)
 
@@ -69,7 +58,7 @@ reader holding the plan should not have to infer the correspondence.
 | Slice | Capability | Rows in this document | State |
 | --- | --- | --- | --- |
 | `16b-LC` | Class lifecycle (CAP-03) | author lifecycle: connect / disconnect / property change | **MIGRATED (2026-11-21)** — root setup/hooks, nested hostless hooks at ANY depth (the cross-ledger transaction closed the depth ≥ 2 boundary), and the connection-scope `env` helper are delivered. What stays refused is PLACEMENT, not depth: a recipe/list body and a component no retained body references have no lifecycle owner (`OEIR_LEAF_INVALID_ARTIFACT` / `OEC9041`), which is the honest boundary of a compiled setup |
-| `16b-EB` | Error boundary (CAP-05) | error boundary | **PARTIAL (by design, not deferred)** — the two capture points (connect/claim; update/refresh + event dispatch sharing one `guardUpdate` sink) AND the §19.2 SSR fallback (conditions 1–4) are delivered; the row is not flipped to MIGRATED only because a NEW identity for the fallback bytes is explicitly out of scope (§19.2 condition 2 says "under the unchanged claim and identity rules") |
+| `16b-EB` | Error boundary (CAP-05) | error boundary | **PARTIAL BY DESIGN** — the two client capture points and the §19.2 fallback use existing identity. Reconnect retries a failed connect after rollback, and the update/event path remains live. |
 | `16b-CTX` | Context (CAP-09) | context provider / consumer | **MIGRATED** (2026-11-19 anchor `e8ea72b95`, kept as history — off the delivery line; delivery-line row in the final-SHA matrix below) |
 | `16b-REF` | Refs (CAP-11) | node refs | **MIGRATED** (2026-11-19 anchor `d135576d0`, kept as history — off the delivery line; delivery-line row in the final-SHA matrix below) |
 | `16b-MN` | Migration note (CAP-26) | this document plus `16b-migration-note.md` | **TRACKED** — both are tracked and indexed; the owner sign-off is the remaining §13.5 item |
@@ -84,9 +73,9 @@ reader holding the plan should not have to infer the correspondence.
 | Property / attribute channel | `@property({ reflect, attribute })` | `properties` row in the sidecar: `{ reflect, attribute, default }` | **MIGRATED** — primitive rows convert through the same `convertFromAttribute`/`coercePropertyValue` leaves |
 | Non-primitive property wire | runtime property assignment on the instance | `data-oe-prop-seed` host attribute carrying JSON (ADR-0182 D-18c), consumed once by `applyGeneratedPropSeed` | **MIGRATED** — `array`/`object` only; `trustedHtml` is excluded because the brand is object identity in a `WeakSet` and any wire transfer would re-forge trust from bytes |
 | Author lifecycle: connect | `connectedCallback()` | `onConnect(env)` intrinsic, erased by the compiler into the claim/mount prologue | **MIGRATED** (runs BEFORE the generated region exists — a handler that scans the rendered subtree must defer one macrotask) |
-| Author lifecycle: disconnect | `disconnectedCallback()` | `onDispose(env)` plus the connection-scope `abort` signal | **MIGRATED** (a disconnect keeps the generated DOM, LC-0, so a teardown that wrote state must restore the declared seed or the next claim fails) |
+| Author lifecycle: disconnect | `disconnectedCallback()` | Cleanup returned by `onConnect(env)` and the connection-scope abort signal. `onDispose(env)` runs when the retained instance is destroyed. | **MIGRATED**. Ordinary disconnect retains generated DOM (LC-0). |
 | Author lifecycle: property change | `attributeChangedCallback` / property setter | `onPropertyChange({ host, signal, states, name, value })` | **MIGRATED** |
-| Error boundary | static `isErrorBoundary` + `catchError()` | `onError(env)` with the shell's capture points (connect/claim; update/refresh and event dispatch share the existing `guardUpdate` sink) plus the §19.2 SSR fallback (conditions 1–4 delivered) | **PARTIAL BY DESIGN** — all four §19.2 conditions hold; the row is not flipped only because a NEW identity for the fallback bytes is out of scope. No handler registered keeps the pre-existing rollback-then-rethrow byte-identically |
+| Error boundary | static `isErrorBoundary` + `catchError()` | `onError(env)` captures connect/claim and refresh/event errors of the generated element. SSR reports a boundary-owned descendant failure through `onNestedFailure` and emits the existing host’s literal bytes. | **PARTIAL BY DESIGN** — ordinary reconnect and subsequent updates/events can recover. Cross-custom-element client capture, async rejections, an author reset API and a separate fallback identity are outside this replacement. |
 | Context provider / consumer | `provideContext(host, token, value)` + subscription | `provideContext(token, () => value)` / `useContext(token)` over the generated owner tree, hostless owners included | **MIGRATED** (`e8ea72b95`) — nested providers shadow, sibling subtrees are isolated, a declared-property commit re-reads the thunk, reconnect republishes from retained intents, and a consumer-reading component IS server-renderable (the scope rides the producer argument list, so per-render isolation is structural) |
 | Node refs | `@query`/manual `querySelector` in `connectedCallback` | `ref(cb?)` declaration intrinsic handed to the existing `ref` JSX channel; `current` survives mount/claim/reconnect | **MIGRATED** (`d135576d0`) — no second attachment mechanism; `current` is deliberately not reactive (a tracked-slot read is refused with `OEC9042`) |
 | Form participation | `static formAssociated` + `ElementInternals` access | sidecar `formAssociated` + the shell's form controller; value/required/disabled with `required → valueMissing`; the author-callable constraint seam (`setValidity`, `setFormValue`, `internals`, `onReset`, `onRestore`) | **MIGRATED** (`fa6e5232d`, re-adjudicated 2026-11-20 / plan §19.3) — the framework mirrors the one constraint derivable from a declared property and hands the author the complete `ElementInternals` seam for every other one, so type/email/pattern parity is authored policy, not framework debt (a shell-side mirror would be a SECOND validation model); non-claim: a `required`-only component gets `valueMissing` free, anything more it writes itself |
@@ -112,7 +101,6 @@ not ports and have no retiring counterpart.
 | Item | Why it is open |
 | --- | --- |
 | `16b-LC` recipe/list placement and pre-DOM timing | **Depth ≥ 2 is DELIVERED (2026-11-21)** — a retained body that retains its own children joins the root attempt's transaction and keeps its record across reconnect (ADR-0181's dated amendment; Chromium rows R8/R10/R11). What is still refused is PLACEMENT: a hook or context intrinsic inside a reusable-JSX/list body, or in a component no retained body references, has no lifecycle owner (`OEIR_LEAF_INVALID_ARTIFACT` / `OEC9041`). Pre-DOM timing stays a documented semantic (a connect handler runs before the generated region exists). |
-| `16b-EB` SSR fallback — conditions 2–4 | **Condition 1 IS delivered** (2026-11-20): a failing descendant producer now renders the enclosing boundary's fallback bytes, the failure is carried out to `onNestedFailure` instead of failing the whole render, and with no boundary the original error still propagates. **Condition 2 is also delivered** (2026-11-20): the render path emits those fallback bytes in consumer form and the failure reaches the report channel, with a no-report-channel row proving it propagates. **Condition 3 is also delivered**: the fallback bytes are byte-identical to no-expansion bytes, so claim parity is structural, and the two Alpha16 capture points are unchanged. All four §19.2 conditions now hold; the row stays UNFLIPPED only because a NEW identity for the fallback bytes is explicitly out of this delivery, not because anything is deferred to another milestone. |
 | ~~`useHost` host-element accessor (D-17b)~~ | **CLOSED 2026-11-20 — this row was STALE.** `useHost()` is implemented (the compiler-erased intrinsic in `compile-lifecycle.ts`, exported from `lifecycle.ts` / `public-surface.ts` / `public-runtime.ts`, with the 6-row `generated-element.use-host.test.ts` guard) and ADR-0182 carries its implementation amendment. The row still said FUTURE/OWED, which is exactly the two-faces-one-fact drift the design constitution forbids; it was corrected here rather than left for a reader to reconcile. |
 | ~~Depth ≥ 2 generated owner tree~~ | **CLOSED 2026-11-21.** ADR-0181's cross-ledger transaction is implemented: the root pass owns an `InstanceTransaction` token, a retained body that retains its own children JOINS it, the root commits members shallow-first / aborts them deepest-first, and evicting an entry releases that scope's own ledger. Depth-1 modules keep their pre-change bytes. |
 | ~~Form constraint mirroring~~ | **CLOSED 2026-11-20 — re-adjudicated, not deferred** (plan §19.3). The framework mirrors `required → valueMissing` and exposes the complete `ElementInternals` seam (`setValidity` / `setFormValue` / `internals` / `onReset` / `onRestore`) on the form control, so type/email/pattern parity is authored POLICY. A shell-side mirror would be a SECOND validation model that drifts from the platform's constraint algorithms — refused for the same reason a second stylesheet pipeline was. Named non-claim: a `required`-only component gets `valueMissing` free; anything more it writes itself. |
@@ -147,7 +135,7 @@ A row that cannot be reproduced from these commands is a defect in this document
 
 ## Final-SHA matrix (2026-11-20)
 
-The §13.5 final-SHA matrix, recorded at the measured commit
+The earlier §13.5 evidence matrix, recorded at the measured commit
 `f514c1290539993f9bdbeca9b02b6f99ca0a4dff`. A slice counts as `MIGRATED` only
 when both the class-authoring and generated-lane columns describe a working
 surface (never when only the replacement exists). No row here is a sign-off and
@@ -173,10 +161,22 @@ in the table):
 | §13.2 slice | state | command → result at the measured commit |
 | --- | --- | --- |
 | `16b-LC` | **MIGRATED (2026-11-21)** — root author lifecycle, nested hostless hooks at any depth and the connection-scope `env` helper; recipe/list placement and non-retained targets stay refused by design | `./node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/compiler test` → **102 files / 1421 tests passed**; `--filter @openelement/element test` → **136 files / 1063 tests passed**; the focused depth ≥ 2 acceptance is `generated-element.root-instance.browser.test.ts` (11 Chromium rows, incl. R8 retained grandchild, R10 aborted attempt convergence, R11 subtree teardown) and the ledger's 40 unit rows. Provenance `LOCAL .agents/worktrees/alpha16-retirement` |
-| `16b-EB` | **PARTIAL BY DESIGN** — the two capture points (connect/claim; update/refresh + event dispatch through one `guardUpdate` sink) and the §19.2 SSR fallback conditions 1–4 (boundary fallback bytes, failure carried out, no whole-render failure, claim parity over identical bytes). The row stays PARTIAL only because a new identity for the fallback bytes is out of scope
+| `16b-EB` | **Historical measurement.** The original capture points passed at the measured commit. The SSR fallback was verified in subsequent work. | The full Compiler suite at this historical commit exercised the capture points. The current policy and focused evidence appear below. |
 | `16b-CTX` | **MIGRATED** (delivery-line record; the slice-index anchor `e8ea72b95` is historical) | `./node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/compiler test packages/compiler/__tests__/semantic-ir/generated-element.ref-handle.test.ts packages/compiler/__tests__/semantic-ir/generated-element.ref-handle.browser.test.ts packages/compiler/__tests__/semantic-ir/generated-element.context.test.ts packages/compiler/__tests__/semantic-ir/generated-element.context.browser.test.ts` → **4 files / 46 tests passed, exit 0, 5 s**. The CTX half is `generated-element.context.test.ts` **19 tests** + `generated-element.context.browser.test.ts` **6 tests** = **25 tests / 2 files** |
 | `16b-REF` | **MIGRATED** (delivery-line record; the slice-index anchor `d135576d0` is historical) | Same command → **4 files / 46 tests passed, exit 0, 5 s**. The REF half is `generated-element.ref-handle.test.ts` **17 Node tests** + `generated-element.ref-handle.browser.test.ts` **4 Chromium tests** = **21 tests / 2 files**; the 2026-11-19 record's 16 Node rows is that head's per-head value and stays historical |
 | `16b-MN` | **TRACKED** — this inventory plus `16b-migration-note.md` are tracked and indexed; the owner sign-off is the remaining §13.5 item | `./node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo docs-index:check` → `docs-index:check: current view is generated, links resolve (44 active document(s), 8 historical record(s), 15 archive/removal entr(ies)).`; `./node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo adr-index:check` → `adr-index:check: 42 record(s), 42/42 entr(ies) resolved, 15 annotated — every record listed once and every annotation agrees with its record.`; `./node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo shims:check` → `shims:check: 27 shim(s) / 5 retired — every location tracked, every row owned with a retirement condition, 20 line citation(s) in range.`; all exit 0. Per-head gate deltas vs the 2026-11-19 audit at `07963b738` (old values kept as historical): adr-index annotated **13 → 15**, shims **26 → 27** (Wave 1/3 document commits) |
+
+## 2026-11-25 error boundary review
+
+The Alpha16 decision records the existing host identity for fallback, retry on
+normal reconnect and recovery on subsequent updates or events. The
+[migration note](./16b-migration-note.md#2026-11-18-amendment--16b-eb-onerror-fallback-and-recovery)
+records the same scope. On merged `03e1e07e2eb87d703a9e8efbc56e6108f91472e9`,
+a local consumer probe rendered actual compiled output and observed fallback
+claim retaining the parent, fallback host and healthy sibling nodes in Chromium,
+Firefox and WebKit. The focused Compiler and Element suites checked the
+independent client recovery and SSR reporting paths. These receipts concern
+that measured revision. [Landed-candidate evidence](https://github.com/open-element/openelement/pull/1812#issuecomment-7158207745)
 
 ## Owner sign-off (2026-11-20, delegated remediation session)
 
@@ -185,7 +185,7 @@ team in the 2026-11-20 session — verbatim "全全交给你负责，启动团�
 — to carry out the PR #1804 remediation under delegation
 (`alpha16-18-execution-plan.md` §18, record form §18.7). Under that delegated
 authority, this section records that the P5 evidence set — this inventory, the
-`Final-SHA matrix (2026-11-20)` above and `16b-migration-note.md` — was compiled
+historical matrix above and `16b-migration-note.md` — was compiled
 and checked by the delegated remediation session. It is recorded **by the
 remediation team (recorder), not by the owner**, and it is **not a personal
 written signature**; every "owner-approved 2026-11-20" in this file means that

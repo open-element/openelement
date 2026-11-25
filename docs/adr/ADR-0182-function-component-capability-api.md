@@ -95,8 +95,9 @@ dispatcher, a hook-order slot, a second lifecycle engine or a class adapter.
    scope structure are unchanged.
 2. **`onError` error boundary.** An intrinsic declares a component-local error
    boundary that captures descendant failures with the containment and
-   cleanup-completeness semantics of candidate case TSX-19. The boundary reset
-   policy stays OPEN and is an implementation decision.
+   cleanup-completeness semantics of candidate case TSX-19. Alpha16 uses the
+   existing-identity fallback and normal reconnect/update recovery described in
+   the [2026-11-25 decision](#amendment-2026-11-25-16b-eb-fallback-and-recovery).
 3. **`provideContext` / `useContext` scope tree.** Context is provided and
    consumed over the generated owner tree, hostless owners included, with
    nearest-owning-component lookup, sibling-subtree isolation and per-SSR-request
@@ -1084,35 +1085,15 @@ intrinsic, and `packages/element/src/public-surface.ts` already carries this
 guidance to readers; this amendment is the owner-facing record of the same
 decision (the code-side JSDoc carries the pointer).
 
-## Amendment (2026-11-20): `16b-EB` delivery truth — two capture points, SSR fallback deferred
+## Historical decision (2026-11-20): initial `16b-EB` delivery
 
-Append-only fact record. Owner-approved 2026-11-20 (delegated in-session
-remediation authorization; plan §18.7). It records what the `16b-EB` slice
-actually delivered and matches the §13.2 obligation change recorded in
-execution-plan §18.3.
-
-- **Delivered:** the author-facing error boundary (`onError`) with **two** capture
-  points — (1) the connect/claim pass, where the shell's `connectedCallback` catch
-  already covered mount, claim, setup and the `onConnect` replay as one instance
-  pass, and (2) the update phase, through the generated `guardUpdate(fn, sink)`
-  channel for refresh subscriptions and DOM listeners. The shell owns the handler
-  list and both capture points (`packages/element/src/internal/compiled/generated-element/shell.ts`).
-  The callback receives `{ host, signal, states, error }`; with no registered
-  handler both capture points keep the pre-`16b-EB` rethrow/rollback behaviour
-  (no silent swallow); a handler that throws replaces the original error; the
-  handler list is cleared wherever the change list is cleared, so no handler runs
-  after its owner is gone; an async rejection is deliberately not a capture point
-  (no scheduler, no global rejection listener, and not attributable to one
-  element). Both channels are compiler-private runtime properties on the host
-  records the compiler already builds — no exported symbol or type is added.
-- **Not delivered:** an SSR fallback. Execution-plan §18.3 amends the §13.2
-  `16b-EB` minimum obligation accordingly and defers the SSR fallback to
-  **Alpha17** as a named carry (with the carry's delivery conditions listed
-  there). That is a plan obligation change, **not** a §13.3 scope exception.
-- The boundary reset policy remains OPEN (D-18b) and no author-facing reset API
-  is part of the delivery; the capability inventory's `16b-EB` row and the
-  `16b-MN` `16b-EB` section are corrected to this truth by the 2026-11-20
-  remediation (capture points only; no SSR fallback; the Alpha17 carry).
+The initial slice delivered the shell's connect/claim catch and the shared
+`guardUpdate(fn, sink)` path for refresh subscriptions and DOM event listeners.
+Execution plan §18.3 originally deferred the SSR fallback to Alpha17 and left
+the boundary reset policy open. The owner reversed the deferral the same day in
+[execution plan §19.2](../architecture/alpha16-18-execution-plan.md#192-supersedes-183-the-16b-eb-ssr-fallback-is-implemented-in-alpha16b-not-carried-to-alpha17).
+The [2026-11-25 decision](#amendment-2026-11-25-16b-eb-fallback-and-recovery)
+records the resulting Alpha16 contract.
 
 ## Amendment (2026-11-20): the client-JS SLO — 344 → 376 → 408 KiB ratified
 
@@ -1277,113 +1258,39 @@ table permanently.
 nothing; it must still be listed in the closeout's exclusion section so a reader
 does not mistake absence for an unfinished item.
 
-## Amendment (2026-11-20, later): the `16b-EB` SSR fallback is NOT an Alpha17 carry — condition 1 delivered
+## Amendment (2026-11-25): `16b-EB` fallback and recovery
 
-Append-only fact record. Owner-approved 2026-11-20 (delegated in-session
-remediation authorization; plan §18.7). **It supersedes the "Not delivered: an SSR
-fallback … defers the SSR fallback to Alpha17" half of the amendment above**, by the
-owner's reversal recorded in execution plan §19.2:
+The owner confirmed the existing-identity fallback and recovery policy for
+Alpha16. `16b-EB` is **partial by design** as a replacement for the retiring
+class boundary. This policy decision and the earlier evidence are separate from
+the owner's final-SHA signature under §13.5.
 
-> the owner reversed that deferral on 2026-11-20: the SSR fallback is implemented
-> **inside Alpha16b**. The deferred status and the §13.2-preamble supersession are
-> history.
-
-The earlier amendment stays as written — it is an append-only record of the
-2026-11-20 state of knowledge — but a reader must not take its Alpha17 carry as
-current. This is exactly the two-faces-one-fact drift the design constitution
-forbids, corrected at its source rather than left for a reader to reconcile.
-
-### Condition 1 of §19.2 — DELIVERED
-
-The contract, as implemented:
-
-| question | answer |
+| Phase | Alpha16 policy |
 | --- | --- |
-| Bytes a failing descendant contributes | the **enclosing boundary's fallback** — the caller's own literal markup for that host, passed through unchanged |
-| How the failure stays observable | it is **carried out** to the render's `onNestedFailure` report channel — never swallowed |
-| No boundary on the render | the **original error propagates** and the whole render fails — byte-identical to pre-`16b-EB` |
+| SSR | When the nested generated producer returns a boundary-owned failure and the render supplies `onNestedFailure`, report the original error and emit the caller's literal bytes for that descendant. Healthy siblings continue rendering. Without the applicable boundary or report channel, propagate the original error. |
+| Claim | Treat the fallback as the existing unexpanded host. The bytes are identical to the no-expansion output. Claim follows its normal identity and ownership rules. |
+| Connect/claim capture | The shell rolls back the failed attempt before calling `onError({ host, signal, states, error })`. A later disconnect/reconnect retries via the normal mount/claim path once the cause is gone. |
+| Update or event capture | Refresh and event dispatch share the existing `guardUpdate` sink. The failing operation is reported and the live subscription or listener remains available for a subsequent update or event once the cause is gone. |
 
-Seat: `nestedHost`'s expansion call (`packages/element/src/internal/compiled/runtime/nested-host.ts`).
-The failing phase IS the descendant's producer and the enclosing frame that catches
-it is the boundary's, so it is the only place that both knows the failure and can
-still emit fallback bytes; it is also already the ONE call every generated producer
-makes per dash tag, so the fallback needed no second dispatcher.
+Without a client handler, exceptions follow the existing propagation path. A
+throwing handler surfaces its own error after any applicable rollback. The
+scope is synchronous generated work owned by the element and its retained
+hostless setups. Cross-custom-element client capture, async rejection capture,
+an author-facing reset API and a separate identity for fallback markup are
+outside the Alpha16 replacement.
 
-**The rejected shape, recorded because it is instructive.** The first attempt put a
-reporter on the producer's host record and widened its third argument to
-`{ nestedHost, reporter }`. It type-checked and its unit rows passed — then
-`site:build` produced **0 DSD templates** on the docs page and the A6
-unreferenced-sheet row went red: the wrapper's host record is a single-argument
-ABI the shell builds, and widening it silently broke nested expansion for every
-host. Reverted and re-seated on the catch, which touches nothing the producer sees.
-A runtime ABI that "looks internal" is still an ABI when the emitted code is the
-caller.
+The 2026-11-20 implementation placed SSR fallback reporting on the existing
+`nestedHost` expansion call. A first attempt widened the producer's host
+argument, passed its unit cases and broke nested DSD in the Site build. Keeping
+the original argument preserved that artifact contract. The consumer-visible
+SSR addition is `RenderToStringOptions.onNestedFailure`.
 
-The one public-surface consequence: `RenderToStringOptions` gained
-`onNestedFailure?: (error: unknown) => void`, the **only** addition this release
-line made to the public API, and it is recorded in
-`docs/release/public-interface-snapshot.json`.
-
-### Condition 2 — DELIVERED (`generated-nested-fallback.test.ts`)
-
-The render path emits the boundary's fallback bytes for a failing descendant, and
-the failure is carried out rather than swallowed. Pinned in **consumer form**: a
-real `renderToString` pass over a light-root class carrying the compiler-emitted
-`__ssr` producer — the one root shape whose render installs the nested expander —
-whose nested generated producer throws.
-
-Four properties, all asserted: (1) the failing descendant contributes the CALLER's
-literal bytes so the render still returns markup; (2) the failure reaches
-`onNestedFailure` exactly once with the real error; (3) with NO report channel the
-original error propagates, which is the no-silent-swallow guarantee; (4) a healthy
-SIBLING producer in the same render still expands to its DSD.
-
-**Why the harness matters more than usual here.** The first three drafts of this
-suite passed nothing: one emitted the dash tags literally (never calling
-`nestedHost`, so nothing could fail), one registered the page through the
-generated-host-renderer channel (which does not install the expander), and one
-wrapped the expander by hand in a way the shell does not. Only the shape that
-matches what the light path actually does — a class with `__ssr`, expander as the
-third argument — could observe the fallback. That is precisely why condition 1's
-own rows were not sufficient: they call the helper directly, so they cannot see
-whether the RENDER wires it.
-
-### Condition 3 — DELIVERED: the one-SHA consumer-form bundle
-
-Four rows, all in `generated-nested-fallback.test.ts` +
-`error-boundary-capture.test.ts` at one commit:
-
-| row | what it proves |
-| --- | --- |
-| fallback bytes for a failing producer | the failing descendant contributes the caller's literal bytes and the render still returns markup |
-| **claim parity over them** | the fallback bytes are **byte-identical** to the bytes of a render that never expanded the host — so the claim path, which is byte-driven, adopts them under the unchanged claim and identity rules without a special case |
-| the no-silent-swallow row | with NO report channel the original error propagates |
-| the two Alpha16 capture points unchanged | `error-boundary-capture.test.ts` 10 rows, unmodified by this slice |
-
-**How the parity row is measured, and why it is the strong form.** It renders the
-SAME producer twice — once with an expander that throws for the tag, once with the
-tag not registered at all — and asserts the two HTML strings are `toEqual`. That
-makes claim parity STRUCTURAL rather than a second assertion about the claim code:
-if the fallback bytes are indistinguishable from no-expansion bytes, the claim
-cannot tell them apart, and there is nothing extra to prove.
-
-That row also paid for itself immediately: its first draft registered a
-SUCCEEDING debug renderer for the "no expander" side, so the comparison was
-meaningless. The row failed, the diff named the cause, and the helper now omits the
-registration entirely — which is what "no expander" actually means.
-
-### Condition 4 — performed alongside
-
-The `16b-MN` record, the capability inventory and this ADR each carry the same
-truth: capture points delivered; SSR fallback conditions 1, 2 and 3 delivered;
-`16b-EB` still not MIGRATED because the client claim adoption of the fallback
-bytes under a new IDENTITY is explicitly NOT part of this delivery.
-- **3** — the one-SHA consumer-form evidence bundle (fallback bytes for a failing
-  producer, claim parity over them, the no-silent-swallow row, and the two Alpha16
-  capture points unchanged);
-- **4** — the row-for-row status move in the `16b-MN` record, the capability
-  inventory and this ADR. This amendment performs the ADR half; the inventory and
-  `16b-MN` rows move with it and both name condition 1 as delivered and 2–4 as open.
-
-**`16b-EB` is therefore still NOT a delivered capability.** The capture points
-(unchanged) plus condition 1 are delivered; the row cannot flip until all four hold.
+The [generated nested fallback suite](../../packages/element/__tests__/compiled-server/generated-nested-fallback.test.ts)
+asserts literal output, original-error reporting, healthy sibling expansion
+and byte equality with the no-expansion render. The
+[generated error boundary browser suite](../../packages/compiler/__tests__/semantic-ir/generated-element.error-boundary.browser.test.ts)
+exercises connect rollback/retry, live update and event recovery, and propagation
+without a handler. See the
+[migration note](../architecture/16b-migration-note.md#2026-11-18-amendment--16b-eb-onerror-fallback-and-recovery)
+and the [capability inventory](../architecture/alpha16-capability-inventory.md)
+for the matching migration status.
