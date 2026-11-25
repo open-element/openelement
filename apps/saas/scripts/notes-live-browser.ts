@@ -52,8 +52,9 @@ const server = createServer(async (incoming, outgoing) => {
     outgoing.writeHead(response.status, Object.fromEntries(response.headers));
     outgoing.end(Buffer.from(await response.arrayBuffer()));
   } catch (error) {
-    outgoing.writeHead(500);
-    outgoing.end(String(error));
+    console.error('Notes browser fixture request failed', error);
+    outgoing.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
+    outgoing.end('Internal Server Error');
   }
 });
 await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
