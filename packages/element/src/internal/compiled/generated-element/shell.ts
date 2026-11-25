@@ -1,168 +1,18 @@
-// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the generated element's lifecycle — class construction, mount-vs-claim selection, attribute conversion, property reflection, the props record, dispose and reconnect — mutates one shared connection/instance state, so it is one shell; the boundary is INTERNAL COMPILER CONTRACT: a narrow descriptor plus the generated factory in, a Custom Element class out, with imports of neither facade-host.ts, runtime-program.ts, the kernel, nor the Part Program executor.
 /**
- * M09-0 — the runtime shell that turns one generated leaf module into a
- * Custom Element.
+ * Internal entry for the generated Custom Element class and host SSR helpers.
  *
- * This file is an INTERNAL COMPILER CONTRACT, not author syntax and not a
- * generic program interpreter. A future M09-1 class emitter supplies a narrow
- * descriptor (tag, declared properties, the generated `create<Name>Recipe`
- * factory, optionally the setup/instance factory, and optionally the legacy
- * bindings factory); this shell only:
+ * Descriptor normalization and defaults are DOM-free and shared by the class
+ * and SSR props resolution. The shell owns the element's retained instance,
+ * its per-connect scope, and its mount or claim projection. Disconnect
+ * disposes the connection while retaining the region and instance. Explicit
+ * teardown releases the instance and detaches only the region it owns when
+ * requested. The constructor never reads attributes or children.
  *
- * - builds the generated element class; explicit registration is the separate
- *   `defineGeneratedElement` helper (a test/emitter hook, not the M09
- *   registration decision);
- * - selects Mount (`insertRecipe`) when the element has no generated region
- *   yet, and Claim (`claimRecipe`) when server DOM or retained DOM exists;
- * - converts attributes through the import-free canonical leaf
- *   `internal/core/property-conversion.ts` (`convertFromAttribute` /
- *   `convertToAttribute` / `coercePropertyValue`) instead of re-deriving a
- *   conversion table. This shell does not import `facade-host.ts`,
- *   `runtime-program.ts`, the compiled kernel, or the Part Program executor;
- * - reflects declared properties back to attributes, including the
- *   reflect-removal contract: removing a reflected attribute restores the
- *   declared default in both channels, even when the property write itself is
- *   value-equal and would otherwise short-circuit;
- * - feeds the generated recipe a stable props record whose getters evaluate on
- *   every read, plus one `propsChanged` signal for the generated invalidation
- *   channel;
- * - disposes the projection and the per-connection scope with `dispose(false)`
- *   on disconnect (DOM retained) and adopts that retained DOM with a FRESH
- *   connection scope on reconnect, while the element-lifetime instance scope is
- *   retained (the LC-0 seam below). The top-level node range owned by the last
- *   successful mount/claim is recorded on the element state, so `dispose(true)`
- *   removes exactly that range: host-appended
- *   children, borrowed server DOM a failed claim never adopted, and DOM that
- *   was never mounted are left alone. The internal disconnect path retains that
- *   ownership record for reconnect/teardown; an explicit shell `dispose(false)`
- *   releases it, so a later `dispose(true)` cannot upgrade the released handle
- *   into a detach (the same one-shot ownership rule as
- *   `LifetimeScope`/`Projection`).
- * - resolves the root once (`./root.ts`), before the recipe: `light` uses the
- *   host, `shadow-open` adopts `host.shadowRoot` or attaches an open root, and
- *   `shadow-closed` adopts `ElementInternals.shadowRoot` or attaches a closed
- *   root. An existing DSD root is never replaced by `attachShadow`; the
- *   resolved ShadowRoot is retained across disconnect/reconnect/teardown. A
- *   shadow element's host light children are slotted content and are never
- *   claimed, owned or deleted by the shell. The first connect observes whether
- *   a generated region already exists (adopted SSR/DSD content) once and stores
- *   that fact on the element state; reconnect and teardown use that fact, not
- *   the current `parent.childNodes`, so foreign nodes left after `dispose(true)`
- *   never masquerade as a region that must be claimed.
- *
- * Upgrade contract: the constructor inspects no attributes and no children.
- * Parser-created markup is seeded by the platform's observed-attribute replay,
- * which runs `attributeChangedCallback` before `connectedCallback`, so the
- * recipe sees the converted attributes. On the first connect, before the
- * recipe is created, own data properties that shadow a declared accessor (a
- * pre-upgrade JS set, or a generated class-field restatement) are reconciled:
- * the own property is deleted and a real pre-upgrade value is written back
- * through the property contract, which makes a pre-upgrade JS set win over an
- * attribute while a value that merely restates the declared default is
- * ignored. A non-configurable own property fails loudly instead of being
- * silently left shadowing the accessor. Reconciliation validates the whole own
- * descriptor set before applying anything, and only records completion after
- * application, so a rejected connect can never leave a half-applied element or
- * let a later connect skip the check.
- *
- * Supported reconnect boundary (LC-0 descriptor-fixture retention seam): the
- * shell owns a three-tier owner tree. `instance` is one element/island-lifetime
- * `LifetimeScope`, created on the first connection and RETAINED across a
- * disconnect; `connection` is an `instance.child()` created per successful
- * connect and disposed `dispose(false)` on disconnect; the projection is the
- * existing per-mount/claim child of `connection`. FOR A DESCRIPTOR THAT
- * SUPPLIES `createInstance(owner, host)` the factory is called ONCE per element
- * on first connect (from the same call-once/retain site the legacy
- * `createBindings()` uses) and its returned bindings record is retained for the
- * element lifetime, so setup-owned signals/private state and the `propsChanged`
- * signal survive a disconnect/reconnect: the reconnect claim runs under a fresh
- * connection scope and does not repeat that factory. Setup cleanups register on
- * the instance owner and run only at explicit teardown. This is the O2
- * root-instance half of the `16b-LC` obligation, not the full §4.1d
- * reconnect-resource contract. The ROOT generated setup split is now WIRED: the
- * compiler emits one module-local `__oe_rootInstance(owner, host)` factory for
- * the root and the emitted descriptor supplies it as `createInstance`
- * (T3/`16b-LC-1`), so the generated root mount/claim alias that retained record
- * instead of re-evaluating its setup locals inside `<Name>__claim`. THIS fixture
- * still supplies the descriptor by hand (descriptor-fixture evidence, not
- * generated-path evidence; the generated-path evidence is the compiler's
- * `generated-element.root-instance.*` tests).
- *
- * DEPTH-1 NESTED RETENTION (LC-2) is wired here: the host record carries the
- * logical `instance` scope, so the generated ROOT mount/claim body can open one
- * instance pass on it and retain its DIRECT hostless children
- * (`retainChildInstance` in `runtime/instance-ledger.ts`). On a failed connect
- * the shell aborts that pass (evicting only entries created in the attempt and
- * keeping committed entries for the retry); at explicit teardown
- * (`dispose(false)`, `dispose(true)`) and at the failed-first-connect rollback
- * it releases every retained child explicitly (`releaseRetainedChildren`)
- * BEFORE destroying the instance scope, because ledger bookkeeping and the
- * structural index are a strong hold while reachable, not a GC cleanup
- * contract. Depth >= 2 retention (a retained child retaining its own children)
- * and cross-ledger transactions remain OWED and are NOT claimed by this seam;
- * a child body emits today's legacy text for its own references. The shell runs
- * no author `onConnect`/`onDispose` callback ITSELF: the generated mount/claim
- * prologue replays the retained callbacks on the per-connection scope the shell
- * hands it, and the shell owns only the scope those callbacks register on. It
- * makes no claim about focus/selection or other platform state across the
- * disconnect window.
- *
- * ERROR BOUNDARY (`16b-EB`): the shell is the ONE owner of the author-facing
- * `onError` handler list and of the two capture points it can honestly attribute
- * to one element. The compiled setup registers a handler through the
- * compiler-private `__oe_onError` host-record property (non-enumerable, like the
- * change channel). At a capture point the shell builds
- * `{ host, signal, states, error }` and runs every handler:
- *
- * 1. the `connectedCallback` catch that already existed — the same rollback runs
- *    (unchanged), then the handler runs instead of the error escaping, leaving
- *    the element in its defined post-failure state (no projection, no listeners,
- *    region fact intact, a later reconnect retries);
- * 2. the update phase, through the `__oe_reportError` sink the generated
- *    `guardUpdate(fn, sink)` call passes for refresh subscriptions and DOM
- *    listeners — the executor's existing helper, so the subscription and the
- *    listener stay live for the next write/dispatch.
- *
- * An async REJECTION is deliberately NOT a capture point: there is no scheduler
- * and no global `unhandledrejection` listener, so a rejection is not
- * attributable to one element. With NO registered handler every capture point
- * keeps its pre-`16b-EB` behaviour exactly (rethrow and roll back at connect,
- * propagate out of the signal writer or the platform dispatch otherwise). The
- * handler list is cleared wherever the change list is cleared, so no handler
- * runs after its owner is gone. No exported symbol or type is added: both
- * channels are runtime properties on the host records the compiler already
- * builds.
- *
- * Explicit teardown is `dispose(true)` on the element; it removes only the node
- * range the shell mounted or claimed and destroys the retained instance in the
- * requested mode (a plain `dispose(false)` releases the record without
- * detaching; the scope one-shot rule keeps a later `dispose(true)` from
- * upgrading it). After teardown the instance/bindings are null, so a later
- * connect creates a NEW instance and re-runs setup: dispose is not disconnect.
- * There is no public author API here: the module is not re-exported from a
- * package barrel and the descriptor is built by the compiler.
- *
- * M09-shadow now covers shadow DOM / DSD, native slots and `delegatesFocus`.
- * Out of scope for this slice: styles/theme (the separate style consumer),
- * event declarations, forms (`formAssociated`/`ElementInternals` ownership),
- * property reflection beyond the three primitive types, the M09-1 class
- * emitter/registration decision, and third-party Web Component qualification.
- *
- * @module ./shell.ts
+ * Generated code reaches the recipe runtime and the canonical property
+ * conversions through this entry without pulling in the Part Program executor.
  */
-
-import {
-  camelToKebab,
-  forbiddenSinkReason,
-  isSafeAttributeName,
-} from '@openelement/protocol/forbidden-sinks';
-import {
-  AuthoringErrorCode,
-  CompilerErrorCode,
-  frameworkError,
-  type ErrorPhase,
-} from '@openelement/protocol/errors';
-import type { RootMode } from '@openelement/protocol/part-program';
+import { camelToKebab } from '@openelement/protocol/forbidden-sinks';
+import { frameworkError } from '@openelement/protocol/errors';
 import type { StyleSheetLike } from '@openelement/protocol/style-sheet';
 import { OpenElementBase } from '../../../open-element-base.ts';
 // The class lane's theme broadcaster: it mirrors the document's `data-theme`
@@ -178,18 +28,12 @@ import { CompiledStyleScope, themeManager } from '../../../open-element-styles.t
 // same source without importing this shell module. See that leaf for the why.
 import { GENERATED_PROP_SEED } from './runtime-only-host-attributes.ts';
 import { ElementFormController } from '../../../open-element-form.ts';
-import {
-  coercePropertyValue,
-  convertFromAttribute,
-  convertToAttribute,
-  type PropertyConversionRecord,
-} from '../../core/property-conversion.ts';
-import { isTrustedHtmlValue, trustedHtml } from '../../core/security.ts';
+import { convertFromAttribute, convertToAttribute } from '../../core/property-conversion.ts';
 import { NESTED_HOST_PROPERTY } from '../runtime/nested-host.ts';
 import { LifetimeScope } from '../lifetime-scope.ts';
 import { bindSignalWrites } from '../runtime/bindings.ts';
 import { abortInstancePass, releaseRetainedChildren } from '../runtime/instance-ledger.ts';
-import { claimRecipe, insertRecipe, type Projection, type Recipe } from '../runtime/recipe.ts';
+import { claimRecipe, insertRecipe, type Projection } from '../runtime/recipe.ts';
 // The pre-upgrade replay HOOK (2026-11-21 closeout): the generated lane captured a
 // pre-hydration click through `document-services` but never replayed it — the replay
 // pair lived in `pre-upgrade-events.ts`, which this shell's P1 closure forbids. The
@@ -212,20 +56,28 @@ import {
   type ElementInternalsRecord,
   type GeneratedRootKind,
 } from './root.ts';
+import {
+  coercePropertyWrite,
+  descriptorError,
+  isPrimitivePropertyType,
+  materialiseDefault,
+  normalizeDescriptor,
+  type FormMapping,
+  type GeneratedElementDescriptor,
+  type GeneratedElementHost,
+  type GeneratedElementInstanceHost,
+  type GeneratedElementProperty,
+  type NormalizedDescriptor,
+  type NormalizedProperty,
+} from './descriptor.ts';
 
-/**
- * Primitive property types (attribute/JS conversion) plus the property-only
- * non-primitive retention family: `array`/`object` (caller-owned references,
- * generated fresh-literal defaults) and `trustedHtml` (the existing brand).
- * Non-primitive rows have no attribute channel and never reflect.
- */
-export type GeneratedElementPropertyType =
-  | 'string'
-  | 'number'
-  | 'boolean'
-  | 'array'
-  | 'object'
-  | 'trustedHtml';
+export { resolveGeneratedElementProps } from './descriptor.ts';
+export type {
+  GeneratedElementDescriptor,
+  GeneratedElementHost,
+  GeneratedElementProperty,
+  GeneratedElementPropertyType,
+} from './descriptor.ts';
 
 /**
  * The generated element's ONE internal entry: the emitted module imports this
@@ -246,28 +98,6 @@ export type GeneratedElementPropertyType =
  */
 export { serializeGeneratedElementHtml } from './dsd-ssr.ts';
 export type { GeneratedElementSsrInput, GeneratedElementSsrRoot } from './dsd-ssr.ts';
-
-/** One compiler-declared property. Internal contract; not author syntax. */
-export interface GeneratedElementProperty {
-  /** JS property name and the key the generated props record exposes. */
-  readonly name: string;
-  /**
-   * Attribute name. Omitted derives `camelToKebab(name)`; `null` declares a
-   * property with no attribute channel. Names are lowercased and validated.
-   */
-  readonly attribute?: string | null;
-  readonly type: GeneratedElementPropertyType;
-  /** Reflect property writes back to the attribute. Requires an attribute. */
-  readonly reflect?: boolean;
-  /**
-   * Declared default. Primitive rows carry the value; a `trustedHtml` row
-   * carries the literal HTML string the shell brands per materialisation; an
-   * array/object row carries the generated fresh-literal factory the shell
-   * calls ONCE per element instance (the descriptor never holds a mutable
-   * shared graph). Caller writes are never cloned.
-   */
-  readonly default?: string | number | boolean | (() => unknown);
-}
 
 /** The attribute name a declared row observes (the compiler's one derivation). */
 function hostPropertyAttribute(property: GeneratedElementProperty): string | null {
@@ -364,7 +194,7 @@ function primitiveRowFallback(property: GeneratedElementProperty): unknown {
  */
 function isJsonPropertySeedRow(property: GeneratedElementProperty): boolean {
   if (JSON_SEEDABLE_PROPERTY_TYPES.has(property.type)) return true;
-  return PRIMITIVE_PROPERTY_TYPES.has(property.type) && hostPropertyAttribute(property) === null;
+  return isPrimitivePropertyType(property.type) && hostPropertyAttribute(property) === null;
 }
 
 /**
@@ -432,7 +262,7 @@ export function seedGeneratedElementHostProperties<P extends object = Record<str
       // the same undefined -> default rule the shell resolver and the client
       // property conversion apply; non-primitive rows keep the resolver/factory
       // boundary (no fabricated seed here).
-      const primitiveFallback = PRIMITIVE_PROPERTY_TYPES.has(property.type)
+      const primitiveFallback = isPrimitivePropertyType(property.type)
         ? (property.default ??
           (property.type === 'boolean' ? false : property.type === 'number' ? 0 : ''))
         : undefined;
@@ -518,7 +348,7 @@ export function seedGeneratedElementHostProperties<P extends object = Record<str
   const computed: Array<readonly [string, string]> = [];
   const computedByName = new Set<string>();
   for (const property of properties ?? []) {
-    if (!PRIMITIVE_PROPERTY_TYPES.has(property.type)) continue;
+    if (!isPrimitivePropertyType(property.type)) continue;
     const attribute = hostPropertyAttribute(property);
     const record = { converter: property.type, type: property.type, default: property.default };
     const fallback = primitiveRowFallback(property);
@@ -766,198 +596,6 @@ function lightSsrProducer(
   };
 }
 
-/** The host record the generated recipe factory consumes. */
-export interface GeneratedElementHost<P extends object = Record<string, unknown>> {
-  /**
-   * Created once by `createInstance` (or the legacy `createBindings` fallback)
-   * and retained for the element lifetime. With `createInstance` the record is
-   * the return value of that setup factory, so it may reference setup-owned
-   * signals/computeds that live in the retained instance scope; with the legacy
-   * `createBindings` it stays allocation-only (see
-   * {@linkcode GeneratedElementDescriptor.createBindings}).
-   */
-  readonly bindings: Readonly<Record<string, unknown>>;
-  /**
-   * The enclosing LOGICAL instance scope (LC-2 nesting): the element/island
-   * instance that survives a disconnect and dies only at explicit teardown.
-   *
-   * It is delivered so the generated ROOT mount/claim body can open one
-   * instance pass on it and retain its direct hostless child instances
-   * (`retainChildInstance`). A retained child's narrower host record — the one
-   * supplied to the child's own body — is generated code (compiler-private),
-   * so this shell type never carries the setup record; no other consumer reads
-   * this field.
-   */
-  readonly instance?: LifetimeScope;
-  readonly props: Readonly<P>;
-  /** Shell-owned invalidation channel; the same signal survives reconnect. */
-  readonly propsChanged: WritableSignal<number>;
-}
-
-/**
- * The setup-time host record the generated instance factory consumes.
- *
- * It deliberately excludes `bindings`: the factory PRODUCES that record (its
- * return value becomes `GeneratedElementHost.bindings`), so supplying a
- * bindings channel here would be circular. `props` and `propsChanged` are the
- * only host facts setup legitimately reads.
- *
- * Deliberately NOT exported: it is a structural detail of the descriptor's
- * `createInstance` member, not a new named consumable API. A host/test builds
- * the argument structurally; no symbol is added to the package surface.
- */
-interface GeneratedElementInstanceHost<P extends object = Record<string, unknown>> {
-  readonly props: Readonly<P>;
-  readonly propsChanged: WritableSignal<number>;
-}
-
-/**
- * The compiler-private descriptor for one generated element. `createRecipe` is
- * the generated module's own `create<Name>Recipe`; this shell never re-derives
- * mount/claim/SSR logic.
- */
-export interface GeneratedElementDescriptor<P extends object = Record<string, unknown>> {
-  readonly tag: string;
-  /**
-   * Root ownership mode. The three values are the protocol's existing
-   * `RootMode`; `light` is the default. This is a compiler-private fact (the
-   * same `root` fact the author's `@element(tag, { root })` already carries),
-   * never a new author API.
-   */
-  readonly root?: RootMode;
-  /**
-   * Native `delegatesFocus` fact. Meaningful only for a shadow root; a light
-   * descriptor that sets it is a compiler bug and fails descriptor validation.
-   */
-  readonly delegatesFocus?: boolean;
-  /**
-   * Associate the host with its surrounding native form through the shell's
-   * ONE element-lifetime `ElementInternals` record (shared with closed-root
-   * discovery). Two shapes, derived from the declared rows (no shape field):
-   *
-   * - value shape — a declared string `value` property is the form value
-   *   source; an optional declared boolean `required` enables the valueMissing
-   *   mirror and an optional declared boolean non-reflecting `disabled`
-   *   enables the fieldset-enabled state.
-   * - button shape — no declared `value` row: the element stays form-associated
-   *   (`form.elements` membership, external `form=<id>` association) but
-   *   publishes no form value, makes no validity claim and maps no reset or
-   *   restore state; its optional declared boolean `disabled` row may reflect
-   *   (the class open-button contract). A `required` row without `value` is
-   *   refused (nothing to mirror).
-   *
-   * The shell owns all platform callbacks; there is no author internals API
-   * and no separate `formValue` field.
-   */
-  readonly formAssociated?: boolean;
-  readonly properties?: readonly GeneratedElementProperty[];
-  /**
-   * A CLIENT-ONLY island's declared stylesheets, as the sheet OBJECTS its
-   * emitted `.css` imports resolve to (2026-11-20 client style-adoption slice).
-   *
-   * The compiler emits this row only for a CLIENT-ONLY island (`ssr: false`, or
-   * the `hydrate: 'only'` coercion): such an island has no server render, so no
-   * marked `<link>` can deliver its sheet and the browser creates the root. The
-   * shell adopts these sheets into the root it created (`rootCreatedByShell`) —
-   * or, for a light root, into the tree the element is in — through the class
-   * lane's ONE `CompiledStyleScope`, and removes them again on disconnect so a
-   * reconnect re-arms exactly one adoption.
-   *
-   * An SSR/DSD island never carries this row: its sheet IS the `<link>` inside
-   * its template, and `sheetDeliveredByLink()` keeps that single delivery.
-   *
-   * Every entry must be a real sheet object (`replaceSync` callable). A string
-   * — what a build that failed to intercept the import would hand over — fails
-   * descriptor normalization with a coded build-phase error instead of
-   * rendering the element silently unstyled.
-   */
-  readonly styles?: readonly StyleSheetLike[];
-  /**
-   * DEV-ONLY live sheets for an SSR/DSD island (owner decision, 2026-11-22).
-   *
-   * `styles` above is deliberately absent for an SSR island: its sheet IS the
-   * marked `<link>` in its template, and `sheetDeliveredByLink()` keeps that one
-   * delivery. But dev needs something a `<link>` cannot give it — HMR. A live
-   * `CSSStyleSheet` held on `globalThis` is re-filled IN PLACE when the sheet
-   * re-evaluates, so a CSS-only edit updates computed styles with no reload and no
-   * flicker, and every root already holding that object re-renders. Replacing a
-   * `<link>` href would re-parse and rebuild instead.
-   *
-   * So the two deliveries differ ON PURPOSE: build is one asset, one delivery; dev
-   * is one live object, updated in place. A field rather than a mode flag keeps the
-   * difference visible at the adoption site, and it is never emitted by the
-   * compiler — the dev client entry injects it at runtime.
-   */
-  devLiveStyles?: readonly StyleSheetLike[];
-  /**
-   * The light-root SSR producer the compiler emits as `<Name>__ssr()`: a
-   * parameterless function returning the content HTML the mount would build.
-   *
-   * Present only for a LIGHT (or absent) descriptor root — a shadow root has no
-   * light DOM of its own to serialize, so its SSR path is the `<Name>__ssrHost`
-   * wrapper declared next to the DSD template instead. The shell attaches this
-   * as the class's static `__ssr` so the canonical serializer can reach it from
-   * the registered constructor without a second registry (the class IS the
-   * registration).
-   */
-  readonly ssrProducer?: () => string;
-  readonly createRecipe: (owner: LifetimeScope, host: GeneratedElementHost<P>) => Recipe<P>;
-  /**
-   * The LC-0 descriptor-fixture retention factory (internal descriptor ABI
-   * addition, compiler-private — no public export). Called ONCE per element, on
-   * its first connection, with the retained element/island-lifetime owner. The
-   * returned record becomes the generated recipe host's `bindings` and is
-   * retained across disconnect/reconnect, so setup-owned signals/computeds and
-   * private state survive the disconnect window; the reconnect claim runs
-   * without repeating this factory.
-   *
-   * In the generated path the compiler now emits this factory for the ROOT
-   * only (module-local `__oe_rootInstance`, T3/`16b-LC-1`) and the emitted
-   * descriptor supplies it here, so the generated root mount/claim alias the
-   * retained record instead of re-evaluating setup in `<Name>__claim`; a root
-   * with no local setup snapshot emits no factory and the shell keeps the
-   * `createBindings?.() ?? {}` fallback. Hosts/tests may still supply this
-   * factory directly (descriptor-fixture evidence). Nested hostless children
-   * keep their own per-claim evaluation: the generated-path fixture measures
-   * that re-evaluation, while nested child retention remains OWED for
-   * `16b-LC retained-child` and is not claimed here.
-   *
-   * The owner is a real cleanup channel: setup-owned effects, listeners, timers,
-   * subscriptions and any other resource that needs cleanup register on it and
-   * are released only by explicit teardown (`dispose`), never by a plain
-   * disconnect. Setup MUST NOT append DOM: the projection owns the region.
-   *
-   * Mutually exclusive with `createBindings`: one descriptor names exactly one
-   * call-once/retain site, so a descriptor carrying both fails descriptor
-   * validation instead of creating a second setup path.
-   */
-  readonly createInstance?: (
-    owner: LifetimeScope,
-    host: GeneratedElementInstanceHost<P>,
-  ) => Readonly<Record<string, unknown>>;
-  /**
-   * Legacy allocation-only bindings factory, kept for hosts/tests (M09-0 shell
-   * tests). Called once per element on first connection and the returned record
-   * is retained for the element lifetime (the factory does not re-run across
-   * disconnect/reconnect).
-   *
-   * This factory runs without a `LifetimeScope` handle and the shell has no
-   * owner on which to register a cleanup for it. The contract is therefore
-   * allocation-only: it MUST NOT allocate effects, listeners, timers,
-   * subscriptions, or any other resource that needs cleanup. It may allocate
-   * signals/computeds and return plain data. A descriptor that needs
-   * element-lifetime cleanup ownership uses `createInstance` instead of leaking
-   * it through this record.
-   *
-   * The shell retains the record across reconnect, while the per-connection
-   * scope is disposed and recreated: resources the generated recipe factory
-   * registers on that scope are released. Omitted means the generated module
-   * must not require bindings; a missing binding still fails through the
-   * generated module's own `OEIR_LEAF_MISSING_VALUE` contract.
-   */
-  readonly createBindings?: () => Readonly<Record<string, unknown>>;
-}
-
 /** The element surface the shell adds beyond `HTMLElement`. */
 export interface GeneratedElement extends HTMLElement {
   /**
@@ -976,73 +614,6 @@ export interface GeneratedElement extends HTMLElement {
 
 /** Constructor type returned by {@linkcode createGeneratedElementClass}. */
 export type GeneratedElementConstructor = new () => GeneratedElement;
-
-interface NormalizedProperty {
-  readonly name: string;
-  readonly attribute: string | null;
-  readonly type: GeneratedElementPropertyType;
-  readonly reflect: boolean;
-  /** Primitive value only; non-primitive defaults are materialised per owner. */
-  readonly defaultValue?: string | number | boolean;
-  /** Primitive-only conversion record; non-primitive rows bypass it entirely. */
-  readonly conversion?: PropertyConversionRecord;
-  /** Array/object fresh-literal factory (one call per element/SSR render). */
-  readonly defaultFactory?: () => unknown;
-  /** trustedHtml literal HTML; branded per materialisation. */
-  readonly defaultHtml?: string;
-}
-
-/**
- * The bounded M09-2d form mapping, in one of two shapes derived from the
- * declared rows (no shape field is invented):
- *
- * - **value shape** — `value` is the declared string row; it is the form value
- *   source and carries the required→valueMissing mirror, reset and restore.
- *   A shadow input marked `data-form-validation="email"` opts the string
- *   `type` row into native email validation when its value is `email`.
- * - **button shape** — `value` is null (the sidecar declared no `value` row):
- *   the element stays form-associated (`form.elements` membership and the
- *   external `form=<id>` association resolve through the one internals record)
- *   but publishes no form value, makes no validity claim and never maps a
- *   reset/restore state. A declared boolean `disabled` row may reflect.
- */
-interface FormMapping {
-  readonly value: NormalizedProperty | null;
-  readonly required?: NormalizedProperty;
-  readonly disabled?: NormalizedProperty;
-  readonly type?: NormalizedProperty;
-}
-
-interface NormalizedDescriptor {
-  readonly rootMode: RootMode;
-  readonly delegatesFocus: boolean;
-  readonly formAssociated: boolean;
-  readonly form: FormMapping | null;
-  readonly properties: readonly NormalizedProperty[];
-  readonly byAttribute: ReadonlyMap<string, NormalizedProperty>;
-  /**
-   * The client-only island's adopted sheets (see
-   * {@link GeneratedElementDescriptor.styles}). Always an array; empty for every
-   * SSR/DSD descriptor.
-   */
-  readonly styles: readonly StyleSheetLike[];
-  /**
-   * DEV-ONLY live sheets, carried through normalization untouched (see
-   * {@link GeneratedElementDescriptor.devLiveStyles}). Never emitted by the
-   * compiler; the dev client entry injects it.
-   */
-  readonly devLiveStyles?: readonly StyleSheetLike[];
-  readonly createRecipe: (
-    owner: LifetimeScope,
-    host: GeneratedElementHost<Record<string, unknown>>,
-  ) => Recipe<Record<string, unknown>>;
-  readonly createInstance?: (
-    owner: LifetimeScope,
-    host: GeneratedElementInstanceHost<Record<string, unknown>>,
-  ) => Readonly<Record<string, unknown>>;
-  readonly createBindings?: () => Readonly<Record<string, unknown>>;
-  readonly ssrProducer?: () => string;
-}
 
 interface FormRuntime {
   readonly controller: ElementFormController;
@@ -1183,48 +754,12 @@ interface ElementState {
 
 const states = new WeakMap<HTMLElement, ElementState>();
 
-const PROPERTY_TYPES: ReadonlySet<string> = new Set([
-  'string',
-  'number',
-  'boolean',
-  'array',
-  'object',
-  'trustedHtml',
-]);
-const PRIMITIVE_PROPERTY_TYPES: ReadonlySet<string> = new Set(['string', 'number', 'boolean']);
-const NON_PRIMITIVE_PROPERTY_TYPES: ReadonlySet<string> = new Set([
-  'array',
-  'object',
-  'trustedHtml',
-]);
-
-/**
- * Property names that would replace platform/lifecycle surface on the element
- * prototype. A descriptor that asks for one is a compiler bug, not a fallback.
- */
-const RESERVED_PROPERTY_NAMES: ReadonlySet<string> = new Set([
-  'constructor',
-  'connectedCallback',
-  'disconnectedCallback',
-  'attributeChangedCallback',
-  'adoptedCallback',
-  'observedAttributes',
-  'dispose',
-  'formAssociatedCallback',
-  'formResetCallback',
-  'formStateRestoreCallback',
-  'formDisabledCallback',
-]);
-
 /**
  * Internal shell identity for a declared property the page locked with a
  * non-configurable own data property. `OEIR_` stays out of the exported
  * catalogue (M07-5 record): no `OE_` public code, no snapshot change.
  */
 const PRE_UPGRADE_PROPERTY_LOCKED = 'OEIR_SHELL_PRE_UPGRADE_PROPERTY_LOCKED';
-/** Internal write guards for the property-only non-primitive family. */
-const PROPERTY_TYPE_MISMATCH = 'OEIR_SHELL_PROPERTY_TYPE_MISMATCH';
-const UNTRUSTED_HTML_PROPERTY = 'OEIR_SHELL_UNTRUSTED_HTML_PROPERTY';
 /**
  * The platform did not provide `attachInternals` (or the one-shot channel was
  * already consumed outside this shell). A form-associated generated element
@@ -1232,436 +767,6 @@ const UNTRUSTED_HTML_PROPERTY = 'OEIR_SHELL_UNTRUSTED_HTML_PROPERTY';
  * does not have.
  */
 const FORM_INTERNALS_UNAVAILABLE = 'OEIR_SHELL_FORM_INTERNALS_UNAVAILABLE';
-
-function descriptorError(
-  message: string,
-  code: string = CompilerErrorCode.INVALID_SOURCE,
-  phase: ErrorPhase = 'build',
-): never {
-  throw frameworkError(code, `[generated-element] ${message}`, { phase });
-}
-
-function normalizeProperty(property: GeneratedElementProperty): NormalizedProperty {
-  const name = property.name;
-  if (typeof name !== 'string' || name.length === 0) {
-    descriptorError('property name must be a non-empty string');
-  }
-  if (RESERVED_PROPERTY_NAMES.has(name)) {
-    descriptorError(`property name "${name}" collides with the element lifecycle surface`);
-  }
-  const sinkReason = forbiddenSinkReason('prop', name);
-  if (sinkReason !== null) {
-    descriptorError(`property name "${name}" is not admissible: ${sinkReason}`);
-  }
-  if (!PROPERTY_TYPES.has(property.type)) {
-    descriptorError(`property "${name}" has unsupported type ${String(property.type)}`);
-  }
-
-  if (NON_PRIMITIVE_PROPERTY_TYPES.has(property.type)) {
-    // Property-only retention: no attribute/JSON channel, no reflection, an
-    // explicit default carrier, and a write that never promotes an arbitrary
-    // value (plain object/string) into trustedHtml.
-    if (property.attribute !== null) {
-      descriptorError(
-        `property "${name}" type ${property.type} is property-only and must declare ` +
-          'attribute: null (no attribute or JSON wire exists for it)',
-      );
-    }
-    if (property.reflect === true) {
-      descriptorError(
-        `property "${name}" type ${property.type} cannot reflect: it has no attribute`,
-      );
-    }
-    if (property.type === 'trustedHtml') {
-      if (typeof property.default !== 'string') {
-        descriptorError(
-          `property "${name}" trustedHtml default must be the generated literal HTML string`,
-        );
-      }
-      return {
-        name,
-        attribute: null,
-        type: property.type,
-        reflect: false,
-        defaultHtml: property.default,
-      };
-    }
-    if (typeof property.default !== 'function') {
-      descriptorError(
-        `property "${name}" ${property.type} default must be a generated fresh-literal factory ` +
-          '(the descriptor never holds a mutable module-level default)',
-      );
-    }
-    return {
-      name,
-      attribute: null,
-      type: property.type,
-      reflect: false,
-      defaultFactory: property.default as () => unknown,
-    };
-  }
-
-  let attribute: string | null;
-  if (property.attribute === undefined) {
-    attribute = camelToKebab(name);
-  } else if (property.attribute === null) {
-    attribute = null;
-  } else if (typeof property.attribute === 'string' && property.attribute.length > 0) {
-    attribute = property.attribute.toLowerCase();
-  } else {
-    descriptorError(`property "${name}" has an invalid attribute name`);
-  }
-
-  if (attribute !== null && !isSafeAttributeName(attribute)) {
-    descriptorError(
-      `property "${name}" attribute "${attribute}" is not a safe HTML attribute name`,
-      AuthoringErrorCode.UNSAFE_ATTRIBUTE_NAME,
-      'validation',
-    );
-  }
-  const defaultForType: string | number | boolean =
-    property.type === 'boolean' ? false : property.type === 'number' ? 0 : '';
-  const rawDefault = property.default;
-  if (
-    rawDefault !== undefined &&
-    typeof rawDefault !== 'string' &&
-    typeof rawDefault !== 'number' &&
-    typeof rawDefault !== 'boolean'
-  ) {
-    descriptorError(
-      `property "${name}" default must be a ${property.type} primitive value; a factory/literal ` +
-        'carrier belongs only to a property-only non-primitive row',
-    );
-  }
-  const defaultValue =
-    typeof rawDefault === 'string' ||
-    typeof rawDefault === 'number' ||
-    typeof rawDefault === 'boolean'
-      ? rawDefault
-      : defaultForType;
-  if (typeof defaultValue !== property.type) {
-    descriptorError(
-      `property "${name}" default must be a ${property.type}, got ${typeof defaultValue}`,
-    );
-  }
-  if (property.reflect === true && attribute === null) {
-    descriptorError(`property "${name}" requests reflection but declares no attribute`);
-  }
-
-  const conversion: PropertyConversionRecord = {
-    type: property.type,
-    converter: property.type,
-    default: defaultValue,
-  };
-
-  return {
-    name,
-    attribute,
-    type: property.type,
-    reflect: property.reflect === true,
-    defaultValue,
-    conversion,
-  };
-}
-
-/** Materialise one property's default for one owner (instance or SSR render). */
-function materialiseDefault(property: NormalizedProperty): unknown {
-  if (property.defaultFactory !== undefined) return property.defaultFactory();
-  if (property.type === 'trustedHtml') return trustedHtml(property.defaultHtml ?? '');
-  return property.defaultValue;
-}
-
-/**
- * The write guard for one declared property. Primitives keep the landed
- * coercion; array/object accept only a caller-owned value of the declared
- * shape (preserved by reference, never cloned); trustedHtml accepts only a
- * value this module branded (a plain `{ html }` object or a string fails
- * closed).
- */
-function coercePropertyWrite(property: NormalizedProperty, value: unknown): unknown {
-  if (property.type === 'array') {
-    if (!Array.isArray(value)) {
-      throw frameworkError(
-        PROPERTY_TYPE_MISMATCH,
-        `[generated-element] property "${property.name}" expects an array value`,
-        { phase: 'csr' },
-      );
-    }
-    return value;
-  }
-  if (property.type === 'object') {
-    const prototype =
-      typeof value === 'object' && value !== null ? Object.getPrototypeOf(value) : undefined;
-    if (
-      typeof value !== 'object' ||
-      value === null ||
-      Array.isArray(value) ||
-      (prototype !== Object.prototype && prototype !== null)
-    ) {
-      throw frameworkError(
-        PROPERTY_TYPE_MISMATCH,
-        `[generated-element] property "${property.name}" expects a plain object value`,
-        { phase: 'csr' },
-      );
-    }
-    return value;
-  }
-  if (property.type === 'trustedHtml') {
-    if (!isTrustedHtmlValue(value)) {
-      throw frameworkError(
-        UNTRUSTED_HTML_PROPERTY,
-        `[generated-element] property "${property.name}" requires a value created by ` +
-          'trustedHtml(); a plain object or string is not promoted',
-        { phase: 'csr' },
-      );
-    }
-    return value;
-  }
-  return coercePropertyValue(property.conversion!, value);
-}
-
-/**
- * Descriptor normalization is memoized by descriptor object identity — the
- * same contract as `runtime-program.ts`'s `normalizedByProgram`: a generated
- * module evaluates its `__oeElementDescriptor` literal once (the compiler
- * emits it as a module-level `const`; "the descriptor rows emitted above ARE
- * the input"), so every SSR render of that element — the emitted
- * `<Name>__ssrHost` resolves props per render — and the one class-definition
- * pass reuse the same normalized descriptor instead of re-running the
- * authoring-shape validation family and rebuilding the camelCase→kebab
- * attribute derivation and the per-name/attribute maps per render.
- *
- * The key is the descriptor object; there is no invalidation: the normalized
- * result is a pure function of the descriptor rows, and a descriptor mutated
- * after its first successful normalization is not re-normalized (descriptors
- * are compiler-built module literals, never mutable request inputs). The
- * normalized descriptor is read-only by contract — consumers read rows and
- * maps, never mutate them, and per-render/per-instance state (lazy defaults,
- * signal values) is allocated fresh downstream. Failures are not memoized: an
- * invalid descriptor re-validates and re-throws on every call, so rejection
- * behavior is unchanged.
- */
-const normalizedByDescriptor = new WeakMap<GeneratedElementDescriptor, NormalizedDescriptor>();
-
-function normalizeDescriptor(descriptor: GeneratedElementDescriptor): NormalizedDescriptor {
-  const cached = normalizedByDescriptor.get(descriptor);
-  if (cached !== undefined) return cached;
-  if (typeof descriptor.tag !== 'string' || !descriptor.tag.includes('-')) {
-    descriptorError(
-      'tag must be a hyphenated custom-element name',
-      AuthoringErrorCode.INVALID_TAG_NAME,
-      'validation',
-    );
-  }
-  if (typeof descriptor.createRecipe !== 'function') {
-    descriptorError('createRecipe must be the generated recipe factory');
-  }
-  if (descriptor.createBindings !== undefined && typeof descriptor.createBindings !== 'function') {
-    descriptorError('createBindings must be a function when present');
-  }
-  if (descriptor.createInstance !== undefined && typeof descriptor.createInstance !== 'function') {
-    descriptorError('createInstance must be a function when present');
-  }
-  if (descriptor.createInstance !== undefined && descriptor.createBindings !== undefined) {
-    descriptorError(
-      'createInstance and createBindings are mutually exclusive: the descriptor must name exactly ' +
-        'one call-once/retain setup site',
-    );
-  }
-  const rootMode = descriptor.root ?? 'light';
-  if (rootMode !== 'light' && rootMode !== 'shadow-open' && rootMode !== 'shadow-closed') {
-    descriptorError(`root must be light, shadow-open or shadow-closed, got ${String(rootMode)}`);
-  }
-  if (descriptor.delegatesFocus !== undefined && typeof descriptor.delegatesFocus !== 'boolean') {
-    descriptorError('delegatesFocus must be a boolean when present');
-  }
-  const delegatesFocus = descriptor.delegatesFocus === true;
-  if (rootMode === 'light' && delegatesFocus) {
-    descriptorError('delegatesFocus requires a shadow root');
-  }
-  if (descriptor.formAssociated !== undefined && typeof descriptor.formAssociated !== 'boolean') {
-    descriptorError('formAssociated must be a boolean when present');
-  }
-  // A client-only island's sheets arrive as EMITTED MODULE IMPORTS (2026-11-20).
-  // Validate the OBJECT here, before any DOM work: a build that failed to
-  // intercept the `.css` import hands over a string (or nothing), and adopting
-  // that would render the element silently unstyled. One coded descriptor error
-  // is the fail-closed half of that contract; the compiler's
-  // CLIENT_STYLES_UNWIRED refusal is the build-time half.
-  //
-  // Never read `cssRules`: a sheet whose `replace()` is still in flight throws
-  // on that read in Firefox (the class lane's KR-2/Q1-B race), and adoption
-  // needs no rule read at all.
-  const declaredStyles = descriptor.styles;
-  if (declaredStyles !== undefined && !Array.isArray(declaredStyles)) {
-    descriptorError('styles must be an array of stylesheet objects when present');
-  }
-  const styles: readonly StyleSheetLike[] = declaredStyles ?? [];
-  for (const [index, sheet] of styles.entries()) {
-    if (
-      typeof sheet !== 'object' ||
-      sheet === null ||
-      typeof (sheet as { replaceSync?: unknown }).replaceSync !== 'function'
-    ) {
-      descriptorError(
-        `styles[${index}] is not a stylesheet object: a client-only island's declared sheet must ` +
-          'arrive as the module-graph import the build intercepts, never as a string or a missing ' +
-          'binding (refusing instead of rendering the element unstyled)',
-      );
-    }
-  }
-  const formAssociated = descriptor.formAssociated === true;
-
-  const properties = (descriptor.properties ?? []).map(normalizeProperty);
-  const names = new Set<string>();
-  const byAttribute = new Map<string, NormalizedProperty>();
-  for (const property of properties) {
-    if (names.has(property.name)) {
-      descriptorError(`duplicate property "${property.name}"`);
-    }
-    names.add(property.name);
-    if (property.attribute !== null) {
-      if (byAttribute.has(property.attribute)) {
-        descriptorError(`duplicate attribute "${property.attribute}"`);
-      }
-      byAttribute.set(property.attribute, property);
-    }
-  }
-
-  const byName = new Map(properties.map((property) => [property.name, property]));
-  let form: FormMapping | null = null;
-  if (formAssociated) {
-    const value = byName.get('value');
-    const required = byName.get('required');
-    const disabled = byName.get('disabled');
-    const type = byName.get('type');
-    if (required !== undefined && required.type !== 'boolean') {
-      descriptorError(
-        `the optional form property "required" must be boolean, got ${required.type}`,
-      );
-    }
-    if (disabled !== undefined && disabled.type !== 'boolean') {
-      descriptorError(
-        `the optional form property "disabled" must be boolean, got ${disabled.type}`,
-      );
-    }
-    if (value === undefined) {
-      // The button shape: no declared value row publishes no form value. The
-      // element stays form-associated (form.elements membership and the
-      // external `form=<id>` association resolve through the one internals
-      // record); `required` mirrors valueMissing on the form value and is
-      // refused here; a reflecting `disabled` row is the class open-button
-      // contract and is admitted.
-      if (required !== undefined) {
-        descriptorError(
-          'the optional form property "required" mirrors valueMissing on the declared form value; ' +
-            'a form-associated descriptor without a "value" property publishes no form value',
-        );
-      }
-    } else {
-      if (value.type !== 'string') {
-        descriptorError(`the form value property "value" must be a string, got ${value.type}`);
-      }
-      if (disabled?.reflect === true) {
-        descriptorError(
-          'the form property "disabled" must not reflect: the fieldset/authored disabled state ' +
-            'must stay reversible',
-        );
-      }
-    }
-    form = {
-      value: value ?? null,
-      ...(required === undefined ? {} : { required }),
-      ...(disabled === undefined ? {} : { disabled }),
-      ...(type?.type === 'string' && value !== undefined ? { type } : {}),
-    };
-  }
-
-  const normalized: NormalizedDescriptor = {
-    rootMode,
-    delegatesFocus,
-    formAssociated,
-    form,
-    properties,
-    byAttribute,
-    styles,
-    ...(descriptor.devLiveStyles === undefined ? {} : { devLiveStyles: descriptor.devLiveStyles }),
-    createRecipe: descriptor.createRecipe as NormalizedDescriptor['createRecipe'],
-    ...(descriptor.ssrProducer === undefined ? {} : { ssrProducer: descriptor.ssrProducer }),
-    ...(descriptor.createInstance === undefined
-      ? {}
-      : { createInstance: descriptor.createInstance as NormalizedDescriptor['createInstance'] }),
-    ...(descriptor.createBindings === undefined
-      ? {}
-      : { createBindings: descriptor.createBindings }),
-  };
-  normalizedByDescriptor.set(descriptor, normalized);
-  return normalized;
-}
-
-/**
- * One lazy, memoised default for one declared row of one SSR render. The
- * factory/brand runs at most once, and only when the leaf actually reads the
- * row; an unused declared row is never materialised.
- */
-function lazyDefaultFor(property: NormalizedProperty): () => unknown {
-  let materialised = false;
-  let value: unknown;
-  return () => {
-    if (!materialised) {
-      materialised = true;
-      value = materialiseDefault(property);
-    }
-    return value;
-  };
-}
-
-/**
- * Fold one in-process props record into a complete server-render props record.
- *
- * The record is getter-backed so the approved per-read props contract survives
- * the fold:
- * - a supplied row's getter delegates to the caller's record on every read
- *   (supplied array/object values stay caller-owned references; trustedHtml
- *   values are brand-checked on read; a supplied getter is never executed by
- *   the resolver itself, so an unused supplied row has no side effect);
- * - an omitted row (or a supplied row whose read yields `undefined`) uses a
- *   lazy memoised default: the generated factory/brand runs at most once per
- *   render and only if the leaf reads it;
- * - readers see a null-prototype record, and no row is ever assigned through
- *   `__proto__`-sensitive assignment.
- *
- * The generated `<Name>__ssrHost` calls this helper with the descriptor +
- * caller props; M11 owns producing that in-process record. The non-primitive
- * JSON seed is the SEEDER's channel (`data-oe-prop-seed`, produced by
- * `seedGeneratedElementHostProperties` and restored by the claim), never a
- * second value wire invented here.
- */
-export function resolveGeneratedElementProps<P extends object = Record<string, unknown>>(
-  descriptor: GeneratedElementDescriptor<P>,
-  props?: Readonly<Record<string, unknown>>,
-): Record<string, unknown> {
-  const normalized = normalizeDescriptor(descriptor as GeneratedElementDescriptor);
-  const resolved: Record<string, unknown> = Object.create(null);
-  for (const property of normalized.properties) {
-    const defaultForRow = lazyDefaultFor(property);
-    const supplied =
-      props !== undefined && Object.prototype.hasOwnProperty.call(props, property.name);
-    const readSupplied = (): unknown => {
-      const value = props![property.name];
-      if (value === undefined) return defaultForRow();
-      return PRIMITIVE_PROPERTY_TYPES.has(property.type)
-        ? value
-        : coercePropertyWrite(property, value);
-    };
-    Object.defineProperty(resolved, property.name, {
-      enumerable: true,
-      configurable: false,
-      get: supplied ? readSupplied : defaultForRow,
-    });
-  }
-  return resolved;
-}
 
 function createState(descriptor: NormalizedDescriptor): ElementState {
   const initial: Record<string, unknown> = Object.create(null);
@@ -1826,7 +931,7 @@ function restatesDefault(property: NormalizedProperty, value: unknown): boolean 
   // Non-primitive defaults are per-owner materialisations; an own pre-upgrade
   // value is a caller write, never a restated default (no deep compare, no
   // shallow clone, identity preserved).
-  if (!PRIMITIVE_PROPERTY_TYPES.has(property.type)) return false;
+  if (!isPrimitivePropertyType(property.type)) return false;
   return value === property.defaultValue;
 }
 
@@ -2001,7 +1106,7 @@ function applyAttribute(
   property: NormalizedProperty,
   raw: string | null,
 ): void {
-  if (!PRIMITIVE_PROPERTY_TYPES.has(property.type) || property.conversion === undefined) return;
+  if (!isPrimitivePropertyType(property.type) || property.conversion === undefined) return;
   const next =
     raw === null ? property.defaultValue : convertFromAttribute(property.conversion, raw);
   setProperty(element, state, property, next, false);

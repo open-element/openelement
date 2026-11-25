@@ -46,66 +46,6 @@ export function readingChromeStrings(locale: string): {
 }
 
 /**
- * Homepage chrome copy that used to be hard-coded English literals in
- * page-home.tsx. Everything already flowing through the route's locale-aware
- * props (scene leads, strategy/output/reference lists) stays there; this
- * dictionary only covers what the component itself owned.
- *
- * The spec strip reads as plain sentences, one fact per cell — no
- * label/value pairs to assemble, and no package count: that number derives
- * from release-state truth (data/version.ts packageCountPhrase), so it lives
- * with the route props instead of a second, hand-written source here.
- */
-export function homeStrings(locale: string): {
-  eyebrow: string;
-  enginesValue: string;
-  depsValue: string;
-  outputValue: string;
-  badgeRuntime: string;
-  badgeAuthoring: string;
-  sceneElementIndex: string;
-  sceneDsdIndex: string;
-  sceneIslandsIndex: string;
-  sceneOutputIndex: string;
-  sceneBeginIndex: string;
-  floodServer: string;
-  floodBrowser: string;
-} {
-  if (locale === 'zh') {
-    return {
-      eyebrow: 'OpenElement — Web 标准实验室',
-      enginesValue: 'CI 中运行 3 个浏览器引擎',
-      depsValue: 'element：0 个第三方运行时依赖',
-      outputValue: 'DSD 服务端输出',
-      badgeRuntime: '无框架运行时',
-      badgeAuthoring: 'JSX + BASIC',
-      sceneElementIndex: '01 — Element',
-      sceneDsdIndex: '02 — 声明式 Shadow DOM',
-      sceneIslandsIndex: '03 — Islands',
-      sceneOutputIndex: '04 — 输出',
-      sceneBeginIndex: '05 — 开始',
-      floodServer: '服务端 · text/html',
-      floodBrowser: '浏览器 · 就地升级',
-    };
-  }
-  return {
-    eyebrow: 'OpenElement — Web Standards Lab',
-    enginesValue: '3 browser engines in CI',
-    depsValue: 'element: 0 third-party runtime deps',
-    outputValue: 'DSD server output',
-    badgeRuntime: 'NO FRAMEWORK RUNTIME',
-    badgeAuthoring: 'JSX + BASIC',
-    sceneElementIndex: '01 — Element',
-    sceneDsdIndex: '02 — Declarative Shadow DOM',
-    sceneIslandsIndex: '03 — Islands',
-    sceneOutputIndex: '04 — Output',
-    sceneBeginIndex: '05 — Begin',
-    floodServer: 'Server · text/html',
-    floodBrowser: 'Browser · upgrades in place',
-  };
-}
-
-/**
  * Freshness-row date display: en keeps the ISO stamp, zh renders
  * 2026年9月18日. Malformed input falls back to the raw string — a display
  * helper must never throw the page.

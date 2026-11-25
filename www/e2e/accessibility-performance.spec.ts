@@ -108,10 +108,12 @@ test.describe('Accessibility', () => {
     await expect(footer.getByRole('heading')).toHaveCount(0);
     await expect(footer.getByRole('navigation')).toHaveCount(4);
     await expect(
-      footer.getByRole('navigation', { name: 'Resources' }).getByRole('link', { name: 'Guide' }),
+      footer
+        .getByRole('navigation', { name: 'Documentation' })
+        .getByRole('link', { name: 'Guide' }),
     ).toHaveAttribute('href', '/guide/getting-started/');
     await expect(
-      footer.getByRole('navigation', { name: 'Company' }).getByRole('link', { name: 'GitHub' }),
+      footer.getByRole('navigation', { name: 'Project' }).getByRole('link', { name: 'GitHub' }),
     ).toHaveAttribute('href', 'https://github.com/open-element/openelement');
   });
 

@@ -138,7 +138,7 @@ export function assertUnifiedProductVersions(versions: ProductVersions): Product
 }
 
 // [sourceTemplate, targetRelativePath] pairs — the SINGLE source for the
-// starter file mapping (M-C2). The cli.test.ts toolchain gate consumes this
+// starter file mapping (M-C2). The starter-template.test.ts toolchain gate consumes this
 // exact list instead of keeping its own hand-maintained copy, so adding a template
 // file cannot pass the scaffold and fail the gate (or vice versa).
 //

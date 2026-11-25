@@ -497,6 +497,56 @@
         "commit": "fc55986d7966da2c2e67cae253e536ca4b898e6e",
         "path": "docs/architecture/alpha16-18-progress.md"
       }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/alpha16-remaining-consumers.md",
+      "date": "2026-11-25",
+      "title": "Alpha16 remaining consumer surface (2026-11-18)",
+      "carried": "Per-module measurements and decisions for production class consumers before retirement, with the recorded closed outcomes.",
+      "nowLivesIn": [
+        "docs/architecture/alpha16-class-migration-matrix.md",
+        "docs/architecture/alpha16-closeout-report.md"
+      ],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "03e1e07e2eb87d703a9e8efbc56e6108f91472e9",
+        "path": "docs/architecture/alpha16-remaining-consumers.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/alpha16b-evidence-20261115.md",
+      "date": "2026-11-25",
+      "title": "Alpha16b capability-train measurements (2026-11-15 and 2026-11-16)",
+      "carried": "Earlier compiler, router, style, lifecycle and packing receipts with their measured revisions and LOCAL/CI provenance.",
+      "nowLivesIn": [
+        "docs/architecture/alpha16-capability-inventory.md",
+        "docs/architecture/16b-migration-note.md",
+        "docs/architecture/alpha16-closeout-report.md"
+      ],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "03e1e07e2eb87d703a9e8efbc56e6108f91472e9",
+        "path": "docs/architecture/alpha16b-evidence-20261115.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/m10-preparation.md",
+      "date": "2026-11-25",
+      "title": "M10-0 unsigned capability preparation",
+      "carried": "2026-11-15 inventory, M11 host SSR carrier, browser-entry graph observer and preliminary migration method.",
+      "nowLivesIn": [
+        "docs/architecture/p1-applicability-record.md",
+        "docs/architecture/alpha16-class-migration-matrix.md",
+        "docs/architecture/alpha16-capability-inventory.md"
+      ],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "03e1e07e2eb87d703a9e8efbc56e6108f91472e9",
+        "path": "docs/architecture/m10-preparation.md"
+      }
     }
   ]
 }

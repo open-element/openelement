@@ -40,7 +40,7 @@ npm run dev
 
 - 脚手架为每个生成文件打印一行 `created <path>`，随后打印一个交接框，用当前包管理器的写法给出接下来的命令。
 - `npm run dev` 打印 ready 行与本机 URL——默认是 `http://localhost:5173/`。
-- 打开该 URL 能看到 starter 的首页：标题 “Rendered before JavaScript arrives”、静态徽标、一个可交互的计数器 island 以及一个纯客户端 live timer。页面此时已经带样式、可阅读；islands 在页面加载后自行唤醒。
+- 打开该 URL 并试用计数器。计时器会在浏览器里启动。编辑 `app/routes/index.tsx` 的标题并保存，即可看到首页更新。
 
 如果在那之前出了问题：
 

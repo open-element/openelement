@@ -457,8 +457,8 @@ native 选择缝是主产物，不再作为垫片登记。）
 - 退役条件：GH #1800 落地 shadow 样式 link 载体、且 shadow-root 生成岛带
   `styles` 能构建并渲染后移除该拒绝。**条件已满足**（载体 M09-2e 落地，随后
   client-only 半边也落地）。
-- **退役动作**：`docs/architecture/alpha16-class-migration-matrix.md` 的
-  "the shadow style carrier exists; the authoring face said otherwise" 一节。
+- **退役动作**：[迁移矩阵历史记录](https://github.com/open-element/openelement/blob/03e1e07e2eb87d703a9e8efbc56e6108f91472e9/docs/architecture/alpha16-class-migration-matrix.md#L1442)
+  中的 “the shadow style carrier exists; the authoring face said otherwise”。
 - **退役时的事实**：DSD 样式 link 载波已落地 —— 编译器在宿主 producer 上发出类型化
   `styleLinks` 通道，`serializeGeneratedElementHtml` 在模版内写出规范 marked
   `<link>` 前缀；构建扫描对 `producer` 身份 + root `shadow` **准入**（原先是拒绝）。

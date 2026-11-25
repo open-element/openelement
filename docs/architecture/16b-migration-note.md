@@ -13,8 +13,8 @@ Working-tree additions on 2026-11-15 (the Alpha16b capability train) are
 authorized by [ADR-0180](../adr/ADR-0180-function-component-lifecycle-intrinsics.md)
 and [ADR-0181](../adr/ADR-0181-generated-element-ssr-and-retention.md), and
 registered in [execution plan §16](./alpha16-18-execution-plan.md). Evidence for
-them lives in the [2026-11-15 appendix](./alpha16b-evidence-20261115.md). No row
-below is closed by that train; each keeps the state it records.
+them lives in the [historical 2026-11-15 appendix](https://github.com/open-element/openelement/blob/03e1e07e2eb87d703a9e8efbc56e6108f91472e9/docs/architecture/alpha16b-evidence-20261115.md). The
+[capability inventory](./alpha16-capability-inventory.md) carries the current status.
 
 ## Status and scope
 
@@ -56,17 +56,12 @@ all three now do, and each is recorded in its own amendment below:
 - `16b-LC` (lifecycle) remains **PARTIAL**: the generated-element ROOT author
   lifecycle hooks are delivered, while nested/hostless hooks and the
   connection-scope helper channel are still OWED.
-- `16b-EB` (error boundary) — **PARTIAL** (`ee0434c9f` + `9e494db63`): `onError`
-  with the shell's **two** capture points (the connect/claim pass, plus
-  update/refresh and event dispatch through one `guardUpdate` sink), AND — since
-  2026-11-20 — the **SSR fallback's condition 1** of execution plan §19.2: a
-  failing descendant producer renders the enclosing boundary's fallback bytes, the
-  failure is carried out to `onNestedFailure` instead of failing the whole render,
-  and with no boundary the original error still propagates. **The "no SSR fallback
-  exists, deferred to Alpha17 by plan §18.3" wording that stood here is CLOSED** —
-  the owner reversed that deferral in §19.2. Conditions 2–4 of §19.2 remain open
-  (client claim adoption of the fallback bytes, the one-SHA consumer-form bundle,
-  and the remainder of the row-by-row move), so this row is not MIGRATED.
+- `16b-EB` (error boundary) — **PARTIAL BY DESIGN** (`ee0434c9f` +
+  `9e494db63`, followed by the §19.2 SSR fallback). Alpha16 uses the existing
+  host identity for literal SSR fallback, retries a rolled-back connect on
+  reconnect and keeps the update subscription or event listener live for later
+  recovery. The [boundary entry below](#2026-11-25-policy-ssr-and-recovery)
+  records the migration scope and evidence.
 - `16b-REF` (refs) — delivered (`d135576d0`): `ref(cb?)` is a compiler-erased
   declaration intrinsic riding the EXISTING `ref` JSX channel, so no second
   attachment mechanism exists; lifetime is proven across mount, claim,
@@ -984,6 +979,9 @@ other three intrinsics.
 
 ### The three capture points
 
+Connect and claim share the shell catch. Refresh and event dispatch share
+`guardUpdate`.
+
 | phase | capture point | what was already there | with a registered handler | with NO handler |
 | --- | --- | --- | --- | --- |
 | connect / claim | the shell's `connectedCallback` `catch` (covers `rootFor`, setup, `createRecipe`, mount, claim and the `onConnect` replay) | rollback of the failed attempt (instance pass abort, connection scope, first-connect instance teardown, retained-child release) then **rethrow** | the SAME rollback runs, then the handler runs and the error does not escape | the pre-`16b-EB` rollback-then-rethrow, byte-identical |
@@ -1040,23 +1038,29 @@ deliberate boundary, not as an oversight.
 
 ### SSR
 
-`__ssr` runs NO handler and does NOT swallow a producer throw. Both halves are
-deliberate:
+The enclosing render handles SSR reporting and fallback through the option
+below.
 
-- an `onError` callback is CLIENT-owned. It is erased into the compiled module
-  and registered on a host record the shell builds at connect time; a server
-  render has no element, no connection scope and no handler registry. There is
-  nothing to run, so emitting a server-side call would be a second error channel
-  invented for one phase.
-- a producer throw still fails the render. The generated `<Name>__ssr` is
-  untouched (its bytes are byte-identical to the same component without the
-  hook), so the server keeps its pre-`16b-EB` behaviour: a throwing producer
-  fails `renderToString`. Chromium row D6 asserts both halves.
+### 2026-11-25 policy: SSR and recovery
 
-The fallback story for SSR, then, is: **no fallback inside this slice**. A
-server-side boundary needs a decision about what a failed island's bytes are
-(omit the island? serialize a fallback tree? fail the page?), and that decision
-belongs to the serializer lane, not here.
+When an admitted nested host expansion throws, a render with
+`onNestedFailure` reports the original thrown value and contributes the
+caller's literal fallback markup. If the reporter returns normally, healthy
+siblings can continue expanding. If the option is omitted, the original
+exception propagates. The generated component registers `onError` during
+client activation.
+
+The fallback represents the existing unexpanded host. Normal claim adopts its
+nodes according to the existing region and ownership rules. On the client a
+connect or claim failure rolls back the attempted projection and its resources,
+preserving borrowed nodes. Reconnecting runs the normal mount or claim path
+once the cause is gone. A captured refresh or event error leaves its subscription
+or listener live. Pre-connection property reconciliation and seed validation
+take place before the shell's capture point.
+
+An author-facing reset API, a separate fallback identity, cross-custom-element
+client capture and async rejection capture are outside the Alpha16 policy.
+[ADR-0182 decision](../adr/ADR-0182-function-component-capability-api.md#amendment-2026-11-25-16b-eb-fallback-and-recovery)
 
 ### Bytes
 
@@ -1066,31 +1070,12 @@ literals, and the unchanged two-name `bindSignalWrites` call. Pins:
 `generated-element.error-boundary.test.ts` B4 (a module using all three older
 intrinsics plus a tracked slot and an event handler) and B5 (the SSR producer).
 
-> **Later reading (2026-11-20).** Two corrections to this section's headline
-> claim. (1) The delivered boundary is the **capture points only**: the
-> `connectedCallback` catch (connect/claim) plus the existing
-> `guardUpdate(fn, sink)` wrapping (update/refresh and event dispatch share that
-> one sink) — two capture points, not the three the heading says. (2) No SSR
-> fallback exists in this slice (the "no fallback inside this slice" paragraph
-> above is the true statement); the SSR fallback is deferred to Alpha17 by the
-> owner-approved plan amendment of 2026-11-20 — a named carry, not a §13.3
-> exception — see `alpha16-18-execution-plan.md` §18.3. The capability
-> inventory's "three capture points … and an SSR fallback … MIGRATED" row was
-> wrong and is corrected in the 2026-11-20 remediation.
-
-**Evidence status (2026-11-20).** The later reading above agrees with the
-owner-approved plan amendment `alpha16-18-execution-plan.md` §18.3: the delivered
-minimum obligation is the `onError` boundary plus the **two** capture points, the
-SSR fallback is deferred to Alpha17 as a named carry (not a §13.3 exception), and
-the capability inventory's `16b-EB` row plus this section are corrected to that
-truth. At the 2026-11-20 measured commit
-`f514c1290539993f9bdbeca9b02b6f99ca0a4dff` (clean worktree, LOCAL
-the remediation worktree) **no focused `16b-EB` command was re-run**: the
-boundary guard file `packages/compiler/__tests__/semantic-ir/generated-element.error-boundary.test.ts`
-is exercised inside the compiler suite that passed in full (`95 files / 1386
-tests passed, exit 0, 91.83 s`), which is suite-level exercise, not a focused EB
-record. No SSR fallback evidence exists in this tree and none is claimed; the
-fallback's delivery conditions are listed in plan §18.3.
+**Historical evidence.** The 2026-11-20 run at
+`f514c1290539993f9bdbeca9b02b6f99ca0a4dff` exercised the boundary guard within the
+full compiler suite (95 files, 1,386 passes). The run preceded the SSR fallback
+evidence. Execution plan §18.3 records the initial fallback deferral and §19.2
+records the same-day reversal and delivery conditions. The P5 capability
+inventory records evidence provenance and the unsigned §13.5 status.
 
 ## 2026-11-19 amendment — R4: a full generated-lane page has no runtime loader, so document services come from the executor-free subpath (facts only)
 

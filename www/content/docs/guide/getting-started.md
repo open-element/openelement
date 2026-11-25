@@ -42,7 +42,7 @@ Success looks like this:
 
 - The scaffold prints one `created <path>` line per generated file, then a handoff box naming the next commands in the package manager's spelling.
 - `npm run dev` prints its ready line and the local URL — `http://localhost:5173/` by default.
-- Opening that URL shows the starter's home page: the heading "Rendered before JavaScript arrives", the static badges, an interactive counter island and a client-only live timer. The page is already styled and readable; the islands wake up after it loads.
+- Open that URL and try the counter. The timer starts in the browser. Edit the heading in `app/routes/index.tsx` and save to see the home page update.
 
 If something goes wrong before that:
 
@@ -54,7 +54,7 @@ If something goes wrong before that:
 | the install fails offline or against a private registry | dependency install is the only step that talks to the registry | scaffold without it using the generator's `--no-install` flag (pass it through your package manager), then install once the registry is reachable |
 | you use pnpm, yarn or bun | the scaffold installs with the manager it was invoked through, else the first of pnpm/npm/yarn/bun on `PATH` | keep using your manager — the scripts are manager-neutral: `pnpm run dev`, `yarn dev` and `bun run dev` all reach the same dev server |
 
-The examples below use server function pages from the current source preview. Follow the [source preview instructions](https://github.com/open-element/openelement#preview-the-current-source) to try them. If your starter came from npm Alpha 15, use the [Alpha 15 authoring guide](https://github.com/open-element/openelement/blob/v1.0.0-alpha.15/www/content/docs/guide/getting-started.md).
+The examples below use server function pages from the current source preview. Follow the [source preview instructions](https://github.com/open-element/openelement/blob/main/README.md#preview-the-source-checkout) to try them. If your starter came from npm Alpha 15, use the [Alpha 15 authoring guide](https://github.com/open-element/openelement/blob/v1.0.0-alpha.15/www/content/docs/guide/getting-started.md).
 
 ## Understand the project
 

@@ -19,7 +19,7 @@ import { readFile } from 'node:fs/promises';
 import process from 'node:process';
 import { emitSummary } from './checker-io.ts';
 import { spawnCommand } from './node-command.ts';
-import { RETIRED_API_TOKENS } from './retired-api-tokens.ts';
+import { containsRetiredApiToken, RETIRED_API_TOKENS } from './retired-api-tokens.ts';
 
 const SCAN_DIRS = [
   'www/content/docs/guide',
@@ -185,11 +185,11 @@ for (const file of files) {
     }
   }
   for (const token of RETIRED_API_TOKENS) {
-    if (text.includes(token)) {
+    if (containsRetiredApiToken(text, token)) {
       // A retired list that names the token as retired is documentation,
       // not teaching: allow "Retired:" / "已退役" lines only.
       const offending = logical.filter(
-        (line) => line.includes(token) && !/Retired:|已退役|retired/i.test(line),
+        (line) => containsRetiredApiToken(line, token) && !/Retired:|已退役|retired/i.test(line),
       );
       if (offending.length > 0) {
         console.error(`${file}: retired reference '${token}' (${offending.length} line(s))`);

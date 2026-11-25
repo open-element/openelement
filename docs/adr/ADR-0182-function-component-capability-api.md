@@ -113,6 +113,9 @@ dispatcher, a hook-order slot, a second lifecycle engine or a class adapter.
    contract's dynamic-component-type item stays candidate), and this ADR creates
    no obligation to land it.
 
+> The [2026-11-25 amendment](#amendment-2026-11-25-16b-eb-fallback-and-recovery)
+> resolves item 2's recovery policy for Alpha16 and records the shipped boundary.
+
 Experience-edition boundaries:
 
 - **No stability promise.** "Experience edition" is a deliberate label: the API
@@ -1387,3 +1390,45 @@ bytes under a new IDENTITY is explicitly NOT part of this delivery.
 
 **`16b-EB` is therefore still NOT a delivered capability.** The capture points
 (unchanged) plus condition 1 are delivered; the row cannot flip until all four hold.
+
+## Amendment (2026-11-25): `16b-EB` fallback and recovery
+
+The owner chose the existing host identity for Alpha16 fallback and recovery
+through ordinary reconnects and later updates or events. This decision
+resolves the reset-policy question in D-18b item 2 and supersedes the earlier
+status descriptions above. `16b-EB` remains **partial by design** as a replacement
+for the retiring class boundary. The policy decision leaves the separate §13.5
+personal signature on the final-SHA matrix pending.
+
+| Phase | Alpha16 policy |
+| --- | --- |
+| SSR | If an admitted nested host expansion throws and the render supplied `onNestedFailure`, call the reporter with the original thrown value and emit the caller's literal fallback bytes. If the reporter returns, healthy sibling expansion can continue. If the render omits the reporter, the original throw propagates. |
+| Claim | The literal fallback has the same bytes as the unexpanded host. Normal claim identifies and adopts the existing nodes according to the generated region's ownership rules. |
+| Connect and claim capture | The shell rolls back the failed attempt before calling `onError({ host, signal, states, error })`. It releases resources opened by the failed attempt and preserves borrowed DOM. Reconnecting after the cause is removed runs the normal mount or claim path. |
+| Update and event capture | Generated refresh subscriptions and event listeners share `guardUpdate`. Reporting an operation's error leaves the subscription or listener live for the next update or event. |
+
+`onNestedFailure` is a render-level option. Generated `onError` registers
+handlers during client activation.
+On the client, without a handler the exception follows its normal propagation
+path. If a handler throws, its error surfaces after any applicable rollback.
+The capture scope is synchronous generated work of the element and its admitted
+retained hostless setups. A new fallback identity, an author-facing reset API,
+cross-custom-element client capture and async rejection capture are outside the
+Alpha16 policy.
+
+The [generated nested fallback suite](../../packages/element/__tests__/compiled-server/generated-nested-fallback.test.ts)
+checks literal output, reporting, healthy sibling expansion and byte equality
+with the no-expansion render. The
+[generated error boundary browser suite](../../packages/compiler/__tests__/semantic-ir/generated-element.error-boundary.browser.test.ts)
+covers client rollback and retry, live update and event recovery, propagation
+without a handler, and the compiled SSR fallback followed by a live Chromium
+claim of the same nodes.
+
+A prior supplemental probe claimed the SSR fallback after compiling the producer
+and preserved node identity in Chromium, Firefox and WebKit. That local result
+is recorded against landed commit `03e1e07e2eb87d703a9e8efbc56e6108f91472e9`.
+[Prior landed-candidate evidence](https://github.com/open-element/openelement/pull/1812#issuecomment-7158207745)
+
+The [migration note](../architecture/16b-migration-note.md#2026-11-25-policy-ssr-and-recovery)
+and [capability inventory](../architecture/alpha16-capability-inventory.md#2026-11-25-error-boundary-review)
+record the same scope and evidence.

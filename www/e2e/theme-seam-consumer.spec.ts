@@ -12,7 +12,7 @@
  * "one mutation" claim is scoped to the no-override path.
  *
  * The static half of the same seam lives in
- * `www/__tests__/site-theme-and-gaze-seams.test.ts`; the byte-identity of the
+ * `www/__tests__/site-theme-seam.test.ts`; the byte-identity of the
  * generated script is guarded by `@openelement/www#check:theme-init`.
  */
 import { expect, type Page, test } from '@playwright/test';

@@ -36,6 +36,9 @@ can scaffold without any manager using `--no-install`. The handoff shows the
 commands for the selected manager. The CLI also initializes git when available
 and the target is outside an existing repository.
 
+Start the dev server from the generated project. Edit the heading in
+`app/routes/index.tsx` and save to see the home page update.
+
 Optional flags
 
 | Flag | Default | Meaning |
@@ -103,7 +106,7 @@ pnpm dlx --package=@openelement/create openelement-create my-app
 
 The scaffolded project runs on Node.js 24.2+ under npm, pnpm, yarn, or bun.
 Keep using the package manager that installed its dependencies. For a checkout
-whose source version is ahead of npm, the [source preview](../../README.md#preview-the-current-source)
+whose source version is ahead of npm, the [source preview](../../README.md#preview-the-source-checkout)
 builds the starter against the checkout’s packages.
 
 ## Stable 0.43 (maintenance line)

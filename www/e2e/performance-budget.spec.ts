@@ -223,8 +223,7 @@ function compare(route: string, measured: Measurement, expected: RouteBaseline):
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Performance profile (mobile 4G, 4x CPU, cold cache)', () => {
-  // Three throttled runs per route plus interactions; the slowest route is the
-  // 10 MB home page, so the ceiling is generous on purpose.
+  // Three throttled runs per route include search and other interactive checks.
   test.setTimeout(1_200_000);
 
   for (const route of ROUTES) {

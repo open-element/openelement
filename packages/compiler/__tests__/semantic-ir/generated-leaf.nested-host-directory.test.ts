@@ -68,12 +68,10 @@
  * proof for the directory half.
  */
 
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
-import { build } from 'vite';
 import { RuntimeErrorCode } from '@openelement/protocol/errors';
 import { compileFunctionModule } from '../../src/internal/compiler/semantic-core/function-frontend.ts';
 import {
@@ -85,9 +83,10 @@ import {
   type DeclaredStaticNode,
 } from '../../../element/src/internal/compiled/runtime/static-sibling-ranges.ts';
 import { ELEMENT_CLASSIFIER as CLASSIFIER, REPO_ROOT } from './testlib/element-classifier.ts';
+import { comment, element, text, type ClaimNode } from './testlib/claim-dom.ts';
+import { loadGeneratedClaimBundle } from './testlib/generated-claim-bundle.ts';
 
 const FILE = '/proj/src/page.tsx';
-const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
 
 function generate(source: string): string {
   const front = compileFunctionModule(source, FILE, { importClassifier: CLASSIFIER });
@@ -108,140 +107,6 @@ function generate(source: string): string {
  * defect was the EMITTER asking the consumer to bracket a nested host, not the
  * consumer refusing a nested marker.
  * ------------------------------------------------------------------------- */
-
-interface ClaimAttribute {
-  name: string;
-  value: string;
-}
-
-interface ClaimNode {
-  nodeType: number;
-  parentNode: ClaimNode | null;
-  nodeValue?: string;
-  localName?: string;
-  tagName?: string;
-  namespaceURI?: string | null;
-  childNodes?: ClaimNode[];
-  readonly firstChild?: ClaimNode | null;
-  readonly nextSibling?: ClaimNode | null;
-  attributes?: { readonly length: number; item(index: number): ClaimAttribute | null };
-  getAttribute?(name: string): string | null;
-  hasAttribute?(name: string): boolean;
-  setAttribute?(name: string, value: string): void;
-  removeAttribute?(name: string): void;
-  toggleAttribute?(name: string, force?: boolean): boolean;
-  appendChild?(node: ClaimNode): ClaimNode;
-  insertBefore?(node: ClaimNode, reference: ClaimNode | null): ClaimNode;
-  removeChild?(node: ClaimNode): ClaimNode;
-  remove?(): void;
-}
-
-function element(tag: string, namespaceURI: string | null = HTML_NAMESPACE): ClaimNode {
-  const attrs: ClaimAttribute[] = [];
-  const attributes = {
-    get length() {
-      return attrs.length;
-    },
-    item(index: number) {
-      return attrs[index] ?? null;
-    },
-  };
-  const node: ClaimNode = {
-    nodeType: 1,
-    parentNode: null,
-    localName: tag,
-    tagName: tag.toUpperCase(),
-    namespaceURI,
-    childNodes: [],
-    attributes,
-    get firstChild() {
-      return node.childNodes![0] ?? null;
-    },
-    get nextSibling() {
-      const parent = node.parentNode;
-      if (parent === null) return null;
-      const siblings = parent.childNodes ?? [];
-      const index = siblings.indexOf(node);
-      return index < 0 ? null : (siblings[index + 1] ?? null);
-    },
-    getAttribute: (name) => attrs.find((entry) => entry.name === name)?.value ?? null,
-    hasAttribute: (name) => attrs.some((entry) => entry.name === name),
-    setAttribute: (name, value) => {
-      const found = attrs.find((entry) => entry.name === name);
-      if (found) found.value = value;
-      else attrs.push({ name, value });
-    },
-    removeAttribute: (name) => {
-      const index = attrs.findIndex((entry) => entry.name === name);
-      if (index >= 0) attrs.splice(index, 1);
-    },
-    toggleAttribute: (name, force) => {
-      const has = attrs.some((entry) => entry.name === name);
-      const on = force === undefined ? !has : force;
-      if (on) node.setAttribute!(name, '');
-      else node.removeAttribute!(name);
-      return on;
-    },
-    appendChild: (child) => {
-      child.parentNode?.removeChild?.(child);
-      child.parentNode = node;
-      node.childNodes!.push(child);
-      return child;
-    },
-    insertBefore: (child, reference) => {
-      child.parentNode?.removeChild?.(child);
-      if (reference === null) return node.appendChild!(child);
-      const index = node.childNodes!.indexOf(reference);
-      if (index < 0) throw new Error('insertBefore reference is not a child');
-      child.parentNode = node;
-      node.childNodes!.splice(index, 0, child);
-      return child;
-    },
-    removeChild: (child) => {
-      const index = node.childNodes!.indexOf(child);
-      if (index < 0) throw new Error('removeChild node is not a child');
-      node.childNodes!.splice(index, 1);
-      child.parentNode = null;
-      return child;
-    },
-    remove: () => {
-      node.parentNode?.removeChild?.(node);
-    },
-  };
-  return node;
-}
-
-function text(value: string): ClaimNode {
-  const node: ClaimNode = { nodeType: 3, parentNode: null, nodeValue: value };
-  Object.defineProperty(node, 'nextSibling', {
-    get() {
-      const parent = node.parentNode;
-      if (parent === null) return null;
-      const siblings = parent.childNodes ?? [];
-      const index = siblings.indexOf(node);
-      return index < 0 ? null : (siblings[index + 1] ?? null);
-    },
-  });
-  Object.defineProperty(node, 'firstChild', { value: null });
-  node.remove = () => node.parentNode?.removeChild?.(node);
-  return node;
-}
-
-function comment(value: string): ClaimNode {
-  const node: ClaimNode = { nodeType: 8, parentNode: null, nodeValue: value };
-  Object.defineProperty(node, 'nextSibling', {
-    get() {
-      const parent = node.parentNode;
-      if (parent === null) return null;
-      const siblings = parent.childNodes ?? [];
-      const index = siblings.indexOf(node);
-      return index < 0 ? null : (siblings[index + 1] ?? null);
-    },
-  });
-  Object.defineProperty(node, 'firstChild', { value: null });
-  node.remove = () => node.parentNode?.removeChild?.(node);
-  return node;
-}
 
 function declaredHost(tag: string): DeclaredStaticNode {
   return { kind: 'element', localName: tag, attributes: [], children: [] };
@@ -430,65 +295,16 @@ beforeAll(async () => {
   // directory consumer; both modules are bundled against the SAME real runtime.
   const dir = mkdtempSync(join(tmpdir(), 'oe-gap2-'));
   bundleDir = dir;
-  const elementRoot = join(REPO_ROOT, 'packages/element/src/internal');
-  const runtime = join(elementRoot, 'compiled/runtime');
-  const shim = join(dir, 'runtime-shim.ts');
-  writeFileSync(
-    shim,
+  loaded = await loadGeneratedClaimBundle<Loaded>(
+    dir,
+    { 'page.js': pageModule, 'light.js': lightModule },
     [
-      // Star exports keep the shim a pure pass-through: the sibling round-4
-      // change adds the nested-host claim helpers to these same modules and
-      // this file must not restate their names.
-      `export * from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
-      `export * from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
-      `export * from ${JSON.stringify(join(runtime, 'values.ts'))};`,
-      `export * from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
-      `export * from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
-      `export * from ${JSON.stringify(join(runtime, 'nested-host.ts'))};`,
-      `export { claimRecipe, createRecipe, insertRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
-      `export { reconcileEachEntries } from ${JSON.stringify(join(runtime, 'each-reconcile.ts'))};`,
-      `export { claimStaticSiblingRange, openStaticSiblingDirectory } from ${JSON.stringify(join(runtime, 'static-sibling-ranges.ts'))};`,
-      `export { escapeText } from ${JSON.stringify(join(elementRoot, 'compiled/escape-text.ts'))};`,
-      `export { escapeAttrValue } from ${JSON.stringify(join(elementRoot, 'core/html-escape.ts'))};`,
-      `export { OpenElementError } from ${JSON.stringify(join(REPO_ROOT, 'packages/protocol/src/errors.ts'))};`,
-      `export { LifetimeScope } from ${JSON.stringify(join(elementRoot, 'compiled/lifetime-scope.ts'))};`,
-      '',
-    ].join('\n'),
+      "export { createPageRecipe, Page__ssr } from './page.js';",
+      "export { createLightRecipe, Light__ssr } from './light.js';",
+      `export { claimRecipe, insertRecipe } from ${JSON.stringify(GENERATED_LEAF_RUNTIME_SPECIFIER)};`,
+      `export { LifetimeScope } from ${JSON.stringify(join(REPO_ROOT, 'packages/element/src/internal/compiled/lifetime-scope.ts'))};`,
+    ],
   );
-  writeFileSync(join(dir, 'page.js'), pageModule);
-  writeFileSync(join(dir, 'light.js'), lightModule);
-  writeFileSync(
-    join(dir, 'entry.ts'),
-    [
-      `export { createPageRecipe, Page__ssr } from './page.js';`,
-      `export { createLightRecipe, Light__ssr } from './light.js';`,
-      `export { claimRecipe, insertRecipe, LifetimeScope } from ${JSON.stringify(
-        GENERATED_LEAF_RUNTIME_SPECIFIER,
-      )};`,
-      '',
-    ].join('\n'),
-  );
-  const result = await build({
-    configFile: false,
-    root: dir,
-    logLevel: 'silent',
-    resolve: { alias: { [GENERATED_LEAF_RUNTIME_SPECIFIER]: shim } },
-    build: {
-      write: false,
-      minify: false,
-      lib: { entry: join(dir, 'entry.ts'), formats: ['es'], fileName: () => 'mod.js' },
-    },
-  });
-  const output = Array.isArray(result)
-    ? result[0]!.output
-    : (result as { output: unknown[] }).output;
-  const chunk = (output as Array<{ type: string; code?: string }>).find(
-    (item) => item.type === 'chunk',
-  );
-  if (chunk?.code === undefined) throw new Error('GAP-2 bundle produced no chunk');
-  const out = join(dir, 'mod.js');
-  writeFileSync(out, chunk.code);
-  loaded = (await import(pathToFileURL(out).href)) as Loaded;
 }, 60_000);
 
 afterAll(() => {

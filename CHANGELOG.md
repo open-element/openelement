@@ -21,12 +21,12 @@ in `public-runtime.ts`, its public exports (`OpenElement`, `ErrorBoundary`) and 
 own contract tests are all removed. There is no compatibility base class and no
 adapter: an app that extended one moves to the generated lane.
 
-What that costs, stated plainly rather than deferred: `ErrorBoundary`'s
-cross-element containment is gone (the surviving `onError` intrinsic is
-element-scoped, two capture points, both update-phase), and streaming
-(`renderIntent.stream`) retired with the artifact it deferred against — a later
-release owns its replacement. `PART_PROGRAM_VERSION` stays: the runtime still
-validates the wire format on revive.
+`ErrorBoundary`'s cross-element containment and `renderIntent.stream` are
+retired. The generated `onError` intrinsic handles the owning element's
+synchronous failures during connect and claim, tracked updates, and DOM event
+dispatch. The runtime still validates `PART_PROGRAM_VERSION` on revive.
+See the [Alpha16 migration note](./docs/architecture/16b-migration-note.md) for
+the generated replacements and their scope.
 
 - **Authoring — `computed` is a generated-lane intrinsic (ADR-0183, option B).**
   `const x = computed(() => expr)` is a compiler-erased, instance-retained derived
@@ -45,11 +45,12 @@ validates the wire format on revive.
   expand it, and the helper returns the caller's own literal bytes whenever no
   expander applies — an admission regression can only ever show up as "no DSD",
   never as wrong markup.
-- **Authoring — `16b-EB` gains its SSR fallback contract.** A descendant producer
-  that throws is owned by the enclosing error boundary: the render emits the
-  boundary's fallback bytes in its place and the failure is carried out to that
-  boundary instead of failing the whole render. With no boundary the original
-  error still propagates, so this is not a silent swallow.
+- **Server rendering — nested host fallback.** A `renderToString` call can
+  supply `onNestedFailure` to receive the original error when an admitted nested
+  host expansion throws. When the reporter returns, the render emits the
+  caller's literal host markup for the failed expansion and can continue with
+  its siblings. Normal claim uses the existing host identity. With the reporter
+  omitted, the original error propagates.
 - **CSS — a LIGHT-root generated island's declared sheets reach the document.**
   The build emitted the asset and recorded its URL, but no render path declared
   it, so a styled light island shipped unstyled and nothing failed. The light-root

@@ -31,7 +31,9 @@
  *   (identity, not a wrapper), `signal.aborted` is true for a connect-phase
  *   failure and false for an update-phase one, `states` is the live
  *   `CustomStateSet`;
- * - the SSR producer runs no handler and never swallows a producer throw.
+ * - the SSR producer runs no handler and propagates a producer throw; the
+ *   enclosing render can opt into literal nested fallback, which the client
+ *   claims under the existing DOM identity.
  *
  * One engine (Chromium), LOCAL. Not an M13 matrix row, not a public API freeze.
  */
@@ -231,6 +233,20 @@ const NESTED_SOURCE =
   '}\n' +
   'export default NestedHost;\n';
 
+const SSR_FALLBACK_SOURCE =
+  "import { onError } from '@openelement/element';\n" +
+  sidecar('seed: { default: 0 }') +
+  `export default function FallbackBoundary(props: { seed: number }) {
+    onError(() => { globalThis.__oeEbJournal.push('caught-fallback'); });
+    return (
+      <section>
+        <error-boundary-update explode><strong>fallback</strong></error-boundary-update>
+        <error-boundary-connect seed="8"></error-boundary-connect>
+        <output>{props.seed}</output>
+      </section>
+    );
+  }`;
+
 interface PageRuntime {
   GeneratedElement: CustomElementConstructor;
   __oeElementTag: string;
@@ -247,6 +263,9 @@ declare global {
     __oeEbNoHandlerUpdate: PageRuntime;
     __oeEbNoHandlerEvent: PageRuntime;
     __oeEbNested: PageRuntime;
+    __oeEbFallback: PageRuntime & {
+      renderToString: typeof import('../../../element/src/index.ts').renderToString;
+    };
     __oeEbTick: () => Promise<void>;
     __oeEbErrors: string[];
     __oeEbJournal: string[];
@@ -275,47 +294,26 @@ const PAGE_SETUP = `
   });
 `;
 
-/** The runtime shim the generated modules' one import specifier resolves to. */
-function runtimeShimSource(): string {
-  const element = join(REPO_ROOT, 'packages/element/src/internal');
-  const runtime = join(element, 'compiled/runtime');
-  return [
-    `export { claimRecipe, createRecipe, insertRecipe } from ${JSON.stringify(join(runtime, 'recipe.ts'))};`,
-    `export { reconcileEachEntries } from ${JSON.stringify(join(runtime, 'each-reconcile.ts'))};`,
-    `export { bindSignalWrites, guardUpdate, runUntracked } from ${JSON.stringify(join(runtime, 'bindings.ts'))};`,
-    `export { runtimeProbe } from ${JSON.stringify(join(runtime, 'observability.ts'))};`,
-    `export { attributeValueOf, assertSafeUrlAttribute, displayValue, removeNodes } from ${JSON.stringify(join(runtime, 'values.ts'))};`,
-    `import * as claimInvariants from ${JSON.stringify(join(runtime, 'claim-invariants.ts'))};`,
-    `export const { assertEachAnchor, assertEachEndMarker, assertElementInHtmlNamespace, assertElementInNamespace, assertStaticAttributeSeed, assertTextSlotMarker, assertWhenAnchor, assertWhenEndMarker, entrySeedMismatch, isEachEndMarker, isWhenEndMarker, leafClaimMismatch, leafRuntimeError, readEntryKeyMarker } = claimInvariants;`,
-    `import * as markers from ${JSON.stringify(join(runtime, 'markers.ts'))};`,
-    `export const { emitComment, entryKeyMarker, MARKERS, markerText, parseEachMarker, parseEntryKeyMarker, parseRangeMarker, parseTextSlotMarker, rangeMarker, slotAnchorMarker, textSlotMarker } = markers;`,
-    `export { encodeListKey, tryEncodeListKey } from ${JSON.stringify(join(runtime, 'list-key.ts'))};`,
-    `export { claimStaticSiblingRange, openStaticSiblingDirectory } from ${JSON.stringify(join(runtime, 'static-sibling-ranges.ts'))};`,
-    `export { abortInstancePass, beginInstancePass, endInstancePass, joinInstancePass, releaseChildInstance, releaseRetainedChildren, releaseUnderStructuralScope, retainChildInstance } from ${JSON.stringify(join(runtime, 'instance-ledger.ts'))};`,
-    `export { escapeText } from ${JSON.stringify(join(element, 'compiled/escape-text.ts'))};`,
-    `export { escapeAttrValue } from ${JSON.stringify(join(element, 'core/html-escape.ts'))};`,
-    '',
-  ].join('\n');
-}
-
 async function buildBundle(
   dir: string,
   islandModule: string,
   name: string,
   globalName: string,
   component: string,
+  includeServerRenderer: boolean,
 ): Promise<string> {
   const element = join(REPO_ROOT, 'packages/element/src/internal');
   const island = join(dir, `${name}-island.js`);
-  const shim = join(dir, `${name}-runtime-shim.ts`);
   const entry = join(dir, `${name}-entry.ts`);
   writeFileSync(island, islandModule);
-  writeFileSync(shim, runtimeShimSource());
   const ssrExport = new RegExp(`export function (${component}__ssr)\\(`).exec(islandModule);
   const entryLines = [
     `export { default as GeneratedElement } from './${name}-island.js';`,
     `export { __oeElementTag } from './${name}-island.js';`,
     ...(ssrExport === null ? [] : [`export { ${ssrExport[1]} } from './${name}-island.js';`]),
+    ...(includeServerRenderer
+      ? [`export { renderToString } from ${JSON.stringify(join(element, '../index.ts'))};`]
+      : []),
     '',
   ];
   writeFileSync(entry, entryLines.join('\n'));
@@ -325,7 +323,7 @@ async function buildBundle(
     logLevel: 'silent',
     resolve: {
       alias: {
-        [GENERATED_LEAF_RUNTIME_SPECIFIER]: shim,
+        [GENERATED_LEAF_RUNTIME_SPECIFIER]: join(element, 'compiled/leaf-runtime.ts'),
         [GENERATED_ELEMENT_SHELL_SPECIFIER]: join(element, 'compiled/generated-element/shell.ts'),
       },
     },
@@ -364,9 +362,9 @@ function compileIsland(
   return { code: compiled!.code, tag: compiled!.tag, component: compiled!.component };
 }
 
-async function openPage(bundleKey: string): Promise<Page> {
+async function openPage(bundleKey: string, html = ''): Promise<Page> {
   const page = await browser.newPage();
-  await page.setContent('<!doctype html><html><body></body></html>');
+  await page.setContent(`<!doctype html><html><body>${html}</body></html>`);
   await page.addScriptTag({ path: bundles.get(bundleKey)! });
   await page.addScriptTag({ content: PAGE_SETUP });
   return page;
@@ -393,13 +391,21 @@ beforeAll(async () => {
       '__oeEbNoHandlerEvent',
     ],
     ['nested', 'error-boundary-nested', NESTED_SOURCE, '__oeEbNested'],
+    ['fallback', 'error-boundary-fallback', SSR_FALLBACK_SOURCE, '__oeEbFallback'],
   ];
   for (const [key, name, source, globalName] of fixtures) {
     const compiled = compileIsland(name, source);
     tags.set(key, compiled.tag);
     bundles.set(
       key,
-      await buildBundle(tempDir, compiled.code, name, globalName, compiled.component),
+      await buildBundle(
+        tempDir,
+        compiled.code,
+        name,
+        globalName,
+        compiled.component,
+        key === 'fallback',
+      ),
     );
   }
   browser = await chromium.launch();
@@ -807,6 +813,121 @@ describe('16b-EB error boundary (Chromium)', () => {
       expect(result.didThrow).toBe(true);
       expect(result.thrownMessage).toBe('slot boom');
       expect(result.journal).toEqual([]);
+    } finally {
+      await page.close();
+    }
+  }, 120_000);
+
+  test('D8 render-level fallback keeps the existing DOM when the generated parent claims', async () => {
+    const server = await openPage('fallback');
+    const rendered = await (async () => {
+      try {
+        await server.addScriptTag({ path: bundles.get('update')! });
+        await server.addScriptTag({ path: bundles.get('connect')! });
+        return await server.evaluate(() => {
+          const { renderToString, GeneratedElement, __oeElementTag } = window.__oeEbFallback;
+          const failing = window.__oeEbUpdate;
+          const healthy = window.__oeEbConnect;
+          customElements.define(failing.__oeElementTag, failing.GeneratedElement);
+          customElements.define(healthy.__oeElementTag, healthy.GeneratedElement);
+
+          const options = {
+            componentClass: GeneratedElement,
+            props: { seed: 3 },
+            ssrRenderableTags: [failing.__oeElementTag, healthy.__oeElementTag],
+          };
+          const errors: string[] = [];
+          const html = renderToString(__oeElementTag, {
+            ...options,
+            onNestedFailure: (error) => errors.push((error as Error).message),
+          });
+          const unexpanded = renderToString(__oeElementTag, {
+            ...options,
+            ssrRenderableTags: [healthy.__oeElementTag],
+          });
+          let unhandled = '';
+          try {
+            renderToString(__oeElementTag, options);
+          } catch (error) {
+            unhandled = (error as Error).message;
+          }
+          return { html, unexpanded, errors, unhandled, journal: window.__oeEbJournal };
+        });
+      } finally {
+        await server.close();
+      }
+    })();
+
+    expect(rendered.errors).toEqual(['slot boom']);
+    expect(rendered.unhandled).toBe('slot boom');
+    expect(rendered.journal).toEqual([]);
+    expect(rendered.html).toBe(rendered.unexpanded);
+    expect(rendered.html).toContain('<strong>fallback</strong>');
+    expect(rendered.html).toMatch(/<error-boundary-connect[^>]*data-oe-light[^>]*><button/);
+
+    const page = await openPage('fallback', rendered.html);
+    try {
+      const result = await page.evaluate(() => {
+        const { GeneratedElement, __oeElementTag } = window.__oeEbFallback;
+        const host = document.querySelector(__oeElementTag) as HTMLElement & { seed: number };
+        const region = host.firstElementChild!;
+        const fallback = host.querySelector('error-boundary-update');
+        const fallbackContent = fallback?.firstElementChild;
+        const sibling = host.querySelector('error-boundary-connect');
+        const siblingContent = sibling?.firstElementChild;
+        const output = host.querySelector('output')!;
+        const observer = new MutationObserver(() => {});
+        observer.observe(host, {
+          subtree: true,
+          childList: true,
+          attributes: true,
+          characterData: true,
+        });
+
+        customElements.define(__oeElementTag, GeneratedElement);
+        const claimed = {
+          upgraded: host instanceof GeneratedElement,
+          mutations: observer.takeRecords().length,
+          seed: output.textContent,
+          sameHost: document.querySelector(__oeElementTag) === host,
+          sameRegion: host.firstElementChild === region,
+          sameFallback:
+            fallback !== null &&
+            fallbackContent?.textContent === 'fallback' &&
+            host.querySelector('error-boundary-update') === fallback &&
+            fallback.firstElementChild === fallbackContent,
+          sameSibling:
+            sibling !== null &&
+            siblingContent?.tagName === 'BUTTON' &&
+            host.querySelector('error-boundary-connect') === sibling &&
+            sibling.firstElementChild === siblingContent,
+        };
+        observer.disconnect();
+
+        host.seed = 9;
+        return {
+          claimed,
+          updated: output.textContent,
+          sameOutput: host.querySelector('output') === output,
+          errors: window.__oeEbErrors,
+          journal: window.__oeEbJournal,
+        };
+      });
+      expect(result).toEqual({
+        claimed: {
+          upgraded: true,
+          mutations: 0,
+          seed: '3',
+          sameHost: true,
+          sameRegion: true,
+          sameFallback: true,
+          sameSibling: true,
+        },
+        updated: '9',
+        sameOutput: true,
+        errors: [],
+        journal: [],
+      });
     } finally {
       await page.close();
     }

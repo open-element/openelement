@@ -1,4 +1,3 @@
-// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the shared consumer-qualification machinery — scratch-project lifecycle, cell framework, HTTP/form probes, dev-feedback session, Playwright continuation, boundary walks — is one harness because every leg must enforce the same observational rule from the same primitives; the boundary is that legs supply a PackedAppLegSpec and the staging stays OUTSIDE the repository so workspace auto-aliasing can never substitute workspace source for the packed tarballs.
 /**
  * Shared harness for packed-artifact consumer qualification of Framework Mode
  * applications (Beta.2.2, #1339 §11): prove that the pack:dry-run tarballs —
@@ -6,8 +5,9 @@
  * compiled native renderer. The harness (tools/release/consumer-packaged-native.ts)
  * supplies a PackedAppLegSpec (app sources, probes, dev-feedback edits); this
  * module owns the shared process/server/temp-project lifecycle, the cell
- * framework, the HTTP and form probes, the dev-feedback session, the
- * Playwright continuation probes, and the boundary walks.
+ * framework, the HTTP and form probes, the dev-feedback session and the
+ * Playwright continuation probes. The boundary cell delegates to the
+ * artifact readers once staging and the build have produced their inputs.
  *
  * The observational rule for packaging defects: qualify the PACKED artifact,
  * never the workspace source. The harness stages a scratch consumer OUTSIDE
@@ -73,83 +73,40 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { spawnCommand } from '../repo/node-command.ts';
 import { mkdtemp, realpath, rm, stat } from 'node:fs/promises';
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { formatJson } from '@openelement/element/build-utils';
 import { formatError } from '@openelement/element';
-import ts from 'typescript';
 import { PACKAGE_VERSION, RETAINED_PACKAGE_NAMES } from '../repo/project-constants.ts';
 import { VITE_DEV_PIN } from '../repo/deps-vite-check.ts';
 import { readPackages } from '../lib/package-graph.ts';
 import { tarballPath } from '../lib/npm-tarball.ts';
+import { assertPackedAppBoundaries } from './consumer-packaged-graphs.ts';
+
+export {
+  DECLARATION_LEAK_PATTERN,
+  declarationTypeEdges,
+  walkPackedDeclarations,
+  type PackedDeclarationWalk,
+} from './consumer-packaged-graphs.ts';
+export {
+  assertAuthoredSourceMap,
+  decodeSourceMapMappings,
+  type AuthoredSourceMapEvidence,
+  type DecodedSourceMapSegment,
+} from './consumer-packaged-source-maps.ts';
 
 const repoRoot = resolve(import.meta.dirname!, '../..');
 // Generous ceilings for the real SSG build and cold-cache vite/dev server
 // boots; a hung packed router must fail the harness instead of stalling CI
 // forever (same contract as consumer-packaged-starter.ts).
-// Responsibility boundary (round-3 review): this module is intentionally one
-// unit. The scratch-consumer staging, hermetic install, reserved-port server
-// lifecycle, teardown, HTTP/form probes, browser continuation, and boundary
-// walks share one mutable session (temp dir, port, child process, served
-// document state) and one ordering contract. Splitting them into
-// install/server/browser/boundary modules would thread that session through
-// single-caller abstractions and duplicate the timeout/probe orchestration —
-// less traceable, not more testable. The leg keeps its own spec
-// (consumer-packaged-native.ts); shared lifecycle stays here.
+// Staging, the install, server probes and teardown share one session and ordering
+// contract. The artifact checks consume only files and leave that lifecycle here.
 
 const BUILD_TIMEOUT_MS = 10 * 60_000;
 const TYPES_TIMEOUT_MS = 5 * 60_000;
 const SERVER_READY_TIMEOUT_MS = 3 * 60_000;
 const BROWSER_TIMEOUT_MS = 5 * 60_000;
-
-/** Boundary pattern: no compiler, router-internal tooling, host or workspace leakage. */
-const BOUNDARY_ID_PATTERN = /compiler|router(?:\/src)?\/vite|router\/cli(?:[/.]|$)|node:/;
-const BOUNDARY_SPECIFIER_PATTERN =
-  /compiler|router(?:\/src)?\/vite|router\/cli(?:[/.]|$)|^node:|workspace:/;
-// The vite/cli alternatives are anchored ((?:[/.]|$)) so a legitimate module
-// name like ./internal/router/client-router.js — whose path carries the
-// substring "router/cli" — is not flagged as a router/cli tooling edge. The
-// anchored `router(?:\/src)?\/(?:vite|cli)` form covers both the router/src
-// and plain router spellings of the vite plugins and the CLI.
-export const DECLARATION_LEAK_PATTERN =
-  /compiler|router(?:\/src)?\/(?:vite|cli)(?:[/.]|$)|\bvite\b|^node:|workspace:/;
-
-/**
- * Type-bearing module specifiers of one declaration file: `import ... from`
- * and `export ... from` edges. Side-effect-only imports (no import clause)
- * are excluded — they carry no consumer type surface. The vp generator emits
- * them faithfully into `.d.ts` for module-order fidelity, so a packed
- * declaration graph may reference an optional peer; leak scans must still see
- * every specifier, and only the resolution walk uses this edge set.
- */
-export function declarationTypeEdges(text: string): string[] {
-  const source = ts.createSourceFile(
-    'graph.d.ts',
-    text,
-    ts.ScriptTarget.ESNext,
-    true,
-    ts.ScriptKind.TS,
-  );
-  const edges: string[] = [];
-  const visit = (node: ts.Node): void => {
-    if (
-      ts.isImportDeclaration(node) &&
-      node.importClause !== undefined &&
-      ts.isStringLiteral(node.moduleSpecifier)
-    ) {
-      edges.push(node.moduleSpecifier.text);
-    } else if (
-      ts.isExportDeclaration(node) &&
-      node.moduleSpecifier !== undefined &&
-      ts.isStringLiteral(node.moduleSpecifier)
-    ) {
-      edges.push(node.moduleSpecifier.text);
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(source);
-  return edges;
-}
 
 export interface ProcessRunResult {
   success: boolean;
@@ -1260,175 +1217,6 @@ function combineFormOutcomes(label: string, outcome: PackedAppOutcome | undefine
 
 // ─── Declaration graph walker (boundary cell) ───────────────────────────────
 //
-// The one packed-artifact declaration walker: consumer-packaged-element,
-// consumer-packaged-ui and the router leg below all walk with it. The leak
-// scan sees every specifier in the graph (including side-effect-only
-// imports); the resolution walk follows type-bearing edges only
-// (declarationTypeEdges) — a packed graph may reference an optional peer that
-// the consumer has not installed, and such a side-effect-only import carries
-// no type surface to resolve. Missing declarations (pack dropped them) are
-// reported module-by-module; any problem fails the caller's cell.
-
-export interface PackedDeclarationWalk {
-  /** Distinct declaration modules visited. */
-  modules: number;
-  /** Leak, unresolved-edge, and missing-declaration violations. */
-  problems: string[];
-}
-
-export function walkPackedDeclarations(options: {
-  /** Absolute entry declaration files to walk from (callers pre-verify them). */
-  entries: readonly string[];
-  /** Defaults to DECLARATION_LEAK_PATTERN. */
-  leakPattern?: RegExp;
-}): PackedDeclarationWalk {
-  const leakPattern = options.leakPattern ?? DECLARATION_LEAK_PATTERN;
-  const host = {
-    fileExists: (name: string): boolean => {
-      try {
-        return statSync(name).isFile();
-      } catch {
-        return false;
-      }
-    },
-    readFile: (name: string): string | undefined => {
-      try {
-        return readFileSync(name, 'utf8');
-      } catch {
-        return undefined;
-      }
-    },
-  };
-  const leaks: string[] = [];
-  const unresolved: string[] = [];
-  const missingDeclarations: string[] = [];
-  const seen = new Set<string>();
-  const walk = (path: string): void => {
-    if (seen.has(path)) return;
-    seen.add(path);
-    const text = readFileSync(path, 'utf8');
-    // Leak scan sees every specifier, including side-effect-only imports.
-    for (const { fileName } of ts.preProcessFile(text).importedFiles) {
-      if (leakPattern.test(fileName)) leaks.push(`${path} -> ${fileName}`);
-    }
-    // Resolution walk follows type-bearing edges only (see declarationTypeEdges).
-    for (const fileName of declarationTypeEdges(text)) {
-      const resolved = ts.resolveModuleName(
-        fileName,
-        path,
-        {
-          moduleResolution: ts.ModuleResolutionKind.Bundler,
-          module: ts.ModuleKind.ESNext,
-        },
-        host,
-      ).resolvedModule;
-      if (!resolved) {
-        unresolved.push(`${path} -> ${fileName}`);
-        continue;
-      }
-      if (!/\.d\.[cm]?ts$/.test(resolved.resolvedFileName)) {
-        missingDeclarations.push(
-          `${path} -> ${fileName} (resolves to ${resolved.resolvedFileName}; ` +
-            'the packed tarball ships no .d.ts for this module)',
-        );
-        continue;
-      }
-      walk(resolved.resolvedFileName);
-    }
-  };
-  for (const entry of options.entries) walk(entry);
-  const problems: string[] = [];
-  if (leaks.length > 0) problems.push(`leaky declaration edges:\n${leaks.join('\n')}`);
-  if (unresolved.length > 0) {
-    problems.push(`unresolved declaration edges:\n${unresolved.join('\n')}`);
-  }
-  if (missingDeclarations.length > 0) {
-    problems.push(`modules lacking packed declarations:\n${missingDeclarations.join('\n')}`);
-  }
-  return { modules: seen.size, problems };
-}
-
-/**
- * Router-leg boundary cell: follow .d.ts import edges from the published
- * @openelement/router entries (index/document) through the shared walker.
- * Every edge must resolve to a declaration file, and no edge may name the
- * compiler, router-internal tooling, vite, a host builtin or a workspace
- * specifier. The retired ./lit and ./lit-ssr declaration entries are no longer
- * part of the packed surface.
- */
-function walkRouterDeclarations(tmp: string): string {
-  const routerSrc = join(tmp, 'node_modules', '@openelement', 'router', 'src');
-  const entries = ['index.d.ts', 'document.d.ts'];
-  const missingEntries = entries.filter((entry) => !existsSync(join(routerSrc, entry)));
-  if (missingEntries.length > 0) {
-    throw new Error(
-      'Packed @openelement/router tarball lacks declaration entries ' +
-        `(vp pack dropped them): ${missingEntries.join(', ')}`,
-    );
-  }
-  const { modules, problems } = walkPackedDeclarations({
-    entries: entries.map((entry) => join(routerSrc, entry)),
-  });
-  if (problems.length > 0) {
-    throw new Error(
-      `Packed @openelement/router declaration graph violations:\n${problems.join('\n')}`,
-    );
-  }
-  return `${modules} declaration modules resolved clean from index/document`;
-}
-
-// ─── Packed element-leaf module graph (boundary cell) ───────────────────────
-//
-// #1339 review: the kernel-free claim for the element leaves must hold on the
-// PACKED artifact, not only the workspace source graph (which
-// packages/router/__tests__/entry-graph-boundary.test.ts proves). Walk the
-// installed @openelement/element/src/{html,logger,authoring}.js graphs inside
-// the consumer's node_modules and require the Native runtime kernel (the root
-// barrel, the compiled-runtime facade, the compiled serializer, the signal
-// engine) to be unreachable. This is a real module-graph walk over the
-// installed artifact, not a string search.
-
-const PACKED_KERNEL_PATTERNS = [
-  /\/src\/index\.js$/, // the runtime barrel
-  /\/src\/public-runtime\.js$/, // the compiled-runtime facade
-  /\/src\/internal\/compiled\//, // the Part Program kernel/serializer
-  /\/src\/internal\/signal\//, // the signal engine
-];
-
-function assertPackedElementLeavesKernelFree(tmp: string): string {
-  const elementDir = join(tmp, 'node_modules', '@openelement', 'element');
-  const pkgJson = JSON.parse(readFileSync(join(elementDir, 'package.json'), 'utf8'));
-  const seen = new Set<string>();
-  const stack: string[] = [];
-  for (const subpath of ['./html', './logger', './authoring']) {
-    const entry = pkgJson.exports?.[subpath];
-    const entryFile = typeof entry === 'string' ? entry : entry?.import;
-    if (typeof entryFile !== 'string') {
-      throw new Error(`packed @openelement/element lacks the ${subpath} export`);
-    }
-    stack.push(join(elementDir, entryFile));
-  }
-  while (stack.length > 0) {
-    const file = stack.pop()!;
-    if (seen.has(file)) continue;
-    seen.add(file);
-    const text = readFileSync(file, 'utf8');
-    for (const { fileName } of ts.preProcessFile(text).importedFiles) {
-      if (!fileName.startsWith('.')) continue;
-      const target = join(dirname(file), fileName);
-      for (const pattern of PACKED_KERNEL_PATTERNS) {
-        if (pattern.test(target)) {
-          throw new Error(
-            `packed element leaf graph reaches the Native runtime kernel: ${file} -> ${fileName}`,
-          );
-        }
-      }
-      stack.push(target);
-    }
-  }
-  return `${seen.size} packed leaf modules kernel-free (html/logger/authoring)`;
-}
-
 // ─── Leg runner ─────────────────────────────────────────────────────────────
 
 interface PackedAppTarball {
@@ -1491,147 +1279,6 @@ async function readHeadCommit(): Promise<HeadCommit> {
  * Every stale tarball is named with its write time and HEAD's identity; the
  * remedy is the one pack step that already exists.
  */
-/** One decoded Source Map v3 segment (all five fields, 1-based lines). */
-export interface DecodedSourceMapSegment {
-  readonly generatedLine: number;
-  readonly generatedColumn: number;
-  readonly sourceIndex: number;
-  readonly sourceLine: number;
-  readonly sourceColumn: number;
-  readonly nameIndex: number;
-}
-
-const SOURCE_MAP_BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-
-function decodeVlqValues(segment: string): number[] {
-  const values: number[] = [];
-  let shift = 0;
-  let value = 0;
-  for (const char of segment) {
-    const digit = SOURCE_MAP_BASE64.indexOf(char);
-    if (digit < 0) throw new Error(`invalid source-map VLQ character "${char}"`);
-    const continuation = (digit & 32) !== 0;
-    value += (digit & 31) << shift;
-    if (continuation) {
-      shift += 5;
-      continue;
-    }
-    const negative = (value & 1) === 1;
-    value >>= 1;
-    values.push(negative ? -value : value);
-    shift = 0;
-    value = 0;
-  }
-  if (shift !== 0) throw new Error('truncated source-map VLQ segment');
-  return values;
-}
-
-/**
- * Decode a standard Source Map v3 `mappings` string into all five-field
- * segments. Pure and dependency-free (the release toolchain must not add a
- * source-map package for one assertion); malformed input fails closed.
- */
-export function decodeSourceMapMappings(mappings: string): DecodedSourceMapSegment[] {
-  if (typeof mappings !== 'string') throw new Error('source map mappings must be a string');
-  const segments: DecodedSourceMapSegment[] = [];
-  const lines = mappings.split(';');
-  let sourceIndex = 0;
-  let sourceLine = 0;
-  let sourceColumn = 0;
-  let nameIndex = 0;
-  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-    let generatedColumn = 0;
-    for (const segment of lines[lineIndex]!.split(',')) {
-      if (segment.length === 0) continue;
-      const values = decodeVlqValues(segment);
-      if (values.length !== 4 && values.length !== 5) {
-        throw new Error(
-          `invalid source-map segment "${segment}": expected 4 or 5 fields, got ${values.length}`,
-        );
-      }
-      generatedColumn += values[0]!;
-      sourceIndex += values[1]!;
-      sourceLine += values[2]!;
-      sourceColumn += values[3]!;
-      if (values.length === 5) nameIndex += values[4]!;
-      if (generatedColumn < 0 || sourceIndex < 0 || sourceLine < 0 || sourceColumn < 0) {
-        throw new Error(`invalid source-map segment "${segment}": negative coordinate`);
-      }
-      segments.push({
-        generatedLine: lineIndex + 1,
-        generatedColumn,
-        sourceIndex,
-        sourceLine: sourceLine + 1,
-        sourceColumn,
-        nameIndex,
-      });
-    }
-  }
-  return segments;
-}
-
-/** The decoded authored-file evidence one packed sourcemap assertion needs. */
-export interface AuthoredSourceMapEvidence {
-  readonly sourceIndex: number;
-  readonly matchingSegments: number;
-  readonly totalSegments: number;
-}
-
-/**
- * Assert a standard Source Map v3 record decodes and carries mappings back to
- * one authored source file. The packed consumer qualifies the shipped map (not
- * the compiler's in-memory metadata), so this reads the emitted JSON only and
- * returns the counts the caller prints into its PASS line.
- */
-export function assertAuthoredSourceMap(
-  record: unknown,
-  sourceSuffix: string,
-  minimumSegments = 10,
-): AuthoredSourceMapEvidence {
-  if (typeof record !== 'object' || record === null) {
-    throw new Error('source map must be a JSON object');
-  }
-  const map = record as {
-    version?: unknown;
-    sources?: unknown;
-    sourcesContent?: unknown;
-    mappings?: unknown;
-  };
-  if (map.version !== 3)
-    throw new Error(`source map version must be 3, got ${String(map.version)}`);
-  if (!Array.isArray(map.sources) || map.sources.some((source) => typeof source !== 'string')) {
-    throw new Error('source map sources must be an array of strings');
-  }
-  const sources = map.sources as string[];
-  const suffix = sourceSuffix.replace(/\\/gu, '/');
-  const sourceIndex = sources.findIndex((source) => source.replace(/\\/gu, '/').endsWith(suffix));
-  if (sourceIndex < 0) {
-    throw new Error(`source map does not list authored source "${sourceSuffix}"`);
-  }
-  if (typeof map.mappings !== 'string' || map.mappings.length === 0) {
-    throw new Error('source map mappings must be a non-empty string');
-  }
-  const segments = decodeSourceMapMappings(map.mappings);
-  const authored = segments.filter((segment) => segment.sourceIndex === sourceIndex);
-  if (authored.length < minimumSegments) {
-    throw new Error(
-      `source map only has ${authored.length} authored segment(s) for ${sourceSuffix}; ` +
-        `expected at least ${minimumSegments}`,
-    );
-  }
-  if (Array.isArray(map.sourcesContent) && map.sourcesContent[sourceIndex] !== undefined) {
-    const content = map.sourcesContent[sourceIndex];
-    if (typeof content !== 'string' || content.trim() === '') {
-      throw new Error(`source map sourcesContent[${sourceIndex}] for ${sourceSuffix} is empty`);
-    }
-  }
-  return {
-    sourceIndex,
-    matchingSegments: authored.length,
-    totalSegments: segments.length,
-  };
-}
-
 export async function assertPackedTarballsFresh(tarballs: readonly string[]): Promise<void> {
   if (tarballs.length === 0) return;
   const head = await readHeadCommit();
@@ -1940,37 +1587,7 @@ export async function qualifyPackedAppLeg(spec: PackedAppLegSpec): Promise<void>
       return summary || 'chromium+firefox+webkit: island activates in place without a full reload';
     });
 
-    await cell(leg, 'boundary', ['install'], () => {
-      const declarationSummary = walkRouterDeclarations(tmp);
-      const packedLeafSummary = assertPackedElementLeavesKernelFree(tmp);
-      const clientDir = join(tmp, 'dist', 'client');
-      if (!existsSync(clientDir)) {
-        throw new Error(
-          `No dist/client browser bundle (build cell failed); declaration graph: ${declarationSummary}`,
-        );
-      }
-      const assets = readdirSync(clientDir, { recursive: true, withFileTypes: true })
-        .filter((entry) => !entry.isDirectory() && entry.name.endsWith('.js'))
-        .map((entry) => ({ path: join(entry.parentPath, entry.name), name: entry.name }));
-      if (assets.length === 0) {
-        throw new Error('dist/client contains no JS assets to scan');
-      }
-      for (const asset of assets) {
-        const assetPath = asset.path;
-        if (BOUNDARY_ID_PATTERN.test(assetPath.slice(clientDir.length))) {
-          throw new Error(`Browser asset path crosses the boundary: ${assetPath}`);
-        }
-        const text = readFileSync(assetPath, 'utf8');
-        for (const { fileName } of ts.preProcessFile(text).importedFiles) {
-          if (BOUNDARY_SPECIFIER_PATTERN.test(fileName)) {
-            throw new Error(`Browser bundle boundary leak: ${assetPath} imports ${fileName}`);
-          }
-        }
-      }
-      return Promise.resolve(
-        `${declarationSummary}; ${packedLeafSummary}; ${assets.length} dist/client assets clean`,
-      );
-    });
+    await cell(leg, 'boundary', ['install'], () => Promise.resolve(assertPackedAppBoundaries(tmp)));
   } finally {
     await rm(tmp, { recursive: true }).catch(() => undefined);
   }
