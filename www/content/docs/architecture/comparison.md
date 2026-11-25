@@ -109,14 +109,14 @@ The docs site builds with OpenElement. These are the raw and gzip sizes of its i
 
 | Chunk                          | Raw bytes | gzip -9 |
 | ------------------------------ | --------- | ------- |
-| `element-runtime`              | 68,475    | 21,842  |
-| `island-open-button`           | 16,432    | 3,747   |
-| `island-open-page-rail`        | 35,269    | 6,713   |
-| `island-open-code-block`       | 8,123     | 2,593   |
-| `island-open-counter`          | 5,126     | 1,783   |
-| `island-open-search`           | 51,060    | 9,992  |
-| `island-open-theme-toggle`     | 21,873    | 4,452   |
-| `client.js`                    | 7,914     | 2,720   |
+| `element-runtime`              | 65,421    | 20,929  |
+| `island-open-button`           | 14,124    | 3,293   |
+| `island-open-page-rail`        | 35,259    | 6,623   |
+| `island-open-code-block`       | 6,826     | 2,210   |
+| `island-open-counter`          | 4,392     | 1,520   |
+| `island-open-search`           | 51,057    | 9,935  |
+| `island-open-theme-toggle`     | 18,457    | 3,834   |
+| `client.js`                    | 7,803     | 2,702   |
 
 ```bash
 ls -l www/dist/client/islands/*.js
@@ -129,9 +129,9 @@ What a page actually downloads follows from its island manifest plus the entry's
 
 | Route                    | Client payload (raw) | Distinct chunks |
 | ------------------------ | -------------------- | --------------- |
-| `/guide/mdx`             | 194,075 B            | 8               |
-| `/guide/getting-started` | 194,075 B            | 8               |
-| `/`                      | 199,201 B            | 9               |
+| `/guide/mdx`             | 186,184 B            | 8               |
+| `/guide/getting-started` | 186,184 B            | 8               |
+| `/`                      | 190,576 B            | 9               |
 
 Across 68 page manifests the site declares 6 island tags in 254 entries. There is an `open-search` and an `open-theme-toggle` on every page, `open-page-rail` on 58 pages, `open-code-block` on 50 pages, `open-button` on 8 pages and `open-counter` on both language versions of the homepage.
 

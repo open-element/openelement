@@ -109,14 +109,14 @@ cat www/dist/pagefind/pagefind-entry.json   # 每种语言 page_count 33
 
 | Chunk                          | 原始字节     | gzip -9 |
 | ------------------------------ | -------- | ------- |
-| `element-runtime`              | 68,475   | 21,842  |
-| `island-open-button`           | 16,432   | 3,747   |
-| `island-open-page-rail`        | 35,269   | 6,713   |
-| `island-open-code-block`       | 8,123    | 2,593   |
-| `island-open-counter`          | 5,126     | 1,783   |
-| `island-open-search`           | 51,060   | 9,992  |
-| `island-open-theme-toggle`     | 21,873   | 4,452   |
-| `client.js`                    | 7,914    | 2,718   |
+| `element-runtime`              | 65,421   | 20,929  |
+| `island-open-button`           | 14,124   | 3,293   |
+| `island-open-page-rail`        | 35,259   | 6,623   |
+| `island-open-code-block`       | 6,826    | 2,210   |
+| `island-open-counter`          | 4,392     | 1,520   |
+| `island-open-search`           | 51,057   | 9,935  |
+| `island-open-theme-toggle`     | 18,457   | 3,834   |
+| `client.js`                    | 7,803    | 2,702   |
 
 ```bash
 ls -l www/dist/client/islands/*.js
@@ -129,9 +129,9 @@ gzip -9 -c www/dist/client/islands/client.js | wc -c
 
 | 路由                       | 客户端载荷（原始）          | 不同 chunk 数    |
 | ------------------------ | ------------------ | ------------- |
-| `/guide/mdx`             | 194,075 B          | 8             |
-| `/guide/getting-started` | 194,075 B          | 8             |
-| `/`                      | 199,201 B          | 9             |
+| `/guide/mdx`             | 186,184 B          | 8             |
+| `/guide/getting-started` | 186,184 B          | 8             |
+| `/`                      | 190,576 B          | 9             |
 
 68 份页面 manifest 合计声明了 6 个 island 标签、254 条记录。`open-search` 和 `open-theme-toggle` 出现在每一页，`open-page-rail` 出现在 58 页，`open-code-block` 出现在 50 页，`open-button` 出现在 8 页，`open-counter` 出现在两种语言版本的首页。
 

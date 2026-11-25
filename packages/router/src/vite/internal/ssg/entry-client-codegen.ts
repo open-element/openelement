@@ -54,9 +54,16 @@ function islandImportFactory(
   // it. `__oeAttachDevLiveStyles` sets the live sheet objects on the
   // constructor BEFORE `customElements.define` upgrades a host, which is the
   // only window in which the shell's connect can adopt them.
+  // The scheduler waits for registration and never reads the module namespace.
+  // Select a single generated constructor so the client build can drop the
+  // module's SSR exports. Preserve the legacy factory's emitted contract.
+  const constructor = generatedLane
+    ? `var Ctor = ${exportName ? `mod[${nameLiteral}]` : 'mod.default'};`
+    : `var _name = ${nameLiteral}; var Ctor = _name ? mod[_name] : mod.default;`;
+  const completion = generatedLane ? '' : ' return mod;';
   const define = attachDevLiveStyles
-    ? `var _name = ${nameLiteral}; var Ctor = _name ? mod[_name] : mod.default; if (typeof Ctor !== 'function') throw new Error(${errorLiteral}); if (!customElements.get(${tagLiteral})) { __oeAttachDevLiveStyles(Ctor, ${tagLiteral}); customElements.define(${tagLiteral}, Ctor); } return mod;`
-    : `var _name = ${nameLiteral}; var Ctor = _name ? mod[_name] : mod.default; if (typeof Ctor !== 'function') throw new Error(${errorLiteral}); if (!customElements.get(${tagLiteral})) customElements.define(${tagLiteral}, Ctor); return mod;`;
+    ? `${constructor} if (typeof Ctor !== 'function') throw new Error(${errorLiteral}); if (!customElements.get(${tagLiteral})) { __oeAttachDevLiveStyles(Ctor, ${tagLiteral}); customElements.define(${tagLiteral}, Ctor); }${completion}`
+    : `${constructor} if (typeof Ctor !== 'function') throw new Error(${errorLiteral}); if (!customElements.get(${tagLiteral})) customElements.define(${tagLiteral}, Ctor);${completion}`;
   if (generatedLane) {
     // M11-3: a generated Native Custom Element island owns its mount/claim
     // through the compiler-emitted shell; the legacy executor runtime is not a
@@ -191,7 +198,8 @@ function sharedActivationFactory(
   const lines = generatedLane
     ? [
         `var ${promise};`,
-        `var ${factory} = function() {`,
+        // The map can reference a grouped factory before its declaration.
+        `function ${factory}() {`,
         `  if (!${promise}) ${promise} = ${importExpression}.then(function(mod) {`,
       ]
     : [
@@ -230,10 +238,10 @@ function sharedActivationFactory(
           )})) customElements.define(${quoteGeneratedJavaScriptValue(entry.tagName)}, ${ctor});`,
     );
   });
-  lines.push('    return mod;');
+  if (!generatedLane) lines.push('    return mod;');
   lines.push('  });');
   lines.push(`  return ${promise};`);
-  lines.push('};');
+  lines.push(generatedLane ? '}' : '};');
   return lines.join('\n');
 }
 
