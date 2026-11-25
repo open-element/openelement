@@ -35,13 +35,13 @@ const ROOT = resolve(process.cwd(), args.dir ?? '../dist');
 const BASE = (args.base ?? '/sub').replace(/\/$/, '');
 
 // A PURE-STATIC build emits no dist/server (F16: the fixture's only request-time
-// route was the streamed page, which retired with the class lane). `undefined`
+// route was the streamed page, which retired with the class lane). `null`
 // is the adapter's "no request-time server" state, so the fixture serves the
 // prerendered tree and the e2e suite exercises exactly what a static deployment
 // ships.
 const serverEntry = existsSync(join(ROOT, 'server/index.js'))
   ? await importRequestTimeServer(join(ROOT, 'server/index.js'))
-  : undefined;
+  : null;
 
 createServer((nodeRequest, nodeResponse) => {
   void (async () => {
