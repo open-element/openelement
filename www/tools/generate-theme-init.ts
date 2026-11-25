@@ -6,6 +6,8 @@
  * This generator is the P6 derived-artifact bridge: the contract stays the one
  * owner of the acceptance rule and the one writer of `html[data-theme]`, and
  * this file is regenerated from it byte-for-byte.
+ * The same head script records search activations that occur before the
+ * client entry runs.
  *
  * Determinism (the `--check` gates depend on it):
  *   - `ts.transpileModule` with a fixed option set and no source maps;
@@ -28,6 +30,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { Script } from 'node:vm';
 import ts from 'typescript';
+import { SEARCH_OPEN_INTENT_KEY } from '../app/site-ui/open-search-shared.ts';
 import { findMachinePath } from './check-no-machine-paths.ts';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -37,6 +40,7 @@ export const THEME_INIT_ARTIFACT = 'www/public/theme-init.js';
 const GENERATED_HEADER = [
   '// GENERATED FILE — do not edit.',
   `// Source: ${CONTRACT_SOURCE}`,
+  '// Search intent key: www/app/site-ui/open-search-shared.ts',
   '// Generator: www/tools/generate-theme-init.ts (--check enforces byte equality).',
 ].join('\n');
 
@@ -171,6 +175,22 @@ ${compiledContract}
 
   const theme = contract.resolveSiteTheme(saved, prefersLight);
   contract.applyDocumentTheme(document.documentElement, theme);
+
+  // The rendered search button is interactive before the module entry can
+  // start framework replay. Retain only the intent on that particular host.
+  if (typeof customElements !== 'undefined' && !customElements.get('open-search')) {
+    const intent = Symbol.for(${JSON.stringify(SEARCH_OPEN_INTENT_KEY)});
+    const rememberSearch = (event) => {
+      if (!event.isTrusted || event.button !== 0 || customElements.get('open-search')) return;
+      const trigger = event.target instanceof Element && event.target.closest('button[part="trigger"]');
+      const host = trigger && trigger.closest('open-search');
+      if (host) host[intent] = true;
+    };
+    document.addEventListener('click', rememberSearch, true);
+    customElements.whenDefined('open-search').then(() => {
+      document.removeEventListener('click', rememberSearch, true);
+    });
+  }
 
   try {
     // Synchronous marker proving theme-init ran before first paint.

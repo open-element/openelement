@@ -292,6 +292,12 @@
           "name": "label",
           "type": "string",
           "default": ""
+        },
+        {
+          "name": "close-label",
+          "type": "string",
+          "default": "Close",
+          "fieldName": "closeLabel"
         }
       ],
       "events": [

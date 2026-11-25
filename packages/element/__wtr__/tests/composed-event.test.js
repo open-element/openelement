@@ -11,8 +11,11 @@
  * its own event bookkeeping; here the browser's composed path is the truth.
  */
 import { assert } from 'chai';
+import { OpenButtonElement, OpenButton__ssrHost } from '../generated/open-button.ts';
 import { WtrShadowButtonElement } from '../generated/wtr-shadow-button.ts';
+import { waitFor } from './helpers.js';
 
+customElements.define('open-button', OpenButtonElement);
 customElements.define('wtr-shadow-button', WtrShadowButtonElement);
 await customElements.whenDefined('wtr-shadow-button');
 
@@ -67,5 +70,24 @@ describe('composed event across the shadow boundary', () => {
     assert.include(button.textContent, 'Clicks: 3');
 
     element.remove();
+  });
+
+  it('the production button loads its declared sheet and publishes a composed click', async () => {
+    const container = document.createElement('div');
+    const stylesheet = new URL('../generated/open-button.css', import.meta.url).pathname;
+    container.setHTMLUnsafe(OpenButton__ssrHost({}, 'Save', undefined, [stylesheet]));
+    const host = container.querySelector('open-button');
+    const control = host.shadowRoot.querySelector('button');
+    document.body.append(container);
+    try {
+      await waitFor(() => getComputedStyle(host).display === 'inline-block', 'the button sheet');
+      assert.strictEqual(host.shadowRoot.querySelector('button'), control, 'retained server control');
+      const clicks = [];
+      container.addEventListener('open-click', (event) => clicks.push(event.target));
+      control.click();
+      assert.deepEqual(clicks, [host]);
+    } finally {
+      container.remove();
+    }
   });
 });

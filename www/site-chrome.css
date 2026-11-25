@@ -469,6 +469,13 @@ open-search .overlay {
   background: radial-gradient(38% 50% at 78% 86%, rgba(23, 10, 64, 0.38), transparent 72%);
 }
 
+@media (forced-colors: active) {
+  .page-home .flood::before,
+  .page-home .flood::after {
+    content: none;
+  }
+}
+
 .page-home .scene-outlined {
   -webkit-text-stroke: 1.5px color-mix(in srgb, var(--color-ring) 55%, transparent);
 }

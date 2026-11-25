@@ -12,6 +12,7 @@
 import {
   input,
   overlay,
+  SEARCH_OPEN_INTENT_KEY,
   searchLocale,
   showMessage,
   type SearchHost,
@@ -45,6 +46,8 @@ interface SearchState {
 }
 
 const states = new WeakMap<SearchHost, SearchState>();
+const searchOpenIntent = Symbol.for(SEARCH_OPEN_INTENT_KEY);
+type SearchBootHost = SearchHost & { [searchOpenIntent]?: true };
 
 /** The dialog's opener: the header trigger button (the island's `part=trigger`). */
 function searchTrigger(host: SearchHost): HTMLElement | null {
@@ -133,15 +136,26 @@ export function installSearch(host: SearchHost): void {
       if (states.get(host)?.runtime) event.preventDefault();
     }
   };
-  states.set(host, {
+  const state: SearchState = {
     keydown,
     runtime: null,
     connectPromise: null,
     openSequence: 0,
     epoch: 0,
     returnFocus: null,
-  });
+  };
+  states.set(host, state);
   globalThis.addEventListener('keydown', keydown);
+
+  const bootHost = host as SearchBootHost;
+  if (bootHost[searchOpenIntent]) {
+    // The connect hook runs before claim. Give normal click replay first
+    // use of the intent and open only after the compiled handlers exist.
+    queueMicrotask(() => {
+      if (states.get(host) !== state || !host.isConnected || !bootHost[searchOpenIntent]) return;
+      openSearch(host);
+    });
+  }
 }
 
 export function uninstallSearch(host: SearchHost): void {
@@ -174,6 +188,10 @@ export function openSearch(host: SearchHost): void {
   const target = overlay(host);
   const state = states.get(host);
   if (!target || !state) return;
+  // A normal click replay may consume the head script's intent even if the
+  // dialog is dismissed again before the queued handoff runs.
+  delete (host as SearchBootHost)[searchOpenIntent];
+  if (!target.hidden) return;
   // Bind the dismissal focus target to THIS open: the reader returns to the
   // control that opened the dialog, even if focus has drifted since.
   state.returnFocus = searchTrigger(host);

@@ -52,6 +52,8 @@ npm run dev
 | 离线或使用私有 registry 时安装失败 | 依赖安装是唯一访问 registry 的步骤 | 用生成器的 `--no-install` 旗标只做脚手架（经你的包管理器透传），等 registry 可达后再安装 |
 | 你用 pnpm、yarn 或 bun | 脚手架用被调用时的管理器安装，否则按 pnpm/npm/yarn/bun 的顺序取 `PATH` 上第一个 | 继续用你的管理器——脚本与包管理器无关：`pnpm run dev`、`yarn dev`、`bun run dev` 都会到达同一个开发服务器 |
 
+下文示例采用当前源码预览的服务端函数页面。按照[源码预览步骤](https://github.com/open-element/openelement/blob/main/README.zh.md#预览当前源码)即可试用。如果你通过 npm 创建了 Alpha 15 项目，请参考 [Alpha 15 编写指南](https://github.com/open-element/openelement/blob/v1.0.0-alpha.15/www/content/docs/guide/getting-started.zh.md)。
+
 ## 认识项目结构
 
 脚手架写出一个小目录，每条路径只有一个职责：
@@ -180,7 +182,7 @@ npm start      # 起真实构建产物，包含请求时路由
 
 校验改动应该用 `npm start`：它起的是与生产一致的输出，并把动态路由与表单 POST 分派给生成的服务端入口。端口取自 `OPEN_ELEMENT_PORT`（回退到 `PORT`，默认 4173），host 取自 `OPEN_ELEMENT_HOST`。若构建产物没有请求时路由，router 命令还带一个纯静态模式——`openelement start --mode=preview`——它拒绝带服务端的构建，而不是悄悄把它藏起来。
 
-部署时：构建没有产出 `dist/server/` 就把 `dist/` 上传到任意静态托管；产出了，就把静态文件连同指向 `dist/server/index.js` 的 Node/Workers 运行时一起部署。完整的输出契约——构建写了哪些文件、每个文件回答什么——见[部署](/zh/guide/deployment)。上线前，`npm run typecheck` 对应用做类型检查，`npm test` 运行 starter 的 `node --test` 测试——模板暂未附带测试文件，把 `*.test.ts` 放到要覆盖的代码旁即可；两者都已在 starter 的脚本里接好，无需额外配置。
+部署时：构建没有产出 `dist/server/` 就把 `dist/` 上传到任意静态托管；产出了，就把静态文件连同指向 `dist/server/index.js` 的 Node/Workers 运行时一起部署。完整的输出契约——构建写了哪些文件、每个文件回答什么——见[部署](/zh/guide/deployment)。上线前，`npm run typecheck` 对应用做类型检查，`npm test` 运行 starter 的 `node --test` 测试——源码预览包含用于检查 `/api/ping` 响应的测试。可在 `tests/` 下添加更多 `*.test.ts` 文件。两条命令都已在 starter 的脚本中配置好。
 
 ## 继续深入
 

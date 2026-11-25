@@ -56,6 +56,65 @@ test.describe('open-input / open-button form participation', () => {
     });
   });
 
+  test('the outer form applies native email constraints to the generated input', async ({
+    page,
+  }) => {
+    await page.locator('#username input').fill('Ada');
+    const email = page.locator('open-input#email');
+    await email.locator('input').fill('not-an-email');
+    await expect(email).toHaveJSProperty('value', 'not-an-email');
+    await page.locator('#submit-native').click();
+    await expect(page.locator('#form-output')).toBeEmpty();
+    expect(await email.evaluate((host) => host.closest('form')!.checkValidity())).toBe(false);
+
+    const transitions = await email.evaluate((node) => {
+      const host = node as HTMLElement & { value: string; type: string; required: boolean };
+      const form = host.closest('form')!;
+      host.type = 'text';
+      const textAccepted = form.checkValidity();
+      host.setAttribute('type', 'EMAIL');
+      const emailRejected = !form.checkValidity();
+      host.value = '';
+      const optionalEmptyAccepted = form.checkValidity();
+      host.required = true;
+      const requiredEmptyRejected = !form.checkValidity();
+      host.value = 'ada@example.com';
+      return { textAccepted, emailRejected, optionalEmptyAccepted, requiredEmptyRejected };
+    });
+    expect(transitions).toEqual({
+      textAccepted: true,
+      emailRejected: true,
+      optionalEmptyAccepted: true,
+      requiredEmptyRejected: true,
+    });
+    await page.locator('#submit-native').click();
+    await expect(page.locator('#form-output')).toHaveText(
+      '{"username":"Ada","email":"ada@example.com"}',
+    );
+  });
+
+  test('email validity applies at hydration and fresh mount, and clears on reset', async ({
+    page,
+  }) => {
+    const validity = await page.locator('#initial-email-form').evaluate((node) => {
+      const form = node as HTMLFormElement;
+      const ssrSeedRejected = !form.checkValidity();
+      form.reset();
+      const resetAccepted = form.checkValidity();
+      const fresh = document.createElement('open-input');
+      fresh.setAttribute('name', 'email');
+      fresh.setAttribute('type', 'email');
+      fresh.setAttribute('value', 'bad-email');
+      form.append(fresh);
+      return { ssrSeedRejected, resetAccepted, freshSeedRejected: !form.checkValidity() };
+    });
+    expect(validity).toEqual({
+      ssrSeedRejected: true,
+      resetAccepted: true,
+      freshSeedRejected: true,
+    });
+  });
+
   test('open-button type=submit submits the form with the ui values', async ({ page }) => {
     await page.locator('#username input').fill('ada');
     await page.locator('#submit-open button').click();

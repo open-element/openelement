@@ -1,5 +1,6 @@
 // GENERATED FILE — do not edit.
 // Source: packages/ui/src/theme-contract.ts
+// Search intent key: www/app/site-ui/open-search-shared.ts
 // Generator: www/tools/generate-theme-init.ts (--check enforces byte equality).
 (function () {
   'use strict';
@@ -54,6 +55,22 @@ function applyDocumentTheme(root, theme) {
 
   const theme = contract.resolveSiteTheme(saved, prefersLight);
   contract.applyDocumentTheme(document.documentElement, theme);
+
+  // The rendered search button is interactive before the module entry can
+  // start framework replay. Retain only the intent on that particular host.
+  if (typeof customElements !== 'undefined' && !customElements.get('open-search')) {
+    const intent = Symbol.for("openelement.site.search-open-intent");
+    const rememberSearch = (event) => {
+      if (!event.isTrusted || event.button !== 0 || customElements.get('open-search')) return;
+      const trigger = event.target instanceof Element && event.target.closest('button[part="trigger"]');
+      const host = trigger && trigger.closest('open-search');
+      if (host) host[intent] = true;
+    };
+    document.addEventListener('click', rememberSearch, true);
+    customElements.whenDefined('open-search').then(() => {
+      document.removeEventListener('click', rememberSearch, true);
+    });
+  }
 
   try {
     // Synchronous marker proving theme-init ran before first paint.

@@ -93,15 +93,13 @@ element tag — in a real build the island scan supplies it). The lane returns
 `{ code, map }` separately (the appended CE tail carries no source-map
 segments, so there is no inline `sourceMappingURL` comment to decode), and the
 script checks the returned map's `sources` point back at the authored `.tsx`.
-No second TSX transform exists in this suite: the emitted modules are plain
-JavaScript that keeps importing `@openelement/element` by bare specifier; the
-`element-browser` project's alias maps that specifier to
-`packages/element/src/index.ts` — this working tree's runtime source, not a
-published tarball — the generated leaf/runtime subpaths resolve through the
-package's own exports map into the same source tree, and the production ui
-imports (`component-recipes.ts`, `instance-state.ts`) resolve straight from
-`packages/ui/src`, so the tests cannot drift from production sources.
-`lit`/`chai` resolve from this directory's own `node_modules`.
+The emitted modules are JavaScript. The `element-browser` project's aliases
+resolve `@openelement/element`, the emitted runtime subpaths, and UI helpers
+such as `button-machine.ts` to this checkout's sources. The fixture script
+copies the stylesheets declared in `openElement.styles` next to the emitted
+modules, preserving the paths used by client-only sheet imports and by the
+server-rendered stylesheets the browser tests link. `lit` and `chai` resolve
+from this directory's own `node_modules`.
 
 The generated element class is exported as `<Component>Element` plus the
 module default (`export { __oe<Component>Element as <Component>Element }`), so

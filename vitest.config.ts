@@ -321,6 +321,10 @@ export default defineConfig({
               find: /^\.\/input-machine\.ts$/,
               replacement: `${rootDir}packages/ui/src/input-machine.ts`,
             },
+            {
+              find: /^\.\/button-machine\.ts$/,
+              replacement: `${rootDir}packages/ui/src/button-machine.ts`,
+            },
           ],
         },
         test: {

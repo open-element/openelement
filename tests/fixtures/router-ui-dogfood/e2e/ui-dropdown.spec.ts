@@ -126,13 +126,17 @@ test.describe('open-dropdown', () => {
   });
 
   test('trigger click toggles the popover open and closed', async ({ page }) => {
+    const trigger = page.getByRole('button', { name: 'Menu', expanded: false });
     expect(await page.evaluate(popoverOpenExpr)).toBe(false);
-    await page.locator('#dropdown-trigger').click();
+    await expect(trigger).toHaveAttribute('aria-controls', 'dropdown-menu');
+    await trigger.click();
     await expect.poll(() => page.evaluate(popoverOpenExpr)).toBe(true);
+    await expect(page.getByRole('button', { name: 'Menu', expanded: true })).toBeVisible();
     await expect(page.locator('#menu-item-1')).toBeVisible();
     // The pointerdown light-dismiss guard: the following click must close.
     await page.locator('#dropdown-trigger').click();
     await expect.poll(() => page.evaluate(popoverOpenExpr)).toBe(false);
+    await expect(trigger).toBeVisible();
   });
 
   test('Escape light dismisses and returns focus to the trigger', async ({ page }) => {
@@ -146,6 +150,7 @@ test.describe('open-dropdown', () => {
     await expect.poll(() => page.evaluate(popoverOpenExpr)).toBe(false);
     // Focus return runs from the popover's queued toggle event.
     await expect.poll(() => page.evaluate(deepActiveId)).toBe('dropdown-trigger');
+    await expect(page.locator('#dropdown-trigger')).toHaveAttribute('aria-expanded', 'false');
   });
 
   test('clicking outside light dismisses the popover', async ({ page }) => {
@@ -153,5 +158,33 @@ test.describe('open-dropdown', () => {
     await expect.poll(() => page.evaluate(popoverOpenExpr)).toBe(true);
     await page.locator('#outside').click();
     await expect.poll(() => page.evaluate(popoverOpenExpr)).toBe(false);
+    await expect(page.locator('#dropdown-trigger')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('native popover calls and reprojected panels update the actual trigger', async ({
+    page,
+  }) => {
+    const host = page.locator('#main-dropdown');
+    const trigger = page.locator('#dropdown-trigger');
+    await host.evaluate((node) =>
+      node.shadowRoot!.querySelector<HTMLElement>('.content')!.showPopover(),
+    );
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await host.evaluate((node) => {
+      const panel = document.createElement('div');
+      panel.className = 'replacement-panel';
+      node.querySelector('#dropdown-menu')!.replaceWith(panel);
+    });
+    await expect(trigger).toHaveAttribute('aria-controls', /^open-dropdown-content-/);
+    expect(
+      await trigger.evaluate((node) => {
+        const root = node.getRootNode() as ShadowRoot;
+        return root.getElementById(node.getAttribute('aria-controls')!)?.className;
+      }),
+    ).toBe('replacement-panel');
+    await host.evaluate((node) =>
+      node.shadowRoot!.querySelector<HTMLElement>('.content')!.hidePopover(),
+    );
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
 });

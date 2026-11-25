@@ -52,8 +52,8 @@
  *   - release-state.json `registry` dist-tags and `latestPrerelease` — they
  *     record what the REGISTRY serves, which lags the source version until
  *     the packages actually publish;
- *   - packages/create/README.md's pinned install example — it documents the
- *     version npm's `@alpha` tag RESOLVES to (registry truth, same lag);
+ *   - the root README npm examples and packages/create/README.md's pinned
+ *     install example — they describe versions available on npm;
  *   - pnpm-lock.yaml — workspace links are recorded as `workspace:*` with no
  *     version token, so a bump normally produces no lock diff.
  *
@@ -101,8 +101,8 @@ export const GENERATED_MANIFEST = 'packages/ui/src/generated-manifest.json';
 
 /** The root README source-tree sentences, with their bilingual anchors. */
 export const README_SOURCE_LINES: readonly { path: string; anchor: string }[] = [
-  { path: 'README.md', anchor: 'The source tree is `' },
-  { path: 'README.zh.md', anchor: '全新公开基线 `' },
+  { path: 'README.md', anchor: 'This checkout previews `' },
+  { path: 'README.zh.md', anchor: '当前源码预览的是 `' },
 ];
 
 /**

@@ -198,7 +198,7 @@ test('starter exposes only product dependencies and the standard lifecycle', () 
   expect(tsconfig.compilerOptions.jsx).toEqual('react-jsx');
   expect(tsconfig.compilerOptions.jsxImportSource).toEqual('@openelement/element');
   expect(tsconfig.compilerOptions.noEmit).toEqual(true);
-  expect(tsconfig.include).toEqual(['app', 'vite.config.ts', 'openelement.config.ts']);
+  expect(tsconfig.include).toEqual(['app', 'tests', 'vite.config.ts', 'openelement.config.ts']);
   // TPL-01: the `types` allowlist names BOTH the CSS-module surface and node.
   // Without "node" a generated starter fails `tsc --noEmit` with TS2591 on its
   // first `process`/`Buffer`/timer reference; the fix is the entry, never an
@@ -381,6 +381,7 @@ test('the showcase template is the one scaffold, Tailwind-ON (#1530 + owner sing
     'openelement.config.ts',
     'package.json',
     'public/openelement-mark.svg',
+    'tests/ping.test.ts',
     'tsconfig.json',
     'vite.config.ts',
   ].sort();
@@ -736,6 +737,7 @@ test('TypeScript starter sources are pack-safe template payloads', () => {
     'app/routes/about.tsx',
     'app/routes/404.tsx',
     'app/routes/api/ping.ts',
+    'tests/ping.test.ts',
   ]) {
     const logicalPath = join(packageDir, 'templates', path);
     expect(

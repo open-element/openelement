@@ -36,12 +36,13 @@ export const openElement = defineIslandConfig({
   formAssociated: true,
   properties: {
     value: { default: '' },
+    type: { default: 'email' },
     name: {},
     required: { default: false },
     disabled: { default: false },
   },
 });
-function FormCard(props: { value: string; name: string; required: boolean; disabled: boolean }) {
+function FormCard(props: { value: string; type: string; name: string; required: boolean; disabled: boolean }) {
   return <p>{props.value}</p>;
 }
 export default FormCard;
@@ -284,6 +285,7 @@ describe('bounded generated-element form mechanism (Chromium)', () => {
           listed: form.elements.namedItem('q') === host,
           value: host.value,
           formData: new FormData(form).get('q'),
+          valid: form.checkValidity(),
         };
         host.value = 'b';
         await tick();
@@ -342,7 +344,7 @@ describe('bounded generated-element form mechanism (Chromium)', () => {
           afterUnsupportedRestore,
         };
       }, SITE.tag);
-      expect(result.initial).toEqual({ listed: true, value: 'a', formData: 'a' });
+      expect(result.initial).toEqual({ listed: true, value: 'a', formData: 'a', valid: true });
       expect(result.afterPropertyWrite).toBe('b');
       expect(result.invalid).toEqual({ checkValidity: false, invalidMatch: true });
       expect(result.blocked).toEqual({ submitEvents: 0, invalidEvents: 1 });

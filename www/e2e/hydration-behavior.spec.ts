@@ -42,6 +42,17 @@ async function waitForHydratedSearch(page: Page): Promise<void> {
   await expect(page.getByRole('button', { name: 'Toggle theme' })).toBeAttached();
 }
 
+async function holdScript(page: Page, glob: string) {
+  const requested = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  await page.route(glob, async (route) => {
+    requested.resolve();
+    await release.promise;
+    await route.continue();
+  });
+  return { requested: requested.promise, release: release.resolve };
+}
+
 test.describe('compiled activation on shipped islands', () => {
   test('theme binding patches the existing DSD node in place', async ({ page }) => {
     await waitForHydratedSearch(page);
@@ -59,6 +70,84 @@ test.describe('compiled activation on shipped islands', () => {
     expect(
       await ssrButton!.evaluate((node, candidate) => node === candidate, activatedButton),
     ).toBe(true);
+  });
+
+  test('the first search click is replayed when the island module is still loading', async ({
+    page,
+  }) => {
+    const island = await holdScript(page, '**/island-open-search-*.js');
+
+    const dialog = page.getByRole('dialog', { name: 'Search' });
+    try {
+      await page.goto('/guide/getting-started/', { waitUntil: 'commit' });
+      await island.requested;
+      const trigger = page.getByRole('button', { name: 'Search', exact: true });
+      expect(await page.evaluate(() => customElements.get('open-search') === undefined)).toBe(true);
+      await trigger.click();
+      await expect(dialog).toBeHidden();
+    } finally {
+      island.release();
+    }
+    await expect(dialog).toBeVisible();
+  });
+
+  for (const { route, name, field, keyboard } of [
+    { route: '/', name: 'Search', field: 'Search documentation', keyboard: false },
+    { route: '/zh/', name: '搜索', field: '搜索文档', keyboard: true },
+  ]) {
+    test(`search remembers a trusted activation before the client entry on ${route}`, async ({
+      page,
+    }) => {
+      const entry = await holdScript(page, '**/client/islands/client.js');
+      const trigger = page.getByRole('button', { name, exact: true });
+      const dialog = page.getByRole('dialog', { name, exact: true });
+      try {
+        await page.goto(route, { waitUntil: 'commit' });
+        await entry.requested;
+        await expect(trigger).toBeVisible();
+        expect(await page.evaluate(() => customElements.get('open-search') === undefined)).toBe(
+          true,
+        );
+        if (keyboard) await trigger.press('Enter');
+        else await trigger.click();
+        await expect(dialog).toBeHidden();
+      } finally {
+        entry.release();
+      }
+      await expect(dialog.getByRole('combobox', { name: field })).toBeFocused();
+      await page.keyboard.press('Escape');
+      await expect(dialog).toBeHidden();
+      await expect(trigger).toBeFocused();
+    });
+  }
+
+  test('dismissing a replayed search open does not reopen it from the head intent', async ({
+    page,
+  }) => {
+    const island = await holdScript(page, '**/island-open-search-*.js');
+    const trigger = page.getByRole('button', { name: 'Search', exact: true });
+    const dialog = page.getByRole('dialog', { name: 'Search', exact: true });
+    try {
+      await page.goto('/guide/getting-started/', { waitUntil: 'commit' });
+      await island.requested;
+      await page.locator('open-search').evaluate((host) => {
+        host.addEventListener('click', (event) => {
+          if (event.isTrusted || host.querySelector('.overlay')?.hasAttribute('hidden')) return;
+          // The replay has reached the generated click handler. Dismiss the
+          // open in the same task, before a queued head handoff could reopen it.
+          globalThis.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+          document.documentElement.dataset.searchReplayDismissed = '1';
+        });
+      });
+      await trigger.click();
+    } finally {
+      island.release();
+    }
+    await expect(page.locator('html')).toHaveAttribute('data-search-replay-dismissed', '1');
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+    await trigger.click();
+    await expect(dialog).toBeVisible();
   });
 
   test('search controller activates against the existing SSR nodes', async ({ page }) => {

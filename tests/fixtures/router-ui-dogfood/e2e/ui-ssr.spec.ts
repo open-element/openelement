@@ -37,6 +37,7 @@ test.describe('ui dogfood SSR/DSD output', () => {
     expect(ssrOpenDialog, 'the inner dialog rendered open').not.toBe('');
     expect(ssrOpenDialog).toContain('open=""');
     expect(ssrOpenDialog).toContain('part="overlay"');
+    expect(html).toMatch(/<button [^>]*part="close"[^>]*aria-label="关闭"/);
   });
 
   test('/dropdown emits open-dropdown DSD with a native popover content block', async ({

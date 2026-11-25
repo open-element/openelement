@@ -105,7 +105,7 @@ test('open-dropdown: activation wires the focus-return listeners on the retained
   };
 
   activateDropdown(el);
-  expect(additions).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1 });
+  expect(additions).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1, slotchange: 1 });
   const anchor = el.anchorName;
   expect(anchor).not.toEqual('');
   // Both anchor halves: the host carries `anchor-name` and the custom property
@@ -118,8 +118,8 @@ test('open-dropdown: activation wires the focus-return listeners on the retained
   // from the dead connection cannot mutate the fresh claim. The realm-unique
   // anchor name is not re-assigned.
   activateDropdown(el);
-  expect(removals).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1 });
-  expect(additions).toEqual({ focusin: 2, beforetoggle: 2, toggle: 2 });
+  expect(removals).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1, slotchange: 1 });
+  expect(additions).toEqual({ focusin: 2, beforetoggle: 2, toggle: 2, slotchange: 2 });
   expect(el.anchorName).toEqual(anchor);
 });
 
@@ -138,11 +138,11 @@ test('open-dropdown: element teardown removes the wiring once, idempotently', as
 
   activateDropdown(el);
   disposeDropdownFocusWiring(el);
-  expect(removals).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1 });
+  expect(removals).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1, slotchange: 1 });
   expect(readInstanceState(el, 'focusWired', () => true)).toEqual(false);
   // Idempotent: a second teardown removes nothing.
   disposeDropdownFocusWiring(el);
-  expect(removals).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1 });
+  expect(removals).toEqual({ focusin: 1, beforetoggle: 1, toggle: 1, slotchange: 1 });
 });
 
 // ─── open-dropdown: the anchor identity is a host custom property ───────────

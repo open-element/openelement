@@ -18,7 +18,7 @@ npm run build      # production build into dist/
 npm run start      # serve the built output (and request-time routes)
 npm run typecheck  # tsc --noEmit
 npm run lint       # oxlint
-npm run test       # node --test
+npm run test       # Node tests for the request-time API
 npm run fmt        # oxfmt
 ```
 
@@ -32,6 +32,7 @@ npm run fmt        # oxfmt
 - `app/head.tsx` — document head entries a config URL list cannot express.
 - `openelement.config.ts` — framework options (head, i18n, middleware, ...).
 - `public/` — copied verbatim into `dist/`.
+- `tests/` — application tests run by Node’s built-in test runner.
 
 ## Rules
 

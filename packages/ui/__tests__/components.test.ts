@@ -359,7 +359,7 @@ test("manifest: every declaration carries the component's published attributes a
     },
     'open-theme-toggle': { attributes: ['theme'], events: ['open:theme-change'] },
     'open-code-block': { attributes: [], events: [] },
-    'open-dialog': { attributes: ['open', 'label'], events: ['open-dialog-close'] },
+    'open-dialog': { attributes: ['open', 'label', 'close-label'], events: ['open-dialog-close'] },
     'open-dropdown': { attributes: [], events: [] },
   };
   const actual = Object.fromEntries(

@@ -22,18 +22,17 @@
  * Run through the package task:
  *   pnpm --dir packages/element run browser:compile
  */
-// NOTE: plain relative paths only — this directory sits outside the pnpm
-// workspace import resolution, so no workspace specifiers are used here.
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+// Workspace source imports use relative paths because this directory is not a
+// workspace member.
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, join, sep } from 'node:path';
+import ts from 'typescript';
 import { compileGeneratedElementIfAdmitted } from '../../../compiler/src/internal/compiler/semantic-ir/generated-element/compile.ts';
+import { readIslandMetadata } from '../../../compiler/src/internal/compiler/semantic-ir/generated-element/site.ts';
 
 const here = import.meta.dirname!; // packages/element/__wtr__/tools
 const suite = join(here, '..');
 const elementPkg = join(suite, '..');
-
-function join(...segments: string[]): string {
-  return segments.join('/').replace(/\/+/g, '/').replace(/\/$/, '');
-}
 
 interface FixtureSpec {
   /** Absolute path of the authored .tsx source. */
@@ -76,11 +75,8 @@ const fixtures: FixtureSpec[] = [
     tag: 'wtr-field',
   },
   {
-    // packages/ui production overlay components (#1339 slice): compiled through
-    // the same official path; their './component-recipes.ts' /
-    // './instance-state.ts' / './dialog-machine.ts' / './dropdown-machine.ts'
-    // imports resolve to packages/ui/src at vitest serve time through the
-    // element-browser project's aliases (no copies committed).
+    // Production UI fixtures use the same compiler entry. Their helpers
+    // resolve to packages/ui/src through the element-browser project's aliases.
     source: join(elementPkg, '../ui/src/open-dialog.tsx'),
     id: 'open-dialog.tsx',
     out: 'open-dialog.ts',
@@ -109,7 +105,7 @@ const fixtures: FixtureSpec[] = [
     // shadow root + one declared sheet. The compiler emits a REAL `.css`
     // import for the sidecar declaration, so this fixture is the browser row's
     // proof that the import reaches the shell as a sheet object. Its sheet is
-    // copied beside the output below (the same rule as the ui sheets).
+    // copied beside the output below (the same rule as the UI sheets).
     source: join(suite, 'fixtures/wtr-live-timer.tsx'),
     id: 'wtr-live-timer.tsx',
     out: 'wtr-live-timer.ts',
@@ -119,28 +115,6 @@ const fixtures: FixtureSpec[] = [
 
 const outDir = join(suite, 'generated');
 await mkdir(outDir, { recursive: true });
-
-// The compiled ui fixtures keep their authored `.css` imports (the #1558
-// file-based style form), and the element-browser project's sheet plugin
-// resolves them relative to generated/ — so the authored ui sheets are copied
-// next to the fixtures here. One copy list, keyed by the css the fixtures
-// import; a new sheet import in packages/ui fails closed in this loop.
-const uiSrc = join(elementPkg, '../ui/src');
-for (const sheet of ['overlay-recipe.css', 'open-dialog.css', 'open-dropdown.css']) {
-  const bytes = await readFile(join(uiSrc, sheet), 'utf8');
-  await writeFile(join(outDir, sheet), bytes);
-  console.log(`copied ui sheet ${sheet} -> generated/${sheet}`);
-}
-
-// The client-only style fixture's sheet (2026-11-20) is not authored under
-// packages/ui: its generated module imports `./wtr-live-timer.css`, and the
-// element-browser sheet plugin resolves that against generated/. One copy, no
-// second source of truth.
-{
-  const bytes = await readFile(join(suite, 'fixtures/wtr-live-timer.css'), 'utf8');
-  await writeFile(join(outDir, 'wtr-live-timer.css'), bytes);
-  console.log('copied fixture sheet wtr-live-timer.css -> generated/wtr-live-timer.css');
-}
 
 for (const fixture of fixtures) {
   const code = await readFile(fixture.source, 'utf8');
@@ -159,6 +133,21 @@ for (const fixture of fixtures) {
   // authored .tsx, or the debugging story silently degrades.
   if (!compiled.map?.sources?.some((source: string) => source.endsWith(fixture.id))) {
     throw new Error(`${fixture.out}: leaf map sources do not reference ${fixture.id}`);
+  }
+
+  // Keep the authored relative paths for client-only sheet imports and DSD
+  // stylesheet links. Use the compiler's sidecar reader for both channels.
+  const sourceFile = ts.createSourceFile(fixture.id, code, ts.ScriptTarget.Latest);
+  const metadata = readIslandMetadata(sourceFile);
+  if (metadata.kind === 'read') {
+    for (const specifier of metadata.facts.styles) {
+      const destination = join(outDir, specifier);
+      if (!destination.startsWith(outDir + sep)) {
+        throw new Error(`${fixture.id}: stylesheet ${specifier} escapes generated/`);
+      }
+      await mkdir(dirname(destination), { recursive: true });
+      await copyFile(join(dirname(fixture.source), specifier), destination);
+    }
   }
   console.log(
     `compiled ${fixture.id} -> generated/${fixture.out} (${compiled.code.length} bytes, generated-element lane)`,

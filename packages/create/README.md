@@ -29,11 +29,14 @@ the generated manifest or scripts.
 npm create @openelement my-app
 ```
 
-The CLI scaffolds, detects the first package manager on PATH (pnpm, then npm,
-then yarn, then bun — failing only when none of the four exists, with a message
-naming all four), installs dependencies with it, initializes git (when git is
-available and the target is not already inside a repository), and prints a boxed
-handoff with the next commands. Flags (all optional):
+The CLI installs dependencies with the invoking package manager, so the command
+above uses npm even when pnpm is on `PATH`. On a direct CLI invocation with no
+package manager identified, it checks `PATH` in pnpm, npm, yarn, bun order. You
+can scaffold without any manager using `--no-install`. The handoff shows the
+commands for the selected manager. The CLI also initializes git when available
+and the target is outside an existing repository.
+
+Optional flags
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
@@ -98,8 +101,10 @@ npx @openelement/create my-app
 pnpm dlx --package=@openelement/create openelement-create my-app
 ```
 
-The scaffolded project itself is Node-native: Node.js 24.2+ runs it, and any of
-npm, pnpm, yarn, or bun runs its scripts.
+The scaffolded project runs on Node.js 24.2+ under npm, pnpm, yarn, or bun.
+Keep using the package manager that installed its dependencies. For a checkout
+whose source version is ahead of npm, the [source preview](../../README.md#preview-the-current-source)
+builds the starter against the checkout’s packages.
 
 ## Stable 0.43 (maintenance line)
 
@@ -156,6 +161,7 @@ npm create @openelement@0.43 my-app
   - `app/styles/theme.css` — the @theme role sheet, Tailwind-ON single-default
     scaffold form (dark values ride
     `prefers-color-scheme`)
+- `tests/` - Node tests, including one for the `/api/ping` response
 - `public/` - static assets
 - `README.md` and `.gitignore` - starter docs and ignore rules
 - `.node-version` - the Node development pin (`24.18.0`; the supported floor

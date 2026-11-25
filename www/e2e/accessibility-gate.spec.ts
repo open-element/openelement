@@ -22,16 +22,10 @@ const SCANNED_ROUTES = ['/', '/guide/getting-started/', '/docs/', '/reference/']
  * reason the page layer cannot own the finding. Kept minimal by design: an
  * exclusion here is a standing accessibility decision.
  *
- * The home list lives in accessibility-coverage.spec.ts (HOME_AXE_EXCLUSIONS)
- * because the T10 sweep scans `/` AND `/zh` — one list, two consumers, no drift.
- * What the T10 audit corrected is the reason text, not the list: the suppressed
- * `color-contrast` nodes come from the entry-opacity snapshot (0.12) AND from
- * `.flood`'s pseudo-element backdrop, which axe cannot composite — and the
- * claimed coverage by the WCAG AA pair test in accessibility-performance.spec.ts
- * was wrong (that test measures the reading shell's code blocks and the mobile
- * rail summary, not the home scenes). The settled numbers for the scenes whose
- * backdrop is resolvable are in the T10 register §2.9.2; the pseudo-element
- * regions still await a pixel-truth check (register R5b).
+ * `axe-home-exclusions.ts` shares the policy with the English and Chinese
+ * coverage sweep. The excluded contrast nodes use animated entry opacity or
+ * the flood scene's pseudo-element backdrop, which axe cannot composite.
+ * `cinematic-home.spec.ts` measures the settled flood scene's painted contrast.
  */
 const EXCLUSIONS: Partial<Record<(typeof SCANNED_ROUTES)[number], string[]>> = {
   '/': [...HOME_AXE_EXCLUSIONS],

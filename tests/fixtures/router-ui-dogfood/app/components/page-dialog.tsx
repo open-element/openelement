@@ -29,7 +29,7 @@ export default function DialogPage() {
           Footer action
         </button>
       </open-dialog>
-      <open-dialog id="ssr-open-dialog" label="SSR open dialog" open>
+      <open-dialog id="ssr-open-dialog" label="SSR open dialog" close-label="关闭" open>
         <p id="ssr-open-text">SSR-opened dialog body</p>
       </open-dialog>
       <button id="after-dialog" type="button">

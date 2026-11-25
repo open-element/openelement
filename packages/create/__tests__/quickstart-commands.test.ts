@@ -6,7 +6,7 @@
  * one used to spell its own commands: some still ran `npm install` after a
  * generator that had already installed, and the root READMEs said `pnpm dev`
  * where the example said `npm create`. This gate holds every copy to the two
- * commands the CLI actually prints:
+ * commands the CLI actually prints for the published npm quickstart:
  *
  *   install  `npm create @openelement <name>`  — createInstallCommand()
  *   dev      `npm run dev`                     — devCommand()
@@ -59,6 +59,9 @@ const BARE_INSTALL = /^\s*(?:npm|pnpm|yarn|bun)\s+install\s*$/;
 /** A dev command, in any package-manager spelling (with optional flags). */
 const DEV_LINE = /^\s*(npm|pnpm|yarn|bun)\s+(?:run\s+)?dev\b/;
 
+const PACKED_STARTER_SETUP =
+  'pnpm exec vp run --no-cache --fail-if-no-match --filter @openelement/e2e-starter-smoke setup';
+
 const CANONICAL_ALIAS_LINE = /^\s*npm create @openelement(?:@[^\s`]+)?\s+\S+\s*(?:#.*)?$/;
 const CANONICAL_RUNNER_LINE =
   /^\s*(?:npm exec|npx|pnpm dlx)\b[^\n]*@openelement\/create(?:@[^\s`]+)?/;
@@ -88,12 +91,13 @@ function auditQuickstart(text: string): string[] {
         }
       }
     }
-    // One dev spelling everywhere: the manager-neutral npm form. The handoff
-    // box may spell the detected manager, but a documented command may not.
+    // The source preview installs local tarballs with pnpm in the starter harness.
+    const manager =
+      lines.includes(PACKED_STARTER_SETUP) && createLines.length === 0 ? 'pnpm' : 'npm';
     for (const line of lines) {
       const dev = DEV_LINE.exec(line);
-      if (dev === null || dev[1] === 'npm') continue;
-      violations.push(`dev command must be spelled "${devCommand()}": ${line.trim()}`);
+      if (dev === null || dev[1] === manager) continue;
+      violations.push(`dev command must be spelled "${devCommand(manager)}": ${line.trim()}`);
     }
   }
   return violations;
@@ -182,4 +186,10 @@ test('the audit fires on the shapes it forbids (negative half)', () => {
     '```',
   ].join('\n');
   expect(auditQuickstart(clean)).toEqual([]);
+
+  const sourcePreview = ['```sh', PACKED_STARTER_SETUP, 'pnpm run dev', '```'].join('\n');
+  expect(auditQuickstart(sourcePreview)).toEqual([]);
+  expect(auditQuickstart(sourcePreview.replace('pnpm run dev', 'npm run dev'))).toEqual([
+    'dev command must be spelled "pnpm run dev": npm run dev',
+  ]);
 });

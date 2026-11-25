@@ -286,6 +286,13 @@
                 "text": "string"
               },
               "default": ""
+            },
+            {
+              "name": "close-label",
+              "type": {
+                "text": "string"
+              },
+              "default": "Close"
             }
           ],
           "events": [

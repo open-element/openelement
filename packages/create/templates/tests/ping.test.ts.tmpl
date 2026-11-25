@@ -1,0 +1,15 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import ping from "../app/routes/api/ping.ts";
+
+test("GET /api/ping returns the JSON health response", async () => {
+  const response = ping();
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /^application\/json(?:;|$)/i);
+  assert.deepEqual(await response.json(), {
+    pong: true,
+    framework: "openElement",
+    route: "/api/ping",
+  });
+});

@@ -67,6 +67,79 @@ test('public signal exports are protocol objects, never Preact objects', () => {
   }
 });
 
+test('public effect runs each cleanup once without subscribing to its reads', () => {
+  const source = signal(0);
+  const cleanupSource = signal('initial');
+  const events: string[] = [];
+  const stop = effect(() => {
+    events.push(`run:${source.value}`);
+    return () => events.push(`cleanup:${cleanupSource.value}`);
+  });
+
+  source.value = 1;
+  cleanupSource.value = 'changed';
+  source.value = 2;
+  const stopOwner = effect(() => {
+    events.push('owner');
+    stop();
+  });
+  cleanupSource.value = 'after stop';
+  source.value = 3;
+  stop();
+  stopOwner();
+
+  expect(events).toEqual([
+    'run:0',
+    'cleanup:initial',
+    'run:1',
+    'cleanup:changed',
+    'run:2',
+    'owner',
+    'cleanup:changed',
+  ]);
+});
+
+test.each(['rerun', 'dispose'])('a throwing cleanup during %s still stops the effect', (phase) => {
+  const source = signal(0);
+  const error = new Error('cleanup failed');
+  const events: string[] = [];
+  const stop = effect(() => {
+    events.push(`run:${source.value}`);
+    return () => {
+      events.push('cleanup');
+      throw error;
+    };
+  });
+
+  const rerun = () => {
+    source.value = 1;
+  };
+  expect(phase === 'rerun' ? rerun : stop).toThrow(error);
+  source.value = 2;
+  expect(stop).not.toThrow();
+  expect(events).toEqual(['run:0', 'cleanup']);
+});
+
+test('a throwing effect rerun does not repeat the previous successful cleanup', () => {
+  const source = signal(0);
+  const error = new Error('effect failed');
+  const events: string[] = [];
+  const stop = effect(() => {
+    events.push(`run:${source.value}`);
+    if (source.value === 1) throw error;
+    const value = source.value;
+    return () => events.push(`cleanup:${value}`);
+  });
+
+  expect(() => {
+    source.value = 1;
+  }).toThrow(error);
+  source.value = 2;
+  stop();
+
+  expect(events).toEqual(['run:0', 'cleanup:0', 'run:1', 'run:2', 'cleanup:2']);
+});
+
 test('public entry points never import the Preact adapter or test engine', async () => {
   for (const file of PUBLIC_SOURCES) {
     const source = await readFile(new URL(`../src/${file}`, import.meta.url), 'utf8');

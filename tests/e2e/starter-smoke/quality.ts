@@ -16,7 +16,7 @@
  *                                   @types/node pin and the tsconfig
  *                                   `types: ["@openelement/element/css-modules", "node"]` list
  *   lint       pnpm run lint        oxlint at the scaffold's own pin
- *   test       pnpm run test        node --test (zero test files is a pass)
+ *   test       pnpm run test        node --test (request-time API regression test)
  *   build      pnpm run build       oe build — SSR + client + SSG phases
  *   smoke      pnpm run start       oe start + HTTP probes over the wire
  *
@@ -114,6 +114,9 @@ function assertScaffoldPresent(): void {
           'generated starter must carry the full lifecycle (create → … → smoke)',
       );
     }
+  }
+  if (!existsSync(join(appDir, 'tests', 'ping.test.ts'))) {
+    throw new Error('[starter-quality] the packed starter did not scaffold tests/ping.test.ts');
   }
   console.log(`[starter-quality] create: scaffold present at ${appDir} (packed CLI output)`);
 }

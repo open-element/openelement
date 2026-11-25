@@ -14,12 +14,11 @@
 
 [English](./README.md) | 简体中文
 
-OpenElement 是一个 Web Platform 优先、只围绕两个核心产品构建的仓库：**Element** 与 **Router**。
-Element 将 JSX 编写的 Custom Element 编译为 Part Program，并统一用于服务端序列化、创建新 DOM 与复用现有 DOM。Router 负责路由选择、HTTP 语义、导航、loader/action，以及共享的文件路由应用协议（单一编译型 native 渲染器，渲染器选择显式）。
+OpenElement 是一个以 Web 平台为基础的框架，包含 **Element** 和 **Router** 两个核心产品。
+Element 将 TSX 编译为服务端 HTML 和可交互的 Custom Elements。Router 负责路由选择、HTTP 语义、导航、loader 和 action。
 
-源码目前是 Element 与 Router 的全新公开基线 `1.0.0-alpha.16`。它不是从历史 0.x API 到 1.x 的兼容迁移。从这个版本起，六个包（`protocol`、`element`、`compiler`、`router`、`create`、`ui`）作为同一条版本线发布，npm `latest` 指向该线——`npm install @openelement/router` 解析到当前 1.0 预发布。自 #1557 起，Element 单体拆为三个包：`@openelement/protocol`（跨系统契约，零依赖）、`@openelement/element`（纯运行时）与 `@openelement/compiler`（构建期 TSX-to-Part-Program 编译器 + Vite 插件）。
-
-以上描述的是当前 alpha.15 实现。[已接受的目标](./docs/architecture/product-model.md)是 HTML-first Full TSX、显式 Signals 与显式 CE 边界。2026-11-03 所有者终止 OhMyLit 独立产品计划，并正式启动第一方 Lit renderer 退役；2026-11-08 所有者裁决（[ADR-0152](./docs/adr/ADR-0152-product-router-and-alpha-convergence.md)）以零兼容窗口执行该退役。当前源码线不再包含第一方 Lit renderer——公共入口、运行时分支、测试与 fixture 均已删除，`renderer: 'lit'` 以显式迁移错误失败——而已发布的 alpha.15 产物仍包含它。第三方 Lit WC 的 client-only 使用继续保留，但不保证自动 SSR 或 Lit DSD hydration。[候选作者样例](./docs/architecture/tsx-author-candidate-contract.md)尚未发布或验证，不是下方快速开始的 API。
+npm 的 `latest` 是 **`1.0.0-alpha.15`**，使用基于类的 Custom Element 写法。
+当前源码预览的是 `1.0.0-alpha.16`，使用服务端函数页面和编译器生成的 Custom Elements。预览使用从此次检出的源码构建的包。[发布状态](./docs/release/release-state.json) · [产品模型](./docs/architecture/product-model.md)
 
 ## 证据与收录
 
@@ -30,9 +29,9 @@ Element 将 JSX 编写的 Custom Element 编译为 Part Program，并统一用�
 - [deps.dev 包视图](https://deps.dev/npm/%40openelement%2Frouter) 与 [npm](https://www.npmjs.com/package/@openelement/router) 上的 npm provenance 证明
 - Bundle 体积见 [Bundlephobia](https://bundlephobia.com/package/@openelement/element)
 
-## 快速开始
+## 通过 npm 快速开始
 
-需要 **Node.js 24.2+（建议 24.18.0）** 与任一包管理器：npm、pnpm、yarn 或 bun（脚手架优先使用调用它的包管理器，再按 pnpm/npm/yarn/bun 顺序探测 PATH；生成的项目不绑定包管理器）。创建、运行、构建——依赖由生成器自己安装，没有单独的 install 步骤：
+需要 **Node.js 24.2+（建议 24.18.0）**。按下方方式启动脚手架，它会用 npm 安装依赖。打开 `npm run dev` 输出的 URL，构建前按 Ctrl+C 停止开发服务器。
 
 ```bash
 npm create @openelement my-app
@@ -69,23 +68,49 @@ export default definePage(HelloPage, {
 });
 ```
 
-重新跑 `npm run dev`，打开 Vite 打印的 URL 并加上 `/hello`，`npm run build` 会产出 static-first 的 `dist/`。完整教程：<https://openelement.org/zh/guide/getting-started>。
+在开发服务器中打开 `/hello`。`npm run build` 将预渲染页面和请求时运行的服务器产物写入 `dist/`。[Alpha 15 入门指南](https://github.com/open-element/openelement/blob/v1.0.0-alpha.15/www/content/docs/guide/getting-started.zh.md)
 
-**构建期宿主说明：** 文件路由的开发与构建运行在 Node.js 24.2+ 上，经应用自身的 package scripts 驱动（ADR-0161，取代 ADR-0108 的 Deno-native 决策）：`@openelement/router` 的工具子路径（`./vite`、`./cli/*`）作为普通 Node 程序经 starter 自己的依赖钉扎消费。请求期产物使用标准 ESM 与 Web `Request`/`Response`；部署支持以资格矩阵实际覆盖的运行时与 Nitro 目标为准，而非所有能加载 ESM 的运行时。Element 仍可在纯 npm 项目中独立消费。
+## 预览当前源码
+
+在仓库根目录运行打包测试流程，将从当前源码构建的包安装到临时应用中。
+
+```sh
+pnpm install --frozen-lockfile
+export STARTER_SMOKE_WORK_DIR="$(mktemp -d)"
+pnpm exec vp run --no-cache --fail-if-no-match --filter @openelement/e2e-starter-smoke setup
+cd "$STARTER_SMOKE_WORK_DIR/my-blog"
+pnpm run dev
+```
+
+在预览应用中添加 `app/routes/hello.tsx`，然后打开 `/hello`。
+
+```tsx
+import { definePage } from '@openelement/router';
+
+export function HelloPage() {
+  return <h1>Hello from OpenElement</h1>;
+}
+
+export default definePage(HelloPage, {
+  head: { title: 'Hello' },
+});
+```
+
+停止开发服务器后，用 `pnpm test` 和 `pnpm run build` 验证预览应用。[脚手架使用指南](./packages/create/README.md)
 
 ## 特性
 
 - Declarative Shadow DOM，外加 SSR、复用现有 DOM 的 claim，以及只在需要处水合的 island。
-- 手写 JSX 在构建期编译为 Part Program；运行时没有 virtual-DOM 协议。
+- 源码预览在构建期编译 TSX，支持服务端函数页面和编译器生成的 Custom Elements。
 - 代码路由写显式路由记录，文件路由做文件路由、loader、action 与表单。
-- 单一编译型 native 渲染器共用一套应用协议；渲染器选择保持显式，已退役的 Lit renderer 以迁移错误拒绝。
-- 编译产物可 tree-shake，纯服务端模块不会漏进客户端 bundle。
+- 原生渲染器基于标准 Custom Elements 和 Web 平台。
+- 服务端和浏览器使用独立的入口图，客户端 bundle 不包含纯服务端模块。
 
 ## 仓库结构
 
 - `packages/element`：Element 核心产品（纯运行时）。
 - `packages/protocol`：跨系统契约包（#1557）：Part Program IR、错误方言、准入描述符；零依赖，仅装契约。
-- `packages/compiler`：Element 编译器（#1557）：TSX-to-Part-Program 语义核心与 Vite 插件边界；在 Element 三包拆分内由它携带 TypeScript，Router tooling 也依赖 TypeScript。
+- `packages/compiler`：Element 编译器（#1557）：TSX 分析、代码生成和 Vite 插件边界；在 Element 三包拆分内由它携带 TypeScript，Router tooling 也依赖 TypeScript。
 - `packages/router`：Router 核心产品：代码路由与文件路由实现。
   `packages/router` 的 `/vite`、`/cli/*` 与 `/nitro-mount` 子路径：Router 的应用生命周期与服务器输出。
 - `packages/create`：面向这两个核心产品的正式创建入口。
