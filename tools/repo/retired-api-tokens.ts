@@ -22,3 +22,10 @@ export const RETIRED_API_TOKENS = [
   '/preact',
   'preact-render-to-string',
 ];
+
+export function containsRetiredApiToken(text: string, token: string): boolean {
+  // Match the complete subpath segment. A period can end a sentence or start
+  // a filename suffix, while a slash can continue a reference to the subpath.
+  if (token === '/preact') return /\/preact(?![\w-]|\.[\w.-])/.test(text);
+  return text.includes(token);
+}

@@ -13,7 +13,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
-import { RETIRED_API_TOKENS } from './retired-api-tokens.ts';
+import { containsRetiredApiToken, RETIRED_API_TOKENS } from './retired-api-tokens.ts';
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 
@@ -56,5 +56,25 @@ test('the hand list keeps the genuinely retired historical entries', () => {
     'preact-render-to-string',
   ]) {
     expect(RETIRED_API_TOKENS, `${token} must stay retired`).toContain(token);
+  }
+});
+
+test('the retired Preact subpath matches a complete segment', () => {
+  for (const reference of [
+    'packages/element/src/internal/signal/preact-engine.ts',
+    './preact.ts',
+    '@openelement/element/preact_adapter',
+  ]) {
+    expect(containsRetiredApiToken(reference, '/preact'), reference).toBe(false);
+  }
+  for (const reference of [
+    '/preact',
+    'See /preact.',
+    '`app/preact`',
+    'import * as preact from "@openelement/app/preact";',
+    'import * as preact from "@openelement/element/preact";',
+    '@openelement/app/preact/client',
+  ]) {
+    expect(containsRetiredApiToken(reference, '/preact'), reference).toBe(true);
   }
 });
