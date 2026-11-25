@@ -8,7 +8,7 @@ section: 'Core'
 
 Every compiled component is one module that default-exports a function component beside a `defineIslandConfig` sidecar. The compiler lowers that pair into a Native Custom Element — a constructor that builds the authored tree, plus, for a shadow root, the host producer the server renders. The grammar is closed: a construct the compiler cannot lower fails the build with a coded diagnostic instead of shipping a runtime interpreter. This page is the cheat sheet — the laws in one table, then each law with a working example and the shape that fails.
 
-The class lane is deleted in this release. `extends OpenElement` and `@element(...)` classes are not an authoring surface: `OpenElement` and `ErrorBoundary` are no longer exported, and no compatibility shim replaces them. The `element` and `property` decorators still exist as inert no-op stand-ins so that an old module can be *evaluated* by a unit test or a config load, but nothing compiles them — a module that still carries them is not admitted by any lane.
+This release removes the class lane, including the `OpenElement` and `ErrorBoundary` exports and the `element` and `property` decorators. Migrate each class component to a default-exported function with a `defineIslandConfig` sidecar.
 
 ## The laws
 
@@ -425,7 +425,7 @@ export default function MyLink(props: { active: boolean }) {
 
 ## Lifecycle is intrinsic calls in root setup
 
-The class lane's hooks have one replacement: intrinsics imported from `@openelement/element` and called at the top level of the root component's body, where the compiler lowers them into the retained instance factory. `onConnect` replaces both `onDsdHydrated` and `onCsrRendered` — one callback, run after a claim and after a fresh mount alike — and `onDispose` replaces the class lane's `onDispose`. A nested component's hook is carried only when the compiler retains that component as a hostless body; a hook with no retained owner fails closed with `OEIR_LEAF_INVALID_ARTIFACT`, so put element lifecycle on the element that owns it.
+Import lifecycle intrinsics from `@openelement/element` and call them at the top level of the component body. The compiler lowers them into the retained instance factory. `onConnect` runs on each connection before the generated body mounts fresh DOM or claims server markup. Its returned cleanup runs on disconnect. `onDispose` runs when the retained instance is torn down. The compiler admits nested hooks in retained hostless bodies and rejects hooks without a retained owner with `OEIR_LEAF_INVALID_ARTIFACT`.
 
 ```tsx
 import { onConnect, onDispose, useHost } from '@openelement/element';
@@ -439,8 +439,7 @@ export default function MyProbe() {
 
   onConnect((env) => {
     host.setAttribute('data-ready', '1');
-    // The per-connection signal aborts at disconnect, so a listener registered
-    // here is released without a second bookkeeping table.
+    // The per-connection signal aborts before connection cleanups on disconnect.
     env.signal.addEventListener('abort', () => host.removeAttribute('data-ready'));
   });
 
@@ -452,7 +451,7 @@ export default function MyProbe() {
 }
 ```
 
-`onPropertyChange(cb)` runs after a declared row commits a new value, and `onError(cb)` is the error boundary. `useHost()` returns this instance's owning element — the replacement for the class lane's `this` — and it is erased only as a setup binding (`const host = useHost()`), so read the host through that binding rather than calling it inside a handler or a text slot. State that must be reachable while disconnected belongs in `ref`: a handle is populated when the node attaches and cleared when it detaches, and the compiler admits it only in a `ref` attribute.
+`onPropertyChange(cb)` runs after a declared row commits a new value, and `onError(cb)` handles errors for the element. Read the owning element through a setup binding (`const host = useHost()`). To access a DOM node from a callback, pass a `ref()` handle to the node's JSX `ref` attribute. Its `current` is set on attach, cleared on detach, and can be read in callbacks without creating a reactive subscription.
 
 ```tsx
 import { onPropertyChange, ref } from '@openelement/element';
