@@ -41,7 +41,7 @@ export async function buildPackedBoard(author: string, consumer: string): Promis
     join(author, 'packed-board.tsx'),
     `${S2_BOARD}
 function defineIslandConfig(config) { return config; }
-export const openElement = defineIslandConfig({tag: 'packed-board', hydrate: 'load', ssr: true, root: 'light'});
+export const openElement = defineIslandConfig({tag: 'packed-board', hydrate: 'load', ssr: true, root: 'shadow'});
 
 function Frame(props) {
   return <main>{props.children}{props.children}</main>;
@@ -59,24 +59,25 @@ function Composition(props) {
   );
   await writeFile(
     join(author, 'board-browser.js'),
-    `import {createBoardRecipe, createCompositionRecipe} from './packed-board.tsx';
+    `import Board, {createBoardRecipe, createCompositionRecipe} from './packed-board.tsx';
 import {signal} from '@openelement/element';
 import {LifetimeScope} from './node_modules/@openelement/element/src/internal/compiled/lifetime-scope.js';
 import {claimRecipe, insertRecipe} from './node_modules/@openelement/element/src/internal/compiled/runtime/recipe.js';
 import {runtimeProbe} from './node_modules/@openelement/element/src/internal/compiled/runtime/observability.js';
 window.__packedS2 = {createBoardRecipe, createCompositionRecipe, signal, LifetimeScope, claimRecipe, insertRecipe, runtimeProbe};
+customElements.define('packed-board', Board);
 `,
   );
   await writeFile(
     join(author, 'board-ssr.js'),
-    `export {Board__ssr, Composition__ssr} from './packed-board.tsx';\n`,
+    `export {Board__ssr, Board__ssrHost, Composition__ssr} from './packed-board.tsx';\n`,
   );
   await writeFile(
     join(author, 'vite.board.config.js'),
     `import {element} from '@openelement/compiler/vite';
 export default ({isSsrBuild}) => ({
   plugins: [
-    element({generatedElementSite: (id) => id === 'packed-board.tsx' ? {tag: 'packed-board', root: 'light'} : null}),
+    element({generatedElementSite: (id) => id === 'packed-board.tsx' ? {tag: 'packed-board', root: 'shadow'} : null}),
     {name:'packed-board-boundary', generateBundle(){if(!isSsrBuild) for(const id of this.getModuleIds()){
       if(/compiler|router\\/src\\/(?:vite|cli)|node:/.test(id))this.error('Browser tooling leak: '+id);
     }}},
@@ -95,6 +96,7 @@ export default ({isSsrBuild}) => ({
 
   const ssr = (await import(pathToFileURL(join(author, 'board-ssr/board-ssr.js')).href)) as {
     Board__ssr(props: object, host: object): string;
+    Board__ssrHost(): string;
     Composition__ssr(props: object, host: object): string;
   };
   const board = ssr.Board__ssr(
@@ -104,6 +106,11 @@ export default ({isSsrBuild}) => ({
     },
   );
   const composition = ssr.Composition__ssr({}, { bindings: { label: { value: 'x' } } });
+  const boardHost = ssr.Board__ssrHost();
+  assert.ok(
+    boardHost.includes(`<template shadowrootmode="open">${board}</template>`),
+    'the public host producer emits the same Board inside a declarative shadow root',
+  );
   assert.match(board, /<!--oe:k:s:61--><li><!--oe:t:0-->A/);
   assert.match(composition, /class="reused"/);
 
@@ -112,6 +119,10 @@ export default ({isSsrBuild}) => ({
     await readFile(join(author, 'board-browser/board.js')),
   );
   await writeFile(join(consumer, 'board.js.map'), JSON.stringify(map));
+  await writeFile(
+    join(consumer, 'board-upgrade.html'),
+    `<!doctype html><meta charset="utf-8">${boardHost}`,
+  );
   await writeFile(
     join(consumer, 'board.html'),
     `<!doctype html><meta charset="utf-8">
@@ -124,7 +135,103 @@ export default ({isSsrBuild}) => ({
   );
 }
 
+async function provePackedBoardUpgrade(page: Page, origin: string): Promise<void> {
+  const response = await page.goto(`${origin}/board-upgrade`);
+  assert.strictEqual(response?.status(), 200);
+  const input = page.locator('packed-board #board-field');
+  assert.strictEqual(await input.inputValue(), 'server');
+  await input.fill('draft typed before upgrade');
+  await page.evaluate(() => {
+    const host = document.querySelector('packed-board')!;
+    const shadow = host.shadowRoot!;
+    const field = shadow.querySelector<HTMLInputElement>('#board-field')!;
+    field.setSelectionRange(2, 8);
+    const errors: string[] = [];
+    window.addEventListener('error', (event) => errors.push(event.message));
+    const mutations: MutationRecord[] = [];
+    const observer = new MutationObserver((records) => mutations.push(...records));
+    const observation = { subtree: true, childList: true, attributes: true, characterData: true };
+    observer.observe(host, observation);
+    observer.observe(shadow, observation);
+    Object.assign(window, {
+      boardUpgrade: {
+        host,
+        shadow,
+        field,
+        errors,
+        mutations,
+        observer,
+        beforeUpgrade: customElements.get('packed-board') === undefined,
+        html: shadow.innerHTML,
+        rows: [...shadow.querySelectorAll('li')],
+      },
+    });
+  });
+  await page.addScriptTag({ url: `${origin}/board.js`, type: 'module' });
+  const adoption = await page.evaluate(() => {
+    const evidence = (
+      window as unknown as {
+        boardUpgrade: {
+          host: Element;
+          shadow: ShadowRoot;
+          field: HTMLInputElement;
+          errors: string[];
+          mutations: MutationRecord[];
+          observer: MutationObserver;
+          beforeUpgrade: boolean;
+          html: string;
+          rows: HTMLLIElement[];
+        };
+      }
+    ).boardUpgrade;
+    const { host, shadow, field, errors, mutations, observer, beforeUpgrade, html, rows } =
+      evidence;
+    const mutationCount = mutations.length + observer.takeRecords().length;
+    observer.disconnect();
+    const ctor = customElements.get('packed-board');
+    return {
+      errors,
+      beforeUpgrade,
+      upgraded: ctor !== undefined && host instanceof ctor,
+      sameHost: document.querySelector('packed-board') === host,
+      sameRoot: host.shadowRoot === shadow,
+      sameInput: shadow.querySelector('#board-field') === field,
+      sameRows: [...shadow.querySelectorAll('li')].every((row, i) => row === rows[i]),
+      sameBytes: shadow.innerHTML === html,
+      mutationCount,
+      focus: shadow.activeElement === field,
+      selection: [field.selectionStart, field.selectionEnd],
+      value: field.value,
+      attributeValue: field.getAttribute('value'),
+    };
+  });
+  assert.deepStrictEqual(
+    adoption,
+    {
+      errors: [],
+      beforeUpgrade: true,
+      upgraded: true,
+      sameHost: true,
+      sameRoot: true,
+      sameInput: true,
+      sameRows: true,
+      sameBytes: true,
+      mutationCount: 0,
+      focus: true,
+      selection: [2, 8],
+      value: 'draft typed before upgrade',
+      attributeValue: 'server',
+    },
+    'native upgrade claims the Board in place and keeps the pre-upgrade input state',
+  );
+  await input.press('End');
+  await input.press('x');
+  assert.strictEqual(await input.inputValue(), 'draft typed before upgradex');
+  assert.deepStrictEqual(await page.locator('packed-board li').allTextContents(), ['A: 1', 'C: 1']);
+}
+
 export async function provePackedBoard(page: Page, origin: string): Promise<string> {
+  await provePackedBoardUpgrade(page, origin);
   const response = await page.goto(`${origin}/board`);
   assert.strictEqual(response?.status(), 200);
   const proof = await page.evaluate(
@@ -144,13 +251,14 @@ export async function provePackedBoard(page: Page, origin: string): Promise<stri
       const invalid = document.querySelector('#invalid-board')!;
       const mount = document.querySelector('#mount')!;
       const owner = new LifetimeScope();
+      const peerOwner = new LifetimeScope();
       const boardBindings = () => ({
         items: signal(initial),
         open: signal(true),
         count: signal(0),
       });
-      const boardRecipe = (bindings: ReturnType<typeof boardBindings>) =>
-        createBoardRecipe(owner, { props: {}, bindings, propsChanged: signal(0) });
+      const boardRecipe = (bindings: ReturnType<typeof boardBindings>, definitionOwner = owner) =>
+        createBoardRecipe(definitionOwner, { props: {}, bindings, propsChanged: signal(0) });
       const rows = (parent: Element) => [...parent.querySelectorAll('li')];
       const labels = (entries: Element[]) => entries.map((entry) => entry.textContent);
       const counts = () => runtimeProbe.snapshot();
@@ -197,7 +305,9 @@ export async function provePackedBoard(page: Page, origin: string): Promise<stri
         sameRows: rows(board)[0] === a && rows(board)[1] === c,
         draft: retainsDraft('note'),
       };
-      const peerProjection = claimRecipe(owner, boardRecipe(boardBindings()), peer);
+      const peerBindings = boardBindings();
+      const peerProjection = claimRecipe(peerOwner, boardRecipe(peerBindings, peerOwner), peer);
+
       const mounted = insertRecipe(owner, boardRecipe(boardBindings()), mount);
       const mountParity =
         mount.querySelector('ul')!.innerHTML === board.querySelector('ul')!.innerHTML;
@@ -264,11 +374,20 @@ export async function provePackedBoard(page: Page, origin: string): Promise<stri
       projection.dispose(false);
       const kept = board.innerHTML === updatedHtml && rows(board)[0] === a;
       const afterKeep = counts();
+      bindings.count.value = 11;
+      peerBindings.count.value = 6;
+      const isolation = {
+        disposedUnchanged: board.innerHTML === updatedHtml && rows(board)[0] === a,
+        peerRows: rows(peer)[0] === peerA && rows(peer)[1] === peerC,
+        peerLabels: labels(rows(peer)),
+      };
+      bindings.count.value = 9;
       const reclaimed = claimRecipe(owner, boardRecipe(bindings), board);
       const sameReclaim = rows(board)[0] === a && board.innerHTML === updatedHtml;
       const afterReclaim = counts();
       reclaimed.dispose(true);
       peerProjection.dispose(true);
+      peerOwner.dispose(true);
       const boardCleanup = {
         empty: board.childNodes.length + peer.childNodes.length,
         counts: counts(),
@@ -353,6 +472,7 @@ export async function provePackedBoard(page: Page, origin: string): Promise<stri
         toggle,
         kept,
         afterKeep,
+        isolation,
         sameReclaim,
         afterReclaim,
         boardCleanup,
@@ -432,6 +552,15 @@ export async function provePackedBoard(page: Page, origin: string): Promise<stri
     proof.kept && proof.sameReclaim,
     'dispose(false) preserves borrowed DOM and retry adopts it',
   );
+  assert.deepStrictEqual(
+    proof.isolation,
+    {
+      disposedUnchanged: true,
+      peerRows: true,
+      peerLabels: ['A: 6', 'C: 6'],
+    },
+    'disposing one Board neither wakes its own bindings nor stops the independent peer',
+  );
   assert.strictEqual(live(proof.afterKeep), live(proof.claimedCounts));
   assert.strictEqual(live(proof.afterReclaim), 2 * live(proof.claimedCounts));
   assert.strictEqual(proof.boardCleanup.empty, 0, 'dispose(true) removes the Board region');
@@ -457,5 +586,5 @@ export async function provePackedBoard(page: Page, origin: string): Promise<stri
   assert.strictEqual(proof.rejected.counts.projections, 0);
   assert.strictEqual(proof.rejected.counts.subscriptions, 0);
   assert.deepStrictEqual(proof.recovery, { live: ['A: 5', 'C: 5'], sameRows: true });
-  return `same authored S2 Board SSR/claim/mount: own draft, focus/selection, replace/reorder/insert/delete, owner isolation, composition, dispose and keyed mismatch/retry; Board liveSubs=${live(proof.claimedCounts)}→0, composed owners=${proof.compositionClaim.owners}`;
+  return `same authored S2 Board host SSR/native upgrade with pre-activation input; recipe SSR/claim/mount: own draft, focus/selection, replace/reorder/insert/delete, owner isolation, composition, dispose and keyed mismatch/retry; Board liveSubs=${live(proof.claimedCounts)}→0, composed owners=${proof.compositionClaim.owners}`;
 }

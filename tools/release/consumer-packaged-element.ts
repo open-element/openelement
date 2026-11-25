@@ -228,6 +228,7 @@ export default {
         '/generated.js': 'generated.js',
         '/generated': 'generated.html',
         '/board': 'board.html',
+        '/board-upgrade': 'board-upgrade.html',
         '/board.js': 'board.js',
         '/board.js.map': 'board.js.map',
         '/shadow.js': 'shadow.js',

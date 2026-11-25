@@ -25,10 +25,9 @@
  * full claim-negative set remain open. The permitted seed state is the single
  * definition in `docs/architecture/m08-list-wire.md` §4.1: equal values are
  * clean, while a different dynamic value is an allowed activation write
- * recorded as non-clean (the `permitted difference` case below). The real
- * void/`<input>` SSR→claim vertical belongs to the input lane; this file keeps
- * a boundary check only and carries focus/selection on a `contenteditable`
- * element, not on an input and not on a property channel.
+ * recorded as non-clean (the `permitted difference` case below). This suite
+ * uses the static contenteditable selection carrier. The packed Custom Element
+ * proof records input value/focus/selection on the same authored Board.
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
@@ -57,7 +56,8 @@ const S2_INITIAL = [
 const S2_WIRE =
   '<section><!--oe:when--><p class="on">open</p><!--oe:/when--><ul><!--oe:each--><!--oe:k:s:61--><li><!--oe:t:0-->A<!--oe:/t:0-->: <!--oe:t:1-->0<!--oe:/t:1--></li><!--oe:k:s:63--><li><!--oe:t:0-->C<!--oe:/t:0-->: <!--oe:t:1-->0<!--oe:/t:1--></li><!--oe:/each--></ul>';
 const FOCUS_CARRIER = '<p id="draft" contenteditable="true">note</p>';
-const S2_SSR = `${S2_WIRE}${FOCUS_CARRIER}</section>`;
+const INPUT_CARRIER = '<input id="board-field" type="text" value="server">';
+const S2_SSR = `${S2_WIRE}${FOCUS_CARRIER}${INPUT_CARRIER}</section>`;
 
 const ENTRY_LOCAL_SIGNAL = `import { signal } from '@openelement/element';
 function Rows(props) {
@@ -406,7 +406,7 @@ describe('M08 S2 acceptance — S: request-time SSR boundary', () => {
 
     expect(ssr(loaded, 'Board')({}, first.host)).toBe(S2_SSR);
     expect(ssr(loaded, 'Board')({}, second.host)).toBe(
-      `<section><!--oe:when--><em class="off">closed</em><!--oe:/when--><ul><!--oe:each--><!--oe:k:s:61--><li><!--oe:t:0-->A<!--oe:/t:0-->: <!--oe:t:1-->2<!--oe:/t:1--></li><!--oe:/each--></ul>${FOCUS_CARRIER}</section>`,
+      `<section><!--oe:when--><em class="off">closed</em><!--oe:/when--><ul><!--oe:each--><!--oe:k:s:61--><li><!--oe:t:0-->A<!--oe:/t:0-->: <!--oe:t:1-->2<!--oe:/t:1--></li><!--oe:/each--></ul>${FOCUS_CARRIER}${INPUT_CARRIER}</section>`,
     );
     expect(first.reads).toEqual({ count: 1, items: 1, open: 1 });
     expect(second.reads).toEqual({ count: 1, items: 1, open: 1 });
@@ -449,7 +449,7 @@ describe('M08 S2 acceptance — S: request-time SSR boundary', () => {
     );
   });
 
-  test('boundary: void input SSR/focus is the input lane obligation; this vertical records no input evidence', () => {
+  test('a standalone void input recipe remains claimable', () => {
     const input = compile(VOID_INPUT);
     const factory = input.loaded.createInputFocusRecipe;
     expect(typeof factory).toBe('function');
@@ -459,13 +459,6 @@ describe('M08 S2 acceptance — S: request-time SSR boundary', () => {
       propsChanged: nodeSignal(0),
     });
     expect('claim' in recipe).toBe(true);
-    // This acceptance vertical intentionally does not prove the input
-    // obligation. Its focus/selection carrier is a static contenteditable
-    // attribute, not a void input. The input lane owns the
-    // SSR→parse→pre-claim-edit→claim vertical; this file neither asserts that
-    // producer's absence nor claims its result.
-    expect(S2_BOARD).toContain('contenteditable="true"');
-    expect(S2_BOARD).not.toContain('<input');
     scope.dispose(false);
   });
 });
