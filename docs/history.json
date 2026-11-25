@@ -10,7 +10,7 @@
       "carried": "READ-ONLY audit of the alpha.15 tree: what it implements, the gap the target must close, the historical compatibility constraints it inherits and the coverage boundary of the evidence.",
       "nowLivesIn": [
         "docs/architecture/compiler-native-architecture.md",
-        "docs/architecture/alpha16-18-progress.md"
+        "docs/architecture/alpha16-closeout-report.md"
       ],
       "noSuccessor": true,
       "recovery": {
@@ -99,7 +99,7 @@
       "title": "Alpha16 integration workboard",
       "carried": "Coordination record: the M07 adjudications, the decided M07b technical plan (§13), evidence grades, merge order and the 2026-11-09 §14 Lead/QA acceptance.",
       "nowLivesIn": [
-        "docs/architecture/alpha16-18-progress.md"
+        "docs/architecture/alpha16-closeout-report.md"
       ],
       "noSuccessor": true,
       "recovery": {
@@ -220,9 +220,9 @@
       "title": "M02 Semantic IR feasibility spike — report",
       "carried": "M02 semantic IR spike.",
       "nowLivesIn": [
-        "docs/architecture/alpha16-18-progress.md"
+        "docs/architecture/alpha16-closeout-report.md"
       ],
-      "noSuccessor": false,
+      "noSuccessor": true,
       "recovery": {
         "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
         "path": "docs/architecture/m02-semantic-ir-feasibility.md"
@@ -250,9 +250,9 @@
       "title": "M03 implementation log",
       "carried": "M03 implementation log.",
       "nowLivesIn": [
-        "docs/architecture/alpha16-18-progress.md"
+        "docs/architecture/alpha16-closeout-report.md"
       ],
-      "noSuccessor": false,
+      "noSuccessor": true,
       "recovery": {
         "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
         "path": "docs/architecture/m03-implementation-log.md"
@@ -265,9 +265,9 @@
       "title": "M03 review corrections register",
       "carried": "M03 review corrections.",
       "nowLivesIn": [
-        "docs/architecture/alpha16-18-progress.md"
+        "docs/architecture/alpha16-closeout-report.md"
       ],
-      "noSuccessor": false,
+      "noSuccessor": true,
       "recovery": {
         "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
         "path": "docs/architecture/m03-review-corrections.md"
@@ -280,9 +280,9 @@
       "title": "M05 leaf-codegen prototype — status: PROTOTYPE, NOT G1",
       "carried": "M05 leaf-codegen prototype.",
       "nowLivesIn": [
-        "docs/architecture/alpha16-18-progress.md"
+        "docs/architecture/alpha16-closeout-report.md"
       ],
-      "noSuccessor": false,
+      "noSuccessor": true,
       "recovery": {
         "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
         "path": "docs/architecture/m05-g1-leaf-prototype.md"
@@ -451,6 +451,51 @@
       "recovery": {
         "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
         "path": "docs/architecture/rendering-and-hydration.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/alpha16-handoff.md",
+      "date": "2026-11-25",
+      "title": "Alpha16 handoff",
+      "carried": "Session handoff for the component migration.",
+      "nowLivesIn": [
+        "docs/architecture/alpha16-closeout-report.md"
+      ],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "fc55986d7966da2c2e67cae253e536ca4b898e6e",
+        "path": "docs/architecture/alpha16-handoff.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/f16-handoff.md",
+      "date": "2026-11-25",
+      "title": "F16 handoff",
+      "carried": "Session handoff for Alpha16 closeout.",
+      "nowLivesIn": [
+        "docs/architecture/alpha16-closeout-report.md"
+      ],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "fc55986d7966da2c2e67cae253e536ca4b898e6e",
+        "path": "docs/architecture/f16-handoff.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/alpha16-18-progress.md",
+      "date": "2026-11-25",
+      "title": "Alpha16–18 progress ledger and audit closure register",
+      "carried": "Dated milestone progress and audit history.",
+      "nowLivesIn": [
+        "docs/architecture/alpha16-closeout-report.md"
+      ],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "fc55986d7966da2c2e67cae253e536ca4b898e6e",
+        "path": "docs/architecture/alpha16-18-progress.md"
       }
     }
   ]

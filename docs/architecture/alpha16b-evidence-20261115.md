@@ -203,7 +203,7 @@ for P1, does not execute M12/M13 and does not flip any milestone or status row.
 ## Later reading (2026-11-20)
 
 **P1–P5/M10/M11 status follows the 2026-11-20 re-record in the head
-[progress ledger](./alpha16-18-progress.md) and the
+[progress ledger](https://github.com/open-element/openelement/blob/fc55986d7966da2c2e67cae253e536ca4b898e6e/docs/architecture/alpha16-18-progress.md) and the
 [P1 applicability record](./p1-applicability-record.md); the `NOT MET`
 statements in this file are the state as recorded at the time of writing**,
 including the 2026-11-16 addendum's "P1–P5 keep their recorded `NOT MET`
@@ -217,7 +217,7 @@ Append-only re-record note. The rows above keep their original commits and their
 original `LOCAL` provenance; this appendix was **not** re-run at the 2026-11-20
 head, so under the per-record rule of the
 [evidence baseline](./evidence-baseline.md) and the per-head rule of the
-[progress ledger](./alpha16-18-progress.md) §2, the rows stay historical for
+[progress ledger](https://github.com/open-element/openelement/blob/fc55986d7966da2c2e67cae253e536ca4b898e6e/docs/architecture/alpha16-18-progress.md) §2, the rows stay historical for
 delivery (the committed history is unchanged). The measured commit of the
 2026-11-20 re-record is
 `f514c1290539993f9bdbeca9b02b6f99ca0a4dff`; the later commit

@@ -1173,7 +1173,7 @@ below. Full log:
 
 Per-row records live in [the P1 applicability record](../architecture/p1-applicability-record.md)
 (section `FINAL VERDICTS — re-recorded 2026-11-20 at f514c1290539993f9bdbeca9b02b6f99ca0a4dff`),
-the [progress ledger](../architecture/alpha16-18-progress.md) M10–M13 rows and the
+the [progress ledger](https://github.com/open-element/openelement/blob/fc55986d7966da2c2e67cae253e536ca4b898e6e/docs/architecture/alpha16-18-progress.md) M10–M13 rows and the
 [capability inventory](../architecture/alpha16-capability-inventory.md) section
 `Final-SHA matrix (2026-11-20)`. This section is the ADR-layer pointer to those
 records, not a second copy of the numbers, and nothing here is an exit or a

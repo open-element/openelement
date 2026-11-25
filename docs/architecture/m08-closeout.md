@@ -185,7 +185,7 @@ pnpm run check
 
 - Stage authority: [Alpha16–18 execution plan](./alpha16-18-execution-plan.md).
 - Status ledger and exit check:
-  [Alpha16–18 progress ledger](./alpha16-18-progress.md#46-m08-exit-and-alpha16a-exit-check-2026-11-13).
+  [Alpha16–18 progress ledger](https://github.com/open-element/openelement/blob/fc55986d7966da2c2e67cae253e536ca4b898e6e/docs/architecture/alpha16-18-progress.md#46-m08-exit-and-alpha16a-exit-check-2026-11-13).
 - Evidence ledger: [Alpha16–18 semantic test matrix](./alpha16-18-semantic-test-matrix.md#m08-recorded-results).
 - Seed definition: [M08 list wire protocol](./m08-list-wire.md).
 - Text and condition wire: [M08 text boundary](./m08-text-boundary.md).

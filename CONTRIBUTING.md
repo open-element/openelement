@@ -32,13 +32,22 @@ completion evidence.
   failing job/step and its error, why the failure is environmental rather than a
   product regression, the rerun's attempt, and the result. A rerun changes the
   evidence; it does not erase the failure from the record.
-- **Gate claims cite the execution-plan unit.** The pull request names the
-  milestone or gate it claims (an M row, G1/G2, a slice) and the commands behind
-  each claim. A prototype or spike is labelled "NOT G1" / "not a gate record";
-  a prototype or a local run must never be written up as a gate, qualification
-  or release evidence — see
-  [docs/architecture/alpha16-18-progress.md](./docs/architecture/alpha16-18-progress.md)
-  for the tracked statuses.
+- **Make verification reproducible.** Cite the candidate commit, command,
+  environment and observed result. For release claims, identify the gate and
+  retain its required evidence with the release.
+
+## Tracking work
+
+Use an issue for a deliverable that contributors can verify. Describe the
+user-visible outcome, the acceptance check and any dependency. A project board
+can track the issue through review. Link the pull request and record the result
+on the issue when the change lands.
+
+Keep internal assignments, session plans, review transcripts and handoffs in a
+separate workspace. Those records can refer to public issue numbers or commits.
+Builds, tests, documentation generation and release gates must run from a clean
+clone using the repository and its declared dependencies. Public architecture
+decisions, compatibility contracts and required release evidence belong here.
 
 ## Architecture review
 

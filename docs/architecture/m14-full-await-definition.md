@@ -35,7 +35,7 @@ extension carrier and its reason; the evidence that exists today; the evidence
 the consolidation PR still owes; the explicit non-claims.
 
 **Is not** — the M14 exit or exit evidence; a status change in
-[the progress ledger](./alpha16-18-progress.md) (the M14 row stays "In
+[the progress ledger](https://github.com/open-element/openelement/blob/fc55986d7966da2c2e67cae253e536ca4b898e6e/docs/architecture/alpha16-18-progress.md) (the M14 row stays "In
 progress", "M14 exit not met"); a result in
 [the semantic test matrix](./alpha16-18-semantic-test-matrix.md) (the TSX-17
 row stays `R`); a public API, ABI, version, tag, publication or release claim;
@@ -179,7 +179,7 @@ At the baseline `6bd3667d4`, after both bounded merges above:
 - **Router tests.** `packages/router/__tests__/function-page.test.ts` — the
   awaited seam, the preserved synchronous contract, and the generated-entry
   wiring.
-- **Recorded evidence.** [The progress ledger](./alpha16-18-progress.md) §3
+- **Recorded evidence.** [The progress ledger](https://github.com/open-element/openelement/blob/fc55986d7966da2c2e67cae253e536ca4b898e6e/docs/architecture/alpha16-18-progress.md) §3
   M14 row records the two bounded merges and their LOCAL counts at #1748
   (compiler focused 203 tests, router 121, element focused 64, Node
   v24.18.0; PR-head CI green). [ADR-0169](../adr/ADR-0169-request-time-rendering-surface.md)
@@ -206,7 +206,7 @@ still owes, at a recorded SHA:
    the §3 refusals (`C−` for the located compile refusals) at that SHA. This
    record cannot be cited as a matrix result.
 2. **The ledger exit row.** In
-   [the progress ledger](./alpha16-18-progress.md) §3 the M14 row stays "In
+   [the progress ledger](https://github.com/open-element/openelement/blob/fc55986d7966da2c2e67cae253e536ca4b898e6e/docs/architecture/alpha16-18-progress.md) §3 the M14 row stays "In
    progress … M14 exit not met" until the exit evidence is recorded there.
    The consolidation PR writes that exit row — the M14 gate is "OEC9032 lifted
    with defined semantics" and its exit is "awaited output, server-only graph
@@ -248,7 +248,7 @@ Explicit, because the definition is easy to over-read:
 
 - [Alpha16–18 execution plan](./alpha16-18-execution-plan.md) — §1 milestone
   table (M14 row), §7 Alpha18 bounded defer.
-- [Alpha16–18 progress ledger](./alpha16-18-progress.md) — §3 M14 row (the
+- [Alpha16–18 progress ledger](https://github.com/open-element/openelement/blob/fc55986d7966da2c2e67cae253e536ca4b898e6e/docs/architecture/alpha16-18-progress.md) — §3 M14 row (the
   bounded merges; exit not met).
 - [Alpha16–18 semantic test matrix](./alpha16-18-semantic-test-matrix.md) —
   TSX-17 row (still `R`).

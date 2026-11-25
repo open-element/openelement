@@ -220,6 +220,6 @@ generated-element page classification; only streaming/deferred and genuinely
 unsupported shapes stay refused with the unchanged identity) and the P1 verdict
 as re-measured **MET at the final head** (see the 2026-11-20 re-record in the
 [p1 applicability record](./p1-applicability-record.md) and the head
-[progress ledger](./alpha16-18-progress.md)). No retirement condition in this
+[progress ledger](https://github.com/open-element/openelement/blob/fc55986d7966da2c2e67cae253e536ca4b898e6e/docs/architecture/alpha16-18-progress.md)). No retirement condition in this
 matrix is relaxed: C08–C11 remain open and every row still needs its own
 evidence before deletion.

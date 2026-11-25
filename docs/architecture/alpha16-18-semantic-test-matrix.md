@@ -973,7 +973,7 @@ Scope: the M14 full-await definition
 ([the definition](./m14-full-await-definition.md) §2 admitted set, §3 located
 boundary) as a per-cell record for the TSX-17 row. Status: **recorded, not an
 M14 exit** — the exit wording and what is still missing are stated in
-[the progress ledger](./alpha16-18-progress.md) §3 M14 row. LOCAL only, Node
+[the progress ledger](https://github.com/open-element/openelement/blob/fc55986d7966da2c2e67cae253e536ca4b898e6e/docs/architecture/alpha16-18-progress.md) §3 M14 row. LOCAL only, Node
 `v24.18.0`; TSX-17 is SSR-only, so no browser instance is required and no
 `M`/`U`/`K`/`D` cell exists to run. Baseline: clean worktree at
 `1b23f677e7e315a479aad385033ff6b60dfc5926` (`git status --porcelain` empty
