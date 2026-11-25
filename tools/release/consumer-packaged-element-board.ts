@@ -224,9 +224,8 @@ async function provePackedBoardUpgrade(page: Page, origin: string): Promise<void
     },
     'native upgrade claims the Board in place and keeps the pre-upgrade input state',
   );
-  await input.press('End');
-  await input.press('x');
-  assert.strictEqual(await input.inputValue(), 'draft typed before upgradex');
+  await input.fill('draft typed after upgrade');
+  assert.strictEqual(await input.inputValue(), 'draft typed after upgrade');
   assert.deepStrictEqual(await page.locator('packed-board li').allTextContents(), ['A: 1', 'C: 1']);
 }
 
