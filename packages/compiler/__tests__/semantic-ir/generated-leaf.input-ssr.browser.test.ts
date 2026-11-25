@@ -14,10 +14,8 @@
  *   - perform **0 product mutations** during the claim.
  *
  * The input also carries one dynamic `attribute` channel and one `boolean`
- * channel. They are already-admitted channels; this vertical pins that they do
- * not overwrite the live property either. The `property` channel itself stays
- * unadmitted: `value={props.value}` produces no `__claim` and no `__ssr`, which
- * is the M09 Custom Element fixture's real boundary.
+ * channel. A separately bound input exercises the property channel through
+ * claim, unchanged model refreshes, a real model update and native reset.
  *
  * A second vertical reorders two static attributes in the parsed bytes and
  * proves the seed is still the exact ordered set: the claim fails closed with
@@ -47,7 +45,7 @@ function Field(props) {
   return <section><input id="field" value="hello" data-kind="seed" data-tone={props.tone} required={props.required} /><span>{label.value}</span></section>;
 }
 function PropertyField(props) {
-  return <input id="field" value={props.value} />;
+  return <form><input id="field" value={props.value} /><output>{props.label}</output></form>;
 }
 `;
 
@@ -348,9 +346,6 @@ describe('M08 input SSR → parse → pre-claim user edit → claim (Chromium LO
   test('the Node-produced input SSR bytes are the exact ordered open-tag form', () => {
     expect(FIELD_HTML).toBe(EXPECTED_FIELD_HTML);
     expect(FIELD_HTML).not.toContain('</input>');
-    // The property channel is admitted (F16): SSR renders the value as an
-    // attribute and the claim writes the DOM property, which is the ordering the
-    // pre-claim-edit test below depends on.
     expect(FIELD_FIXTURE.module).toContain('function PropertyField__claim');
     expect(FIELD_FIXTURE.module).toContain('function PropertyField__ssr');
   });
@@ -416,4 +411,87 @@ describe('M08 input SSR → parse → pre-claim user edit → claim (Chromium LO
       await page.close();
     }
   });
+
+  test.each([
+    { seed: 'hello', edit: 'typed', initial: 'hello', claimedValue: 'typed' },
+    { seed: 'hello', edit: '', initial: 'hello', claimedValue: '' },
+    { seed: '', edit: null, initial: '', claimedValue: '' },
+    { seed: '', edit: null, initial: 'client initial', claimedValue: 'client initial' },
+    {
+      seed: 'hello',
+      edit: 'typed',
+      initial: 'explicit override',
+      claimedValue: 'explicit override',
+    },
+  ])(
+    'bound input with SSR $seed, edit $edit, and initial model $initial',
+    async ({ seed, edit, initial, claimedValue }) => {
+      const page = await newPage();
+      try {
+        const html = ssr(FIELD_FIXTURE.loaded, 'PropertyField')({ value: seed, label: 'initial' });
+        const result = await page.evaluate(
+          ({ html, edit, initial }) => {
+            const { __oeRuntime: runtime, __oeModule: factories } = window as unknown as {
+              __oeRuntime: Pick<typeof compiledRuntime, 'LifetimeScope' | 'claimRecipe'> & {
+                signal: typeof nodeSignal;
+              };
+              __oeModule: {
+                createPropertyFieldRecipe(
+                  owner: compiledRuntime.LifetimeScope,
+                  hostRecord: {
+                    props: { value: string; label: string };
+                    propsChanged: ReturnType<typeof nodeSignal<number>>;
+                  },
+                ): Parameters<typeof compiledRuntime.claimRecipe>[1];
+              };
+            };
+            const host = document.getElementById('host')!;
+            host.innerHTML = html;
+            const form = host.querySelector('form')!;
+            const field = form.querySelector('input')!;
+            const label = form.querySelector('output')!;
+            if (edit !== null) field.value = edit;
+
+            const props = { value: initial, label: 'initial' };
+            const propsChanged = runtime.signal(0);
+            const scope = new runtime.LifetimeScope();
+            const claimed = runtime.claimRecipe(
+              scope,
+              factories.createPropertyFieldRecipe(scope, { props, propsChanged }),
+              host,
+            );
+            const afterClaim = {
+              sameNode: host.querySelector('input') === field,
+              value: field.value,
+              defaultValue: field.defaultValue,
+            };
+            props.label = 'changed label';
+            propsChanged.value++;
+            const afterUnrelatedUpdate = { value: field.value, label: label.textContent };
+            props.value = 'bound update';
+            propsChanged.value++;
+            const afterBoundUpdate = { value: field.value, defaultValue: field.defaultValue };
+            form.reset();
+            const afterReset = field.value;
+            claimed.dispose(false);
+            return { afterClaim, afterUnrelatedUpdate, afterBoundUpdate, afterReset };
+          },
+          { html, edit, initial },
+        );
+        expect(result.afterClaim).toEqual({
+          sameNode: true,
+          value: claimedValue,
+          defaultValue: seed,
+        });
+        expect(result.afterUnrelatedUpdate).toEqual({
+          value: claimedValue,
+          label: 'changed label',
+        });
+        expect(result.afterBoundUpdate).toEqual({ value: 'bound update', defaultValue: seed });
+        expect(result.afterReset).toBe(seed);
+      } finally {
+        await page.close();
+      }
+    },
+  );
 });

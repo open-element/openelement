@@ -359,14 +359,10 @@ function emitSsrDynamicAttribute(
     );
     return true;
   }
-  // A PROPERTY channel renders as an HTML ATTRIBUTE in SSR (owner decision F16).
-  // `el.value = x` is the correct CLAIM behaviour — it sets the DOM property
-  // without clobbering user input — but the server has no live DOM and no user
-  // input to preserve: the honest server artifact for `value={x}` is
-  // `value="x"`, which is also what the browser parses back before any claim
-  // runs. Refusing here made every form page unproducible as a generated page
-  // root (measured: `ssrHostExport: null`), which is why nine fixtures could not
-  // leave the class lane.
+  // A property channel renders as an HTML attribute in SSR (F16). For
+  // `<input value={x}>`, the parser sets the reset default from this attribute.
+  // Claim uses the same representation to tell a replay of that default from
+  // a different client value.
   if (attribute.channel !== 'attribute' && attribute.channel !== 'property') return false;
   const valueVar = nextName(state, 'value');
   pushParts(state, [`const ${valueVar} = attributeValueOf((`, { record }, '));'], attribute.span);

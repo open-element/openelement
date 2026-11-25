@@ -86,6 +86,47 @@ test.describe('SSR and native claim', () => {
 });
 
 test.describe('create flow (JS on)', () => {
+  test('title typed into the server shadow form survives page-root activation', async ({
+    page,
+  }) => {
+    let releaseClient!: () => void;
+    const clientHeld = new Promise<void>((resolve) => (releaseClient = resolve));
+    await page.route('**/client/islands/client.js', async (route) => {
+      await clientHeld;
+      await route.continue();
+    });
+
+    await page.goto('/notes/new', { waitUntil: 'commit' });
+    const host = page.locator('notes-new');
+    const title = page.locator('notes-new #title');
+    const ssrTitle = await title.evaluateHandle((field) => field);
+    try {
+      expect(await page.evaluate(() => customElements.get('notes-new') === undefined)).toBe(true);
+      await expect(host).toHaveAttribute('data-oe-prop-seed');
+      await expect(title).toHaveJSProperty('defaultValue', '');
+      await title.fill('ab');
+      await expect(title).toHaveValue('ab');
+    } finally {
+      releaseClient();
+    }
+
+    await page.evaluate(() => customElements.whenDefined('notes-new').then(() => undefined));
+    await expect(host).not.toHaveAttribute('data-oe-prop-seed');
+    expect(await title.evaluate((field, beforeClaim) => field === beforeClaim, ssrTitle)).toBe(
+      true,
+    );
+    await expect(title).toHaveValue('ab');
+    await expect(title).toHaveJSProperty('defaultValue', '');
+    const post = page.waitForResponse(
+      (response) => response.request().method() === 'POST' && response.url().endsWith('/notes/new'),
+    );
+    await page.click('#submit');
+    const failure = await post;
+    expect(failure.request().headers()['x-openelement-action']).toBe('enhance');
+    expect(failure.status()).toBe(422);
+    await expect(page.locator('#error')).toHaveText('title must be at least 3 characters');
+  });
+
   test('422 re-render, then PRG success with the created flash', async ({
     page,
     request,

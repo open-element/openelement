@@ -134,12 +134,16 @@ function emitClaimTextSlotWrite(
   push(state, `}`);
 }
 
+interface InputValueClaim {
+  readonly first: string;
+  readonly previous: string;
+}
+
 /**
- * Claim-period attribute write. Mount and update keep {@link emitAttributeWrite}.
- * Each channel compares the current DOM to the same value the unconditional
- * write would store. `assertSafeUrlAttribute` runs only when a string
- * attribute will actually be set. Property channels stay mount-only today;
- * the branch is here so a claim write cannot assign an equal property.
+ * Claim-period attribute write. Each channel compares the current DOM to the
+ * target value. `assertSafeUrlAttribute` runs before setting a string
+ * attribute. The first value write to an input preserves live edits when
+ * the binding still carries the server default.
  */
 function emitClaimAttributeWrite(
   state: EmitState,
@@ -148,6 +152,7 @@ function emitClaimAttributeWrite(
   channel: string,
   record: LoweredExpressionRecord,
   anchor: SpanLike,
+  inputValueClaim?: InputValueClaim,
 ): void {
   const literal = JSON.stringify(name);
   if (channel === 'boolean') {
@@ -172,6 +177,28 @@ function emitClaimAttributeWrite(
     }
     const valueVar = nextName(state, 'value');
     pushParts(state, [`const ${valueVar} = (`, { record }, ');'], anchor);
+    if (inputValueClaim !== undefined) {
+      const { first, previous } = inputValueClaim;
+      // A shared prop version or keyed entry update may refresh this slot
+      // without changing its model value. Keep the draft until it does change.
+      push(state, `if (!${first} && Object.is(${previous}, ${valueVar})) return;`, anchor);
+      const liveValue = nextName(state, 'liveValue');
+      const preserveDraft = nextName(state, 'preserveDraft');
+      push(state, `const ${liveValue} = ${elementVar}.value;`, anchor);
+      push(
+        state,
+        `const ${preserveDraft} = ${first} && ${liveValue} !== ${elementVar}.defaultValue && ${elementVar}.getAttribute("value") === attributeValueOf(${valueVar});`,
+        anchor,
+      );
+      push(
+        state,
+        `if (!${preserveDraft} && ${liveValue} !== ${valueVar}) ${elementVar}.value = ${valueVar};`,
+        anchor,
+      );
+      push(state, `${previous} = ${valueVar};`, anchor);
+      push(state, `${first} = false;`, anchor);
+      return;
+    }
     push(
       state,
       `if (${elementVar}[${literal}] !== ${valueVar}) ${elementVar}[${literal}] = ${valueVar};`,
@@ -500,20 +527,28 @@ function emitClaimSlot(
   state: EmitState,
   dependencies: readonly Dependency[],
   anchor: SpanLike,
-  write: () => void,
+  write: (inputValueClaim?: InputValueClaim) => void,
+  adoptsInputValue = false,
 ): void {
   const entry = state.claimEntry;
   // Outside a list-entry claim a zero-dependency slot is one write. Inside one
   // the slot must stay re-runnable: a keyed reuse rebinds the mapper parameter
   // and `update(next)` forces the same named refresh (the M06b2c rule).
-  if (dependencies.length === 0 && entry === null) {
+  if (dependencies.length === 0 && entry === null && !adoptsInputValue) {
     write();
     return;
   }
   const refresh = nextName(state, 'refresh');
+  const inputValueClaim = adoptsInputValue
+    ? { first: nextName(state, 'firstValueWrite'), previous: nextName(state, 'previousValue') }
+    : undefined;
+  if (inputValueClaim !== undefined) {
+    push(state, `let ${inputValueClaim.first} = true;`, anchor);
+    push(state, `let ${inputValueClaim.previous};`, anchor);
+  }
   push(state, `function ${refresh}() {`, anchor);
   state.indent += 1;
-  write();
+  write(inputValueClaim);
   state.indent -= 1;
   push(state, `}`);
   if (entry !== null) {
@@ -1385,9 +1420,27 @@ function emitClaimInto(
         const attributeName = attribute.name;
         const channel = attribute.channel;
         const span = attribute.span;
+        const adoptsInputValue =
+          elementNamespace === 'html' &&
+          node.tag === 'input' &&
+          channel === 'property' &&
+          attributeName === 'value';
         phase2.push(() =>
-          emitClaimSlot(state, slot.dependencies, span, () =>
-            emitClaimAttributeWrite(state, name, attributeName, channel, slot.record, span),
+          emitClaimSlot(
+            state,
+            slot.dependencies,
+            span,
+            (inputValueClaim) =>
+              emitClaimAttributeWrite(
+                state,
+                name,
+                attributeName,
+                channel,
+                slot.record,
+                span,
+                inputValueClaim,
+              ),
+            adoptsInputValue,
           ),
         );
       }
