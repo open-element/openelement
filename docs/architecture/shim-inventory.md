@@ -480,7 +480,7 @@ native 选择缝是主产物，不再作为垫片登记。）
 ### 25. legacy allocation-only 绑定工厂（descriptor `createBindings`）——条件到即删
 
 - 所有者：element 生成元素 shell（`packages/element/src/internal/compiled/generated-element/shell.ts:448-470` 的 descriptor 字段、allocation-only 契约注释与 `createBindings?.() ?? {}` 回退；语义记载于
-  `docs/architecture/m09-generated-element-shell.md`——"the legacy allocation-only factory for hosts/tests"）。
+  [M09 shell record](https://github.com/open-element/openelement/blob/8d50588914ea32f7b76ad8280d66496449273f29/docs/architecture/m09-generated-element-shell.md)——"the legacy allocation-only factory for hosts/tests"）。
 - 方向：descriptor（hosts/tests 手写 fixture，或尚未发射 `createInstance` 的旧路径）→ shell 每元素首次连接调用一次 → 返回记录保留整个元素生命周期（重连不重跑）。
 - 存在原因：M09-0 shell 测试先于 T3 的 `createInstance(owner, host)` 落地；该工厂拿不到 cleanup owner，契约因此被迫收窄为 allocation-only（不得申请任何需要清理的资源，只能分配 signals/computeds 与纯数据）。生成路径如今只对 ROOT 发射 `createInstance`，shell 仅为无 setup 快照的根保留 `createBindings?.() ?? {}` 回退。
 - 退役条件：M09 shell 测试全部迁移到 `createInstance`（带 owner 的 retained setup 工厂，descriptor-fixture 证据随之改写）之后，从 descriptor 契约中删除 `createBindings` 字段及其校验；与 `createInstance` 的互斥 fail-closed 判定随本字段一并退役（只剩一个 call-once/retain 位点，互斥规则自然消失）。

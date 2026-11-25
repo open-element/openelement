@@ -58,6 +58,7 @@ import {
 import { createGeneratedElementSiteResolver } from '../../../router/src/vite/generated-element-site.ts';
 import { FacadeErrorCode, OpenElementError } from '../../../protocol/src/errors.ts';
 import { onConnect, onDispose } from '../../../element/src/index.ts';
+import { LifetimeScope } from '../../../element/src/internal/compiled/lifetime-scope.ts';
 
 const ISLANDS_DIR = 'app/islands';
 const siteFor = createGeneratedElementSiteResolver(ISLANDS_DIR);
@@ -320,6 +321,30 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     const factory = functionText(module, '__oe_rootInstance');
     expect(factory).toContain('const props = __oe_host.props;');
     expect(factory).toContain('__oe_connect.push((');
+  });
+
+  test('failed setup retains only disposers reached before the throwing initializer', () => {
+    const source = `${SIDECAR}
+      import { onDispose } from '@openelement/element';
+      export default function CleanupOrder(props: { seed: number }) {
+        onDispose(() => { globalThis.journal.push('registered'); });
+        const value = globalThis.failSetup();
+        onDispose(() => { globalThis.journal.push('unreached'); });
+        return <div>{value}</div>;
+      }`;
+    const module = compileIsland('cleanup-order', source);
+    const factory = functionText(module, '__oe_rootInstance');
+    const journal: string[] = [];
+    const owner = new LifetimeScope();
+    const setup = new Function('globalThis', `${factory}\nreturn __oe_rootInstance;`)({
+      journal,
+      failSetup() {
+        throw new Error('setup failed');
+      },
+    }) as (owner: LifetimeScope, host: object) => unknown;
+    expect(() => setup(owner, {})).toThrow('setup failed');
+    owner.dispose(true);
+    expect(journal).toEqual(['registered']);
   });
 
   test('A7 SSR producer is byte-identical to the same component without hooks and invokes nothing', () => {

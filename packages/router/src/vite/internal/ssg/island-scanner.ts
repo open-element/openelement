@@ -1302,6 +1302,7 @@ function admitIslandStyles(input: {
   readonly clientOnly: boolean;
 }): string[] {
   switch (input.identity.kind) {
+    case 'light-producer':
     case 'light-no-producer':
       registerIslandStyleDeclaration({
         tagName: input.tagName,
@@ -1495,8 +1496,7 @@ export async function scanIslandMeta(
       throw buildError(
         ClientAssetErrorCode.ISLAND_TAG_DUPLICATE,
         `Derived tag "${tagName}" is claimed by two island files: "${claimant}" and ` +
-          `"${filePath}" — each island derives its tag from its path, so rename one file ` +
-          `or declare the tag explicitly with the sidecar tags/tagNames option`,
+          `"${filePath}" — each island derives its tag from its path, so rename one file`,
       );
     }
     tagClaimants.set(tagName, filePath);

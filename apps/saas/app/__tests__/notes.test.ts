@@ -165,6 +165,16 @@ test('notes loader applies a fixed keyset page and emits a stable next cursor', 
   expect(cursorFilter.includes(`id.lt.${notes[9].id}`)).toBeTruthy();
 });
 
+test('Notes pagination is disabled when the loader supplies no next cursor', async () => {
+  const terminal = await renderNotesPage({ denied: false, notes: [] });
+  expect(terminal).toContain('<form method="get" action="/notes" hidden>');
+  expect(terminal).toContain('<button id="next-notes-page" type="submit" disabled>');
+  const next = await renderNotesPage({ denied: false, nextCursor: 'next-note' });
+  expect(next).toContain('<form method="get" action="/notes">');
+  expect(next).toContain('<button id="next-notes-page" type="submit">');
+  expect(next).toContain('name="cursor" value="next-note"');
+});
+
 test('bounded Notes page stays under its SSR budget at database maxima', async () => {
   const notes = Array.from({ length: NOTES_PAGE_SIZE }, (_, index) => ({
     id: `123e4567-e89b-42d3-a456-${String(426614174000 + index).padStart(12, '0')}`,

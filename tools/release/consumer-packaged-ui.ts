@@ -77,8 +77,8 @@ try {
   writeFileSync(
     join(tmp, 'main.ts'),
     `import { OpenButton, OpenInput, manifest } from '@openelement/ui';
-import { OpenDialog } from '@openelement/ui/open-dialog';
-import { OpenDropdown } from '@openelement/ui/open-dropdown';
+import OpenDialog from '@openelement/ui/open-dialog';
+import OpenDropdown from '@openelement/ui/open-dropdown';
 import { createLogger, type Logger, type ReadonlySignal } from '@openelement/element';
 
 const log: Logger = createLogger('consumer');
@@ -87,14 +87,11 @@ log.info('ui consumer booted');
 const label: ReadonlySignal<string> = null as unknown as ReadonlySignal<string>;
 void label;
 
-const button = new OpenButton();
-button.variant = 'primary';
-const input = new OpenInput();
-input.label = 'Name';
-const dialog = new OpenDialog();
-const dropdown = new OpenDropdown();
-dropdown.anchorName = 'menu';
-void [button, input, dialog, dropdown];
+const authoredComponents: readonly ((props: never) => unknown)[] = [
+  OpenButton, OpenInput, OpenDialog, OpenDropdown,
+];
+const buttonVariant: Parameters<typeof OpenButton>[0]['variant'] = 'primary';
+void [authoredComponents, buttonVariant];
 if (manifest.packageName !== '@openelement/ui') throw new Error('unexpected UI manifest');
 `,
   );

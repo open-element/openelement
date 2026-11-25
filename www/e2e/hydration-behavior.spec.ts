@@ -176,154 +176,142 @@ test.describe('compiled activation on shipped islands', () => {
 });
 
 test.describe('open-button form submission', () => {
-  test('shadow-DOM submit click preserves validation and delivers one native submit', async ({
-    page,
-  }) => {
-    await waitForHydratedSearch(page);
+  for (const placement of ['inside form', 'external form attribute'] as const) {
+    test(`shadow submit preserves native validation and delivery (${placement})`, async ({
+      page,
+    }) => {
+      await page.goto('/contributing/');
+      await page.waitForFunction(() => customElements.get('open-button') !== undefined);
 
-    const result = await page.evaluate(async () => {
-      // open-button is not used by the homepage, so load its island chunk
-      // directly. The chunk URL hash is discovered from the island loader
-      // source to survive rebuilds. Package islands group under the island
-      // naming (`island-<tag>-<hash>.js`, #1471 exact identity join); the
-      // unprefixed shape stays tolerated for a module that ends up unnamed.
-      const loaderSource = await (await fetch('/client/islands/client.js')).text();
-      const chunkMatch = loaderSource.match(
-        /(?:\.\/|islands\/)((?:island-)?open-button-[\w-]+\.js)/,
-      );
-      if (!chunkMatch) return { error: 'open-button chunk URL not found in island loader' };
+      const result = await page.evaluate((placement) => {
+        // Keep the form in a shadow root as page-rendered Router forms are. The
+        // enhancement runtime scans each root and listens there because native
+        // submit is not composed consistently across browser engines.
+        const formRootHost = document.createElement('div');
+        const formRoot = formRootHost.attachShadow({ mode: 'open' });
+        const form = document.createElement('form');
+        form.id = 'submit-probe';
+        const requiredInput = document.createElement('input');
+        requiredInput.required = true;
+        let invalidEventCount = 0;
+        requiredInput.addEventListener('invalid', () => {
+          invalidEventCount++;
+        });
+        form.appendChild(requiredInput);
+        const host = document.createElement('open-button') as HTMLElement;
+        host.setAttribute('type', 'submit');
+        host.textContent = 'Go';
+        formRoot.appendChild(form);
+        const fieldset = document.createElement('fieldset');
+        fieldset.append(host);
+        if (placement === 'inside form') {
+          form.append(fieldset);
+        } else {
+          host.setAttribute('form', form.id);
+          formRoot.append(fieldset);
+        }
+        const maskedMethod = document.createElement('input');
+        maskedMethod.name = 'requestSubmit';
+        form.append(maskedMethod);
+        document.body.appendChild(formRootHost);
 
-      const mod = (await import(`/client/islands/${chunkMatch[1]}`)) as Record<string, unknown>;
-      // Island chunks wrapped by the runtime expose a `.t` namespace (the same
-      // unwrap the island loader applies); plain ui-package chunks export the
-      // class directly.
-      const ns = mod.t as
-        | (Record<string, CustomElementConstructor | undefined> & {
-            default?: CustomElementConstructor;
-          })
-        | undefined;
-      // #638: package island chunks dropped `export default`; the constructor
-      // is exported under the CEM class name `OpenButton`.
-      const ButtonCtor =
-        (mod as Record<string, CustomElementConstructor | undefined>).OpenButton ??
-        ns?.OpenButton ??
-        ns?.default ??
-        (mod.default as CustomElementConstructor | undefined);
-      if (!ButtonCtor) return { error: 'open-button chunk has no OpenButton export' };
-      if (!customElements.get('open-button')) {
-        customElements.define('open-button', ButtonCtor);
-      }
+        let submitEventCount = 0;
+        let submitEvent: {
+          isSubmitEvent: boolean;
+          isTrusted: boolean;
+          bubbles: boolean;
+          targetIsForm: boolean;
+          submitterIsNull: boolean;
+        } | null = null;
+        let rootEventCount = 0;
+        let rootSawSameEvent = false;
+        let formSubmitEvent: Event | null = null;
+        form.addEventListener('submit', (event) => {
+          // Prevent the native navigation; assertions inspect delivery below.
+          event.preventDefault();
+          submitEventCount++;
+          formSubmitEvent = event;
+          submitEvent = {
+            isSubmitEvent: event instanceof SubmitEvent,
+            isTrusted: event.isTrusted,
+            bubbles: event.bubbles,
+            targetIsForm: event.target === form,
+            submitterIsNull: (event as SubmitEvent).submitter === null,
+          };
+        });
+        formRoot.addEventListener('submit', (event) => {
+          rootEventCount++;
+          rootSawSameEvent = event === formSubmitEvent;
+        });
+        let openClickCount = 0;
+        host.addEventListener('open-click', () => {
+          openClickCount++;
+        });
 
-      // Keep the form in a shadow root as page-rendered Router forms are. The
-      // enhancement runtime scans each root and listens there because native
-      // submit is not composed consistently across browser engines.
-      const formRootHost = document.createElement('div');
-      const formRoot = formRootHost.attachShadow({ mode: 'open' });
-      const form = document.createElement('form');
-      const requiredInput = document.createElement('input');
-      requiredInput.required = true;
-      let invalidEventCount = 0;
-      requiredInput.addEventListener('invalid', () => {
-        invalidEventCount++;
-      });
-      form.appendChild(requiredInput);
-      const host = document.createElement('open-button') as HTMLElement;
-      host.setAttribute('type', 'submit');
-      host.textContent = 'Go';
-      form.appendChild(host);
-      formRoot.appendChild(form);
-      document.body.appendChild(formRootHost);
-
-      let submitEventCount = 0;
-      let submitEvent: {
-        isSubmitEvent: boolean;
-        isTrusted: boolean;
-        bubbles: boolean;
-        targetIsForm: boolean;
-        submitterIsNull: boolean;
-      } | null = null;
-      let rootEventCount = 0;
-      let rootSawSameEvent = false;
-      let formSubmitEvent: Event | null = null;
-      form.addEventListener('submit', (event) => {
-        // Prevent the native navigation; assertions inspect delivery below.
-        event.preventDefault();
-        submitEventCount++;
-        formSubmitEvent = event;
-        submitEvent = {
-          isSubmitEvent: event instanceof SubmitEvent,
-          isTrusted: event.isTrusted,
-          bubbles: event.bubbles,
-          targetIsForm: event.target === form,
-          submitterIsNull: (event as SubmitEvent).submitter === null,
+        const inner = host.shadowRoot?.querySelector('button');
+        if (!inner) return { error: 'open-button shadow button not rendered' };
+        fieldset.disabled = true;
+        inner.click();
+        const disabledClicks = openClickCount;
+        fieldset.disabled = false;
+        inner.click();
+        const invalidSubmission = {
+          submitEventCount,
+          invalidEventCount,
+          formValid: requiredInput.validity.valid,
         };
+
+        requiredInput.value = 'ready';
+        inner.click();
+
+        // The form association is asserted through the PLATFORM's own view, not
+        // through the class lane's private `_internals` field: a generated
+        // element's ElementInternals record is the shell's (a compiled component
+        // never sees it), so `_internals` no longer exists. `form.elements`
+        // membership is what a form-associated custom element is required to
+        // expose, and it is the observable the failure modes would break.
+        const outcome = {
+          disabledClicks,
+          invalidSubmission,
+          submitEventCount,
+          submitEvent,
+          rootEventCount,
+          rootSawSameEvent,
+          openClickCount,
+          listedInOwningForm: [...form.elements].includes(host as unknown as Element),
+        };
+        formRootHost.remove();
+        return outcome;
+      }, placement);
+
+      if (isProbeError(result)) throw new Error(result.error);
+
+      // requestSubmit() keeps the browser's constraint validation: the invalid
+      // first click fires invalid and no submit event.
+      expect(result.disabledClicks).toBe(0);
+      expect(result.invalidSubmission).toEqual({
+        submitEventCount: 0,
+        invalidEventCount: 1,
+        formValid: false,
       });
-      formRoot.addEventListener('submit', (event) => {
-        rootEventCount++;
-        rootSawSameEvent = event === formSubmitEvent;
+      // After the required control is filled, exactly one trusted native
+      // SubmitEvent bubbles from the form to its owning shadow root. The event
+      // remains the same object along the path, as the Router listener sees it.
+      expect(result.submitEventCount).toBe(1);
+      expect(result.submitEvent).toEqual({
+        isSubmitEvent: true,
+        isTrusted: true,
+        bubbles: true,
+        targetIsForm: true,
+        submitterIsNull: true,
       });
-      let openClickCount = 0;
-      host.addEventListener('open-click', () => {
-        openClickCount++;
-      });
-
-      const inner = host.shadowRoot?.querySelector('button');
-      if (!inner) return { error: 'open-button shadow button not rendered' };
-      inner.click();
-      const invalidSubmission = {
-        submitEventCount,
-        invalidEventCount,
-        formValid: requiredInput.validity.valid,
-      };
-
-      requiredInput.value = 'ready';
-      inner.click();
-
-      // The form association is asserted through the PLATFORM's own view, not
-      // through the class lane's private `_internals` field: a generated
-      // element's ElementInternals record is the shell's (a compiled component
-      // never sees it), so `_internals` no longer exists. `form.elements`
-      // membership is what a form-associated custom element is required to
-      // expose, and it is the observable the failure modes would break.
-      const outcome = {
-        invalidSubmission,
-        submitEventCount,
-        submitEvent,
-        rootEventCount,
-        rootSawSameEvent,
-        openClickCount,
-        listedInOwningForm: [...form.elements].includes(host as unknown as Element),
-      };
-      formRootHost.remove();
-      return outcome;
+      expect(result.rootEventCount).toBe(1);
+      expect(result.rootSawSameEvent).toBe(true);
+      // The component's own event is still fired for each activation.
+      expect(result.openClickCount).toBe(2);
+      // The element is a form-associated custom element: the platform lists it in
+      // the owning form's `elements` collection.
+      expect(result.listedInOwningForm).toBe(true);
     });
-
-    if (isProbeError(result)) throw new Error(result.error);
-
-    // requestSubmit() keeps the browser's constraint validation: the invalid
-    // first click fires invalid and no submit event.
-    expect(result.invalidSubmission).toEqual({
-      submitEventCount: 0,
-      invalidEventCount: 1,
-      formValid: false,
-    });
-    // After the required control is filled, exactly one trusted native
-    // SubmitEvent bubbles from the form to its owning shadow root. The event
-    // remains the same object along the path, as the Router listener sees it.
-    expect(result.submitEventCount).toBe(1);
-    expect(result.submitEvent).toEqual({
-      isSubmitEvent: true,
-      isTrusted: true,
-      bubbles: true,
-      targetIsForm: true,
-      submitterIsNull: true,
-    });
-    expect(result.rootEventCount).toBe(1);
-    expect(result.rootSawSameEvent).toBe(true);
-    // The component's own event is still fired for each activation.
-    expect(result.openClickCount).toBe(2);
-    // The element is a form-associated custom element: the platform lists it in
-    // the owning form's `elements` collection.
-    expect(result.listedInOwningForm).toBe(true);
-  });
+  }
 });

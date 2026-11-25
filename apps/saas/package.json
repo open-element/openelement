@@ -9,6 +9,7 @@
     "start": "node ../../packages/router/src/cli/start.ts",
     "check": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --root ../.. --project saas",
+    "test:notes-live:browser": "node scripts/notes-live-browser.ts",
     "nitro:build-workers": "node ../../tools/release/nitro-build.ts --root . --preset cloudflare_module --out .output-workers --prune-public server"
   },
   "dependencies": {

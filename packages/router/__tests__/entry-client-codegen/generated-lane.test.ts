@@ -35,7 +35,7 @@ function islandMeta(generatedElementHost?: {
 }
 
 function generatedEntries(
-  kind: 'producer' | 'missing-producer' | 'light-no-producer' = 'producer',
+  kind: 'producer' | 'missing-producer' | 'light-producer' | 'light-no-producer' = 'producer',
 ): ClientIslandDeliveryEntry[] {
   return buildClientIslandEntries({
     root: '/proj',
@@ -61,7 +61,12 @@ function classEntries(): ClientIslandDeliveryEntry[] {
 }
 
 test('buildClientIslandEntries propagates the generated lane fact from the scan carrier', () => {
-  for (const kind of ['producer', 'missing-producer', 'light-no-producer'] as const) {
+  for (const kind of [
+    'producer',
+    'missing-producer',
+    'light-producer',
+    'light-no-producer',
+  ] as const) {
     const [entry] = generatedEntries(kind);
     expect(entry?.generatedLane, kind).toBe(true);
   }
@@ -154,10 +159,15 @@ const LANE_VERDICT_OWNER = resolve(
   'vite/internal/ssg/generated-element-host-metadata.ts',
 );
 
-/** The three owned kinds (the one verdict's vocabulary). */
-const OWNED_KINDS = ['producer', 'missing-producer', 'light-no-producer'] as const;
+/** The owned kinds (the one verdict's vocabulary). */
+const OWNED_KINDS = [
+  'producer',
+  'missing-producer',
+  'light-producer',
+  'light-no-producer',
+] as const;
 
-/** The same three kinds as source literals — the drift-guard scan input. */
+/** The same kinds as source literals — the drift-guard scan input. */
 const OWNED_KIND_LITERALS = OWNED_KINDS.map((kind) => `'${kind}'`);
 
 /** Every `.ts` file under one directory tree. */
@@ -172,10 +182,10 @@ function routerSources(directory: string): string[] {
 }
 
 /**
- * The smallest source span that holds all three owned-kind literals, or
+ * The smallest source span that holds all owned-kind literals, or
  * `undefined` when the file does not mention every kind. A duplicated kind
  * LIST (an owned-kind `Set`/array, or an OR-chain of `kind === …` tests) puts
- * the three literals tens of characters apart; a legitimate `switch` over the
+ * the literals tens of characters apart; a legitimate `switch` over the
  * identity union mentions them across hundreds-to-thousands of characters
  * (see the anti-vacuity assertion in the guard below).
  */
@@ -188,10 +198,11 @@ function ownedKindLiteralSpan(source: string): number | undefined {
     return hits;
   }).sort((left, right) => left.at - right.at);
   let smallest: number | undefined;
-  for (let index = 0; index + 2 < positions.length; index += 1) {
-    const window = positions.slice(index, index + 3);
+  const width = OWNED_KIND_LITERALS.length;
+  for (let index = 0; index + width <= positions.length; index += 1) {
+    const window = positions.slice(index, index + width);
     if (new Set(window.map((hit) => hit.literal)).size !== OWNED_KIND_LITERALS.length) continue;
-    const span = window[2]!.at - window[0]!.at;
+    const span = window[width - 1]!.at - window[0]!.at;
     if (smallest === undefined || span < smallest) smallest = span;
   }
   return smallest;
@@ -203,6 +214,7 @@ function identityFor(kind: GeneratedElementHostIdentity['kind']): GeneratedEleme
     case 'producer':
       return { kind, component: 'GenPage', ssrHostExport: 'GenPage__ssrHost' };
     case 'missing-producer':
+    case 'light-producer':
     case 'light-no-producer':
       return { kind, component: 'GenPage' };
     case 'lane-declined':
@@ -224,7 +236,12 @@ test('M-4a: the owned-kind verdict is ONE exported owner, with no second copy in
   // The set itself and its predicate agree, and the predicate is total over the
   // identity union (an absent carrier is never owned).
   expect([...GENERATED_LANE_OWNED_KINDS].sort()).toEqual([...OWNED_KINDS].sort());
-  for (const kind of ['producer', 'missing-producer', 'light-no-producer'] as const) {
+  for (const kind of [
+    'producer',
+    'missing-producer',
+    'light-producer',
+    'light-no-producer',
+  ] as const) {
     expect(ownsGeneratedLaneKind(kind), kind).toBe(true);
   }
   for (const kind of ['lane-declined', 'lane-refused'] as const) {

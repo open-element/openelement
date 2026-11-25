@@ -181,13 +181,7 @@ export async function logoutAction(ctx: {
   throw redirect('/login');
 }
 
-/**
- * Request scope → compiled page properties (app/components/page-notes.tsx).
- * Grammar v1 list Regions carry one value slot per item, so each note
- * composes its display line here; the next-page control is a GET form whose
- * hidden cursor input is a property Part (dynamic intrinsic attributes are
- * outside the SSR part schema in v1).
- */
+/** Project the notes, cursor and Realtime handoff into request-time page props. */
 export function notesPageProps(context: PagePropsContext<NotesData>): Record<string, unknown> {
   const data = context.data;
   const actionData = context.actionData as CreateNoteData | undefined;
@@ -203,6 +197,7 @@ export function notesPageProps(context: PagePropsContext<NotesData>): Record<str
       line: `${note.title} — ${note.body}`,
     })),
     nextCursor: data?.nextCursor ?? '',
+    noNextPage: !data?.nextCursor,
     liveUrl: live?.url ?? '',
     liveAnonKey: live?.anonKey ?? '',
     liveUserId: live?.userId ?? '',

@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { compileFunctionPage } from './compile-page.ts';
 import {
   decodeWorkspaceCursor,
   encodeWorkspaceCursor,
@@ -8,7 +9,8 @@ import {
 
 // v0.44: route logic lives in app/route-logic/ so tests never evaluate the
 // compiled page class (decorators are compile-time-only input).
-const { createWorkspaceRecordsLoader } = await import('../route-logic/workspace-records.ts');
+const { createWorkspaceRecordsLoader, workspaceRecordsPageProps } =
+  await import('../route-logic/workspace-records.ts');
 type WorkspaceRecordsClient = import('../route-logic/workspace-records.ts').WorkspaceRecordsClient;
 
 const WORKSPACE = '11111111-1111-4111-8111-111111111111';
@@ -82,4 +84,35 @@ test('workspace loader bounds pages and emits a stable keyset cursor', async () 
   expect(calls.at(-1)).toEqual(`limit:${WORKSPACE_PAGE_SIZE + 1}`);
   expect(calls.join('\n')).toMatch(/order:created_at\norder:id/);
   expect(calls.join('\n')).toMatch(/or:created_at\.lt\./);
+});
+
+test('workspace records pagination is disabled at the end and preserves filters on the next page', async () => {
+  const render = await compileFunctionPage(
+    '../routes/workspace-records.tsx',
+    'WorkspaceRecordsPage',
+  );
+  const renderPage = (nextCursor?: string) =>
+    render(
+      workspaceRecordsPageProps({
+        data: {
+          denied: false,
+          filters: { workspaceId: WORKSPACE, status: 'active', titlePrefix: 'Record' },
+          nextCursor,
+        },
+        params: {},
+        request: undefined,
+        route: { path: '/workspace-records' },
+        meta: {},
+      }),
+    );
+  const terminal = await renderPage();
+  expect(terminal).toContain('<form method="get" action="/workspace-records" hidden>');
+  expect(terminal).toContain('<button id="next-page" type="submit" disabled>');
+  const next = await renderPage('next-record');
+  expect(next).toContain('<form method="get" action="/workspace-records">');
+  expect(next).toContain('<button id="next-page" type="submit">');
+  expect(next).toContain('name="cursor" value="next-record"');
+  expect(next).toContain(`name="workspace" value="${WORKSPACE}"`);
+  expect(next).toContain('name="status" value="active"');
+  expect(next).toContain('name="q" value="Record"');
 });

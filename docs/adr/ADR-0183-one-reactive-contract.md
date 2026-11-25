@@ -4,7 +4,7 @@
 - Date: 2026-11-20
 - Owner direction: 2026-11-20 — "一个引擎、一个订阅接线、一个生命周期范围、一个衍生状态合同"; the same session directed that a P6/P8 defect of this class is fixed at the architecture level rather than patched, and that the props duplication recorded in §Context is a bug to be fixed with priority.
 - Amends: nothing. It records a decision about mechanisms that already ship, and a defect the repository's own gates failed to catch.
-- Related: ADR-0173, ADR-0174, ADR-0180, ADR-0181, ADR-0182, ADR-0163 (seams), [the design constitution](../architecture/design-principles.md), [the M04 runtime-primitive record](../architecture/alpha16-18-progress.md), [the M09-0 shell record](../architecture/m09-generated-element-shell.md)
+- Related: ADR-0173, ADR-0174, ADR-0180, ADR-0181, ADR-0182, ADR-0163 (seams), [the design constitution](../architecture/design-principles.md), [the M04 runtime-primitive record](../architecture/alpha16-18-progress.md), [the M09-0 shell record](https://github.com/open-element/openelement/blob/8d50588914ea32f7b76ad8280d66496449273f29/docs/architecture/m09-generated-element-shell.md)
 
 ## Context
 

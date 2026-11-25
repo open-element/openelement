@@ -147,10 +147,16 @@ export function renderEntry(desc: EntryDescriptor): string {
     ) {
       continue;
     }
+    if (identity.kind === 'light-producer') continue;
     if (identity.kind === 'light-no-producer') {
-      // A light/absent root never has a host producer by design. The island
-      // keeps the pre-existing class-only registration bytes (no DSD host, no
-      // pairing) — the admission decision, not this codegen, owns that path.
+      if (island.ssr === true) {
+        throw buildError(
+          DescriptorErrorCode.MODULE_IMPORT,
+          `[openElement] SSR-admitted generated light island <${island.tagName}> has no ` +
+            'compiler-emitted render producer. Set openElement.ssr to false for a client-only ' +
+            'island, or use a component shape that emits an SSR producer.',
+        );
+      }
       continue;
     }
     if (identity.kind === 'missing-producer') {

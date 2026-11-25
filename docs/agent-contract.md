@@ -130,6 +130,7 @@ task by design: the repo vitest `tools` project (`vitest.config.ts`) owns
 | The pre-push check: fmt + lint + typecheck + markdown | `vp run check` |
 | Regenerate every derived artifact | `vp run generate:all` |
 | The full workspace test suite | `vp run test` |
+| Build the website and SaaS app and verify their production browser graphs | `vp run test:p1` |
 | One package's tests (canonical form) | `vp run --no-cache --fail-if-no-match --filter @openelement/element test` |
 | Router tests | `vp run --no-cache --fail-if-no-match --filter @openelement/router test` |
 | Compiler tests | `vp run --no-cache --fail-if-no-match --filter @openelement/compiler test` |

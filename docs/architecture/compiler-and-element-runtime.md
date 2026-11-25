@@ -1,48 +1,29 @@
 ---
 status: active
 topic: Runtime architecture
-summary: One mandatory compiler, one signals engine and one owner per region; the runtime responsibility split for the two products.
+summary: How the compiler, generated custom elements, server renderer and Router share component and DOM ownership.
 ---
 
 # Compiler and element runtime
 
-The 1.0 Element baseline uses one mandatory compiler to lower supported TSX into
-a Part Program. `OpenElement extends HTMLElement` owns local lifecycle, root, program
-instance, subscriptions, and cleanup. Unsupported authoring fails with diagnostics;
-it does not fall back to a runtime virtual-DOM path.
+An island has a server renderer, a browser module and a native custom-element tag. The compiler owns the component's structure. Router chooses the delivery strategy and registers the constructor. The browser owns upgrade, element identity, shadow roots and form association.
 
-## Toolchain decisions
+## Compile a component
 
-One production compiler frontend: the classic TypeScript compiler API, imported
-directly from the Node workspace's pinned `typescript` dependency (exact
-`typescript@6.0.3`). A second parser is
-admitted only with an independent benchmark and a semantic-equivalence proposal.
-Generic parsing may move upstream; Part Program semantics, OpenElement component
-semantics, reactivity semantics, and the generated artifact contract never do.
+The TypeScript frontend resolves each binding in lexical scope and records the source location of each expression. Generated modules contain the instructions for mounting DOM, claiming server-rendered DOM, updating bindings and disposing resources. A change to a property or signal updates its dependent bindings. Unsupported source produces a located compiler diagnostic. The [scope resolver](./m03-scope-resolution.md) and [expression lowering contract](./m03-expression-identity.md) describe the compiler's inputs.
 
-The Custom Elements Manifest is the generic metadata interchange authority for tags,
-attributes, members, events, slots, and CSS parts. OpenElement adds a namespaced
-`openElement` extension for compiler and SSR capability and keeps its own SSR admission
-classification; it does not maintain a second generic metadata extractor. Runtime
-schema validation and analyzer-based generation are deferred until the upstream
-contract expresses the fail-closed invariants the interop corpus requires.
+The class frontend was retired in Alpha16. The [migration matrix](./alpha16-class-migration-matrix.md) records how its consumers moved to function components.
 
-## Precedents and deliberate differences
+## Render and claim a host
 
-The nearest mature precedent for the Part Program is lit-html's `Template`/`Part`
-model — a name neighbor this repository carried until the first-party Lit renderer
-retirement (`lit@3.3.3`, ADR-0152, 2026-11-08). The differences are deliberate. The
-Part Program is a compile-time
-artifact, not a runtime API: every dynamic location receives a compiler-owned
-identity at build time, so nothing discovers bindings at runtime the way lit-html's
-`TemplateInstance` resolves its Parts. The artifact is a serializable, versioned
-JSON program rather than a non-serializable `TemplateResult`; compiler and runtime
-meet only through that artifact, and no compiler internals ship in the runtime
-(P2, ADR-0148). And there is no runtime interpreter fallback, VNode diff renderer,
-or generic hydration walker: fixed executors replay the typed program, and claim
-runs it against existing DOM with bounded element-local recovery (ADR-0143).
+- The component's sidecar declares its root, property channels and styles. TypeScript supplies property names and types. The compiler checks the declarations against the root function and emits a descriptor for the custom-element shell. Package islands publish the corresponding compiler facts in the package manifest. The generic Custom Elements Manifest describes their public platform surface.
+- The server emits light DOM inside the host or a declarative shadow template for a shadow root. The browser adopts the matching nodes and attaches event handlers and reactive updates. `delegatesFocus` belongs to the shadow root. Declared shadow styles must reach the same root at render and upgrade.
+- String, boolean and number properties follow their declared attribute and reflection rules. Declared property-only arrays and objects can cross the HTML boundary through the generated host's JSON seed. The shell consumes that seed on upgrade. An HTML trust brand cannot be reconstructed from JSON.
+- A connection owns its listeners and subscriptions. Disconnect ends that connection. Retained setup and owned DOM can survive reconnect. The claim checks the retained structure before reconciling changed properties. Full disposal releases the retained instance. The [seam registry](./seams.md) lists the browser regression tests for failed claims, retry and cleanup.
+- A form-associated element obtains one `ElementInternals` record. Value-bearing controls publish their value and validity through it. A submit button can be form-associated without contributing a value. The form supplies validation, cancellation and submission behavior.
 
-The compile-time lowering strategy itself follows Svelte's compiler-pays model
-(P2). The deliberate difference is the runtime contract: the program executes on
-the browser's own component model — `OpenElement extends HTMLElement` — rather
-than on a private component runtime.
+## Deliver and verify an island
+
+Router derives an island's lane from compiler or package metadata. Generated entries import their constructors and the document services they use for pre-upgrade interaction and deep fragment navigation. Hydration policy still determines when each island activates.
+
+Run the production builds, then pass both `dist/client/.vite/oe-browser-entry-graph.json` files to `@openelement/tools-repo`'s `browser-graph:check` task. It follows static and dynamic chunks and checks for the six generic executor entry modules. A missing or incomplete graph cannot establish a pass. Browser tests separately exercise the behavior of the built islands. The [progress ledger](./alpha16-18-progress.md) and [document history](../legacy/README.md) retain the evidence for earlier compiler milestones.

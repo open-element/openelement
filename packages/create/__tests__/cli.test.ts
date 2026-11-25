@@ -1878,91 +1878,55 @@ test.skipIf(process.platform === 'win32')(
 );
 
 test.skipIf(!pnpmAvailable)(
-  'packed router declares the openelement bin and the scaffolded scripts name it (#1633)',
+  'the packed CLI scaffolds starter files and scripts for the packed router bin (#1633)',
   async () => {
-    const tmpRoot = mkdtempSync(join(tmpdir(), 'open-create-bin-'));
+    const tmpRoot = mkdtempSync(join(tmpdir(), 'open-create-packed-'));
     try {
-      // Consumer form of the bin seam: read the REAL packed router manifest
-      // and the generated starter's own scripts, so the claim is about the
-      // artifact a consumer installs, not about the workspace sources.
+      // One release dry-run produces both tarballs consumed by this starter.
       const repoRoot = join(packageDir, '..', '..');
       const pack = spawnSync('pnpm', ['--dir', 'tools/release', 'run', 'pack:dry-run'], {
         cwd: repoRoot,
       });
       expect(pack.status, pack.stderr.toString()).toEqual(0);
-      const tarball = join(
+
+      const routerTarball = join(
         repoRoot,
         'packages',
         'router',
         `openelement-router-${CREATE_VERSION}.tgz`,
       );
-      expect(existsSync(tarball), tarball).toBeTruthy();
-      const unpack = spawnSync('tar', ['-xzf', tarball, '-C', tmpRoot]);
-      expect(unpack.status, unpack.stderr.toString()).toEqual(0);
+      const routerRoot = join(tmpRoot, 'router');
+      mkdirSync(routerRoot);
+      const unpackRouter = spawnSync('tar', ['-xzf', routerTarball, '-C', routerRoot]);
+      expect(unpackRouter.status, unpackRouter.stderr.toString()).toEqual(0);
       const routerManifest = JSON.parse(
-        readFileSync(join(tmpRoot, 'package', 'package.json'), 'utf8'),
+        readFileSync(join(routerRoot, 'package', 'package.json'), 'utf8'),
       ) as { bin?: Record<string, string> };
-      // One entry, two bins: the long spelling and the short `oe` alias the
-      // starter scripts use (alpha.14) — both resolve the same entry point.
       expect(Object.keys(routerManifest.bin ?? {})).toContain('openelement');
       expect(Object.keys(routerManifest.bin ?? {})).toContain('oe');
       expect(routerManifest.bin!.oe).toEqual(routerManifest.bin!.openelement);
-      const target = join(tmpRoot, 'package', routerManifest.bin!.openelement.replace(/^\.\//, ''));
+      const target = join(routerRoot, 'package', routerManifest.bin!.openelement);
       expect(existsSync(target), `declared bin target must exist: ${target}`).toBeTruthy();
       expect(readFileSync(target, 'utf8').startsWith('#!/usr/bin/env node')).toBeTruthy();
 
-      // The generated starter's scripts run that bin, never a tree path.
-      const { stderr, code } = await runCreate(
-        join(packageDir, 'src', 'cli.ts'),
-        tmpRoot,
-        'bin-app',
-        '--no-install',
-      );
-      expect(code, stderr).toEqual(0);
-      const manifest = JSON.parse(
-        readFileSync(join(tmpRoot, 'bin-app', 'package.json'), 'utf8'),
-      ) as { scripts: Record<string, string> };
-      expect(manifest.scripts.build).toEqual('oe build');
-      expect(manifest.scripts.start).toEqual('oe start');
-      // The dev entry rides the same bin: `oe dev` is the router lifecycle
-      // subcommand the packed dispatcher has to expose (alpha.15).
-      expect(manifest.scripts.dev).toEqual('oe dev');
-      expect(manifest.scripts.preview).toEqual(undefined);
-    } finally {
-      rmSync(tmpRoot, { recursive: true });
-    }
-  },
-  300_000,
-);
-
-test.skipIf(!pnpmAvailable)(
-  'packed CLI retains every starter template, including dotfiles',
-  async () => {
-    const tmpRoot = mkdtempSync(join(tmpdir(), 'open-create-packed-'));
-    try {
-      // The packed payload is produced by the release toolchain (vp pack via
-      // publish-npm dry-run; `deno pack` retired with the A1 toolchain swap).
-      // The dry run writes the same payload tarballs the publish flow ships.
-      const repoRoot = join(packageDir, '..', '..');
-      const pack = spawnSync('pnpm', ['--dir', 'tools/release', 'run', 'pack:dry-run'], {
-        cwd: repoRoot,
-      });
-      expect(pack.status, pack.stderr.toString()).toEqual(0);
-      const tarball = join(packageDir, `openelement-create-${CREATE_VERSION}.tgz`);
-      const unpack = spawnSync('tar', ['-xzf', tarball, '-C', tmpRoot]);
-      expect(unpack.status, unpack.stderr.toString()).toEqual(0);
-      // --no-install: this test owns the TEMPLATE payload, not dependency
-      // resolution. A default install is registry-dependent — once the candidate
-      // version is freshly published, pnpm writes its own
-      // minimumReleaseAgeExclude bookkeeping into pnpm-workspace.yaml, which is a
-      // project-local install artifact, not a shipped template. The fixtures use
-      // the same --no-install convention for the same reason (KR-16).
-      await runCreate(
+      const createTarball = join(packageDir, `openelement-create-${CREATE_VERSION}.tgz`);
+      const unpackCreate = spawnSync('tar', ['-xzf', createTarball, '-C', tmpRoot]);
+      expect(unpackCreate.status, unpackCreate.stderr.toString()).toEqual(0);
+      // Skip dependency installation so the assertions inspect the shipped template.
+      await runCreateOk(
         join(tmpRoot, 'package', 'src', 'cli.js'),
         tmpRoot,
         'sample-app',
         '--no-install',
       );
+      const manifest = JSON.parse(
+        readFileSync(join(tmpRoot, 'sample-app', 'package.json'), 'utf8'),
+      ) as { scripts: Record<string, string> };
+      expect(manifest.scripts.build).toEqual('oe build');
+      expect(manifest.scripts.start).toEqual('oe start');
+      expect(manifest.scripts.dev).toEqual('oe dev');
+      expect(manifest.scripts.preview).toBeUndefined();
+
       expect(existsSync(join(tmpRoot, 'sample-app', '.gitignore'))).toBeTruthy();
       // The Node pin is a template DOTFILE: the packed payload has to carry it
       // (the tarball is assembled from git ls-files + the templates glob, not

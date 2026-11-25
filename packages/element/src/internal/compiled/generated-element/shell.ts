@@ -187,6 +187,7 @@ import {
 import { isTrustedHtmlValue, trustedHtml } from '../../core/security.ts';
 import { NESTED_HOST_PROPERTY } from '../runtime/nested-host.ts';
 import { LifetimeScope } from '../lifetime-scope.ts';
+import { bindSignalWrites } from '../runtime/bindings.ts';
 import { abortInstancePass, releaseRetainedChildren } from '../runtime/instance-ledger.ts';
 import { claimRecipe, insertRecipe, type Projection, type Recipe } from '../runtime/recipe.ts';
 // The pre-upgrade replay HOOK (2026-11-21 closeout): the generated lane captured a
@@ -1082,6 +1083,8 @@ interface ElementState {
    * host-appended or borrowed DOM); cleared when ownership is released.
    */
   ownedNodes: readonly Node[] | null;
+  /** The declared props most recently delivered to the owned DOM. */
+  renderedProps: Record<string, unknown> | null;
   /**
    * The retained setup record: `createInstance`'s return value (or the legacy
    * `createBindings` record). Survives disconnect; nulled by teardown/failed
@@ -1133,6 +1136,8 @@ interface ElementState {
   reflecting: boolean;
   /** The first connect reconciled pre-upgrade own data properties. */
   ownPropertiesReconciled: boolean;
+  /** Explicit writes before the first connection win over the server seed. */
+  propSeedOverrides: Set<string> | null;
   /**
    * Element-lifetime `onPropertyChange` registrations. The compiled setup
    * registers through the internal `__oe_onPropertyChange` runtime property on
@@ -1667,6 +1672,7 @@ function createState(descriptor: NormalizedDescriptor): ElementState {
     connection: null,
     projection: null,
     ownedNodes: null,
+    renderedProps: null,
     bindings: null,
     root: null,
     rootKind: null,
@@ -1685,6 +1691,7 @@ function createState(descriptor: NormalizedDescriptor): ElementState {
     connecting: false,
     reflecting: false,
     ownPropertiesReconciled: false,
+    propSeedOverrides: descriptor.properties.some(isJsonPropertySeedRow) ? new Set() : null,
     propertyChangeCallbacks: [],
     errorHandlers: [],
     errorReporter: null,
@@ -1703,6 +1710,10 @@ function stateOf(element: HTMLElement): ElementState {
 /** Write one value through the ONE props primitive, without reflection. */
 function writeValue(state: ElementState, property: NormalizedProperty, value: unknown): boolean {
   return state.tracked.set(property.name, value);
+}
+
+function rememberPropSeedOverride(state: ElementState, property: NormalizedProperty): void {
+  if (isJsonPropertySeedRow(property)) state.propSeedOverrides?.add(property.name);
 }
 
 function reflectProperty(
@@ -1867,8 +1878,11 @@ function reconcilePreUpgradeProperties(element: HTMLElement, state: ElementState
   // have produced a partial reconciliation.
   for (const { property, value } of pending) {
     delete record[property.name];
-    if (restatesDefault(property, value) || value === null || value === undefined) continue;
-    setProperty(element, state, property, coercePropertyWrite(property, value), true);
+    if (value === null || value === undefined) continue;
+    if (!isJsonPropertySeedRow(property) && restatesDefault(property, value)) continue;
+    const next = coercePropertyWrite(property, value);
+    rememberPropSeedOverride(state, property);
+    setProperty(element, state, property, next, true);
   }
 
   // Completion is recorded last: a failed connect retries the whole check
@@ -1901,12 +1915,8 @@ function reconcilePreUpgradeProperties(element: HTMLElement, state: ElementState
  * keeping the default.
  */
 function applyGeneratedPropSeed(element: HTMLElement, state: ElementState): void {
-  // A descriptor with no row the seed can carry can never hold this attribute,
-  // so the shell must not even ASK for it: the constructor/connect path is
-  // contractually attribute-read-free unless a declared row needs one.
-  if (!state.descriptor.properties.some(isJsonPropertySeedRow)) {
-    return;
-  }
+  const overrides = state.propSeedOverrides;
+  if (overrides === null) return;
   const raw = element.getAttribute(GENERATED_PROP_SEED);
   if (raw === null) return;
   const where = `[${GENERATED_PROP_SEED}]`;
@@ -1930,6 +1940,7 @@ function applyGeneratedPropSeed(element: HTMLElement, state: ElementState): void
     );
   }
   const byName = new Map(state.descriptor.properties.map((property) => [property.name, property]));
+  const writes: Array<readonly [NormalizedProperty, unknown]> = [];
   for (const [name, value] of Object.entries(parsed as Record<string, unknown>)) {
     const property = byName.get(name);
     if (property === undefined || !isJsonPropertySeedRow(property)) {
@@ -1945,8 +1956,10 @@ function applyGeneratedPropSeed(element: HTMLElement, state: ElementState): void
     // keeps the shell's shape refusal). The one difference from a client write
     // is the channel: this write happens before setup and does not reflect
     // (these rows have no attribute to reflect to).
-    writeValue(state, property, coercePropertyWrite(property, value));
+    const next = coercePropertyWrite(property, value);
+    if (!overrides.has(name)) writes.push([property, next]);
   }
+  for (const [property, value] of writes) writeValue(state, property, value);
   // The seed is consumed once: leaving it would make a later re-claim re-apply a
   // stale value over a user's write.
   element.removeAttribute(GENERATED_PROP_SEED);
@@ -2341,6 +2354,7 @@ function errorReporterFor(element: HTMLElement, state: ElementState): (error: un
 function hostFor(
   state: ElementState,
   element: HTMLElement,
+  props = state.props,
 ): GeneratedElementHost<Record<string, unknown>> {
   return withContextChannel(
     withInternalsStates(
@@ -2359,7 +2373,7 @@ function hostFor(
                 // retention path is only emitted for a generated root, whose instance is
                 // always established before this host is built.
                 instance: state.instance ?? undefined,
-                props: state.props,
+                props,
                 propsChanged: state.propsChanged,
               },
               element,
@@ -2376,6 +2390,12 @@ function hostFor(
     ),
     element,
     state,
+  );
+}
+
+function snapshotProps(state: ElementState): Record<string, unknown> {
+  return Object.fromEntries(
+    state.descriptor.properties.map(({ name }) => [name, state.tracked.read(name)]),
   );
 }
 
@@ -2784,6 +2804,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       // carrying `OEIR_SHELL_PROP_SEED_MISMATCH`), the same pre-try input-
       // validation posture as pre-upgrade reconciliation above.
       applyGeneratedPropSeed(this, state);
+      state.propSeedOverrides = null;
       state.connecting = true;
       // A retained instance is what makes reconnect a re-arm rather than a
       // re-setup. It is resolved inside the try so a root failure allocates no
@@ -2792,6 +2813,8 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       // surviving setup state).
       const hadInstance = state.instance !== null;
       let connection: LifetimeScope | null = null;
+      let retainedProps = state.renderedProps;
+      let refreshProps = false;
       try {
         const parent = rootFor(this, state);
         // 2026-11-20 client style adoption: a client-only island's shadow root
@@ -2827,7 +2850,18 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         // exactly the engine's own "registration then connect" order. A
         // descriptor that never touches the channel never created a scope.
         state.context?.connect();
-        const recipe = normalized.createRecipe(connection, hostFor(state, this));
+        // Re-arm against the props that produced the retained DOM. The setup
+        // instance and the platform accessors continue to read live props.
+        const claimProps = retainedProps === null ? undefined : Object.create(null);
+        if (claimProps !== undefined) {
+          for (const { name } of normalized.properties) {
+            Object.defineProperty(claimProps, name, {
+              enumerable: true,
+              get: () => (retainedProps === null ? state.props[name] : retainedProps[name]),
+            });
+          }
+        }
+        const recipe = normalized.createRecipe(connection, hostFor(state, this, claimProps));
         // Reconnect and dispose(false) retain the region; dispose(true) marks it
         // absent and the next connect mounts even when foreign nodes remain in
         // the root. The decision is never re-derived from current childNodes.
@@ -2835,6 +2869,18 @@ export function createGeneratedElementClass<P extends object = Record<string, un
           state.regionState === 'present'
             ? claimRecipe(connection, recipe, parent)
             : insertRecipe(connection, recipe, parent);
+        if (normalized.properties.length > 0) {
+          // Capture delivered updates after the projection's subscriptions.
+          bindSignalWrites(connection, state.propsChanged, 'generated host props', () => {
+            if (state.connection === connection) state.renderedProps = snapshotProps(state);
+          });
+          state.renderedProps = retainedProps ?? snapshotProps(state);
+          refreshProps =
+            retainedProps !== null &&
+            normalized.properties.some(
+              ({ name }) => !Object.is(retainedProps?.[name], state.tracked.read(name)),
+            );
+        }
         state.connection = connection;
         state.projection = projection;
         state.ownedNodes = projection.nodes;
@@ -2927,12 +2973,15 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         }
         throw error;
       } finally {
+        retainedProps = null;
         state.connecting = false;
         // Activation decision — success OR failure, the class facade's rule: this
         // element's captured records never outlive its decision. Records owned by
         // still-pending islands stay in the shared pool for their own upgrade.
         releasePreUpgradeCapturesFor(this);
       }
+      if (refreshProps && state.connection === connection)
+        state.tracked.replace(snapshotProps(state));
     }
 
     disconnectedCallback(): void {
@@ -3017,6 +3066,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       state.instance = null;
       state.bindings = null;
       state.ownedNodes = null;
+      state.renderedProps = null;
       // The instance is being destroyed: drop its change listeners before any
       // teardown cleanup runs, so none can observe a dying owner.
       state.propertyChangeCallbacks.length = 0;
@@ -3132,7 +3182,9 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       },
       set(this: HTMLElement, value: unknown): void {
         const state = stateOf(this);
-        setProperty(this, state, property, coercePropertyWrite(property, value), true);
+        const next = coercePropertyWrite(property, value);
+        rememberPropSeedOverride(state, property);
+        setProperty(this, state, property, next, true);
       },
     });
   }

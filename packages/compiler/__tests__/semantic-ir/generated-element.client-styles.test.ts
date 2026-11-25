@@ -29,6 +29,10 @@
 
 import { describe, expect, test } from 'vitest';
 import type ts from 'typescript';
+import {
+  compiledArtifactClassCandidates,
+  encodeCompiledArtifactClassCandidates,
+} from '../../src/internal/compiler/compiled-artifact-class-candidates.ts';
 import { CompiledElementError } from '../../src/internal/compiler/semantic-core/compiler-diagnostics.ts';
 import { typescriptParser } from '../../src/internal/compiler/semantic-core/parse-module.ts';
 import { compileGeneratedElementIfAdmitted } from '../../src/internal/compiler/semantic-ir/generated-element/compile.ts';
@@ -226,6 +230,19 @@ export default Card;
   });
   expect(compiled).not.toBeNull();
   expect(compiled!.classCandidates).toEqual(['card', 'gap-2', 'inline-flex', 'marker']);
+  expect(compiledArtifactClassCandidates(compiled!.code, FILE)).toBeUndefined();
+  const footer = encodeCompiledArtifactClassCandidates(compiled!.classCandidates);
+  const packedModule = '/consumer/node_modules/card/src/card.js';
+  expect(compiledArtifactClassCandidates(compiled!.code + footer, packedModule)).toEqual(
+    compiled!.classCandidates,
+  );
+  for (const malformed of [
+    compiled!.code + footer.replace('"gap-2"', '2'),
+    compiled!.code + footer + '\nexport const late = true;',
+    compiled!.code + `\n/*${footer}*/`,
+  ]) {
+    expect(compiledArtifactClassCandidates(malformed, packedModule)).toBeUndefined();
+  }
 });
 
 test('P-1: a dynamic class channel contributes NO candidate (an expression is not a token)', () => {

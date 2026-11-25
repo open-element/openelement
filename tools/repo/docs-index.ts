@@ -714,18 +714,18 @@ export function renderLegacyRegister(history: HistoryFile, root = '.'): string {
   const lines: string[] = [
     '## Archived decision records',
     '',
-    `| Record | Status | Carried | Recover at \`${history.baselineCommit.slice(0, 7)}\` |`,
+    '| Record | Status | Carried | Recovery command |',
     '| --- | --- | --- | --- |',
     ...archived.map((entry) => {
       const name = existsSync(join(root, entry.path))
         ? `[${entry.title}](${relativeLink(file, entry.path)})`
         : `\`${entry.path}\``;
-      return `| ${name} | ${entry.status ?? ''} | ${entry.carried} | \`${entry.recovery.path}\` |`;
+      return `| ${name} | ${entry.status ?? ''} | ${entry.carried} | \`git show ${entry.recovery.commit}:${entry.recovery.path}\` |`;
     }),
     '',
     '## Removed process documents',
     '',
-    `| Document | Removed | What it carried | Where that responsibility lives now | Recover at \`${history.baselineCommit.slice(0, 7)}\` |`,
+    '| Document | Removed | What it carried | Where that responsibility lives now | Recovery command |',
     '| --- | --- | --- | --- | --- |',
     ...removed.map((entry) => {
       const successors = entry.nowLivesIn.map((path) => {
@@ -740,11 +740,11 @@ export function renderLegacyRegister(history: HistoryFile, root = '.'): string {
             ? '**No in-tree successor**; recover from Git history'
             : '**No successor recorded**'
           : `${successors.join(', ')}${entry.noSuccessor === true ? ' (partial: no successor carries the full responsibility)' : ''}`;
-      return `| \`${entry.path}\` | ${entry.date} | ${entry.carried} | ${where} | \`${entry.recovery.path}\` |`;
+      return `| \`${entry.path}\` | ${entry.date} | ${entry.carried} | ${where} | \`git show ${entry.recovery.commit}:${entry.recovery.path}\` |`;
     }),
     '',
-    'Recovery is the pre-change path at the baseline commit: `git show <baseline>:<path>` for both',
-    'the archived records and the removed documents. The register is machine-checked by',
+    'Each recovery command uses the pre-change commit and path recorded for that entry.',
+    'The register is machine-checked by',
     '`@openelement/tools-repo#docs-index:check`; a deletion that is not registered here fails the gate.',
   ];
   return lines.join('\n');

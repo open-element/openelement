@@ -387,6 +387,63 @@ test('a producer generated-element page is classified with the compiler tag fact
   expect(entry).not.toContain('__resolvePageTag($pageAbout');
 });
 
+test('a named import alias resolves the generated page under its local binding', async () => {
+  const { route } = await scanOneRoute(
+    'about.tsx',
+    [
+      "import { definePage } from '@openelement/router';",
+      "import { ProfileCard as RoutePage } from '../islands/profile-card.tsx';",
+      'export default definePage(RoutePage);',
+    ].join('\n'),
+  );
+  const descriptor = buildEntryDescriptor(
+    [route],
+    islandOptions({
+      ssr: true,
+      generatedElementHost: {
+        kind: 'producer',
+        component: 'ProfileCard',
+        ssrHostExport: 'ProfileCard__ssrHost',
+      },
+    }),
+  );
+  expect(readPageModuleFacts(route)?.pageArgument).toEqual({
+    kind: 'import',
+    name: 'RoutePage',
+    specifier: '../islands/profile-card.tsx',
+  });
+  expect(readPageKind(descriptor.pageRoutes[0])).toEqual('generated-element-page');
+});
+
+test('a renamed import cannot claim a same-named local server page', async () => {
+  const { route } = await scanOneRoute(
+    'about.tsx',
+    [
+      "import { definePage } from '@openelement/router';",
+      "import { ProfileCard as Widget } from '../islands/profile-card.tsx';",
+      'export function ProfileCard() { return <main><Widget /></main>; }',
+      'export default definePage(ProfileCard);',
+    ].join('\n'),
+  );
+  const descriptor = buildEntryDescriptor(
+    [route],
+    islandOptions({
+      ssr: true,
+      generatedElementHost: {
+        kind: 'producer',
+        component: 'ProfileCard',
+        ssrHostExport: 'ProfileCard__ssrHost',
+      },
+    }),
+  );
+  expect(readPageModuleFacts(route)?.pageArgument).toEqual({
+    kind: 'local',
+    name: 'ProfileCard',
+    binding: 'function',
+  });
+  expect(readPageKind(descriptor.pageRoutes[0])).toEqual('function-page');
+});
+
 test('a light-root generated page has no host producer and fails closed precisely', async () => {
   const { route } = await scanOneRoute('about.tsx', GENERATED_PAGE_ROUTE);
   const code = codeOf(() =>

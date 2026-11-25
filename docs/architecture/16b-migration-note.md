@@ -122,7 +122,7 @@ the mount/claim prologue with its optional cleanup registered there, and
 erased from the emitted module and fail closed with the existing
 `JSX_OUTSIDE_COMPILER` identity outside the compiler; the emitted SSR producer
 runs no hook. The seam is registered in the
-[M09-0 shell record](./m09-generated-element-shell.md) and in
+[M09-0 shell record](https://github.com/open-element/openelement/blob/8d50588914ea32f7b76ad8280d66496449273f29/docs/architecture/m09-generated-element-shell.md) and in
 [`seams.md`](./seams.md).
 
 Owed, and the reason this is PARTIAL, not delivered:

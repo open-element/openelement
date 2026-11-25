@@ -28,6 +28,7 @@ import {
   LEGACY_ADR_DIR,
   LEGACY_README_PATH,
   parseFrontMatter,
+  renderLegacyRegister,
   writeDocsIndex,
   type DocsIndexDeps,
   type DocsIndexReport,
@@ -265,6 +266,23 @@ test('a valid tree round-trips: writeDocsIndex then checkDocsIndex is clean', ()
   expect(readme).toContain('A hand-written coda the generator must leave alone.');
   expect(readme).toContain(report.architectureIndex);
   expect(read(root, LEGACY_README_PATH)).toContain(report.legacyRegister);
+});
+
+test('the archive and removal rows use their own Git recovery commits and paths', () => {
+  const archived = archivedEntry();
+  const removed = removedEntry();
+  const laterCommit = 'b'.repeat(40);
+  const register = renderLegacyRegister({
+    schemaVersion: 1,
+    baselineCommit: COMMIT,
+    entries: [
+      archived,
+      { ...removed, recovery: { commit: laterCommit, path: 'docs/prior-path.md' } },
+    ],
+  });
+  expect(register).toContain(`git show ${COMMIT}:${archived.recovery.path}`);
+  expect(register).toContain(`git show ${laterCommit}:docs/prior-path.md`);
+  expect(register).not.toContain(`git show ${COMMIT}:docs/prior-path.md`);
 });
 
 test('the generated blocks sort active rows by topic and link the external entry points', () => {

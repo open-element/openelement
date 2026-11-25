@@ -190,6 +190,7 @@ test('the parser keeps unknown envelope fields (forward compat) but never trusts
   const wire = JSON.stringify({
     format: DIAGNOSTIC_REPORT_FORMAT,
     ok: true,
+    producerVersion: 'future',
     diagnostics: [
       {
         code: ErrorCode.UNKNOWN,
@@ -201,8 +202,34 @@ test('the parser keeps unknown envelope fields (forward compat) but never trusts
     ],
   });
   const report = parseDiagnosticReport(wire);
+  expect(JSON.parse(serializeDiagnosticReport(report))).toMatchObject({
+    producerVersion: 'future',
+  });
   expect(report.diagnostics[0]).toMatchObject({ code: ErrorCode.UNKNOWN, severity: 'info' });
   expect((report.diagnostics[0] as Record<string, unknown>).suggestedAction).toEqual(
     'a field this build does not know',
   );
+});
+
+test.each([
+  { ok: true, severity: 'error' },
+  { ok: false, severity: 'warning' },
+])('the parser rejects an inconsistent verdict $ok with severity $severity', ({ ok, severity }) => {
+  const wire = JSON.stringify({
+    format: DIAGNOSTIC_REPORT_FORMAT,
+    ok,
+    diagnostics: [{ code: 'OEC9029', severity, phase: 'build', message: 'Build diagnostic' }],
+  });
+  expect(() => parseDiagnosticReport(wire)).toThrow(/report\.ok/);
+});
+
+test('a future severity can explain a failing verdict', () => {
+  const wire = JSON.stringify({
+    format: DIAGNOSTIC_REPORT_FORMAT,
+    ok: false,
+    diagnostics: [
+      { code: 'OE_FUTURE', severity: 'fatal', phase: 'build', message: 'Build diagnostic' },
+    ],
+  });
+  expect(parseDiagnosticReport(wire)).toEqual(JSON.parse(wire));
 });

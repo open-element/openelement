@@ -457,12 +457,10 @@ function resolvePageArgumentIdentifier(name: string, sourceFile: ts.SourceFile):
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier))
       continue;
     const bindings = statement.importClause?.namedBindings;
-    if (bindings === undefined) {
-      if (statement.importClause?.name?.text === name) {
-        return { kind: 'import', name, specifier: statement.moduleSpecifier.text };
-      }
-      continue;
+    if (statement.importClause?.name?.text === name) {
+      return { kind: 'import', name, specifier: statement.moduleSpecifier.text };
     }
+    if (bindings === undefined) continue;
     if (ts.isNamespaceImport(bindings)) {
       if (bindings.name.text === name) {
         return { kind: 'import', name, specifier: statement.moduleSpecifier.text };
@@ -470,8 +468,7 @@ function resolvePageArgumentIdentifier(name: string, sourceFile: ts.SourceFile):
       continue;
     }
     for (const element of bindings.elements) {
-      const imported = element.propertyName?.text ?? element.name.text;
-      if (imported === name) {
+      if (element.name.text === name) {
         return { kind: 'import', name, specifier: statement.moduleSpecifier.text };
       }
     }
@@ -663,12 +660,12 @@ export interface PageRouteClassification {
 
 /** Why a generated-element page shape has no renderable host artifact. */
 function generatedPageRefusalReason(laneKind: GeneratedElementHostIdentity['kind']): string {
-  if (laneKind === 'light-no-producer') {
+  if (laneKind === 'light-no-producer' || laneKind === 'light-producer') {
     return (
       'the component root is light, so the compiler emits no DSD host producer for it; a ' +
       'generated page root needs the compiler-emitted host producer (the light document style ' +
-      'plan does not create one). Set root: shadow on the island, render the island inside a ' +
-      'compiled @element class page, or move the page to a server function page form.'
+      'plan does not create one). Set root: shadow on the island, or move the page to a ' +
+      'server function page form.'
     );
   }
   return (

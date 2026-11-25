@@ -244,15 +244,27 @@ test('a shadow island without a host producer is recorded as missing-producer', 
   expect((meta['field-card'] as { ssrHostExport?: unknown }).ssrHostExport).toBeUndefined();
 });
 
+test('scan carries the absence of a producer for a light island with an unsupported SSR shape', async () => {
+  const { meta } = await scanProject({
+    'app/islands/light-table.tsx': SHADOW_WITHOUT_SSR.replace(
+      "root: 'shadow'",
+      "root: 'light', ssr: true",
+    ),
+  });
+  expect(identityOf(meta, 'light-table')).toEqual({
+    kind: 'light-no-producer',
+    component: 'Field',
+  });
+});
+
 test('light generated and light class islands stay distinguishable', async () => {
   const { meta } = await scanProject({
     'app/islands/light-card.tsx': LIGHT_GENERATED,
     'app/islands/light-class.tsx': LIGHT_CLASS,
   });
-  // The compiler admitted the generated lane but the emitter appends no host
-  // for a light root: a fact, not a "not generated" guess.
+  // The light constructor supplies a static render producer.
   expect(identityOf(meta, 'light-card')).toEqual({
-    kind: 'light-no-producer',
+    kind: 'light-producer',
     component: 'ProfileCard',
   });
   // A class-owned light island was declined by the generated lane; it must
@@ -445,7 +457,7 @@ test('dev rescan regenerates the carrier from the same scan (no stale identity)'
   await writeFile(join(root, 'app', 'islands', 'live-card.tsx'), LIGHT_GENERATED, 'utf8');
   await rescanIslands(state);
   expect(readGeneratedElementHost(state.ctx.phase1.islandMeta['live-card'])).toEqual({
-    kind: 'light-no-producer',
+    kind: 'light-producer',
     component: 'ProfileCard',
   });
 });

@@ -79,7 +79,9 @@ const MOUNT_SOURCE =
 
 const CLAIM_SOURCE =
   sidecar("open: { default: false }, title: { default: 'A' }") +
+  "import { onConnect } from '@openelement/element/lifecycle';\n" +
   'function ConditionPropsClaim(props: { open: boolean; title: string }) {\n' +
+  '  onConnect(() => { globalThis.__oeConditionHooks?.push(props.open); });\n' +
   '  return (\n' +
   '    <div>\n' +
   '      <h1>{props.title}</h1>\n' +
@@ -102,6 +104,7 @@ interface PageWindow {
   };
   __oeTick: () => Promise<void>;
   __oeBranchChildRuns?: number;
+  __oeConditionHooks?: boolean[];
   __oeErrors: string[];
 }
 declare global {
@@ -361,6 +364,49 @@ describe('generated-element condition × declared props (Chromium)', () => {
         branchPresent: true,
         childList: 1,
         branchChildRuns: 2,
+      });
+    } finally {
+      await page.close();
+    }
+  });
+
+  test('reconnect reclaims the retained branch before refreshing detached prop writes', async () => {
+    const page = await openPage(claimBundle);
+    try {
+      const result = await page.evaluate(async (tag) => {
+        window.__oeConditionHooks = [];
+        customElements.define(tag, window.__oeClaimed.Element);
+        const host = document.createElement(tag) as PageHost;
+        host.open = true;
+        document.body.append(host);
+        await window.__oeTick();
+        const heading = host.shadowRoot!.querySelector('h1');
+        const hadBranch = host.shadowRoot!.querySelector('#branch') !== null;
+        host.remove();
+        host.open = false;
+        document.body.append(host);
+        await window.__oeTick();
+        const removedBranch = host.shadowRoot!.querySelector('#branch') === null;
+        host.remove();
+        host.open = true;
+        document.body.append(host);
+        await window.__oeTick();
+        return {
+          hadBranch,
+          removedBranch,
+          sameHeading: host.shadowRoot!.querySelector('h1') === heading,
+          hasBranch: host.shadowRoot!.querySelector('#branch') !== null,
+          errors: window.__oeErrors,
+          hooks: window.__oeConditionHooks,
+        };
+      }, CLAIM_TAG);
+      expect(result).toEqual({
+        hadBranch: true,
+        removedBranch: true,
+        sameHeading: true,
+        hasBranch: true,
+        errors: [],
+        hooks: [true, false, true],
       });
     } finally {
       await page.close();

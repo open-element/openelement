@@ -71,9 +71,3 @@ export function syncInputDisabled(host: InputHost): void {
   if (control.disabled === next) return;
   control.disabled = next;
 }
-
-/** The live value channel: write the declared row. */
-export function writeInputValue(host: InputHost, event: Event): void {
-  const control = event.target as HTMLInputElement;
-  host.value = control.value;
-}

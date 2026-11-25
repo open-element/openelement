@@ -212,6 +212,246 @@
         "commit": "f611c8757b33031d33f3dabe2bbf14c35c3e5817",
         "path": "docs/release/alpha15-retrospective.md"
       }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/m02-semantic-ir-feasibility.md",
+      "date": "2026-11-25",
+      "title": "M02 Semantic IR feasibility spike — report",
+      "carried": "M02 semantic IR spike.",
+      "nowLivesIn": [
+        "docs/architecture/alpha16-18-progress.md"
+      ],
+      "noSuccessor": false,
+      "recovery": {
+        "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
+        "path": "docs/architecture/m02-semantic-ir-feasibility.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/m03-i0-sourcemap-prototype.md",
+      "date": "2026-11-25",
+      "title": "M03-I-0 — source-map prototype: decision record",
+      "carried": "M03-I-0 source-map prototype.",
+      "nowLivesIn": [
+        "docs/architecture/m03-expression-identity.md"
+      ],
+      "noSuccessor": false,
+      "recovery": {
+        "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
+        "path": "docs/architecture/m03-i0-sourcemap-prototype.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/m03-implementation-log.md",
+      "date": "2026-11-25",
+      "title": "M03 implementation log",
+      "carried": "M03 implementation log.",
+      "nowLivesIn": [
+        "docs/architecture/alpha16-18-progress.md"
+      ],
+      "noSuccessor": false,
+      "recovery": {
+        "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
+        "path": "docs/architecture/m03-implementation-log.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/m03-review-corrections.md",
+      "date": "2026-11-25",
+      "title": "M03 review corrections register",
+      "carried": "M03 review corrections.",
+      "nowLivesIn": [
+        "docs/architecture/alpha16-18-progress.md"
+      ],
+      "noSuccessor": false,
+      "recovery": {
+        "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
+        "path": "docs/architecture/m03-review-corrections.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/m05-g1-leaf-prototype.md",
+      "date": "2026-11-25",
+      "title": "M05 leaf-codegen prototype — status: PROTOTYPE, NOT G1",
+      "carried": "M05 leaf-codegen prototype.",
+      "nowLivesIn": [
+        "docs/architecture/alpha16-18-progress.md"
+      ],
+      "noSuccessor": false,
+      "recovery": {
+        "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
+        "path": "docs/architecture/m05-g1-leaf-prototype.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/m09-1-emitter.md",
+      "date": "2026-11-25",
+      "title": "M09-1a/M09-1b: generated Native Custom Element emitter, registration and packaging",
+      "carried": "M09-1a generated Native Custom Element emitter.",
+      "nowLivesIn": [
+        "docs/architecture/compiler-and-element-runtime.md"
+      ],
+      "noSuccessor": false,
+      "recovery": {
+        "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
+        "path": "docs/architecture/m09-1-emitter.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/m09-2a-delegates-focus.md",
+      "date": "2026-11-25",
+      "title": "M09-2a: authoring `delegatesFocus` on a generated element",
+      "carried": "M09-2a generated-element delegatesFocus authoring.",
+      "nowLivesIn": [
+        "docs/architecture/compiler-and-element-runtime.md"
+      ],
+      "noSuccessor": false,
+      "recovery": {
+        "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
+        "path": "docs/architecture/m09-2a-delegates-focus.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/m09-2a-root-source.md",
+      "date": "2026-11-25",
+      "title": "M09-2a: the island sidecar root source",
+      "carried": "M09-2a sidecar root source.",
+      "nowLivesIn": [
+        "docs/architecture/compiler-and-element-runtime.md"
+      ],
+      "noSuccessor": false,
+      "recovery": {
+        "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
+        "path": "docs/architecture/m09-2a-root-source.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/m09-2a-shadow-authoring.md",
+      "date": "2026-11-25",
+      "title": "M09-2a: authoring a shadow island end to end",
+      "carried": "M09-2a shadow island authoring.",
+      "nowLivesIn": [
+        "docs/architecture/compiler-and-element-runtime.md"
+      ],
+      "noSuccessor": false,
+      "recovery": {
+        "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
+        "path": "docs/architecture/m09-2a-shadow-authoring.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/m09-2b-primitive-properties.md",
+      "date": "2026-11-25",
+      "title": "M09-2b: primitive property metadata on a generated element",
+      "carried": "M09-2b generated-element primitive properties.",
+      "nowLivesIn": [
+        "docs/architecture/compiler-and-element-runtime.md"
+      ],
+      "noSuccessor": false,
+      "recovery": {
+        "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
+        "path": "docs/architecture/m09-2b-primitive-properties.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/m09-2c-intrinsic-event-ref.md",
+      "date": "2026-11-25",
+      "title": "M09-2c: intrinsic event/ref channels on the generated leaf",
+      "carried": "M09-2c intrinsic event/ref on the generated leaf.",
+      "nowLivesIn": [
+        "docs/architecture/compiler-and-element-runtime.md"
+      ],
+      "noSuccessor": false,
+      "recovery": {
+        "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
+        "path": "docs/architecture/m09-2c-intrinsic-event-ref.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/m09-2d-forms.md",
+      "date": "2026-11-25",
+      "title": "M09-2d: bounded form association on the generated element",
+      "carried": "M09-2d bounded form association on the generated element.",
+      "nowLivesIn": [
+        "docs/architecture/compiler-and-element-runtime.md"
+      ],
+      "noSuccessor": false,
+      "recovery": {
+        "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
+        "path": "docs/architecture/m09-2d-forms.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/m09-2d-nonprimitive-properties.md",
+      "date": "2026-11-25",
+      "title": "M09-2d: property-only non-primitive property retention",
+      "carried": "M09-2d property-only non-primitive retention on the generated element.",
+      "nowLivesIn": [
+        "docs/architecture/compiler-and-element-runtime.md"
+      ],
+      "noSuccessor": false,
+      "recovery": {
+        "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
+        "path": "docs/architecture/m09-2d-nonprimitive-properties.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/m09-generated-element-shell.md",
+      "date": "2026-11-25",
+      "title": "M09-0 generated-element shell",
+      "carried": "M09-0 generated-element shell.",
+      "nowLivesIn": [
+        "docs/architecture/compiler-and-element-runtime.md"
+      ],
+      "noSuccessor": false,
+      "recovery": {
+        "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
+        "path": "docs/architecture/m09-generated-element-shell.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/m09-shadow-dsd.md",
+      "date": "2026-11-25",
+      "title": "M09-shadow: generated-element root, DSD and claim parent",
+      "carried": "M09-shadow generated-element root, DSD and claim parent.",
+      "nowLivesIn": [
+        "docs/architecture/compiler-and-element-runtime.md"
+      ],
+      "noSuccessor": false,
+      "recovery": {
+        "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
+        "path": "docs/architecture/m09-shadow-dsd.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/rendering-and-hydration.md",
+      "date": "2026-11-25",
+      "title": "Rendering and hydration",
+      "carried": "The Alpha15 Part Program rendering baseline and the requirement to preserve matching server DOM.",
+      "nowLivesIn": [
+        "docs/architecture/compiler-and-element-runtime.md"
+      ],
+      "noSuccessor": false,
+      "recovery": {
+        "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
+        "path": "docs/architecture/rendering-and-hydration.md"
+      }
     }
   ]
 }

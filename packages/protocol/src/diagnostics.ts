@@ -223,7 +223,22 @@ export function parseDiagnosticReport(text: string): DiagnosticReport {
   const diagnostics = (record.diagnostics as unknown[]).map((entry, index) =>
     parseEnvelope(entry, `report.diagnostics[${index}]`),
   );
+  const expected = diagnosticReport(diagnostics).ok;
+  // A future severity can explain a failing verdict this reader cannot
+  // otherwise derive. A known error always contradicts a successful verdict.
+  const hasUnknownSeverity = diagnostics.some(
+    ({ severity }) => severity !== 'error' && severity !== 'warning' && severity !== 'info',
+  );
+  if (record.ok !== expected && (!expected || !hasUnknownSeverity)) {
+    throw new DiagnosticReportParseError([
+      problem(
+        'report.ok',
+        expected ? 'true when no error is present' : 'false when an error is present',
+      ),
+    ]);
+  }
   return {
+    ...record,
     format: record.format as DiagnosticReportFormat,
     ok: record.ok as boolean,
     diagnostics,

@@ -118,6 +118,7 @@ export function workspaceRecordsPageProps(
       line: record.title,
     })),
     nextCursor: data?.nextCursor ?? '',
+    noNextPage: !data?.nextCursor,
     filterWorkspaceId: data?.filters?.workspaceId ?? '',
     filterStatus: data?.filters?.status ?? '',
     filterTitlePrefix: data?.filters?.titlePrefix ?? '',

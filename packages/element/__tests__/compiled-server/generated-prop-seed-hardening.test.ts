@@ -235,6 +235,33 @@ describe('producer: a hostile row value cannot escape the seed attribute', () =>
 });
 
 describe('consumer: malformed seed payloads fail closed', () => {
+  test('a later invalid row leaves earlier valid rows at their defaults', () => {
+    const tag = uniqueTag('atomic-seed');
+    registerLeaf(tag);
+    const element = dom.document.createElement(tag) as HardenedElement;
+    element.setAttribute(SEED, '{"items":["server"],"undeclared":true}');
+    expect(() => dom.document.body.appendChild(element)).toThrow(
+      'not a JSON-seedable declared row',
+    );
+    expect(element.items).toEqual([]);
+    expect(element.hasAttribute(SEED)).toBe(true);
+    if (element.parentNode !== null) dom.document.body.removeChild(element);
+  });
+
+  test('an explicit browser write wins over a valid seed without suppressing other rows', () => {
+    const tag = uniqueTag('browser-write');
+    registerLeaf(tag);
+    const element = dom.document.createElement(tag) as HardenedElement;
+    const items = ['browser'];
+    element.items = items;
+    element.setAttribute(SEED, '{"items":["server"],"model":{"source":"server"}}');
+    dom.document.body.appendChild(element);
+    expect(element.items).toBe(items);
+    expect(element.model).toEqual({ source: 'server' });
+    expect(element.hasAttribute(SEED)).toBe(false);
+    dom.document.body.removeChild(element);
+  });
+
   test('unparseable JSON is OEIR_SHELL_PROP_SEED_MISMATCH', () => {
     const tag = uniqueTag('bad-json');
     registerLeaf(tag);

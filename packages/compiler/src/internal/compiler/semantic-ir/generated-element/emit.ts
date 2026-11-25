@@ -91,6 +91,8 @@ export interface GeneratedElementModule extends GeneratedLeafModule {
    * must not scan or suffix-derive it from the emitted module.
    */
   readonly ssrHostExport: string | null;
+  /** Whether the generated constructor gets the light-root SSR producer. */
+  readonly lightSsr: boolean;
 }
 
 /**
@@ -267,6 +269,7 @@ function emptyResult(
     leaf: null,
     tail: null,
     ssrHostExport: null,
+    lightSsr: false,
   };
 }
 
@@ -503,6 +506,7 @@ export function generateElementModule(
       leaf: leafText,
       tail: null,
       ssrHostExport: null,
+      lightSsr: false,
     };
   }
 
@@ -595,8 +599,10 @@ export function generateElementModule(
   // `styleLinks` channel is the SSR/DSD half of "one asset, one delivery", and the
   // client row is additive on top of it.
   const producerlessClientOnly = options.clientOnly === true && clientStyles.length === 0;
+  const hasSsrContent = exportsSsrFunction(leafText, rootName);
+  const lightSsr = templateRoot === null && hasSsrContent;
   const hostWrapper =
-    !producerlessClientOnly && templateRoot !== null && exportsSsrFunction(leafText, rootName)
+    !producerlessClientOnly && templateRoot !== null && hasSsrContent
       ? { root: templateRoot, name: names.ssrHost }
       : null;
   const propertyEmission = buildPropertyEmission(options.properties ?? []);
@@ -684,11 +690,7 @@ export function generateElementModule(
     // root's `<Name>__ssrHost` DSD wrapper has no light DOM to produce. The row
     // is emitted only when the leaf really emitted that producer, and the shell
     // attaches it as the class's static `__ssr` (one class = one registration).
-    ...(root !== undefined && root !== 'light'
-      ? []
-      : exportsSsrFunction(leafText, rootName)
-        ? [`  ssrProducer: ${names.ssrProducer},`]
-        : []),
+    ...(lightSsr ? [`  ssrProducer: ${names.ssrProducer},`] : []),
     '};',
     '',
     `const ${names.element} = createGeneratedElementClass(${names.descriptor});`,
@@ -815,5 +817,6 @@ export function generateElementModule(
     // name is exactly what the appended `export function` declares, or null
     // when no wrapper exists. The emitted bytes never carry this field.
     ssrHostExport: hostWrapper === null ? null : hostWrapper.name,
+    lightSsr,
   };
 }

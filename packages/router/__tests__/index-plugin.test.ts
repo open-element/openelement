@@ -141,14 +141,6 @@ test('createOpenPlugin() rejects script tags in raw headExtras', () => {
   );
 });
 
-test('createOpenPlugin() rejects script tags in inject.headFragments', () => {
-  assertThrowsIncludes(
-    () => createOpenPlugin({ inject: { headFragments: ['<script src="/x.js"></script>'] } }),
-    Error,
-    'inject.headFragments must not contain <script> tags',
-  );
-});
-
 test('createOpenPlugin() allows scripts through structured inject.scripts', () => {
   const plugins = createOpenPlugin({ inject: { scripts: [{ src: '/x.js', defer: true }] } });
   assertOpenPluginArray(plugins);
@@ -238,14 +230,6 @@ test('createOpenPlugin() with packageIslands option (empty array)', () => {
   assertOpenPluginArray(plugins);
 });
 
-// ─── createOpenPlugin() default dirs ────────────────────────────────────
-
-test('createOpenPlugin() applies default routesDir and islandsDir', () => {
-  const plugins = createOpenPlugin();
-  assertOpenPluginArray(plugins);
-  // Defaults applied internally via resolvedOptions
-});
-
 // ─── createOpenPlugin() buildStart hook (requires filesystem) ──────────
 
 test('createOpenPlugin() corePlugin.buildStart is callable', () => {
@@ -286,13 +270,6 @@ test('createOpenPlugin() with middleware.corsOrigin as string', () => {
 test('createOpenPlugin() with middleware.corsOrigin as array', () => {
   const plugins = createOpenPlugin({
     middleware: { corsOrigin: ['http://localhost:3000', 'http://localhost:3001'] },
-  });
-  assertOpenPluginArray(plugins);
-});
-
-test('createOpenPlugin() with island.upgradeStrategy=load', () => {
-  const plugins = createOpenPlugin({
-    island: { upgradeStrategy: 'load' },
   });
   assertOpenPluginArray(plugins);
 });

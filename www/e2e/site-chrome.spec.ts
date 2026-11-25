@@ -335,6 +335,83 @@ test.describe('Site chrome: header repository link', () => {
 });
 
 test.describe('Site chrome: reading rail scrollspy', () => {
+  test('tracks rail fragment links and Back navigation', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto('/guide/getting-started/');
+    const desktop = page.locator('open-page-rail nav').first();
+    const current = desktop.locator('a[aria-current="location"]');
+    await expect(current).toHaveAttribute('href', '#start');
+
+    await desktop.locator('a[href="#install"]').click();
+    await expect(page).toHaveURL(/#install$/);
+    await expect(current).toHaveAttribute('href', '#install');
+
+    const last = desktop.locator('a[href="#using-element-as-a-library"]');
+    await last.click();
+    await expect(page).toHaveURL(/#using-element-as-a-library$/);
+    await expect(current).toHaveAttribute('href', '#using-element-as-a-library');
+
+    await page.goBack();
+    await expect(current).toHaveAttribute('href', '#install');
+    await page.goBack();
+    await expect(current).toHaveAttribute('href', '#start');
+  });
+
+  test('ignores an observer notification queued before disconnect and reconnect', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const scope = window as Window & {
+        railObserverCallbacks?: Array<(target: Element) => void>;
+      };
+      const callbacks: Array<(target: Element) => void> = [];
+      scope.railObserverCallbacks = callbacks;
+      globalThis.IntersectionObserver = class extends IntersectionObserver {
+        constructor(notify: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+          super(notify, options);
+          if (options?.rootMargin === '-15% 0px -70% 0px') {
+            callbacks.push((target) => {
+              notify([{ target, isIntersecting: true } as IntersectionObserverEntry], this);
+            });
+          }
+        }
+      };
+    });
+    await page.setViewportSize(DESKTOP);
+    await page.goto('/guide/getting-started/');
+    const rail = page.locator('open-page-rail');
+    const current = rail.locator('nav').first().locator('a[aria-current="location"]');
+    await expect(current).toHaveAttribute('href', '#start');
+
+    const result = await rail.evaluate(async (host) => {
+      const callbacks = (
+        window as Window & {
+          railObserverCallbacks: Array<(target: Element) => void>;
+        }
+      ).railObserverCallbacks;
+      const stale = callbacks[0]!;
+      const target = document.getElementById('install')!;
+      const root = host.shadowRoot ?? host;
+      const anchor = root.querySelector('a[href="#start"]');
+      const parent = host.parentNode!;
+      const next = host.nextSibling;
+
+      host.remove();
+      stale(target);
+      const detachedMarks = root.querySelectorAll('[aria-current]').length;
+      parent.insertBefore(host, next);
+      await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+      stale(target);
+      return {
+        detachedMarks,
+        installedObservers: callbacks.length,
+        retained: (host.shadowRoot ?? host).querySelector('a[href="#start"]') === anchor,
+      };
+    });
+    expect(result).toEqual({ detachedMarks: 0, installedObservers: 2, retained: true });
+    await expect(current).toHaveAttribute('href', '#start');
+  });
+
   test('marks Overview at rest and follows the scroll', async ({ page }) => {
     await page.setViewportSize(DESKTOP);
     await page.goto('/guide/getting-started/');

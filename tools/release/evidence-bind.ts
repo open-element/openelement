@@ -1,4 +1,3 @@
-// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the qualification block joins every authority (AutoFlow runs and their job instances, artifacts, CodeQL alerts, npm dist-tags, tag/Release existence) into one fail-closed verdict, and the fail-closed rules only make sense over that whole join; the boundary is read-only consumption of the authoritative sources — a run bound to another head_sha, a failed required instance or a wrong-ref CodeQL answer is recorded history, never qualification, and exits non-zero.
 /**
  * REL-01 — exact-SHA release evidence binder.
  *
@@ -8,9 +7,8 @@
  *   - every AutoFlow CI run returned for the candidate \`head_sha\`, with its
  *     attempt, conclusion, event/branch and timestamps — a run whose conclusion
  *     is not \`success\` can be *recorded* but is never selected as qualification;
- *   - the per-job-instance conclusions of the selected qualification run, checked
- *     against the workflow's own nine required job IDs / twelve instances
- *     (matrix expansions included);
+ *   - the exact Full qualification job instances, including the SHA guard and
+ *     every matrix leg, and the same-SHA main push jobs for release evidence;
  *   - the run's artifacts (id, name, bytes, expired) and the listing total;
  *   - the authoritative CodeQL alert list for the PR merge ref
  *     (\`refs/pull/<n>/merge\`) or \`refs/heads/main\` — state, severity, rule,
@@ -20,12 +18,9 @@
  *
  * Fail-closed rules (each one is a refusal in the verdict, and a non-zero exit):
  *   - a run bound to a different \`head_sha\` than the candidate;
- *   - no successful push/main run for the candidate SHA (a cancelled or failed
- *     run is history, never qualification);
- *   - a required job ID missing, an unexpected instance count, or any instance
- *     whose conclusion is not \`success\`;
- *   - a CI job name outside the qualification contract (the contract must be
- *     updated deliberately when the workflow grows a job);
+ *   - no Full qualification, or no successful same-SHA main push in release mode;
+ *   - a missing, duplicated, or unexpected job instance, an incomplete listing,
+ *     or a conclusion that differs from the Full or Base contract;
  *   - a CodeQL answer for a different ref, or a non-network query failure;
  *   - a candidate tag pointing at a different SHA;
  *   - a dimension that could not be queried (network offline, missing fixture)
@@ -38,34 +33,18 @@
  */
 
 import { spawn } from 'node:child_process';
-import { readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import process from 'node:process';
+import {
+  CI_BASE_LISTING,
+  CI_GUARD_JOB,
+  CI_QUALIFICATION_JOBS,
+  CI_RUN_INSTANCES,
+} from '../repo/ci-qualification.ts';
 
 /** The workflow whose runs are the qualification evidence. */
 export const EVIDENCE_WORKFLOW = 'autoflow-ci.yml';
-
-/**
- * The qualification contract of \`autoflow-ci.yml\`: nine job IDs, twelve
- * instances. The release workflow's \`ci-evidence\` job enforces the same
- * contract server-side; this tool reads it from the API and refuses the same
- * shapes, so a checklist cannot cite a run that the publish path would refuse.
- * \`sha-guard\` is the run-binding guard, not a qualification instance.
- */
-export const REQUIRED_JOBS: readonly { id: string; instances: number }[] = [
-  { id: 'lint', instances: 1 },
-  { id: 'test', instances: 1 },
-  { id: 'e2e', instances: 1 },
-  { id: 'pack', instances: 1 },
-  { id: 'e2e-full', instances: 2 },
-  { id: 'bfcache', instances: 1 },
-  { id: 'node-serve-smoke', instances: 2 },
-  { id: 'packed-consumer-matrix', instances: 2 },
-  { id: 'fresh-install', instances: 1 },
-];
-
-/** Job names allowed in a qualification run besides {@link REQUIRED_JOBS}. */
-export const ALLOWED_EXTRA_JOBS: readonly string[] = ['sha-guard'];
 
 /** The six published packages whose dist-tags are part of the evidence. */
 export const RELEASE_PACKAGES: readonly string[] = [
@@ -110,6 +89,12 @@ export interface CiArtifact {
   createdAt: string;
 }
 
+interface CiJobEvidence {
+  runId: number;
+  jobs: CiJob[];
+  jobListingTotal: number;
+}
+
 export interface CodeqlAlert {
   number: number;
   ruleId: string;
@@ -152,11 +137,13 @@ export interface EvidenceDocument {
     runs: CiRun[];
     qualificationRunId: number | null;
     /**
-     * How the qualification run was selected. The job instances are the
-     * authority: a run qualifies when its own listings satisfy the nine-ID /
-     * twelve-instance contract and every instance concluded success — never
-     * because a title, an event label or a report says so.
+     * An independent successful main push when the Full qualification was a
+     * dispatch. A historical Full main push already proves both requirements.
      */
+    mainPush?: CiJobEvidence | null;
+    /** Exact successful Base listings skipped ahead of the Full release run. */
+    skippedBaseRuns?: CiJobEvidence[];
+    /** How the full qualification run was selected from its exact job listing. */
     selectionBasis: string | null;
     /** Successful runs whose job instances did not satisfy the contract. */
     rejectedRuns: { id: number; reason: string }[];
@@ -180,8 +167,14 @@ export interface EvidenceDocument {
   };
   git: {
     origin: string;
-    tag: { name: string; sha: string | null; exists: boolean };
-    release: { tag: string; exists: boolean; createdAt: string | null; htmlUrl: string | null };
+    tag: { name: string; sha: string | null; exists: boolean; error?: string };
+    release: {
+      tag: string;
+      exists: boolean;
+      createdAt: string | null;
+      htmlUrl: string | null;
+      error?: string;
+    };
   };
 }
 
@@ -194,6 +187,18 @@ export interface EvidenceVerdict {
   skips: string[];
   /** Non-blocking facts the checklist must still carry (e.g. open alerts). */
   notes: string[];
+}
+
+/** Read a bare evidence document or the envelope written by --json. */
+export function parseEvidenceDocument(raw: string): EvidenceDocument {
+  const parsed = JSON.parse(raw) as
+    | (Partial<EvidenceDocument> & { document?: EvidenceDocument })
+    | null;
+  const document = parsed?.document ?? parsed;
+  if (document?.schemaVersion !== 1 || !document.candidate || !document.ci) {
+    throw new Error('expected a version 1 evidence document');
+  }
+  return document as EvidenceDocument;
 }
 
 /** The subset of raw GitHub CI run JSON this tool reads. */
@@ -405,7 +410,7 @@ export function createGhSource(repository: string): EvidenceSource {
     },
     async listJobs(runId) {
       const answer = await ghApiOptional<{ total_count: number; jobs: RawJob[] }>(
-        `repos/${repository}/actions/runs/${runId}/jobs?per_page=100`,
+        `repos/${repository}/actions/runs/${runId}/jobs?per_page=100&filter=latest`,
       );
       return answer ? { totalCount: answer.total_count, jobs: answer.jobs.map(toJob) } : null;
     },
@@ -537,43 +542,121 @@ function isSkip(error: unknown): boolean {
   return message.startsWith('fixture-missing:') || isOfflineFailure(message);
 }
 
-/** The qualification contract's total instance count (nine IDs, twelve). */
-export const TOTAL_JOB_INSTANCES = REQUIRED_JOBS.reduce((sum, job) => sum + job.instances, 0);
+const FULL_LISTING = CI_RUN_INSTANCES.map((name) => ({ name, conclusion: 'success' }));
 
 /**
- * The contract findings for one job listing. Empty means the listing satisfies
- * the nine-ID / twelve-instance qualification contract with every instance
- * \`success\`; anything else is a refusal string (the listing total is checked
- * too, so a truncated API answer can never pass).
+ * The same exact names and conclusions the release workflow reads. Empty means
+ * the API returned every required instance once, including the SHA guard.
  */
 export function contractFailures(jobs: readonly CiJob[], totalCount: number): string[] {
+  return listingFailures(jobs, totalCount, FULL_LISTING);
+}
+
+function listingFailures(
+  jobs: readonly CiJob[],
+  totalCount: number,
+  expected: readonly { name: string; conclusion: string }[],
+): string[] {
   const failures: string[] = [];
   if (totalCount !== jobs.length) {
     failures.push(`CI jobs listing is incomplete (${jobs.length}/${totalCount})`);
   }
-  const contractIds = new Set(REQUIRED_JOBS.map((job) => job.id));
+  const conclusions = new Map(expected.map(({ name, conclusion }) => [name, conclusion]));
+  const counts = new Map<string, number>();
   for (const job of jobs) {
-    const base = jobBaseId(job.name);
-    if (!contractIds.has(base) && !ALLOWED_EXTRA_JOBS.includes(base)) {
+    counts.set(job.name, (counts.get(job.name) ?? 0) + 1);
+    const conclusion = conclusions.get(job.name);
+    if (conclusion === undefined) {
       failures.push(`CI job '${job.name}' is outside the qualification contract`);
-    }
-  }
-  for (const required of REQUIRED_JOBS) {
-    const instances = jobs.filter((job) => jobBaseId(job.name) === required.id);
-    if (instances.length !== required.instances) {
+    } else if (job.conclusion !== conclusion) {
       failures.push(
-        `required CI job ${required.id} has ${instances.length} instance(s), contract expects ${required.instances}`,
+        `required CI job ${job.name} concluded ${job.conclusion ?? job.status}; expected ${conclusion}`,
       );
     }
-    for (const instance of instances) {
-      if (instance.conclusion !== 'success') {
-        failures.push(
-          `required CI job ${instance.name} concluded ${instance.conclusion ?? instance.status}`,
-        );
-      }
+  }
+  for (const { name } of expected) {
+    const count = counts.get(name) ?? 0;
+    if (count === 0) failures.push(`required CI job instance ${name} is missing`);
+    else if (count > 1) failures.push(`required CI job instance ${name} appears ${count} times`);
+  }
+  return failures;
+}
+
+function isMainPush(run: CiRun): boolean {
+  return run.event === 'push' && run.headBranch === 'main';
+}
+
+function isSuccessful(run: CiRun, sha: string): boolean {
+  return run.headSha === sha && run.status === 'completed' && run.conclusion === 'success';
+}
+
+function newestFirst(a: CiRun, b: CiRun): number {
+  return b.createdAt.localeCompare(a.createdAt) || b.id - a.id;
+}
+
+function releaseCandidates(runs: readonly CiRun[], sha: string): CiRun[] {
+  return runs
+    .filter((run) => run.headSha === sha && (run.event === 'workflow_dispatch' || isMainPush(run)))
+    .sort((a, b) => Number(isMainPush(a)) - Number(isMainPush(b)) || newestFirst(a, b));
+}
+
+function releaseRunFailure(run: CiRun): string {
+  return `CI run ${run.id} concluded ${run.conclusion ?? run.status} before Full release qualification`;
+}
+
+function releaseSelectionFailures(document: EvidenceDocument, qualification: CiRun): string[] {
+  const sha = document.candidate.sha;
+  const candidates = releaseCandidates(document.ci.runs, sha);
+  const selection = candidates.findIndex((run) => run.id === qualification.id);
+  if (selection < 0) {
+    return [
+      `qualification run ${qualification.id} must be a same-SHA workflow_dispatch or push/main run for release`,
+    ];
+  }
+  const failures: string[] = [];
+  for (const run of candidates.slice(0, selection)) {
+    if (!isSuccessful(run, sha)) {
+      failures.push(releaseRunFailure(run));
+      continue;
+    }
+    const proof = document.ci.skippedBaseRuns?.find((base) => base.runId === run.id);
+    if (!proof) {
+      failures.push(
+        `CI run ${run.id} precedes the Full release run without a verified Base listing`,
+      );
+      continue;
+    }
+    for (const failure of listingFailures(proof.jobs, proof.jobListingTotal, CI_BASE_LISTING)) {
+      failures.push(`CI run ${run.id}: ${failure}`);
     }
   }
   return failures;
+}
+
+function mainPushFailures(document: EvidenceDocument, qualification: CiRun): string[] {
+  // The Full listing and outcome of this run are already checked separately.
+  if (isMainPush(qualification)) return [];
+  const proof = document.ci.mainPush;
+  const sha = document.candidate.sha;
+  const push = proof && document.ci.runs.find((run) => run.id === proof.runId);
+  if (!proof || !push || !isMainPush(push) || !isSuccessful(push, sha)) {
+    return [`no successful push/main CI evidence recorded for ${sha}`];
+  }
+  const base = listingFailures(proof.jobs, proof.jobListingTotal, CI_BASE_LISTING);
+  const full = contractFailures(proof.jobs, proof.jobListingTotal);
+  if (base.length === 0 || full.length === 0) return [];
+  const failures = proof.jobs.some((job) => job.conclusion === 'skipped') ? base : full;
+  return failures.map((failure) => `main push ${push.id}: ${failure}`);
+}
+
+function artifactListingFailures(ci: EvidenceDocument['ci'], runId: number): string[] {
+  const { artifacts, artifactListingTotal } = ci;
+  if (artifactListingTotal == null)
+    return [`CI artifacts for qualification run ${runId} are unverified`];
+  if (artifactListingTotal !== artifacts.length) {
+    return [`CI artifacts listing is incomplete (${artifacts.length}/${artifactListingTotal})`];
+  }
+  return [];
 }
 
 /** Collect the full evidence document for one candidate SHA. */
@@ -584,7 +667,7 @@ export async function collectEvidence(options: {
   pullRequest: number | null;
   tag: string;
   packages: readonly string[];
-  /** Require a push/main run on top of the job-instance contract. */
+  /** Require a same-SHA Base or Full main push as well as Full qualification. */
   requireMainPush?: boolean;
   /** Separate source for the CodeQL alerts (fork candidate, base-repo PR ref). */
   codeqlSource?: EvidenceSource;
@@ -613,6 +696,8 @@ export async function collectEvidence(options: {
       origin: source.origin,
       runs: [],
       qualificationRunId: null,
+      mainPush: null,
+      skippedBaseRuns: [],
       selectionBasis: null,
       rejectedRuns: [],
       jobs: [],
@@ -641,40 +726,59 @@ export async function collectEvidence(options: {
         );
       }
     }
-    const candidates = runs
-      .filter(
-        (run) =>
-          run.headSha === sha &&
-          run.status === 'completed' &&
-          run.conclusion === 'success' &&
-          (!requireMainPush || (run.event === 'push' && run.headBranch === 'main')),
-      )
-      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-    // The job instances are the authority: a green run title is not evidence,
-    // so every candidate's own listings must satisfy the contract before it can
-    // be cited. A cancelled or failed run never reaches this loop.
+    const candidates = requireMainPush
+      ? releaseCandidates(runs, sha)
+      : runs.filter((run) => isSuccessful(run, sha)).sort(newestFirst);
     for (const run of candidates) {
+      if (qualificationRun && !isMainPush(run)) continue;
+      const selectingReleaseRun = requireMainPush && !qualificationRun;
+      if (!isSuccessful(run, sha)) {
+        if (!selectingReleaseRun) continue;
+        refusals.push(releaseRunFailure(run));
+        break;
+      }
       const listing = await source.listJobs(run.id);
       if (!listing) {
         document.ci.rejectedRuns.push({ id: run.id, reason: 'job listing unavailable' });
+        if (selectingReleaseRun) break;
         continue;
       }
       const failures = contractFailures(listing.jobs, listing.totalCount);
-      if (failures.length > 0) {
+      const full = failures.length === 0;
+      const base =
+        !full && listingFailures(listing.jobs, listing.totalCount, CI_BASE_LISTING).length === 0;
+      if (!full && !base) {
         document.ci.rejectedRuns.push({ id: run.id, reason: failures.join('; ') });
+        if (selectingReleaseRun) break;
         continue;
       }
-      qualificationRun = run;
-      document.ci.jobs = listing.jobs;
-      document.ci.jobListingTotal = listing.totalCount;
-      document.ci.selectionBasis =
-        `run ${run.id} (${run.event}/${run.headBranch ?? '-'}) attempt ${run.attempt}: all ` +
-        `${listing.jobs.length} job instances success against the ${REQUIRED_JOBS.length}-ID/` +
-        `${TOTAL_JOB_INSTANCES}-instance contract`;
-      break;
+      const proof = { runId: run.id, jobs: listing.jobs, jobListingTotal: listing.totalCount };
+      if (base && selectingReleaseRun) document.ci.skippedBaseRuns!.push(proof);
+      if (full && !qualificationRun) {
+        qualificationRun = run;
+        document.ci.jobs = listing.jobs;
+        document.ci.jobListingTotal = listing.totalCount;
+        document.ci.selectionBasis =
+          `run ${run.id} (${run.event}/${run.headBranch ?? '-'}) attempt ${run.attempt}: all ` +
+          `${CI_RUN_INSTANCES.length} required job instances succeeded`;
+      }
+      if (
+        requireMainPush &&
+        isMainPush(run) &&
+        qualificationRun?.id !== run.id &&
+        !document.ci.mainPush
+      ) {
+        document.ci.mainPush = proof;
+      }
+      if (
+        qualificationRun &&
+        (!requireMainPush || isMainPush(qualificationRun) || document.ci.mainPush)
+      )
+        break;
     }
     if (qualificationRun) {
       document.ci.qualificationRunId = qualificationRun.id;
+      if (requireMainPush) refusals.push(...mainPushFailures(document, qualificationRun));
       if (qualificationRun.attempt > 1) {
         notes.push(
           `qualification run ${qualificationRun.id} qualified on attempt ${qualificationRun.attempt}`,
@@ -712,6 +816,7 @@ export async function collectEvidence(options: {
         document.ci.artifacts = listing.artifacts;
         document.ci.artifactListingTotal = listing.totalCount;
       }
+      refusals.push(...artifactListingFailures(document.ci, qualificationRun.id));
     } catch (error) {
       const reason = skipReason(error);
       if (isSkip(error)) skips.push(`CI artifacts: ${reason}`);
@@ -726,11 +831,14 @@ export async function collectEvidence(options: {
   try {
     const answer = await codeqlSource.listCodeqlAlerts(codeqlRef);
     if ('error' in answer) {
+      document.codeql.error = answer.error;
       if (isOfflineFailure(answer.error)) skips.push(`CodeQL alerts: offline: ${answer.error}`);
       else refusals.push(`CodeQL alerts: ${answer.error}`);
     } else {
       if (answer.ref !== codeqlRef) {
-        refusals.push(`CodeQL answer is for ${answer.ref}, not the requested ${codeqlRef}`);
+        const reason = `CodeQL answer is for ${answer.ref}, not the requested ${codeqlRef}`;
+        document.codeql.error = reason;
+        refusals.push(reason);
       }
       document.codeql.alerts = answer.alerts;
       const open = answer.alerts.filter((alert) => alert.state === 'open');
@@ -744,6 +852,7 @@ export async function collectEvidence(options: {
     }
   } catch (error) {
     const reason = skipReason(error);
+    document.codeql.error = reason;
     if (isSkip(error)) skips.push(`CodeQL alerts: ${reason}`);
     else refusals.push(`CodeQL alerts: ${reason}`);
   }
@@ -777,6 +886,7 @@ export async function collectEvidence(options: {
     }
   } catch (error) {
     const reason = skipReason(error);
+    document.git.tag.error = reason;
     if (isSkip(error)) skips.push(`tag ${tag}: ${reason}`);
     else refusals.push(`tag ${tag}: ${reason}`);
   }
@@ -790,6 +900,7 @@ export async function collectEvidence(options: {
     }
   } catch (error) {
     const reason = skipReason(error);
+    document.git.release.error = reason;
     if (isSkip(error)) skips.push(`Release ${tag}: ${reason}`);
     else refusals.push(`Release ${tag}: ${reason}`);
   }
@@ -809,6 +920,7 @@ export async function collectEvidence(options: {
 export function evaluateDocument(
   document: EvidenceDocument,
   expectSha: string | null,
+  requireMainPush = document.candidate.requireMainPush,
 ): EvidenceVerdict {
   const refusals: string[] = [];
   const skips: string[] = [];
@@ -833,14 +945,7 @@ export function evaluateDocument(
         `qualification run ${qualification.id} is bound to ${qualification.headSha}, not ${sha}`,
       );
     }
-    if (
-      document.candidate.requireMainPush &&
-      (qualification.event !== 'push' || qualification.headBranch !== 'main')
-    ) {
-      refusals.push(
-        `qualification run ${qualification.id} is ${qualification.event}/${qualification.headBranch ?? '-'}, not a push/main run`,
-      );
-    }
+    if (requireMainPush) refusals.push(...releaseSelectionFailures(document, qualification));
     if (qualification.conclusion !== 'success' || qualification.status !== 'completed') {
       refusals.push(
         `qualification run ${qualification.id} concluded ${qualification.conclusion ?? qualification.status}; a non-success run is never qualification`,
@@ -858,9 +963,11 @@ export function evaluateDocument(
         refusals.push(`run ${qualification.id}: ${failure}`);
       }
     }
+    refusals.push(...artifactListingFailures(document.ci, qualification.id));
+    if (requireMainPush) refusals.push(...mainPushFailures(document, qualification));
   }
   if (document.codeql.error) {
-    if (isOfflineFailure(document.codeql.error)) skips.push(`CodeQL alerts: offline`);
+    if (isSkip(document.codeql.error)) skips.push(`CodeQL alerts: ${document.codeql.error}`);
     else refusals.push(`CodeQL alerts: ${document.codeql.error}`);
   } else if (document.codeql.alerts.length === 0 && document.codeql.queriedAt === null) {
     skips.push('CodeQL alerts: not queried');
@@ -891,7 +998,10 @@ export function evaluateDocument(
       else refusals.push(`dist-tags ${pkg.name}: ${pkg.error}`);
     }
   }
-  if (document.git.tag.exists) {
+  if (document.git.tag.error) {
+    const findings = isSkip(document.git.tag.error) ? skips : refusals;
+    findings.push(`tag ${document.git.tag.name}: ${document.git.tag.error}`);
+  } else if (document.git.tag.exists) {
     if (document.git.tag.sha !== sha) {
       refusals.push(`tag ${document.git.tag.name} points at ${document.git.tag.sha}, not ${sha}`);
     }
@@ -900,7 +1010,10 @@ export function evaluateDocument(
       `tag ${document.git.tag.name}: absent (expected before the owner's publish approval)`,
     );
   }
-  if (!document.git.release.exists) {
+  if (document.git.release.error) {
+    const findings = isSkip(document.git.release.error) ? skips : refusals;
+    findings.push(`Release ${document.git.release.tag}: ${document.git.release.error}`);
+  } else if (!document.git.release.exists) {
     notes.push(
       `GitHub Release ${document.git.release.tag}: absent (expected before the owner's publish approval)`,
     );
@@ -946,7 +1059,7 @@ export function renderChecklist(document: EvidenceDocument, verdict: EvidenceVer
           .join('; ')}.`,
       );
     }
-    const byJob = REQUIRED_JOBS.map((required) => {
+    const byJob = CI_QUALIFICATION_JOBS.map((required) => {
       const instances = document.ci.jobs.filter((job) => jobBaseId(job.name) === required.id);
       const label = instances
         .map(
@@ -954,14 +1067,26 @@ export function renderChecklist(document: EvidenceDocument, verdict: EvidenceVer
             `${instance.instance ?? 'default'}: ${instance.conclusion ?? instance.status}`,
         )
         .join(', ');
-      return `  - \`${required.id}\` (${instances.length}/${required.instances}) — ${label || 'missing'}`;
+      return `  - \`${required.id}\` (${instances.length}/${required.instances.length}) — ${label || 'missing'}`;
     });
+    const guard = document.ci.jobs.find((job) => job.name === CI_GUARD_JOB);
     lines.push(`- Required job instances (${document.ci.jobs.length} listed):`);
+    lines.push(
+      `  - \`${CI_GUARD_JOB}\` (binding guard) — ${guard?.conclusion ?? guard?.status ?? 'missing'}`,
+    );
     lines.push(...byJob);
   } else {
-    lines.push('- **none recorded** — this candidate has no successful push/main run.');
+    lines.push('- **none recorded** — this candidate has no successful Full qualification run.');
   }
-  const history = document.ci.runs.filter((r) => r.id !== document.ci.qualificationRunId);
+  const mainPush = document.ci.runs.find((r) => r.id === document.ci.mainPush?.runId);
+  if (mainPush && mainPush.id !== qualification?.id) {
+    lines.push(
+      `- Main push [${mainPush.id}](${mainPush.htmlUrl}) attempt ${mainPush.attempt} — \`${mainPush.conclusion}\` — head_sha \`${mainPush.headSha}\`.`,
+    );
+  }
+  const history = document.ci.runs.filter(
+    (r) => r.id !== document.ci.qualificationRunId && r.id !== mainPush?.id,
+  );
   if (history.length > 0) {
     lines.push('');
     lines.push(
@@ -1135,11 +1260,12 @@ Collects the exact-SHA release evidence (CI runs/job instances/artifacts, CodeQL
 alerts for the merge ref, npm dist-tags, tag/Release presence) and prints the
 PR/release checklist snippet. Refuses (exit 1) on a SHA mismatch, a cancelled or
 failed run cited as qualification, a missing/non-success required job instance, or
-an unqueried dimension. A run qualifies only when its own job instances satisfy
-the nine-ID / twelve-instance contract with every instance success; --require-main-push
-additionally demands a push/main run (the release-time contract). --fixtures
+an unqueried dimension. Full qualification requires every job instance, including
+sha-guard, to succeed. --require-main-push demands a same-SHA Full dispatch and a
+successful Base or Full main push, or a historical Full main push. --fixtures
 evaluates recorded API answers offline; --check re-evaluates an evidence document
-written by a previous run. --repo is the repository whose runs/tag/Release are
+written by a previous run. --out writes the same format as stdout (Markdown or
+--json). --repo is the repository whose runs/tag/Release are
 read (a fork for an unmerged candidate); --codeql-repo is the repository whose
 PR merge ref carries the alerts (the base repository).`;
 
@@ -1153,15 +1279,13 @@ async function main(): Promise<void> {
   }
 
   if (options.check) {
-    const raw = await readFile(options.check, 'utf8');
-    const document = JSON.parse(raw) as EvidenceDocument;
-    const verdict = evaluateDocument(document, options.sha);
-    const snippet = renderChecklist(document, verdict);
-    if (options.out) await writeFile(options.out, snippet, 'utf8');
-    process.stdout.write(
-      options.json ? `${JSON.stringify({ document, verdict }, null, 2)}\n` : snippet,
+    const document = parseEvidenceDocument(await readFile(options.check, 'utf8'));
+    const verdict = evaluateDocument(
+      document,
+      options.sha,
+      options.requireMainPush || document.candidate.requireMainPush,
     );
-    if (!verdict.qualified) process.exitCode = 1;
+    await emitEvidence(document, verdict, options);
     return;
   }
 
@@ -1189,11 +1313,22 @@ async function main(): Promise<void> {
     packages: options.packages,
     now: new Date().toISOString(),
   });
-  const snippet = renderChecklist(document, verdict);
-  if (options.out) await writeFile(options.out, snippet, 'utf8');
-  process.stdout.write(
-    options.json ? `${JSON.stringify({ document, verdict }, null, 2)}\n` : snippet,
-  );
+  await emitEvidence(document, verdict, options);
+}
+
+async function emitEvidence(
+  document: EvidenceDocument,
+  verdict: EvidenceVerdict,
+  options: Pick<CliOptions, 'json' | 'out'>,
+): Promise<void> {
+  const output = options.json
+    ? `${JSON.stringify({ document, verdict }, null, 2)}\n`
+    : renderChecklist(document, verdict);
+  if (options.out) {
+    await mkdir(dirname(options.out), { recursive: true });
+    await writeFile(options.out, output, 'utf8');
+  }
+  process.stdout.write(output);
   if (!verdict.qualified) process.exitCode = 1;
 }
 

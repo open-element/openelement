@@ -4,19 +4,7 @@ import {
   uninstallRailScrollspy,
 } from '../app/site-ui/open-page-rail-controller.ts';
 
-/**
- * Regression for the alpha16 author trap (8d5b48a77): a disconnect keeps the
- * retained generated DOM, so an `aria-current` mark left behind by the previous
- * activation survives into the next claim and fails its static-seed check.
- * Teardown must undo the marks, and the SAME nodes must come back clean.
- *
- * The controller is browser-only and the www project runs in the node
- * environment, so the test supplies the three globals it touches (a rail host
- * with a shadow root, `IntersectionObserver`, and `document.getElementById`);
- * the link nodes are shared across the connect/disconnect cycle, which is the
- * retained-DOM shape the trap describes.
- */
-
+/** A disconnect resets the retained links to the attributes expected by claim. */
 interface FakeLink {
   attrs: Map<string, string>;
   getAttribute(name: string): string | null;
@@ -44,6 +32,9 @@ function withBrowserGlobals(
     IntersectionObserver: scope.IntersectionObserver,
     document: scope.document,
     innerHeight: scope.innerHeight,
+    location: scope.location,
+    addEventListener: scope.addEventListener,
+    removeEventListener: scope.removeEventListener,
   };
   const observed = { disconnected: 0 };
   class FakeIntersectionObserver {
@@ -62,6 +53,10 @@ function withBrowserGlobals(
     },
   };
   scope.innerHeight = 1000;
+  scope.location = { hash: '' };
+  const listeners = new EventTarget();
+  scope.addEventListener = listeners.addEventListener.bind(listeners);
+  scope.removeEventListener = listeners.removeEventListener.bind(listeners);
   try {
     run(observed);
   } finally {

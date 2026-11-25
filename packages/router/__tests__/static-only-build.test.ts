@@ -18,7 +18,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { stat, readFile } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
-import { expect, test } from 'vitest';
+import { beforeAll, expect, test } from 'vitest';
 import { join } from 'node:path';
 
 const fixtureDir = join(import.meta.dirname!, '../../../tests/fixtures/router-static-only');
@@ -40,9 +40,9 @@ async function ensureFixtureBuild(): Promise<void> {
   expect(code, `static-only fixture build failed:\n${logs}`).toEqual(0);
 }
 
-test('static-only build: no dist/server, mdx route prerendered (#953, #954)', async () => {
-  await ensureFixtureBuild();
+beforeAll(ensureFixtureBuild);
 
+test('static-only build: no dist/server, mdx route prerendered (#953, #954)', async () => {
   expect(
     await stat(join(distDir, 'index.html'))
       .then(() => true)
@@ -69,8 +69,6 @@ test('static-only build: zero islands, zero enhanced forms, zero client JS', asy
   // returns before any client build or manifest read, and dist/client (the
   // client bundle, its .vite manifest, and the island manifests) is never
   // emitted.
-  await ensureFixtureBuild();
-
   for (const absent of ['client', 'island-manifests']) {
     expect(
       await stat(join(distDir, absent))
@@ -82,8 +80,6 @@ test('static-only build: zero islands, zero enhanced forms, zero client JS', asy
 });
 
 test('static-only build: preview mode serves the output (#953)', async () => {
-  await ensureFixtureBuild();
-
   const freePort = await new Promise<number>((resolve) => {
     const probe = createServer();
     probe.listen(0, '127.0.0.1', () => {
