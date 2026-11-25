@@ -8,14 +8,12 @@ section: 'Core'
 
 Every compiled component is one module that default-exports a function component beside a `defineIslandConfig` sidecar. The compiler lowers that pair into a Native Custom Element — a constructor that builds the authored tree, plus, for a shadow root, the host producer the server renders. The grammar is closed: a construct the compiler cannot lower fails the build with a coded diagnostic instead of shipping a runtime interpreter. This page is the cheat sheet — the laws in one table, then each law with a working example and the shape that fails.
 
-This release removes the class lane, including the `OpenElement` and `ErrorBoundary` exports and the `element` and `property` decorators. Migrate each class component to a default-exported function with a `defineIslandConfig` sidecar.
-
 ## The laws
 
 | Law | The compiler admits | The compiler rejects |
 | --- | --- | --- |
 | One component per module | one default-exported function component plus its `defineIslandConfig` sidecar | a class default export or a module with no default-exported function (the lane declines it); a default-exported function that is not a component (`OEC9040`) |
-| The sidecar is identity | `tag`, `root: 'light' \| 'shadow' \| 'closed'` | the retired spellings `'shadow-open'` / `'shadow-closed'` (`OEIR_GENERATED_ELEMENT_ROOT_INVALID`) |
+| The sidecar is identity | `tag`, `root: 'light' \| 'shadow' \| 'closed'` | invalid root values (`OEIR_GENERATED_ELEMENT_ROOT_INVALID`) |
 | Props are a declared table | a typed props parameter whose members match `properties` one-for-one | a typed member with no sidecar row, or a sidecar row with no typed member (`OEIR_GENERATED_ELEMENT_PROPERTY_MISMATCH`) |
 | Only primitives take the attribute channel | `string`, `number` and `boolean` rows | an array, object or `trustedHtml` row without `attribute: false` (`OEIR_GENERATED_ELEMENT_PROPERTY_INVALID`) |
 | Module scope is imports, the sidecar and the component | imports, `export const openElement`, the default export | a module-local `const` or `function` the component body reads (`OEIR_GENERATED_ELEMENT_UNBOUND_BINDING`) |
@@ -55,9 +53,7 @@ export default function MyCard(props: { title: string }) {
 ```
 
 ```text
-// declined, not compiled: a class default export belongs to the retired lane,
-// and a module with no default-exported function is not this lane's component
-export default class MyCard { render() { return <article></article>; } }
+// The compiler requires a default-exported function.
 export function MyCard() { return <article></article>; }
 
 // refused: a default-exported function that returns a non-JSX value — OEC9040
@@ -66,7 +62,7 @@ export default function MyCard() { return 'not a component'; }
 
 ## The sidecar declares identity and root
 
-There is no base class to import and no decorator to apply. Identity is data: the sidecar's `tag` names the custom element and `root` selects where its content renders. `'shadow'` is an open declarative shadow root, `'closed'` an encapsulated one, and `'light'` renders into the document tree. The two Alpha15 spellings `'shadow-open'` and `'shadow-closed'` are gone — closed-ness is now its own `'closed'` value rather than an `-open`/`-closed` suffix, so a ported value has to be rewritten.
+The sidecar's `tag` names the custom element and `root` selects where its content renders. `'shadow'` is an open declarative shadow root, `'closed'` an encapsulated one, and `'light'` renders into the document tree.
 
 ```tsx
 import { defineIslandConfig } from '@openelement/router';
@@ -82,11 +78,6 @@ export const openElement = defineIslandConfig({
 export default function MyBadge(props: { tone: string }) {
   return <span class='badge'>{props.tone}</span>;
 }
-```
-
-```text
-// rejected: the retired root spellings — OEIR_GENERATED_ELEMENT_ROOT_INVALID
-export const openElement = defineIslandConfig({ tag: 'my-badge', root: 'shadow-open' });
 ```
 
 `root` also decides what the build can emit for the module. A shadow root gets a compiler-owned host producer (`<Name>__ssrHost`) that the server renders into a `<template shadowrootmode>`; a light root gets none, because there is no template to produce. That asymmetry is why a light-root component can be nested in a page but cannot itself be a generated page root — a light *page* uses the server-function form below.
@@ -336,7 +327,7 @@ export default function MyTotal(props: { label: string; price: number }) {
 }
 ```
 
-The admitted text grammar is deliberately wider than the retired class lane's: an expression is fine, and it is a *slot*, not a re-render of the surrounding tree. A derived value used in more than one place is still better as a `computed` so the derivation runs once.
+A text expression creates a reactive slot and updates independently of its surrounding DOM. A derived value used in more than one place is still better as a `computed` so the derivation runs once.
 
 ## Branches are JSX or null
 
@@ -387,7 +378,7 @@ export default function MyToggle(props: { enabled: boolean }) {
 }
 ```
 
-A property named `on*` is not reserved here the way it was on the class lane: the props table is read literally, so `on` is an ordinary member. What is still true is that the handler position takes a function — a call's return value is not a handler.
+The props table accepts `on` as an ordinary member. What is still true is that the handler position takes a function — a call's return value is not a handler.
 
 ## Attributes are literals or admitted channels
 
@@ -434,7 +425,7 @@ import { defineIslandConfig } from '@openelement/router';
 export const openElement = defineIslandConfig({ tag: 'my-probe', root: 'shadow', hydrate: 'visible', ssr: true });
 
 export default function MyProbe() {
-  // The host element itself replaces the class lane's `this`.
+  // This callback receives the host element.
   const host = useHost();
 
   onConnect((env) => {
@@ -474,7 +465,7 @@ export default function MyField(props: { value: string }) {
 
 ### The error boundary is element-scoped
 
-`onError(cb)` is the author-facing boundary of **one generated element**. It runs when a value escapes that element's own work: the connect/claim pass (mount, claim, setup and the `onConnect` replay) or an update-phase write (a tracked slot refresh, or a DOM event handler dispatched inside the compiled body). It is not a subtree boundary and it does not catch across elements — cross-element containment retired with the class base, and no wrapper component replaces it.
+`onError(cb)` is the author-facing boundary of **one generated element**. It runs when a value escapes that element's own work: the connect/claim pass (mount, claim, setup and the `onConnect` replay) or an update-phase write (a tracked slot refresh, or a DOM event handler dispatched inside the compiled body). Each generated element handles its own errors.
 
 ```tsx
 import { onError } from '@openelement/element';

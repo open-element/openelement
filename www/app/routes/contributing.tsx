@@ -144,7 +144,7 @@ const content = {
     calloutBetween: ' for usage and design. ',
     issuesLabel: 'Issues',
     calloutAfter: ' for reproducible bugs, documentation defects, and agreed proposals.',
-    changelogLabel: 'Changelog',
+    changelogLabel: 'Release Status',
     roadmapLabel: 'Roadmap',
   },
   zh: {
@@ -274,7 +274,7 @@ const content = {
     calloutBetween: '。',
     issuesLabel: 'Issues',
     calloutAfter: ' 用于可复现的 bug、文档缺陷与已达成共识的提案。',
-    changelogLabel: 'Changelog',
+    changelogLabel: 'Release Status',
     roadmapLabel: 'Roadmap',
   },
 } as const;

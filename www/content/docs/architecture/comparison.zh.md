@@ -54,7 +54,7 @@ order: 20
 
 OpenElement × Supabase × Cloudflare 是第一方全栈交付路径，所有权边界明确：OpenElement 负责应用 UX；Supabase 负责数据、Auth、RLS、Storage 与 Realtime；Cloudflare 负责边缘交付、安全、缓存与异步执行。Supabase 与 Cloudflare 是被组合的服务提供方——绝不是框架内建功能——包图谱边界门禁保证服务提供方代码不进入框架包。
 
-最初随 0.43 线与 Universal WC SSR 一同交付，并由当前编译型版本线继承。框架自有的生产运行时恢复与缓存语义仍在当前契约之外，尚未分配发布版本。
+请在部署平台配置恢复与缓存。
 
 - [第一方 SaaS 消费方](https://github.com/open-element/openelement/tree/main/apps/saas)
 
@@ -87,20 +87,20 @@ OpenElement × Supabase × Cloudflare 是第一方全栈交付路径，所有权
 
 | 指标                   | 数值                                               |
 | -------------------- | ------------------------------------------------ |
-| 预渲染文档                | 78 个 HTML 文件                                     |
-| `sitemap.xml` URL 数  | 76                                               |
-| 静态产物总量               | 13.0 MiB（13,665,658 B）                           |
-| island manifest      | 78 份——每页一份                                       |
-| 搜索索引                 | 每个语言 38 页（en、zh），76 个 fragment，1.8 MiB           |
+| 预渲染文档                | 68 个 HTML 文件                                     |
+| `sitemap.xml` URL 数  | 66                                               |
+| 静态产物总量               | 11.6 MiB（12,164,849 B）                           |
+| island manifest      | 68 份——每页一份                                       |
+| 搜索索引                 | 每个语言 33 页（en、zh），66 个 fragment，1.5 MiB           |
 
 ```bash
 # 先重新生成以下全部内容。
 vp run site:build
-find www/dist -name '*.html' | wc -l        # 78
-grep -c '<loc>' www/dist/sitemap.xml        # 76
-find www/dist -type f -exec wc -c {} + | tail -1   # 合计 13,665,658 B（上表字节总和）
-ls www/dist/island-manifests | wc -l        # 78
-cat www/dist/pagefind/pagefind-entry.json   # 每种语言 page_count 38
+find www/dist -name '*.html' | wc -l        # 68
+grep -c '<loc>' www/dist/sitemap.xml        # 66
+find www/dist -type f -exec wc -c {} + | tail -1   # 合计 12,164,849 B（上表字节总和）
+ls www/dist/island-manifests | wc -l        # 68
+cat www/dist/pagefind/pagefind-entry.json   # 每种语言 page_count 33
 ```
 
 ### Island bundle
@@ -133,7 +133,7 @@ gzip -9 -c www/dist/client/islands/client.js | wc -c
 | `/guide/getting-started` | 194,075 B          | 8             |
 | `/`                      | 199,201 B          | 9             |
 
-78 份页面 manifest 合计声明了 6 个 island 标签、290 条记录。`open-search` 和 `open-theme-toggle` 出现在每一页，`open-page-rail` 出现在 68 页，`open-code-block` 出现在 56 页，`open-button` 出现在 8 页，`open-counter` 出现在两种语言版本的首页。
+68 份页面 manifest 合计声明了 6 个 island 标签、254 条记录。`open-search` 和 `open-theme-toggle` 出现在每一页，`open-page-rail` 出现在 58 页，`open-code-block` 出现在 50 页，`open-button` 出现在 8 页，`open-counter` 出现在两种语言版本的首页。
 
 ```bash
 cat www/dist/island-manifests/page-<hash>.json   # 单页的 island 集合：标签、chunk、策略、层级

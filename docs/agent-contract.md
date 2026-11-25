@@ -150,13 +150,13 @@ command conformance alone does not validate prose about side effects.
 
 | Generated surface | Repository state | Written only by | Checked by |
 | --- | --- | --- | --- |
-| `www/app/data/_generated-*.ts` (guide/architecture/blog data, nav, article routes, changelog archive, content meta, page code, quickstart, API reference, error reference, error codes, install command) | **Git-ignored** (`.gitignore`: `www/app/data/_generated-*.ts`); a local build input, never committed | the `www` `generate:*` tasks, auto-enrolled in `vp run generate:all` | the paired `--check` tasks (byte-identical compare), wired into `gate:release` |
+| `www/app/data/_generated-*.ts` (guide and architecture data, nav, article routes, content meta, page code, quickstart, API reference, error reference, error codes, install command) | **Git-ignored** (`.gitignore`: `www/app/data/_generated-*.ts`); a local build input, never committed | the `www` `generate:*` tasks, auto-enrolled in `vp run generate:all` | the paired `--check` tasks (byte-identical compare), wired into `gate:release` |
 | `www/app/data/_generated-release-line.ts` | **Git-ignored** (same pattern) | the release train's registry read-back (internal release procedure, not published) | `@openelement/tools-release#registry-drift:check` (in `gate:release`) |
 | `docs/release/public-interface-snapshot.json` | **Tracked** (committed) | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot:write` | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot` (in `gate:source` and CI) |
 | `packages/ui/src/generated-manifest.json` | **Tracked** (committed) | `vp run --no-cache --fail-if-no-match --filter @openelement/ui generate:ui-manifest` | `@openelement/ui#ui-manifest:check` (in `gate:release`) |
 | `packages/ui/custom-elements.json` | **Tracked** (committed) | `vp run --no-cache --fail-if-no-match --filter @openelement/ui generate:ui-cem` | `@openelement/ui#ui-cem:check` (in `gate:release`) |
 | `www/public/theme-init.js` | **Tracked** (committed) | `vp run --no-cache --fail-if-no-match --filter @openelement/www generate:theme-init` (generated from `packages/ui/src/theme-contract.ts`) | `@openelement/www#check:theme-init` (in `gate:source`, `gate:release`, the root `release:check` aggregate and PR CI, before `generate:all`) |
-| `www/dist/**` | **Git-ignored** (build output; `.gitignore`: `dist/`) | `vp run site:build` (redirects/sitemap/RSS emitters write into it) | the site build and consumer gates that read `dist` |
+| `www/dist/**` | **Git-ignored** (build output; `.gitignore`: `dist/`) | `vp run site:build` (redirect and sitemap emitters write into it) | the site build and consumer gates that read `dist` |
 
 Trackedness changes what a bad edit looks like, not whether the file is
 generated. Editing a **tracked** surface either makes a paired `--check` fail
@@ -201,7 +201,7 @@ graph; it does not execute the gate.
 | `vp run release:check` | `@openelement/ui#ui-manifest:check` → `@openelement/ui#ui-cem:check` → `@openelement/www#check:theme-init` → `@openelement/tools-repo#generate:all` → `@openelement/tools-repo#release:registry-check` → `@openelement/tools-repo#gate:release` → `@openelement/tools-release#gate:packed` → `@openelement/tools-release#publish:npm:dry-run` |
 | `vp run saas:verify` | `@openelement/saas#check` → `@openelement/saas#test` |
 | `vp run saas:workers` | `@openelement/saas#build` → `@openelement/saas#nitro:build-workers` → `@openelement/tools-repo#workers:boundary-check` |
-| `vp run site:build` | `@openelement/tools-repo#generate:all` → `@openelement/www#build` → `@openelement/www#pagefind` → `@openelement/www#emit:redirects` → `@openelement/www#emit:sitemap` → `@openelement/www#emit:rss` |
+| `vp run site:build` | `@openelement/tools-repo#generate:all` → `@openelement/www#build` → `@openelement/www#pagefind` → `@openelement/www#emit:redirects` → `@openelement/www#emit:sitemap` |
 | `vp run site:verify` | `site:build` → `@openelement/www#check:links` → `@openelement/www#check:theme-tokens` → `@openelement/www#check:content` → `@openelement/tools-repo#retired-api:check` |
 | `vp run test:e2e` | `site:build` → `@openelement/www#e2e:browsers` → `@openelement/fixture-router-native-framework#e2e` |
 | `vp run verify` | `check` → `test` → `@openelement/tools-repo#gate:source` → `saas:verify` → `saas:workers` → `@openelement/tools-release#gate:packed` |

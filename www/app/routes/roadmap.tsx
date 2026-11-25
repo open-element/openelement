@@ -5,14 +5,7 @@ import '#site-ui/open-artifact-panel.tsx';
 import '#site-ui/open-section-frame.tsx';
 import '#site-ui/open-reading-shell.tsx';
 import '../islands/open-page-rail.tsx';
-import {
-  COMMON_PUBLISHED_VERSION,
-  prereleasePublishStatus,
-  REGISTRY_NOTE,
-  stableLineNote,
-  stableLineTitle,
-  STABLE_LINE,
-} from '../data/version.ts';
+import { OPENELEMENT_VERSION, PUBLISHED_LATEST, sourceLineNote } from '../data/version.ts';
 import { siteHead } from '#site-ui/head.ts';
 import { siteHref } from '#site-ui/site-url.ts';
 import { contentLocale } from '#site-ui/locale.ts';
@@ -59,96 +52,59 @@ interface RoadmapListItem {
   value: string;
 }
 
-/**
- * Planning labels, declared once for both locales. These are PLANNING targets,
- * not published facts: published truth lives in `data/version.ts`
- * (`SOURCE_VERSION` / `CURRENT_ALPHA_VERSION`, projected from
- * `docs/release/release-state.json`). Spelling the same label into the en and
- * zh rows made two copies of one claim, so a locale edit could move a version
- * on one rendering of the page and not the other.
- */
-const alphaLabel = (minor: number): string => `v1.0.0-alpha.${minor}`;
-/** Historical fact: the first public Alpha admission row. */
-const BASELINE_ALPHA = alphaLabel(1);
-const PLANNED_ALPHA_16 = alphaLabel(16);
-const PLANNED_ALPHA_17 = alphaLabel(17);
-const PLANNED_ALPHA_18 = alphaLabel(18);
-/** Target name, not a version: no number is claimed for the stable release. */
-const STABLE_TARGET_LABEL = 'v1.0 RC / Stable';
-
 const entries: Record<SiteLocale, TimelineEntry[]> = {
   en: [
     {
-      version: BASELINE_ALPHA,
-      theme: 'Public Alpha admission',
-      copy: 'Start real application use with the public baseline: independently consumable Element and Router with Native/Lit application flows. Element and Router are the public core, Create is the supported entry, UI is experimental. 1.0 Alpha is a fresh baseline with no supported migration from 0.x.',
+      version: 'Current source',
+      theme: 'Function pages and compiled islands',
+      copy: 'Author routes as server functions. The compiler generates the Custom Element lifecycle and binds interaction to server-rendered HTML. Static output and request-time rendering use the same route model.',
       state: 'baseline',
       stamp: 'BASELINE',
     },
     {
-      version: PLANNED_ALPHA_16,
-      theme: 'Compilation and safe delivery',
-      copy: 'The browser still executes Part Programs, so the backend must prepare for new composition. Generate direct DOM mount/claim/update/dispose, separate public and private output, extend existing server functions with async/full-await composition, and target zero JS only where there is no actual client need. Keep existing behavior and cleanup. Full function authoring belongs to Alpha17; new component defer to Alpha18. ADR-0174 formally accepts the generated-code/runtime direction and amends ADR-0148; implementation remains pending. ADR-0171 records the output-safety direction.',
+      version: 'Planned',
+      theme: 'Reusable component packages',
+      copy: 'Validate composition across independently built packages, including props, children, state and published Custom Element entry points.',
       state: 'planned',
-      status: 'Planning target; release depends on validation',
     },
     {
-      version: PLANNED_ALPHA_17,
-      theme: 'Function components and composition',
-      copy: 'Use Signals and setup-once for stateful composition without an extra host: props, children, conditions, keyed lists, explicit CE exports and independent precompiled component packages. Validate one recommended entry, starters, docs and migration; general upgrade tooling and URL-prefix removal are separate work. OpenElement has no React Hooks and promises no Hooks/React compatibility; old classes remain compatible without an immediate rewrite. ADR-0173 formally accepts the composition direction and amends ADR-0143; implementation and consumer validation remain pending. The distribution contract is not frozen.',
-      state: 'planned',
-      status: 'Planning target; recommendation changes after author and consumer validation',
-    },
-    {
-      version: PLANNED_ALPHA_18,
+      version: 'Planned',
       theme: 'Component-level streaming',
-      copy: 'Extend existing route/field channels to deferred component subtrees, coordinating CSS, scripts, failures, bounded resources, cancellation and navigation/HTML morph. Isolate stale responses and measure real deployment benefits, full-await and HTML fallback. No arbitrary nesting, forced termination of any user task, or universally script-free dynamic insertion is promised. Extend ADR-0158 resource/component contracts; material protocol changes get a successor record.',
+      copy: 'Evaluate deferred component subtrees, including bounded work, cancellation, CSS and script loading, and HTML fallbacks.',
       state: 'planned',
-      status: 'Planning target; default enablement requires correctness and benefit evidence',
     },
     {
-      version: STABLE_TARGET_LABEL,
-      theme: 'Separately admitted releases',
-      copy: 'Freeze contracts and dependencies after Alpha evidence; require at least fourteen days of RC soak, install/upgrade/security qualification and human GO. Element and Router do not mandate a package count.',
+      version: 'v1.0 RC / Stable',
+      theme: 'Release qualification',
+      copy: 'Qualify real applications, packed installs and security before freezing public contracts.',
       state: 'planned',
-      status: 'unscheduled',
     },
   ],
   zh: [
     {
-      version: BASELINE_ALPHA,
-      theme: '公开 Alpha 准入',
-      copy: '从公开基线开始在真实应用中使用可独立消费的 Element 与 Router，验证 Native/Lit 应用流程。Element 与 Router 是公共核心，Create 是正式入口，UI 为实验性能力。1.0 Alpha 是新基线，不提供从 0.x 的受支持迁移。',
+      version: '当前源码',
+      theme: '函数页面与编译型 island',
+      copy: '以服务端函数编写路由。编译器生成 Custom Element 生命周期，并将交互绑定到服务端输出的 HTML。静态输出和请求时渲染使用同一套路由模型。',
       state: 'baseline',
       stamp: 'BASELINE',
     },
     {
-      version: PLANNED_ALPHA_16,
-      theme: '编译与安全交付',
-      copy: '当前浏览器仍执行 Part Program，后端需为后续组合做准备。生成直接 DOM mount/claim/update/dispose，隔离公开与私有输出，扩展既有服务端函数的异步/full-await组合；无实际客户端需求的页面目标为零JS，保留既有行为与清理。完整函数作者API留在Alpha17，新组件defer留在Alpha18。ADR-0174已正式接受生成代码/运行时方向并修订ADR-0148，实现仍待完成；ADR-0171记录输出安全方向。',
+      version: '规划中',
+      theme: '可复用的组件包',
+      copy: '验证独立构建的包之间如何组合，覆盖 props、children、状态与已发布的 Custom Element 入口。',
       state: 'planned',
-      status: '规划目标；发布取决于验证结果',
     },
     {
-      version: PLANNED_ALPHA_17,
-      theme: '函数组件与组合',
-      copy: '基于Signals和setup-once，让有状态业务组合无需额外host：props、children、条件、keyed list、显式CE出口与独立预编译组件包。验证统一推荐入口、starter、文档与迁移；通用升级工具和URL去前缀独立推进。当前没有React Hooks，也不承诺Hooks/React兼容；旧class兼容，用户无需立即重写。ADR-0173已正式接受组件组合方向并修订ADR-0143，实现与独立消费者验证仍待完成；分发契约尚未冻结。',
+      version: '规划中',
+      theme: '组件级流式渲染',
+      copy: '评估组件子树的延迟交付，包括工作量限制、取消、CSS 与脚本投递，以及 HTML 回退。',
       state: 'planned',
-      status: '规划目标；作者与消费者验证通过后切换推荐路径',
     },
     {
-      version: PLANNED_ALPHA_18,
-      theme: '组件级流式交付',
-      copy: '扩展既有route/field通道交付延迟组件子树，协调CSS、脚本、错误、有限资源、取消和导航/HTML morph。隔离过期响应，测量真实部署收益并验证完整等待与HTML fallback。不承诺任意嵌套、强制终止任意用户任务或所有动态回填完全无脚本。扩展ADR-0158资源与组件契约，协议实质变化另行记录。',
+      version: 'v1.0 RC / Stable',
+      theme: '发布验证',
+      copy: '在冻结公开契约前，验证真实应用、安装发布包与安全性。',
       state: 'planned',
-      status: '规划目标；默认启用需要正确性与收益证据',
-    },
-    {
-      version: STABLE_TARGET_LABEL,
-      theme: '分别准入',
-      copy: 'Alpha 证据充分后冻结接口与依赖，完成至少十四天 RC 持续运行及安装、升级、安全验证后取得人工 GO。两个产品不强制两个发布包。',
-      state: 'planned',
-      status: '未定日期',
     },
   ],
 };
@@ -156,28 +112,21 @@ const entries: Record<SiteLocale, TimelineEntry[]> = {
 const content = {
   en: {
     headTitle: 'Roadmap',
-    headDescription: `The openElement roadmap: the public Alpha admission (${BASELINE_ALPHA}), the ${STABLE_LINE.series} stable maintenance line and the gated path to v1.0.`,
+    headDescription: `OpenElement’s current capabilities and planned work toward v1.0.`,
     pageTitle: 'Roadmap',
     heroLede:
-      'Compose native Web UI with TSX, deliver HTML first, and run interaction when needed. Alpha16–18 plan compilation and safe delivery, function components, then component-level streaming.',
+      'Compose native Web UI with TSX, deliver HTML first, and activate interactions when needed.',
     railItems:
       '[{"id":"release-line","label":"Release line"},{"id":"product-boundary","label":"Product boundary"},{"id":"decision-matrix","label":"Decision matrix"},{"id":"system-visual","label":"System visual"}]',
     architecture: 'Architecture',
-    freezeBadge: `Alpha admission — ${BASELINE_ALPHA}`,
-    // The "now" band states the two lines the release record proves. Both
-    // halves derive (data/version.ts ← the generated release-line module ←
-    // CHANGELOG.md + docs/release/release-state.json): the series the stable
-    // maintenance line closed at, and the version npm actually serves on the
-    // per-package `latest` dist-tag beside the current source baseline. The
-    // former literal called the 1.0 prerelease the "published stable
-    // maintenance line" — a claim the record contradicts.
-    nowTitle: stableLineTitle('en'),
-    nowCopy: stableLineNote('en'),
+    freezeBadge: OPENELEMENT_VERSION,
+    nowTitle: 'Source and npm',
+    nowCopy: sourceLineNote('en'),
     registryLabel: 'Per-package npm latest:',
     releaseLineIndex: '01 / release line',
-    releaseLineTitle: 'From shipped evidence to v1.0 freeze.',
+    releaseLineTitle: 'Current work and future milestones',
     releaseLineCopy:
-      'Alpha16–18 are planning targets, not released capabilities, with no fixed dates. Current source and publication status below remain derived from release records. RC and stable need independent real-use, install/upgrade and security admission even after these milestones.',
+      'Milestones have no scheduled dates. Release candidates and stable releases each require application, installation and security validation.',
     timelineAria: 'Roadmap release line',
     stamps: {
       CURRENT: 'CURRENT',
@@ -186,7 +135,7 @@ const content = {
     } as Record<'CURRENT' | 'BASELINE' | 'NEXT', string>,
     designRuleTitle: 'Design rule',
     designRuleText:
-      'Element, Router, standard HTTP, HTML-first delivery, on-demand interaction and native interoperability remain the foundation; layouts stay supported, third-party Lit Web Components remain client-only interoperability, and the first-party Lit renderer is retired (ADR-0152). OhMyLit is a separate effort; new Native capabilities do not automatically promise Lit parity. Auth, ORM and storage remain recipes, not service products.',
+      'OpenElement uses standard HTTP, HTML-first delivery, and native Custom Elements. Layouts compose server pages, and third-party elements follow the interoperability contract.',
     boundaryIndex: '02 / product boundary',
     boundaryTitle: 'Scope is explicit.',
     boundaryCopy:
@@ -206,11 +155,9 @@ const content = {
     outScopeLabel: 'out of current scope',
     outScopeTitle: 'Out of current scope',
     outScopeItems: [
-      'Hub product language',
-      'Registry Hub as a current product promise',
-      'RPC, CEM, and interop adapter package promises',
+      'Framework-owned sessions and data caching',
+      'Component package registry',
       'Generic auth, ORM, or database platform claims',
-      'Old package-count public graph language',
     ],
     siteRuleLabel: 'design rule',
     siteRuleTitle: 'Design rule',
@@ -239,33 +186,29 @@ const content = {
     v10PostureMeta: 'v1.0 posture',
     noDriftLabel: 'No drift',
     noDriftCopy: 'Marketing language, docs, package exports, and CI gates must agree.',
-    noGhostsLabel: 'Retired stays retired',
-    noGhostsCopy:
-      'Archived Hub-era promises and webpack-era shortcuts stay out of the current public product line.',
+    noGhostsLabel: 'Package compatibility',
+    noGhostsCopy: 'Verify the published package set in a real consumer before release.',
     noFogLabel: 'Scope in the open',
     noFogCopy:
       'Users should understand what is shipped, current, planned, and explicitly out of scope.',
-    changelog: 'Changelog',
+    changelog: 'Release Status',
     deployment: 'Deployment',
   },
   zh: {
     headTitle: '路线图',
-    headDescription: `openElement 路线图：公开 Alpha 准入（${BASELINE_ALPHA}）、${STABLE_LINE.series} 稳定维护线，以及通往 v1.0 的门禁路径。`,
-    pageTitle: 'Roadmap',
-    heroLede:
-      '用 TSX 组合原生 Web UI，先交付 HTML，再按需运行交互。Alpha16–18 依次规划编译与安全交付、函数组件、组件级流式交付。',
+    headDescription: `OpenElement 当前能力与通往 v1.0 的规划。`,
+    pageTitle: '路线图',
+    heroLede: '用 TSX 组合原生 Web UI，先交付 HTML，再按需运行交互。',
     railItems:
       '[{"id":"release-line","label":"发布线"},{"id":"product-boundary","label":"产品边界"},{"id":"decision-matrix","label":"决策矩阵"},{"id":"system-visual","label":"系统图示"}]',
     architecture: '架构',
-    freezeBadge: `Alpha 准入 — ${BASELINE_ALPHA}`,
-    // See the en block: the zh band derives the same two lines.
-    nowTitle: stableLineTitle('zh'),
-    nowCopy: stableLineNote('zh'),
+    freezeBadge: OPENELEMENT_VERSION,
+    nowTitle: '源码与 npm',
+    nowCopy: sourceLineNote('zh'),
     registryLabel: '各包 npm latest：',
     releaseLineIndex: '01 / 发布线',
-    releaseLineTitle: '从已交付证据，到 v1.0 冻结。',
-    releaseLineCopy:
-      'Alpha16–18为规划目标，不是已发布能力，不设固定日期。当前源码与包发布状态继续由发布记录派生；完成这些版本后，RC与稳定版仍需真实使用、安装升级和安全等独立准入。',
+    releaseLineTitle: '当前工作与后续里程碑',
+    releaseLineCopy: '里程碑尚未排期。候选版本和稳定版各自需要通过真实应用、安装与安全验证。',
     timelineAria: 'Roadmap 发布线',
     stamps: {
       CURRENT: '当前',
@@ -274,7 +217,7 @@ const content = {
     } as Record<'CURRENT' | 'BASELINE' | 'NEXT', string>,
     designRuleTitle: '设计规则',
     designRuleText:
-      'Element、Router、标准HTTP、HTML-first、按需交互和原生互操作保持为基础；layout继续受支持，第三方Lit Web Components保持client-only互操作，第一方Lit renderer已退役（ADR-0152）。独立OhMyLit另行规划，Native新增能力不自动承诺Lit对等。Auth、ORM与存储保持配方，不是服务产品。',
+      'OpenElement 基于标准 HTTP、HTML 优先交付和原生 Custom Elements。Layout 负责组合服务端页面，第三方元素遵循互操作契约。',
     boundaryIndex: '02 / 产品边界',
     boundaryTitle: '范围是明确的。',
     boundaryCopy: '当前能力、被排除的承诺与视觉契约，分开陈述。',
@@ -293,11 +236,9 @@ const content = {
     outScopeLabel: '当前范围外',
     outScopeTitle: '当前范围之外',
     outScopeItems: [
-      'Hub 产品话术',
-      'Registry Hub 作为当前产品承诺',
-      'RPC、CEM 与互操作 adapter 包的承诺',
+      '框架内置 session 与数据缓存',
+      '组件包注册表',
       '通用的 auth、ORM 或数据库平台宣称',
-      '旧的包数量公开图谱话术',
     ],
     siteRuleLabel: '设计规则',
     siteRuleTitle: '设计规则',
@@ -322,11 +263,11 @@ const content = {
     v10PostureMeta: 'v1.0 姿态',
     noDriftLabel: '不漂移',
     noDriftCopy: '营销语言、文档、包导出与 CI 门禁必须一致。',
-    noGhostsLabel: '退役不再回来',
-    noGhostsCopy: '已归档的 Hub 时代承诺与 webpack 时代的捷径，一律留在当前公开产品线之外。',
+    noGhostsLabel: '包兼容性',
+    noGhostsCopy: '发布前用实际应用验证打包后的依赖组合。',
     noFogLabel: '边界公开',
     noFogCopy: '用户应能看懂什么是已发布、当前、规划中，以及明确排除在范围之外的。',
-    changelog: '更新日志',
+    changelog: '发布状态',
     deployment: '部署',
   },
 };
@@ -647,28 +588,15 @@ export default definePage(RoadmapPage, {
     const resolved = contentLocale(locale ?? 'en');
     const t = content[resolved];
     const timeline = entries[resolved].map((phase) => {
-      // There is no complete-surface published version on the stable line
-      // (Router has no 0.43.x; protocol and compiler have no stable release),
-      // so COMMON_PUBLISHED_VERSION is null and no timeline row is marked
-      // current from registry state.
-      const stamp =
-        COMMON_PUBLISHED_VERSION !== null && phase.version === COMMON_PUBLISHED_VERSION
-          ? 'CURRENT'
-          : phase.stamp;
       return {
-        key: phase.version,
+        key: phase.theme,
         rowClass: `tl-row tl-${phase.state}`,
         version: phase.version,
         theme: phase.theme,
-        stampClass: stamp ? `stamp stamp-${stamp.toLowerCase()}` : 'stamp',
-        stampLabel: stamp ? t.stamps[stamp] : '',
+        stampClass: phase.stamp ? `stamp stamp-${phase.stamp.toLowerCase()}` : 'stamp',
+        stampLabel: phase.stamp ? t.stamps[phase.stamp] : '',
         copy: phase.copy,
-        // The alpha-train row carries no hand-written status: its publish-
-        // state derives from release-state truth via app/data/version.ts so
-        // the roadmap cannot contradict the registry (www check:content-data
-        // fails on any literal claim here). Hand-written status remains only
-        // for rows registry state cannot know, e.g. the unscheduled RC row.
-        status: phase.status ?? prereleasePublishStatus(resolved),
+        status: phase.status ?? '',
       };
     });
     // The rows the markup renders: the per-item class strings decoded into
@@ -706,7 +634,9 @@ export default definePage(RoadmapPage, {
       nowTitle: t.nowTitle,
       nowCopy: t.nowCopy,
       registryLabel: t.registryLabel,
-      registryNote: REGISTRY_NOTE,
+      registryNote: Object.entries(PUBLISHED_LATEST)
+        .map(([name, version]) => `${name.replace('@openelement/', '')} ${version}`)
+        .join(' · '),
       timelineAria: t.timelineAria,
       rows,
       designRuleTitle: t.designRuleTitle,

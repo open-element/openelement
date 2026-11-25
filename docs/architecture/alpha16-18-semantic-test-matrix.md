@@ -21,7 +21,7 @@ Before it, the **M08
 recorded results** annex records the stateful list
 across S → K → U → D, the composition shapes, the claim negatives and the
 authored-location diagnostics, recorded by
-[the M08 closeout record](./m08-closeout.md) at `116f4b5dffc2a4b8eb0aa730cb5208b7b142c59f`. The M07
+[the M08 closeout record](https://github.com/open-element/openelement/blob/e655a0bab6f1396f4ed1a10208794e51e592b0ce/docs/architecture/m08-closeout.md) at `116f4b5dffc2a4b8eb0aa730cb5208b7b142c59f`. The M07
 annexes below are unchanged history: M07-1 is signed off on
 `ac8c218614e2d4749435c51edf3eaf15eb65f6fd` (Node DOM shim, 非浏览器资格), M07-2
 on `70eb2381cab2ef238903cb583f3925976206e901` (browser qualification, chromium
@@ -836,7 +836,7 @@ LOCAL only — chromium `147.0.7727.15` (Playwright `browser.version()`) plus No
 The rows fill exactly these cells: TSX-18 `C+`, `S`, `K`, `U`, `D`, `F`;
 TSX-30 `C+`, `S`, `K`, `D`. `T+`/`T−`/`C−` for both rows, `B` (M13), `P`
 (M12) and TSX-30's `F` stay `R`; the reasons are in
-[the closeout record](./m08-closeout.md#row-cells-recorded).
+[the closeout record](https://github.com/open-element/openelement/blob/e655a0bab6f1396f4ed1a10208794e51e592b0ce/docs/architecture/m08-closeout.md#row-cells-recorded).
 
 **C+** is the production function frontend plus the generator admitting the
 fixture with an empty diagnostic list: the shared harness

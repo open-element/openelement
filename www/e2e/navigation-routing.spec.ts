@@ -28,7 +28,6 @@ test.describe('Direct URL Access', () => {
     { path: '/docs/', titleContains: 'openElement' },
     { path: '/contributing/', titleContains: 'openElement' },
     { path: '/reference/', titleContains: 'openElement' },
-    { path: '/blog/', titleContains: 'openElement' },
   ];
 
   for (const route of routes) {
@@ -166,58 +165,5 @@ test.describe('404 Page', () => {
 
     // open-button renders a real anchored link inside its open shadow root.
     await expect(page.getByRole('link', { name: 'Back home' })).toHaveAttribute('href', '/');
-  });
-});
-
-test.describe('Blog Pages', () => {
-  test('blog index page loads', async ({ page }) => {
-    await page.goto('/blog/');
-    await page.waitForLoadState('networkidle');
-
-    const title = await page.title();
-    expect(title).toBeTruthy();
-  });
-
-  test('blog index has blog post links', async ({ page }) => {
-    await page.goto('/blog/');
-    await page.waitForLoadState('networkidle');
-
-    // Blog index should have links to individual posts. The retired
-    // <blog-index> host became the page hook class (page-blog-index) with the
-    // server function page migration (alpha15).
-    const blogLinks = await page
-      .locator('.page-blog-index')
-      .getByRole('link')
-      .evaluateAll((links) =>
-        links
-          .map((link) => link.getAttribute('href'))
-          .filter((href): href is string => !!href && /^\/blog\/.+/.test(href)),
-      );
-
-    expect(blogLinks.length).toBeGreaterThan(0);
-  });
-
-  test('individual blog post loads', async ({ page }) => {
-    await page.goto('/blog/');
-    await page.waitForLoadState('networkidle');
-
-    // Follow the first post link the index actually renders — never assume a
-    // slug pattern.
-    const firstPostLink = await page
-      .locator('.page-blog-index')
-      .getByRole('link')
-      .evaluateAll(
-        (links) =>
-          links
-            .map((link) => link.getAttribute('href'))
-            .find((href) => !!href && /^\/blog\/.+/.test(href)) ?? null,
-      );
-
-    expect(firstPostLink).not.toBeNull();
-    await page.goto(firstPostLink!);
-    await page.waitForLoadState('networkidle');
-
-    const title = await page.title();
-    expect(title).toBeTruthy();
   });
 });

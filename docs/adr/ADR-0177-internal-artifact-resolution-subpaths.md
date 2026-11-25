@@ -90,7 +90,7 @@ the naming-boundary assertion does not exist there today.
 | --- | --- |
 | `@openelement/tools-repo#interface:snapshot` (`tools/repo/check-public-interface-snapshot.ts`) | only that `exports` and snapshot agree; at retirement, that `publicSymbols` behind both subpaths is zero. It cannot alone decide ADR-0137 §1 compliance. |
 | `@openelement/tools-release#graph:check` (`tools/release/check-package-graph.ts`) + `@openelement/tools-repo#esm:boundary-check` + `export-files:check` | zero importers / zero external resolution in the packed tarball and module graph — the only decidable source of that predicate. |
-| `@openelement/tools-release#package-artifacts:check:prepacked` + `gate:packed` + `@openelement/tools-repo#gate:release` | both green at the same SHA, per `alpha16-18-execution-plan.md`:508. A green CI run is not browser qualification (`docs/architecture/README.md`:96-98). |
+| `@openelement/tools-release#package-artifacts:check:prepacked` + `gate:packed` + `@openelement/tools-repo#gate:release` | both green at the same SHA, per the [qualification contract](../architecture/alpha16-18-execution-plan.md#retained-platform-concerns). Browser coverage still requires its own result. |
 
 Adding a naming-boundary assertion to `check-public-interface-snapshot.ts` would
 be a **gate-policy change**, and this record does not make it. The risk register
@@ -109,8 +109,7 @@ queue that does not exist.
   for `./client-only` (ADR-0155:175-205) and `./no-blocks` / `./base`
   (ADR-0166:134-148), whose written retirement conditions are the compliant
   precedent. That annotation previously covered only those three subpaths.
-- `docs/architecture/16b-migration-note.md` carries one derived row for this
-  deviation (§14.1 condition 6 / §14.2:504). Neither is a second owner.
+- The [historical migration record](https://github.com/open-element/openelement/blob/e655a0bab6f1396f4ed1a10208794e51e592b0ce/docs/architecture/16b-migration-note.md) carried a derived row for this deviation.
 - `docs/adr/README.md` gains one entry; `adr-index:check` covers it in
   `gate:source`.
 - This record creates no version, tag, publication, public API freeze or release
@@ -125,7 +124,7 @@ queue that does not exist.
 
 Append-only amendment. Owner-approved 2026-11-20 under the delegated in-session
 remediation authorization recorded in
-[execution-plan §18](../architecture/alpha16-18-execution-plan.md) (§18.5 for the
+[historical execution plan §18](https://github.com/open-element/openelement/blob/e655a0bab6f1396f4ed1a10208794e51e592b0ce/docs/architecture/alpha16-18-execution-plan.md#18-dated-amendment-2026-11-20-owner-approved-remediation-of-pr-1804) (§18.5 for the
 authorization, §18.7 for the record form). The Context and Decision sections
 above stay as written; this amendment records that their premise — "two export
 subpaths", "the public surface is neither widened nor renamed" — no longer
@@ -208,7 +207,7 @@ for separate surfaces and do not own this deviation.
 
 `packages/element/package.json`:5's annotation still says "the two
 ./internal/compiled/* artifact-resolution subpaths", and
-the `16b-MN` row (`docs/architecture/16b-migration-note.md`) says "the subpath set now numbers
+the [historical `16b-MN` row](https://github.com/open-element/openelement/blob/e655a0bab6f1396f4ed1a10208794e51e592b0ce/docs/architecture/16b-migration-note.md) says "the subpath set now numbers
 four" (the two ADR-0177 subpaths, `./internal/compiled/leaf-runtime`, and the
 public `./lifecycle`). Both are **derived pointers**, not second owners: the
 authority is this record. They are stale in their counts (two → three internal

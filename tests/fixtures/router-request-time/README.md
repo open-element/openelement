@@ -1,6 +1,6 @@
 # router-request-time
 
-Minimal openElement app proving **request-time rendering** (0.42.0-alpha.1):
+Minimal openElement app proving **request-time rendering**:
 routes with `renderIntent: { mode: 'dynamic' }` are excluded from prerendering
 and served per request through `dist/server/index.js`. The generated
 request-time server entry injects the island client entry (the framework fix,

@@ -370,9 +370,9 @@ describe('compat-promise policy ban', () => {
   test('fires when a public page promises class compatibility', () => {
     const findings = checkCompatPromises(
       new Map([
-        ['www/content/blog/example.md', '旧 class 用户无需立即重写项目。'],
+        ['www/content/articles/example.md', '旧 class 用户无需立即重写项目。'],
         [
-          'www/content/blog/example-en.md',
+          'www/content/articles/example-en.md',
           'Existing class users will not need to rewrite immediately. Compatible old classes share a backend.',
         ],
       ]),
@@ -385,11 +385,11 @@ describe('compat-promise policy ban', () => {
     const findings = checkCompatPromises(
       new Map([
         [
-          'www/content/blog/example.md',
+          'www/content/articles/example.md',
           'Class/Decorator 作者 API 已批准退役（P-1/P-5），不提供兼容层或迁移期。旧 class 作者 API 退役、无兼容层。',
         ],
         [
-          'www/content/blog/example-en.md',
+          'www/content/articles/example-en.md',
           'The Class/Decorator authoring API is approved for retirement with no compatibility adapter; the old class authoring API is retired with no compatibility layer.',
         ],
       ]),

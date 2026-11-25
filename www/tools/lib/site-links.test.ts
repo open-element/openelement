@@ -128,7 +128,7 @@ test('findCrossPageSeoFailures: per-locale title uniqueness', () => {
   const crossLocale = [
     ...pages,
     {
-      file: 'zh/blog/post/index.html',
+      file: 'zh/articles/post/index.html',
       title: 'API — openElement',
       description: 'Original-language excerpt.',
       locale: 'zh',
@@ -159,16 +159,16 @@ test('pageSeo: locale detection follows the explicit default, not array order', 
 
 test('resolveBuiltPath: dotted locale slugs are real directories, not assumed assets', () => {
   const files = new Set([
-    'blog/post.zh/index.html',
-    'zh/blog/post.zh/index.html',
+    'articles/post.zh/index.html',
+    'zh/articles/post.zh/index.html',
     'assets/app.js',
     'legacy.html',
   ]);
   const exists = (file: string) => files.has(file);
-  expect(resolveBuiltPath('/blog/post.zh/', exists)).toBe('blog/post.zh/index.html');
-  expect(resolveBuiltPath('/zh/blog/post.zh/', exists)).toBe('zh/blog/post.zh/index.html');
+  expect(resolveBuiltPath('/articles/post.zh/', exists)).toBe('articles/post.zh/index.html');
+  expect(resolveBuiltPath('/zh/articles/post.zh/', exists)).toBe('zh/articles/post.zh/index.html');
   expect(resolveBuiltPath('/assets/app.js', exists)).toBe('assets/app.js');
   expect(resolveBuiltPath('/legacy', exists)).toBe('legacy.html');
-  expect(resolveBuiltPath('/blog/missing.zh/', exists)).toBeNull();
+  expect(resolveBuiltPath('/articles/missing.zh/', exists)).toBeNull();
   expect(resolveBuiltPath('/assets/missing.js', exists)).toBeNull();
 });

@@ -26,13 +26,13 @@ Because the manifest is emitted next to the HTML, the built output answers "whic
 
 ## Progressive behavior
 
-The claim replays the compiled Part Program against DOM that is already present: the handlers the template declared are bound, `@property` fields are filled from host attributes, and a `pure-island` renders for the first time. Untouched nodes are never re-rendered, no binding is discovered by string lookup, and no event is synthesized from a `data-*` attribute.
+The generated claim function binds the template's handlers to existing DOM and reads host attributes declared in the sidecar. A client-only island mounts for the first time.
 
 The strategy decides when the chunk is fetched — `load`, `idle`, `visible`, `media` or `only`. A `media` island declares its query in the island's `media` field, and the chunk loads only while that query matches. Until it arrives, the element keeps its server markup and its styling: the page never depends on an island having loaded, and an island that is never reached costs nothing beyond its own chunk.
 
 ## Upgrade Model
 
-Islands are the only client JavaScript units in openElement. The public model is the compiled element class: server serialization, fresh DOM and existing-DOM hydration share one Part Program.
+The compiler emits server rendering, client mounting and claim functions from the same component. Each island has its own loading strategy. The app can also load a shared bootstrap.
 
 openElement uses the browser Custom Element upgrade mechanism. SSG writes HTML first, then the generated client entry imports only the island modules used by the current page and registers their compiled classes.
 
@@ -44,7 +44,7 @@ Static Web Components render as DSD during SSG. They remain visible and styled e
 
 ### Layer 2 — `dsd-interactive` — DSD plus compiled claim
 
-The server serializes the island's compiled Part Program as DSD. On upgrade, the generated claim artifact walks the same program against the existing DOM and binds the declared event handlers — no binding-discovery walk, no string method lookup, no `data-on-*` event attributes.
+The generated server renderer emits DSD. On upgrade, the generated claim function binds event handlers to existing DOM.
 
 ### Layer 3 — `pure-island` — Client-owned shadow root
 

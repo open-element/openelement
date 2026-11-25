@@ -169,7 +169,7 @@ test('open-search keeps its view compiler-owned and its browser state external',
   // Presentational rows only. The class lane's two `computed` rows
   // (`hideSkeleton` / `hideEmpty`) are GONE from the table: the generated lane
   // has no authoring `computed`, so each derivation inlines at its `hidden`
-  // sink (16b-migration-note R1/R1b) and both stay reactive there.
+  // sink (compiled slot updates) and both stay reactive there.
   expect(result!.code).toContain('toggleAttribute("hidden", Boolean((props . hasHits');
   expect(result!.code).toContain('toggleAttribute("hidden", Boolean((!  props . searching');
   // The row table the shell seeds from the host attributes. `hits` is the
@@ -223,7 +223,7 @@ test('open-page-rail keeps its view compiler-owned and its browser state externa
   // The class lane's two `computed` rows (`onThisPage` / `overview`) are GONE
   // from the table: the generated lane has no authoring `computed`, so each
   // derivation is a component-local const arrow read at its sink
-  // (16b-migration-note R1/R1b) and stays reactive there.
+  // (compiled slot updates) and stays reactive there.
   const rows = descriptorRows(result!.code);
   expect(rows.map((row) => row.name)).toEqual(['items', 'locale']);
   // `items` is the property-only JSON-seed row (ADR-0182 D-18c): a rendered

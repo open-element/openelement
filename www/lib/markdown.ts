@@ -2,7 +2,7 @@
  * site markdown pipeline — marked + build-time syntax highlighting.
  *
  * The ONE renderer for every authored Markdown surface (guide, architecture,
- * blog collections and the changelog archive). Code fences are compiled to
+ * guide and architecture collections). Code fences are compiled to
  * token-span HTML by Shiki here, on the build machine: the highlighter, its
  * grammars and its theme are devDependencies that never enter a page bundle
  * or a published package. The emitted markup is plain platform HTML — token

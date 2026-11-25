@@ -674,7 +674,7 @@ OPEN, and must be resolved by evidence rather than by preference:
 7. Server-side recipe execution host for **bounded deferred regions** only
    (Alpha18). Ordinary async server components, including full-await output, are
    **M14 / Alpha16b** and are specified in
-   [compiler-native-architecture §4.6a](./compiler-native-architecture.md#46a-async-server-components-alpha16-scope);
+   [server rendering](./compiler-native-architecture.md#server-rendering);
    they are not an Alpha18 host question. **SUPERSEDED HISTORY:** an earlier
    revision of this list said "for async (Alpha18)", conflating the two
    capabilities.

@@ -23,7 +23,7 @@ export const openElement = defineIslandConfig({ hydrate: 'visible', ssr: true, d
 - `visible`——首屏之下的分量：评论、图表、嵌入。IntersectionObserver 到视口附近才放行拉取。
 - `media`——按能力开关的分量：在 island 的 `media` 字段声明媒体查询，查询命中时才拉取。
 - `only`——无法产出可靠 DSD 的纯浏览器组件（canvas、媒体、WebGL）。服务端只输出宿主标签与序列化 props；跳过 SSR。
-- `none`——纯 SSR：服务端照常序列化该组件，但构建永不发射它的 chunk。用于交互性已退役的 chrome——按组件编写，按纯标记交付。
+- `none`——纯 SSR：服务端照常序列化该组件，但构建永不发射它的 chunk。适用于只交付服务端 HTML 的组件。
 
 ## 迟到宿主
 

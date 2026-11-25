@@ -413,7 +413,7 @@ native 选择缝是主产物，不再作为垫片登记。）
 ## 复审机制
 
 本登记簿由"平台追账评审"（[design-principles](./design-principles.md#platform-catch-up-review)；
-逐版本记录见 [platform-catch-up.md](../release/platform-catch-up.md)）按 release 周期驱动：每周期逐行重估"条件到即删"的到期情况与
+逐版本记录见 [此前发布周期的记录](https://github.com/open-element/openelement/blob/e655a0bab6f1396f4ed1a10208794e51e592b0ce/docs/release/platform-catch-up.md)）按 release 周期驱动：每周期逐行重估"条件到即删"的到期情况与
 "平台边缘"的追账进度，新 shim 入场时必须同时入表并写死条件。与
 [seams.md](./seams.md) 的分工：接缝表管"谁写谁读、守卫
 在哪"，本表管"为何存在、何时能删"；同一工件两边都该有一行，交叉引用
@@ -501,9 +501,9 @@ native 选择缝是主产物，不再作为垫片登记。）
 - 存在原因：#1558 把样式创作形态收敛为 `.css` 文件 + import 之前发布的产物（引用 plain module `StyleSheet` 的 legacy 内联 sheet）继续走旧路径不变——这里的严格准入会让每一个先前发布的包平白破产，换不来任何协议收益。
 - 交叉登记：接缝事实（单写者、守卫测试与 Missing/unreadable 行为）登记在
   [seams.md](./seams.md) 的 "Compiled-artifact style-edge adoption (alpha.13 I1, KR-10b)" 行；迁移矩阵对应
-  [m01-consumer-migration-matrix.md](./m01-consumer-migration-matrix.md) C13（词法读、build only、"facts emitted, not re-parsed"）。
+  [M01 消费者审计](https://github.com/open-element/openelement/blob/e655a0bab6f1396f4ed1a10208794e51e592b0ce/docs/architecture/m01-consumer-migration-matrix.md) C13（词法读、build only、"facts emitted, not re-parsed"）。
 - 退役条件：#1558 前发布的产物版本退出受支持窗口（消费方按
-  [m01-consumer-migration-matrix.md](./m01-consumer-migration-matrix.md) 完成重编译迁移）之后，把这段 permissive 读收紧为对 ONE 样式创作语法（`semantic-core/style-imports.ts`）的严格准入；届时旧形状在打包消费证据上 fail closed，而不是静默走旧路径。
+  [M01 消费者审计](https://github.com/open-element/openelement/blob/e655a0bab6f1396f4ed1a10208794e51e592b0ce/docs/architecture/m01-consumer-migration-matrix.md) 完成重编译迁移）之后，把这段 permissive 读收紧为对 ONE 样式创作语法（`semantic-core/style-imports.ts`）的严格准入；届时旧形状在打包消费证据上 fail closed，而不是静默走旧路径。
 - 处置：条件到即删。
 
 ### 28. `registerOpenUi` published-API 空操作垫片（`@openelement/ui`）——**已退役**（2026-11-20）

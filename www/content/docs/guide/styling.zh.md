@@ -6,7 +6,7 @@ order: 5
 
 ## shadow 边界
 
-当页面的标记就是它自己的组件模块时，它渲染在每页一个的 custom element 内（例如 `<blog-post-page>`），而这个**页面根永远是 shadow root**：编译器发射 DSD 宿主模板，sidecar 声明 `root: 'shadow'`，服务端把页面内容放进 `<template shadowrootmode="open">` 里发送。页面自己的 `.css` 样式表作为 `<link>` 声明在同一份模板内，因此它的规则只活在 shadow root 里，别处没有。
+当页面的标记就是它自己的组件模块时，它渲染在每页一个的 custom element 内（例如 `<article-page>`），而这个**页面根永远是 shadow root**：编译器发射 DSD 宿主模板，sidecar 声明 `root: 'shadow'`，服务端把页面内容放进 `<template shadowrootmode="open">` 里发送。页面自己的 `.css` 样式表作为 `<link>` 声明在同一份模板内，因此它的规则只活在 shadow root 里，别处没有。
 
 文档级规则如 `.card { ... }` 或 `h1 { ... }` 被限定在 light DOM，永远到不了 shadow 页面内容——而且是静默的：没有 console 警告，也没有构建错误。这是边界在正常工作，不是需要绕开的 bug。
 
@@ -75,7 +75,7 @@ export default function ExamplePage() {
 }
 ```
 
-内联样式字符串已退役，class 通道的 `static styles` 也已退役。`styles` 只接受相对的 `.css` 说明符：裸包说明符、URL 或绝对路径、非 `.css` 条目都会以 `OE_ISLAND_DESCRIPTOR_SHAPE` 失败；服务端渲染的 shadow 组件若没有编译 DSD 宿主生产者可在其中声明样式表，会以 `OE_ISLAND_STYLE_SHADOW_UNWIRED` 失败；生成通道不编译的模块会以 `OE_ISLAND_STYLE_LANE_UNSUPPORTED` 失败，而不是被静默地留在无样式状态。
+`styles` 只接受相对的 `.css` 说明符：裸包说明符、URL 或绝对路径、非 `.css` 条目都会以 `OE_ISLAND_DESCRIPTOR_SHAPE` 失败；服务端渲染的 shadow 组件若没有编译 DSD 宿主生产者可在其中声明样式表，会以 `OE_ISLAND_STYLE_SHADOW_UNWIRED` 失败；生成通道不编译的模块会以 `OE_ISLAND_STYLE_LANE_UNSUPPORTED` 失败，而不是被静默地留在无样式状态。
 
 ## 自定义属性实战
 

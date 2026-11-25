@@ -6,7 +6,7 @@
  *
  * What it compares, and why both layers:
  *   - DISPLAY layer (the E3-2 assertion): `PUBLISHED_LATEST` in
- *     www/app/data/version.ts — the per-package values the homepage version
+ *     the generated release-line module — the per-package values the homepage version
  *     block and the changelog register render — must equal the registry's
  *     `latest` dist-tag for each package, and a package named in
  *     `UNRELEASED_PACKAGES` must NOT be known to the registry. This is the
@@ -41,11 +41,15 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import process from 'node:process';
 import {
+  readDisplayProjection,
+  RELEASE_LINE_GENERATED,
+  type DisplayProjection,
+} from '../repo/www-release-anchor.ts';
+import {
   npmRegistryEvidence,
   RELEASE_STATE_PATH,
   type RegistryEvidence,
   type ReleaseStateDocument,
-  WWW_VERSION_PATH,
 } from './registry-sync.ts';
 
 /** The read-only query surface (shared with the sync: one implementation). */
@@ -75,13 +79,7 @@ export function isMissingPackageFailure(message: string): boolean {
   return /\bE404\b|404 Not Found/iu.test(message);
 }
 
-/** The display constants this check compares (www/app/data/version.ts). */
-export interface DisplayProjection {
-  /** Package name -> displayed version WITH the `v` prefix. */
-  publishedLatest: Record<string, string>;
-  /** Names the site claims have never published. */
-  unreleased: readonly string[];
-}
+export { readDisplayProjection, type DisplayProjection } from '../repo/www-release-anchor.ts';
 
 /**
  * Where a network failure is recorded instead of aborting the run (see
@@ -112,37 +110,6 @@ async function queryOrSkip(
     }
     throw error;
   }
-}
-
-/**
- * Read the two display constants out of the www source. Text-level on the
- * same terms as release:state-machine:check and www-release-anchor (both read
- * this file as source), so all three agree about which numbers the site
- * shows. Fail-closed: a missing constant throws instead of returning an empty
- * projection that would vacuously pass.
- */
-export function readDisplayProjection(source: string): DisplayProjection {
-  const publishedBody =
-    /export const PUBLISHED_LATEST: Readonly<Record<string, string>> = \{([\s\S]*?)\n\};/u.exec(
-      source,
-    )?.[1];
-  if (publishedBody === undefined) {
-    throw new Error('readDisplayProjection: PUBLISHED_LATEST declaration not found');
-  }
-  const publishedLatest: Record<string, string> = {};
-  for (const match of publishedBody.matchAll(/'([^']+)':\s*'([^']+)'/gu)) {
-    publishedLatest[match[1]!] = match[2]!;
-  }
-  if (Object.keys(publishedLatest).length === 0) {
-    throw new Error('readDisplayProjection: PUBLISHED_LATEST carries no entries');
-  }
-  const unreleasedBody =
-    /export const UNRELEASED_PACKAGES: readonly string\[\] = \[([^\]]*)\]/u.exec(source)?.[1];
-  if (unreleasedBody === undefined) {
-    throw new Error('readDisplayProjection: UNRELEASED_PACKAGES declaration not found');
-  }
-  const unreleased = [...unreleasedBody.matchAll(/'([^']+)'/gu)].map((match) => match[1]!);
-  return { publishedLatest, unreleased };
 }
 
 /** One line per package that diverges from the live registry. */
@@ -318,8 +285,8 @@ export function driftVerdict(
       lines: [
         'registry-drift: FAIL — the site displays version values the registry does not serve:',
         ...result.failures.map((failure) => `- ${failure}`),
-        "Land the publish train's registry-sync output (docs/release/release-state.json + " +
-          'www/app/data/version.ts + the regenerated release-line module) or fix the copy.',
+        "Land the publish train's registry-sync output (docs/release/release-state.json) " +
+          'and regenerate the release-line module.',
       ],
     };
   }
@@ -357,7 +324,7 @@ export function driftVerdict(
   };
 }
 
-/** Read both tracked sources from the repository root. */
+/** Read the tracked registry state and the generated site projection. */
 export async function readTrackedTruth(root: string): Promise<{
   document: ReleaseStateDocument;
   display: DisplayProjection;
@@ -365,7 +332,7 @@ export async function readTrackedTruth(root: string): Promise<{
   const document = JSON.parse(
     await readFile(join(root, RELEASE_STATE_PATH), 'utf8'),
   ) as ReleaseStateDocument;
-  const display = readDisplayProjection(await readFile(join(root, WWW_VERSION_PATH), 'utf8'));
+  const display = readDisplayProjection(await readFile(join(root, RELEASE_LINE_GENERATED), 'utf8'));
   return { document, display };
 }
 

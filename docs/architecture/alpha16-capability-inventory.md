@@ -1,206 +1,27 @@
 ---
 status: active
-topic: Alpha16 capability inventory (P5 evidence)
-summary: The tracked capability inventory §13.5 requires — what the retiring class path provided, what replaces it on the generated path, and each replacement's state. Not a sign-off; P5 stays unclaimable until the owner signs; the final-SHA matrix/verdict rows are re-recorded in the 2026-11-20 remediation.
+topic: Component capability inventory
+summary: Owners, supported behavior, refusal boundaries and consumer proofs for generated Element capabilities.
 ---
 
-# Alpha16 capability inventory
+# Component capability inventory
 
-The tracked capability inventory §13.5 requires for P5: what the retiring class
-authoring path provided, what replaces it on the generated path, and the state of
-each replacement at a named SHA. The final-SHA matrix is the `class authoring`
-column beside the `generated lane` column — a capability counts as MIGRATED only
-when both columns describe a working surface, never when only the replacement
-exists.
+The [compiler and runtime contract](./compiler-and-element-runtime.md) describes how these capabilities work together. This table connects each capability to its owning decision and a standing consumer proof. Evidence for a release remains specific to the reviewed SHA.
 
-**Status of this document.** It is tracked and reproducible; it is **not** a
-sign-off. §13.5 requires four things — this inventory, the final-SHA matrix, the
-migration note and the owner sign-off — and the signature is the owner's to give.
-Until it is given, P5 is not claimable and Alpha16 release qualification is not
-openable. Nothing below should be read as a release claim.
-
-**Historical measurements.** The 2026-11-20 remediation preserved the
-2026-11-19 verdict at `c9dcf660f` and the slice measurements at
-`e8ea72b95` and `d135576d0`. The
-[2026-11-20 matrix](#final-sha-matrix-2026-11-20) records the scope measured at
-`f514c1290539993f9bdbeca9b02b6f99ca0a4dff`.
-
-**Evidence rule.** Every row cites the mechanism by file and the acceptance by
-test name, and the numbers are per-SHA. A capability is `MIGRATED` when the
-generated lane delivers the same SEMANTICS (not merely a same-named export), with
-the parenthesised note naming what the class path did that the generated path now
-does differently or refuses.
-
-**Verdict (2026-11-19; corrected 2026-11-20 and 2026-11-21).** Five capabilities
-have a full replacement: lifecycle (root scope, nested hostless hooks at any
-depth after the 2026-11-21 cross-ledger transaction, and the connection-scope
-`env` helper), context, refs, the per-component property/attribute channel and
-the client-only style channel. The error boundary is **PARTIAL BY DESIGN**.
-The 2026-11-25 policy keeps the existing SSR fallback identity, retries
-rolled-back connection attempts on reconnect, and keeps subscriptions and
-listeners live for later updates or events. The separate P5 signature remains
-pending. [ADR-0182 decision](../adr/ADR-0182-function-component-capability-api.md#amendment-2026-11-25-16b-eb-fallback-and-recovery)
-Form participation is **MIGRATED** (re-adjudicated 2026-11-20 / plan §19.3: the
-framework mirrors the one constraint derivable from a declared property and hands
-the author the complete `ElementInternals` seam for the rest, so constraint parity
-is authored policy rather than framework debt). `useHost` is **DELIVERED**
-(`useHost()` in `compile-lifecycle.ts`, exported from `lifecycle.ts` /
-`public-surface.ts` / `public-runtime.ts`; ADR-0182 carries its implementation
-amendment).
-
-## Slice index (§13.2 obligation → row)
-
-§13.2 names five Alpha16b obligation slices. The rows above are organised by
-capability, so this index maps each slice ID to the rows that satisfy it — a
-reader holding the plan should not have to infer the correspondence.
-
-| Slice | Capability | Rows in this document | State |
-| --- | --- | --- | --- |
-| `16b-LC` | Class lifecycle (CAP-03) | author lifecycle: connect / disconnect / property change | **MIGRATED (2026-11-21)** — root setup/hooks, nested hostless hooks at ANY depth (the cross-ledger transaction closed the depth ≥ 2 boundary), and the connection-scope `env` helper are delivered. What stays refused is PLACEMENT, not depth: a recipe/list body and a component no retained body references have no lifecycle owner (`OEIR_LEAF_INVALID_ARTIFACT` / `OEC9041`), which is the honest boundary of a compiled setup |
-| `16b-EB` | Error boundary (CAP-05) | error boundary | **PARTIAL BY DESIGN** — the render-level reporter opts into literal nested fallback under the existing identity. The client retries a rolled-back connect on reconnect, and the update/event path remains live. |
-| `16b-CTX` | Context (CAP-09) | context provider / consumer | **MIGRATED** (2026-11-19 anchor `e8ea72b95`, kept as history — off the delivery line; delivery-line row in the final-SHA matrix below) |
-| `16b-REF` | Refs (CAP-11) | node refs | **MIGRATED** (2026-11-19 anchor `d135576d0`, kept as history — off the delivery line; delivery-line row in the final-SHA matrix below) |
-| `16b-MN` | Migration note (CAP-26) | this document plus `16b-migration-note.md` | **TRACKED** — both are tracked and indexed; the owner sign-off is the remaining §13.5 item |
-
-## Capability map
-
-| Capability | Class authoring (retiring) | Generated lane (replacement) | State |
-| --- | --- | --- | --- |
-| Component declaration | `@element('tag')` + `class X extends OpenElement` | local default-exported function + `defineIslandConfig`/`defineComponentConfig` sidecar (`root`, `tag`, `properties`) | **MIGRATED** — the compiler emits the `OpenElementBase` subclass; island admission refuses a re-export default (`lane-declined / compiler-declined`) so the body must live in the admitted module |
-| Reactive render | `render()` returning compiled JSX | function component returning compiled JSX; every sink is a compiled slot | **MIGRATED** (depends on emission: a value bound to a local identifier yields ZERO refreshes while the same expression inlined yields two — R1b, pinned by a regression test) |
-| Derived values | `computed(() => …)` | **ADR-0183 D-4** — the `computed` intrinsic (compiler-erased; element-root resources are created by the retained setup factory and returned in its record; lazy; `Object.is` cut; scope-released; one evaluation per render on the server) | **MIGRATED** (`b38c1147b` first production consumer; D-4 landed 2026-11-20) — the retained `__oe_rootInstance` factory is the production binding source the earlier PARTIAL row was waiting for. A root `computed`/`signal` is created once per element, resolved by the unchanged `host.bindings` prologue in mount/claim, and re-created per render by the SSR producer (no server-side graph). 2026-11-20 lifecycle fix: a hook carried by the same factory reads those resources as closure captures instead of being silently dropped. Guard: `generated-element.computed-boundary.test.ts` plus the D-4 landed section in ADR-0183 |
-| Property / attribute channel | `@property({ reflect, attribute })` | `properties` row in the sidecar: `{ reflect, attribute, default }` | **MIGRATED** — primitive rows convert through the same `convertFromAttribute`/`coercePropertyValue` leaves |
-| Non-primitive property wire | runtime property assignment on the instance | `data-oe-prop-seed` host attribute carrying JSON (ADR-0182 D-18c), consumed once by `applyGeneratedPropSeed` | **MIGRATED** — `array`/`object` only; `trustedHtml` is excluded because the brand is object identity in a `WeakSet` and any wire transfer would re-forge trust from bytes |
-| Author lifecycle: connect | `connectedCallback()` | `onConnect(env)` intrinsic, erased by the compiler into the claim/mount prologue | **MIGRATED** (runs BEFORE the generated region exists — a handler that scans the rendered subtree must defer one macrotask) |
-| Author lifecycle: disconnect | `disconnectedCallback()` | Cleanup returned by `onConnect(env)` and the connection-scope abort signal. `onDispose(env)` runs when the retained instance is destroyed. | **MIGRATED**. Ordinary disconnect retains generated DOM (LC-0). |
-| Author lifecycle: property change | `attributeChangedCallback` / property setter | `onPropertyChange({ host, signal, states, name, value })` | **MIGRATED** |
-| Error boundary | static `isErrorBoundary` + `catchError()` | `onError(env)` captures connect/claim and refresh/event errors of the generated element. SSR reports a boundary-owned descendant failure through `onNestedFailure` and emits the existing host’s literal bytes. | **PARTIAL BY DESIGN** — ordinary reconnect and subsequent updates/events can recover. Cross-custom-element client capture, async rejections, an author reset API and a separate fallback identity are outside this replacement. |
-| Context provider / consumer | `provideContext(host, token, value)` + subscription | `provideContext(token, () => value)` / `useContext(token)` over the generated owner tree, hostless owners included | **MIGRATED** (`e8ea72b95`) — nested providers shadow, sibling subtrees are isolated, a declared-property commit re-reads the thunk, reconnect republishes from retained intents, and a consumer-reading component IS server-renderable (the scope rides the producer argument list, so per-render isolation is structural) |
-| Node refs | `@query`/manual `querySelector` in `connectedCallback` | `ref(cb?)` declaration intrinsic handed to the existing `ref` JSX channel; `current` survives mount/claim/reconnect | **MIGRATED** (`d135576d0`) — no second attachment mechanism; `current` is deliberately not reactive (a tracked-slot read is refused with `OEC9042`) |
-| Form participation | `static formAssociated` + `ElementInternals` access | sidecar `formAssociated` + the shell's form controller; value/required/disabled with `required → valueMissing`; the author-callable constraint seam (`setValidity`, `setFormValue`, `internals`, `onReset`, `onRestore`) | **MIGRATED** (`fa6e5232d`, re-adjudicated 2026-11-20 / plan §19.3) — the framework mirrors the one constraint derivable from a declared property and hands the author the complete `ElementInternals` seam for every other one, so type/email/pattern parity is authored policy, not framework debt (a shell-side mirror would be a SECOND validation model); non-claim: a `required`-only component gets `valueMissing` free, anything more it writes itself |
-| Slots / light DOM | `static styles`, `<slot>` in the template | compiler-emitted slot anchors (`oe:s:<ordinal>:<hex>`) plus the light-root producer; `projectedChildren` substitution walks comment tokens only | **MIGRATED** |
-| Styles | `static styles = css\`…\`` | file-based `.oe-style.css` imports plus the generated island's `defineIslandConfig({ styles })` declaration (the string-template tag retired with #1558) | **MIGRATED** — ONE declaration, one delivery per root/delivery shape: the DSD marked `<link>` inside a shadow template (M09-2e), the document sink for a light root, and (2026-11-20) the compiler's module-graph import the shell adopts for a client-only island. All of them ride the same style-edge registry, Vite CSS pipeline and content-addressed asset; the generated root joins the same `themeManager` broadcaster |
-| Client-only shadow styles (`ssr: false`) | `static styles` + the client-created root (the class lane adopted the sheet in `connectedCallback`) | sidecar `styles` → compiler-emitted `.css` imports + descriptor `styles`; the shell adopts through the class lane's SAME `CompiledStyleScope` into the root it created, releases on disconnect and re-adopts on reconnect | **MIGRATED** (`b165ab443`-line, 2026-11-20) — the last open style capability. A declared sheet that reaches the emitter without a specifier fails the build (`OEIR_GENERATED_ELEMENT_CLIENT_STYLES_UNWIRED`); a non-sheet descriptor value fails closed with a coded build-phase error; a link-delivered DSD root is never adopted twice |
-| Nested light root inside a shadow template | not applicable — contradictory composition | **NOT A CAPABILITY — written rule (2026-11-20)**: a light root must not be rendered inside another component's shadow template (document stylesheets never cross the boundary; the class lane's hoisted link was a workaround). Use a `<slot>` or make the child a shadow root. 0 product instances; `site-light-probe`'s port measured the gap and was reverted; its e2e row is rewritten to the rule as part of the lane deletion. ADR-0181's 2026-11-20 rule section. |
-| Registration / packaging | `customElements.define` at module scope | compiler-emitted Native Custom Element tail + `generated-manifest.json` / `custom-elements.json` | **MIGRATED** |
-
-## Generated-only capabilities (no class counterpart)
-
-These exist BECAUSE the generated lane is a different execution model. They are
-not ports and have no retiring counterpart.
-
-| Capability | Mechanism | Note |
+| Capability | Current behavior | Owner and consumer evidence |
 | --- | --- | --- |
-| Executor-free page floor | `@openelement/element/document-services` + the narrow `leaf-runtime` entry | A page whose islands are all generated-lane emits no `element-services` loader, so the document-level services need a surface that reaches no executor module |
-| Claim verification | `assertStaticAttributeSeed` + `assertGeneratedRootOptions` | A runtime write onto a claimed static attribute fails with `OEIR_LEAF_CLAIM_MISMATCH` rather than silently diverging from the rendered bytes |
-| JSON prop seed | `data-oe-prop-seed` (ADR-0182 D-18c) | The one channel a non-primitive declared row crosses SSR→claim on |
+| Component declaration and registration | The compiler emits a native custom-element constructor for an admitted explicit boundary. The declaring function belongs to that module. Hostless function components compose without platform hosts. | [Runtime architecture](./compiler-and-element-runtime.md) and [interop qualification](../integrations/web-components-interop.md). |
+| Reactive render and derived values | Tracked props, signals and computed values update generated bindings. Ordinary locals capture a snapshot. The server evaluates each render in its own scope. | [Reactive contract](../adr/ADR-0183-one-reactive-contract.md) and [computed consumer cases](../../packages/compiler/__tests__/semantic-ir/generated-element.computed-boundary.test.ts). |
+| Lifecycle | Retained components at any depth can register connect, dispose and property-change hooks. Setup is retained across reconnect. Recipe/list bodies and components without a retained setup owner refuse hook placement. Connect hooks run before the claimed or mounted DOM region exists. | [Lifecycle intrinsics](../adr/ADR-0180-function-component-lifecycle-intrinsics.md), [connection hooks](../../packages/compiler/__tests__/semantic-ir/generated-element.lifecycle.browser.test.ts) and [nested retained owners](../../packages/compiler/__tests__/semantic-ir/generated-element.root-instance.browser.test.ts). |
+| Error handling | Connect/claim failures roll back the attempt and report through the element's `onError`; reconnect can retry. Update/event capture keeps the connection live. In SSR the render-level `onNestedFailure` option reports a nested expansion failure and emits the caller's literal fallback under the existing host identity. Client capture is element-scoped and synchronous. | [Fallback and recovery decision](../adr/ADR-0182-function-component-capability-api.md#amendment-2026-11-25-16b-eb-fallback-and-recovery), [client and claim cases](../../packages/compiler/__tests__/semantic-ir/generated-element.error-boundary.browser.test.ts) and [server renderer cases](../../packages/element/__tests__/compiled-server/generated-nested-fallback.test.ts). |
+| Context | Providers and readers follow the generated owner tree, including retained hostless owners. A provider shadows its subtree, independent owners remain isolated, and each SSR render gets its own scope. | [Component capability decision](../adr/ADR-0182-function-component-capability-api.md), [context browser cases](../../packages/compiler/__tests__/semantic-ir/generated-element.context.browser.test.ts) and [server cases](../../packages/compiler/__tests__/semantic-ir/generated-element.context.test.ts). |
+| Node references | `ref()` attaches through the JSX ref channel and preserves the retained handle across a successful claim and reconnect. A tracked binding that reads `ref.current` is refused. | [Ref lifetime cases](../../packages/compiler/__tests__/semantic-ir/generated-element.ref-handle.browser.test.ts) and [compiler boundaries](../../packages/compiler/__tests__/semantic-ir/generated-element.ref-handle.test.ts). |
+| Properties and trust | Declared primitive attributes and reflected properties use the descriptor conversion rules. The server JSON seed carries declared property-only arrays and objects. The trusted HTML brand stays in-process. | [SSR property seed seam](./seams.md) and [nonprimitive property browser cases](../../packages/compiler/__tests__/semantic-ir/generated-element.nonprimitive-properties.browser.test.ts). |
+| Forms | Form association uses one element-lifetime record for value, validity, reset, restore and custom states. A declared required value maps to `valueMissing`. Custom validation uses the author-facing internals. A claimed native input preserves a draft while the model matches the SSR default. | [Form and input seams](./seams.md) and [native form fixture](../../tests/fixtures/router-native-framework/e2e/app-flow.spec.ts). |
+| Shadow roots, projection and styles | The compiler declares the root and placement facts, and the runtime adopts declarative shadow content. Router's style plan supplies marked links in the shadow template or document-level styles for light DOM. Client-only roots adopt their declared sheets. Use slot projection or a shadow child when styling across a shadow boundary. | [Generated SSR and retention](../adr/ADR-0181-generated-element-ssr-and-retention.md) and [shadow controls](../../packages/compiler/__tests__/semantic-ir/generated-element.shadow-authoring.browser.test.ts). |
+| Document services | The browser entry can capture eligible pre-upgrade interaction and resolve deep fragments without importing the retired generic executor. Captured interactions are replayed against the retained DOM after activation. | [Document services seam](./seams.md) and [production graph applicability](./p1-applicability-record.md). |
+| Component metadata | Standard Custom Elements Manifest output matches the generated declarations, with validation after packing. | [Package manifests](./packages-and-distribution.md) and [component artifact qualification](./alpha16-18-execution-plan.md#retained-platform-concerns). |
 
-## Still owed (stated, not deferred as paperwork)
+## Recorded capability review
 
-| Item | Why it is open |
-| --- | --- |
-| `16b-LC` recipe/list placement and pre-DOM timing | **Depth ≥ 2 is DELIVERED (2026-11-21)** — a retained body that retains its own children joins the root attempt's transaction and keeps its record across reconnect (ADR-0181's dated amendment; Chromium rows R8/R10/R11). What is still refused is PLACEMENT: a hook or context intrinsic inside a reusable-JSX/list body, or in a component no retained body references, has no lifecycle owner (`OEIR_LEAF_INVALID_ARTIFACT` / `OEC9041`). Pre-DOM timing stays a documented semantic (a connect handler runs before the generated region exists). |
-| ~~`useHost` host-element accessor (D-17b)~~ | **CLOSED 2026-11-20 — this row was STALE.** `useHost()` is implemented (the compiler-erased intrinsic in `compile-lifecycle.ts`, exported from `lifecycle.ts` / `public-surface.ts` / `public-runtime.ts`, with the 6-row `generated-element.use-host.test.ts` guard) and ADR-0182 carries its implementation amendment. The row still said FUTURE/OWED, which is exactly the two-faces-one-fact drift the design constitution forbids; it was corrected here rather than left for a reader to reconcile. |
-| ~~Depth ≥ 2 generated owner tree~~ | **CLOSED 2026-11-21.** ADR-0181's cross-ledger transaction is implemented: the root pass owns an `InstanceTransaction` token, a retained body that retains its own children JOINS it, the root commits members shallow-first / aborts them deepest-first, and evicting an entry releases that scope's own ledger. Depth-1 modules keep their pre-change bytes. |
-| ~~Form constraint mirroring~~ | **CLOSED 2026-11-20 — re-adjudicated, not deferred** (plan §19.3). The framework mirrors `required → valueMissing` and exposes the complete `ElementInternals` seam (`setValidity` / `setFormValue` / `internals` / `onReset` / `onRestore`) on the form control, so type/email/pattern parity is authored POLICY. A shell-side mirror would be a SECOND validation model that drifts from the platform's constraint algorithms — refused for the same reason a second stylesheet pipeline was. Named non-claim: a `required`-only component gets `valueMissing` free; anything more it writes itself. |
-| Reactive refs and component refs | `ref.current` is not reactive by design (a tracked read is refused), and component (non-element) refs stay out of scope per ADR-0182 D-18b-5. |
-| Class candidates from the generated lane | the generated leaf's model walk → `classCandidates` → the discovery pass registers them (shadow scope) → the build's shared component stylesheet → the DSD template links it beside the authored `styles` assets | **DELIVERED 2026-11-21 (P-1 + P-1b)** — measured on the migrated `router-unocss-probe` shadow island: two marked links in the template and **15/15 e2e across chromium, firefox and webkit**, computed styles included. This was the last capability prerequisite for deleting the class lane. |
-| Generated component nested inside a page | the static scan declares the page-local component's tag + host producer; the SSG entry registers the host PAIR; its `styles` declaration rides the same build-time carrier an island's does | **DELIVERED 2026-11-21 (P-2)** — measured on `router-base-path`: the nested generated note renders light with its sheet in the head, the nested generated card renders a DSD template with its marked link, build green, **e2e 9/9 on chromium/firefox/webkit**. |
-| A generated LIGHT page's own sheet | the page module's sidecar declaration, registered with `scopeTag: null` (a page owns no host element) and seeded into the route's document link list | **DELIVERED 2026-11-21 (P-2b)** — `router-base-path`'s page is a generated function page: three marked head links (page + nested light + nested shadow), **e2e 9/9 on three engines**, including the JavaScript-disabled computed-style row. |
-| ~~Island state across a MORPH~~ | the class lane re-uses the same element instance, so its property state survives a morph | **OWED — deletion prerequisite P-5 (2026-11-21, measured)**: migrating `router-request-time`'s two simplest islands to the generated lane keeps 109/114 e2e rows but turns the five state-continuity rows RED (baseline 114). The generated lane re-runs the setup on a morph, so a signal resets. Deleting the class lane owes a morph-continuity contract; this line does not claim one. **DISPROVEN + CLOSED (2026-11-23, dated note, amend-never-rewrite):** f16-handoff §5 measured that "P-5 was never a capability gap" — the first port omitted `root: 'shadow'`, the morph client correctly replaced the light-rooted island, and the same root restored 114/114 and 342/342. The five rows that stayed red at the third closeout pass were four real defects with their own pinned tests (directory-claim tombstones, shadow host sheet scope, first-activation replay, the nested-host claim boundary), all fixed (`ab80a3c20`, `31a86c009`, `e808871ec`, `21a9c92ca`); the fixture is 342/342 on chromium, firefox and webkit (f16-handoff §11). No morph-continuity contract is owed. |
-| `formStateRestoreCallback` restore state | the inherited base-class callback forwarded to a kernel hook the component never registered, so a platform restore was a no-op — only the component's own `formResetCallback` restored | **LANE SEMANTICS RECORDED (2026-11-24, measured)**: the generated shell implements the platform restore channel itself (`restoreFormValue`): a string state is written through the declared `value` row (prop sink + validity re-synced), a null/File/FormData state is ignored, and `formResetCallback` still restores the default. Pinned by `packages/element/__wtr__/tests/form-platform.test.js` row 7 (`bf8cf51bc`). Restoring is the callback's platform purpose — the class lane's no-op was the unregistered-hook accident — so the generated behaviour is the contract, not a gap. |
-| ~~Nested host expansion inside a SHADOW-root generated host~~ | the light-root producer receives a `nestedHost` expander | **FIXED 2026-11-21** — the shadow host producer now declares `(props, lightChildren, attributes, styleLinks, nestedHost)` with FIXED positions and hands the expander to its leaf; one runtime factory builds it for the page root, the light root and the class lane's nested walk alike. Measured: `router-ui-dogfood`'s /dialog is a generated shadow page rendering `<open-dialog>` as DSD, **120/120 e2e on three engines**. |
-| ~~A generated PAGE that is not an islands-dir entry~~ | page classification resolves a page component only against the islands directory (`resolveLocalIsland`) | **FIXED 2026-11-21 (`e8661bad0`)** — one `component-declaration` reader plus classification by module identity; `/dialog` now builds as a generated page and renders its DSD. The follow-on blocker is the P-6 row above. |
-| Streamed-page runtime substrate (the pump: `createStreamBody`, `streamFields`, `createStreamRequestScope`, `STREAM_BROWSER_BOOTSTRAP`) | the class lane's compiled-Part-Program channel fed it a manifest per route | **RETAINED INTERNAL SUBSTRATE, NO EMITTED CONSUMER (2026-11-24, C09/C10 closure)** — the scanner emits no stream manifest (retirement above), so nothing the lane builds can reach the pump; the runtime reads that *did* reach it (`default.__partProgram.tag/version`, `componentClass.__partProgram`) are deleted with the deferred-shell gate and the public `createStreamShellExecutor`. It is kept because it is the piece the Alpha18 carrier is built on, it has no public element surface, and its own rows still prove the pump semantics. Distinct from a *supported* capability: no route, fixture or template can produce a streamed page in this release. |
-| Streamed pages (`renderIntent.stream`) | part of the class lane's compiled-Part-Program channel | **REMOVED WITH THE CLASS LANE (owner direction 2026-11-21)** — the deferred-field streaming channel has no function-lane carrier (authoring refuses `stream` on a server function page; the build refuses it on a generated element page, D-M11). The two streamed fixture routes retire with the lane; Alpha18 owns the replacement streaming carrier. |
-| Dynamic text in an RCDATA context (`<textarea>{value}</textarea>`) | the class lane compiled the text into the textarea; the edit form was pre-filled from the loader | **REMOVED WITH THE CLASS LANE (owner-approved 2026-11-23) — recorded not softened.** The refusal is unchanged: `OEIR_LEAF_UNSUPPORTED_TEXT_CONTEXT` from `assertTextBoundaryContext` (`generated-leaf/generate.ts:3899`; [`m08-text-boundary.md`](./m08-text-boundary.md) §4) refuses the shape at compile time and produces no module. It is not implemented because a claim/SSR split collides with the pinned fail-closed contract: the shell takes the claim branch whenever its root carries content (`generated-element/shell.ts:2752`), a module with no claim fails `OE_RUNTIME_LEAF_CLAIM_UNAVAILABLE` (`compiled/runtime/recipe.ts:293`) instead of mounting, and the failed attempt leaves the region `present` so the next connect retries the claim rather than switching to mount — pinned by `generated-element.shell.test.ts`'s "a generated module without a claim fails closed on existing DOM and on reconnect" (:2420). The only in-repo consumer did not justify rewriting it: at the decision point a typed `definePage<…>(…)` call never matched the page-component scanner regex (`static-component-scanner.ts:252`), so the page had no client entry and its claim path could not run; dropping the call-site type arguments is what later admitted it (the fixture has done that) and the refusal itself is unchanged. **Disposition:** the `router-native-framework` fixture migrated to the generated lane (function component + `defineIslandConfig`) and carries the body on the textarea `value` property channel. The page is now ADMITTED: the four typed `definePage<…>(…)` call sites dropped their type arguments (the loader/props/head annotations keep the typing), and the edit route's props projector names the component's declared rows (`titleText`/`bodyText`, not the class lane's `title`/`body`). Measured consequence on the BUILT fixture, chromium/firefox/webkit: SSR emits an inert `value` attribute (the parser ignores `value` on `<textarea>`), so with JavaScript disabled `#body` is empty while `#title` pre-fills from its SSR attribute — **the no-JS textarea pre-fill is REMOVED**. With JavaScript on the claim restores the loader values through the JSON `data-oe-prop-seed` channel (ADR-0181 A5 amendment, 2026-11-23), measured `#title` = "Seed note one" and `#body` = "The first seeded note body." on all three engines — the client-side pre-fill is DELIVERED through the property channel, not removed. The RCDATA text shape itself stays refused at compile time, not softened. |
-| A layout module's `IslandConfig.styles` | `static styles` on the layout class (`@element('app-layout', { root: 'shadow-open' })`) reached the DSD template through the class's own style channel | **REMOVED WITH THE CLASS LANE (owner-approved 2026-11-23) — recorded not softened.** In the generated lane a layout's declared sheets have no carrier: the island scan walks only the islands directory (`island-scanner.ts` has 0 `layout` hits) and is the ONE producer for local island modules in the style-declaration carrier, the static-component scan has no layout handling (`static-component-scanner.ts` has 0 `layout` hits), and the layout facts the entry re-attaches carry only the tag, import path and host export (`entry-descriptor.ts`; `entry-orchestrator.ts`'s `layoutModules` map) — no code path registers a layout style declaration (grep evidence: `island-style-declarations.ts` has 0 `layout` hits; its writers are the island scan, package islands and page-local static components). **Consequence:** a generated-lane layout that declares `styles` gets no `styleLinks` carrier, and its emitted host producer fails closed at SSR with `OEIR_LEAF_MISSING_VALUE: styleLinks` (`generated-element/emit.ts:713`) — measured on the `dev-tailwind` D2 cold-start fixture: the first `GET /` returned HTTP 500. **Disposition:** the D2 fixture's inline layout declaration drops `styles` and keeps `root: 'shadow'`; the cold-start assertion is unchanged (a `GET /` 200 whose document links the compiled entry sheet). |
-| Server-side context reactivity | A consumer value resolves once per producer call. There is nothing to react to before bytes leave, so this is a property of SSR rather than a gap — recorded so a future reader does not read it as one. |
-
-## How a reader verifies a row
-
-Each `MIGRATED` row names a mechanism by file and an acceptance by test. To
-re-check one at a candidate SHA:
-
-```sh
-vp run --no-cache --fail-if-no-match --filter @openelement/compiler test
-vp run --no-cache --fail-if-no-match --filter @openelement/element test
-vp run --no-cache --fail-if-no-match --filter @openelement/router test
-node tools/repo/check-browser-entry-graph.ts www/dist/client/.vite/oe-browser-entry-graph.json
-```
-
-The last command is the P1 evidence; the three suites carry the capability tests.
-A row that cannot be reproduced from these commands is a defect in this document.
-
-## Final-SHA matrix (2026-11-20)
-
-The earlier §13.5 evidence matrix, recorded at the measured commit
-`f514c1290539993f9bdbeca9b02b6f99ca0a4dff`. A slice counts as `MIGRATED` only
-when both the class-authoring and generated-lane columns describe a working
-surface (never when only the replacement exists). No row here is a sign-off and
-no row is an exit.
-
-Five-field record shared by every row below (the per-row command and result are
-in the table):
-
-- **commit:** `f514c1290539993f9bdbeca9b02b6f99ca0a4dff` — HEAD did not move
-  across the measurement run. The later commit
-  `434a624d39496eed70d29df4c1bba3fef17cca56` changes only one JSON annotation and
-  one test comment; it neither changes behavior nor is re-measured.
-- **status:** clean at measurement — `git status --porcelain` showed only the
-  pre-existing `?? .cc-agent-transcript.jsonl`; every artifact used is
-  Git-ignored.
-- **provenance:** `LOCAL` — a clean worktree at the cited commit; a
-  LOCAL record only, not a CI run/job; it writes no CI column.
-- **environment:** macOS (darwin), 8 cores / 16 GB; Node `v24.18.0`; pnpm
-  `12.8.1`; Playwright `1.59.1` (chromium `147.0.7727.15`, firefox `148.0.2`,
-  webkit `26.4`).
-- **full log:** `.artifacts/pr1804-remediation-20261120/02-evidence/EVIDENCE-RUN.md`.
-
-| §13.2 slice | state | command → result at the measured commit |
-| --- | --- | --- |
-| `16b-LC` | **MIGRATED (2026-11-21)** — root author lifecycle, nested hostless hooks at any depth and the connection-scope `env` helper; recipe/list placement and non-retained targets stay refused by design | `./node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/compiler test` → **102 files / 1421 tests passed**; `--filter @openelement/element test` → **136 files / 1063 tests passed**; the focused depth ≥ 2 acceptance is `generated-element.root-instance.browser.test.ts` (11 Chromium rows, incl. R8 retained grandchild, R10 aborted attempt convergence, R11 subtree teardown) and the ledger's 40 unit rows. Provenance `LOCAL .agents/worktrees/alpha16-retirement` |
-| `16b-EB` | **Historical measurement.** The original capture points passed at the measured commit. The SSR fallback was verified in subsequent work. | The full Compiler suite at this historical commit exercised the capture points. The current policy and focused evidence appear below. |
-| `16b-CTX` | **MIGRATED** (delivery-line record; the slice-index anchor `e8ea72b95` is historical) | `./node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/compiler test packages/compiler/__tests__/semantic-ir/generated-element.ref-handle.test.ts packages/compiler/__tests__/semantic-ir/generated-element.ref-handle.browser.test.ts packages/compiler/__tests__/semantic-ir/generated-element.context.test.ts packages/compiler/__tests__/semantic-ir/generated-element.context.browser.test.ts` → **4 files / 46 tests passed, exit 0, 5 s**. The CTX half is `generated-element.context.test.ts` **19 tests** + `generated-element.context.browser.test.ts` **6 tests** = **25 tests / 2 files** |
-| `16b-REF` | **MIGRATED** (delivery-line record; the slice-index anchor `d135576d0` is historical) | Same command → **4 files / 46 tests passed, exit 0, 5 s**. The REF half is `generated-element.ref-handle.test.ts` **17 Node tests** + `generated-element.ref-handle.browser.test.ts` **4 Chromium tests** = **21 tests / 2 files**; the 2026-11-19 record's 16 Node rows is that head's per-head value and stays historical |
-| `16b-MN` | **TRACKED** — this inventory plus `16b-migration-note.md` are tracked and indexed; the owner sign-off is the remaining §13.5 item | `./node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo docs-index:check` → `docs-index:check: current view is generated, links resolve (44 active document(s), 8 historical record(s), 15 archive/removal entr(ies)).`; `./node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo adr-index:check` → `adr-index:check: 42 record(s), 42/42 entr(ies) resolved, 15 annotated — every record listed once and every annotation agrees with its record.`; `./node_modules/.bin/vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo shims:check` → `shims:check: 27 shim(s) / 5 retired — every location tracked, every row owned with a retirement condition, 20 line citation(s) in range.`; all exit 0. Per-head gate deltas vs the 2026-11-19 audit at `07963b738` (old values kept as historical): adr-index annotated **13 → 15**, shims **26 → 27** (Wave 1/3 document commits) |
-
-## 2026-11-25 error boundary review
-
-The Alpha16 policy uses literal SSR fallback under the existing host identity
-when the render supplies `onNestedFailure`. The client `onError` applies to
-admitted synchronous work of the element and its retained hostless setups.
-Failed connects retry on reconnect after rollback. Captured updates or events
-leave the subscription or listener live for later work. The checked-in
-Chromium regression compiles the producer, renders with the reporter, then
-claims the same nodes and updates the parent.
-[Browser regression](../../packages/compiler/__tests__/semantic-ir/generated-element.error-boundary.browser.test.ts)
-[Migration note](./16b-migration-note.md#2026-11-25-policy-ssr-and-recovery)
-
-On merged `03e1e07e2eb87d703a9e8efbc56e6108f91472e9`, a supplemental local probe
-rendered compiled output, then observed fallback claim preserving DOM identity
-in Chromium, Firefox and WebKit. The focused Compiler and Element suites checked
-the independent client recovery and SSR reporting paths at that revision.
-[Landed-candidate evidence](https://github.com/open-element/openelement/pull/1812#issuecomment-7158207745)
-
-## Owner sign-off (2026-11-20, delegated remediation session)
-
-**What this section records.** The owner (SisyphusZheng) authorized the remediation
-team in the 2026-11-20 session — verbatim "全全交给你负责，启动团队把这些任务全部解决掉"
-— to carry out the PR #1804 remediation under delegation
-(`alpha16-18-execution-plan.md` §18, record form §18.7). Under that delegated
-authority, this section records that the P5 evidence set — this inventory, the
-historical matrix above and `16b-migration-note.md` — was compiled
-and checked by the delegated remediation session. It is recorded **by the
-remediation team (recorder), not by the owner**, and it is **not a personal
-written signature**; every "owner-approved 2026-11-20" in this file means that
-in-session delegation.
-
-**What is not recorded, and not claimable.** §13.5's owner sign-off on the
-final-SHA matrix is a personal signature and is **not given** here and cannot be
-given by the delegation: plan §18.7 says a §13.5 owner sign-off needs the owner's
-own line, and plan §18.6 item 3 assigns the P5 final-SHA matrix together with the
-owner's own sign-off to an independent consolidation PR. Until that lands, **the
-§13.5 P5 evidence stays unsigned and P5 is not claimable; Alpha16 release
-qualification is not openable** (see "Status of this document" above). This
-section creates no milestone, gate, exit or release claim.
+The Alpha16 capability review verified lifecycle, error routing, context and refs on the candidate commit. The error-routing scope remains the one recorded in ADR-0182. The review's fifth row established the then-required migration record on that revision. The owner signed the earlier #1813 revision and separately signed the #1814 revision after its independent rerun. Those dated records retain their original scope. [Reviewed five-row matrix](https://github.com/open-element/openelement/pull/1814#issuecomment-7161223186) · [Owner sign-off](https://github.com/open-element/openelement/pull/1814#issuecomment-7161266060)

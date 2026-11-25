@@ -65,7 +65,7 @@ export default function ThirdPartyWcFixture(props: { eventCount: number }) {
     // Host globals are spelled `globalThis.` throughout: the compiled setup
     // resolves a bare identifier against an ECMAScript-only allowlist, so
     // `window` / `document` / `setTimeout` fail closed with OEIR_UNRESOLVED_BINDING
-    // while the property read on `globalThis` does not (16b-migration-note;
+    // while the property read on `globalThis` does not (the reactive read contract in docs/architecture/compiler-and-element-runtime.md;
     // www/app/islands/open-page-rail.tsx).
     if (typeof globalThis.window !== 'undefined') {
       void import('../client/wc-client.ts');

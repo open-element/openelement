@@ -141,6 +141,22 @@ test('harness goes red when the CI workflow grows a matrix leg', () => {
   }
 });
 
+test('harness goes red when the registry-state upload points at a different file', () => {
+  const { dir, path } = withMutatedWorkflow((text) =>
+    text.replace(
+      'path: docs/release/release-state.json',
+      'path: docs/release/release-state.json.bak',
+    ),
+  );
+  try {
+    const failed = failures(runMatrix({ releasePath: path }));
+    expect(failed.join('\n')).toContain('post-publish-readback-keeps-always-forensics');
+    expect(failed.join('\n')).toContain('must carry only docs/release/release-state.json');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('harness goes red when the CI workflow gains a job the contract does not own', () => {
   const { dir, path } = withMutatedCiWorkflow((text) =>
     text.replace(

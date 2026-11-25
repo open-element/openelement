@@ -23,7 +23,7 @@ export const openElement = defineIslandConfig({ hydrate: 'visible', ssr: true, d
 - `visible` — below-the-fold weight: comments, charts, embeds. An IntersectionObserver gates the fetch until scroll-in.
 - `media` — capability-gated weight: declare the media query in the island's `media` field and the chunk loads only while it matches.
 - `only` — browser-only components that cannot produce reliable DSD (canvas, media, WebGL). The server emits the host tag and serialized props; SSR is skipped.
-- `none` — SSR-only: the server serializes the component but the build never emits its chunk. For chrome whose interactivity was retired — authored as a component, delivered as pure markup.
+- `none` — SSR-only: the server serializes the component but the build never emits its chunk. Use it for components delivered as server HTML.
 
 ## Late hosts
 

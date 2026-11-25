@@ -23,8 +23,7 @@
  *      `morph-align.ts` / `morph-focus-restore.ts`).
  *
  * Automation is NOT screen-reader testing: these are DOM/behaviour assertions.
- * Screen-reader verification stays manual (see
- * `docs/release/evidence/alpha15/dx02-browser-automation.md`).
+ * Screen-reader verification is performed manually.
  */
 import { expect, type Page, test } from '@playwright/test';
 

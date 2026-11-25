@@ -3,7 +3,7 @@
  *
  * www/app/data/version.ts must keep OPENELEMENT_VERSION derived from the
  * generated release-line module (`_generated-release-line.ts`), and that
- * committed module must mirror docs/release/release-state.json. Two consumers
+ * generated module must mirror docs/release/release-state.json. Two consumers
  * share this audit: tools/repo/version-bump.ts (anchor cross-assertion at
  * bump time) and tools/repo/check-release-state-machine.ts (the offline
  * release gate), so the site can never show two different "current version"
@@ -33,6 +33,52 @@ function isPublished(
 export const VERSION_SOURCE_WWW = 'www/app/data/version.ts';
 export const RELEASE_LINE_GENERATED = 'www/app/data/_generated-release-line.ts';
 
+export interface DisplayProjection {
+  /** Package name to the displayed npm latest, including its `v` prefix. */
+  publishedLatest: Record<string, string>;
+  unreleased: readonly string[];
+}
+
+function generatedValue(source: string, name: string): unknown {
+  const match = new RegExp(`^export const ${name}(?::[^=]+)? = ([^\\n]+);$`, 'mu').exec(source);
+  if (match?.[1] === undefined) throw new Error(`${name} declaration not found`);
+  return JSON.parse(match[1]);
+}
+
+/** Read the generated registry projection without executing the site. */
+export function readDisplayProjection(source: string): DisplayProjection {
+  const publishedLatest = generatedValue(source, 'PUBLISHED_LATEST');
+  if (
+    publishedLatest === null ||
+    typeof publishedLatest !== 'object' ||
+    Array.isArray(publishedLatest)
+  ) {
+    throw new Error('PUBLISHED_LATEST must be a map of packages to npm latest versions');
+  }
+  if (Object.keys(publishedLatest).length === 0)
+    throw new Error('PUBLISHED_LATEST carries no entries');
+  const latest: Record<string, string> = {};
+  for (const [name, value] of Object.entries(publishedLatest)) {
+    if (typeof value !== 'string' || !value.startsWith('v')) {
+      throw new Error(`PUBLISHED_LATEST ${name} must have a v-prefixed version`);
+    }
+    latest[name] = value;
+  }
+  const unreleased = generatedValue(source, 'UNRELEASED_PACKAGES');
+  if (!Array.isArray(unreleased) || !unreleased.every((name) => typeof name === 'string')) {
+    throw new Error('UNRELEASED_PACKAGES must be an array of package names');
+  }
+  return { publishedLatest: latest, unreleased };
+}
+
+export function readCommonPublishedVersion(source: string): string | null {
+  const value = generatedValue(source, 'COMMON_PUBLISHED_VERSION');
+  if (value !== null && typeof value !== 'string') {
+    throw new Error('COMMON_PUBLISHED_VERSION must be a stable version string or null');
+  }
+  return value;
+}
+
 /**
  * Cross-assert the www version anchors against release bookkeeping truth.
  * The assertions are text-level (the checks read the modules as source), so
@@ -52,7 +98,7 @@ export function wwwReleaseAnchorFailures(
       'www OPENELEMENT_VERSION must stay derived from SOURCE_VERSION (no hand-written version)',
     );
   }
-  // The committed generated release-line module must mirror release-state.json
+  // The generated release-line module must mirror release-state.json
   // — the same truth www#check:content-data regenerates, asserted here so a
   // stale module fails the release gate without the www toolchain.
   const sourceVersionMatch = releaseLineSource.match(/SOURCE_VERSION = '([^']+)'/);

@@ -1,8 +1,4 @@
-/**
- * XML text/attribute escaping shared by the site's XML emitters (RSS feed,
- * sitemap). Escapes the five XML predefined entities; everything else passes
- * through byte-for-byte.
- */
+/** XML text and attribute escaping for the site sitemap. */
 export function escapeXml(text: string): string {
   return text
     .replace(/&/g, '&amp;')

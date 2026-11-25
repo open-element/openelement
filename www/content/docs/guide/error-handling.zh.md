@@ -137,7 +137,7 @@ export default function MyWidget() {
 }
 ```
 
-`onError` 捕获当前元素执行过程中的同步错误，包括 setup、mount、claim、`onConnect` 回调、受追踪的 slot 刷新，以及编译组件中的 DOM 事件处理器。各个 Custom Element 分别处理自身的错误。旧版基于类的 `ErrorBoundary` 导出和 protected hook 已移除。
+`onError` 捕获当前元素执行过程中的同步错误，包括 setup、mount、claim、`onConnect` 回调、受追踪的 slot 刷新，以及编译组件中的 DOM 事件处理器。各个 Custom Element 分别处理自身的错误。
 
 connect 或 claim 失败时，元素会先回滚，再调用 `onError`。断开后重新连接会按正常流程重试。更新或事件处理失败时，先前写入的 DOM 会保留，订阅或监听器可以在下一次继续执行。未注册处理器时，原始错误会向上传播。处理器自身抛错时，传播的是处理器抛出的错误。
 

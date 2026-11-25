@@ -38,7 +38,7 @@ export const openElement = defineIslandConfig({
   // `data-oe-light` with the content inline. `www/site-chrome.css` selects
   // `open-search .overlay` in the document tree, which a shadow root would put
   // out of reach — declaring `shadow` would be a behaviour change dressed as a
-  // migration (16b-migration-note, page-local slice).
+  // migration (compiled slot updates).
   root: 'light',
   hydrate: 'load',
   ssr: true,
@@ -94,7 +94,7 @@ function OpenSearch(props: {
   // so `getRootNode().host` would hand back the Document; the host is the nearest
   // `open-search` ancestor of the event target. Declared as a component-local
   // const arrow (the idiom this lane admits) and read only inside event handlers,
-  // never in a tracked JSX slot (16b-migration-note R1b).
+  // never in a tracked JSX slot (compiled slot updates).
   const hostOf = (event: Event): SearchHost =>
     (event.currentTarget as HTMLElement).closest('open-search') as SearchHost;
 
@@ -212,7 +212,7 @@ function OpenSearch(props: {
                   index load); the idle message hides while it is up. The class
                   lane's `hideEmpty` / `hideSkeleton` `computed` rows inline at
                   these two `hidden` sinks, each keeping its own refresh edge
-                  (16b-migration-note R1/R1b). */}
+                  (compiled slot updates). */}
               <div
                 class='px-3 py-9 text-center text-(length:--text-sm) text-muted-foreground empty:hidden'
                 hidden={props.hasHits || props.searching}

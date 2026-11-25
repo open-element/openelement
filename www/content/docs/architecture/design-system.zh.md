@@ -54,9 +54,7 @@ section: 'Reference'
 
 ### 状态与动效
 
-状态标签与动效状态以可读文本为先，颜色其次。零交互形态是纯 HTML + CSS
-recipe，而非自定义元素——退役的 `open-badge` 以文档化 recipe 的形式活在
-create 起始模板的 `app/styles/recipes.css` 中（#1557）：
+状态标签可以使用 starter 提供的 HTML 和 CSS 样式。
 
 ```html
 <span class="badge badge-brand">current</span>

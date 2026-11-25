@@ -1,6 +1,6 @@
 # router-unocss-probe
 
-The acceptance fixture for alpha15 stage 2B: **a real second utility engine,
+The acceptance fixture for **a real second utility engine,
 selected by declaration, replacing the first without touching the core.**
 
 ## What it proves

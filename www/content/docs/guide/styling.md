@@ -6,7 +6,7 @@ order: 5
 
 ## The shadow boundary
 
-A page whose markup is its own component module renders inside a per-page custom element (for example `<blog-post-page>`), and that **page root is always a shadow root**: the compiler emits the DSD host template, the sidecar declares `root: 'shadow'`, and the server sends the page's content inside `<template shadowrootmode="open">`. The page's own `.css` sheet is declared inside that same template as a `<link>`, so its rules live in the shadow root and nowhere else.
+A page whose markup is its own component module renders inside a per-page custom element (for example `<article-page>`), and that **page root is always a shadow root**: the compiler emits the DSD host template, the sidecar declares `root: 'shadow'`, and the server sends the page's content inside `<template shadowrootmode="open">`. The page's own `.css` sheet is declared inside that same template as a `<link>`, so its rules live in the shadow root and nowhere else.
 
 A document-level rule like `.card { ... }` or `h1 { ... }` is scoped to the light DOM and never reaches shadow page content — silently: no console warning, no build error. That is the boundary working, not a bug to work around.
 
@@ -75,7 +75,7 @@ export default function ExamplePage() {
 }
 ```
 
-Inline sheet strings are retired, and so is the class lane's `static styles`. `styles` accepts relative `.css` specifiers only: a bare package specifier, a URL or absolute path, or a non-`.css` entry fails with `OE_ISLAND_DESCRIPTOR_SHAPE`, a server-rendered shadow component with no compiled DSD host producer to declare the sheet in fails with `OE_ISLAND_STYLE_SHADOW_UNWIRED`, and a module the generated lane does not compile fails with `OE_ISLAND_STYLE_LANE_UNSUPPORTED` rather than being silently left unstyled.
+`styles` accepts relative `.css` specifiers only: a bare package specifier, a URL or absolute path, or a non-`.css` entry fails with `OE_ISLAND_DESCRIPTOR_SHAPE`, a server-rendered shadow component with no compiled DSD host producer to declare the sheet in fails with `OE_ISLAND_STYLE_SHADOW_UNWIRED`, and a module the generated lane does not compile fails with `OE_ISLAND_STYLE_LANE_UNSUPPORTED` rather than being silently left unstyled.
 
 ## Custom properties in practice
 

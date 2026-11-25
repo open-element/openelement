@@ -4,9 +4,9 @@ lede: 'OpenElement 是以 Web Components 为原生契约、static-first 的应�
 order: 1
 ---
 
-> {{SOURCE_LINE_NOTE}} registry 真值以 [`docs/release/release-state.json`](https://github.com/open-element/openelement/blob/main/docs/release/release-state.json) 为准，不提供从 0.x 的受支持迁移路径。
+> {{SOURCE_LINE_NOTE}}
 
-本页先把新项目跑起来，再依次走一遍页面、额外元素与构建。每一步都以看得见的结果收尾；内部原理放在流程之后，而不是之前。
+本页演示如何创建并验证项目、添加页面和元素，以及构建生产产物。
 
 ## 安装
 
@@ -30,9 +30,7 @@ npm run dev
 - `cd my-app`——进入生成的项目。
 - `npm run dev`——启动项目的 Vite 开发服务器。
 
-安装命令解析到的版本登记在 [`docs/release/release-state.json`](https://github.com/open-element/openelement/blob/main/docs/release/release-state.json)（仓库的 registry 核验真值）中：脚手架把 `@openelement/*` 的 caret 范围（以该版本为下限）写进生成的 `package.json`，不需要任何额外旗标，后续 `1.0.0` 预发布版本靠 `npm update` 到手。
-
-> 生成的项目是纯 Node 应用（ADR-0161）：脚本由 Node.js 24.2+ 驱动，任何包管理器（npm、pnpm、yarn、bun）都能跑——Node 24.2 是打包产物 engines 声明、CI 实际运行过的验证下限（Router CLI 依赖 Node 24.2.0 引入的 `import.meta.main`；`.node-version` 钉住 24.18 开发线）。bootstrap 命令本身就是一次普通的 Node 调用，整条流程只需要 Node 与一个包管理器；早先的 Deno bootstrap 已随 2026-10-03 的 ADR-0161 修订被退役。
+脚手架使用 npm `latest` 标签对应的版本。可在[发布状态](/zh/changelog)查看当前 npm 版本和源码预览版本。生成项目的生命周期脚本支持 npm、pnpm、yarn 或 bun。
 
 ## 验证
 
@@ -52,7 +50,7 @@ npm run dev
 | 离线或使用私有 registry 时安装失败 | 依赖安装是唯一访问 registry 的步骤 | 用生成器的 `--no-install` 旗标只做脚手架（经你的包管理器透传），等 registry 可达后再安装 |
 | 你用 pnpm、yarn 或 bun | 脚手架用被调用时的管理器安装，否则按 pnpm/npm/yarn/bun 的顺序取 `PATH` 上第一个 | 继续用你的管理器——脚本与包管理器无关：`pnpm run dev`、`yarn dev`、`bun run dev` 都会到达同一个开发服务器 |
 
-下文示例采用当前源码预览的服务端函数页面。按照[源码预览步骤](https://github.com/open-element/openelement/blob/main/README.zh.md#预览当前源码)即可试用。如果你通过 npm 创建了 Alpha 15 项目，请参考 [Alpha 15 编写指南](https://github.com/open-element/openelement/blob/v1.0.0-alpha.15/www/content/docs/guide/getting-started.zh.md)。
+[预览当前源码](https://github.com/open-element/openelement/blob/main/README.zh.md#预览当前源码)中的步骤会生成可运行下文示例的项目。
 
 ## 认识项目结构
 
@@ -108,7 +106,7 @@ export default definePage(HelloPage, {
 });
 ```
 
-组件就是模块自己导出的那个函数，按标识符传给 `definePage`，而 URL 由文件名拥有。编译器把它降级为一个生成式 HTML 构造器，所以这个页面在构造上就是纯服务端的：它不产出 Part Program、不产出属性机制，也永远不会到达客户端，这正是它不发布任何自己 JavaScript 的原因。开发服务器不用重启就会拾取该文件。
+组件就是模块自己导出的那个函数，按标识符传给 `definePage`，而 URL 由文件名拥有。编译器把它降级为一个生成式 HTML 构造器，所以这个页面在构造上就是纯服务端的：该页面函数本身不产生客户端 JavaScript。开发服务器不用重启就会拾取该文件。
 
 预期结果：打开 `http://localhost:5173/hello` 能看到该标题。查看页面源代码（或 `curl -s http://localhost:5173/hello | grep -o 'Hello from a page'`），标题就在服务器发出的 HTML 里——它不是由脚本注入的。这条路由本身没有引入 island，所以这个页面不携带自己的客户端模块。
 

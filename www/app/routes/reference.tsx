@@ -412,26 +412,12 @@ const content = {
     headTitle: 'API Reference',
     headDescription: `The supported openElement API surface: ${packageCount} consumer packages, every documented export and every custom element, generated from repository truth.`,
     pageTitle: 'API Reference',
-    lede: (v: string) =>
-      `The ${v} surface covers only the ${packageCount} consumer packages. Retired alpha packages and internal subpaths are not authoring surfaces.`,
+    lede: (v: string) => `The ${v} surface covers only the ${packageCount} consumer packages.`,
     s1Index: '01 / interface rule',
     s1Title: 'Authoring starts at product packages.',
-    s1Copy: `Current documentation, starters and dogfood use the ${packageCount} supported interfaces. Loader, action and form semantics are frozen at 0.42.0 (ADR-0122); framework session and active cache are not part of the contract and have no assigned version. Streaming is supported for compiled class pages as an opt-in mode of the compiled server executor (ADR-0158, ADR-0159; the Streaming guide documents its limits) and is deliberately rejected on server function pages, which have no compiled Part Program to backfill (ADR-0169).`,
-    s1Links: [
-      { label: 'Streaming guide', href: '/guide/streaming' },
-      {
-        label: 'ADR-0158',
-        href: 'https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0158-streaming-server-executor.md',
-      },
-      {
-        label: 'ADR-0159',
-        href: 'https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0159-part-backfill-and-late-claim.md',
-      },
-      {
-        label: 'ADR-0169',
-        href: 'https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0169-request-time-rendering-surface.md',
-      },
-    ],
+    s1Copy:
+      'The applications use loaders, actions and progressively enhanced forms. The server resolves the loader before rendering the complete page.',
+    s1Links: [{ label: 'Routing and Data', href: '/guide/routing-and-data' }],
     s2Index: '02 / supported surface',
     s2Title: `${packageCount} packages, one application path.`,
     s2Copy:
@@ -476,26 +462,11 @@ const content = {
     headTitle: 'API 参考',
     headDescription: `openElement 受支持的 API 面：${packageCount} 个面向使用者的包、全部记录在案的导出与 Custom Element，由仓库真值生成。`,
     pageTitle: 'API 参考',
-    lede: (v: string) =>
-      `${v} 的创作面只覆盖 ${packageCount} 个面向使用者的包。已退役的 alpha 包与内部子路径都不是创作面。`,
+    lede: (v: string) => `${v} 的创作面只覆盖 ${packageCount} 个面向使用者的包。`,
     s1Index: '01 / 接口规则',
     s1Title: '创作从产品包开始。',
-    s1Copy: `当前文档、starter 与 dogfood 都使用这 ${packageCount} 个受支持的接口。Loader、action 与表单语义已在 0.42.0 冻结（ADR-0122）；框架 session 与 active cache 尚未进入契约，也未分配版本。流式渲染则已对编译的 class 页面受支持：它是编译后服务器执行器的一种可选模式（ADR-0158、ADR-0159；其边界见流式渲染指南），并在服务端函数页上被明确拒绝——这类页面没有可供回填的编译 Part Program（ADR-0169）。`,
-    s1Links: [
-      { label: '流式渲染指南', href: '/zh/guide/streaming' },
-      {
-        label: 'ADR-0158',
-        href: 'https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0158-streaming-server-executor.md',
-      },
-      {
-        label: 'ADR-0159',
-        href: 'https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0159-part-backfill-and-late-claim.md',
-      },
-      {
-        label: 'ADR-0169',
-        href: 'https://github.com/open-element/openelement/blob/main/docs/adr/ADR-0169-request-time-rendering-surface.md',
-      },
-    ],
+    s1Copy: '应用使用 loader、action 和渐进增强表单。服务端先解析 loader，再渲染完整页面。',
+    s1Links: [{ label: '路由与数据', href: '/zh/guide/routing-and-data' }],
     s2Index: '02 / 受支持的产品面',
     s2Title: `${packageCount} 个包，一条应用路径。`,
     s2Copy: '每个包对应一个明确的使用者决策；被吸收的实现包保持私有。',

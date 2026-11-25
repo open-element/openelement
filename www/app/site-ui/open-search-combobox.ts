@@ -33,11 +33,10 @@ import { searchChromeStrings } from './chrome-strings.ts';
 const ZH_SECTIONS: Record<string, string> = {
   guide: '指南',
   architecture: '架构',
-  blog: '博客',
   docs: '文档',
   reference: 'API 参考',
   roadmap: '路线图',
-  changelog: '更新日志',
+  changelog: '发布状态',
 };
 
 function sectionFor(url: string): string {

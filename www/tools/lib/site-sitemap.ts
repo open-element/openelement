@@ -6,10 +6,7 @@
  *
  *   - static page routes come from the adapter route scanner (the file-owned
  *     route catalog);
- *   - dynamic-but-public routes come from explicit enumeration: the blog
- *     collection loaded straight from source (the same posts the route's
- *     getStaticPaths projects). An unenumerated dynamic page route fails
- *     closed instead of silently dropping out of the public index;
+ *   - a dynamic route requires an explicit public enumeration;
  *   - error documents (/404) are never sitemap entries;
  *   - every public route expands to one URL per site locale: the default
  *     locale keeps the canonical unprefixed path, other locales prefix.
@@ -43,26 +40,10 @@ export interface SiteRouteCatalogEntry {
 export interface EnumeratePublicRoutesOptions {
   /** Route catalog from the adapter route scanner. */
   routes: readonly SiteRouteCatalogEntry[];
-  /** Blog-post routes enumerated from the source-loaded blog collection. */
-  blogPostRoutes: readonly string[];
   /** Site locales (canonical: www/site-config.ts). */
   locales: readonly string[];
   /** Default locale whose paths stay unprefixed (canonical: site-config). */
   defaultLocale: string;
-}
-
-/**
- * Dynamic page routes the site build prerenders through getStaticPaths, keyed
- * by the scanned route path, each mapped to its explicit public enumeration.
- * A dynamic route missing from this table fails the enumeration closed —
- * "SSR could render it" is never evidence of publicness (#1327).
- */
-function dynamicRouteEnumeration(
-  routePath: string,
-  blogPostRoutes: readonly string[],
-): string[] | undefined {
-  if (routePath === '/blog/:slug') return [...blogPostRoutes];
-  return undefined;
 }
 
 /**
@@ -75,7 +56,7 @@ export function enumeratePublicRoutes(options: EnumeratePublicRoutesOptions): {
   routes: string[];
   failures: string[];
 } {
-  const { routes, blogPostRoutes, locales, defaultLocale } = options;
+  const { routes, locales, defaultLocale } = options;
   const failures: string[] = [];
   // The default locale is an explicit input, never derived from array order:
   // reordering SITE_LOCALES must not silently move the unprefixed tree.
@@ -93,15 +74,7 @@ export function enumeratePublicRoutes(options: EnumeratePublicRoutesOptions): {
     // artifact and the locale-prefixed variants share the /404 route).
     if (entry.path === '/404' || entry.path.endsWith('/404')) continue;
     if (entry.path.includes(':')) {
-      const enumeration = dynamicRouteEnumeration(entry.path, blogPostRoutes);
-      if (enumeration === undefined) {
-        failures.push(
-          `dynamic page route '${entry.path}' has no explicit public enumeration — ` +
-            'add one to dynamicRouteEnumeration or exclude the route',
-        );
-        continue;
-      }
-      canonical.push(...enumeration);
+      failures.push(`dynamic page route '${entry.path}' has no explicit public enumeration`);
       continue;
     }
     canonical.push(entry.path);

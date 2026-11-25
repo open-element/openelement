@@ -8,7 +8,7 @@ order: 50
 
 routes 目录下的 `.mdx` 文件与其他路由一样是路由：`app/routes/about.mdx` 伺服 `/about`，被同一个路由扫描器发现，并在构建时预渲染。文件里是纯 Markdown，受支持的子集是刻意划定的——标题、段落、emphasis/strong/delete、链接、图片、列表、代码、引用块与水平线。
 
-构建会先把该文件降级为编译页面模块，再运行 compiled-element transform，因此 MDX 页面与手写的 `.tsx` 页面走完全相同的 Part Program 管线；元素标签由路由相对路径派生，以保证生成入口注册的标签与程序声明的标签一致。Markdown 的任何部分都不会到达浏览器：输出是普通 HTML，页面内容位于宿主的 shadow root 中。
+构建将 Markdown 页面编译为服务端 HTML，遵循与手写 `.tsx` 页面相同的路由模型。
 
 Markdown 解析是这条路径唯一的依赖，而它是 `@openelement/router` 的可选 peer——只有真正有 `.mdx` 文件进入构建时才会解析它。把它安装为应用依赖：
 

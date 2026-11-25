@@ -8,14 +8,12 @@ section: 'Core'
 
 每个编译组件都是一个模块：它默认导出一个函数组件，旁边放着一份 `defineIslandConfig` sidecar。编译器把这一对降级为一个 Native Custom Element——一个构建作者所写树的构造器，外加（对 shadow root 而言）服务端渲染所用的宿主生成器。这份文法是封闭的：编译器无法降级的写法会在构建期以带码诊断失败，而不是把运行时解释器发到浏览器。本页即速查表——先一表列出全部法则，再逐条给出可用示例与失败形态。
 
-本版本移除了类范式，包括 `OpenElement`、`ErrorBoundary` 导出以及 `element`、`property` 装饰器。请将类组件迁移为默认导出的函数，并使用 `defineIslandConfig` 声明配置。
-
 ## 法则一览
 
 | 法则 | 编译器承认 | 编译器拒绝 |
 | --- | --- | --- |
 | 一模块一组件 | 一个默认导出的函数组件加上它的 `defineIslandConfig` sidecar | 类的默认导出，或没有默认导出函数的模块（本范式不接纳它）；默认导出的函数不是组件（`OEC9040`） |
-| sidecar 就是身份 | `tag`、`root: 'light' \| 'shadow' \| 'closed'` | 已退役的写法 `'shadow-open'` / `'shadow-closed'`（`OEIR_GENERATED_ELEMENT_ROOT_INVALID`） |
+| sidecar 就是身份 | `tag`、`root: 'light' \| 'shadow' \| 'closed'` | 无效的 root 取值（`OEIR_GENERATED_ELEMENT_ROOT_INVALID`） |
 | props 是一张声明的表 | 带类型的 props 形参，其成员与 `properties` 一一对应 | 没有 sidecar 行的类型成员，或没有类型成员的 sidecar 行（`OEIR_GENERATED_ELEMENT_PROPERTY_MISMATCH`） |
 | 只有原语走 attribute 通道 | `string`、`number` 与 `boolean` 行 | 未声明 `attribute: false` 的数组、对象或 `trustedHtml` 行（`OEIR_GENERATED_ELEMENT_PROPERTY_INVALID`） |
 | 模块作用域只有 import、sidecar 和组件 | import、`export const openElement`、默认导出 | 组件正文会读取的模块局部 `const` 或 `function`（`OEIR_GENERATED_ELEMENT_UNBOUND_BINDING`） |
@@ -55,9 +53,7 @@ export default function MyCard(props: { title: string }) {
 ```
 
 ```text
-// 不接纳、不编译：类的默认导出属于已退役的范式，
-// 而没有默认导出函数的模块不是本范式的组件
-export default class MyCard { render() { return <article></article>; } }
+// 编译器要求模块默认导出函数。
 export function MyCard() { return <article></article>; }
 
 // 拒绝：默认导出的函数返回非 JSX 值 —— OEC9040
@@ -66,7 +62,7 @@ export default function MyCard() { return 'not a component'; }
 
 ## sidecar 声明身份与 root
 
-这里没有基类要导入，也没有装饰器要施加。身份就是数据：sidecar 的 `tag` 命名自定义元素，`root` 选择它的内容渲染到哪里。`'shadow'` 是一个开放的声明式 shadow root，`'closed'` 是封装起来的那一个，`'light'` 则渲染进文档树。Alpha15 的两种写法 `'shadow-open'` 与 `'shadow-closed'` 已经不存在——闭合性现在是独立的 `'closed'` 取值，而不再是 `-open`/`-closed` 后缀，因此移植过来的取值必须重写。
+sidecar 的 `tag` 命名自定义元素，`root` 选择它的内容渲染到哪里。`'shadow'` 是一个开放的声明式 shadow root，`'closed'` 是封装起来的那一个，`'light'` 则渲染进文档树。
 
 ```tsx
 import { defineIslandConfig } from '@openelement/router';
@@ -82,11 +78,6 @@ export const openElement = defineIslandConfig({
 export default function MyBadge(props: { tone: string }) {
   return <span class='badge'>{props.tone}</span>;
 }
-```
-
-```text
-// 拒绝：已退役的 root 写法 —— OEIR_GENERATED_ELEMENT_ROOT_INVALID
-export const openElement = defineIslandConfig({ tag: 'my-badge', root: 'shadow-open' });
 ```
 
 `root` 还决定构建能为这个模块产出什么。shadow root 会得到一份编译器自有的宿主生成器（`<Name>__ssrHost`），服务端把它渲染进 `<template shadowrootmode>`；light root 则什么都没有，因为没有模板可产出。正是这种不对称，使得 light root 组件可以被嵌套进页面、却不能自己充当生成的页面根——light 的*页面*要使用下文的服务端函数形态。
@@ -336,7 +327,7 @@ export default function MyTotal(props: { label: string; price: number }) {
 }
 ```
 
-被承认的文本文法刻意比已退役的类范式更宽：表达式是可以的，而且它是一个*槽位*，不是对周边树的重渲染。在不止一处使用的派生值仍然更适合做成 `computed`，好让派生只跑一次。
+文本表达式创建一个响应式 slot，可独立于周围 DOM 更新。在不止一处使用的派生值仍然更适合做成 `computed`，好让派生只跑一次。
 
 ## 分支是 JSX 或 null
 
@@ -474,7 +465,7 @@ export default function MyField(props: { value: string }) {
 
 ### 错误边界是元素作用域的
 
-`onError(cb)` 是**一个生成元素**面向作者的边界。当某个值逃出该元素自己的工作范围时它运行：连接/认领过程（挂载、认领、setup 与 `onConnect` 重放），或一次更新阶段的写入（一次跟踪槽位刷新，或编译正文内派发的一次 DOM 事件处理器）。它不是子树边界，也不跨元素捕获——跨元素围堵随类基类一同退役了，也没有包装组件替代它。
+`onError(cb)` 是**一个生成元素**面向作者的边界。当某个值逃出该元素自己的工作范围时它运行：连接/认领过程（挂载、认领、setup 与 `onConnect` 重放），或一次更新阶段的写入（一次跟踪槽位刷新，或编译正文内派发的一次 DOM 事件处理器）。各个生成元素分别处理自身的错误。
 
 ```tsx
 import { onError } from '@openelement/element';

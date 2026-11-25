@@ -4,9 +4,9 @@ lede: 'OpenElement is a Web Components-native, static-first app framework: stand
 order: 1
 ---
 
-> {{SOURCE_LINE_NOTE}} Registry truth lives in [`docs/release/release-state.json`](https://github.com/open-element/openelement/blob/main/docs/release/release-state.json) — there is no supported migration from 0.x.
+> {{SOURCE_LINE_NOTE}}
 
-This page gets a new project running, then walks one page, one extra element and one build. Every step ends with something you can see; the internals come after the flow, not before it.
+Scaffold a project, verify it, then add a page and an element and build for production.
 
 ## Install
 
@@ -32,9 +32,7 @@ What each step does:
 - `cd my-app` — enter the generated project.
 - `npm run dev` — start the project's Vite dev server.
 
-The version the install command resolves is registered in [`docs/release/release-state.json`](https://github.com/open-element/openelement/blob/main/docs/release/release-state.json), the repository's registry-verified source of truth: the scaffold writes `@openelement/*` caret ranges over that release into the generated `package.json`, so no extra flags are involved and later `1.0.0` prereleases arrive through `npm update`.
-
-> The generated project is a plain Node app (ADR-0161): Node.js 24.2+ runs its scripts under any package manager (npm, pnpm, yarn, or bun) — Node 24.2 is the verified floor the packed packages declare and CI exercises (the Router CLI relies on `import.meta.main`, added in Node 24.2.0; `.node-version` pins the 24.18 development line). The bootstrap command itself is a plain Node invocation, so the whole flow needs only Node and a package manager; the earlier Deno bootstrap was retired by the 2026-10-03 ADR-0161 amendment.
+The scaffold uses the release behind the npm `latest` tag. See [Release Status](/changelog) for the published version and the source preview. The generated project runs its scripts with npm, pnpm, yarn or bun.
 
 ## Verify
 
@@ -54,7 +52,7 @@ If something goes wrong before that:
 | the install fails offline or against a private registry | dependency install is the only step that talks to the registry | scaffold without it using the generator's `--no-install` flag (pass it through your package manager), then install once the registry is reachable |
 | you use pnpm, yarn or bun | the scaffold installs with the manager it was invoked through, else the first of pnpm/npm/yarn/bun on `PATH` | keep using your manager — the scripts are manager-neutral: `pnpm run dev`, `yarn dev` and `bun run dev` all reach the same dev server |
 
-The examples below use server function pages from the current source preview. Follow the [source preview instructions](https://github.com/open-element/openelement/blob/main/README.md#preview-the-source-checkout) to try them. If your starter came from npm Alpha 15, use the [Alpha 15 authoring guide](https://github.com/open-element/openelement/blob/v1.0.0-alpha.15/www/content/docs/guide/getting-started.md).
+To run the examples below, use the project created by the [source preview steps](https://github.com/open-element/openelement/blob/main/README.md#preview-the-source-checkout).
 
 ## Understand the project
 

@@ -24,8 +24,7 @@
  *      the tests drive every splice category (including the class sink, which
  *      now takes the same boundary) with a hostile name.
  *
- * The full alert state, data-flow trace and consumer-context proof:
- * docs/release/evidence/alpha15/rel02-codeql-disposition.md.
+ * CodeQL alert and data-flow evidence: https://github.com/open-element/openelement/blob/e655a0bab6f1396f4ed1a10208794e51e592b0ce/docs/release/evidence/alpha15/rel02-codeql-disposition.md
  */
 import { describe, expect, test } from 'vitest';
 import ts from 'typescript';

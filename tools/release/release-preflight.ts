@@ -3,15 +3,14 @@
  *
  * Composes, in order, everything that must hold before a tag/publish/Release:
  *
- *   1. the read-only local verifiers this batch adds — toolchain pins (REL-04),
- *      the raw measurement package (REL-03), and the exact-SHA evidence binder
- *      (REL-01);
+ *   1. toolchain pins (REL-04), the exact-SHA evidence binder (REL-01), and
+ *      the historical archive verifier when auditing Alpha 15 (REL-03);
  *   2. the existing gate entry points, by their package.json script names (the
  *      single source of truth for commands) — check / test / verify:core /
  *      release:check / site:verify;
- *   3. the owner-gated action sequence: evidence-only handoff prerelease, full
- *      qualification dispatch, publish dispatch, evidence-asset attachment and
- *      the read-backs (registry dist-tags, Release objects, the archive bytes).
+ *   3. the owner-gated qualification and publish dispatches, followed by npm
+ *      and release read-back. Explicit Alpha 15 audits verify the local
+ *      historical archive against the immutable Git record.
  *
  * Safety model: the default is a dry run that prints the plan and NEVER runs a
  * destructive action. Destructive steps (tag, publish, Release, asset upload,
@@ -36,6 +35,9 @@ import {
   RELEASE_PACKAGES,
   type EvidenceDocument,
 } from './evidence-bind.ts';
+
+const ALPHA15_VERSION = '1.0.0-alpha.15';
+const ALPHA15_ARCHIVE = '.artifacts/release-evidence/alpha15-ab-jfb-evidence.tar.zst';
 
 /** Gate entry points: package.json script name -> why it runs. */
 export const GATE_ENTRY_POINTS: readonly { script: string; purpose: string }[] = [
@@ -91,14 +93,17 @@ export function buildReleasePlan(input: PlanInput): PlanStep[] {
     destructive: false,
     note: 'node/pnpm/Playwright/Dockerfile vs package.json, .node-version, lockfile and CI workflows',
   });
-  steps.push({
-    id: 'evidence-archive',
-    title: 'Raw measurement package verified',
-    kind: 'local-verify',
-    command: `node tools/release/verify-evidence-archive.ts --archive ${input.archivePath}`,
-    destructive: false,
-    note: 'pinned sha256 + 503 member hashes + 86/22 assertions + JFB recomputation; obtain the bytes from the handoff prerelease first',
-  });
+  if (input.version === ALPHA15_VERSION) {
+    steps.push({
+      id: 'evidence-archive',
+      title: 'Raw measurement package verified',
+      kind: 'local-verify',
+      command: `node tools/release/verify-evidence-archive.ts --archive ${input.archivePath}`,
+      destructive: false,
+      note: 'pinned digest, 503 member hashes, 86/22 assertions and JFB recomputation from a local historical archive',
+    });
+    return steps;
+  }
   steps.push({
     id: 'evidence-bind-pr',
     title: 'PR evidence block bound (pre-merge)',
@@ -120,14 +125,6 @@ export function buildReleasePlan(input: PlanInput): PlanStep[] {
       note: entry.purpose,
     });
   }
-  steps.push({
-    id: 'handoff-prerelease',
-    title: 'Evidence-only handoff prerelease (before approval)',
-    kind: 'owner-gated',
-    command: `gh release create evidence-${sha7} --repo ${input.repository} --target ${input.sha} --prerelease --title "alpha15 raw measurement evidence (evidence-only)" --notes "Evidence-only handoff; not a product release." ${input.archivePath}`,
-    destructive: true,
-    note: 'makes the raw bytes obtainable before the Release exists (REL-03); explicitly not a product release',
-  });
   steps.push({
     id: 'qualification-dispatch',
     title: 'Full qualification CI on the exact SHA',
@@ -151,36 +148,25 @@ export function buildReleasePlan(input: PlanInput): PlanStep[] {
     id: 'publish',
     title: 'Publish dispatch (owner approval through the environment)',
     kind: 'owner-gated',
-    command: `gh workflow run autoflow-release.yml --ref main -f operation=publish -f version=${input.version}`,
+    command: `gh workflow run autoflow-release.yml --repo ${input.repository} --ref main -f operation=publish -f version=${input.version}`,
     destructive: true,
     note: 'runs after same-SHA Full qualification and main push evidence, plus the release gate and human environment approval',
-  });
-  steps.push({
-    id: 'release-asset',
-    title: 'Attach the raw measurement package to the Release',
-    kind: 'owner-gated',
-    command: `gh release upload ${input.releaseTag} ${input.archivePath} --repo ${input.repository} --clobber`,
-    destructive: true,
-    note: 'owner decision: the per-package split retired the umbrella Release, so name the Release that carries the evidence asset (default: the flagship package Release)',
   });
   steps.push({
     id: 'dist-tag-repoint',
     title: 'Channel dist-tag repair (only if the alias did not move)',
     kind: 'owner-gated',
-    command: `gh workflow run autoflow-release.yml --ref main -f operation=repoint -f tag=alpha -f version=${input.version} -f packages=protocol,element,compiler,router,create,ui`,
+    command: `gh workflow run autoflow-release.yml --repo ${input.repository} --ref main -f operation=repoint -f tag=alpha -f version=${input.version} -f packages=protocol,element,compiler,router,create,ui`,
     destructive: true,
     note: 'repair path only; the publish job re-points alpha itself, and this operation never publishes a version',
   });
   steps.push({
     id: 'readback-release',
-    title: 'Read back Release objects and dist-tags',
+    title: 'Read back the package Release',
     kind: 'read-back',
-    command:
-      `node tools/release/evidence-bind.ts --sha ${input.sha}` +
-      (input.pullRequest ? ` --pr ${input.pullRequest}` : '') +
-      ` --repo ${input.repository} --codeql-repo ${input.codeqlRepository} --tag ${input.tag}`,
+    command: `gh release view ${input.releaseTag} --repo ${input.repository}`,
     destructive: false,
-    note: 'every dist-tag and Release state in the checklist is read back from the API after publication',
+    note: 'repeat for each shipped package tag; the following check verifies the dist-tags against npm',
   });
   steps.push({
     id: 'readback-registry',
@@ -189,14 +175,6 @@ export function buildReleasePlan(input: PlanInput): PlanStep[] {
     command: 'pnpm --dir tools/repo run release:registry-check',
     destructive: false,
     note: 'read-only npm queries; a drift or false common version fails',
-  });
-  steps.push({
-    id: 'readback-asset',
-    title: 'Download and re-verify the published evidence asset',
-    kind: 'read-back',
-    command: `gh release download ${input.releaseTag} --repo ${input.repository} -p alpha15-ab-jfb-evidence.tar.zst -D /tmp/release-evidence/published && node tools/release/verify-evidence-archive.ts --archive /tmp/release-evidence/published/alpha15-ab-jfb-evidence.tar.zst`,
-    destructive: false,
-    note: 'the bytes a reviewer downloads must be the bytes verified before approval',
   });
   return steps;
 }
@@ -296,12 +274,14 @@ export async function runLocalChecks(
     });
   };
   await runNode('toolchain-pins', ['tools/release/check-toolchain-pins.ts', '--json']);
-  await runNode('evidence-archive', [
-    'tools/release/verify-evidence-archive.ts',
-    '--archive',
-    input.archivePath,
-    '--json',
-  ]);
+  if (input.version === ALPHA15_VERSION) {
+    await runNode('evidence-archive', [
+      'tools/release/verify-evidence-archive.ts',
+      '--archive',
+      input.archivePath,
+      '--json',
+    ]);
+  }
   return checks;
 }
 
@@ -407,7 +387,7 @@ interface CliOptions {
   repository: string;
   codeqlRepository: string | null;
   releaseTag: string | null;
-  archive: string;
+  archive: string | null;
   evidence: string | null;
   runLocal: boolean;
   execute: boolean;
@@ -428,7 +408,7 @@ export function parseArgs(argv: readonly string[]): CliOptions {
     repository: 'open-element/openelement',
     codeqlRepository: null,
     releaseTag: null,
-    archive: '.artifacts/release-evidence/alpha15-ab-jfb-evidence.tar.zst',
+    archive: null,
     evidence: null,
     runLocal: false,
     execute: false,
@@ -518,7 +498,9 @@ const USAGE = `usage: node tools/release/release-preflight.ts [--sha <sha>] [--v
 
 Dry-run by default: prints the ordered plan (read-only verification, gates,
 owner-gated actions, read-backs) and executes nothing. --run-local runs the
-read-only verifiers (toolchain pins, raw measurement package). --execute refuses
+toolchain pin verifier and, for --version 1.0.0-alpha.15, the historical raw
+measurement verifier. Alpha 15 audit mode is read-only and requires a local
+archive. Other versions must match the checkout release state. --execute refuses
 every destructive action unless --authorize-destructive, --confirm-sha and
 OPEN_ELEMENT_RELEASE_APPROVED=1 are all present; even then the tool only prints
 the steps for the owner and never publishes anything.`;
@@ -544,7 +526,16 @@ async function main(): Promise<void> {
   }
   const root = process.cwd();
   const sha = options.sha ?? (await gitHead());
-  const version = options.version ?? (await resolveVersion(root));
+  const sourceVersion = await resolveVersion(root);
+  const version = options.version ?? sourceVersion;
+  if (options.version === ALPHA15_VERSION) {
+    if (options.execute) throw new Error('Alpha 15 audit mode is read-only');
+  } else if (version !== sourceVersion || version === ALPHA15_VERSION) {
+    throw new Error(`Publish planning requires the current checkout release ${sourceVersion}`);
+  }
+  if (options.archive !== null && version !== ALPHA15_VERSION) {
+    throw new Error('--archive applies only to --version 1.0.0-alpha.15');
+  }
   const tag = options.tag ?? `v${version}`;
   const codeqlRepository = options.codeqlRepository ?? options.repository;
   const releaseTag = options.releaseTag ?? `element-v${version}`;
@@ -563,7 +554,7 @@ async function main(): Promise<void> {
     repository: options.repository,
     codeqlRepository,
     releaseTag,
-    archivePath: options.archive,
+    archivePath: options.archive ?? ALPHA15_ARCHIVE,
     evidencePath: options.evidence ?? '',
   };
   const steps = buildReleasePlan(input);

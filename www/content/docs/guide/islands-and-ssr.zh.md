@@ -89,9 +89,9 @@ export default function ProfileCounter() {
 }
 ```
 
-默认导出是函数组件；`defineIslandConfig` sidecar 声明它的 tag、root、宿主属性与投递策略。`hydrate` 决定模块何时被 import——`'load'` 用于首屏关键控件，尽早导入并升级，`'idle'` 用于可以等待的工作，`'visible'` 用于接近视口才重要的组件，`'media'` 用于按能力门控的加载（chunk 只在 island `media` 字段声明的查询匹配期间拉取），`'only'` 用于跳过 SSR 的浏览器专用组件。`'none'` 则彻底退役 island 的客户端：服务端照常序列化该组件，但构建永不发射它的 chunk——组件零客户端 JavaScript，同时保留 manifest 里的 island 记录。`ssr` 与 `dsd` 说明服务端是否序列化该组件。构建会逐页记录结果，因此页面永远到不了的 island 永远不会被执行。这两个设置在[流式渲染](/zh/guide/streaming)路由上不适用：其壳不接受嵌套渲染器，因此那里的每个 island 与嵌套已编译组件都只输出为不透明的空宿主，并在浏览器中激活。
+默认导出是函数组件；`defineIslandConfig` sidecar 声明它的 tag、root、宿主属性与投递策略。`hydrate` 决定模块何时被 import——`'load'` 用于首屏关键控件，尽早导入并升级，`'idle'` 用于可以等待的工作，`'visible'` 用于接近视口才重要的组件，`'media'` 用于按能力门控的加载（chunk 只在 island `media` 字段声明的查询匹配期间拉取），`'only'` 用于跳过 SSR 的浏览器专用组件。`'none'` 仅交付服务端 HTML：服务端照常序列化该组件，但构建永不发射它的 chunk——组件零客户端 JavaScript，同时保留 manifest 里的 island 记录。`ssr` 与 `dsd` 说明服务端是否序列化该组件。构建会逐页记录结果，因此页面永远到不了的 island 永远不会被执行。
 
-upgrade 本身是浏览器的 Custom Element 机制。服务端把编译程序序列化为 Declarative Shadow DOM；生成的 island 模块定义之后，其 claim 产物会把程序应用到已经存在的 DOM，并绑定模板声明过的处理器。attribute-backed 值来自 sidecar 的 `properties` 声明。不会重建树，不会用字符串查找绑定，也不会从 attribute 合成事件。[流式渲染](/zh/guide/streaming)路由是这条序列化承诺的例外——见上文。
+upgrade 本身是浏览器的 Custom Element 机制。编译生成的服务端渲染器输出 Declarative Shadow DOM。浏览器定义生成元素之后，claim 函数会把模板声明的处理器绑定到现有 DOM。attribute-backed 值来自 sidecar 的 `properties` 声明。不会重建树，不会用字符串查找绑定，也不会从 attribute 合成事件。
 
 ## 迟到宿主
 

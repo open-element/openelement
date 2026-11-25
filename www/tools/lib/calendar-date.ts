@@ -1,9 +1,4 @@
-/**
- * Whether `value` is a real calendar date written as `YYYY-MM-DD`. The one
- * validator for source-content dates: the content-dates manifest gate and the
- * RSS pubDate formatter share it, so a stamp the gate accepts is exactly a
- * stamp the feed can render.
- */
+/** Validates a UTC calendar date from the content-date manifest. */
 export function isCalendarDate(value: string): boolean {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) return false;

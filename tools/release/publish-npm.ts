@@ -75,7 +75,6 @@ export {
   npmRegistryEvidence,
   rewriteRegistryBlock,
   syncRegistryState,
-  WWW_VERSION_PATH,
   type RegistryEvidence,
   type RegistrySyncResult,
 } from './registry-sync.ts';
@@ -763,10 +762,8 @@ async function main(): Promise<void> {
           packages: pkgs.map((pkg) => pkg.name.replace('@openelement/', '')),
           query: npmView,
         }),
-      // Registry read-back: the tracked release-state (and the site's display
-      // constants) end the train naming what npm serves. The synced files are
-      // uploaded by the workflow as `registry-release-state`; landing them is
-      // the maintainer's ordinary PR (see the module doc).
+      // Record what npm serves. The workflow uploads the synced state as
+      // `registry-release-state` for a maintainer to land by PR.
       syncRegistry: () =>
         syncRegistryState({
           root: fileURLToPath(new URL('../../', import.meta.url)),

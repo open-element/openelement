@@ -546,9 +546,8 @@ test('build output: zh pages keep in-content links inside the zh tree (#1031)', 
   expect(existsSync(zhDir), `zh build output is missing: ${zhDir}`).toBeTruthy();
 
   // Scope: the pages whose in-content links are authored in route components —
-  // the blog index, the docs index, and every guide page. Blog post *bodies*
-  // come from locale-shared markdown and are intentionally out of scope.
-  const targets = [join(zhDir, 'blog', 'index.html'), join(zhDir, 'docs', 'index.html')];
+  // the release status, docs index and every guide page.
+  const targets = [join(zhDir, 'changelog', 'index.html'), join(zhDir, 'docs', 'index.html')];
   const guideDir = join(zhDir, 'guide');
   if (existsSync(guideDir)) {
     for (const entry of readdirSync(guideDir, { recursive: true, withFileTypes: true })) {

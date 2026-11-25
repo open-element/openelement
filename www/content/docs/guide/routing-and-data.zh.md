@@ -41,7 +41,7 @@ order: 40
 
 `renderIntent.mode` 决定页面在哪里渲染:`'static'`(默认)在构建时预渲染;`'dynamic'` 跳过预渲染,通过生成的 `dist/server` 入口按请求渲染,每次请求都会运行路由 loader。导出 action 的页面可以保持 `'static'`——即混合页:其 GET 被预渲染并由静态产物伺服,而其 action POST 在请求时分派给生成的服务器入口。当 GET 本身必须按请求执行时(按请求的 loader、响应头、不可重复的内容)才选择 `'dynamic'`。该行为已冻结。
 
-`renderIntent.stream`——延迟字段的流式渲染通道——**不属于本次发布**。它属于已退役 class 通道的编译 Part Program，而取代它的函数通道目前还没有承载它的载体；Alpha18 拥有替代方案。在那之前，需要数据的路由像任何其他页面一样，在 loader 或前置门禁里解析。[流式渲染](/zh/guide/streaming) 说明了整个边界。
+页面发送完整的 HTML 响应。先从 loader 返回页面所需的数据，再由页面渲染。通过 loader 的 `responseHeaders` 设置响应头或 cookie。需要支持无 JavaScript 的内容应包含在这次服务端渲染中。
 
 ## 服务端函数页
 
@@ -205,4 +205,3 @@ request-time(`'dynamic'`)loader/action 运行在服务端,上下文是 Web 标�
 - [核心概念](/zh/guide/core-concepts)——这些路由所组合的组件与 island。
 - [错误处理](/zh/guide/error-handling)——action 返回值所进入的失败通道。
 - [API 路由](/zh/guide/api)——不经过页面的请求路由。
-- [流式渲染](/zh/guide/streaming)——为什么 `renderIntent.stream` 不属于本次发布。

@@ -68,7 +68,7 @@ The split is not a packaging detail: a reset or a token table inside a component
 
 Accepted keys — anything else fails the build with this list:
 
-- `renderer` — `'native'` only (the default: the compiled Part Program serializer). Renderer selection stays explicit and is never inferred. The retired `'lit'` value is still recognized so it fails with an explicit migration error (`CONFIG_INVALID`; ADR-0152 2026-11-08 executes the retirement with no compatibility window and no adapter); any other value is a type error.
+- `renderer` — the Native rendering backend, set to `'native'` by default.
 - `dirs` — `{ routes, islands, components }`.
 - `layout` — `false` to opt out, or `{ import, props }`. The tag name is derived from the import's basename, so it is not configurable.
 - `packageIslands` — how component packages are admitted. Omitted or `'auto'` (the default): the build derives the admitted set at scan time — every package-owned element module your routes, pages, layouts, islands and components really import (bundler-resolved) is attributed to its owner package, and a package with a valid OpenElement manifest is admitted with no configuration. An array adds explicit entries on top of the derivation (e.g. `['@openelement/ui']`); an explicit entry outranks a derived claim when two packages declare the same tag. `'manual'` turns the derivation off: only listed packages are admitted, and an imported-but-unlisted component package is reported with the explicit fix. A package whose element modules the app imports but which carries no valid manifest is never admitted (there is nothing to admit) and is reported — the one true mistake class. The derivation also folds every admitted package into the SSR externalization list (an admitted package is bundled, not imported at run time), which is why there is no `ssr.noExternal` key.
@@ -98,126 +98,11 @@ Each entry is a `{ meta }` record, a `{ link }` record (`rel` and `href` require
 
 ## Content collections are site-owned
 
-The 1.0 router ships routing, locale/render context, the SSG descriptor and Document ownership — not a CMS or content database. A site owns its Markdown pipeline. This repository's reference site validates frontmatter against declarative schemas, renders with `marked`, treats the rendered HTML as first-party trusted content (`trustCollectionHtml` in `www/lib/content.ts`, `trustedHtml` trust level — untrusted sources must be sanitized at your own boundary first), defines collections in `www/lib/blog.ts`, and writes typed data modules with `www/tools/generate-site-content-data.ts`:
-
-```sh
-pnpm --dir www run generate:content   # site:build runs this before the router build
-```
-
-Generated modules are consumed through the site's own package import — the `imports` field of the site's `package.json` — there is no framework virtual module:
-
-```json
-{
-  "imports": {
-    "#generated/blog-data": "./app/data/_generated-blog-data.ts"
-  }
-}
-```
-
-Every `content/blog/*.md` compiles to one post; draft posts are excluded from production builds. frontmatter supports `title`, `date`, `draft`, `tags`, `excerpt`, `type`, `lang`.
-
-A collection declares its directory, base path and schema:
-
-```ts
-import type { CollectionOptions } from '../lib/content.ts';
-
-export const blogCollection: CollectionOptions = {
-  contentDir: 'content/blog',
-  basePath: '/blog',
-  schema: {
-    fields: {
-      title: 'string',
-      date: 'string',
-      draft: 'boolean',
-      tags: 'string[]',
-    },
-  },
-};
-```
-
-### app/routes/blog/[slug].tsx — usage pattern
-
-```tsx
-// app/routes/blog/[slug].tsx — the route module the scanner discovers
-import { definePage, notFound } from '@openelement/router';
-import { getPostBySlug, posts } from '#generated/blog-data';
-import { type TrustedHtml } from '@openelement/element';
-
-// The page is one module with no client behavior, so the server function form
-// carries it: the browser never receives this function.
-export function BlogPostPage(props: { title: string; html: TrustedHtml }) {
-  return (
-    <main>
-      <h1>{props.title}</h1>
-      {/* post.html is markdown authored in this repo — explicit trust boundary */}
-      <article class='post-body' innerHTML={props.html} trustedHtml></article>
-    </main>
-  );
-}
-
-export function getStaticPaths(): Array<Record<string, string>> {
-  return posts.map((post) => ({ slug: post.slug }));
-}
-
-export default definePage(BlogPostPage, {
-  renderIntent: { mode: 'static' },
-  props({ params }) {
-    const post = getPostBySlug(params.slug);
-    if (!post) notFound(`Post not found: ${params.slug}`);
-    return { title: post.frontmatter.title, html: post.html };
-  },
-});
-```
-
-`getStaticPaths()` pre-renders every slug; `innerHTML` + `trustedHtml` is the explicit trust boundary for markdown HTML.
+The reference site defines the guide and architecture frontmatter schemas in [`www/content-collections.ts`](https://github.com/open-element/openelement/blob/main/www/content-collections.ts). Its build validates and renders Markdown, then writes the data consumed by a shared server-rendered article view. Sanitize external content before passing it to `trustedHtml`.
 
 ## Code-block highlighting (build-time)
 
-The site-owned collection loader compiles fenced blocks to Shiki token spans during the generate step, on the build machine — the highlighter is a devDependency and never ships to the client, so pages carry static token markup with no highlight script and no highlight flash. Token colors are `var(--shiki-token-*)` references resolved by one palette table in the site stylesheet, so both palettes flip with `data-theme` like every other site color. A collection's `markdown` option replaces the renderer; its output is still first-party trusted content. For code blocks in routes/pages, wrap them in `<open-code-block>` (`@openelement/ui`) — it owns the copy button only; highlighting is whatever the build compiled into the slot's light DOM, and a block without token spans still renders (and copies) as plain text.
-
-### lib/blog.ts — syntax highlighting recipe
-
-```ts
-import { marked } from 'marked';
-import {
-  createCssVariablesTheme,
-  createHighlighter,
-  createJavaScriptRegexEngine,
-} from 'shiki';
-import type { CollectionOptions } from '../lib/content.ts';
-
-// Build-time highlighting: token colors are CSS variables resolved by the
-// site stylesheet; the strict JavaScript regex engine loads no WASM and
-// fails the build on an incompatible grammar. Languages outside the loaded
-// set fall through to marked's plain <pre><code> path.
-const theme = createCssVariablesTheme({ variablePrefix: '--shiki-' });
-const highlighter = await createHighlighter({
-  themes: [theme],
-  langs: ['typescript', 'tsx', 'javascript', 'json', 'bash', 'css', 'html'],
-  engine: createJavaScriptRegexEngine(),
-});
-const langs = new Set(['typescript', 'tsx', 'javascript', 'json', 'bash', 'css', 'html']);
-
-const markdown = (content: string) =>
-  marked(content, {
-    renderer: {
-      code(code: string, lang: string | undefined) {
-        const grammar = ({ ts: 'typescript', js: 'javascript', sh: 'bash' })[lang ?? ''] ?? lang;
-        return grammar && langs.has(grammar)
-          ? highlighter.codeToHtml(code, { lang: grammar, theme })
-          : false;
-      },
-    },
-  });
-
-export const blogCollection: CollectionOptions = {
-  contentDir: 'content/blog',
-  basePath: '/blog',
-  markdown,
-};
-```
-
-Custom renderer output stays within the same first-party trust boundary.
+The reference site highlights language-tagged code fences at build time with Shiki. The highlighted HTML and theme styles ship with the page. Add a language to a Markdown fence, such as `tsx` or `bash`, to enable highlighting.
 
 ## middleware.use
 

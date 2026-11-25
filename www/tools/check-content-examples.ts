@@ -11,15 +11,14 @@
  * standalone content-imports checker is retired.
  *
  * Compile invariant (fail closed): a fence is admitted by the same two
- * admission bridges the real build uses — `compileElementModule` for an
- * `@element`-decorated TSX module, then `compileServerComponentIfAdmitted`
+ * admission bridges the real build uses — the generated-element compiler,
+ * then `compileServerComponentIfAdmitted`
  * for a server-function page module — with the router's own island sidecar
  * (`ISLAND_ADMISSION`, so `export const openElement = defineIslandConfig(…)`
  * is admitted exactly as in an app). An OEC diagnostic fails the gate with
  * the compiler's own boundary+fix message, so a documented recipe cannot rot
  * into "does not build". De-duplication is by fence bytes (the en/zh pairs
- * carry identical code); the blog stays out of scope for the same historical
- * reason as the type-check.
+ * carry identical code).
  *
  * Fragment rule: a fence that is not a whole compiled unit (a JSX snippet, a
  * `render()` body excerpt, an options object, a config block) is exactly the
@@ -39,7 +38,7 @@
  *
  * (Original) Content example type-check gate: TypeScript
  * fenced code blocks in the authored bilingual guides that import
- * `@openelement/*` must type-check against the real v0.44 framework sources.
+ * `@openelement/*` must type-check against the current framework sources.
  * zh duplicates of an en block are deduped by content. Fails closed with
  * compiler diagnostics.
  *
@@ -49,14 +48,6 @@
  * syntax), so the alias can no longer smuggle an unchecked framework example
  * past the gate. Fence openers also tolerate trailing whitespace/CRLF after the
  * language token; spacing never silently removes a fence from the checked set.
- *
- * Blog exclusion (#1307 adjudication): www/content/blog is deliberately NOT
- * type-checked. Dispatches are dated historical records — their snippets
- * document the API surface of their era (LessJS-era names, since-removed
- * packages) and stay truthful as history, not as current authoring guidance.
- * The maintained authoring surface is guide/architecture, and it is fully
- * covered. The checked directory list is explicit below so widening the
- * surface is a deliberate edit.
  *
  * Elision convention: guide snippets are written as consumer-project modules
  * and legitimately omit application context. The harness therefore suppresses
@@ -86,7 +77,7 @@ import process from 'node:process';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 
-/** The maintained authoring surface; blog is excluded deliberately (header). */
+/** The maintained authoring surface. */
 const CHECKED_CONTENT_DIRS = ['www/content/docs/guide', 'www/content/docs/architecture'];
 
 /** Every documented framework export + custom-element class name. */

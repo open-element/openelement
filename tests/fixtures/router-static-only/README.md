@@ -1,6 +1,6 @@
 # router-static-only
 
-Minimal openElement app with **only static routes** (0.42.0-alpha.17, #953): no
+Minimal openElement app with **only static routes**: no
 route uses `renderIntent: { mode: 'dynamic' }`, so the build must not produce a
 request-time server entry and `cli/start --mode=preview` must accept the
 output. The `.mdx` route pins build-time markdown prerendering (#954).

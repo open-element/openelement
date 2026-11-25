@@ -21,9 +21,6 @@ order: 10
 | `@openelement/ui`        | 可选原语            | 可选 `@openelement/element`                             |
 | `@openelement/create`    | starter · 构建期    | —                                                       |
 
-> 已退役：`core` · `signal` · `content` · `ssg` · `app` · `adapter-vite` ·
-> `app/preact` · `app/spa`。
-
 ## 深模块隐藏实现复杂度。
 
 作者使用产品接口。renderer、router、signal、content
@@ -31,12 +28,12 @@ order: 10
 
 | 层          | 包                                            | 职责                                                                 |
 | ----------- | --------------------------------------------- | -------------------------------------------------------------------- |
-| contracts   | `@openelement/protocol`                       | 两个产品共同构建其上的共享契约：Part Program IR、错误方言、诊断。     |
+| contracts   | `@openelement/protocol`                       | 渲染、路由与诊断的共享契约。     |
 | element     | `@openelement/element`                        | Custom Elements、JSX、DSD、hydration 与 signals 的统一创作界面。     |
-| build       | `@openelement/compiler`                       | 编译器 Vite 接缝之后的 TSX-to-Part-Program 编译；唯一 TypeScript 宿主依赖。 |
+| build       | `@openelement/compiler`                       | 将 TSX 编译为服务端渲染器和 Custom Element 生命周期函数。 |
 | application | `@openelement/router`                         | 面向完整应用的页面、路由、islands、渲染语义与构建编排。               |
 | output      | `@openelement/router`                         | Vite 集成、静态生成与可部署的 Nitro 输出，收敛在一个构建边界之内。   |
-| adoption    | `@openelement/create`，可选 `@openelement/ui` | 以 starter 为先的采用路径与可选原语；两者都不暴露已退役的实现包。    |
+| adoption    | `@openelement/create`，可选 `@openelement/ui` | 脚手架和可选的基础组件。    |
 
 ## Web Components 就是应用架构。
 
@@ -45,9 +42,7 @@ order: 10
 
 ### WC SSR
 
-当前版本线会把已准入的标准、Lit、FAST 与 Stencil 元素分类为 DSD、light DOM
-或仅客户端渲染，并提供可操作的诊断与语料证据——该契约最初随 0.43
-线交付，并在编译型版本线上由 CI 持续验证。
+构建将已准入的组件分类为 DSD、light DOM 或仅客户端渲染。浏览器测试验证标准、Lit、FAST 与 Stencil 元素的升级行为。
 
 ### 应用闭环
 
@@ -62,12 +57,12 @@ cache/recovery API 尚未分配版本，必须经过未来的决策记录。
 
 ## 当前真相由机器校验。
 
-包表面、文档真相、产物、关键路径与浏览器测试，共同拒绝退回已退役的产品图。
+发布验证覆盖包导出、文档、可部署产物和浏览器中的应用行为。
 
 | 门禁         | 要求                                                                                    |
 | ------------ | --------------------------------------------------------------------------------------- |
 | {{PACKAGE_COUNT}} 个包 | 当前消费面（protocol/element/compiler/router/create/ui）、starter 与文档保持一致。       |
-| 输出切分     | static 与 request-time 的输出切分已冻结；0.41.x 静态冻结未被触动。                      |
+| 输出切分     | 静态 HTML 与浏览器资源公开交付，请求时模块留在服务器。                      |
 | 3 个浏览器   | 候选版本发布需要 Chromium、Firefox 与 WebKit 的验证。                                   |
 | 打包产物验证 | 消费方从公开产物构建，而不是 workspace 别名。                                           |
 
@@ -77,15 +72,15 @@ openElement 把第三方 Custom Elements 视为基于标准的依赖。当前构
 
 ### 当前契约
 
-`@openelement/element` 负责编写体验；`router` 包把应用行为与构建行为收敛在一个边界之内。
+Compiler 生成渲染器和生命周期函数，Element 提供 Custom Element 运行时，Router 负责应用行为与构建。
 
 ### 显式准入
 
-已知包可配置为 package island，并利用可用的 CEM metadata，无需引入已退役的包接口。
+已知包可配置为 package island，并利用可用的 CEM metadata。
 
 ### 当前诊断
 
-当前版本线交付通用 DSD/light/client-only 分类、hydration 不匹配诊断与已跟踪的第三方 WC SSR 语料库——最初随 0.43 线交付，并在编译型版本线上由 CI 持续验证。准入仍依赖显式 package-island 配置与已观测 metadata，并不意味着对所有第三方组件作笼统认证。
+构建报告 DSD、light DOM、仅客户端渲染的分类和 hydration 不匹配诊断。组件准入取决于 package-island 配置及该包可用的 metadata。
 
 ## 另见
 

@@ -9,8 +9,7 @@
       "title": "Alpha16–18 architecture audit and compatibility boundary",
       "carried": "READ-ONLY audit of the alpha.15 tree: what it implements, the gap the target must close, the historical compatibility constraints it inherits and the coverage boundary of the evidence.",
       "nowLivesIn": [
-        "docs/architecture/compiler-native-architecture.md",
-        "docs/architecture/alpha16-closeout-report.md"
+        "docs/architecture/compiler-native-architecture.md"
       ],
       "noSuccessor": true,
       "recovery": {
@@ -38,7 +37,7 @@
       "title": "Alpha16–18 current reality and contradictions",
       "carried": "READ-ONLY audit of the 2026-11-03 reality and contradiction matrices, the boundary answers, the `__partProgram` production consumer map, the approved D-O1…D-O3 owner decisions and the remaining OPEN register O-1…O-10.",
       "nowLivesIn": [
-        "docs/architecture/m01-consumer-migration-matrix.md",
+        "docs/architecture/seams.md",
         "docs/architecture/product-model.md",
         "docs/adr/ADR-0174-generated-code-runtime-and-compatibility.md"
       ],
@@ -98,9 +97,7 @@
       "date": "2026-11-10",
       "title": "Alpha16 integration workboard",
       "carried": "Coordination record: the M07 adjudications, the decided M07b technical plan (§13), evidence grades, merge order and the 2026-11-09 §14 Lead/QA acceptance.",
-      "nowLivesIn": [
-        "docs/architecture/alpha16-closeout-report.md"
-      ],
+      "nowLivesIn": [],
       "noSuccessor": true,
       "recovery": {
         "commit": "826dead73ea38029262056d20a16f15ab06f24b7",
@@ -108,56 +105,56 @@
       }
     },
     {
-      "kind": "archived",
+      "kind": "removed",
       "path": "docs/legacy/adr/ADR-0108-deno-native-npm-distribution.md",
-      "date": "2026-11-10",
+      "date": "2026-11-25",
       "title": "ADR-0108: npm distribution via `deno pack`",
       "carried": "Deno-native npm distribution: a Deno workspace whose public packages ship as ordinary npm artifacts via the `deno pack` tarball generator; the Deno-native toolchain and consumer requirement are retired and the npm-only publishing half is restated in ADR-0161.",
-      "status": "SUPERSEDED by ADR-0161",
       "nowLivesIn": [],
       "recovery": {
-        "commit": "826dead73ea38029262056d20a16f15ab06f24b7",
-        "path": "docs/adr/ADR-0108-deno-native-npm-distribution.md"
-      }
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/legacy/adr/ADR-0108-deno-native-npm-distribution.md"
+      },
+      "noSuccessor": true
     },
     {
-      "kind": "archived",
+      "kind": "removed",
       "path": "docs/legacy/adr/ADR-0112-protocol-types-and-tiny-runtime.md",
-      "date": "2026-11-10",
+      "date": "2026-11-25",
       "title": "ADR-0112: Protocol Types and Tiny Runtime",
       "carried": "Standalone `@openelement/protocol` contracts package with a tiny runtime; the package left the tree at v0.40.0 and the shared contract types now live inside `@openelement/element`, whose multi-package boundary was superseded by ADR-0152.",
-      "status": "SUPERSEDED by ADR-0152",
       "nowLivesIn": [],
       "recovery": {
-        "commit": "826dead73ea38029262056d20a16f15ab06f24b7",
-        "path": "docs/adr/ADR-0112-protocol-types-and-tiny-runtime.md"
-      }
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/legacy/adr/ADR-0112-protocol-types-and-tiny-runtime.md"
+      },
+      "noSuccessor": true
     },
     {
-      "kind": "archived",
+      "kind": "removed",
       "path": "docs/legacy/adr/ADR-0156-tree-sha-evidence-reuse.md",
-      "date": "2026-11-10",
+      "date": "2026-11-25",
       "title": "ADR-0156: Tree-SHA evidence reuse for the candidate gate",
       "carried": "Tree-SHA evidence reuse for the candidate gate: a reuse chain judged by the producer's tree, with a refused claim falling back to the real gate; the mechanism was removed by the #1567 CI/Release redesign.",
-      "status": "RETIRED by the #1567 CI/Release redesign",
       "nowLivesIn": [],
       "recovery": {
-        "commit": "826dead73ea38029262056d20a16f15ab06f24b7",
-        "path": "docs/adr/ADR-0156-tree-sha-evidence-reuse.md"
-      }
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/legacy/adr/ADR-0156-tree-sha-evidence-reuse.md"
+      },
+      "noSuccessor": true
     },
     {
-      "kind": "archived",
+      "kind": "removed",
       "path": "docs/legacy/adr/ADR-0162-element-runtime-compiler-split-deferred.md",
-      "date": "2026-11-10",
+      "date": "2026-11-25",
       "title": "ADR-0162: Element runtime/compiler package split — executed",
       "carried": "Deferral of the Element runtime/compiler package split until measured evidence justified it; the split has since landed and the record is closed as executed.",
-      "status": "EXECUTED: the deferred split landed",
       "nowLivesIn": [],
       "recovery": {
-        "commit": "826dead73ea38029262056d20a16f15ab06f24b7",
-        "path": "docs/adr/ADR-0162-element-runtime-compiler-split-deferred.md"
-      }
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/legacy/adr/ADR-0162-element-runtime-compiler-split-deferred.md"
+      },
+      "noSuccessor": true
     },
     {
       "kind": "removed",
@@ -219,9 +216,7 @@
       "date": "2026-11-25",
       "title": "M02 Semantic IR feasibility spike — report",
       "carried": "M02 semantic IR spike.",
-      "nowLivesIn": [
-        "docs/architecture/alpha16-closeout-report.md"
-      ],
+      "nowLivesIn": [],
       "noSuccessor": true,
       "recovery": {
         "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
@@ -249,9 +244,7 @@
       "date": "2026-11-25",
       "title": "M03 implementation log",
       "carried": "M03 implementation log.",
-      "nowLivesIn": [
-        "docs/architecture/alpha16-closeout-report.md"
-      ],
+      "nowLivesIn": [],
       "noSuccessor": true,
       "recovery": {
         "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
@@ -264,9 +257,7 @@
       "date": "2026-11-25",
       "title": "M03 review corrections register",
       "carried": "M03 review corrections.",
-      "nowLivesIn": [
-        "docs/architecture/alpha16-closeout-report.md"
-      ],
+      "nowLivesIn": [],
       "noSuccessor": true,
       "recovery": {
         "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
@@ -279,9 +270,7 @@
       "date": "2026-11-25",
       "title": "M05 leaf-codegen prototype — status: PROTOTYPE, NOT G1",
       "carried": "M05 leaf-codegen prototype.",
-      "nowLivesIn": [
-        "docs/architecture/alpha16-closeout-report.md"
-      ],
+      "nowLivesIn": [],
       "noSuccessor": true,
       "recovery": {
         "commit": "8d50588914ea32f7b76ad8280d66496449273f29",
@@ -459,9 +448,7 @@
       "date": "2026-11-25",
       "title": "Alpha16 handoff",
       "carried": "Session handoff for the component migration.",
-      "nowLivesIn": [
-        "docs/architecture/alpha16-closeout-report.md"
-      ],
+      "nowLivesIn": [],
       "noSuccessor": true,
       "recovery": {
         "commit": "fc55986d7966da2c2e67cae253e536ca4b898e6e",
@@ -474,9 +461,7 @@
       "date": "2026-11-25",
       "title": "F16 handoff",
       "carried": "Session handoff for Alpha16 closeout.",
-      "nowLivesIn": [
-        "docs/architecture/alpha16-closeout-report.md"
-      ],
+      "nowLivesIn": [],
       "noSuccessor": true,
       "recovery": {
         "commit": "fc55986d7966da2c2e67cae253e536ca4b898e6e",
@@ -489,9 +474,7 @@
       "date": "2026-11-25",
       "title": "Alpha16–18 progress ledger and audit closure register",
       "carried": "Dated milestone progress and audit history.",
-      "nowLivesIn": [
-        "docs/architecture/alpha16-closeout-report.md"
-      ],
+      "nowLivesIn": [],
       "noSuccessor": true,
       "recovery": {
         "commit": "fc55986d7966da2c2e67cae253e536ca4b898e6e",
@@ -504,10 +487,7 @@
       "date": "2026-11-25",
       "title": "Alpha16 remaining consumer surface (2026-11-18)",
       "carried": "Per-module measurements and decisions for production class consumers before retirement, with the recorded closed outcomes.",
-      "nowLivesIn": [
-        "docs/architecture/alpha16-class-migration-matrix.md",
-        "docs/architecture/alpha16-closeout-report.md"
-      ],
+      "nowLivesIn": [],
       "noSuccessor": true,
       "recovery": {
         "commit": "03e1e07e2eb87d703a9e8efbc56e6108f91472e9",
@@ -522,8 +502,8 @@
       "carried": "Earlier compiler, router, style, lifecycle and packing receipts with their measured revisions and LOCAL/CI provenance.",
       "nowLivesIn": [
         "docs/architecture/alpha16-capability-inventory.md",
-        "docs/architecture/16b-migration-note.md",
-        "docs/architecture/alpha16-closeout-report.md"
+        "docs/architecture/compiler-and-element-runtime.md",
+        "docs/adr/ADR-0182-function-component-capability-api.md"
       ],
       "noSuccessor": true,
       "recovery": {
@@ -539,13 +519,383 @@
       "carried": "2026-11-15 inventory, M11 host SSR carrier, browser-entry graph observer and preliminary migration method.",
       "nowLivesIn": [
         "docs/architecture/p1-applicability-record.md",
-        "docs/architecture/alpha16-class-migration-matrix.md",
         "docs/architecture/alpha16-capability-inventory.md"
       ],
       "noSuccessor": true,
       "recovery": {
         "commit": "03e1e07e2eb87d703a9e8efbc56e6108f91472e9",
         "path": "docs/architecture/m10-preparation.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/16b-migration-note.md",
+      "date": "2026-11-25",
+      "title": "Class authoring transition note",
+      "carried": "Prior migration and stage observations. Current component ownership, styles, property seeding, and error behavior are in the runtime contract and ADRs.",
+      "nowLivesIn": [
+        "docs/architecture/compiler-and-element-runtime.md",
+        "docs/adr/ADR-0182-function-component-capability-api.md"
+      ],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/architecture/16b-migration-note.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/alpha16-class-migration-matrix.md",
+      "date": "2026-11-25",
+      "title": "Class consumer conversion inventory",
+      "carried": "Per-file classification of the completed class authoring conversion.",
+      "nowLivesIn": [],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/architecture/alpha16-class-migration-matrix.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/alpha16-closeout-report.md",
+      "date": "2026-11-25",
+      "title": "Compiler-native transition closeout",
+      "carried": "Stage closeout, temporary gaps and remediation reports. Current runtime behavior and qualification requirements are documented separately.",
+      "nowLivesIn": [
+        "docs/architecture/compiler-and-element-runtime.md",
+        "docs/architecture/alpha16-18-execution-plan.md"
+      ],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/architecture/alpha16-closeout-report.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/alpha16-m09-exit-docket.md",
+      "date": "2026-11-25",
+      "title": "Generated custom element qualification docket",
+      "carried": "Dated interoperability, generated CEM and capability-review approvals.",
+      "nowLivesIn": [
+        "docs/architecture/alpha16-18-execution-plan.md"
+      ],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/architecture/alpha16-m09-exit-docket.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/m01-consumer-migration-matrix.md",
+      "date": "2026-11-25",
+      "title": "Part Program consumer inventory",
+      "carried": "Historical protocol readers and their conversion or retirement disposition.",
+      "nowLivesIn": [
+        "docs/architecture/compiler-ir-and-abi-boundary.md",
+        "docs/architecture/seams.md"
+      ],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/architecture/m01-consumer-migration-matrix.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/m08-closeout.md",
+      "date": "2026-11-25",
+      "title": "Generated list claim stage closeout",
+      "carried": "Stage exit and historical Chromium-only stateful-list evidence. The semantic matrix retains the evidence references.",
+      "nowLivesIn": [
+        "docs/architecture/alpha16-18-semantic-test-matrix.md"
+      ],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/architecture/m08-closeout.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/architecture/project-history.md",
+      "date": "2026-11-25",
+      "title": "Project history and pivot ledger",
+      "carried": "Historical account of product, toolchain and package changes.",
+      "nowLivesIn": [],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/architecture/project-history.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/release/alpha15-ab-evaluation.md",
+      "date": "2026-11-25",
+      "title": "Historical release byte evaluation",
+      "carried": "Prior A/B artifact size experiment.",
+      "nowLivesIn": [],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/release/alpha15-ab-evaluation.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/release/alpha15-jfb-runtime-evaluation.md",
+      "date": "2026-11-25",
+      "title": "Historical runtime benchmark evaluation",
+      "carried": "Prior framework benchmark evidence.",
+      "nowLivesIn": [],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/release/alpha15-jfb-runtime-evaluation.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/release/alpha5-qualification.md",
+      "date": "2026-11-25",
+      "title": "Historical Alpha5 gate record",
+      "carried": "Release-specific qualification results.",
+      "nowLivesIn": [],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/release/alpha5-qualification.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/release/dependency-alerts-2026-11-06.md",
+      "date": "2026-11-25",
+      "title": "Dependency alert disposition",
+      "carried": "Dated triage record.",
+      "nowLivesIn": [],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/release/dependency-alerts-2026-11-06.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/release/flake-ledger.md",
+      "date": "2026-11-25",
+      "title": "Historical CI flake ledger",
+      "carried": "Individual CI failures and rerun dispositions.",
+      "nowLivesIn": [
+        "CONTRIBUTING.md"
+      ],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/release/flake-ledger.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/release/late-host-island-activation-design.md",
+      "date": "2026-11-25",
+      "title": "Late-host activation design draft",
+      "carried": "Earlier island activation proposal.",
+      "nowLivesIn": [
+        "docs/adr/ADR-0170-late-host-island-activation.md"
+      ],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/release/late-host-island-activation-design.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/release/platform-catch-up.md",
+      "date": "2026-11-25",
+      "title": "Historical platform catch-up queue",
+      "carried": "Prior temporary platform and dependency review queue.",
+      "nowLivesIn": [
+        "docs/architecture/design-principles.md",
+        "docs/architecture/shim-inventory.md"
+      ],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/release/platform-catch-up.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/release/evidence/alpha15/README.md",
+      "date": "2026-11-25",
+      "title": "Alpha15 release evidence — A/B and JFB (durable pointer)",
+      "carried": "Historical release evidence and reproduction material.",
+      "nowLivesIn": [],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/release/evidence/alpha15/README.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/release/evidence/alpha15/doc01-site-alpha15.md",
+      "date": "2026-11-25",
+      "title": "DOC-01 — alpha15 site truth and guide-command corrections",
+      "carried": "Historical release evidence and reproduction material.",
+      "nowLivesIn": [],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/release/evidence/alpha15/doc01-site-alpha15.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/release/evidence/alpha15/doc02-content-gate-audit.md",
+      "date": "2026-11-25",
+      "title": "DOC-02 — audit of the existing content-example gate",
+      "carried": "Historical release evidence and reproduction material.",
+      "nowLivesIn": [],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/release/evidence/alpha15/doc02-content-gate-audit.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/release/evidence/alpha15/dx02-browser-automation.md",
+      "date": "2026-11-25",
+      "title": "DX-02 — Browser automation for timing / morph / preserve / 390px / keyboard",
+      "carried": "Historical release evidence and reproduction material.",
+      "nowLivesIn": [],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/release/evidence/alpha15/dx02-browser-automation.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/release/evidence/alpha15/frm07-timeout-classification.md",
+      "date": "2026-11-25",
+      "title": "FRM-07C — run 39216159302 failure classification (review FR-05C)",
+      "carried": "Historical release evidence and reproduction material.",
+      "nowLivesIn": [],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/release/evidence/alpha15/frm07-timeout-classification.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/release/evidence/alpha15/late-host-walk-bench.js",
+      "date": "2026-11-25",
+      "title": "late-host-walk-bench.js",
+      "carried": "Historical release evidence and reproduction material.",
+      "nowLivesIn": [],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/release/evidence/alpha15/late-host-walk-bench.js"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/release/evidence/alpha15/rel02-codeql-disposition.md",
+      "date": "2026-11-25",
+      "title": "REL-02 — CodeQL disposition record (alpha15, PR #1611)",
+      "carried": "Historical release evidence and reproduction material.",
+      "nowLivesIn": [],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/release/evidence/alpha15/rel02-codeql-disposition.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/release/evidence/alpha15/rel05-a6-adjudication.md",
+      "date": "2026-11-25",
+      "title": "REL-05 — A6 (review FR-08) adjudication on the fixed toolchain",
+      "carried": "Historical release evidence and reproduction material.",
+      "nowLivesIn": [],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/release/evidence/alpha15/rel05-a6-adjudication.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/release/evidence/alpha15/report-repro-final.js",
+      "date": "2026-11-25",
+      "title": "report-repro-final.js",
+      "carried": "Historical release evidence and reproduction material.",
+      "nowLivesIn": [],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/release/evidence/alpha15/report-repro-final.js"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/release/evidence/alpha15/sha256-manifest.txt",
+      "date": "2026-11-25",
+      "title": "sha256-manifest.txt",
+      "carried": "Historical release evidence and reproduction material.",
+      "nowLivesIn": [],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/release/evidence/alpha15/sha256-manifest.txt"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/release/evidence/alpha15/three-arm-repro.js",
+      "date": "2026-11-25",
+      "title": "three-arm-repro.js",
+      "carried": "Historical release evidence and reproduction material.",
+      "nowLivesIn": [],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/release/evidence/alpha15/three-arm-repro.js"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/release/evidence/alpha15/tpl01-node-types-browser-boundary.md",
+      "date": "2026-11-25",
+      "title": "TPL-01 / TPL-02 — starter Node types, browser boundary, manager-matched handoff",
+      "carried": "Historical release evidence and reproduction material.",
+      "nowLivesIn": [],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/release/evidence/alpha15/tpl01-node-types-browser-boundary.md"
+      }
+    },
+    {
+      "kind": "removed",
+      "path": "docs/release/evidence/alpha15/tpl03-starter-quality-gate.md",
+      "date": "2026-11-25",
+      "title": "TPL-03 — fresh-scaffold starter quality gate",
+      "carried": "Historical release evidence and reproduction material.",
+      "nowLivesIn": [],
+      "noSuccessor": true,
+      "recovery": {
+        "commit": "e655a0bab6f1396f4ed1a10208794e51e592b0ce",
+        "path": "docs/release/evidence/alpha15/tpl03-starter-quality-gate.md"
       }
     }
   ]

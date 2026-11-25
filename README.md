@@ -16,18 +16,6 @@ English | [简体中文](./README.zh.md)
 
 OpenElement is a framework for server-rendered HTML and interactive Custom Elements. **Compiler** turns TSX into Custom Elements and server renderers. **Element** provides the runtime. **Router** handles routes, navigation, loaders and actions.
 
-## Start with npm
-
-Use Node.js 24.2 or newer. The npm `latest` line is **`1.0.0-alpha.15`** and uses class-based Custom Elements.
-
-```sh
-npm create @openelement my-app
-cd my-app
-npm run dev
-```
-
-Open the URL printed by the dev server. Stop it before running `npm run build`. Follow the versioned guide to add a route. [Alpha 15 quick start](https://github.com/open-element/openelement/blob/v1.0.0-alpha.15/www/content/docs/guide/getting-started.md)
-
 ## Preview the source checkout
 
 This checkout previews `1.0.0-alpha.16` with server function pages and compiler-generated Custom Elements. The setup task builds the packages from this checkout and installs them into a temporary starter app. [Release state](./docs/release/release-state.json)
@@ -42,6 +30,18 @@ pnpm run dev
 
 Edit `app/routes/index.tsx` to try the starter's file routing. Run `pnpm test` and `pnpm run build` after stopping the dev server. [Starter package](./packages/create/README.md)
 
+## Start with npm
+
+Use Node.js 24.2 or newer. This command scaffolds the version on the npm `latest` tag. Check it with `npm view @openelement/create dist-tags`.
+
+```sh
+npm create @openelement my-app
+cd my-app
+npm run dev
+```
+
+Open the URL printed by the dev server. Stop it before running `npm run build`.
+
 ## Repository
 
 | Directory | What lives here |
@@ -49,7 +49,7 @@ Edit `app/routes/index.tsx` to try the starter's file routing. Run `pnpm test` a
 | [packages](./packages) | [Element runtime](./packages/element), [compiler](./packages/compiler), [protocol contracts](./packages/protocol), [Router](./packages/router), [starter CLI](./packages/create), and [experimental UI](./packages/ui) |
 | [tests](./tests) | Cross-package tests, starter smoke and deployment fixtures |
 | [tools](./tools) | Repository checks, release packaging and packed consumer tests |
-| [docs](./docs/architecture/README.md) | Current architecture, [decisions](./docs/adr/README.md) and [history](./docs/legacy/README.md) |
+| [docs](./docs/architecture/README.md) | Current architecture and [decisions](./docs/adr/README.md) |
 | [www](./www) | Official documentation site and its browser tests |
 | [apps/saas](./apps/saas) | Separately governed first-party consumer app |
 

@@ -2,36 +2,36 @@
   "generatedFrom": "hand-maintained: last meaningful update per article and locale, validated against www/content/docs by check:content-dates",
   "articles": {
     "architecture/architecture": {
-      "en": "2026-10-18",
-      "zh": "2026-10-18"
+      "en": "2026-11-25",
+      "zh": "2026-11-25"
     },
     "architecture/comparison": {
       "en": "2026-11-25",
       "zh": "2026-11-25"
     },
     "architecture/design-system": {
-      "en": "2026-09-19",
-      "zh": "2026-09-19"
+      "en": "2026-11-25",
+      "zh": "2026-11-25"
     },
     "architecture/dsd": {
       "en": "2026-10-28",
       "zh": "2026-10-28"
     },
     "architecture/islands": {
-      "en": "2026-10-11",
-      "zh": "2026-10-28"
+      "en": "2026-11-25",
+      "zh": "2026-11-25"
     },
     "architecture/web-component-admission": {
-      "en": "2026-09-25",
-      "zh": "2026-10-11"
+      "en": "2026-11-25",
+      "zh": "2026-11-25"
     },
     "guide/api": {
       "en": "2026-10-18",
       "zh": "2026-10-18"
     },
     "guide/configuration": {
-      "en": "2026-11-24",
-      "zh": "2026-11-24"
+      "en": "2026-11-25",
+      "zh": "2026-11-25"
     },
     "guide/core-concepts": {
       "en": "2026-11-24",
@@ -42,8 +42,8 @@
       "zh": "2026-10-18"
     },
     "guide/deployment": {
-      "en": "2026-10-19",
-      "zh": "2026-10-19"
+      "en": "2026-11-25",
+      "zh": "2026-11-25"
     },
     "guide/error-handling": {
       "en": "2026-11-25",
@@ -54,8 +54,8 @@
       "zh": "2026-11-25"
     },
     "guide/glossary": {
-      "en": "2026-10-11",
-      "zh": "2026-10-11"
+      "en": "2026-11-25",
+      "zh": "2026-11-25"
     },
     "guide/i18n": {
       "en": "2026-11-24",
@@ -66,24 +66,24 @@
       "zh": "2026-11-25"
     },
     "guide/mdx": {
-      "en": "2026-10-18",
-      "zh": "2026-10-18"
+      "en": "2026-11-25",
+      "zh": "2026-11-25"
     },
     "guide/recipe-form-actions": {
       "en": "2026-11-24",
       "zh": "2026-11-24"
     },
     "guide/recipe-island-strategies": {
-      "en": "2026-10-19",
-      "zh": "2026-10-19"
+      "en": "2026-11-25",
+      "zh": "2026-11-25"
     },
     "guide/recipe-theming": {
       "en": "2026-09-19",
       "zh": "2026-09-19"
     },
     "guide/routing-and-data": {
-      "en": "2026-11-24",
-      "zh": "2026-11-24"
+      "en": "2026-11-25",
+      "zh": "2026-11-25"
     },
     "guide/compiled-grammar": {
       "en": "2026-11-25",
@@ -93,21 +93,17 @@
       "en": "2026-11-14",
       "zh": "2026-11-14"
     },
-    "guide/streaming": {
+    "guide/styling": {
       "en": "2026-11-25",
       "zh": "2026-11-25"
-    },
-    "guide/styling": {
-      "en": "2026-11-24",
-      "zh": "2026-11-24"
     },
     "guide/testing": {
       "en": "2026-10-18",
       "zh": "2026-10-18"
     },
     "guide/tutorial": {
-      "en": "2026-11-24",
-      "zh": "2026-11-24"
+      "en": "2026-11-25",
+      "zh": "2026-11-25"
     }
   }
 }

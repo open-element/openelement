@@ -186,37 +186,6 @@ open-search .overlay {
   background: var(--color-primary);
 }
 
-/* page-changelog (the retired page-changelog component): the sheet kept only
- * the host box, which needed no successor — the page root is a div. */
-
-/* page-blog-index (the retired page-blog-index component): the host ink and
- * paper (the page root div carries them now), the masthead grid pseudo-element
- * and the eyebrow rule, scoped under the page hook class. */
-.page-blog-index {
-  display: block;
-  color: var(--color-foreground);
-  background: var(--color-background);
-}
-
-.page-blog-index .masthead::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background-image:
-    linear-gradient(color-mix(in srgb, var(--grid-ink) 7%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--grid-ink) 7%, transparent) 1px, transparent 1px);
-  background-size: 72px 72px;
-  mask-image: linear-gradient(180deg, black, transparent);
-}
-
-.page-blog-index .eyebrow::before {
-  content: '';
-  width: 2rem;
-  height: 2px;
-  background: var(--color-primary);
-}
-
 /* page-errors (the retired page-errors component): the sheet kept only the
  * host box, which needed no successor — the page root is a div. */
 
@@ -1017,74 +986,16 @@ open-page-rail a[aria-current='location']::before {
   color: var(--color-primary);
 }
 
-/* article-prose — the generated-content treatment of the reading pages
- * (alpha15 utility-first migration).
- *
- * What this sheet owns, and why it stays a sheet:
- *   the article/prose HTML of the guide/architecture articles, the blog
- *   dispatches and the changelog archive. That HTML is generated at BUILD
- *   time (markdown -> HTML in www/lib/markdown.ts; code fences compile to
- *   Shiki token spans, the pipeline wraps each fence in <open-code-block>
- *   and appends heading anchors — www/app/site-ui/article-body.ts).
- *
- *   The reason is ownership, not capability. A generator can emit classes as
- *   easily as it emits anything else, and the pipeline could tag each element
- *   it produces; the sheet is here because the rules it holds are
- *   DESCENDANT-scoped presentation of an output stream — `h2 + p`, list
- *   markers, `:first-child`, `::before` heading anchors — that several
- *   producers share (three collections, one treatment) and that would have to
- *   be threaded through every producer's output and kept in step with all of
- *   them. One sheet, one owner, one scope. Every rule is rooted at the
- *   generated-content container class (.article-content, .blog-content,
- *   .changelog-content), which is the authored hook the pipeline output sits
- *   inside and the boundary that keeps these rules off the page chrome.
- *
- * What this sheet does NOT own (the scope boundary): every page-chrome
- * element the page components render — breadcrumbs, titles, lede, the blog
- * meta row, the changelog register and its rows, the archive source line —
- * is authored markup and carries Tailwind utilities on that markup instead.
- * Because every selector below is rooted at a generated-content container,
- * none of those utilities can be reached (or restyled) from here.
- *
- * Delivery: the #1569 consolidation moved these rules here from
- * article-prose.css when the reading pages' compiled elements retired their
- * shadow-sheet channel; they keep the provenance sheet's rooting — every
- * selector starts at its generated-content container class, never a page
- * hook. One document stylesheet now carries the fence surface exactly once,
- * instead of one near-identical copy per page component. The retired
- * per-page sheets (open-article-view.css, page-blog-post.css,
- * page-changelog.css) keep only their irreducible `:host` box.
- *
- * The fence surface (background/border/radius for the slotted <pre>) also
- * exists at the document layer — www/site-css.ts `open-code-block pre` —
- * for the WebKit slotted-DOM reason stated there, which the retired sheets
- * mirrored; the rules below are the article-side treatment it mirrors.
- * That layer is not this sheet's to edit.
- *
- * Rule provenance: "A" marks a rule the three retired sheets carried
- * identically (the generic article-page element rules); "B" marks a rule
- * only one or two of them carried (the per-page content blocks).
- */
-
-/* ── content roots (B: article/blog; B changelog differs) ─────────────── */
-  .article-content,
-  .blog-content {
+/* Shared styles for the generated Markdown article body. */
+.article-content {
   font-family: var(--font-sans);
   font-size: var(--text-base);
   line-height: 1.8;
   color: var(--color-muted-foreground);
 }
 
-  .changelog-content {
-  font-size: var(--text-base);
-  line-height: var(--leading-relaxed);
-  color: var(--color-foreground);
-}
-
 /* ── headings (A: h1, h4-h6 all sheets; B: h2/h3 per page) ───────────── */
-  .article-content h1,
-  .blog-content h1,
-  .changelog-content h1 {
+.article-content h1 {
   font-size: clamp(2.7rem, 6vw, 5.5rem);
   font-weight: var(--font-weight-black);
   letter-spacing: -0.06em;
@@ -1093,8 +1004,7 @@ open-page-rail a[aria-current='location']::before {
   line-height: 1.05;
 }
 
-  .article-content h2,
-  .blog-content h2 {
+.article-content h2 {
   font-family: var(--font-sans);
   font-size: var(--text-4xl);
   font-weight: var(--font-weight-extrabold);
@@ -1110,12 +1020,11 @@ open-page-rail a[aria-current='location']::before {
 
 /* Inline tokens carry no break opportunity; the article column measured
    wider than the viewport at 390px (the `csp` token landed at 417px). */
-  .article-content h2 {
+.article-content h2 {
   overflow-wrap: anywhere;
 }
 
-  .article-content h3,
-  .blog-content h3 {
+.article-content h3 {
   font-family: var(--font-sans);
   font-size: var(--text-xl);
   font-weight: var(--font-weight-extrabold);
@@ -1126,9 +1035,7 @@ open-page-rail a[aria-current='location']::before {
   scroll-margin-top: calc(var(--nav-height) + calc(var(--spacing) * 4));
 }
 
-  .article-content h4,
-  .blog-content h4,
-  .changelog-content h4 {
+.article-content h4 {
   font-size: var(--text-2xl);
   font-weight: var(--font-weight-semibold);
   margin: calc(var(--spacing) * 4) 0 calc(var(--spacing) * 2);
@@ -1136,12 +1043,8 @@ open-page-rail a[aria-current='location']::before {
   line-height: 1.3;
 }
 
-  .article-content h5,
-  .article-content h6,
-  .blog-content h5,
-  .blog-content h6,
-  .changelog-content h5,
-  .changelog-content h6 {
+.article-content h5,
+.article-content h6 {
   font-size: var(--text-base);
   font-weight: var(--font-weight-semibold);
   margin: calc(var(--spacing) * 3) 0 calc(var(--spacing) * 1);
@@ -1150,104 +1053,74 @@ open-page-rail a[aria-current='location']::before {
 }
 
 /* ── paragraphs ───────────────────────────────────────────────────────── */
-  .article-content p,
-  .blog-content p,
-  .changelog-content p {
+.article-content p {
   line-height: 1.72;
   color: var(--color-foreground);
   font-size: var(--text-base);
 }
 
-  .article-content p,
-  .blog-content p {
+.article-content p {
   margin: calc(var(--spacing) * 4) 0;
 }
 
-  .changelog-content p {
-  margin: calc(var(--spacing) * 2) 0;
-}
-
 /* Subject-side :lang — @scope'd sheets cannot match the html[lang] ancestor. */
-  .article-content p:lang(zh),
-  .article-content li:lang(zh),
-  .blog-content p:lang(zh),
-  .blog-content li:lang(zh),
-  .changelog-content p:lang(zh),
-  .changelog-content li:lang(zh) {
+.article-content p:lang(zh),
+.article-content li:lang(zh) {
   line-height: 1.9;
 }
 
 /* ── inline semantics (A) ─────────────────────────────────────────────── */
-  .article-content strong,
-  .blog-content strong,
-  .changelog-content strong {
+.article-content strong {
   color: var(--color-foreground);
   font-weight: var(--font-weight-bold);
 }
 
-  .article-content em,
-  .blog-content em,
-  .changelog-content em {
+.article-content em {
   font-family: var(--font-serif);
   font-style: italic;
 }
 
-  .article-content img,
-  .blog-content img,
-  .changelog-content img {
+.article-content img {
   max-width: 100%;
   height: auto;
   border-radius: var(--radius-lg);
 }
 
-  .article-content a,
-  .blog-content a,
-  .changelog-content a {
+.article-content a {
   color: var(--color-primary);
   text-decoration: underline;
   text-underline-offset: 3px;
   text-decoration-color: color-mix(in srgb, var(--color-primary) 34%, transparent);
-  /* No base text-decoration-thickness: the `text-decoration` shorthand above
-     resets it to auto, exactly as the retired sheets' shorthand did; only
-     the hover state pins it (1px). */
+
   transition:
     color var(--ease-in-out) var(--default-transition-duration),
     text-decoration-color var(--ease-in-out) var(--default-transition-duration);
 }
 
-  .article-content a:hover,
-  .blog-content a:hover,
-  .changelog-content a:hover {
+.article-content a:hover {
   color: color-mix(in srgb, var(--color-primary) 80%, var(--color-foreground));
   text-decoration-color: currentColor;
   text-decoration-thickness: calc(var(--spacing) * 0.25);
 }
 
-  .article-content :focus-visible,
-  .blog-content :focus-visible,
-  .changelog-content :focus-visible {
+.article-content :focus-visible {
   outline: calc(var(--spacing) * 0.5) solid var(--color-ring);
   outline-offset: calc(var(--spacing) * 0.75);
 }
 
-  .article-content a:focus-visible,
-  .blog-content a:focus-visible,
-  .changelog-content a:focus-visible {
+.article-content a:focus-visible {
   outline: 2px solid var(--color-ring);
   outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .article-content a,
-  .blog-content a,
-  .changelog-content a {
+  .article-content a {
     transition: none;
   }
 }
 
 /* ── inline code (B per page; the chip's border came from A) ──────────── */
-  .article-content code,
-  .blog-content code {
+.article-content code {
   background: var(--color-muted);
   color: var(--color-foreground);
   padding: 0.125rem 0.375rem;
@@ -1259,39 +1132,18 @@ open-page-rail a[aria-current='location']::before {
 /* Same reason as the h2 rule above: a bare identifier sets the min-content
    floor of its paragraph. Fences are unaffected (`white-space: pre` on the
    pre suppresses breaking). */
-  .article-content code {
+.article-content code {
   overflow-wrap: anywhere;
 }
 
-  .article-content p code,
-  .article-content li code,
-  .blog-content p code,
-  .blog-content li code {
-  border: calc(var(--spacing) * 0.25) solid
-    color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
-}
-
-  .changelog-content code {
-  overflow-wrap: anywhere;
-  font-family: var(--font-mono);
-  background: var(--color-muted);
-  padding: calc(var(--spacing) * 1) calc(var(--spacing) * 2);
-  border-radius: var(--radius-md);
-  font-size: var(--text-xs);
-}
-
-/* The archive keeps its long single-token identifiers (`AppIslandOptions`
-   measured 133px inside a 342px list item) inside the page column. */
-  .changelog-content p code,
-  .changelog-content li code {
-  color: var(--color-primary);
+.article-content p code,
+.article-content li code {
   border: calc(var(--spacing) * 0.25) solid
     color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
 }
 
 /* ── fences (B per page; the plain-fence remainder came from A) ───────── */
-  .article-content pre,
-  .blog-content pre {
+.article-content pre {
   background: var(--surface-code);
   color: var(--surface-code-foreground);
   padding: calc(var(--spacing) * 4);
@@ -1303,8 +1155,7 @@ open-page-rail a[aria-current='location']::before {
   box-shadow: none;
 }
 
-  .article-content pre code,
-  .blog-content pre code {
+.article-content pre code {
   background: none;
   color: var(--surface-code-foreground);
   padding: 0;
@@ -1315,40 +1166,13 @@ open-page-rail a[aria-current='location']::before {
 /* Fenced blocks compile to Shiki token spans at generation time; token
    colors resolve through the --shiki-* palette table (site-css.ts), so the
    rules above only own the surface, the border and the plain-fence ink. */
-  .article-content open-code-block,
-  .blog-content open-code-block {
+.article-content open-code-block {
   margin: calc(var(--spacing) * 5) 0;
 }
 
-/* The changelog archive renders plain <pre> (no copy-button wrapper): the
-   fence's own border/margin belong to this rule, not to the document layer. */
-  .changelog-content pre {
-  background: var(--surface-code);
-  color: var(--surface-code-foreground);
-  padding: calc(var(--spacing) * 5) calc(var(--spacing) * 6);
-  border-radius: var(--radius-lg);
-  overflow-x: auto;
-  border: calc(var(--spacing) * 0.25) solid var(--color-border);
-  margin: calc(var(--spacing) * 4) 0;
-  font-size: var(--text-sm);
-  line-height: 1.7;
-  box-shadow: none;
-}
-
-  .changelog-content pre code {
-  background: none;
-  color: inherit;
-  padding: 0;
-  border-radius: 0;
-  font-size: var(--text-sm);
-  line-height: 1.7;
-}
-
 /* ── lists ────────────────────────────────────────────────────────────── */
-  .article-content ul,
-  .article-content ol,
-  .blog-content ul,
-  .blog-content ol {
+.article-content ul,
+.article-content ol {
   padding-left: calc(var(--spacing) * 6);
   margin: calc(var(--spacing) * 4) 0;
   color: var(--color-muted-foreground);
@@ -1359,43 +1183,26 @@ open-page-rail a[aria-current='location']::before {
 /* list-style-type is re-declared on purpose: the preset bundle's base layer
    (Tailwind preflight, since C4 enabled it — #1507) resets lists to none,
    and this unlayered sheet must win the markers back for prose. */
-  .article-content ul,
-  .blog-content ul {
+.article-content ul {
   list-style-type: disc;
 }
 
-  .article-content ol,
-  .blog-content ol {
+.article-content ol {
   list-style-type: decimal;
 }
 
-  .changelog-content ul,
-  .changelog-content ol {
-  padding-left: calc(var(--spacing) * 5);
-  color: var(--color-muted-foreground);
-  line-height: 1.7;
-  font-size: var(--text-base);
-}
-
-  .article-content li,
-  .blog-content li {
+.article-content li {
   margin: 0.375rem 0;
 }
 
-  .changelog-content li {
-  margin: calc(var(--spacing) * 1) 0;
-}
-
 /* ── rules, quotes, figures, headings' anchors ────────────────────────── */
-  .article-content hr,
-  .blog-content hr {
+.article-content hr {
   border: 0;
   border-top: 0.5px solid var(--color-border);
   margin: calc(var(--spacing) * 8) 0;
 }
 
-  .article-content blockquote,
-  .blog-content blockquote {
+.article-content blockquote {
   margin: calc(var(--spacing) * 8) 0;
   padding: calc(var(--spacing) * 6) calc(var(--spacing) * 4);
   border: 0;
@@ -1408,10 +1215,7 @@ open-page-rail a[aria-current='location']::before {
   text-align: center;
 }
 
-/* The article column restates the quote as a quiet inset; the blog keeps
-   the serif pull-quote above. Later declaration wins, exactly as the
-   retired article sheet's second blockquote block did. */
-  .article-content blockquote {
+.article-content blockquote {
   margin: calc(var(--spacing) * 4) 0;
   padding: calc(var(--spacing) * 1) calc(var(--spacing) * 4);
   border: 0;
@@ -1424,21 +1228,18 @@ open-page-rail a[aria-current='location']::before {
   text-align: start;
 }
 
-  .article-content blockquote p,
-  .blog-content blockquote p {
+.article-content blockquote p {
   margin: 0;
 }
 
 /* Line-art diagrams (locale-free, static raw HTML in the markdown): ink from
    currentColor, one brand accent carried by the markup itself. */
-  .article-content figure.diagram,
-  .blog-content figure.diagram {
+.article-content figure.diagram {
   margin: calc(var(--spacing) * 6) 0;
   color: var(--color-muted-foreground);
 }
 
-  .article-content figure.diagram svg,
-  .blog-content figure.diagram svg {
+.article-content figure.diagram svg {
   display: block;
   height: 120px;
   width: auto;
@@ -1447,8 +1248,7 @@ open-page-rail a[aria-current='location']::before {
 /* Hover/focus anchor: a real same-page link appended by the build pipeline
    (article-body.ts); the "#" glyph lives in ::after so screen readers hear
    the bare title. Pseudo-element subject — no utility can address it. */
-  .article-content .heading-anchor,
-  .blog-content .heading-anchor {
+.article-content .heading-anchor {
   margin-inline-start: calc(var(--spacing) * 2);
   color: var(--color-muted-foreground);
   font-weight: var(--font-weight-normal);
@@ -1456,24 +1256,18 @@ open-page-rail a[aria-current='location']::before {
   opacity: 0;
 }
 
-  .article-content .heading-anchor::after,
-  .blog-content .heading-anchor::after {
+.article-content .heading-anchor::after {
   content: '#';
 }
 
-  .article-content h2:hover .heading-anchor,
-  .article-content h3:hover .heading-anchor,
-  .article-content .heading-anchor:focus-visible,
-  .blog-content h2:hover .heading-anchor,
-  .blog-content h3:hover .heading-anchor,
-  .blog-content .heading-anchor:focus-visible {
+.article-content h2:hover .heading-anchor,
+.article-content h3:hover .heading-anchor,
+.article-content .heading-anchor:focus-visible {
   opacity: 1;
   color: var(--color-primary);
 }
 
-/* ── tables (B article/blog; A changelog) ─────────────────────────────── */
-  .article-content table,
-  .blog-content table {
+.article-content table {
   display: block;
   width: 100%;
   max-width: 100%;
@@ -1486,8 +1280,7 @@ open-page-rail a[aria-current='location']::before {
 
 /* A table is its own horizontal scroll container, so it is focusable
    (tabindex added by article-body.ts); paint the site focus ring. */
-.article-content table:focus-visible,
-.blog-content table:focus-visible {
+.article-content table:focus-visible {
   outline: 2px solid var(--color-ring);
   outline-offset: 2px;
 }
@@ -1497,10 +1290,8 @@ open-page-rail a[aria-current='location']::before {
    document to 722px. overflow is ignored on a display:table box, so the
    table becomes a block that scrolls only when its content needs the room —
    desktop output is byte-identical. */
-  .article-content th,
-  .article-content td,
-  .blog-content th,
-  .blog-content td {
+.article-content th,
+.article-content td {
   border: calc(var(--spacing) * 0.25) solid var(--color-border);
   border-bottom: 0.5px solid var(--color-border);
   padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
@@ -1508,8 +1299,7 @@ open-page-rail a[aria-current='location']::before {
   vertical-align: top;
 }
 
-  .article-content th,
-  .blog-content th {
+.article-content th {
   background: var(--color-muted);
   color: var(--color-muted-foreground);
   font-weight: var(--font-weight-semibold);
@@ -1518,121 +1308,32 @@ open-page-rail a[aria-current='location']::before {
   letter-spacing: var(--tracking-normal);
 }
 
-  .article-content td,
-  .blog-content td {
+.article-content td {
   color: var(--color-muted-foreground);
 }
 
-  .article-content tr:nth-child(even) td,
-  .blog-content tr:nth-child(even) td {
+.article-content tr:nth-child(even) td {
   background: color-mix(in srgb, var(--color-muted) 72%, transparent);
 }
 
-  .changelog-content table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: calc(var(--spacing) * 3) 0 calc(var(--spacing) * 6);
-  font-size: var(--text-sm);
-  background: var(--color-card);
-}
-
-  .changelog-content th,
-  .changelog-content td {
-  border: calc(var(--spacing) * 0.25) solid var(--color-border);
-  padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
-  text-align: left;
-  vertical-align: top;
-}
-
-  .changelog-content th {
-  font-weight: var(--font-weight-bold);
-  color: var(--color-foreground);
-  background: var(--color-muted);
-}
-
-  .changelog-content td {
-  color: var(--color-muted-foreground);
-}
-
-  .changelog-content tr:nth-child(even) td {
-  background: color-mix(in srgb, var(--color-muted) 72%, transparent);
-}
-
-/* ── changelog archive specifics (B changelog only) ───────────────────── */
-  .changelog-content h2 {
-  position: relative;
-  font-size: var(--text-5xl);
-  font-weight: var(--font-weight-extrabold);
-  line-height: 1.12;
-  margin: calc(var(--spacing) * 10) 0 calc(var(--spacing) * 4);
-  border-bottom: 0.5px solid var(--color-border);
-  padding: 0 0 calc(var(--spacing) * 4) calc(var(--spacing) * 6);
-  color: var(--color-foreground);
-}
-
-  .changelog-content h2::before {
-  content: '';
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 2px;
-  background: var(--color-primary);
-}
-
-  .changelog-content h2:first-child::after {
-  content: 'published history';
-  display: block;
-  margin-top: calc(var(--spacing) * 2);
-  color: var(--color-primary);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-  .changelog-content h3 {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-weight-bold);
-  line-height: 1.22;
-  margin: calc(var(--spacing) * 6) 0 calc(var(--spacing) * 2);
-  color: var(--color-foreground);
-}
-
-/* ── responsive tiers (A; the retired sheets' inclusive max-width form) ── */
 @media (max-width: 900px) {
-  .article-content h1,
-  .blog-content h1,
-  .changelog-content h1 {
+  .article-content h1 {
     font-size: var(--text-6xl);
   }
 
-  .article-content p,
-  .blog-content p,
-  .changelog-content p {
+  .article-content p {
     font-size: var(--text-sm);
   }
 
-  .changelog-content pre {
-    font-size: var(--text-xs);
-  }
 }
 
 @media (max-width: 480px) {
-  .article-content h1,
-  .blog-content h1,
-  .changelog-content h1 {
+  .article-content h1 {
     font-size: var(--text-5xl);
   }
 
-  /* Article/blog lists keep their base size: the retired sheet's ≤480 list
-     rule was an elements-only rule that the content block's class rule
-     already outranked. The changelog archive has no such class rule, so
-     there the tier applies. */
-  .changelog-content ul,
-  .changelog-content ol {
-    font-size: var(--text-sm);
-  }
-}
 
+}
 
 /* ── API reference: grouped export panes (T5) ─────────────────────────────
    The generated export inventory renders as trusted HTML (one pane per
@@ -1845,10 +1546,8 @@ open-page-rail a[aria-current='location']::before {
    and React keep their reference prose around 700–760px (~86–90 characters).
    Constrain the text blocks to a readable measure while code blocks, tables
    and figures keep the full column width — they either scroll horizontally or
-   own their layout, and narrowing them would force more wrapping. Applies to
-   both long-form surfaces (guide/architecture articles and blog posts). */
-.article-content :is(p, ul, ol, blockquote, dl, h2, h3, h4, h5, h6),
-.blog-content :is(p, ul, ol, blockquote, dl, h2, h3, h4, h5, h6) {
+   own their layout, and narrowing them would force more wrapping. */
+.article-content :is(p, ul, ol, blockquote, dl, h2, h3, h4, h5, h6) {
   max-width: 44rem;
 }
 

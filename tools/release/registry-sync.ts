@@ -15,23 +15,16 @@
  * Contract:
  *   - read-only against npm (`npm view <pkg> dist-tags --json` and
  *     `npm view <pkg> versions --json`); it never publishes or moves a tag.
- *   - the write is the sync's only side effect, over exactly three files:
- *     `docs/release/release-state.json` (the registry block: `verifiedAt`,
- *     `method`, each published package's `registry` object, and
- *     `latestPrerelease`), `www/app/data/version.ts` (the display projection:
- *     `PUBLISHED_LATEST` and `UNRELEASED_PACKAGES`, the two constants
- *     `release:state-machine:check` pins to the block), and the regenerated
- *     `www/app/data/_generated-release-line.ts` (through the site's own
- *     content generator, so `www-release-anchor` keeps agreeing with both).
- *     Every other byte of each file is preserved; the JSON round-trip is
- *     byte-identity (proven in the tests).
+ *   - the sync writes docs/release/release-state.json's registry sections
+ *     and refreshes the site's ignored release-line module through its
+ *     content generator. The checked-in site consumes this projection.
  *   - `commonCompleteVersion` (the stable intersection, needs full version
  *     sets and a release-admission decision) stays owned by
  *     release:registry-check and the maintainer; the sync never writes it.
  *
  * What the sync does NOT do: commit or push. The Release workflow uploads the
- * three files as a `registry-release-state` artifact and a maintainer lands
- * them through the ordinary pull-request path (the main-branch ruleset has no
+ * updated release state as a `registry-release-state` artifact and a
+ * maintainer lands it through the ordinary pull-request path (the main-branch ruleset has no
  * machine bypass, and the release job holds no push identity). Until that PR
  * lands, `@openelement/tools-release#registry-drift:check` fails a build whose
  * displayed version values no longer match the live registry — it runs in the
@@ -64,7 +57,6 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 export const RELEASE_STATE_PATH = 'docs/release/release-state.json';
-export const WWW_VERSION_PATH = 'www/app/data/version.ts';
 /** The site's one content generator: also refreshes _generated-release-line.ts. */
 export const SITE_CONTENT_GENERATOR = 'www/tools/generate-site-content-data.ts';
 
@@ -281,51 +273,6 @@ export function rewriteRegistryBlock(
   };
 }
 
-/** One published package's display line in the www projection. */
-function publishedLatestLines(document: ReleaseStateDocument): string[] {
-  return document.packages
-    .filter((entry) => entry.status === 'published')
-    .map((entry) => {
-      const latest = entry.registry?.latest;
-      if (!latest) throw new Error(`projectWwwVersionSource: ${entry.name} carries no latest`);
-      return `  '${entry.name}': 'v${latest}',`;
-    });
-}
-
-/** The unpublished package names, as the `UNRELEASED_PACKAGES` literal. */
-function unreleasedNames(document: ReleaseStateDocument): string[] {
-  return document.packages
-    .filter((entry) => entry.status === 'unpublished')
-    .map((entry) => `'${entry.name}'`);
-}
-
-/**
- * Project the synced truth into www/app/data/version.ts. Text-level (the same
- * level release:state-machine:check and www-release-anchor read the file at),
- * and fail-closed: an unexpected shape throws instead of writing a half-edited
- * module. Only the two registry-derived constants are replaced; every
- * hand-written comment and constant around them is preserved.
- */
-export function projectWwwVersionSource(source: string, document: ReleaseStateDocument): string {
-  const publishedBlock =
-    /(export const PUBLISHED_LATEST: Readonly<Record<string, string>> = \{)([\s\S]*?)(\n\};)/;
-  const unreleasedBlock = /(export const UNRELEASED_PACKAGES: readonly string\[\] = )\[[^\]]*\](;)/;
-  if (!publishedBlock.test(source)) {
-    throw new Error('projectWwwVersionSource: PUBLISHED_LATEST declaration not found');
-  }
-  if (!unreleasedBlock.test(source)) {
-    throw new Error('projectWwwVersionSource: UNRELEASED_PACKAGES declaration not found');
-  }
-  const withPublished = source.replace(
-    publishedBlock,
-    (_match, head: string, _body: string, tail: string) =>
-      `${head}\n${publishedLatestLines(document).join('\n')}${tail}`,
-  );
-  const names = unreleasedNames(document);
-  const unreleased = names.length === 0 ? '[]' : `[${names.join(', ')}]`;
-  return withPublished.replace(unreleasedBlock, `$1${unreleased}$2`);
-}
-
 export interface RegistrySyncResult {
   verifiedAt: string;
   /** The prerelease line the registry currently serves. */
@@ -336,8 +283,8 @@ export interface RegistrySyncResult {
 
 /**
  * The sync step of the publish train: read the tracked release-state, query
- * the live registry for every published package, rewrite the block, project it
- * into www/app/data/version.ts, and refresh the generated release-line module
+ * the live registry for every published package, rewrite the block, and
+ * refresh the generated release-line module
  * through the site's own generator. Fails closed on any query or write error.
  */
 export async function syncRegistryState(options: {
@@ -362,8 +309,6 @@ export async function syncRegistryState(options: {
   const verifiedAt = calendarDateStamp(options.now?.() ?? new Date());
   const synced = rewriteRegistryBlock(document, evidenceByName, verifiedAt);
   await writeFile(readPath(RELEASE_STATE_PATH), `${JSON.stringify(synced, null, 2)}\n`);
-  const versionSource = await readFile(readPath(WWW_VERSION_PATH), 'utf8');
-  await writeFile(readPath(WWW_VERSION_PATH), projectWwwVersionSource(versionSource, synced));
 
   if (options.regenerate !== false) {
     const runGenerator =

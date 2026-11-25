@@ -635,12 +635,9 @@ jobs:
         if: always() && steps.check.outputs.already_published != 'true'
         run: vp run --no-cache --fail-if-no-match --filter @openelement/tools-release sync:registry
 
-      # What the publish train writes: docs/release/release-state.json and the
-      # site's display constants, both set to what npm answers, so the tracked
-      # truth cannot lag the registry (the alpha.12 E400 legacy). Landing those
-      # files is a maintainer PR — main requires a pull request and this job
-      # holds no push identity — so the job hands them over as an artifact
-      # instead. Until the PR lands, the release-train drift check
+      # The release-state JSON records what npm answers. This job uploads
+      # it for a maintainer to land through a PR. Until the PR lands, the
+      # release-train drift check
       # (@openelement/tools-release#registry-drift:check, inside gate:release)
       # fails when the displayed versions no longer match the registry.
       - name: Upload the registry-synced release state
@@ -648,10 +645,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: registry-release-state
-          path: |
-            docs/release/release-state.json
-            www/app/data/version.ts
-            www/app/data/_generated-release-line.ts
+          path: docs/release/release-state.json
           if-no-files-found: error
 
       # T7 per-package tags + format-A notes: one Release object per shipped

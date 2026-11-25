@@ -9,6 +9,7 @@
 ## Start here
 
 - [Home](https://openelement.org/): the framework overview and the published version line.
+- [Release status](https://openelement.org/changelog/): published npm packages and the current source preview.
 - [Getting started](https://openelement.org/guide/getting-started/): install and scaffold a first project.
 - [Core concepts](https://openelement.org/guide/core-concepts/): elements, blocks, islands, and the compiled-element model.
 - [Tutorial](https://openelement.org/guide/tutorial/): a full walk through authoring, routing, and deployment.

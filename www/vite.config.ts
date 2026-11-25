@@ -8,8 +8,7 @@ import { defineConfig } from 'vite';
 // stays `openElement()` with no arguments: framework options have one home.
 //
 // www is an npm-first consumer; local workspace resolution during dev,
-// npm tarballs in production. The Site's own `#site-ui/*` and
-// `#generated/blog-data` subpath imports resolve through package.json
+// npm tarballs in production. The Site's own `#site-ui/*` subpath imports resolve through package.json
 // `imports`; these aliases keep the bundler on the same targets even where
 // imports-field resolution is not wired up.
 
@@ -17,8 +16,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '#site-ui': new URL('./app/site-ui', import.meta.url).pathname,
-      '#generated/blog-data': new URL('./app/data/_generated-blog-data.ts', import.meta.url)
-        .pathname,
     },
   },
   base: '/',

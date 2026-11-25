@@ -48,7 +48,7 @@ test('generator/emitter classification is green only when both rules hold', () =
     workspace('www', '@openelement/www', {
       'generate:content': 'node tools/generate-content.ts',
       'check:content': 'node tools/generate-content.ts --check',
-      'emit:rss': 'node tools/emit-rss.ts',
+      'emit:sitemap': 'node tools/emit-sitemap.ts',
     }),
     workspace('packages/ui', '@openelement/ui', {
       'generate:ui-manifest': 'node tools/generate-ui-manifest.ts',
@@ -71,7 +71,7 @@ test('generator/emitter classification is green only when both rules hold', () =
   expect(report.rows).toContain(
     'generate | www | tools/generate-content.ts | check:content | gate:source',
   );
-  expect(report.rows).toContain('emit | www | tools/emit-rss.ts | (none) | no');
+  expect(report.rows).toContain('emit | www | tools/emit-sitemap.ts | (none) | no');
 });
 
 test('each regression direction reports its own naming failure', () => {

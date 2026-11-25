@@ -32,7 +32,7 @@ export const openElement = defineIslandConfig({
   // carries the outline inline. `www/site-chrome.css` selects
   // `open-page-rail a::before` (the counter-rendered "§N" chip) in the document
   // tree, which a shadow root would put out of reach — declaring `shadow` would
-  // be a behaviour change dressed as a migration (16b-migration-note,
+  // be a behaviour change dressed as a migration (compiled slot updates,
   // page-local slice). The activation strategy is unchanged: idle + SSR.
   root: 'light',
   hydrate: 'idle',
@@ -55,7 +55,7 @@ export const openElement = defineIslandConfig({
  * the generated lane has no authoring `computed` (2026-11-18 ruling), and a
  * direct call to an app-local function in a tracked sink is refused with
  * `OEC9043 [OEIR_UNCLASSIFIED_BINDING]`, while a component-local const arrow IS
- * admitted and emits a bound refresh (16b-migration-note R1b, measured).
+ * admitted and emits a bound refresh (compiled slot updates).
  *
  * Everything else is byte-identical markup: the classes, both branches, the
  * `#start` overview anchor, `aria-label` from the locale and

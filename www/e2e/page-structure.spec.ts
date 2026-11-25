@@ -16,7 +16,6 @@ const guideRoutes = [
   '/guide/core-concepts/',
   '/guide/compiled-grammar',
   '/guide/routing-and-data/',
-  '/guide/streaming',
   '/guide/mdx',
   '/guide/api/',
   '/guide/configuration/',
@@ -56,10 +55,22 @@ test.describe('Unified page structure', () => {
     });
   }
 
-  test('changelog renders content-first with a railed reading surface', async ({ page }) => {
-    await page.goto('/changelog/');
-    await expect(page.locator('open-reading-shell[rail]')).toHaveCount(1);
-    await expect(page.locator('open-reading-shell h1:visible')).toHaveCount(1);
+  test('release status shows npm and source versions without JavaScript', async ({ browser }) => {
+    const context = await browser.newContext({ javaScriptEnabled: false });
+    try {
+      const page = await context.newPage();
+      await page.goto('/changelog/');
+      await expect(page.getByRole('heading', { level: 1, name: 'Release Status' })).toBeVisible();
+      await expect(page.locator('#published')).toContainText('latest');
+      await expect(
+        page.locator('#published').getByRole('link', { name: '@openelement/router' }),
+      ).toHaveAttribute('href', 'https://www.npmjs.com/package/@openelement/router');
+      await expect(
+        page.locator('#source').getByRole('heading', { name: 'Source checkout' }),
+      ).toBeVisible();
+    } finally {
+      await context.close();
+    }
   });
 
   test('404 remains a compact recovery scene without WebGL', async ({ page }) => {
@@ -97,31 +108,6 @@ test.describe('Unified page structure', () => {
     // commands are repository fixture scripts, not app-local commands.
     await expect(examples).toContainText('Run (repo root)');
     await expect(examples).toContainText('clone https://github.com/open-element/openelement');
-  });
-
-  test('blog index is a v4 dispatch journal with a featured band', async ({ page, request }) => {
-    await page.goto('/blog/');
-    // The retired <blog-index> host became the page hook class (page-blog-index)
-    // when the route migrated to a server function page (alpha15).
-    const index = page.locator('.page-blog-index');
-    await expect(index.locator('h1')).toHaveText('Dispatches.');
-    // The 1.0 baseline ships one dispatch; it is the featured band and the
-    // stream renders any earlier dispatches. Assert the featured post is real
-    // and that every post link on the index resolves.
-    // The featured band is the index's only post anchor that carries an h2
-    // (stream rows carry h3); the presentation class it used to be found by
-    // went away with the utility-first migration.
-    const featured = index.locator('a:has(h2)').first();
-    await expect(featured).toHaveAttribute('href', /\/blog\/.+/);
-    await expect(featured.locator('h2')).toBeVisible();
-    const hrefs = await index
-      .locator('a[href^="/blog/"]')
-      .evaluateAll((links) => links.map((link) => link.getAttribute('href') ?? ''));
-    expect(hrefs.length).toBeGreaterThan(0);
-    for (const href of hrefs) {
-      const res = await request.get(href);
-      expect(res.ok()).toBe(true);
-    }
   });
 
   test('contributing is a v4 lab page with terminal, checklist and help rows', async ({ page }) => {
@@ -247,29 +233,6 @@ test.describe('Unified page structure', () => {
     const visual = page.locator('open-standards-visual');
     await expect(visual).toHaveAttribute('data-oe-light', '');
     expect(await visual.locator(':scope > *').count()).toBeGreaterThan(0);
-  });
-
-  test('blog articles SSR their outline and deterministic navigation without mojibake', async ({
-    page,
-  }) => {
-    // The baseline's dispatch post; ADR pages are excluded from prev/next and
-    // render an empty (hidden) pager.
-    await page.goto('/zh/blog/1-0-0-alpha-1-baseline');
-    const rail = page.locator('open-page-rail');
-    await expect(rail).toBeVisible();
-    expect(await rail.locator('a[href^="#"]').count()).toBeGreaterThan(0);
-    await expect(page.locator('body')).not.toContainText(/鏂|鈫|鍗|杩|鏈/);
-    // The pager is deterministic: it is visible exactly when the post has
-    // prev/next neighbors. The baseline ships a single dispatch, so no
-    // neighbors means the pager renders hidden. The label follows the page
-    // locale (zh here).
-    const pager = page.getByRole('navigation', { name: '页面导航' });
-    await expect(pager).toHaveCount(1);
-    if ((await pager.locator('a:visible').count()) > 0) {
-      await expect(pager).toBeVisible();
-    } else {
-      await expect(pager).toBeHidden();
-    }
   });
 
   test('mobile rail is a native details drawer', async ({ page }) => {

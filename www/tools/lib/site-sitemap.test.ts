@@ -9,37 +9,25 @@ import { tmpdir } from 'node:os';
 
 const LOCALES: readonly SiteLocale[] = SITE_LOCALES;
 
-test('enumeratePublicRoutes: static catalog + blog enumeration, both locales', () => {
+test('enumeratePublicRoutes: static catalog, both locales', () => {
   const { routes, failures } = enumeratePublicRoutes({
     routes: [
       { path: '/', type: 'page' },
       { path: '/404', type: 'page' },
       { path: '/docs', type: 'page' },
-      { path: '/blog/:slug', type: 'page' },
       { path: '/api/hello', type: 'api' },
       { path: '/_renderer', type: 'special' },
     ],
-    blogPostRoutes: ['/blog/a', '/blog/b'],
     locales: LOCALES,
     defaultLocale: 'en',
   });
   expect(failures).toEqual([]);
-  expect(routes).toEqual([
-    '/',
-    '/blog/a',
-    '/blog/b',
-    '/docs',
-    '/zh',
-    '/zh/blog/a',
-    '/zh/blog/b',
-    '/zh/docs',
-  ]);
+  expect(routes).toEqual(['/', '/docs', '/zh', '/zh/docs']);
 });
 
 test('enumeratePublicRoutes: unenumerated dynamic route fails closed', () => {
   const { routes, failures } = enumeratePublicRoutes({
     routes: [{ path: '/shop/:id', type: 'page' }],
-    blogPostRoutes: [],
     locales: LOCALES,
     defaultLocale: 'en',
   });
@@ -54,7 +42,6 @@ test('enumeratePublicRoutes: duplicate localized route fails closed', () => {
       { path: '/docs', type: 'page' },
       { path: '/docs', type: 'page' },
     ],
-    blogPostRoutes: [],
     locales: LOCALES,
     defaultLocale: 'en',
   });
@@ -129,7 +116,6 @@ test('enumeratePublicRoutes: the default locale is explicit, not array order', (
       { type: 'page', path: '/' },
       { type: 'page', path: '/guide' },
     ],
-    blogPostRoutes: [],
     locales: ['zh', 'en'],
     defaultLocale: 'en',
   });
@@ -138,7 +124,7 @@ test('enumeratePublicRoutes: the default locale is explicit, not array order', (
 });
 
 test('enumeratePublicRoutes: invalid locale configuration fails closed', () => {
-  const base = { routes: [], blogPostRoutes: [] } as const;
+  const base = { routes: [] } as const;
   const cases: Array<[string, { locales: string[]; defaultLocale: string }]> = [
     ['no locales', { locales: [], defaultLocale: 'en' }],
     ['duplicate locales', { locales: ['en', 'en'], defaultLocale: 'en' }],
@@ -171,7 +157,7 @@ test('articleLastmodByRoute: source dates per locale, unknown routes omitted', a
         '/zh/guide/getting-started',
         '/architecture',
         '/zh/architecture',
-        '/blog/hello',
+        '/changelog',
       ],
       manifest,
     );
@@ -180,7 +166,7 @@ test('articleLastmodByRoute: source dates per locale, unknown routes omitted', a
     expect(map.get('/architecture')).toEqual('2026-09-16');
     expect(map.has('/zh/architecture')).toEqual(false); // 'uncommitted' is hidden
     expect(map.has('/')).toEqual(false);
-    expect(map.has('/blog/hello')).toEqual(false);
+    expect(map.has('/changelog')).toEqual(false);
   } finally {
     await rm(dir, { recursive: true });
   }

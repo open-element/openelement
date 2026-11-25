@@ -1,16 +1,13 @@
 /**
  * Generate site sitemap.xml + robots.txt from the route catalog (#1327).
  * Runs in `pnpm run site:build` after the router build: the public index is
- * enumerated from the route catalog plus the blog collection loaded straight
- * from source — never by scanning built output or request-time Documents,
+ * enumerated from the route catalog without scanning built output or request-time Documents,
  * and never from a hand-synced index.
  * Fails closed: an unenumerable dynamic route or a duplicate fails the build.
  */
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SITE_DEFAULT_LOCALE, SITE_LOCALES } from '../site-config.ts';
-import { loadCollectionData } from '../lib/content.ts';
-import { blogCollection, prepareBlogPosts } from '../lib/blog.ts';
 import { scanSiteRoutes } from './lib/site-route-scan.ts';
 import { enumeratePublicRoutes, renderRobotsTxt, renderSitemapXml } from './lib/site-sitemap.ts';
 import { articleLastmodByRoute } from './lib/site-lastmod.ts';
@@ -21,23 +18,11 @@ export const SITE_DIST = 'www/dist';
 const SITE_ROUTES = 'www/app/routes';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
-const siteRoot = join(repoRoot, 'www', '');
 
 export async function generateSiteSitemap(dist = join(repoRoot, SITE_DIST)): Promise<string[]> {
-  // The feed/sitemap consume slugs and frontmatter only: render no markdown
-  // (the identity override skips the build-time highlighter entirely).
-  const blogOptions = {
-    ...blogCollection,
-    contentDir: join(siteRoot, blogCollection.contentDir),
-    markdown: (content: string) => content,
-  };
-  const blogPostRoutes = prepareBlogPosts(await loadCollectionData('blog', blogOptions)).map(
-    (post) => `/blog/${post.slug}`,
-  );
   const routes = await scanSiteRoutes(join(repoRoot, SITE_ROUTES));
   const { routes: publicRoutes, failures } = enumeratePublicRoutes({
     routes,
-    blogPostRoutes,
     locales: SITE_LOCALES,
     defaultLocale: SITE_DEFAULT_LOCALE,
   });
@@ -48,7 +33,7 @@ export async function generateSiteSitemap(dist = join(repoRoot, SITE_DIST)): Pro
   }
   // Real source dates, not the build clock: routes without a known content
   // date omit <lastmod> entirely, and the artifact stays byte-stable across
-  // UTC days (matching the RSS feed's deliberate no-build-date policy).
+  // UTC days.
   const lastmod = await articleLastmodByRoute(publicRoutes);
   const sitemapPath = join(dist, 'sitemap.xml');
   const robotsPath = join(dist, 'robots.txt');

@@ -72,7 +72,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
@@ -306,40 +306,57 @@ interface ShellRun {
   output: string;
 }
 
+const EXTRACTED_STEP_SCRATCH_FILES = [
+  'ci-runs.json',
+  'ci-run.json',
+  'ci-jobs.json',
+  'ci-qualification.json',
+  'disttag-${PKG}.log',
+];
+
 function runShellScript(
   script: string,
   options: { cwd: string; env: Record<string, string>; pathPrefix?: string },
 ): ShellRun {
-  const dir = mkdtempSync(join(tmpdir(), 'oe-intent-step-'));
+  const dir = mkdtempSync(join(options.cwd, 'oe-intent-step-'));
   const scriptPath = join(dir, 'step.sh');
   const outputPath = join(dir, 'github-output.txt');
-  writeFileSync(scriptPath, `${script}\n`);
-  writeFileSync(outputPath, '');
-  const env: Record<string, string> = {
-    ...options.env,
-    GITHUB_OUTPUT: outputPath,
-    GITHUB_REPOSITORY: 'openelement/openelement',
-    // The extracted steps may resolve checked-in tools through the workspace
-    // (the qualification-contract CLI). GitHub provides this variable; the
-    // harness points it at the real checkout while cwd stays the scratch repo.
-    GITHUB_WORKSPACE: repoRoot,
-    PATH: `${options.pathPrefix ? `${options.pathPrefix}:` : ''}${process.env.PATH ?? ''}`,
-  };
-  // GitHub's default Linux shell is `bash -e {0}` — reproduce it exactly.
-  const result = spawnCommandSync('bash', {
-    args: ['-e', scriptPath],
-    cwd: options.cwd,
-    env,
-    stdin: 'null',
-    stdout: 'piped',
-    stderr: 'piped',
-  });
-  return {
-    status: result.code,
-    stdout: new TextDecoder().decode(result.stdout),
-    stderr: new TextDecoder().decode(result.stderr),
-    output: readFileSync(outputPath, 'utf8'),
-  };
+  try {
+    // GitHub gives each job its own /tmp. Concurrent local matrices share it.
+    // Rebase the extracted steps' known scratch filenames within their fixture.
+    let isolatedScript = script;
+    for (const name of EXTRACTED_STEP_SCRATCH_FILES) {
+      isolatedScript = isolatedScript.replaceAll(`/tmp/${name}`, `./${basename(dir)}/${name}`);
+    }
+    writeFileSync(scriptPath, `${isolatedScript}\n`);
+    writeFileSync(outputPath, '');
+    const env: Record<string, string> = {
+      ...options.env,
+      GITHUB_OUTPUT: outputPath,
+      GITHUB_REPOSITORY: 'openelement/openelement',
+      // GitHub supplies this path for the qualification-contract CLI.
+      GITHUB_WORKSPACE: repoRoot,
+      PATH: `${options.pathPrefix ? `${options.pathPrefix}:` : ''}${process.env.PATH ?? ''}`,
+      TMPDIR: dir,
+    };
+    // GitHub's default Linux shell is `bash -e {0}`.
+    const result = spawnCommandSync('bash', {
+      args: ['-e', scriptPath],
+      cwd: options.cwd,
+      env,
+      stdin: 'null',
+      stdout: 'piped',
+      stderr: 'piped',
+    });
+    return {
+      status: result.code,
+      stdout: new TextDecoder().decode(result.stdout),
+      stderr: new TextDecoder().decode(result.stderr),
+      output: readFileSync(outputPath, 'utf8'),
+    };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 function runExtractedStep(
@@ -1680,19 +1697,23 @@ export function runMatrix(paths: HarnessPaths = {}): ScenarioOutcome[] {
     );
     if (!upload) problems.push('the registry-state artifact upload is missing');
     else {
+      if (!upload.uses?.startsWith('actions/upload-artifact@')) {
+        problems.push('the registry-state artifact step no longer uploads an artifact');
+      }
       if (!/always\s*\(/u.test(upload.if ?? '')) {
         problems.push('the registry-state artifact upload lost its always() guard');
+      }
+      if (!/steps\.check\.outputs\.already_published\s*!=\s*'true'/u.test(upload.if ?? '')) {
+        problems.push('the registry-state artifact upload lost its already-published guard');
       }
       if (upload.with?.['if-no-files-found'] !== 'error') {
         problems.push('the registry-state artifact upload no longer fails on missing files');
       }
-      const paths = String(upload.with?.path ?? '');
-      for (const path of [
-        'docs/release/release-state.json',
-        'www/app/data/version.ts',
-        'www/app/data/_generated-release-line.ts',
-      ]) {
-        if (!paths.includes(path)) problems.push(`the artifact upload omits ${path}`);
+      if (upload['continue-on-error'] === true) {
+        problems.push('the registry-state artifact upload is continue-on-error');
+      }
+      if (String(upload.with?.path ?? '').trim() !== 'docs/release/release-state.json') {
+        problems.push('the artifact upload must carry only docs/release/release-state.json');
       }
     }
     return {

@@ -4,8 +4,7 @@
   "version": "1.0.0-alpha.16",
   "type": "module",
   "imports": {
-    "#site-ui/*": "./app/site-ui/*",
-    "#generated/blog-data": "./app/data/_generated-blog-data.ts"
+    "#site-ui/*": "./app/site-ui/*"
   },
   "scripts": {
     "build": "node ../packages/router/src/cli/build.ts",
@@ -29,7 +28,6 @@
     "check:install-command": "node ../tools/repo/run-in.ts --root .. -- node www/tools/generate-install-command.ts --check",
     "emit:redirects": "node ../tools/repo/run-in.ts --root .. -- node www/tools/emit-site-redirects.ts",
     "emit:sitemap": "node ../tools/repo/run-in.ts --root .. -- node www/tools/emit-site-sitemap.ts",
-    "emit:rss": "node ../tools/repo/run-in.ts --root .. -- node www/tools/emit-site-rss.ts",
     "check:content": "node ../tools/repo/run-in.ts --root .. -- node www/tools/check-content-examples.ts",
     "check:content-dates": "node ../tools/repo/run-in.ts --root .. -- node www/tools/check-content-dates.ts",
     "check:doc-claims": "node ../tools/repo/run-in.ts --root .. -- node www/tools/check-doc-claims.ts",
