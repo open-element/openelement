@@ -16,6 +16,8 @@ import {
 } from './consumer-packaged-shared.ts';
 import { VITE_DEV_PIN } from '../repo/deps-vite-check.ts';
 
+import { buildPackedBoard, provePackedBoard } from './consumer-packaged-element-board.ts';
+
 const root = resolve(import.meta.dirname!, '../..');
 const elementTarball = join(
   root,
@@ -211,6 +213,8 @@ export default {
     '<!doctype html><proof-profile></proof-profile><script type="module" src="/generated.js"></script>',
   );
 
+  await buildPackedBoard(author, consumer);
+
   // Qualification server on node:http via the shared fetch adapter.
   let serverOrigin = '';
   const serve = await import('../../packages/router/src/internal/node-http.ts');
@@ -219,24 +223,22 @@ export default {
     port: 0,
     handler: async (request) => {
       const path = new URL(request.url).pathname;
-      const file =
-        path === '/counter.js'
-          ? 'counter.js'
-          : path === '/generated.js'
-            ? 'generated.js'
-            : path === '/generated'
-              ? 'generated.html'
-              : path === '/shadow.js'
-                ? 'shadow.js'
-                : path === '/shadow.js.map'
-                  ? 'shadow.js.map'
-                  : path === '/shadow-s3'
-                    ? 'shadow-s3.html'
-                    : path === '/shadow-mismatch'
-                      ? 'shadow-mismatch.html'
-                      : path === '/shadow-mismatch-control'
-                        ? 'shadow-mismatch-control.html'
-                        : 'index.html';
+      const files: Record<string, string> = {
+        '/counter.js': 'counter.js',
+        '/generated.js': 'generated.js',
+        '/generated': 'generated.html',
+        '/board': 'board.html',
+        '/board.js': 'board.js',
+        '/board.js.map': 'board.js.map',
+        '/shadow.js': 'shadow.js',
+        '/shadow.js.map': 'shadow.js.map',
+        '/shadow-s3': 'shadow-s3.html',
+        '/shadow-mismatch': 'shadow-mismatch.html',
+        '/shadow-mismatch-control': 'shadow-mismatch-control.html',
+        '/shadow-seed': 'shadow-seed.html',
+        '/shadow-seed-mismatch': 'shadow-seed-mismatch.html',
+      };
+      const file = files[path] ?? 'index.html';
       return new Response(await readFile(join(consumer, file), 'utf8'), {
         headers: {
           'content-type': /\.js$/.test(file)
@@ -307,14 +309,14 @@ export default {
 
     // ---- M12 S3 slice: packed shadow-root generated island ----
     //
-    // LOCAL evidence (never a gate/CI-required task). This leg builds the packed
+    // This packed qualification leg builds the packed
     // generated lane the S3 assertions need: a shadow-root generated island with
     // a compiler-emitted host producer, a Node SSR artifact (packed compiler +
     // packed shell), a browser bundle with an external source map, and then
     // asserts on the installed tarballs' output only: no `__partProgram`, exact
     // server SSR bytes preserved through parse/claim, zero claim-period
     // mutations, pre-activation input retention, and a decodable authored map.
-    // It does not claim the full S2 stateful list matrix (M12/M13 stay owed).
+    // The authored S2 Board runs on these same tarballs in each engine below.
     await writeFile(
       join(author, 'proof-shadow.tsx'),
       `// The generated lane's island policy statement (no router is installed).
@@ -409,6 +411,9 @@ export function renderShadow() {
   // router build uses; no fabricated property seed.
   return ProofShadow__ssrHost(undefined, undefined, [['title', 'server title'], ['count', '2']]);
 }
+export function renderSeededShadow() {
+  return ProofShadow__ssrHost({items: [{id: 's', label: 'SEED'}]}, undefined, [['title', 'seeded title']]);
+}
 `,
     );
     await writeFile(
@@ -458,7 +463,7 @@ export default {
     const shadowMapEvidence = assertAuthoredSourceMap(shadowMap, 'proof-shadow.tsx', 10);
     const ssrModule = (await import(
       pathToFileURL(join(author, 'dist-ssr/ssr-shadow-entry.js')).href
-    )) as { renderShadow: () => unknown };
+    )) as { renderShadow: () => unknown; renderSeededShadow: () => string };
     const serverHostHtml = ssrModule.renderShadow();
     assert(
       typeof serverHostHtml === 'string' &&
@@ -480,9 +485,12 @@ export default {
     preHost: host.outerHTML,
     preShadow: shadow.innerHTML,
     typed: 'typed before activation',
+    input: input,
     reset: function () { records.length = 0; }
   };
   input.value = window.__s3.typed;
+  input.focus();
+  input.setSelectionRange(2, 7);
   var observe = function (target) {
     var observer = new MutationObserver(function (entries) {
       for (var i = 0; i < entries.length; i++) {
@@ -573,6 +581,27 @@ export default {
       join(consumer, 'shadow-mismatch-control.html'),
       mismatchDocument(`card.setAttribute('data-kind', declaredKind);`),
     );
+    const seededHtml = ssrModule.renderSeededShadow();
+    assert.match(seededHtml, /data-oe-prop-seed=/, 'packed producer emitted the real prop seed');
+    for (const corrupt of [false, true]) {
+      await writeFile(
+        join(consumer, corrupt ? 'shadow-seed-mismatch.html' : 'shadow-seed.html'),
+        `<!doctype html><meta charset="utf-8">${seededHtml}<script>
+const host = document.querySelector('proof-shadow');
+const seedName = 'data-oe-prop-seed';
+const seed = host.getAttribute(seedName);
+const initialRow = host.shadowRoot.querySelector('#shadow-list li');
+const initialShadow = host.shadowRoot.innerHTML;
+const errors = [];
+addEventListener('error', event => errors.push(event.error?.code ?? event.message));
+if (${corrupt}) host.setAttribute(seedName, '{"undeclared":true}');
+const mutations = [];
+const observer = new MutationObserver(records => mutations.push(...records.map(record => record.type)));
+observer.observe(host.shadowRoot, {subtree: true, childList: true, characterData: true, attributes: true});
+window.__wire = {host, seedName, seed, initialRow, initialShadow, errors, mutations};
+</script><script type="module" src="/shadow.js"></script>`,
+      );
+    }
     console.log(
       `PASS packed S3 build: generated module ${shadowJs.length}B, SSR host ${(serverHostHtml as string).length}B, ` +
         `source map ${shadowMapEvidence.matchingSegments}/${shadowMapEvidence.totalSegments} authored segments`,
@@ -587,6 +616,8 @@ export default {
       const shadowBrowser = await type.launch({ headless: true });
       try {
         const page = await shadowBrowser.newPage();
+        const boardProof = await provePackedBoard(page, serverOrigin);
+        console.log(`PASS ${type.name()} ${shadowBrowser.version()} (packed): ${boardProof}`);
         const response = await page.goto(`${serverOrigin}/shadow-s3`);
         const responseText = await response!.text();
         assert(
@@ -612,6 +643,7 @@ export default {
                 preHost: string;
                 preShadow: string;
                 typed: string;
+                input: HTMLInputElement;
                 reset: () => void;
                 initialList: HTMLLIElement[];
                 initialChildren: Node[];
@@ -632,6 +664,9 @@ export default {
             postHost: host.outerHTML,
             postShadow: shadow.innerHTML,
             typed: s3.typed,
+            sameInput: shadow.querySelector('#shadow-field') === s3.input,
+            focus: shadow.activeElement === s3.input,
+            selection: [s3.input.selectionStart, s3.input.selectionEnd],
             inputValue: (shadow.querySelector('#shadow-field') as HTMLInputElement).value,
             title: shadow.querySelector('#shadow-title')?.textContent,
             count: shadow.querySelector('#shadow-count')?.textContent,
@@ -677,6 +712,8 @@ export default {
         assert.strictEqual(evidence.postHost, evidence.preHost, 'claim kept the host bytes');
         assert.strictEqual(evidence.postShadow, evidence.preShadow, 'claim kept the shadow bytes');
         assert.strictEqual(evidence.typed, 'typed before activation');
+        assert.ok(evidence.sameInput && evidence.focus, 'claim preserves the input and its focus');
+        assert.deepStrictEqual(evidence.selection, [2, 7], 'claim preserves input selection');
         assert.strictEqual(
           evidence.inputValue,
           'typed before activation',
@@ -1347,6 +1384,71 @@ export default {
         } finally {
           await mismatchPage.close();
         }
+        for (const corrupt of [false, true]) {
+          await page.goto(`${serverOrigin}/shadow-seed${corrupt ? '-mismatch' : ''}`);
+          await page.waitForFunction(() => customElements.get('proof-shadow') !== undefined);
+          const result = await page.evaluate(async (corrupt) => {
+            const wire = (
+              window as unknown as {
+                __wire: {
+                  host: HTMLElement & { items: { id: string; label: string }[] };
+                  seedName: string;
+                  seed: string;
+                  initialRow: Element;
+                  initialShadow: string;
+                  errors: string[];
+                  mutations: string[];
+                };
+              }
+            ).__wire;
+            const { host, seedName, seed, initialRow, initialShadow, errors, mutations } = wire;
+            const shadow = host.shadowRoot!;
+            const before = {
+              errors: [...errors],
+              mutations: [...mutations],
+              seed: host.getAttribute(seedName),
+              sameRow: shadow.querySelector('#shadow-list li') === initialRow,
+              sameBytes: shadow.innerHTML === initialShadow,
+            };
+            if (corrupt) {
+              host.setAttribute(seedName, seed);
+              host.remove();
+              document.body.append(host);
+            }
+            const consumed = !host.hasAttribute(seedName);
+            const sameRowAfterClaim = shadow.querySelector('#shadow-list li') === initialRow;
+            const seedLabel = host.items[0]?.label;
+            host.items = [{ id: 's', label: 'live seed' }];
+            await Promise.resolve();
+            return {
+              before,
+              consumed,
+              sameRowAfterClaim,
+              seedLabel,
+              errors,
+              live: shadow.querySelector('#shadow-list li')?.textContent,
+            };
+          }, corrupt);
+          assert.deepStrictEqual(result.before, {
+            errors: corrupt ? ['OEIR_SHELL_PROP_SEED_MISMATCH'] : [],
+            mutations: [],
+            seed: corrupt ? '{"undeclared":true}' : null,
+            sameRow: true,
+            sameBytes: true,
+          });
+          assert.ok(result.consumed && result.sameRowAfterClaim);
+          assert.strictEqual(
+            result.seedLabel,
+            'SEED',
+            'the actual non-default SSR input survives claim',
+          );
+          assert.strictEqual(
+            result.live,
+            'live seed',
+            'the valid or repaired seed leaves a live claim',
+          );
+          assert.deepStrictEqual(result.errors, result.before.errors);
+        }
         console.log(
           `PASS ${type.name()} ${shadowBrowser.version()} (packed, LOCAL): shadow generated S3 SSR->claim bytes, ` +
             `0 claim mutations, pre-activation input, source map ${shadowMapEvidence.matchingSegments}/${shadowMapEvidence.totalSegments} authored segments; ` +
@@ -1354,7 +1456,7 @@ export default {
             `condition-present-reorder-gap={mutations:${conditionPresentGap.mutationCount},types:${conditionPresentGap.mutationTypes.join('+')},conditionNodes:${conditionPresentGap.recreatedConditionNodes},present:${conditionPresentGap.conditionStillPresent}}; ` +
             `pre-teardown-order=${preTeardown.order.join(',')} dispose-reconnect-order=${teardown.reconnectTexts.join(',')}; ` +
             `mismatch=${mismatchEvidence.errorCode} mismatchMutations=${mismatchEvidence.mutationCount} ` +
-            `mismatchControlMutations=${controlEvidence.mutationCount} mismatchRetryLive=${mismatchEvidence.retriedConditionGone}; ${probeLine}`,
+            `mismatchControlMutations=${controlEvidence.mutationCount} mismatchRetryLive=${mismatchEvidence.retriedConditionGone}; prop-seed refusal/retry; ${probeLine}`,
         );
       } finally {
         await shadowBrowser.close();

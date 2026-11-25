@@ -44,27 +44,9 @@ import { signal as nodeSignal } from '../../../element/src/internal/signal/frame
 import { LifetimeScope } from '../../../element/src/internal/compiled/lifetime-scope.ts';
 import { ELEMENT_CLASSIFIER as CLASSIFIER, REPO_ROOT } from './testlib/element-classifier.ts';
 
-const FILE = '/proj/src/m08-s2-acceptance.tsx';
+import { S2_BOARD } from './testlib/s2-board.ts';
 
-/**
- * The M06 authored S2 Board, with one qualification-only static focus carrier.
- * The condition is a sibling of the list, the key is `item.id`, and the private
- * draft is the component-local `count` signal (the admitted M06 shape).
- * `contenteditable` is an ordinary static attribute; it is not a property
- * channel and it is not pretending to be the unqualified `<input>` obligation.
- */
-const S2_BOARD = `import { signal } from '@openelement/element';
-function Board(props) {
-  const items = signal([{ id: 'a', label: 'A' }, { id: 'c', label: 'C' }]);
-  const open = signal(true);
-  const count = signal(0);
-  return <section>
-    {open.value ? <p class="on">open</p> : <em class="off">closed</em>}
-    <ul>{items.value.map((item) => <li key={item.id}>{item.label}: {count.value}</li>)}</ul>
-    <p id="draft" contenteditable="true">note</p>
-  </section>;
-}
-`;
+const FILE = '/proj/src/m08-s2-acceptance.tsx';
 
 const S2_INITIAL = [
   { id: 'a', label: 'A' },

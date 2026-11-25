@@ -1,8 +1,8 @@
 /**
  * Unit coverage for the packed-element S3 leg's pure helpers.
  *
- * The packed leg itself is a LOCAL network/harness script
- * (`consumer-packaged-element.ts`) and is never a gate/CI required task. These
+ * The packed qualification leg itself runs via
+ * `consumer-packaged-element.ts` in the packed gate. These
  * tests pin only the dependency-free source-map decoding/validation that the
  * leg uses on the REAL emitted `dist/shadow.js.map`; they do not install,
  * build, or start a browser.
