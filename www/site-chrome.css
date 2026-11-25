@@ -361,15 +361,14 @@ open-search .overlay {
   text-decoration: none;
 }
 
-.page-home .home-release::before {
-  content: '';
+.page-home .home-release-dot {
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 50%;
   background: currentColor;
 }
 
-.page-home .home-release span {
+.page-home .home-release-version {
   padding-inline-start: 0.65rem;
   border-inline-start: 1px solid var(--home-rule);
   color: var(--color-muted-foreground);

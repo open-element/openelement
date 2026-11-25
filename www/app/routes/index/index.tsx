@@ -139,8 +139,9 @@ export function PageHome(props: {
         <div class='home-width home-hero-grid'>
           <div class='home-intro'>
             <a class='home-release' href={props.changelogHref}>
+              <span class='home-release-dot' aria-hidden='true'></span>
               {props.release}
-              <span>{props.version}</span>
+              <span class='home-release-version'>{props.version}</span>
             </a>
             <h1 id='home-title'>
               {props.title} <span>{props.titleAccent}</span>
