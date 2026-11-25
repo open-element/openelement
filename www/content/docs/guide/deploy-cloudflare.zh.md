@@ -68,13 +68,24 @@ export default createOpenElementNitroHandler({
 
 ```ts
 // nitro.config.ts
+import { fileURLToPath } from 'node:url';
+
+const publicDir = fileURLToPath(new URL('./dist-public', import.meta.url));
+
 export default defineNitroConfig({
   serverDir: 'server',
-  publicAssets: [{ dir: 'dist-public' }],
+  publicAssets: [{ dir: publicDir }],
+  modules: [
+    ({ options }) => {
+      options.publicAssets = options.publicAssets.filter(({ dir }) => dir === publicDir);
+    },
+  ],
   compatibilityDate: '2026-06-12',
   cloudflare: { nodeCompat: true },
 });
 ```
+
+模块初始化会限制 Nitro 读取的静态目录，只保留已经验证的构建产物。
 
 `env` 转发正是把 Workers 绑定送进 loader 与 action 的通道。在 Workers 上，h3 v2 把绑定放在请求自身（`req.runtime.cloudflare.env`）——h3 event 本身没有 `env` 字段——而挂载会先解析该运行时通道，其次显式的 `event.env`，再次挂载选项。按上面转发 `context.env`，loader 或 action 里的 `ctx.env` 读到的就是你的 Workers 绑定。
 

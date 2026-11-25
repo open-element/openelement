@@ -64,12 +64,23 @@ export default createOpenElementNitroHandler({
 
 ```ts
 // nitro.config.ts
+import { fileURLToPath } from 'node:url';
+
+const publicDir = fileURLToPath(new URL('./dist-public', import.meta.url));
+
 export default defineNitroConfig({
   serverDir: 'server',
   preset: 'node-server', // Workers 用 'cloudflare_module'
-  publicAssets: [{ dir: 'dist-public' }],
+  publicAssets: [{ dir: publicDir }],
+  modules: [
+    ({ options }) => {
+      options.publicAssets = options.publicAssets.filter(({ dir }) => dir === publicDir);
+    },
+  ],
 });
 ```
+
+模块初始化会限制 Nitro 读取的静态目录，只保留已经验证的构建产物。
 
 部署顺序：
 

@@ -64,12 +64,23 @@ export default createOpenElementNitroHandler({
 
 ```ts
 // nitro.config.ts
+import { fileURLToPath } from 'node:url';
+
+const publicDir = fileURLToPath(new URL('./dist-public', import.meta.url));
+
 export default defineNitroConfig({
   serverDir: 'server',
   preset: 'node-server', // or 'cloudflare_module' for Workers
-  publicAssets: [{ dir: 'dist-public' }],
+  publicAssets: [{ dir: publicDir }],
+  modules: [
+    ({ options }) => {
+      options.publicAssets = options.publicAssets.filter(({ dir }) => dir === publicDir);
+    },
+  ],
 });
 ```
+
+The Nitro module keeps asset discovery scoped to the verified build directory.
 
 The deploy sequence is:
 

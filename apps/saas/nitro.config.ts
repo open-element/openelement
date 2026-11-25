@@ -11,6 +11,12 @@ const { root: publicDir } = checkPublishOutput(fileURLToPath(new URL('./dist', i
 export default defineNitroConfig({
   serverDir: 'server',
   publicAssets: [{ dir: publicDir }],
+  modules: [
+    ({ options }) => {
+      // Nitro also discovers source public/ directories. Package only the verified build.
+      options.publicAssets = options.publicAssets.filter(({ dir }) => dir === publicDir);
+    },
+  ],
   output: {
     dir: '.output',
   },

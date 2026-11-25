@@ -69,13 +69,24 @@ export default createOpenElementNitroHandler({
 
 ```ts
 // nitro.config.ts
+import { fileURLToPath } from 'node:url';
+
+const publicDir = fileURLToPath(new URL('./dist-public', import.meta.url));
+
 export default defineNitroConfig({
   serverDir: 'server',
-  publicAssets: [{ dir: 'dist-public' }],
+  publicAssets: [{ dir: publicDir }],
+  modules: [
+    ({ options }) => {
+      options.publicAssets = options.publicAssets.filter(({ dir }) => dir === publicDir);
+    },
+  ],
   compatibilityDate: '2026-06-12',
   cloudflare: { nodeCompat: true },
 });
 ```
+
+The Nitro module keeps asset discovery scoped to the verified build directory.
 
 The `env` forwarding is what carries Workers bindings into your loaders and actions. On Workers, h3 v2 delivers bindings on the request itself (`req.runtime.cloudflare.env`) — the h3 event has no `env` field — and the mount resolves that runtime channel first, then an explicit `event.env`, then mount options. Forwarding `context.env` as above means `ctx.env` in a loader or action reads your Workers bindings directly.
 

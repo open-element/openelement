@@ -149,10 +149,19 @@ try {
   // build generates no second production server.
   const nitroPreset = runtime === 'bun' ? 'bun' : 'node-server';
   const files: Record<string, string> = {
-    'nitro.config.ts': `export default defineNitroConfig({
+    'nitro.config.ts': `import { fileURLToPath } from 'node:url';
+
+const publicDir = fileURLToPath(new URL('./dist-public', import.meta.url));
+
+export default defineNitroConfig({
   serverDir: 'server',
   preset: '${nitroPreset}',
-  publicAssets: [{ dir: 'dist-public' }],
+  publicAssets: [{ dir: publicDir }],
+  modules: [
+    ({ options }) => {
+      options.publicAssets = options.publicAssets.filter(({ dir }) => dir === publicDir);
+    },
+  ],
   output: { dir: '.output-serve' },
 });
 `,
@@ -282,6 +291,10 @@ export default function PackedLive(props: { xText: string }) {
   );
   if (!publicCheck.success)
     throw new Error(`Packed public output check failed:\n${publicCheck.output}`);
+  // An ordinary source file created after the build is outside the verified
+  // snapshot. Nitro's auto-discovery must not include it in this package.
+  mkdirSync(join(tmp, 'public'), { recursive: true });
+  writeFileSync(join(tmp, 'public', 'ordinary-host-note.txt'), 'unlisted marker\n');
   // Nitro 3 builds on a Rolldown-based pipeline (native binding). The pinned
   // nitro CLI runs through npx (the temp consumer's own install satisfies the
   // pin without a re-download).
