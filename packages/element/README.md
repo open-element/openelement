@@ -70,7 +70,7 @@ compiler, build, and runtime integration.
 | `@openelement/element/document-services` | Document-level installers for fragment navigation into shadow roots and pre-upgrade event capture. |
 | `@openelement/element/server` | HTML constructors called by compiled server function components. |
 | `@openelement/element/internal/compiled/leaf-runtime` | Runtime helpers imported by compiler-generated components, including mount, claim, and server context. |
-| `@openelement/element/internal/styles` | The shared sheet registry (`themeManager`). Emitted-code import target: the generated client entry registers the compiled component stylesheet here, which used to happen through the class base's `registerGlobalStyles` static. The symbol is deliberately NOT on the public surface — the caller is framework-generated code, not author API — and this entry carries no stability promise (ADR-0177). |
+| `@openelement/element/internal/styles` | The shared sheet registry (`themeManager`). Emitted-code import target: the generated client entry registers the compiled component stylesheet here, which used to happen through the class base's `registerGlobalStyles` static. The symbol is deliberately NOT on the public surface — the caller is framework-generated code, not author API — and this entry carries no stability promise. |
 | `@openelement/element/internal/compiled/generated-element/shell` | The generated Native Custom Element shell (`createGeneratedElementClass`, `defineGeneratedElement`). Emitted-code import target; not author API — the compiler-private descriptor is the only contract. |
 
 In a compiled component, call `provideContext(token, () => value)` from the

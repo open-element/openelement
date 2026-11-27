@@ -13,8 +13,6 @@
  * has been disposed. The ledger disposes retained scopes without removing
  * DOM. Setup and abort preserve the original error. Commit and release
  * attempt every cleanup before throwing the first failure.
- *
- * See ADR-0181 for the retained-instance contract.
  */
 
 import {

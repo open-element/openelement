@@ -9,15 +9,6 @@
  * page-lifetime entry table).
  */
 
-// The error dialect comes from its ORIGIN module, never from the executor's
-// `fail` micro-factory in program-kernel.ts. The two are byte-for-byte the same
-// failure — `fail(code, message)` IS `raiseFrameworkError('render', code,
-// message)` — but the import edge is not: program-kernel is one of the six P1
-// executor entry modules, so reaching it here made this module (and the
-// document-level pre-hydration capture it owns) impossible to install from a
-// page floor that must stay executor-free. Importing the origin is the same
-// rule leaf-runtime.ts states for `removeNodes`: import the origin, never the
-// re-export.
 // The shell's side of the replay contract (see that module's doc): this capture
 // module is the ONLY publisher, and it publishes at install time.
 import { installPreUpgradeReplayHook } from './pre-upgrade-replay-hook.ts';
