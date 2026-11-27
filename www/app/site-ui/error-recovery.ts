@@ -186,17 +186,6 @@ export const compilerRecovery: Readonly<Record<string, Recovery>> = {
       '在每个列表项的根节点上绑定一次 key，例如 key={item.id}。确认该字段在更新前后都能标识同一个列表项。',
     ],
   },
-  OEC9016: {
-    guide: 'handlers',
-    en: [
-      'The compiler could not lower the event action.',
-      'Check the action named in the message. Keep it to one supported operation or move the logic into the handler form admitted by the component.',
-    ],
-    zh: [
-      '编译器无法转换该事件操作。',
-      '检查消息指明的操作，将它简化为一个受支持的操作，或把逻辑移入该组件支持的处理器形式。',
-    ],
-  },
   OEC9017: {
     guide: 'jsx',
     en: [
