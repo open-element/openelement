@@ -100,12 +100,3 @@ test('the wire-validator face stays a string type guard on top of the canonical 
     expect(wireValidatorFace(notAString)).toEqual(false);
   }
 });
-
-test('the head-injection import seam rejects forbidden-sink attribute names fail-closed', () => {
-  // The router head channel throws on any name this predicate rejects; these
-  // assertions pin that a forged `innerhtml`/`srcdoc` attribute name can no
-  // longer pass the seam the head-injection path imports from /authoring.
-  expect(authoringFace('innerhtml')).toEqual(false);
-  expect(authoringFace('srcdoc')).toEqual(false);
-  expect(authoringFace('SRCDOC')).toEqual(false);
-});

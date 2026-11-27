@@ -1,13 +1,7 @@
-/**
- * Alpha.10 closure verification — NEW parity probe added by the independent
- * release verifier (packet criterion 5). Drift vectors NOT present in
- * nested-block-part-paths.test.ts:
- *   - a static attribute REMOVED from a when-Block branch element in transit
- *   - an unexpected attribute INJECTED into an each-Block item in transit
- * Both must fail closed at claim, while SSR/fresh stay byte-identical.
- */
+/** Block structure drift must fail closed while untampered SSR and fresh DOM agree. */
 
 import { expect, test } from 'vitest';
+import { ClaimErrorCode } from '@openelement/protocol/errors';
 import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { PartProgramHydrationError } from '../../src/internal/compiled/runtime.ts';
 import { parseHtml, TestDocument, TestElement } from '../compiled-runtime/test-dom.ts';
@@ -26,7 +20,7 @@ const TAG_PREFIX = 'oe-a10v';
 const whenSiblingProgram = () => buildWhenSiblingProgram(TAG_PREFIX);
 const eachSiblingProgram = () => buildEachSiblingProgram(TAG_PREFIX);
 
-test('alpha10-verifier parity: claim fails closed when a static attr is REMOVED inside a when Block branch', () => {
+test('claim fails closed when a static attr is REMOVED inside a when Block branch', () => {
   const program = whenSiblingProgram();
   const host = whenHost();
   const html = serializeServer(program, host);
@@ -46,10 +40,11 @@ test('alpha10-verifier parity: claim fails closed when a static attr is REMOVED 
     () => claimExisting(program, whenHost(), root as unknown as Node),
     PartProgramHydrationError,
   );
+  expect(error.code).toBe(ClaimErrorCode.STRUCTURE_MISMATCH);
   expect(error.message).toContain('template[1].branch[0]');
 });
 
-test('alpha10-verifier parity: claim fails closed when an unexpected attr is INJECTED into an each Block item', () => {
+test('claim fails closed when an unexpected attr is INJECTED into an each Block item', () => {
   const program = eachSiblingProgram();
   const host = eachHost();
   const html = serializeServer(program, host);
@@ -67,10 +62,11 @@ test('alpha10-verifier parity: claim fails closed when an unexpected attr is INJ
     () => claimExisting(program, eachHost(), root as unknown as Node),
     PartProgramHydrationError,
   );
+  expect(error.code).toBe(ClaimErrorCode.STRUCTURE_MISMATCH);
   expect(error.message).toContain('template[1].item');
 });
 
-test('alpha10-verifier parity: untampered SSR payload still claims with zero allocations (control)', () => {
+test('untampered SSR payload still claims with zero allocations (control)', () => {
   const program = eachSiblingProgram();
   const doc = new TestDocument();
   const root = parseHtml(doc, serializeServer(program, eachHost()));
