@@ -52,6 +52,7 @@ interface Bundle {
 declare global {
   interface Window {
     __oeDirect: {
+      themeManager: typeof import('../../../element/src/open-element-styles.ts').themeManager;
       Counter: CustomElementConstructor;
       Timer: CustomElementConstructor;
       Generic: CustomElementConstructor;
@@ -93,6 +94,20 @@ async function bundle(name: string, exports: string[]): Promise<Bundle> {
     configFile: false,
     root: dir,
     logLevel: 'silent',
+    plugins: [
+      {
+        name: 'count-style-scopes',
+        transform(code, id) {
+          if (!id.endsWith('/open-element-styles.ts')) return;
+          return code.replace(
+            'export class CompiledStyleScope {',
+            `export class CompiledStyleScope {
+          constructor() { globalThis.__oeStyleScopeAllocations = (globalThis.__oeStyleScopeAllocations || 0) + 1; }
+        `,
+          );
+        },
+      },
+    ],
     resolve: {
       alias: {
         [GENERATED_ELEMENT_SHELL_SPECIFIER]: join(
@@ -138,6 +153,7 @@ beforeAll(async () => {
   );
   const element = join(REPO_ROOT, 'packages/element/src/document-services.ts');
   const shared = [
+    `export { themeManager } from ${JSON.stringify(join(REPO_ROOT, 'packages/element/src/open-element-styles.ts'))};`,
     "export { default as Counter, MyCounter__ssrHost as counterSsr } from './counter.js';",
     "export { default as Timer } from './timer.js';",
     `export { ensurePreHydrationClickCapture as installCapture } from ${JSON.stringify(element)};`,
@@ -348,6 +364,57 @@ test('a direct counter and generic property host claim and replay from the same 
       retained: true,
       afterReconnect: ['1', 'converted:1'],
       seed: 'older malformed transport',
+    });
+  } finally {
+    await page.close();
+  }
+});
+
+test('styleless direct hosts allocate no style scope and still follow theme changes', async () => {
+  const page = await browser.newPage();
+  try {
+    await page.addScriptTag({ path: direct.file });
+    const result = await page.evaluate(async () => {
+      const { Counter, Timer, counterSsr, themeManager } = window.__oeDirect;
+      const counts = () =>
+        (window as unknown as { __oeStyleScopeAllocations?: number }).__oeStyleScopeAllocations ??
+        0;
+      document.documentElement.dataset.theme = 'light';
+      const frame = document.createElement('div');
+      frame.setHTMLUnsafe(counterSsr(undefined, undefined, [], ['/counter.css']));
+      customElements.define('my-counter', Counter);
+      document.body.append(frame);
+      const host = frame.firstElementChild!;
+      const mounted = [counts(), host.getAttribute('data-theme')];
+      document.documentElement.dataset.theme = 'dark';
+      await Promise.resolve();
+      const themed = host.getAttribute('data-theme');
+      frame.remove();
+      const live = new CSSStyleSheet();
+      live.replaceSync('#count { color: rgb(1, 2, 3) }');
+      (Counter as unknown as { __oeDevLiveStyles: CSSStyleSheet[] }).__oeDevLiveStyles = [live];
+      document.body.append(frame);
+      const reconnected = [counts(), host.shadowRoot!.adoptedStyleSheets.length];
+      frame.remove();
+      const disconnected = host.shadowRoot!.adoptedStyleSheets.length;
+      const globalSheet = new CSSStyleSheet();
+      themeManager.registerStyles(globalSheet);
+      customElements.define('live-timer', Timer);
+      const timer = document.createElement('live-timer');
+      document.body.append(timer);
+      const clientOnly = [counts(), timer.shadowRoot!.adoptedStyleSheets.length];
+      timer.remove();
+      const timerDisconnected = timer.shadowRoot!.adoptedStyleSheets.length;
+      themeManager.resetStyles();
+      return { mounted, themed, reconnected, disconnected, clientOnly, timerDisconnected };
+    });
+    expect(result).toEqual({
+      mounted: [0, 'light'],
+      themed: 'dark',
+      reconnected: [1, 1],
+      disconnected: 0,
+      clientOnly: [2, 2],
+      timerDisconnected: 0,
     });
   } finally {
     await page.close();

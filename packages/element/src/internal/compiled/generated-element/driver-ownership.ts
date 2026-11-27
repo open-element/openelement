@@ -102,6 +102,15 @@ export function adoptGeneratedClientStyles(
   styles: readonly StyleSheetLike[],
   canAdoptDeclared: boolean,
 ): void {
+  const selected = generatedClientStyles(constructor, styles, canAdoptDeclared);
+  if (selected !== undefined) scope.connect(root, [...selected]);
+}
+
+export function generatedClientStyles(
+  constructor: unknown,
+  styles: readonly StyleSheetLike[],
+  canAdoptDeclared: boolean,
+): readonly StyleSheetLike[] | undefined {
   // A dev live sheet is adopted even into an ADOPTED (DSD) root: that is the whole
   // point of the field — dev must re-fill the same sheet object in place for HMR,
   // which a `<link>` delivered sheet cannot do. Build never sets it, so the
@@ -113,10 +122,9 @@ export function adoptGeneratedClientStyles(
   const devLive = (constructor as { __oeDevLiveStyles?: readonly StyleSheetLike[] } | undefined)
     ?.__oeDevLiveStyles;
   if (devLive !== undefined && devLive.length > 0) {
-    scope.connect(root, [...devLive]);
-    return;
+    return devLive;
   }
-  if (canAdoptDeclared && styles.length > 0) scope.connect(root, [...styles]);
+  return canAdoptDeclared && styles.length > 0 ? styles : undefined;
 }
 
 type RegionState = 'unobserved' | 'present' | 'absent';
