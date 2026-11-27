@@ -72,10 +72,11 @@ qualification is external pending; see
 ```sh
 vp run saas:verify   # local typecheck and stubbed unit tests
 vp run saas:workers  # local application and Workers builds + boundary check
+vp run --no-cache --fail-if-no-match --filter @openelement/saas test:workspace-rls  # disposable local Postgres
 ```
 
 Run both from the repository root after the frozen-lockfile install described in
-[the agent contract](../../docs/agent-contract.md). These local checks exercise
+[the agent contract](../../docs/agent-contract.md). The RLS proof requires `initdb`, `pg_ctl`, and `psql` on PATH; it creates and removes a disposable cluster. It tests the actual workspace migration, not hosted Realtime. These local checks exercise
 code and build boundaries; they do not prove hosted Auth, RLS, Realtime, email,
 Queues or scanner delivery. Record hosted results separately using the
 [staging checklist](STAGING-CHECKLIST.md). The app already provides sign-in,

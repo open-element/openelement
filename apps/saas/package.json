@@ -10,7 +10,8 @@
     "check": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --root ../.. --project saas",
     "test:notes-live:browser": "node scripts/notes-live-browser.ts",
-    "nitro:build-workers": "node ../../tools/release/nitro-build.ts --root . --preset cloudflare_module --out .output-workers"
+    "nitro:build-workers": "node ../../tools/release/nitro-build.ts --root . --preset cloudflare_module --out .output-workers",
+    "test:workspace-rls": "sh scripts/workspace-rls-proof.sh"
   },
   "dependencies": {
     "@openelement/compiler": "workspace:*",
