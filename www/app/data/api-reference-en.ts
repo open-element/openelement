@@ -1,5 +1,8 @@
 /** Quick summaries where the upstream note has no complete short opening, plus the documented definePage overload. */
 export const englishExportOverrides: ReadonlyMap<string, string> = new Map([
+  ['packages/compiler/src/internal/compiler/semantic-core/jsx-module-id.ts#isJsxModuleId', 'Check whether a module ID names a .jsx or .tsx file, ignoring the query suffix.'],
+  ['packages/compiler/src/internal/compiler/semantic-core/server-component.ts#prepareServerComponentImports', 'Resolve named imports used as server component tags and return a synchronous lookup for the compiler.'],
+  ['packages/compiler/src/internal/compiler/semantic-core/server-component.ts#ResolvedServerComponentSource', 'Carry the source text and resolved filename of an imported server component. The filename selects the parser syntax.'],
   ['packages/element/src/internal/core/compile-lifecycle.ts#onConnect', 'Run a callback on each element connection. If it returns a cleanup function, run that function on disconnect.'],
   ['packages/element/src/internal/core/compile-lifecycle.ts#onDispose', 'Run a callback once when the generated element is disposed, after its connection cleanups.'],
   ['packages/element/src/internal/core/compile-lifecycle.ts#onPropertyChange', 'Run a callback after a declared property changes through an attribute or property write.'],

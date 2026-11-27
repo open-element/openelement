@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import { buildErrorCodes, collectRuntimeCodes } from '../tools/generate-error-codes.ts';
 
+// This integration test parses sources across every retained package under coverage.
 test('/errors discovers every exported runtime error-code family', async () => {
   const build = await buildErrorCodes();
   expect(build.failures).toEqual([]);
@@ -32,7 +33,7 @@ test('/errors discovers every exported runtime error-code family', async () => {
       path: 'packages/router/src/internal/error-codes.ts',
     });
   }
-});
+}, 15_000);
 
 test('runtime error-code collection follows map declarations and rejects dynamic entries', () => {
   const failures: string[] = [];
