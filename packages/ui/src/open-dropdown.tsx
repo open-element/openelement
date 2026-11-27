@@ -40,7 +40,7 @@ import {
  * package stylesheets, and the property-only `anchorName` row (the anchor
  * identity is assigned at activation, never spelled as an attribute).
  */
-export const openElement = defineComponentConfig({
+export const openElement = /* @__PURE__ */ defineComponentConfig({
   root: 'shadow',
   styles: ['./overlay-recipe.css', './open-dropdown.css'],
   properties: { anchorName: { default: '', attribute: false } },

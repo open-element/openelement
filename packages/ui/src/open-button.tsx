@@ -48,7 +48,7 @@ import { defineComponentConfig } from './component-config.ts';
  * authored stylesheet, and the six declared property rows — all reflected, the
  * class lane's exact attribute surface.
  */
-export const openElement = defineComponentConfig({
+export const openElement = /* @__PURE__ */ defineComponentConfig({
   root: 'shadow',
   delegatesFocus: true,
   formAssociated: true,

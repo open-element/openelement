@@ -41,7 +41,7 @@ import {
  * Platform facts for the generated element: shadow root with delegated focus,
  * the authored component stylesheet, and the declared `theme` property.
  */
-export const openElement = defineComponentConfig({
+export const openElement = /* @__PURE__ */ defineComponentConfig({
   root: 'shadow',
   delegatesFocus: true,
   styles: ['./open-theme-toggle.css'],

@@ -35,7 +35,7 @@ import { log } from './component-recipes.ts';
  * component stylesheet, and the `copyLabel` property (property-only, no
  * attribute form).
  */
-export const openElement = defineComponentConfig({
+export const openElement = /* @__PURE__ */ defineComponentConfig({
   root: 'shadow',
   styles: ['./open-code-block.css'],
   properties: { copyLabel: { default: 'Copy', attribute: false } },
