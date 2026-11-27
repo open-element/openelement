@@ -1,9 +1,12 @@
 import { createHash } from 'node:crypto';
 import {
-  copyFileSync,
+  closeSync,
+  constants,
+  fstatSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   readdirSync,
   realpathSync,
@@ -17,6 +20,8 @@ import { publicOutputDir } from './paths.ts';
 import { cacheControlFor } from './static-cache.ts';
 
 const MANIFEST_FILE = 'publish-manifest.json';
+const READ_FILE_FLAGS =
+  constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0);
 
 interface PublishFile {
   path: string;
@@ -66,7 +71,40 @@ export function publicTreePaths(root: string): string[] {
   return files.sort();
 }
 
-function readPublishFile(root: string, path: string): PublishFile {
+function readCanonicalRegularFile(
+  file: string,
+  diagnostic: string,
+): { bytes: Buffer; mode: number } {
+  let fd: number | undefined;
+  try {
+    fd = openSync(file, READ_FILE_FLAGS);
+    const opened = fstatSync(fd, { bigint: true });
+    if (!opened.isFile()) throw new Error('Expected a regular file descriptor');
+    // O_NOFOLLOW covers the leaf when available. Check canonical ancestry
+    // and match the path to the descriptor before reading any bytes. The build
+    // and host must keep the parent directories under their own control.
+    const canonical = normalize(realpathSync(file));
+    const current = lstatSync(file, { bigint: true });
+    if (
+      canonical !== file ||
+      !current.isFile() ||
+      current.dev !== opened.dev ||
+      current.ino !== opened.ino
+    ) {
+      throw new Error('The path does not identify the opened file');
+    }
+    return { bytes: readFileSync(fd), mode: Number(opened.mode & 0o777n) };
+  } catch (cause) {
+    throw new Error(diagnostic, { cause });
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+function readPublishFile(
+  root: string,
+  path: string,
+): { entry: PublishFile; bytes: Buffer; mode: number } {
   const file = resolve(root, path);
   if (
     normalize(path) !== path ||
@@ -79,22 +117,26 @@ function readPublishFile(root: string, path: string): PublishFile {
   ) {
     throw new Error(`Invalid public output path ${JSON.stringify(path)}`);
   }
-  if (!lstatSync(file).isFile() || normalize(realpathSync(file)) !== file) {
-    throw new Error(`Public output requires a canonical regular file at ${path}`);
-  }
-  const bytes = readFileSync(file);
+  const { bytes, mode } = readCanonicalRegularFile(
+    file,
+    `Public output requires a canonical regular file at ${path}`,
+  );
   return {
-    path,
-    size: bytes.length,
-    sha256: publicFileDigest(bytes),
-    cacheControl: cacheControlFor(path),
+    entry: {
+      path,
+      size: bytes.length,
+      sha256: publicFileDigest(bytes),
+      cacheControl: cacheControlFor(path),
+    },
+    bytes,
+    mode,
   };
 }
 
 function inventory(root: string): PublishFile[] {
   const paths = publicTreePaths(root);
   const canonicalRoot = normalize(realpathSync(root));
-  return paths.map((path) => readPublishFile(canonicalRoot, path));
+  return paths.map((path) => readPublishFile(canonicalRoot, path).entry);
 }
 
 function serialize(files: readonly PublishFile[]): string {
@@ -103,21 +145,23 @@ function serialize(files: readonly PublishFile[]): string {
 
 /** The build's sole writer of the isolated public directory and manifest. */
 export function writePublishOutput(outDir: string, publicPaths: Iterable<string>): void {
+  const sourcePath = resolve(outDir);
+  if (!lstatSync(sourcePath).isDirectory()) throw new Error(`Expected a directory at ${outDir}`);
+  const source = normalize(realpathSync(sourcePath));
   const publicDir = publicOutputDir(outDir);
-  const manifest = join(outDir, MANIFEST_FILE);
+  const manifest = join(source, MANIFEST_FILE);
   // The manifest is the last write. During replacement there is no admission
   // record for a partially copied public directory.
   rmSync(manifest, { force: true });
   const stage = mkdtempSync(`${publicDir}-stage-`);
   try {
-    if (!lstatSync(outDir).isDirectory()) throw new Error(`Expected a directory at ${outDir}`);
-    const source = normalize(realpathSync(outDir));
-    const files = [...new Set(publicPaths)].sort().map((path) => readPublishFile(source, path));
-    for (const file of files) {
-      const target = join(stage, file.path);
+    const files = [...new Set(publicPaths)].sort().map((path) => {
+      const { entry, bytes, mode } = readPublishFile(source, path);
+      const target = join(stage, entry.path);
       mkdirSync(dirname(target), { recursive: true });
-      copyFileSync(join(source, file.path), target);
-    }
+      writeFileSync(target, bytes, { flag: 'wx', mode });
+      return entry;
+    });
     const expected = serialize(files);
     if (serialize(inventory(stage)) !== expected) {
       throw new Error('The public files changed while staging the build output');
@@ -135,10 +179,15 @@ export function checkPublishOutput(outDir: string): { root: string; files: Publi
   const root = publicOutputDir(outDir);
   const manifest = join(outDir, MANIFEST_FILE);
   try {
-    if (!lstatSync(manifest).isFile()) throw new Error('Expected a regular manifest file');
-    const recorded = readFileSync(manifest, 'utf8');
+    const canonicalManifest = join(normalize(realpathSync(outDir)), MANIFEST_FILE);
+    const { bytes } = readCanonicalRegularFile(
+      canonicalManifest,
+      'Expected a regular manifest file',
+    );
     const files = inventory(root);
-    if (serialize(files) !== recorded) throw new Error('Manifest differs from public output');
+    if (serialize(files) !== bytes.toString('utf8')) {
+      throw new Error('Manifest differs from public output');
+    }
     return { root, files: new Map(files.map((file) => [file.path, file])) };
   } catch (cause) {
     throw new Error(`Cannot verify ${manifest} against ${root}. Run \x60oe build\x60 first.`, {
