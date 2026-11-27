@@ -7,14 +7,13 @@ routes, loaders, actions, islands, and the Vite/SSG build
 pipeline (dev/build/start/preview) that ships Framework Mode applications.
 
 The Route Mode subpaths (`@openelement/router/router`,
-`@openelement/router/router/client`, `@openelement/router/http`) and the
-request-context root export are host-free at runtime: Route Mode pulls no
+`@openelement/router/router/client`, `@openelement/router/http`) are host-free
+at runtime. Route Mode pulls no
 Vite, Nitro, Element, or Node host dependencies into its module graph.
 
 Framework Mode authoring — the package root (`definePage`,
 `defineIslandConfig`, the action protocol) and the Element route-data types it
-re-exports — is built on compiled element classes and therefore
-requires `@openelement/element` to be installed. The `./document`
+re-exports — depends on the `@openelement/element` runtime. The `./document`
 subpath (the resolved-page seam used by the native serializer) is
 Framework Mode surface too: it depends on Element's trusted-HTML contract
 through the shared head-safety predicates, so it is not part of the
@@ -43,47 +42,30 @@ WinterCG-pure; deployment support is limited to the runtimes and Nitro
 targets actually covered by the release qualification matrix (the Node and
 Workers fixtures), not every runtime that can load ESM.
 
-> The 1.0 baseline authors pages as default-exported function components beside
-> a `defineIslandConfig` sidecar; the compiler lowers the pair into a Native
-> Custom Element. Route Mode stays independently consumable without Element;
-> Framework Mode installs Element alongside Router.
-
-Use the package root in route, island, and component modules. A page component
-default-exports its function beside the sidecar, and the route module wraps it
-in `definePage()`:
+Author pages and islands as JSX or TSX function components. A server function
+page exports its component and passes it to `definePage()` in the route
+module. Router prerenders this page by default.
 
 ```tsx
-// app/components/page-home.tsx — lowered by the generated-element transform
-import { defineIslandConfig } from '@openelement/router';
+// app/routes/index.tsx
+import { definePage } from '@openelement/router';
 
-export const openElement = defineIslandConfig({
-  tag: 'home-page',
-  root: 'shadow',
-  properties: { heading: { attribute: false } },
-});
-
-export default function HomePage(props: { heading: string }) {
+export function HomePage() {
   return (
     <main>
-      <h1>{props.heading}</h1>
+      <h1>Hello OpenElement</h1>
     </main>
   );
 }
+
+export default definePage(HomePage, { head: { title: 'Home' } });
 ```
 
-```ts
-// app/routes/index.tsx — the route module the scanner discovers
-import { definePage } from '@openelement/router';
-import HomePage from '../components/page-home.tsx';
-
-export async function loader() {
-  return { heading: 'Hello openElement' };
-}
-
-export default definePage(HomePage, {
-  head: { title: 'Home' },
-});
-```
+For an interactive island, default-export its function and declare the tag,
+root and behavior in an `openElement` sidecar made with `defineIslandConfig`.
+An interactive page root can also use a compiled shadow component imported
+from outside the route module. See [Routing and data](https://openelement.org/guide/routing-and-data/)
+for both page forms.
 
 Use the Vite facade from `@openelement/router/vite` in `vite.config.ts`:
 
@@ -92,19 +74,15 @@ import { openElement } from '@openelement/router/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  plugins: [
-    openElement({
-      routesDir: 'app/routes',
-      islandsDir: 'app/islands',
-      packageIslands: ['@acme/components'],
-    }),
-  ],
+  plugins: [...openElement()],
 });
 ```
 
 `openElement()` scans routes and islands, generates virtual entries, builds
-client island chunks, runs SSG, and writes post-processed HTML. For a leaner
-setup, use `openPipeline()` from the same subpath.
+client island chunks, runs SSG, and writes post-processed HTML. Use
+`packageIslands` in `openelement.config.ts` to list installed component
+packages explicitly. For a leaner setup, use `openPipeline()` from the same
+Vite subpath.
 
 A Vite-mode consumer installs the host packages the tooling peers on:
 
@@ -184,8 +162,8 @@ that assemble the same server seams by hand.
 
 ## Route Mode subpaths
 
-Route Mode is consumable without Element or a renderer, through three
-subpaths plus the request-context root export:
+Route Mode is consumable without Element or a renderer through three
+subpaths.
 
 ```ts
 import { RouteTable } from '@openelement/router/router'; // route records + matching
@@ -194,6 +172,9 @@ import { createRouter } from '@openelement/router/router/client';
 // WinterCG fetch middleware for Route Mode, and its method policy:
 import { createRouteMiddleware } from '@openelement/router/http';
 ```
+
+`createRequestContext()` is available from the package root. Install Element
+when importing from that entry.
 
 ## Authoring API
 
@@ -253,7 +234,7 @@ npm install @openelement/router @openelement/element
 Note that the `./vite` and `./cli/*` tooling subpaths are **build-time**
 modules — run builds through the Node-hosted `openelement` bin
 (`openelement build`) or the Vite CLI.
-The request-time output is host-free and deploys to any WinterCG target.
+For qualified request-time deployment targets, see [Nitro deploy mount](#nitro-deploy-mount).
 
 ## License
 

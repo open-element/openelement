@@ -66,8 +66,15 @@ Non-interactive runs (CI, packed consumers) behave identically.
 npx @openelement/create my-app --no-install --no-git -t showcase
 ```
 
-`npm create @openelement` resolves the npm `latest` tag. The starter writes
-caret ranges for the OpenElement packages based on the scaffold's release.
+`npm create @openelement` resolves the npm `latest` tag. To scaffold with the
+Alpha16 version of the CLI, pin it explicitly.
+
+```bash
+npm create @openelement@1.0.0-alpha.16 my-app
+```
+
+The starter writes caret ranges for the OpenElement packages based on the
+scaffold's release.
 
 The canonical install command is exported from `@openelement/create/install-command` (one builder, every documented copy derives from it).
 
@@ -129,9 +136,7 @@ builds the starter against the checkout’s packages.
     `Response.json`
   - `app/islands/` — the two islands (`my-counter` hydrating on idle,
     `live-timer` client-only), the only code that ships JavaScript
-  - `app/components/` — where page-scope components live when you add one
-    (the shipped pages are server functions in `app/routes/`; each SHADOW
-    element that needs one carries its own root `.css` sheet)
+  - `app/layout.tsx` — the shared layout used to render the starter's pages
   - `app/styles/theme.css` — the @theme role sheet, Tailwind-ON single-default
     scaffold form (dark values ride
     `prefers-color-scheme`)
