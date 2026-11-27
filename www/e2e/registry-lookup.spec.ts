@@ -81,19 +81,40 @@ test('reference lookup lands on a readable export and makes its long signature k
       return settled;
     })
     .toBeTruthy();
-  const scrolled = await pane.evaluate((node) => node.scrollTop);
+  const afterPaging = await pane.evaluate((node) => {
+    const box = node.getBoundingClientRect();
+    const header = document.querySelector('.oe-site-header')!.getBoundingClientRect();
+    const top = Math.max(box.top, header.bottom);
+    const bottom = Math.min(box.bottom, window.innerHeight);
+    const title = Array.from(node.querySelectorAll('.ref-name')).find((name) => {
+      const rect = name.getBoundingClientRect();
+      return rect.top >= top && rect.bottom <= bottom;
+    });
+    return {
+      rowId: title?.closest('.ref-row')?.id,
+      paneScroll: node.scrollTop,
+      pageScroll: window.scrollY,
+    };
+  });
+  expect(afterPaging.rowId, 'a full export title is visible after paging').toBeTruthy();
   await page.keyboard.press('ArrowDown');
-  const focusedName = pane.locator('.ref-row:focus .ref-name');
-  await expect(focusedName).toHaveText('BuildArtifacts');
+  const focusedRow = pane.locator('.ref-row:focus');
+  await expect(focusedRow).toHaveAttribute('id', afterPaging.rowId!);
   await expect
     .poll(() =>
-      focusedName.evaluate((node) => {
-        const header = document.querySelector('.oe-site-header')!;
-        return node.getBoundingClientRect().top - header.getBoundingClientRect().bottom;
+      focusedRow.locator('.ref-name').evaluate((node) => {
+        const list = node.closest('.ref-group-scroll')!.getBoundingClientRect();
+        const header = document.querySelector('.oe-site-header')!.getBoundingClientRect();
+        const title = node.getBoundingClientRect();
+        return Math.min(
+          title.top - Math.max(list.top, header.bottom),
+          Math.min(list.bottom, window.innerHeight) - title.bottom,
+        );
       }),
     )
     .toBeGreaterThanOrEqual(0);
-  expect(await pane.evaluate((node) => node.scrollTop)).toBe(scrolled);
+  expect(await pane.evaluate((node) => node.scrollTop)).toBe(afterPaging.paneScroll);
+  expect(await page.evaluate(() => window.scrollY)).toBe(afterPaging.pageScroll);
 });
 
 test('a fresh export fragment makes the focused long signature a keyboard stop', async ({

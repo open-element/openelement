@@ -427,9 +427,15 @@ export function connectRegistryLookup(host: HTMLElement, signal: AbortSignal): v
           const name = nextRow.querySelector('.ref-name')?.getBoundingClientRect();
           const later = nextRow.nextElementSibling;
           const laterName = later?.querySelector('.ref-name')?.getBoundingClientRect();
-          // A partly visible row may have started well above the pane. Prefer
-          // the next visible name when entering the pane after a manual scroll.
-          if (name && name.top < bounds.top && laterName && (down || laterName.bottom <= bottom)) {
+          // The pane can start behind the sticky header. Skip a clipped title
+          // only when the next title fits the visible band.
+          if (
+            name &&
+            name.top < top &&
+            laterName &&
+            laterName.top >= top &&
+            laterName.bottom <= bottom
+          ) {
             nextRow = later;
           }
         }
@@ -447,9 +453,10 @@ export function connectRegistryLookup(host: HTMLElement, signal: AbortSignal): v
           // Reveal the focused name past the sticky header or viewport edge
           // without shifting a title that is already inside the pane.
           const visibleName = name.getBoundingClientRect();
-          const aboveViewport = visibleName.top - headerBottom - 4;
-          const belowViewport = visibleName.bottom - document.documentElement.clientHeight + 4;
-          const pageShift = aboveViewport < 0 ? aboveViewport : Math.max(0, belowViewport);
+          const aboveViewport = visibleName.top - headerBottom;
+          const belowViewport = visibleName.bottom - document.documentElement.clientHeight;
+          const pageShift =
+            aboveViewport < 0 ? aboveViewport - 4 : belowViewport > 0 ? belowViewport + 4 : 0;
           if (pageShift) {
             document.defaultView?.scrollBy({ top: pageShift, behavior: 'instant' });
           }
