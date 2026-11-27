@@ -50,9 +50,20 @@ export async function consumeAttachmentScans(
         }),
       );
       if (!response.ok) throw new Error(`scanner failed (${response.status})`);
-      const result = (await response.json()) as { verdict?: string; scanPolicy?: string };
+      const result = (await response.json()) as {
+        status?: string;
+        verdict?: string;
+        scanPolicy?: string;
+      };
+      if (result.scanPolicy !== ATTACHMENT_SCAN_POLICY) {
+        throw new Error('scanner returned an invalid scan policy');
+      }
+      if (result.status === 'terminal' && result.verdict === undefined) {
+        message.ack();
+        continue;
+      }
       if (
-        result.scanPolicy !== ATTACHMENT_SCAN_POLICY ||
+        result.status !== undefined ||
         (result.verdict !== 'clean' && result.verdict !== 'quarantined')
       ) {
         throw new Error('scanner returned an invalid verdict');

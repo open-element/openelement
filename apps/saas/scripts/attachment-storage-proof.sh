@@ -59,4 +59,50 @@ SQL
   query --single-transaction -f "$migration"
 done
 query -f "$root/scripts/attachment-storage-proof.sql"
-echo 'Attachment Storage policy, grants, and deletion proof passed (disposable PostgreSQL).'
+(
+  query <<'SQL'
+begin;
+set local role service_role;
+select public.complete_brokered_attachment_scan(
+  '20000000-0000-4000-8000-000000000007', '30000000-0000-4000-8000-000000000009/race.txt', 'clean'
+);
+do $$ begin perform pg_sleep(1); end $$;
+commit;
+SQL
+) >/dev/null &
+complete=$!
+(
+  query <<'SQL'
+begin;
+set local role service_role;
+select public.record_attachment_scan_dead_letter(
+  '20000000-0000-4000-8000-000000000007', '30000000-0000-4000-8000-000000000009/race.txt'
+);
+do $$ begin perform pg_sleep(1); end $$;
+commit;
+SQL
+) >/dev/null &
+dead_letter=$!
+wait "$complete"
+wait "$dead_letter"
+query <<'SQL'
+do $$
+declare
+  raced_id uuid := '20000000-0000-4000-8000-000000000007';
+  current_state text;
+  dead_letters integer;
+  verdicts integer;
+begin
+  select r.state into current_state from public.attachment_reservations as r where r.id = raced_id;
+  select count(*) into dead_letters from public.attachment_scan_dead_letters as d where d.reservation_id = raced_id;
+  select count(*) into verdicts from public.storage_audit as a where a.reservation_id = raced_id and a.event = 'scan_clean';
+  if (
+    (current_state = 'clean' and dead_letters = 0 and verdicts = 1)
+    or (current_state = 'scan_dead_letter' and dead_letters = 1 and verdicts = 0)
+  ) is distinct from true then
+    raise exception 'concurrent completion and DLQ capture published contradictory states';
+  end if;
+end;
+$$;
+SQL
+echo 'Attachment Storage, deletion, and Queue idempotency proof passed (disposable PostgreSQL).'

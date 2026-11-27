@@ -72,6 +72,15 @@ begin
     where d.reservation_id = quarantine_id and d.delivery_count = 2) then
     raise exception 'duplicate dead letter did not increment delivery count';
   end if;
+  perform public.complete_brokered_attachment_scan(quarantine_id, quarantine_key, 'clean');
+  if not exists (select 1 from public.attachment_reservations as r
+    where r.id = quarantine_id and r.state = 'scan_dead_letter') then
+    raise exception 'late verdict overwrote a persisted dead letter';
+  end if;
+  if public.authorize_brokered_attachment_scan(quarantine_id, quarantine_key)->>'status'
+    is distinct from 'terminal' then
+    raise exception 'already dead-lettered delivery would rescan without admin replay';
+  end if;
   if public.begin_attachment_delete(upload_id, stranger, false) is not null then
     raise exception 'wrong owner obtained a deletion key';
   end if;
@@ -95,6 +104,25 @@ begin
   set local role service_role;
   perform public.complete_brokered_attachment_scan(quarantine_id, quarantine_key, 'quarantined');
   perform public.complete_brokered_attachment_scan(upload_id, target_key, 'clean');
+  if public.authorize_brokered_attachment_scan(upload_id, target_key)->>'status'
+    is distinct from 'terminal'
+    or public.authorize_brokered_attachment_scan(quarantine_id, quarantine_key)->>'status'
+    is distinct from 'terminal' then
+    raise exception 'duplicate delivery after a verdict was not terminal';
+  end if;
+  perform public.complete_brokered_attachment_scan(upload_id, target_key, 'quarantined');
+  perform public.record_attachment_scan_dead_letter(upload_id, target_key);
+  if not exists (select 1 from public.attachment_reservations as r
+    where r.id = upload_id and r.state = 'clean')
+    or exists (select 1 from public.attachment_scan_dead_letters as d where d.reservation_id = upload_id) then
+    raise exception 'late verdict or dead letter overwrote the first verdict';
+  end if;
+  begin
+    perform public.authorize_brokered_attachment_scan(upload_id, quarantine_key);
+    raise exception 'key mismatch was acknowledged after successful scan';
+  exception when raise_exception then
+    if sqlerrm <> 'attachment key does not match the reservation' then raise; end if;
+  end;
   reset role;
   set local role anon;
   if exists (select 1 from storage.objects where bucket_id = 'notes-attachments') then
@@ -126,6 +154,34 @@ begin
   if exists (select 1 from public.attachment_reservations as r where r.id = upload_id) then
     raise exception 'successful deletion did not release quota';
   end if;
+  if public.authorize_brokered_attachment_scan(upload_id, target_key)->>'status'
+    is distinct from 'terminal' then
+    raise exception 'delivery after verified deletion was not terminal';
+  end if;
+  perform public.complete_brokered_attachment_scan(upload_id, target_key, 'clean');
+  perform public.record_attachment_scan_dead_letter(upload_id, target_key);
+  if exists (select 1 from public.attachment_scan_dead_letters as d where d.reservation_id = upload_id) then
+    raise exception 'delivery after deletion created a dead letter';
+  end if;
+  begin
+    perform public.authorize_brokered_attachment_scan(upload_id, quarantine_key);
+    raise exception 'wrong key matched a deletion digest';
+  exception when raise_exception then
+    if sqlerrm <> 'attachment reservation not found' then raise; end if;
+  end;
+  begin
+    perform public.complete_brokered_attachment_scan(upload_id, quarantine_key, 'clean');
+    raise exception 'wrong key matched a deletion digest at completion';
+  exception when raise_exception then
+    if sqlerrm <> 'attachment reservation not found' then raise; end if;
+  end;
+  begin
+    perform public.record_attachment_scan_dead_letter(upload_id, quarantine_key);
+    raise exception 'wrong key matched a deletion digest in the DLQ';
+  exception when raise_exception then
+    if sqlerrm <> 'attachment reservation not found' then raise; end if;
+  end;
+
 
   if public.begin_attachment_delete(failed_id, owner_id, true) is not null then
     raise exception 'ambiguous provider upload allowed immediate deletion';
@@ -194,3 +250,29 @@ begin
   end if;
 end;
 $$;
+
+-- Old deletion audit rows did not carry a verifiable key.
+insert into public.storage_audit(user_id, reservation_id, event)
+values (
+  '30000000-0000-4000-8000-000000000009',
+  '20000000-0000-4000-8000-000000000008',
+  'deleted'
+);
+set role service_role;
+do $$
+begin
+  perform public.authorize_brokered_attachment_scan(
+    '20000000-0000-4000-8000-000000000008', 'unverified/key'
+  );
+  raise exception 'old audit without a deletion digest was accepted';
+exception when raise_exception then
+  if sqlerrm <> 'attachment reservation not found' then raise; end if;
+end;
+$$;
+reset role;
+
+insert into public.attachment_reservations (id, user_id, object_key, display_name, byte_size, content_type, state)
+values (
+  '20000000-0000-4000-8000-000000000007', '30000000-0000-4000-8000-000000000009',
+  '30000000-0000-4000-8000-000000000009/race.txt', 'race.txt', 1, 'text/plain', 'pending_scan'
+);

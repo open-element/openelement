@@ -15,12 +15,10 @@ interface ScanRequest {
   objectKey: string;
 }
 
-interface AuthorizedAttachment {
-  object_key: string;
-  byte_size: number;
-  content_type: string;
-  scan_policy: string;
-}
+type ScanAuthorization = { object_key: string; scan_policy: string } & (
+  | { status: 'terminal' }
+  | { status: 'scan'; byte_size: number; content_type: string }
+);
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const TIMEOUT_MS = 20_000;
@@ -107,10 +105,6 @@ export function createScannerWorker(
           return new Response('Not Found', { status: 404 });
         }
         const config = configuration(env);
-        const provider =
-          options.provider ??
-          options.providerFactory?.(env) ??
-          createMetaDefenderProvider(env, fetchImpl, timeoutMs);
         const body = (await request.json()) as Partial<ScanRequest>;
         if (
           body.type !== 'attachment.scan' ||
@@ -120,7 +114,7 @@ export function createScannerWorker(
         )
           return Response.json({ error: 'invalid scan request' }, { status: 400 });
 
-        const attachment = await serviceRoleRpc<AuthorizedAttachment>(
+        const attachment = await serviceRoleRpc<ScanAuthorization>(
           env,
           'authorize_brokered_attachment_scan',
           {
@@ -137,6 +131,17 @@ export function createScannerWorker(
         if (attachment.scan_policy !== ATTACHMENT_SCAN_POLICY) {
           throw new Error('attachment scan policy unavailable');
         }
+
+        if (attachment.status === 'terminal') {
+          return Response.json({ status: 'terminal', scanPolicy: attachment.scan_policy });
+        }
+        if (attachment.status !== 'scan') {
+          throw new Error('attachment scan authorization unavailable');
+        }
+        const provider =
+          options.provider ??
+          options.providerFactory?.(env) ??
+          createMetaDefenderProvider(env, fetchImpl, timeoutMs);
 
         const object = await fetchImpl(storagePath(config.supabase, attachment.object_key), {
           headers: {

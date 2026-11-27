@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import {
   consumeAttachmentScanDeadLetters,
   consumeAttachmentScans,
@@ -54,7 +54,49 @@ test('queue scan acknowledges only after scanner verdict and atomic RPC', async 
   expect(rpcBodies).toEqual([{ reservation_id: 'r1', target_key: 'u/o', verdict: 'clean' }]);
 });
 
-test.each([{ verdict: 'unknown', scanPolicy: 'brokered-storage' }, { verdict: 'clean' }])(
+test('queue acknowledges duplicate deliveries after scan completion and deletion', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: unknown[] = [];
+  globalThis.fetch = (input, init) => {
+    expect(String(input)).toMatch(/\/rpc\/complete_brokered_attachment_scan$/);
+    calls.push(JSON.parse(String(init?.body)));
+    return Promise.resolve(new Response(null, { status: 204 }));
+  };
+  const ack = vi.fn();
+  const retry = vi.fn();
+  const message = {
+    body: { type: 'attachment.scan', reservationId: 'r1', objectKey: 'u/o' } as const,
+    ack,
+    retry,
+  };
+  const batch = { queue: 'openelement-attachment-scan', messages: [message] };
+  const results = [
+    { verdict: 'clean', scanPolicy: 'brokered-storage' },
+    { status: 'terminal', scanPolicy: 'brokered-storage' },
+    { status: 'terminal', scanPolicy: 'brokered-storage' },
+  ];
+  const fixture = env({
+    ATTACHMENT_SCANNER: { fetch: () => Promise.resolve(Response.json(results.shift())) },
+  });
+  try {
+    // The initial delivery completes the scan. Then the same message is
+    // delivered in clean state and again after the reservation is deleted.
+    await consumeAttachmentScans(batch, fixture);
+    await consumeAttachmentScans(batch, fixture);
+    await consumeAttachmentScans(batch, fixture);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  expect(ack).toHaveBeenCalledTimes(3);
+  expect(retry).not.toHaveBeenCalled();
+  expect(calls).toEqual([{ reservation_id: 'r1', target_key: 'u/o', verdict: 'clean' }]);
+});
+
+test.each([
+  { verdict: 'unknown', scanPolicy: 'brokered-storage' },
+  { verdict: 'clean' },
+  { status: 'terminal' },
+])(
   'queue scan retries invalid and legacy scanner responses without acknowledging',
   async (result) => {
     let acked = 0;

@@ -24,6 +24,7 @@ function successfulFetch(code: number) {
     if (url.endsWith('/rpc/authorize_brokered_attachment_scan')) {
       return Promise.resolve(
         Response.json({
+          status: 'scan',
           object_key: objectKey,
           byte_size: 4,
           content_type: 'application/pdf',
@@ -102,14 +103,51 @@ test('private scanner quarantines infected, suspicious, and blocklisted results'
   }
 });
 
-test('private scanner fails closed without provider configuration', async () => {
-  let called = false;
-  const response = await createScannerWorker(() => {
-    called = true;
-    return Promise.reject(new Error('must not call'));
-  }).fetch(request(), { ...env, METADEFENDER_API_KEY: '' });
+test('private scanner fails closed without provider configuration for active work', async () => {
+  const base = successfulFetch(0);
+  const response = await createScannerWorker(base.fetchImpl).fetch(request(), {
+    ...env,
+    METADEFENDER_API_KEY: '',
+  });
   expect(response.status).toEqual(503);
-  expect(called).toEqual(false);
+  expect(base.calls.map(({ url }) => new URL(url).pathname)).toEqual([
+    '/rest/v1/rpc/authorize_brokered_attachment_scan',
+  ]);
+});
+
+test.each(['clean', 'deleted'])(
+  'private scanner ignores a matching late delivery after %s without reading Storage',
+  async () => {
+    const calls: string[] = [];
+    const worker = createScannerWorker((input) => {
+      calls.push(String(input));
+      return Promise.resolve(
+        Response.json({
+          status: 'terminal',
+          object_key: objectKey,
+          scan_policy: 'brokered-storage',
+        }),
+      );
+    });
+    const response = await worker.fetch(request(), { ...env, METADEFENDER_API_KEY: '' });
+    expect(response.status).toEqual(200);
+    expect(await response.json()).toEqual({ status: 'terminal', scanPolicy: 'brokered-storage' });
+    expect(calls.map((url) => new URL(url).pathname)).toEqual([
+      '/rest/v1/rpc/authorize_brokered_attachment_scan',
+    ]);
+  },
+);
+
+test('private scanner retries unavailable database authorization without accessing Storage', async () => {
+  const calls: string[] = [];
+  const response = await createScannerWorker((input) => {
+    calls.push(String(input));
+    return Promise.resolve(new Response(null, { status: 503 }));
+  }).fetch(request(), env);
+  expect(response.status).toEqual(503);
+  expect(calls.map((url) => new URL(url).pathname)).toEqual([
+    '/rest/v1/rpc/authorize_brokered_attachment_scan',
+  ]);
 });
 
 test('private scanner rejects cross-object substitution before Storage access', async () => {
@@ -118,9 +156,9 @@ test('private scanner rejects cross-object substitution before Storage access', 
     calls++;
     return Promise.resolve(
       Response.json({
+        status: 'terminal',
         object_key: 'owner/different.pdf',
-        byte_size: 4,
-        content_type: 'application/pdf',
+        scan_policy: 'brokered-storage',
       }),
     );
   }).fetch(request(), env);
@@ -137,6 +175,7 @@ test('private scanner rejects oversized or mismatched object bytes', async () =>
       if (url.endsWith('/rpc/authorize_brokered_attachment_scan')) {
         return Promise.resolve(
           Response.json({
+            status: 'scan',
             object_key: objectKey,
             byte_size: declared,
             content_type: 'application/pdf',
