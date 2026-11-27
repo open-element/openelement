@@ -33,11 +33,12 @@ npm run dev    # Vite 开发服务器
 
 ### 纯静态：Cloudflare Pages
 
-脚手架的 `app/routes/404.tsx` 默认声明 `renderIntent: { mode: 'dynamic' }`。删除这个选项即可预渲染 `404.html`。如果应用中没有其他动态路由或 action，构建便是纯静态的，上传到 Pages 的完整目录为 `dist-public/`。
+要将脚手架项目改为纯静态，删除 `app/routes/404.tsx` 中的 `renderIntent: { mode: 'dynamic' }`，让构建预渲染 `404.html`。删除示例请求时端点 `app/routes/api/ping.ts` 及其测试 `tests/ping.test.ts`。按纯静态应用部署前，还要确认应用没有其他请求时路由或 action。
 
 ```bash
 set -e
 npm run build
+test ! -e dist/server
 npx oe publish --check
 test -f dist-public/404.html
 npx wrangler pages deploy dist-public --project-name=your-project

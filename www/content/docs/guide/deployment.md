@@ -33,11 +33,12 @@ With neither set, the origin stays `http://<Host>`, which is correct for a serve
 
 ### Pure static: Cloudflare Pages
 
-In the starter, `app/routes/404.tsx` starts with `renderIntent: { mode: 'dynamic' }`. Remove that option to prerender `404.html`. If your app has no other dynamic routes or actions, the build is static-only and the complete Pages upload is `dist-public/`.
+To make the starter static-only, remove `renderIntent: { mode: 'dynamic' }` from `app/routes/404.tsx` so the build prerenders `404.html`. Remove the example request-time endpoint `app/routes/api/ping.ts` and its test, `tests/ping.test.ts`. The application must also be free of any other request-time routes and actions before you deploy it as a static-only app.
 
 ```bash
 set -e
 npm run build
+test ! -e dist/server
 npx oe publish --check
 test -f dist-public/404.html
 npx wrangler pages deploy dist-public --project-name=your-project
