@@ -71,6 +71,45 @@ qualification is external pending; see
   MetaDefender Core is a reference adapter; the scanner fails closed when no
   provider is configured.
 
+## Run the app locally
+
+Install workspace dependencies with `pnpm install --frozen-lockfile` from
+the repository root. With Docker running, start the local Supabase stack
+and apply pending migrations.
+
+```sh
+(
+  cd apps/saas
+  supabase start
+  supabase migration up
+  supabase status
+)
+```
+
+Create `apps/saas/.env` with the local Project URL and Publishable key from
+`supabase status`. Older CLI versions label the public key `anon key`.
+`SUPABASE_URL` and `SUPABASE_ANON_KEY` are enough for sign-in, Notes, and
+Workspaces. See [`.env.example`](.env.example) for the other integrations.
+
+From the repository root, build the app and start it on loopback.
+
+```sh
+vp run --no-cache --fail-if-no-match --filter @openelement/saas build
+OPEN_ELEMENT_HOST=localhost OPEN_ELEMENT_PORT=4173 \
+  vp run --no-cache --fail-if-no-match --filter @openelement/saas start:local
+```
+
+`start:local` loads `apps/saas/.env` and serves the built app. Open
+`http://localhost:4173/login` and choose **Create account**. Follow the
+confirmation link from the local Mailpit inbox in the same browser. The inbox
+URL appears in `supabase status`. Keep the app URL on `localhost` for its
+configured Auth callback. Open **Workspaces** from Notes after signing in.
+
+A workspace admin can generate a code in **Workspace invitations** and share
+it with the intended recipient. Generation requires JavaScript because the
+issuing response delivers the code once. The recipient pastes the code into
+**Join a workspace** while signed in.
+
 ## Tasks
 
 ```sh
@@ -88,30 +127,18 @@ migrations, including concurrent invitation redemption, in a disposable
 Postgres cluster. The attachment Storage proof applies the full migration
 chain in a disposable PostgreSQL catalog and verifies broker privileges,
 reconciliation and rescanning of inherited attachments. Build the SaaS app
-before running the browser proof. The
-browser proof uses Chromium and a loopback Auth and Data API fixture. It
-exercises creation and joining with JavaScript disabled and checks code
-issuance and its no-store responses. Use the
+before running the Chromium proof. The proof starts its own loopback Auth
+and Data API fixture and can run without Supabase CLI or Docker. It exercises
+creation and joining with JavaScript disabled and checks code issuance and
+its no-store responses. Use the
 [staging checklist](STAGING-CHECKLIST.md) to record hosted provider evidence.
-
-Open **Workspaces** from Notes after sign-in to create or join a workspace.
-A workspace admin can generate a code in **Workspace invitations** and share
-it with the intended recipient. Generation requires JavaScript because the
-issuing response delivers the code once. The recipient pastes the code into
-**Join a workspace** while signed in.
 
 ## Migrations
 
-```sh
-supabase start          # local emulator
-supabase migration up   # apply ordered migrations locally
-```
-
-Local development and tests run against the emulator. Hosted-project
-migration and deployment qualification is external pending; the operator
-procedure, credential boundary, and rollback policy are documented in
-[`docs/runbooks/supabase-migrations.md`](../../docs/runbooks/supabase-migrations.md).
-Runtime service-role credentials are not migration credentials.
+See [Run the app locally](#run-the-app-locally) for the emulator migration
+commands. The hosted migration procedure, credential boundary, and rollback
+policy are in [the migration runbook](../../docs/runbooks/supabase-migrations.md).
+Hosted migration and deployment qualification are pending.
 
 Payment delivery, DLQ recovery, and replay operations are documented in
 [`docs/runbooks/payment-events.md`](../../docs/runbooks/payment-events.md).

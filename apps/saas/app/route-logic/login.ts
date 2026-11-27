@@ -90,7 +90,12 @@ export function createLoginAction(createClient: LoginClientFactory = createServe
     }
     const client = createClient(ctx.env, ctx.request, ctx.responseHeaders);
     const { error } = await client.auth.signInWithPassword({ email, password });
-    if (error) return fail(422, { error: publicAuthError(error), email });
+    if (error) {
+      return fail(422, {
+        error: 'Sign-in failed. Check your email and password and try again.',
+        email,
+      });
+    }
     throw redirect('/notes');
   };
 }
