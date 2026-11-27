@@ -27,29 +27,65 @@
  */
 import { expect, type Page, test } from '@playwright/test';
 
+type EnhanceReadyWindow = Window & { __enhanceReady?: Promise<void> };
+
+const readinessLog = new WeakMap<Page, string[]>();
+const readinessMessage = '[DX-02] open:enhance-ready';
+
 /**
  * Arm the enhance-readiness recorder BEFORE the first navigation (the
  * `open:enhance-ready` signal fires from the ready-time scan in
  * form-enhance.ts; a listener attached after `page.goto` resolves can miss it).
  */
 async function armEnhanceReady(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    document.addEventListener(
-      'open:enhance-ready',
-      () => {
-        (window as unknown as { __enhanceReady?: boolean }).__enhanceReady = true;
-      },
-      { once: true },
-    );
+  const log: string[] = [];
+  readinessLog.set(page, log);
+  page.on('request', (request) => {
+    if (request.resourceType() === 'script') log.push(`request ${request.url()}`);
   });
+  page.on('response', (response) => {
+    if (response.request().resourceType() === 'script') {
+      log.push(`response ${response.status()} ${response.url()}`);
+    }
+  });
+  page.on('requestfailed', (request) => {
+    if (request.resourceType() === 'script') {
+      log.push(`failed ${request.url()} ${request.failure()?.errorText ?? ''}`);
+    }
+  });
+  page.on('pageerror', (error) => log.push(`page error ${error.message}`));
+  page.on('console', (message) => {
+    if (message.text() === readinessMessage) log.push(message.text());
+  });
+  await page.addInitScript((message) => {
+    (window as EnhanceReadyWindow).__enhanceReady = new Promise<void>((resolve) => {
+      document.addEventListener(
+        'open:enhance-ready',
+        () => {
+          console.debug(message);
+          resolve();
+        },
+        { once: true },
+      );
+    });
+  }, readinessMessage);
 }
 
 /** Resolve only after the enhancement's ready-time scan: the interceptor is attached. */
 async function waitForEnhanceReady(page: Page): Promise<void> {
-  await page.waitForFunction(
-    () => (window as never as { __enhanceReady?: boolean }).__enhanceReady === true,
-  );
+  // Await the event directly so observing it does not depend on animation frames.
+  await page.evaluate(() => {
+    const ready = (window as EnhanceReadyWindow).__enhanceReady;
+    if (!ready) throw new Error('DX-02 enhancement readiness recorder was not installed');
+    return ready;
+  });
 }
+
+test.afterEach(({ page }, info) => {
+  if (info.status === info.expectedStatus) return;
+  const log = readinessLog.get(page);
+  if (log) console.error(`DX-02 enhancement at ${page.url()}\n${log.join('\n')}`);
+});
 
 /** Set a window marker that survives anything but a full page reload. */
 async function markWindow(page: Page, name: string): Promise<void> {
