@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
@@ -152,7 +152,7 @@ describe('Client payload closure', () => {
   });
 });
 
-test('packed starter checker reads emitted files and exits red when a shared file grows', async () => {
+test('packed starter checker rejects over-budget and missing emitted files', async () => {
   const root = await mkdtemp(join(tmpdir(), 'oe-reference-payload-'));
   try {
     const dist = join(root, 'my-blog', 'dist');
@@ -221,18 +221,35 @@ test('packed starter checker reads emitted files and exits red when a shared fil
     const pass = run();
     expect(pass.stderr).toBe('');
     expect(pass.status).toBe(0);
-    expect(JSON.parse(pass.stdout).totals.home.raw).toBe(7 * 'export {};'.length);
-    await writeFile(
-      join(client, 'runtime.js'),
-      Buffer.concat(
-        Array.from({ length: 160 }, (_, index) =>
-          createHash('sha256').update(String(index)).digest(),
-        ),
+    const report = JSON.parse(pass.stdout);
+    expect(report.limits).toEqual(REFERENCE_GZIP_LIMITS);
+    expect(report.totals.home.raw).toBe(7 * 'export {};'.length);
+
+    const extraBytes = Buffer.concat(
+      Array.from({ length: 700 }, (_, index) =>
+        createHash('sha256').update(String(index)).digest(),
       ),
     );
-    const fail = run();
-    expect(fail.status).toBe(1);
-    expect(fail.stderr).toMatch(/sharedRuntime: \d+ B gzip exceeds 4500 B/);
+    const oversized = `export {}; /* ${extraBytes.toString('base64')} */`;
+    for (const [file, metrics] of [
+      ['runtime.js', ['sharedRuntime', 'home']],
+      ['timer.js', ['home']],
+    ] as const) {
+      const chunk = join(client, file);
+      await writeFile(chunk, oversized);
+      const fail = run();
+      expect(fail.status).toBe(1);
+      const { failures } = JSON.parse(fail.stdout) as { failures: string[] };
+      expect(failures.map((failure) => failure.split(':')[0])).toEqual(metrics);
+      expect(fail.stderr.trim().split('\n')).toEqual(failures);
+      await writeFile(chunk, 'export {};');
+    }
+
+    await unlink(join(client, 'timer.js'));
+    const missing = run();
+    expect(missing.status).toBe(1);
+    expect(missing.stdout).toBe('');
+    expect(missing.stderr).toMatch(/ENOENT.*timer\.js/);
   } finally {
     await rm(root, { force: true, recursive: true });
   }

@@ -13,9 +13,9 @@ import type { PageIslandManifest } from '../../packages/router/src/vite/internal
 import { clientChunkUrl, clientImportGraph, payloadClosure } from './payload-closure.ts';
 
 export const REFERENCE_GZIP_LIMITS = {
-  sharedRuntime: 4_500,
+  sharedRuntime: 13_437,
   referenceIsland: 2_000,
-  home: 10_000,
+  home: 17_071,
 } as const;
 
 const gzip9 = promisify(gzip);

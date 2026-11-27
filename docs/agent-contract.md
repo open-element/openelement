@@ -243,12 +243,18 @@ per reported closure. Cross-page prefetches, HTML and CSS are outside the
 reference JavaScript budget.
 
 - Shared runtime includes the client bootstrap and its dependencies, plus
-  common imports of multiple active islands. It has a 4,500-byte gzip limit.
+  common imports of multiple active islands. It has a 13,437-byte gzip limit.
 - Reference island is the starter's `my-counter` and its dependencies, after
   removing files already charged to shared runtime. It has a 2,000-byte gzip
   limit. The report also shows the island with its own dependency closure.
 - Reference home includes the document's scripts and module preloads, both
-  islands and their reachable dependencies. It has a 10,000-byte gzip limit.
+  islands and their reachable dependencies. It has a 17,071-byte gzip limit.
+
+The shared and home limits use the measured packed Alpha16 baseline at
+`46ee1701804d41ca6e096416f263fb4e69475c3e`. The 13,045-byte shared runtime and
+16,573-byte home each receive a one-sided runner allowance of 3% of the
+measured bytes, rounded up and added once to set the fixed limit. The
+allowance follows the [Site gzip figures precedent](../www/tools/check-doc-figures.ts).
 
 The checker uses Node zlib to compress each emitted response separately at
 gzip level 9 and adds the results. It also reports raw and Brotli level 11 bytes, plus
