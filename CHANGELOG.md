@@ -18,6 +18,13 @@ This entry records the release candidate. The release state below tracks npm ava
   counter island. The packed consumer qualification covers the authored Board's
   keyed identity, pre-upgrade input, focus, selection, and cleanup in Chromium,
   Firefox, and WebKit.
+- Router accepts JavaScript JSX alongside TypeScript TSX for compiled pages
+  and islands. JavaScript authors can declare prop shapes with JSDoc.
+- Local fixtures exercise the generated Nitro Node and Workers hosts, including
+  public asset delivery, request isolation, and private artifact denial.
+- The SaaS reference app supports workspace creation and single-use invitation
+  codes. Disposable PostgreSQL and Chromium fixtures cover membership and the
+  onboarding flow.
 
 See the [compiler and element runtime](./docs/architecture/compiler-and-element-runtime.md)
 for the current contract and the [release state](./docs/release/release-state.json)
