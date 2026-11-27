@@ -16,9 +16,25 @@
 
 OpenElement 是用于服务端渲染 HTML 和构建交互式 Custom Elements 的框架。**Compiler** 将 TSX 编译为 Custom Elements 和服务端渲染器。**Element** 提供运行时。**Router** 负责路由、导航、loader 和 action。
 
+## 通过 npm 开始
+
+需要 Node.js 24.2 或更新版本。默认命令使用 npm 的 `latest` 标签，目前该标签指向 alpha 版本。
+
+```sh
+npm create @openelement my-app
+cd my-app
+npm run dev
+```
+
+打开开发服务器输出的地址。编辑 `app/routes/index.tsx` 即可修改首页。停止服务器后可运行 `npm test` 和 `npm run build`。
+
+如需明确选择 alpha 渠道，将第一条命令替换为 `npm create @openelement@alpha my-app`。可用 `npm view @openelement/create dist-tags` 查看两个标签指向的版本。[更新日志](./CHANGELOG.md)提供 Alpha16 发布后的安装方法。
+
+按[第一个应用教程](https://openelement.org/zh/guide/tutorial/)添加页面、交互岛和表单 action。参阅[部署指南](https://openelement.org/zh/guide/deployment/)了解如何部署到静态托管平台、Node 和 Cloudflare Workers。
+
 ## 预览当前源码
 
-当前源码预览的是 `1.0.0-alpha.16`，支持服务端函数页面和编译器生成的 Custom Elements。setup 任务从当前源码构建包，并将其安装到临时示例应用。[发布状态](./docs/release/release-state.json)
+当前源码预览的是 `1.0.0-alpha.16`，可用 JSX 和 TSX 函数组件编写服务端渲染页面和交互岛。setup 任务从当前源码构建包，并将其安装到临时示例应用。[发布状态](./docs/release/release-state.json)
 
 ```sh
 pnpm install --frozen-lockfile
@@ -29,18 +45,6 @@ pnpm run dev
 ```
 
 编辑 `app/routes/index.tsx` 即可体验文件路由。停止开发服务器后运行 `pnpm test` 和 `pnpm run build`。[脚手架包](./packages/create/README.md)
-
-## 通过 npm 开始
-
-需要 Node.js 24.2 或更新版本。该命令使用 npm `latest` 标签对应的脚手架版本，可用 `npm view @openelement/create dist-tags` 查询。
-
-```sh
-npm create @openelement my-app
-cd my-app
-npm run dev
-```
-
-打开开发服务器输出的地址。停止开发服务器后运行 `npm run build`。
 
 ## 仓库结构
 
