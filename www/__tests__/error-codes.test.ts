@@ -23,12 +23,15 @@ test('/errors discovers every exported runtime error-code family', async () => {
     summary: 'A compile step was handed source it cannot analyse.',
     path: 'packages/protocol/src/errors.ts',
   });
-  expect(
-    build.runtime.find(({ value }) => value === 'OE_CLIENT_BUILD_BROWSER_ENTRY_NODE_BUILTIN'),
-  ).toMatchObject({
-    family: 'BrowserEntryBoundaryErrorCode',
-    path: 'packages/router/src/vite/internal/browser-entry-boundary.ts',
-  });
+  for (const code of [
+    'OE_CLIENT_BUILD_BROWSER_ENTRY_NODE_BUILTIN',
+    'OE_CLIENT_BUILD_BROWSER_ENTRY_SERVER_ONLY',
+  ]) {
+    expect(build.runtime.find(({ value }) => value === code)).toMatchObject({
+      family: 'BrowserEntryBoundaryErrorCode',
+      path: 'packages/router/src/internal/error-codes.ts',
+    });
+  }
 });
 
 test('runtime error-code collection follows map declarations and rejects dynamic entries', () => {
