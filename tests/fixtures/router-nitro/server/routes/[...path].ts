@@ -5,6 +5,10 @@ import {
 // @ts-expect-error The Router build emits the Nitro entry as JavaScript without a declaration file.
 import requestTimeServer from '../../../router-request-time/dist/server/index.js';
 
+type WorkerRequest = Request & {
+  runtime?: { cloudflare?: { env?: { ASSETS?: { fetch(request: Request): Promise<Response> } } } };
+};
+
 const transportProof = createOpenElementNitroHandler({
   handler: (request) => {
     if (new URL(request.url).pathname === '/stream') return streamTransportProof(request);
@@ -50,8 +54,17 @@ function streamTransportProof(request: Request): Response {
 }
 
 export default function openElementNitroProofRoute(event: NitroRequestEvent): Promise<Response> {
-  const { pathname } = new URL(event.req.url);
+  const request: WorkerRequest = event.req;
+  const { pathname } = new URL(request.url);
   if (pathname === '/stream' || pathname === '/cached') return transportProof(event);
+  const assets = request.runtime?.cloudflare?.env?.ASSETS;
+  if (
+    assets &&
+    pathname === '/guestbook' &&
+    (request.method === 'GET' || request.method === 'HEAD')
+  ) {
+    return assets.fetch(request);
+  }
   // The proof injects a public sentinel with the Node event. Nitro supplies
   // Workers bindings on the request itself and the generated handler prefers them.
   return requestTimeServer({

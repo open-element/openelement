@@ -17,19 +17,42 @@ Web stream transport. The final line says `runtime passed` after all checks.
 
 The Node proof starts Nitro's emitted `node-server` entry on loopback. The
 Workers proof calls the emitted `cloudflare_module` entry under Node with a
-local `ASSETS` implementation and overlapping per-request env bindings. It
-requests the exact HTML asset keys since clean URL resolution belongs to the
-Cloudflare asset service.
+local `ASSETS` implementation and overlapping per-request env bindings. The
+two commands serialize builds because they share the Router output and Nitro
+staging directory. If an interrupted build leaves `.output-proof-lock/`, remove
+that empty directory once its build processes have exited.
 
-For an authorized Workers preview of this fixture, configure the
-`REQUEST_TIME_PROOF_TOKEN` binding to the public fixture value
-`fixture-worker-token`. Use an origin containing only this test fixture.
-The same task can then exercise the deployed HTTP endpoints, including
-Cloudflare's clean static URLs.
+## Workerd on loopback
+
+After `proof:workers`, start Wrangler against Nitro's generated configuration.
+
+```sh
+npx --yes wrangler@4.168.0 dev --local \
+  --config tests/fixtures/router-nitro/.output-workers/server/wrangler.json \
+  --ip 127.0.0.1 --port 41910 --var REQUEST_TIME_PROOF_TOKEN:fixture-worker-token
+```
+
+In a second terminal, run the HTTP smoke. This covers workerd and the local
+Cloudflare asset router.
+
+```sh
+vp run --no-cache --fail-if-no-match --filter @openelement/fixture-router-nitro proof:workers --origin http://127.0.0.1:41910
+```
+
+The fixture routes `/guestbook` to the Worker first. The catch-all sends GET
+and HEAD to `ASSETS` and lets Router handle POST. The Workers HTML policy
+uses the same canonical path as the action. [Cloudflare asset routing](https://developers.cloudflare.com/workers/static-assets/routing/worker-script/)
+
+## Workers preview
+
+For an authorized preview, configure the `REQUEST_TIME_PROOF_TOKEN` binding
+to the public fixture value `fixture-worker-token`. Use an origin containing
+only this test fixture. The same HTTP smoke sends fixture form submissions to
+that origin.
 
 ```sh
 vp run --no-cache --fail-if-no-match --filter @openelement/fixture-router-nitro proof:workers --origin https://your-fixture.example
 ```
 
-A deployed run sends fixture form submissions and reports `deployed Router
-fixture passed`. Record the deployed revision and origin with its result.
+The HTTP smoke reports `HTTP fixture passed` with its target origin. Record the
+deployed revision and origin when using it against a preview.

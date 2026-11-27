@@ -31,5 +31,10 @@ export default defineNitroConfig({
   compatibilityDate: NITRO_COMPATIBILITY_DATE,
   cloudflare: {
     nodeCompat: true,
+    wrangler: {
+      name: 'openelement-router-nitro-proof',
+      // The asset router can match this path before the Worker and reject POST.
+      assets: { run_worker_first: ['/guestbook'], html_handling: 'drop-trailing-slash' },
+    },
   },
 });

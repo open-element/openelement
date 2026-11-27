@@ -52,6 +52,10 @@ export async function assertRuntime(
   };
   await checkStatic(home, 'request-time fixture home');
   await checkStatic(guestbook, 'hybrid guestbook');
+  const guestbookHead = await get(guestbook.path, { method: 'HEAD' });
+  assert.equal(guestbookHead.status, 200);
+  assert.equal(guestbookHead.headers.get('x-fixture-middleware'), null);
+  assert.equal(await guestbookHead.text(), '');
 
   const [first, second] = await Promise.all([
     get('/live?x=nitro-first'),
