@@ -28,13 +28,13 @@ npm run dev
 
 Open the URL printed by the dev server. Edit `app/routes/index.tsx` to change the home page. Stop the server before running `npm run build`.
 
-For Alpha16 specifically, use `npm create @openelement@1.0.0-alpha.16 my-app` as the first command. To follow the alpha channel, use `npm create @openelement@alpha my-app`. Check both tags with `npm view @openelement/create dist-tags`. [Changelog](./CHANGELOG.md)
+To follow the alpha channel, use `npm create @openelement@alpha my-app`. Check both tags with `npm view @openelement/create dist-tags`. [Changelog](./CHANGELOG.md)
 
 Follow the [first app tutorial](https://openelement.org/guide/tutorial/) to add a page, an interactive island, and a form action. See the [deployment guide](https://openelement.org/guide/deployment/) for static hosting, Node, and Cloudflare Workers.
 
 ## Preview the source checkout
 
-To test local source changes, build the packages from this checkout and install them into a temporary starter app. [Release state](./docs/release/release-state.json)
+This checkout previews `1.0.0-alpha.16` from source. To test local source changes, build the packages from this checkout and install them into a temporary starter app. [Release state](./docs/release/release-state.json)
 
 ```sh
 pnpm install --frozen-lockfile

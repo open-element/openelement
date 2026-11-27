@@ -28,13 +28,13 @@ npm run dev
 
 打开开发服务器输出的地址。编辑 `app/routes/index.tsx` 即可修改首页。停止服务器后可运行 `npm run build`。
 
-如需安装 Alpha16，将第一条命令替换为 `npm create @openelement@1.0.0-alpha.16 my-app`。如需跟随 alpha 渠道，使用 `npm create @openelement@alpha my-app`。可用 `npm view @openelement/create dist-tags` 查看两个标签指向的版本。[更新日志](./CHANGELOG.md)
+如需跟随 alpha 渠道，将第一条命令替换为 `npm create @openelement@alpha my-app`。可用 `npm view @openelement/create dist-tags` 查看两个标签指向的版本。[更新日志](./CHANGELOG.md)
 
 按[第一个应用教程](https://openelement.org/zh/guide/tutorial/)添加页面、交互岛和表单 action。参阅[部署指南](https://openelement.org/zh/guide/deployment/)了解如何部署到静态托管平台、Node 和 Cloudflare Workers。
 
 ## 预览当前源码
 
-如需验证本地源码改动，可以用 setup 任务构建当前检出的包，并将其安装到临时示例应用。[发布状态](./docs/release/release-state.json)
+当前源码预览的是 `1.0.0-alpha.16`。如需验证本地源码改动，可以用 setup 任务构建当前检出的包，并将其安装到临时示例应用。[发布状态](./docs/release/release-state.json)
 
 ```sh
 pnpm install --frozen-lockfile
