@@ -108,7 +108,7 @@ test('a user toggle still propagates through the owner and changes computed styl
 }) => {
   await page.emulateMedia({ colorScheme: 'dark' });
   await observeThemeMutations(page);
-  await page.goto('/');
+  await page.goto('/guide/getting-started/');
   await waitForPrePaint(page);
 
   const toggle = page.getByRole('button', { name: 'Toggle theme' });

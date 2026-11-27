@@ -22,11 +22,8 @@
  * Two generation-time guards, both fail-closed:
  *
  *   headerNav targets — a curated header link whose route left the tree;
- *   section coverage  — every generated section must be listed for its own
- *     basePath in SECTION_MAP (www/app/site-ui/open-layout-navigation.ts).
- *     The sidebar filters sections per basePath, so an unsynced frontmatter
- *     `section` value would otherwise drop that group from the page's sidebar
- *     with no error at all.
+ *   membership       — every canonical route in the four section lists must
+ *     resolve to a route module, and no other route enters the global tree.
  *
  * `--check` regenerates in memory and fails on drift. The module is generated
  * (gitignored) and rebuilt before the site build.
@@ -38,50 +35,82 @@ import process from 'node:process';
 import { loadCollectionData } from '../lib/content.ts';
 import { fileToRoutePath } from '../lib/route-path.ts';
 import { articleCollections } from '../content-collections.ts';
-import { FALLBACK_SECTION, SECTION_MAP } from '../app/site-ui/open-layout-navigation.ts';
 
 const siteRoot = fileURLToPath(new URL('../../www/', import.meta.url));
 const routesDir = join(siteRoot, 'app/routes');
 const outFile = join(siteRoot, 'app/data/_generated-nav-data.ts');
 
 /**
- * Sidebar group order, aligned with the URL tree: Guide covers the manual
- * (/docs hub + /guide/*), Core the guide's framework-api page, Principles and
- * Reference the architecture notes and the api list, and the nameless group
- * ('', rendered as FALLBACK_SECTION "Project") the project's own pages
- * (changelog/roadmap/contributing). Any section missing here is appended
- * deterministically by `render`, so a new section cannot silently disappear.
+ * Canonical global sidebar groups. Their path membership and order are fixed
+ * here so every route presents the same information architecture.
  */
-const SECTION_ORDER = ['Guide', 'Core', 'Recipes', 'Principles', 'Reference', ''];
+const SECTION_ORDER = ['LEARN', 'GUIDES', 'REFERENCE', 'PROJECT'];
+const SECTION_PATHS: Readonly<Record<string, readonly string[]>> = {
+  LEARN: [
+    '/guide/getting-started',
+    '/guide/tutorial',
+    '/guide/core-concepts',
+    '/guide/islands-and-ssr',
+    '/architecture',
+    '/architecture/dsd',
+  ],
+  GUIDES: [
+    '/guide/styling',
+    '/guide/routing-and-data',
+    '/guide/mdx',
+    '/guide/i18n',
+    '/guide/configuration',
+    '/guide/error-handling',
+    '/guide/security',
+    '/guide/deployment',
+    '/guide/testing',
+    '/guide/recipe-form-actions',
+    '/guide/recipe-theming',
+    '/guide/recipe-island-strategies',
+  ],
+  REFERENCE: [
+    '/reference',
+    '/guide/api',
+    '/errors',
+    '/guide/compiled-grammar',
+    '/guide/glossary',
+    '/architecture/web-component-admission',
+  ],
+  PROJECT: ['/roadmap', '/changelog', '/contributing', '/architecture/design-system'],
+};
+const ROUTE_ORDER = new Map(
+  Object.values(SECTION_PATHS).flatMap((paths) =>
+    paths.map((path, index) => [path, index] as const),
+  ),
+);
+const ROUTE_LABELS: Readonly<Record<string, { en: string; zh: string }>> = {
+  '/guide/api': { en: 'Route handlers', zh: '路由处理器' },
+  '/architecture/web-component-admission': { en: 'WC admission tiers', zh: 'WC 准入等级' },
+  '/changelog': { en: 'Changelog', zh: '更新日志' },
+};
 
-/** zh group headings; '' is the nameless group the consumer labels "Project". */
+/** Localized group headings. */
 const SECTION_ZH: Readonly<Record<string, string>> = {
-  Guide: '指南',
-  Core: '核心',
-  Recipes: '实战',
-  Principles: '原则',
-  Reference: '参考',
-  '': '项目',
+  LEARN: '学习',
+  GUIDES: '指南',
+  REFERENCE: '参考',
+  PROJECT: '项目',
 };
 
 /**
  * Curated header links; each must resolve to a scanned static route.
  *
- * Docs, API reference, roadmap and the current release status are top-level destinations.
+ * The documentation and editorial blog are the two top-level destinations.
  */
 const HEADER_NAV: ReadonlyArray<{ path: string; label: string }> = [
   { path: '/docs', label: 'Docs' },
-  { path: '/reference', label: 'API' },
-  { path: '/roadmap', label: 'Roadmap' },
-  { path: '/changelog', label: 'Releases' },
+  { path: '/blog', label: 'Blog' },
 ];
 
 /** zh header labels keyed by path (they name sections, not page titles). */
 const HEADER_NAV_ZH: Readonly<Record<string, string>> = {
   '/docs': '文档',
-  '/reference': 'API',
-  '/roadmap': '路线图',
-  '/changelog': '发布状态',
+  '/blog': '博客',
 };
 
 /**
@@ -90,11 +119,9 @@ const HEADER_NAV_ZH: Readonly<Record<string, string>> = {
  * title (single source of truth); these static pages declare theirs here.
  */
 const ROUTE_LABEL_ZH: Readonly<Record<string, string>> = {
-  '/docs': '文档',
   '/reference': 'API 参考',
   '/errors': '错误码',
   '/roadmap': '路线图',
-  '/changelog': '发布状态',
   '/contributing': '参与贡献',
 };
 
@@ -166,7 +193,7 @@ async function collectContentNav(): Promise<Map<string, ContentNavMeta>> {
         continue;
       }
       nav.set(path, {
-        section: String(entry.frontmatter.section ?? ''),
+        section: sectionFor(path),
         label,
         order: Number(entry.frontmatter.order ?? 0),
       });
@@ -177,6 +204,10 @@ async function collectContentNav(): Promise<Map<string, ContentNavMeta>> {
     if (item) item.labelZh = labelZh;
   }
   return nav;
+}
+
+function sectionFor(path: string): string {
+  return SECTION_ORDER.find((section) => SECTION_PATHS[section].includes(path)) ?? '';
 }
 
 async function collect(
@@ -193,11 +224,19 @@ async function collect(
     routes.push(path);
     const fromContent = contentNav.get(path);
     const meta = fromContent ?? parseMeta(await readFile(entryPath, 'utf8'));
-    if (!meta) continue;
+    if (!meta || path === '/docs') continue;
     const labelZh = fromContent ? fromContent.labelZh : ROUTE_LABEL_ZH[path];
-    const list = sections.get(meta.section) ?? [];
-    list.push({ path, label: meta.label, ...(labelZh ? { labelZh } : {}), order: meta.order });
-    sections.set(meta.section, list);
+    const section = sectionFor(path);
+    if (!section) continue;
+    const list = sections.get(section) ?? [];
+    const customLabel = ROUTE_LABELS[path];
+    list.push({
+      path,
+      label: customLabel?.en ?? meta.label,
+      ...(customLabel?.zh || labelZh ? { labelZh: customLabel?.zh ?? labelZh } : {}),
+      order: ROUTE_ORDER.get(path) ?? meta.order,
+    });
+    sections.set(section, list);
   }
   for (const list of sections.values()) {
     list.sort((a, b) => a.order - b.order || (a.label < b.label ? -1 : 1));
@@ -252,32 +291,11 @@ export const headerNav: HeaderNavLink[] = ${JSON.stringify(headerNav, null, 2)};
 const contentNav = await collectContentNav();
 const { routes, sections } = await collect(contentNav);
 
-/**
- * Section-coverage guard. The sidebar (filterNavSections) keeps only the
- * sections a page's own basePath lists in SECTION_MAP, so a frontmatter
- * `section` name that was never synced there hides the whole group on those
- * pages — silently. Fail the build instead, naming section and basePath.
- * A basePath without a SECTION_MAP entry is unfiltered (the Docs hub shows the
- * whole manual), so any section is reachable there and needs no allow-list.
- */
-const uncovered = new Set<string>();
-for (const [section, items] of sections) {
-  const name = section || FALLBACK_SECTION;
-  for (const item of items) {
-    const basePath = `/${item.path.split('/').filter(Boolean)[0] ?? ''}`;
-    const allowed = SECTION_MAP[basePath];
-    if (allowed && !allowed.includes(name)) {
-      uncovered.add(`section '${name}' in basePath '${basePath}' (${item.path})`);
-    }
-  }
-}
-if (uncovered.size > 0) {
-  console.error(
-    'site nav sections missing from SECTION_MAP (www/app/site-ui/open-layout-navigation.ts):',
-  );
-  for (const entry of [...uncovered].sort()) console.error(`  ${entry}`);
-  console.error('add the section to its basePath list, or the page sidebar drops it.');
-  process.exit(1);
+const missingCanonicalPaths = Object.values(SECTION_PATHS)
+  .flat()
+  .filter((path) => !routes.includes(path));
+if (missingCanonicalPaths.length) {
+  throw new Error(`Canonical nav routes are missing: ${missingCanonicalPaths.join(', ')}`);
 }
 
 // Static-map drift guard: a zh label for a route that left the nav (renamed

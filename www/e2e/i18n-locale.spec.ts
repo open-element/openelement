@@ -88,10 +88,7 @@ test.describe('Localized layout', () => {
     const state = await readShellState(page);
     expect(state.htmlLang).toBe('en');
     expect(state.homeHref).toBe('/');
-    // The header carries the same four entrances in every locale (E2 §4):
-    // Docs / API / Roadmap / Blog, unprefixed on the default locale.
-    expect(state.navHrefs).toEqual(['/docs/', '/reference/', '/roadmap/', '/changelog/']);
-    expect(state.navHrefs?.some((href) => href?.startsWith('/zh/'))).toBe(false);
+    expect(state.navHrefs).toEqual(['/docs/', '/blog/']);
   });
 
   test('Chinese shell projects locale-prefixed navigation', async ({ page }) => {
@@ -101,12 +98,7 @@ test.describe('Localized layout', () => {
     const state = await readShellState(page);
     expect(state.htmlLang).toBe('zh');
     expect(state.homeHref).toBe('/zh/');
-    expect(state.navHrefs).toEqual([
-      '/zh/docs/',
-      '/zh/reference/',
-      '/zh/roadmap/',
-      '/zh/changelog/',
-    ]);
+    expect(state.navHrefs).toEqual(['/zh/docs/', '/zh/blog/']);
   });
 
   test('switching locale via URL changes page language', async ({ page }) => {
@@ -141,13 +133,13 @@ test.describe('i18n SSG Output', () => {
   test('release status and its guide link are localized', async ({ page }) => {
     const zhRes = await page.goto('/zh/changelog/');
     expect(zhRes?.ok()).toBe(true);
-    await expect(page.getByRole('heading', { level: 1, name: '发布状态' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: '更新日志' })).toBeVisible();
     await expect(
       page.locator('.page-changelog').getByRole('link', { name: '快速开始' }),
     ).toHaveAttribute('href', '/zh/guide/getting-started/');
     const enRes = await page.goto('/changelog/');
     expect(enRes?.ok()).toBe(true);
-    await expect(page.getByRole('heading', { level: 1, name: 'Release Status' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Changelog' })).toBeVisible();
   });
 
   test('both locale versions of roadmap exist', async ({ page }) => {

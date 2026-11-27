@@ -161,7 +161,8 @@ async function interact(page: Page): Promise<void> {
     await page.keyboard.press('Escape');
   }
   const toggle = page.locator('open-theme-toggle button').first();
-  if (await toggle.count()) {
+  // The home route hides the control on purpose; only click visible chrome.
+  if ((await toggle.count()) && (await toggle.isVisible())) {
     await toggle.click({ timeout: 5_000 }).catch(() => {});
   }
   for (let i = 0; i < 4; i++) await page.keyboard.press('Tab');

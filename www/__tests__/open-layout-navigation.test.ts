@@ -3,7 +3,7 @@ import { readingChromeStrings } from '../app/site-ui/chrome-strings.ts';
 import {
   buildSidebarRows,
   decorateHeaderNav,
-  filterNavSections,
+  globalNavSections,
   footerColumn,
   isExternalLayoutUrl,
   isSafeLayoutUrl,
@@ -14,6 +14,7 @@ import {
   localizeLayoutPath,
   mobileSectionRoot,
   REPOSITORY_URL,
+  showsDocumentationSidebar,
 } from '../app/site-ui/open-layout-navigation.ts';
 
 test('open-layout navigation rejects executable and protocol-relative URLs', () => {
@@ -46,18 +47,16 @@ test('localeSwitchPath degrades unresolved route params to the static ancestor',
   expect(localeSwitchScopeNote('en')).toContain('View this page in Chinese');
 });
 
-test('open-layout navigation filters only the active section family', () => {
+test('open-layout navigation keeps the complete global section tree', () => {
   const sections = [
-    { section: 'Guide', items: [] },
-    { section: 'Core', items: [] },
-    { section: 'Principles', items: [] },
-    { section: 'Reference', items: [] },
-    { section: 'Project', items: [] },
+    { section: 'LEARN', items: [] },
+    { section: 'GUIDES', items: [] },
+    { section: 'REFERENCE', items: [] },
+    { section: 'PROJECT', items: [] },
   ];
-  // A guide page sees the manual (the docs hub's group) and nothing else.
-  expect(filterNavSections(sections, '/guide/api')).toEqual([sections[0], sections[1]]);
-  expect(filterNavSections(sections, '/architecture/dsd')).toEqual([sections[2], sections[3]]);
-  expect(filterNavSections(sections, '/changelog')).toEqual([sections[4]]);
+  expect(globalNavSections(sections)).toEqual(sections);
+  expect(globalNavSections(sections)).toEqual(sections);
+  expect(globalNavSections(sections)).toEqual(sections);
   expect(mobileSectionRoot('/zh/guide/api', ['en', 'zh'])).toEqual('/guide');
 });
 
@@ -71,14 +70,11 @@ test('open-layout navigation labels the nameless generated group as Project', ()
     { section: '', items: [{ label: 'Roadmap', path: '/roadmap' }] },
   ];
   // Unfiltered paths keep every group, with the empty one renamed.
-  expect(filterNavSections(generated, '/docs').map((s) => s.section)).toEqual([
-    'Reference',
-    'Project',
-  ]);
-  expect(filterNavSections(sections, '/roadmap').map((s) => s.section)).toEqual(['Project']);
+  expect(globalNavSections(generated).map((s) => s.section)).toEqual(['Reference', 'Project']);
+  expect(globalNavSections(sections).map((s) => s.section)).toEqual(['Reference', 'Project']);
   // Release status belongs to the project section.
-  expect(filterNavSections(sections, '/changelog').map((s) => s.section)).toEqual(['Project']);
-  expect(filterNavSections(sections, '/reference').map((s) => s.section)).toEqual(['Reference']);
+  expect(globalNavSections(sections).map((s) => s.section)).toEqual(['Reference', 'Project']);
+  expect(globalNavSections(sections).map((s) => s.section)).toEqual(['Reference', 'Project']);
 });
 
 const GENERATED_LIKE_SECTIONS = [
@@ -95,12 +91,16 @@ const GENERATED_LIKE_SECTIONS = [
   { section: 'Reference', items: [{ path: '/reference', label: 'API Reference' }] },
 ];
 
-test('buildSidebarRows flattens the filtered section tree into heading and link rows', () => {
+test('buildSidebarRows flattens the global section tree into heading and link rows', () => {
   const rows = buildSidebarRows(GENERATED_LIKE_SECTIONS, '/guide/api', 'en', ['en', 'zh']);
   expect(rows.map((row) => row.kind)).toEqual([
     'section',
     'link',
     'link',
+    'link',
+    'section',
+    'link',
+    'section',
     'link',
     'section',
     'link',
@@ -127,9 +127,11 @@ test('buildSidebarRows localizes link targets and matches the localized current 
   ]);
 });
 
-test('buildSidebarRows filters to the active section family before flattening', () => {
+test('buildSidebarRows keeps every global section while flattening', () => {
   const rows = buildSidebarRows(GENERATED_LIKE_SECTIONS, '/architecture/dsd', 'en', ['en', 'zh']);
   expect(rows.filter((row) => row.kind === 'section').map((row) => row.heading)).toEqual([
+    'Guide',
+    'Core',
     'Principles',
     'Reference',
   ]);
@@ -157,58 +159,89 @@ test('buildSidebarRows guards unsafe hrefs and marks external links', () => {
   expect(external?.rel).toEqual('noopener noreferrer');
 });
 
-test('decorateHeaderNav marks the current section and never external links', () => {
+test('documentation navigation stays out of home, Blog and error recovery pages', () => {
+  const locales = ['en', 'zh'];
+  for (const path of [
+    '/',
+    '/zh',
+    '/zh/',
+    '/blog',
+    '/zh/blog/',
+    '/zh/blog/first-post/',
+    '/404',
+    '/zh/404/',
+    '/zh/404.html',
+  ]) {
+    expect(showsDocumentationSidebar(path, locales), path).toBe(false);
+  }
+  for (const path of ['/docs/', '/zh/guide/getting-started/', '/blogger/']) {
+    expect(showsDocumentationSidebar(path, locales), path).toBe(true);
+  }
+});
+
+test('decorateHeaderNav distinguishes the active page from its active section', () => {
   const links = [
     { href: '/docs', label: 'Docs' },
-    { href: '/changelog', label: 'Releases' },
+    { href: '/blog', label: 'Blog', labelZh: '博客' },
     { href: 'https://github.com/open-element/openelement', label: 'GitHub' },
   ];
   expect(decorateHeaderNav(links, '/docs', 'en', ['en', 'zh']).map((link) => link.current)).toEqual(
-    ['page', false, false],
+    ['page', undefined, undefined],
   );
-  // Section roots stay current on nested routes.
-  expect(decorateHeaderNav(links, '/docs/nested', 'en', ['en', 'zh'])[0].current).toEqual('page');
-  // Router 1.0 does not pre-localize shell nav; the Site builder localizes
-  // bare hrefs, and current marking must still land for non-default locales.
-  const zhNav = decorateHeaderNav(links, '/changelog', 'zh', ['en', 'zh']);
-  expect(zhNav.map((link) => link.current)).toEqual([false, 'page', false]);
+  expect(decorateHeaderNav(links, '/blog/first-post', 'en', ['en', 'zh'])[1].current).toBe(
+    'location',
+  );
+  const zhNav = decorateHeaderNav(links, '/blog', 'zh', ['en', 'zh']);
+  expect(zhNav.map((link) => link.current)).toEqual([undefined, 'page', undefined]);
   expect(zhNav[0].href).toEqual('/zh/docs/');
+  expect(zhNav[1].href).toEqual('/zh/blog/');
   expect(zhNav[2].href).toEqual('https://github.com/open-element/openelement');
-  // A locale-prefixed request-time path normalizes to the same result.
   expect(
-    decorateHeaderNav(links, '/zh/changelog', 'zh', ['en', 'zh']).map((link) => link.current),
-  ).toEqual([false, 'page', false]);
+    decorateHeaderNav(links, '/zh/blog/first-post/', 'zh', ['en', 'zh']).map(
+      (link) => link.current,
+    ),
+  ).toEqual([undefined, 'location', undefined]);
+  expect(decorateHeaderNav(links, '/blogger/', 'en', ['en', 'zh'])[1].current).toBeUndefined();
+  for (const path of [
+    '/guide/tutorial/',
+    '/architecture',
+    '/architecture/dsd',
+    '/reference',
+    '/errors',
+  ]) {
+    expect(decorateHeaderNav(links, path, 'en', ['en', 'zh'])[0].current, path).toBe('location');
+  }
+  expect(decorateHeaderNav(links, '/zh/guide/api/', 'zh', ['en', 'zh'])[0].current).toBe(
+    'location',
+  );
+  expect(decorateHeaderNav(links, '/roadmap', 'en', ['en', 'zh'])[0].current).toBeUndefined();
 });
 
-test('footerColumn restores the four-column link structure with localized targets', () => {
-  const product = footerColumn('en', ['en', 'zh'], 'framework');
-  expect(product.label).toEqual('Framework');
-  expect(product.links.map((link) => link.href)).toEqual([
-    '/guide/core-concepts/',
-    '/architecture/design-system/',
-    '/architecture/',
-    '/architecture/dsd/',
-  ]);
-  const zhProduct = footerColumn('zh', ['en', 'zh'], 'framework');
-  expect(zhProduct.label).toEqual('框架');
-  expect(zhProduct.links.every((link) => link.href.startsWith('/zh/'))).toBeTruthy();
-  const project = footerColumn('en', ['en', 'zh'], 'project');
-  const github = project.links.find((link) => link.label === 'GitHub');
-  expect(github?.href).toEqual('https://github.com/open-element/openelement');
-  expect(github?.rel).toEqual('noopener noreferrer');
-  expect(project.label).toBe('Project');
-  expect(project.links.find((link) => link.label === 'Contributing')?.href).toBe('/contributing/');
-  const legal = footerColumn('zh', ['en', 'zh'], 'legal');
-  expect(legal.label).toEqual('法律');
-  expect(legal.links.map((link) => link.label)).toEqual(['MIT 许可证']);
+test('footer Docs and Project link groups point to the localized core destinations', () => {
+  for (const [locale, prefix] of [
+    ['en', ''],
+    ['zh', '/zh'],
+  ]) {
+    const docs = footerColumn(locale, ['en', 'zh'], 'docs');
+    expect(docs.label).toBe(locale === 'zh' ? '文档' : 'Docs');
+    expect(docs.links.map((link) => link.href)).toEqual(
+      ['/docs/', '/guide/getting-started/', '/reference/', '/errors/'].map((path) => prefix + path),
+    );
+    const project = footerColumn(locale, ['en', 'zh'], 'project');
+    expect(project.label).toBe(locale === 'zh' ? '项目' : 'Project');
+    expect(project.links.map((link) => link.href)).toEqual(
+      ['/blog/', '/changelog/', '/contributing/', '/roadmap/'].map((path) => prefix + path),
+    );
+  }
 });
 
 test('layoutChromeStrings carries the bilingual shell chrome copy', () => {
   expect(layoutChromeStrings('en').sidebarLabel).toEqual('Documentation navigation');
   expect(layoutChromeStrings('zh').sidebarLabel).toEqual('文档导航');
-  expect(layoutChromeStrings('en').sidebarToggle).toEqual('Documentation');
-  expect(layoutChromeStrings('zh').sidebarToggle).toEqual('文档');
-  expect(typeof layoutChromeStrings('zh').footerTagline).toEqual('string');
+  expect(layoutChromeStrings('en').sidebarToggle).toEqual('Browse documentation');
+  expect(layoutChromeStrings('zh').sidebarToggle).toEqual('浏览文档');
+  expect(layoutChromeStrings('en').footerLicense).toEqual('MIT License');
+  expect(layoutChromeStrings('zh').footerLicense).toEqual('MIT 许可证');
   // Skip link and header chrome; the English literals are e2e landmark pins.
   expect(layoutChromeStrings('en').skipToMain).toEqual('Skip to main content');
   expect(layoutChromeStrings('zh').skipToMain).toEqual('跳到主要内容');

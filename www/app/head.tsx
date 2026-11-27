@@ -44,24 +44,26 @@
  * would duplicate the page's own.
  */
 import { documentStyle } from '../site-css.ts';
+import { SITE_ORIGIN } from './site-ui/site-url.ts';
+
+const socialImage = `${SITE_ORIGIN}/brand/og-default.png`;
 
 export default [
-  { meta: { property: 'og:site_name', content: 'OpenElement' } },
+  { meta: { property: 'og:site_name', content: 'openElement' } },
   { meta: { property: 'og:type', content: 'website' } },
-  { meta: { property: 'og:image', content: 'https://openelement.org/assets/og-image.jpg' } },
+  { meta: { property: 'og:image', content: socialImage } },
+  { meta: { property: 'og:image:type', content: 'image/png' } },
   { meta: { property: 'og:image:width', content: '1200' } },
   { meta: { property: 'og:image:height', content: '630' } },
   { meta: { name: 'twitter:card', content: 'summary_large_image' } },
-  {
-    meta: { name: 'twitter:image', content: 'https://openelement.org/assets/og-image.jpg' },
-  },
+  { meta: { name: 'twitter:image', content: socialImage } },
   // Anti-flash: the theme is applied before the document style below paints, so
   // the page is never rendered in the wrong palette.
   {
     style:
       'html{visibility:visible!important;}body{background:var(--color-background);color:var(--color-foreground);}',
   },
-  { link: { rel: 'icon', type: 'image/svg+xml', href: '/assets/open-favicon.svg' } },
-  { link: { rel: 'apple-touch-icon', href: '/assets/open-avatar.svg' } },
+  { link: { rel: 'icon', type: 'image/svg+xml', sizes: 'any', href: '/favicon.svg' } },
+  { link: { rel: 'apple-touch-icon', sizes: '180x180', href: '/brand/apple-touch-icon.png' } },
   { style: documentStyle },
 ];

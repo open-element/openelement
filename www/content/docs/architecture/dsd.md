@@ -38,7 +38,7 @@ The browser parses shadow roots from HTML. Custom Elements then upgrade existing
 
 ## Platform standards
 
-OpenElement relies on web-platform contracts rather than a proprietary registry product. Custom Elements, DSD, CEM, Request/Response and FormData define the direction of the public application model.
+openElement relies on web-platform contracts rather than a proprietary registry product. Custom Elements, DSD, CEM, Request/Response and FormData define the direction of the public application model.
 
 ### Elements + DSD
 
@@ -54,7 +54,6 @@ Standard Custom Elements and Declarative Shadow DOM define the durable component
 
 ## See also
 
-- [Island Hydration](/architecture/islands) — when a component crosses into client delivery: the layers and hydration strategies.
 - [Core Concepts](/guide/core-concepts) — declaring a component's root mode.
 - [Light DOM, DSD, SSR and islands](/guide/islands-and-ssr) — the four terms side by side, the current compiled default, and the request-to-interaction flow.
 - [Current Architecture](/architecture) — where each package sits in the graph.

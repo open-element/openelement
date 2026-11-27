@@ -10,7 +10,7 @@ section: 'Core'
 
 ### Custom Element
 
-浏览器通过带连字符的标签名注册组件。OpenElement 从函数组件及其 `defineIslandConfig` 声明生成 Custom Element。服务端函数页面可以组合这些元素。
+浏览器通过带连字符的标签名注册组件。openElement 从函数组件及其 `defineIslandConfig` 声明生成 Custom Element。服务端函数页面可以组合这些元素。
 
 ### Signal
 
@@ -69,5 +69,5 @@ island 的 chunk 何时拉取：`load`（立即，用于首屏控件）、`idle`
 ## 另见
 
 - [核心概念](/zh/guide/core-concepts)——这些术语所属的创作模型。
-- [Island Hydration](/zh/architecture/islands)——分层、策略与 manifest。
+- [Island Hydration](/zh/guide/islands-and-ssr)——分层、策略与 manifest。
 - [DSD 渲染](/zh/architecture/dsd)——服务端的平台契约。

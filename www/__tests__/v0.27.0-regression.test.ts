@@ -22,7 +22,7 @@ import { readFileSync } from 'node:fs';
 const DIST = join(import.meta.dirname ?? '.', '..', 'dist');
 const DOCS_PAGE = join(DIST, 'zh', 'guide', 'getting-started', 'index.html');
 const HOME_PAGE = join(DIST, 'index.html');
-const ARCHITECTURE_PAGE = join(DIST, 'zh', 'architecture', 'islands', 'index.html');
+const ARCHITECTURE_PAGE = join(DIST, 'zh', 'guide', 'islands-and-ssr', 'index.html');
 const REGISTRY_PAGE = join(DIST, 'zh', 'registry', 'index.html');
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -54,8 +54,8 @@ test('v0.27.0 regression: the layout shell is present and expanded', () => {
   // former open-layout island retired with the server function page lane.
   expect(html, 'Layout host must be present').toContain('<app-layout');
   expect(html, 'Compiled light roots must be expanded').toContain('data-oe-light');
-  expect(html, 'Admitted shadow islands must keep native DSD').toContain(
-    '<open-theme-toggle><template shadowrootmode="open"',
+  expect(html, 'Admitted shadow islands must keep native DSD').toMatch(
+    /<open-theme-toggle[^>]*><template shadowrootmode="open"/,
   );
   const codeBlock = html.indexOf('<open-code-block');
   expect(codeBlock !== -1, 'open-code-block host must be present in article content').toBeTruthy();

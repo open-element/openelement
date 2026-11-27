@@ -55,7 +55,7 @@ test('no www site-ui module remains on the class lane', async () => {
   ).toEqual([]);
 });
 
-test('app/layout.tsx is the generated site shell with all 31 derived nodes', async () => {
+test('app/layout.tsx is the generated site shell with all 45 derived nodes', async () => {
   const url = new URL('../app/layout.tsx', import.meta.url);
   const source = await readFile(url, 'utf8');
   // Generated lane (2026-11-20 migration): the class became a function component
@@ -65,7 +65,9 @@ test('app/layout.tsx is the generated site shell with all 31 derived nodes', asy
   // registers it through the generated host PAIR channel (layout-pair slice).
   expect(source).not.toContain('extends OpenElement');
   expect(source).toContain("tag: 'app-layout'");
-  expect(source.match(/const \w+ = computed\(/g)?.length).toEqual(31);
+  expect(source.match(/const \w+ = computed\(/g)?.length).toEqual(45);
+  expect(source).toContain("aria-labelledby='oe-menu-appearance'");
+  expect(source).toContain("<p id='oe-menu-appearance'>{menuAppearanceLabel.value}</p>");
   const compiled = compileGeneratedElementIfAdmitted(source, url.pathname, {
     site: { tag: 'app-layout' },
   });
@@ -185,6 +187,14 @@ test('open-search keeps its view compiler-owned and its browser state external',
     'resultsLabel',
     'emptyMessage',
     'message',
+    'closeLabel',
+    'resultCount',
+    'suggestionLabel',
+    'term1',
+    'term2',
+    'term3',
+    'docsHref',
+    'docsLabel',
     'hasHits',
     'searching',
     'hits',
@@ -197,9 +207,12 @@ test('open-search keeps its view compiler-owned and its browser state external',
     expect(row.attribute).toBeNull();
     expect(row.type).toBe('array');
   }
-  // Four authored event bindings — trigger open, backdrop dismiss, input
-  // search, results-click dismiss — emitted once per path (mount + claim).
-  expect(result!.code.match(/addEventListener\("click"/g)?.length).toBe(6);
+  // Five authored click bindings — trigger open, backdrop dismiss, the close
+  // button, the search empty-state suggestion chip (which re-runs the search
+  // with the suggested term), and results-click dismiss — emitted once per
+  // path (mount + claim). The count moved 6 -> 8 when the suggestion chip
+  // joined the empty state, and 8 -> 10 with the S2 close control.
+  expect(result!.code.match(/addEventListener\("click"/g)?.length).toBe(10);
   expect(result!.code.match(/addEventListener\("input"/g)?.length).toBe(2);
 });
 
@@ -239,15 +252,19 @@ test('open-page-rail keeps its view compiler-owned and its browser state externa
   });
 });
 
-test('open-reading-shell is a generated component with all 21 derived nodes', async () => {
+test('open-reading-shell compiles the metadata visibility node with its other derived values', async () => {
   const url = new URL('../app/site-ui/open-reading-shell.tsx', import.meta.url);
   const source = await readFile(url, 'utf8');
   // Generated lane (2026-11-20): the class's 21 `computed` fields are the lane's
-  // `computed` intrinsic — derived nodes the compiler creates in the retained
-  // setup factory, never declared property rows.
+  // `computed` intrinsic plus the visibility of optional date/tag metadata.
+  // These nodes live in the retained setup factory, never in property rows.
   expect(source).not.toContain('extends OpenElement');
   expect(source).toContain("tag: 'open-reading-shell'");
-  expect(source.match(/const \w+ = computed\(/g)?.length).toEqual(21);
+  expect(source.match(/const \w+ = computed\(/g)?.length).toEqual(22);
+  expect(source).toContain(
+    'computed(() => !props.metadata?.date && !props.metadata?.tags?.length)',
+  );
+  expect(source).toContain('hidden={hideDetails.value}');
   // The two `attribute: false` rows are local mirrors: the lane refuses an
   // imported or generic props member type.
   expect(source).toContain('interface ReadingMetadata');

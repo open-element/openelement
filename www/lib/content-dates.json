@@ -5,10 +5,6 @@
       "en": "2026-11-25",
       "zh": "2026-11-25"
     },
-    "architecture/comparison": {
-      "en": "2026-11-25",
-      "zh": "2026-11-25"
-    },
     "architecture/design-system": {
       "en": "2026-11-25",
       "zh": "2026-11-25"
@@ -16,10 +12,6 @@
     "architecture/dsd": {
       "en": "2026-10-28",
       "zh": "2026-10-28"
-    },
-    "architecture/islands": {
-      "en": "2026-11-25",
-      "zh": "2026-11-25"
     },
     "architecture/web-component-admission": {
       "en": "2026-11-25",
@@ -37,21 +29,17 @@
       "en": "2026-11-24",
       "zh": "2026-11-24"
     },
-    "guide/deploy-cloudflare": {
-      "en": "2026-11-25",
-      "zh": "2026-11-25"
-    },
     "guide/deployment": {
-      "en": "2026-11-25",
-      "zh": "2026-11-25"
+      "en": "2026-11-27",
+      "zh": "2026-11-27"
     },
     "guide/error-handling": {
       "en": "2026-11-25",
       "zh": "2026-11-25"
     },
     "guide/getting-started": {
-      "en": "2026-11-25",
-      "zh": "2026-11-25"
+      "en": "2026-11-27",
+      "zh": "2026-11-27"
     },
     "guide/glossary": {
       "en": "2026-11-25",

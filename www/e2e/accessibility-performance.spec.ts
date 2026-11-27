@@ -106,15 +106,15 @@ test.describe('Accessibility', () => {
     // footer strip that shipped with the compiled-shell refactor passed this
     // exact check; the structural assertions below close that coverage gap.
     await expect(footer.getByRole('heading')).toHaveCount(0);
-    await expect(footer.getByRole('navigation')).toHaveCount(4);
+    await expect(footer.getByRole('navigation')).toHaveCount(2);
     await expect(
       footer
-        .getByRole('navigation', { name: 'Documentation' })
-        .getByRole('link', { name: 'Guide' }),
+        .getByRole('navigation', { name: 'Docs' })
+        .getByRole('link', { name: 'Getting Started' }),
     ).toHaveAttribute('href', '/guide/getting-started/');
     await expect(
-      footer.getByRole('navigation', { name: 'Project' }).getByRole('link', { name: 'GitHub' }),
-    ).toHaveAttribute('href', 'https://github.com/open-element/openelement');
+      footer.getByRole('navigation', { name: 'Project' }).getByRole('link', { name: 'Blog' }),
+    ).toHaveAttribute('href', '/blog/');
   });
 
   test('homepage has no auto-detected a11y issues', async ({ page }) => {
@@ -146,7 +146,7 @@ test.describe('Accessibility', () => {
   });
 
   test('theme toggle is keyboard accessible via delegatesFocus', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     // open-theme-toggle is nested inside app-layout's shadow DOM.

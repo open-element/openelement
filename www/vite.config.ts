@@ -1,5 +1,17 @@
 import { openElement } from '@openelement/router/vite';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
+import redirectsJson from './tools/site-redirects.json' with { type: 'json' };
+import { createSiteRedirectMiddleware, type SiteRedirect } from './lib/site-redirects.ts';
+
+function siteRedirects(): Plugin {
+  const redirects = (redirectsJson as { redirects: SiteRedirect[] }).redirects;
+  return {
+    name: 'openelement-site-redirects',
+    configureServer(server) {
+      server.middlewares.use(createSiteRedirectMiddleware(redirects));
+    },
+  };
+}
 
 // Vite configuration only. Every framework option — including the Tailwind
 // preset, whose `tailwind` key serves both the dev and the build channel —
@@ -26,5 +38,7 @@ export default defineConfig({
       importSource: '@openelement/element',
     },
   },
-  plugins: [openElement()],
+  // The site-owned redirect consumer runs before the framework's route
+  // middleware and shares the manifest/target normalizer with deployment.
+  plugins: [siteRedirects(), openElement()],
 });

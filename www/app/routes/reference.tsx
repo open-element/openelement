@@ -2,16 +2,37 @@
 import { trustedHtml, type TrustedHtml } from '@openelement/element';
 import { definePage } from '@openelement/router';
 import { siteHead } from '#site-ui/head.ts';
-import { normalizeSiteHref } from '#site-ui/site-url.ts';
+import { normalizeSiteHref, siteHref } from '#site-ui/site-url.ts';
 import { contentLocale } from '#site-ui/locale.ts';
 import '#site-ui/open-reading-shell.tsx';
 import '../site-ui/open-section-frame.tsx';
 import '../islands/open-page-rail.tsx';
+import '../islands/open-registry-lookup.tsx';
 import type { SiteLocale } from '../../site-config.ts';
 import { OPENELEMENT_VERSION, sourceLineStamp } from '../data/version.ts';
 import { apiReference } from '../data/_generated-api-reference.ts';
+import { apiReferencePreview } from '../data/api-reference-previews.ts';
 
 export const meta = { section: 'Reference', label: 'API Reference', order: 5 };
+
+/**
+ * Brand casing for generated prose. JSDoc summaries and manifest descriptions
+ * arrive from package sources outside this workspace. The public prose uses
+ * `openElement`. Normalize the standalone word and preserve exported API
+ * names such as `OpenElementOptions`.
+ */
+const BRAND_PROSE = /(?<![A-Za-z0-9_$])OpenElement(?![A-Za-z0-9_$])/g;
+
+function brandProse(text: string): string {
+  // Inline code is an API identifier (`OpenElement` the class), not prose:
+  // normalize only the odd/even segments outside backtick spans.
+  return text
+    .split('`')
+    .map((segment, index) =>
+      index % 2 === 1 ? segment : segment.replace(BRAND_PROSE, 'openElement'),
+    )
+    .join('`');
+}
 
 /** One generated package record projected onto the registry row grammar. */
 export interface ApiPackageItem {
@@ -91,57 +112,45 @@ type AuthoredPackageCopy = {
 const authoredCopy: Record<string, AuthoredPackageCopy> = {
   protocol: {
     copy: {
-      en: 'The cross-system contracts: the Part Program IR, the error dialect, and the admission descriptors the compiler, runtime and build share (#1557).',
-      zh: '跨系统契约：编译器、运行时与构建共享的 Part Program IR、错误方言与准入描述符（#1557）。',
+      en: 'Shared types for compiled templates, rendering, routing, and errors.',
+      zh: '编译模板、渲染、路由和错误共用的类型。',
     },
     notes: {
-      en: [
-        'Zero dependencies, contracts only: no logic grows here by charter.',
-        'You normally consume these through the packages that re-export them.',
-        'Repository baseline — published on the alpha train.',
-      ],
-      zh: [
-        '零依赖、仅装契约：章程禁止逻辑在此生长。',
-        '通常通过转售这些契约的包间接消费。',
-        '仓库基线——已随 alpha 列车发布。',
-      ],
+      en: ['Most apps import these types through the router or element package.'],
+      zh: ['应用通常从 router 或 element 包导入这些类型。'],
     },
     kind: 'core',
   },
   element: {
     copy: {
-      en: 'The supported Custom Element authoring surface for JSX, DSD, hydration, signals and styles — the pure runtime package since the #1557 split.',
-      zh: '受支持的 Custom Element 创作面，覆盖 JSX、DSD、hydration、signals 与样式——#1557 拆分后的纯运行时包。',
+      en: 'Renders compiled custom elements and connects their reactive state in the browser.',
+      zh: '将组件函数编译为浏览器原生自定义元素后，用这个运行时渲染和运行它们。',
     },
     notes: {
       en: [
-        'Start here for standalone element authoring.',
-        'Author compiled elements as `@element`-decorated `OpenElement` classes with `@property` state; `StyleSheet` and signal helpers come from the same root.',
-        '@experimental additions: the `element`/`property` decorator intrinsics (#1209) and the dangerous-key guards `isDangerousKey`, `injectPropsSafe`, `DANGEROUS_KEYS` (#1214).',
+        'Write custom elements as component functions with a configuration export.',
+        'Import `signal` for reactive state and `StyleSheet` for component styles.',
       ],
       zh: [
-        '独立的元素创作从这里开始。',
-        '以 `@element` 装饰的 `OpenElement` 类和 `@property` 状态创作编译元素；`StyleSheet` 与 signal 辅助函数同出包根。',
-        '@experimental 新增：`element`/`property` 装饰器内在量（#1209）与危险键守卫 `isDangerousKey`、`injectPropsSafe`、`DANGEROUS_KEYS`（#1214）。',
+        '用组件函数编写自定义元素，并导出其配置。',
+        '从包根导入 `signal` 管理响应式状态，用 `StyleSheet` 编写组件样式。',
       ],
     },
     kind: 'core',
   },
   compiler: {
     copy: {
-      en: 'The build-time TSX-to-Part-Program compiler and its Vite plugin boundary; the only package carrying the TypeScript dependency (#1557).',
-      zh: '构建期 TSX-to-Part-Program 编译器及其 Vite 插件边界；唯一携带 TypeScript 依赖的包（#1557）。',
+      en: 'Compiles TSX component functions at build time.',
+      zh: '在构建时编译 TSX 组件函数。',
     },
     notes: {
       en: [
-        'Build tooling only — never part of a browser/runtime graph.',
+        'Install it as a development dependency when building components without the router.',
         'You normally drive it through the `@openelement/router` build; the standalone plugin is `@openelement/compiler/vite`.',
-        'Repository baseline — published on the alpha train.',
       ],
       zh: [
-        '仅构建期工具——绝不进入浏览器/运行期依赖图。',
+        '不使用 router 构建组件时，将它安装为开发依赖。',
         '通常通过 `@openelement/router` 构建驱动；独立插件在 `@openelement/compiler/vite`。',
-        '仓库基线——已随 alpha 列车发布。',
       ],
     },
     kind: 'build',
@@ -167,35 +176,23 @@ const authoredCopy: Record<string, AuthoredPackageCopy> = {
   },
   create: {
     copy: {
-      en: 'The installed starter and zero-context consumer entrypoint.',
-      zh: '安装即用的 starter，零上下文的使用者入口。',
+      en: 'Creates the starter app and installs its dependencies.',
+      zh: '生成起步应用并安装依赖。',
     },
     notes: {
-      en: [
-        'Generated projects expose `dev`, `check`, `test`, `build`, `start` and `preview`.',
-        'The starter imports product packages only.',
-      ],
-      zh: [
-        '生成的项目暴露 `dev`、`check`、`test`、`build`、`start` 与 `preview`。',
-        'starter 只导入产品包。',
-      ],
+      en: ['Generated projects expose `dev`, `check`, `test`, `build`, `start` and `preview`.'],
+      zh: ['生成的项目暴露 `dev`、`check`、`test`、`build`、`start` 与 `preview`。'],
     },
     kind: 'build',
   },
   ui: {
     copy: {
-      en: 'Optional primitives retained only when they have demonstrated reusable behavior.',
-      zh: '可选原语，仅在已证明行为可复用时保留。',
+      en: 'Optional ready-to-use custom elements, including buttons, inputs, and dialogs.',
+      zh: '可选的现成自定义元素，包括按钮、输入框和对话框。',
     },
     notes: {
-      en: [
-        'UI is not required to use OpenElement.',
-        'Website-specific brand, hero, lab and layout artifacts are not UI package contracts.',
-      ],
-      zh: [
-        '使用 OpenElement 不依赖 UI 包。',
-        '网站特有的品牌、hero、lab 与布局工件不属于 UI 包的契约。',
-      ],
+      en: [],
+      zh: [],
     },
     kind: 'optional',
   },
@@ -247,6 +244,21 @@ const kindLabels = {
   zh: { core: '核心', build: '构建', optional: '可选' },
 } as const;
 
+const exportTags: Record<string, string> = {
+  class: '类',
+  const: '常量',
+  function: '函数',
+  interface: '接口',
+  namespace: '命名空间',
+  public: '公开',
+  type: '类型',
+};
+
+// The generator currently lists the first overload. Point directly to the
+// function overload in packages/router/src/authoring.ts as well.
+const functionPageOverload =
+  'https://github.com/open-element/openelement/blob/main/packages/router/src/authoring.ts#L505-L511';
+
 /**
  * Render the generated export inventory as grouped, fixed-height scroll panes:
  * one pane per package, every export row keeping its generated `id` anchor.
@@ -269,12 +281,42 @@ function renderReferenceGroupsHtml(
 ): string {
   const unit = locale === 'zh' ? '个导出' : 'exports';
   const regionLabel = locale === 'zh' ? '导出列表' : 'export list';
+  const signatureLabel = locale === 'zh' ? '签名' : 'signature';
+  const continueLabel = locale === 'zh' ? '继续向下阅读' : 'Continue reading';
+  const topLabel = locale === 'zh' ? '回到列表开头' : 'Back to list top';
+  const browseLabel = locale === 'zh' ? '随页面滚动此列表' : 'Scroll this list with the page';
+  const sourceLabel = locale === 'zh' ? '英文源码说明' : 'Source notes';
+  const optionsLabel = locale === 'zh' ? '参数选项和源码位置' : 'Options and source location';
+  const scopeHint =
+    locale === 'zh' ? '↑ ↓ 选择 · Tab 查看 · Esc 返回' : '↑ ↓ Select · Tab inspect · Esc return';
   const escapeHtml = (value: string): string =>
     value
       .replaceAll('&', '&amp;')
       .replaceAll('<', '&lt;')
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;');
+  const formActionsHref = siteHref(
+    locale === 'zh'
+      ? '/guide/routing-and-data#表单-action'
+      : '/guide/routing-and-data#form-actions',
+    locale,
+  );
+  const inlineLink = (href: string, label: string) =>
+    `<a class="underline" href="${escapeHtml(href)}">${escapeHtml(label)}</a>`;
+  const summaryHtml = (summary: string) =>
+    escapeHtml(summary)
+      .replaceAll(
+        '&quot;Form actions&quot; section',
+        inlineLink(formActionsHref, '"Form actions" section'),
+      )
+      .replaceAll(
+        'see ProblemDetails.',
+        `see ${inlineLink('#api-protocol-root-ProblemDetails', 'ProblemDetails')}.`,
+      )
+      .replaceAll(
+        'See `ActionResult` for',
+        `See ${inlineLink('#api-protocol-root-ActionResult', 'ActionResult')} for`,
+      );
   const optionLine = (
     options: readonly {
       name: string;
@@ -286,8 +328,11 @@ function renderReferenceGroupsHtml(
     options
       .map((option) => {
         const marker = option.required ? requiredLabel : optionalLabel;
-        const description = option.description === '' ? '' : ` — ${option.description}`;
-        return `${option.name}${option.required ? '' : '?'}: ${option.type} (${marker})${description}`;
+        const description =
+          option.description === ''
+            ? ''
+            : ` — <span lang="en">${escapeHtml(option.description)}</span>`;
+        return `${escapeHtml(option.name)}${option.required ? '' : '?'}: ${escapeHtml(option.type)} (${marker})${description}`;
       })
       .join('; ');
   const groups = apiReference.packages
@@ -295,41 +340,64 @@ function renderReferenceGroupsHtml(
       const rows = pkg.subpaths
         .flatMap((subpath) =>
           subpath.exports.map((exported) => {
-            const summary: string = exported.summary;
+            const preview = apiReferencePreview(exported, locale);
+            const functionLink =
+              exported.anchor === 'api-router-root-definePage'
+                ? ` ${inlineLink(functionPageOverload, locale === 'zh' ? '查看函数重载' : 'See the function overload')}${locale === 'zh' ? '。' : '.'}`
+                : '';
+            const notes = preview === exported.summary ? '' : summaryHtml(exported.summary);
             const options = optionLine(exported.options);
-            const tags = [exported.kind, exported.stability].filter(Boolean).join(' · ');
+            const sourceLocation = `<span class="ref-source">${escapeHtml(exported.source.path)}:${exported.source.line}</span>`;
+            const details =
+              notes || options
+                ? `<details class="ref-detail"><summary class="ref-detail-toggle" data-pagefind-ignore>${notes ? sourceLabel : optionsLabel}</summary>` +
+                  (notes ? `<p class="ref-summary" lang="en">${notes}</p>` : '') +
+                  (options ? `<p class="ref-options">${options}</p>` : '') +
+                  `${sourceLocation}</details>`
+                : sourceLocation;
+            const tags = [exported.kind, exported.stability]
+              .filter(Boolean)
+              .map((tag) => (locale === 'zh' ? (exportTags[tag] ?? tag) : tag))
+              .join(' · ');
             return (
-              `<div class="ref-row" id="${escapeHtml(exported.anchor)}" role="listitem">` +
+              `<div class="ref-row" id="${escapeHtml(exported.anchor)}" role="listitem" tabindex="-1" data-lookup-label="${escapeHtml(exported.name)}">` +
               `<div class="ref-row-head">` +
               `<span class="ref-name">${escapeHtml(exported.name)}</span>` +
               (tags === '' ? '' : `<span class="ref-tags">${escapeHtml(tags)}</span>`) +
               `</div>` +
               `<span class="ref-container">${escapeHtml(pkg.name)} · ${escapeHtml(subpath.label)}</span>` +
-              (summary === '' ? '' : `<p class="ref-summary">${escapeHtml(summary)}</p>`) +
-              `<pre class="ref-sig" tabindex="0"><code>${escapeHtml(exported.signature)}</code></pre>` +
-              (options === '' ? '' : `<p class="ref-options">${escapeHtml(options)}</p>`) +
-              `<span class="ref-source">${escapeHtml(exported.source.path)}:${exported.source.line}</span>` +
+              (preview ? `<p class="ref-summary">${summaryHtml(preview)}${functionLink}</p>` : '') +
+              `<pre class="ref-sig" tabindex="-1" data-sig-label="${escapeHtml(exported.name)} ${signatureLabel}"><code>${escapeHtml(exported.signature)}</code></pre>` +
+              details +
               `</div>`
             );
           }),
         )
         .join('');
       const count = pkg.subpaths.reduce((total, subpath) => total + subpath.exports.length, 0);
+      const packageHeading = escapeHtml(pkg.name).replace('/', '/<wbr>');
       return (
-        `<section class="ref-group" aria-labelledby="ref-${pkg.id}-title">` +
+        `<section class="ref-group" aria-labelledby="ref-${pkg.id}-title" data-ref-package="${escapeHtml(pkg.name)}">` +
         `<div class="ref-group-head">` +
-        `<h3 class="ref-group-title" id="ref-${pkg.id}-title">${escapeHtml(pkg.name)}</h3>` +
+        `<h3 class="ref-group-title" id="ref-${pkg.id}-title">${packageHeading}</h3>` +
         `<span class="ref-group-count">${count} ${unit}</span>` +
         `</div>` +
-        `<div class="ref-group-scroll" role="region" tabindex="0" ` +
-        `aria-label="${escapeHtml(pkg.name)} — ${regionLabel}">` +
+        `<button type="button" class="ref-browse min-h-11 w-full cursor-pointer px-4 text-start text-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring" ` +
+        `data-ref-browse aria-controls="ref-${pkg.id}-exports" aria-describedby="ref-${pkg.id}-title" aria-pressed="false" hidden>${browseLabel}</button>` +
+        `<div id="ref-${pkg.id}-exports" class="ref-group-scroll" role="region" tabindex="0" ` +
+        `aria-label="${escapeHtml(pkg.name)} — ${regionLabel}" aria-describedby="export-keyboard-hint">` +
         `<div role="list" class="ref-list">${rows}</div>` +
+        `</div>` +
+        `<div class="border-t border-border bg-muted" data-ref-controls hidden>` +
+        `<button type="button" class="min-h-11 w-full cursor-pointer px-4 text-start text-sm font-semibold text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring" ` +
+        `aria-controls="ref-${pkg.id}-exports" data-ref-continue data-ref-more="${continueLabel}" data-ref-top="${topLabel}">${continueLabel}</button>` +
+        `<p class="m-0 flex flex-wrap justify-between gap-x-2 gap-y-1 px-4 pb-3 text-xs text-muted-foreground"><span>${scopeHint}</span><span data-ref-position></span></p>` +
         `</div>` +
         `</section>`
       );
     })
     .join('');
-  return `<div class="ref-groups">${groups}</div>`;
+  return groups;
 }
 
 interface GeneratedElementDetail {
@@ -351,7 +419,7 @@ function projectConfigOptions(requiredLabel: string, optionalLabel: string): Api
     type: option.type,
     required: option.required ? requiredLabel : optionalLabel,
     defaultValue: option.default === '' ? '' : `= ${option.default}`,
-    description: option.description,
+    description: brandProse(option.description),
   }));
 }
 
@@ -364,7 +432,7 @@ function detailLine(details: readonly GeneratedElementDetail[]): string {
       const fallback = typeof detail.default === 'string' ? ` = ${detail.default}` : '';
       const description =
         typeof detail.description === 'string' && detail.description !== ''
-          ? ` — ${detail.description}`
+          ? ` — ${brandProse(detail.description)}`
           : '';
       return `${name}${type}${fallback}${description}`;
     })
@@ -384,7 +452,7 @@ function projectElementEntries(labels: {
     anchor: element.anchor,
     tag: `<${element.tag}>`,
     className: element.className,
-    description: element.description,
+    description: brandProse(element.description),
     layer: element.layer,
     hydrate: element.hydrate,
     module: element.module,
@@ -412,16 +480,24 @@ const content = {
     headTitle: 'API Reference',
     headDescription: `The supported openElement API surface: ${packageCount} consumer packages, every documented export and every custom element, generated from repository truth.`,
     pageTitle: 'API Reference',
-    lede: (v: string) => `The ${v} surface covers only the ${packageCount} consumer packages.`,
+    lede: (v: string) => `Look up import paths, signatures, and configuration for ${v}.`,
     s1Index: '01 / interface rule',
-    s1Title: 'Authoring starts at product packages.',
+    s1Title: 'Start with routes and components',
     s1Copy:
-      'The applications use loaders, actions and progressively enhanced forms. The server resolves the loader before rendering the complete page.',
-    s1Links: [{ label: 'Routing and Data', href: '/guide/routing-and-data' }],
+      'Use definePage to give a page function its route options. Use defineIslandConfig beside a component function to set its custom element tag and when it becomes interactive.',
+    s1Links: [
+      { label: 'Build a page and custom element', href: '/guide/getting-started#build-a-page' },
+      { label: 'Routing and Data', href: '/guide/routing-and-data' },
+    ],
+    lookupLabel: 'Find an exported symbol',
+    lookupExample: 'definePage',
+    lookupHint: 'Enter a name such as definePage, or choose a package to browse its exports.',
+    lookupSubmit: 'Find',
+    keyboardHint:
+      'Use Page Up or Page Down to read and ↑ or ↓ to select an export. Tab reaches long signatures, notes and links. Use ← or → to read across a signature and Esc to return to the list. Turn on “Scroll this list with the page” to browse without a separate scrollbar.',
     s2Index: '02 / supported surface',
-    s2Title: `${packageCount} packages, one application path.`,
-    s2Copy:
-      'Each package owns a distinct consumer decision; absorbed implementation packages remain private.',
+    s2Title: `${packageCount} supported packages`,
+    s2Copy: 'Check each package’s purpose and supported import paths.',
     headPackage: 'Package',
     headSubpaths: 'Supported subpaths',
     headKind: 'Kind',
@@ -429,9 +505,10 @@ const content = {
     railElements: 'Elements',
     railOptions: 'Config options',
     s3Index: '03 / export reference',
-    s3Title: 'Every documented export, anchored.',
+    s3Title: 'Exported symbols',
     s3Copy:
-      'Each entry below is enumerated from the package exports maps by the reference generator — name, kind, stability class, JSDoc summary, declared signature and option table are generated facts, never hand-copied. The anchor matches the generated search record for the same export.',
+      'Signatures and paths follow the source version shown above. Expand source notes for longer descriptions or additional options.',
+    changelogLabel: 'See published versions in the changelog',
     headExport: 'Export',
     headSummary: 'Summary',
     headSource: 'Source',
@@ -462,14 +539,24 @@ const content = {
     headTitle: 'API 参考',
     headDescription: `openElement 受支持的 API 面：${packageCount} 个面向使用者的包、全部记录在案的导出与 Custom Element，由仓库真值生成。`,
     pageTitle: 'API 参考',
-    lede: (v: string) => `${v} 的创作面只覆盖 ${packageCount} 个面向使用者的包。`,
+    lede: (v: string) => `查阅 ${v} 的导入路径、签名和配置选项。`,
     s1Index: '01 / 接口规则',
-    s1Title: '创作从产品包开始。',
-    s1Copy: '应用使用 loader、action 和渐进增强表单。服务端先解析 loader，再渲染完整页面。',
-    s1Links: [{ label: '路由与数据', href: '/zh/guide/routing-and-data' }],
+    s1Title: '从路由和组件开始',
+    s1Copy:
+      '用 definePage 为页面函数设置路由选项。在组件函数旁用 defineIslandConfig 声明自定义元素的标签名和启用交互的时机。',
+    s1Links: [
+      { label: '编写页面和自定义元素', href: '/zh/guide/getting-started#写一个页面' },
+      { label: '路由与数据', href: '/zh/guide/routing-and-data' },
+    ],
+    lookupLabel: '查找导出的符号',
+    lookupExample: 'definePage',
+    lookupHint: '输入名称（如 definePage），或选择一个包浏览其中的导出项。',
+    lookupSubmit: '查找',
+    keyboardHint:
+      '用 Page Up 或 Page Down 翻页，用 ↑ 或 ↓ 选择导出项。按 Tab 进入长签名、说明或链接，用 ← 或 → 横向阅读签名，按 Esc 返回列表。打开“随页面滚动此列表”可用页面的滚动条浏览。',
     s2Index: '02 / 受支持的产品面',
-    s2Title: `${packageCount} 个包，一条应用路径。`,
-    s2Copy: '每个包对应一个明确的使用者决策；被吸收的实现包保持私有。',
+    s2Title: `${packageCount} 个受支持的包`,
+    s2Copy: '查看各个包的用途及受支持的导入路径。',
     headPackage: '包',
     headSubpaths: '受支持的子路径',
     headKind: '类别',
@@ -477,9 +564,10 @@ const content = {
     railElements: '元素',
     railOptions: '配置选项',
     s3Index: '03 / 导出参考',
-    s3Title: '每一个记录在案的导出，都有锚点。',
+    s3Title: '导出的符号',
     s3Copy:
-      '以下条目由参考生成器从各包的 exports map 枚举——名称、类别、稳定性级别、JSDoc 摘要、声明的签名与选项表均为生成事实，绝不手工复制。锚点与该导出生成的搜索记录一一对应。',
+      '签名和路径取自上方标明的源码版本。常用条目提供中文说明，展开即可查阅英文源码摘要和参数选项。',
+    changelogLabel: '在更新日志中查看已发布版本',
     headExport: '导出',
     headSummary: '摘要',
     headSource: '来源',
@@ -523,6 +611,12 @@ export function ReferencePage(props: {
   s1Title: string;
   s1Copy: string;
   s1Links: ReadonlyArray<{ label: string; href: string }>;
+  lookupLabel: string;
+  lookupExample: string;
+  lookupHint: string;
+  lookupSubmit: string;
+  keyboardHint: string;
+  jumpLinks: Array<{ label: string; href: string }>;
   s2Index: string;
   s2Title: string;
   s2Copy: string;
@@ -552,6 +646,8 @@ export function ReferencePage(props: {
   s3Index: string;
   s3Title: string;
   s3Copy: string;
+  changelogLabel: string;
+  changelogHref: string;
   headExport: string;
   headSummary: string;
   headSource: string;
@@ -598,10 +694,27 @@ export function ReferencePage(props: {
     // Without data-pagefind-body the page is absent from the index entirely:
     // pagefind stops indexing every page that lacks the attribute. The shell
     // already renders the one <main> landmark (#main-content).
-    <div class='page-reference text-foreground' data-pagefind-body>
+    <div class='page-reference text-foreground' data-registry='reference' data-pagefind-body>
       <open-reading-shell meta rail footer metadata={props.metadata} locale={props.locale}>
         <div slot='rail'>
           <open-page-rail items={props.railItems} locale={props.locale}></open-page-rail>
+        </div>
+        <open-registry-lookup
+          label={props.lookupLabel}
+          example={props.lookupExample}
+          submit={props.lookupSubmit}
+          hint={props.lookupHint}
+        ></open-registry-lookup>
+        <div class='flex flex-wrap gap-x-4 gap-y-2'>
+          {props.jumpLinks.map((link) => (
+            <a
+              class='text-sm text-primary underline underline-offset-4'
+              href={link.href}
+              key={link.href}
+            >
+              {link.label}
+            </a>
+          ))}
         </div>
         <open-section-frame>
           <span slot='index'>{props.s1Index}</span>
@@ -663,18 +776,16 @@ export function ReferencePage(props: {
         <open-section-frame>
           <span slot='index'>{props.s3Index}</span>
           <span slot='title'>{props.s3Title}</span>
-          <span slot='copy'>{props.s3Copy}</span>
+          <span slot='copy'>
+            {props.s3Copy}{' '}
+            <a class='text-primary underline underline-offset-4' href={props.changelogHref}>
+              {props.changelogLabel}
+            </a>
+          </span>
           <div class='border-t border-border' id='api-reference'>
-            {/* The exports region is a list, and now says so: the rows were
-                plain divs, so a screen reader read one undifferentiated run of
-                text with no item count ("list, N items") and no way to step
-                between exports. The label comes from the section's own title;
-                the visual column header above stays a presentational legend
-                (aria-hidden), because each item carries its own name, summary
-                and source in reading order. A table mapping was considered and
-                rejected: with the header row hidden below 1101px, a role=table
-                would promise column semantics the narrow layout does not
-                render. */}
+            <p id='export-keyboard-hint' class='mb-4 max-w-[66ch] text-sm text-muted-foreground'>
+              {props.keyboardHint}
+            </p>
             <div class='ref-groups' innerHTML={props.exportsHtml} trustedHtml></div>
           </div>
         </open-section-frame>
@@ -836,7 +947,7 @@ export default definePage(ReferencePage, {
     };
     return {
       metadata: {
-        breadcrumb: 'Reference',
+        breadcrumb: resolved === 'zh' ? '参考' : 'Reference',
         title: t.pageTitle,
         lede: t.lede(sourceLineStamp(resolved)),
       },
@@ -855,6 +966,16 @@ export default definePage(ReferencePage, {
       s1Title: t.s1Title,
       s1Copy: t.s1Copy,
       s1Links: t.s1Links.map((link) => ({ ...link, href: normalizeSiteHref(link.href) })),
+      lookupLabel: t.lookupLabel,
+      lookupExample: t.lookupExample,
+      lookupHint: t.lookupHint,
+      lookupSubmit: t.lookupSubmit,
+      keyboardHint: t.keyboardHint,
+      jumpLinks: [
+        { label: t.railExports, href: '#api-reference' },
+        { label: t.railOptions, href: '#config-options' },
+        { label: t.railElements, href: '#element-reference' },
+      ],
       s2Index: t.s2Index,
       s2Title: t.s2Title,
       s2Copy: t.s2Copy,
@@ -868,6 +989,8 @@ export default definePage(ReferencePage, {
       s3Index: t.s3Index,
       s3Title: t.s3Title,
       s3Copy: t.s3Copy,
+      changelogLabel: t.changelogLabel,
+      changelogHref: siteHref('/changelog', resolved),
       headExport: t.headExport,
       headSummary: t.headSummary,
       headSource: t.headSource,

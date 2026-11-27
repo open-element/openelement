@@ -118,6 +118,7 @@ function OpenReadingShell(props: {
   const tags = computed((): ReadingTag[] =>
     (props.metadata?.tags ?? []).map((tag) => ({ key: tag, label: tag })),
   );
+  const hideDetails = computed(() => !props.metadata?.date && !props.metadata?.tags?.length);
   const previousHref = computed(() => props.navigation?.previous?.href ?? props.previous);
   const nextHref = computed(() => props.navigation?.next?.href ?? props.next);
   const previousText = computed(() => props.navigation?.previous?.label ?? props.previousLabel);
@@ -133,9 +134,9 @@ function OpenReadingShell(props: {
 
   return (
     <div class='shell'>
-      <article class='main min-w-0 leading-[1.7]'>
-        <span id='start' tabindex='-1'></span>
-        <header class='meta mb-7 border-b border-border pb-5'>
+      <article class='main'>
+        <span class='reading-start' id='start' tabindex='-1'></span>
+        <header class='meta'>
           <slot name='meta'>
             <div>
               <nav
@@ -164,19 +165,24 @@ function OpenReadingShell(props: {
                   {accent.value}
                 </span>
               </h1>
-              <p class='mt-4 mb-0 max-w-[640px] leading-[1.65] text-muted-foreground min-[901px]:text-[clamp(var(--text-base),1.4vw,var(--text-xl))]'>
+              <p class='mt-4 mb-0 leading-[1.65] text-muted-foreground min-[901px]:text-[clamp(var(--text-base),1.4vw,var(--text-xl))]'>
                 {lede.value}
               </p>
               {freshnessRows.value.map((row) => (
                 <p
                   key={row.key}
                   class='mt-3 mb-0 font-mono text-(length:--text-xs) text-muted-foreground'
+                  data-pagefind-ignore
                 >
                   <span>{row.prefix}</span>
                   <time datetime={row.updated}>{row.label}</time>
                 </p>
               ))}
-              <p class='mt-4 mb-0 flex flex-wrap gap-2 font-mono text-(length:--text-xs) text-muted-foreground'>
+              <p
+                class='mt-4 mb-0 flex flex-wrap gap-2 font-mono text-(length:--text-xs) text-muted-foreground'
+                hidden={hideDetails.value}
+                data-pagefind-ignore
+              >
                 <time>{date.value}</time>
                 {tags.value.map((tag) => (
                   <span class='rounded-md border border-border px-2 py-1' key={tag.key}>
@@ -187,7 +193,15 @@ function OpenReadingShell(props: {
             </div>
           </slot>
         </header>
-        <slot></slot>
+        <aside class='rail print:hidden!' aria-label={onThisPage.value} data-pagefind-ignore>
+          <p class='mt-0 mb-3 hidden font-mono text-(length:--text-xs) font-extrabold tracking-[0.14em] text-muted-foreground uppercase min-[901px]:block'>
+            {onThisPage.value}
+          </p>
+          <slot name='rail'></slot>
+        </aside>
+        <div class='reading-body'>
+          <slot></slot>
+        </div>
         <footer class='footer mt-10 border-t border-border pt-5'>
           <slot name='footer'>
             <nav
@@ -219,16 +233,6 @@ function OpenReadingShell(props: {
           </slot>
         </footer>
       </article>
-      <aside
-        class='rail static mt-6 self-start min-[901px]:sticky min-[901px]:top-[calc(var(--nav-height)+1.5rem)] min-[901px]:mt-0 print:hidden!'
-        aria-label={onThisPage.value}
-        data-pagefind-ignore
-      >
-        <p class='mt-0 mb-3 hidden font-mono text-(length:--text-xs) font-extrabold tracking-[0.14em] text-muted-foreground uppercase min-[901px]:block'>
-          {onThisPage.value}
-        </p>
-        <slot name='rail'></slot>
-      </aside>
     </div>
   );
 }

@@ -71,7 +71,7 @@ export default defineConfig({
 - `renderer`——原生渲染后端，接受 `'native'`（默认值）。
 - `dirs`——`{ routes, islands, components }`。
 - `layout`——`false` 表示退出约定，或 `{ import, props }`。标签名由 import 的文件名推导，因此不可配置。
-- `packageIslands`——组件包如何被接纳。省略或 `'auto'`（默认）：构建在 scan 期推导被接纳的集合——应用的路由、页面、布局、岛与组件真正导入的每一个包属主元素模块（经打包器解析）都按其属主包归因，拥有有效 OpenElement manifest 的包无需任何配置即被接纳。数组在推导之外追加显式条目（如 `['@openelement/ui']`）；两个包声明同名标签时，显式条目优先于推导条目。`'manual'` 关闭推导：只接纳列出的包，导入未列出组件包的行为会以显式声明的修法被报告。应用导入了某包的元素模块、而该包没有有效 manifest 时，它永远不会被接纳（无可接纳之物）并被报告——这是 auto 下保留的唯一真实失误类报告。推导还会把每个被接纳的包并入 SSR 外部化列表（被接纳的包被打包而非运行时导入），因此没有 `ssr.noExternal` 键。
+- `packageIslands`——组件包如何被接纳。省略或 `'auto'`（默认）：构建在 scan 期推导被接纳的集合——应用的路由、页面、布局、岛与组件真正导入的每一个包属主元素模块（经打包器解析）都按其属主包归因，拥有有效 openElement manifest 的包无需任何配置即被接纳。数组在推导之外追加显式条目（如 `['@openelement/ui']`）；两个包声明同名标签时，显式条目优先于推导条目。`'manual'` 关闭推导：只接纳列出的包，导入未列出组件包的行为会以显式声明的修法被报告。应用导入了某包的元素模块、而该包没有有效 manifest 时，它永远不会被接纳（无可接纳之物）并被报告——这是 auto 下保留的唯一真实失误类报告。推导还会把每个被接纳的包并入 SSR 外部化列表（被接纳的包被打包而非运行时导入），因此没有 `ssr.noExternal` 键。
 - `head`——结构化文档头通道：`title`、`description`、`lang`、`favicon`、`ogImage`、`stylesheets: string[]` 与 `scripts: { src, defer?, crossOrigin?, integrity? }[]`。脚本与样式表都经框架自己的 link/script 序列化器写出，因此配置条目与内联 `inject` 条目产出的字节完全一致。`inject` 本身——框架的原始 HTML 通道——刻意在这里没有家。`lang` 设置 `<html lang>`，默认 `en`；配置了 `i18n` 时，按请求路径推导出的 locale 会覆盖它（ADR-0172）。
 - `styles`——`{ tokens }`，把 token 约定指向另一个文件。
 - `i18n`——`{ locales, defaultLocale }`；构建会在每个额外 locale 前缀下展开所有路由。

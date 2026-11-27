@@ -64,7 +64,17 @@ test('built site emits the admitted package sheets and links those its pages ren
   };
   const referencing = (sheet: (typeof sheets)[number]): string[] =>
     artifacts
-      .filter((artifact) => artifact.path !== sheet.path && artifact.text.includes(sheet.name))
+      .filter(
+        (artifact) =>
+          artifact.path !== sheet.path &&
+          // The publish manifest is an index of every emitted byte, not a
+          // consumer: it necessarily names every sheet, so counting it here
+          // would make each admitted-but-unrendered contract sheet look
+          // rendered. The row asserts render/import linkage, so the index is
+          // excluded (and nothing else is).
+          !artifact.path.endsWith('publish-manifest.json') &&
+          artifact.text.includes(sheet.name),
+      )
       .map((artifact) => artifact.path.slice(DIST.length + 1));
 
   for (const sheet of RENDERED_SHEETS) {

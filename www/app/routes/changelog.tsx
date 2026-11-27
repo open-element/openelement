@@ -6,15 +6,18 @@ import { siteHref } from '#site-ui/site-url.ts';
 import '#site-ui/open-reading-shell.tsx';
 import { CURRENT_ALPHA_VERSION, OPENELEMENT_VERSION, PUBLISHED_LATEST } from '../data/version.ts';
 
-export const meta = { section: '', label: 'Release Status', order: 20 };
+export const meta = { section: '', label: 'Changelog', order: 20 };
+
+const releaseNotesUrl = 'https://github.com/open-element/openelement/releases';
 
 const registryStateUrl =
   'https://github.com/open-element/openelement/blob/main/docs/release/release-state.json';
 
 const content = {
   en: {
-    title: 'Release Status',
-    description: 'The current source preview and published npm versions of OpenElement.',
+    title: 'Changelog',
+    description:
+      'See what changed in past releases and check which versions are available on npm and in the source checkout.',
     npmTitle: 'Published on npm',
     npmNote: 'Run the command below to check the live tags for the starter.',
     sourceTitle: 'Source checkout',
@@ -23,12 +26,14 @@ const content = {
     previewHref:
       'https://github.com/open-element/openelement/blob/main/README.md#preview-the-source-checkout',
     stateLabel: 'Registry snapshot',
+    historyLabel: 'Read release notes and breaking changes on GitHub',
+    onThisPage: 'On this page',
     guide: 'Getting Started',
     roadmap: 'Roadmap',
   },
   zh: {
-    title: '发布状态',
-    description: '查看 OpenElement 当前源码预览和 npm 发布版本。',
+    title: '更新日志',
+    description: '查看各次发布的变更，以及 npm 已发布版本和当前源码版本。',
     npmTitle: 'npm 已发布版本',
     npmNote: '运行下面的命令，查看脚手架当前的 npm 标签。',
     sourceTitle: '当前源码',
@@ -36,6 +41,8 @@ const content = {
     previewLabel: '预览当前源码',
     previewHref: 'https://github.com/open-element/openelement/blob/main/README.zh.md#预览当前源码',
     stateLabel: 'npm 注册表快照',
+    historyLabel: '在 GitHub 查看发布说明和破坏性变更',
+    onThisPage: '本页目录',
     guide: '快速开始',
     roadmap: '路线图',
   },
@@ -54,6 +61,9 @@ export function PageChangelog(props: {
   previewHref: string;
   previewLabel: string;
   stateLabel: string;
+  historyLabel: string;
+  historyHref: string;
+  onThisPage: string;
   stateHref: string;
   guide: string;
   guideHref: string;
@@ -71,8 +81,28 @@ export function PageChangelog(props: {
           <p class='mt-4 max-w-[640px] text-[clamp(var(--text-base),1.4vw,var(--text-xl))] leading-[1.65] text-muted-foreground'>
             {props.description}
           </p>
+          <a
+            class='inline-flex min-h-8 items-center text-primary underline underline-offset-4'
+            href={props.historyHref}
+          >
+            {props.historyLabel}
+          </a>
+          <nav class='mt-2 flex flex-wrap gap-x-6' aria-label={props.onThisPage}>
+            <a
+              class='inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4'
+              href='#published'
+            >
+              {props.npmTitle}
+            </a>
+            <a
+              class='inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4'
+              href='#source'
+            >
+              {props.sourceTitle}
+            </a>
+          </nav>
         </div>
-        <section id='published' class='mb-10 border-t border-border pt-6'>
+        <section id='published' class='mb-10 pt-6' tabindex='-1'>
           <h2 class='mb-3 text-2xl font-extrabold text-foreground'>{props.npmTitle}</h2>
           <p class='mb-4 flex flex-wrap items-baseline gap-3'>
             <span class='rounded-md bg-primary px-2 py-1 font-mono text-xs font-bold text-primary-foreground'>
@@ -101,7 +131,7 @@ export function PageChangelog(props: {
             {props.stateLabel}
           </a>
         </section>
-        <section id='source' class='mb-10 border-t border-border pt-6'>
+        <section id='source' class='mb-10 pt-6' tabindex='-1'>
           <h2 class='mb-3 text-2xl font-extrabold text-foreground'>{props.sourceTitle}</h2>
           <p class='mb-2 font-mono text-lg font-bold text-foreground'>{props.sourceVersion}</p>
           <p class='mb-3 leading-relaxed text-muted-foreground'>{props.sourceNote}</p>
@@ -140,6 +170,7 @@ export default definePage(PageChangelog, {
       })),
       sourceVersion: OPENELEMENT_VERSION,
       stateHref: registryStateUrl,
+      historyHref: releaseNotesUrl,
       guideHref: siteHref('/guide/getting-started', resolved),
       roadmapHref: siteHref('/roadmap', resolved),
       locale: resolved,

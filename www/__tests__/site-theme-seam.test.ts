@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { renderThemeInit } from '../tools/generate-theme-init.ts';
 
 /**
- * The two theme consumers share the same acceptance rule and document
+ * The theme consumers share the same acceptance rule and document
  * attribute writer, including the classic pre-paint artifact.
  */
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -15,6 +15,10 @@ const THEME_CONTRACT_SOURCE = readFile(
 const THEME_INIT_SOURCE = readFile(new URL('../public/theme-init.js', import.meta.url), 'utf8');
 const THEME_TOGGLE_SOURCE = readFile(
   new URL('../../packages/ui/src/open-theme-toggle.tsx', import.meta.url),
+  'utf8',
+);
+const SITE_MENU_SOURCE = readFile(
+  new URL('../app/site-ui/open-site-menu-controller.ts', import.meta.url),
   'utf8',
 );
 test('the theme contract is import-free and owns the one acceptance rule', async () => {
@@ -63,4 +67,16 @@ test('the toggle delegates the resolution rule and the document write to the con
   expect(toggle, 'no second copy of the saved-value acceptance rule').not.toMatch(
     /saved\s*===\s*'light'/,
   );
+});
+
+test('the site appearance actions delegate the document write and preference rule', async () => {
+  const menu = await SITE_MENU_SOURCE;
+  expect(menu).toMatch(/applyDocumentTheme\(doc\.documentElement, theme\)/);
+  expect(menu).toContain('resolveSiteTheme(');
+  expect(menu).toContain('isSiteTheme(saved)');
+  expect(menu).toContain('THEME_STORAGE_KEY');
+  expect(menu).not.toMatch(
+    /documentElement\.(?:setAttribute\(\s*['"]data-theme|dataset\.theme\s*=(?!=)|style\.colorScheme\s*=(?!=))/,
+  );
+  expect(menu).not.toMatch(/(?:const|let) THEME_STORAGE_KEY\s*=/);
 });

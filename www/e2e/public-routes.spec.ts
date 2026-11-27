@@ -8,10 +8,8 @@
  * requires every guide/architecture article route from the generated content
  * sources (www/content/docs/{guide,architecture}/*.md, paired en/zh)
  * to appear in the sitemap in both locales, so a source-level route that
- * never reached the built public surface is a CI failure here as well. Blog
- * article files also generate route modules at build time, so the
- * built sitemap is their only mechanical source of truth (they are covered
- * by the enumeration itself).
+ * never reached the built public surface is a CI failure here as well. The
+ * static Blog pages enter the sitemap through the public route scanner.
  *
  * Per route, the smoke assertion is user-visible: the page answers < 400,
  * carries the correct html lang for its locale, renders exactly one visible

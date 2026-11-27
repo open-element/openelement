@@ -20,7 +20,14 @@
  */
 
 import { expect, test } from 'vitest';
+import { errorCodes } from '../app/data/_generated-error-codes.ts';
 import { errorReference } from '../app/data/_generated-error-reference.ts';
+import {
+  compilerRecovery,
+  recoveryFor,
+  runtimeSpecific,
+  runtimeStages,
+} from '../app/site-ui/error-recovery.ts';
 import {
   buildErrorReference,
   compilerCodeLiterals,
@@ -30,6 +37,32 @@ import {
 import { readFile } from 'node:fs/promises';
 
 const catalogCodes = errorReference.codes.map((record) => record.code);
+
+test('all generated codes have bilingual guidance and undocumented runtime codes have meanings', () => {
+  expect(Object.keys(compilerRecovery).sort()).toEqual(
+    errorCodes.diagnostics.map((entry) => entry.code).sort(),
+  );
+  expect(Object.keys(runtimeStages).sort()).toEqual(
+    [...new Set(errorCodes.runtime.map((entry) => entry.family))].sort(),
+  );
+  const runtimeValues = new Set(errorCodes.runtime.map((entry) => entry.value));
+  expect(Object.keys(runtimeSpecific).every((code) => runtimeValues.has(code))).toBe(true);
+
+  const codes = [
+    ...errorCodes.diagnostics.map(({ code }) => ({ code, family: 'compiler', summary: '' })),
+    ...errorCodes.runtime.map(({ value: code, family, summary }) => ({ code, family, summary })),
+  ];
+  for (const { code, family, summary } of codes) {
+    const en = recoveryFor(code, family, 'en');
+    const zh = recoveryFor(code, family, 'zh');
+    expect(en.meaning || summary, code).toBeTruthy();
+    expect(zh.meaning || summary, code).toBeTruthy();
+    expect(en.nextStep, code).not.toEqual(zh.nextStep);
+    expect(zh.nextStep, code).toMatch(/\p{Script=Han}/u);
+    expect(en.guide.href, code).toMatch(/^\/guide\/[^#]+#.+$/);
+    expect(zh.guide.href, code).toMatch(/^\/guide\/[^#]+#.+$/);
+  }
+});
 
 test('#1413 /errors: the catalog is non-trivial and every code is classified', () => {
   expect(
@@ -94,7 +127,7 @@ test('#1413 /errors: the page projection carries every generated code', async ()
   // test must follow whatever name the route actually uses.
   const route = await readFile(new URL('../app/routes/errors.tsx', import.meta.url), 'utf8');
   expect(route).toContain('errorCodes.diagnostics.map(');
-  expect(route).toContain('codes,');
+  expect(route).toContain('errorCodes.runtime.map(');
   for (const record of errorReference.codes) {
     expect(
       renderErrorReferenceModule({ codes: [record], failures: [] }),

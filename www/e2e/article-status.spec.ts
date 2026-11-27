@@ -179,8 +179,11 @@ test.describe('missing routes keep the real 404 contract', () => {
 
     const scene = page.locator('.page-404');
     await expect(scene).toBeVisible();
-    await expect(scene.locator('h1')).toHaveAttribute('aria-label', '404');
-    await expect(scene).toContainText('Lost in the shadow DOM.');
+    await expect(scene.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
+    await expect(scene.getByRole('link', { name: 'Read the docs' })).toHaveAttribute(
+      'href',
+      '/docs/',
+    );
     // The error document stays out of the index.
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/i);
   });

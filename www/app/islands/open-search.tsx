@@ -4,11 +4,13 @@
 import { onConnect, onDispose } from '@openelement/element/lifecycle';
 import { defineIslandConfig } from '@openelement/router';
 import {
+  closeSearch,
   closeSearchFromResults,
   closeSearchOnBackdrop,
   installSearch,
   openSearch,
   searchFromInput,
+  searchSuggestedTerm,
   uninstallSearch,
 } from '../site-ui/open-search-controller.ts';
 import type { SearchHost } from '../site-ui/open-search-shared.ts';
@@ -29,7 +31,10 @@ interface SearchHitRow {
   href: string;
   section: string;
   title: string;
-  text: string;
+  /** Pre-split around the matched term so the view can own the `<mark>`. */
+  before: string;
+  match: string;
+  after: string;
 }
 
 export const openElement = defineIslandConfig({
@@ -56,6 +61,20 @@ export const openElement = defineIslandConfig({
     resultsLabel: { attribute: 'results', default: 'Search results' },
     emptyMessage: { attribute: 'empty', default: 'Type at least 2 characters to search' },
     message: { attribute: 'message', default: '' },
+    closeLabel: { attribute: 'close', default: 'Close dialog' },
+    // Written by the controller after a round lands: the visible result count
+    // and the polite live-region text share this one formatted string.
+    resultCount: { attribute: false, default: '' },
+    // The empty state's recovery path: three suggested queries and the docs
+    // index. Strings are server-rendered per locale (layout.tsx pulls them
+    // from searchChromeStrings); `termN` is both the chip label and the query
+    // it runs, so the view needs no separate table.
+    suggestionLabel: { attribute: 'suggestion-label', default: 'Try:' },
+    term1: { attribute: 'term1', default: '' },
+    term2: { attribute: 'term2', default: '' },
+    term3: { attribute: 'term3', default: '' },
+    docsHref: { attribute: 'docs-href', default: '/docs/' },
+    docsLabel: { attribute: 'docs-label', default: 'Browse the docs index' },
     // The controller writes these three. `hits` is the rendered list and takes
     // the JSON seed channel (ADR-0182 D-18c), so the server-rendered rows survive
     // the claim instead of the instance reverting to an empty array.
@@ -86,6 +105,14 @@ function OpenSearch(props: {
   resultsLabel: string;
   emptyMessage: string;
   message: string;
+  closeLabel: string;
+  resultCount: string;
+  suggestionLabel: string;
+  term1: string;
+  term2: string;
+  term3: string;
+  docsHref: string;
+  docsLabel: string;
   hasHits: boolean;
   searching: boolean;
   hits: SearchHitRow[];
@@ -118,9 +145,10 @@ function OpenSearch(props: {
     <div class='contents'>
       <button
         type='button'
-        class='inline-flex size-9 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent p-0 font-bold tracking-normal text-(length:--text-xs) text-foreground shadow-none transition-all hover:border-transparent hover:bg-primary/[5.44%] hover:text-primary'
+        class='oe-search-trigger inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-full border-0 bg-transparent px-1.5 font-bold tracking-normal text-(length:--text-xs) text-foreground shadow-none transition-all hover:border-transparent hover:bg-primary/[5.44%] hover:text-primary'
         part='trigger'
         aria-label={props.triggerLabel}
+        title='⌘K / Ctrl K'
         onClick={(event: Event) => openSearch(hostOf(event))}
       >
         <svg
@@ -138,11 +166,19 @@ function OpenSearch(props: {
         <span class='hidden' part='label'>
           {props.triggerLabel}
         </span>
+        {/* The visible shortcut hint follows the platform. The
+            pre-paint script records `html[data-platform]`; CSS shows exactly
+            one glyph set, so the SSR bytes already carry both variants and the
+            label never swaps after hydration. The title on the trigger names
+            both chords, and the controller accepts metaKey and ctrlKey alike.
+            aria-hidden keeps the button's accessible name the trigger label. */}
         <kbd
-          class='ml-1 hidden rounded-md border border-border p-1 text-(length:--text-xs) [font-family:inherit]'
+          class='oe-search-kbd rounded-md border border-border px-1 py-0.5 font-mono text-(length:--font-size-micro) leading-none'
           part='shortcut'
+          aria-hidden='true'
         >
-          ⌘K
+          <span class='oe-search-kbd-apple'>⌘K</span>
+          <span class='oe-search-kbd-other'>Ctrl K</span>
         </kbd>
       </button>
 
@@ -192,41 +228,93 @@ function OpenSearch(props: {
           <label id='open-search-results-label' class='sr-only' for='open-search-input'>
             {props.resultsLabel}
           </label>
-          <div id='open-search-control' class='block'>
+          <div id='open-search-control' class='flex items-stretch'>
             <input
               type='text'
               id='open-search-input'
-              class='search-input box-border block w-full rounded-none border-0 border-b-[0.5px] border-b-border bg-transparent px-3 py-3 text-(length:--text-base) text-foreground [font-family:inherit]'
+              class='search-input min-w-0 flex-1 border-0 bg-transparent px-3 py-3 text-(length:--text-base) text-foreground [font-family:inherit]'
               aria-label={props.inputLabel}
               placeholder={props.placeholder}
               onInput={(event: Event) => searchFromInput(hostOf(event))}
             />
+            {/* The visible close button complements Escape and backdrop clicks. The target is
+                44px under a coarse pointer (site-chrome.css), and the label
+                comes from the page locale so both trees read naturally. */}
+            <button
+              type='button'
+              id='open-search-close'
+              class='search-close inline-flex shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring'
+              aria-label={props.closeLabel}
+              title={props.closeLabel}
+              onClick={(event: Event) => closeSearch(hostOf(event))}
+            >
+              {'×'}
+            </button>
           </div>
           <div id='open-search-positioner' class='pointer-events-none z-[1]'>
-            <div
-              id='open-search-results'
-              class='pointer-events-auto max-h-[min(50vh,26rem)] overflow-y-auto rounded-xl border border-border bg-popover py-3 shadow-[0_1rem_4rem_color-mix(in_srgb,var(--color-primary)_18%,transparent)]'
-              onClick={(event: Event) => closeSearchFromResults(hostOf(event), event)}
-            >
-              {/* Skeleton shows only over an empty result area (first search /
+            <div class='search-popover pointer-events-auto'>
+              {/* The visible count sits outside the listbox, so the
+                  machine-owned role=listbox still owns only option children.
+                  It shares its text with the live region the controller writes. */}
+              <div
+                id='open-search-count'
+                class='search-count-row flex items-center justify-between px-3 pt-3 font-mono text-(length:--font-size-micro) text-muted-foreground'
+                hidden={!props.hasHits}
+                data-count
+              >
+                {props.resultCount}
+              </div>
+              <div
+                id='open-search-results'
+                class='search-results overflow-y-auto py-3'
+                onClick={(event: Event) => closeSearchFromResults(hostOf(event), event)}
+              >
+                {/* Skeleton shows only over an empty result area (first search /
                   index load); the idle message hides while it is up. The class
                   lane's `hideEmpty` / `hideSkeleton` `computed` rows inline at
                   these two `hidden` sinks, each keeping its own refresh edge
                   (compiled slot updates). */}
-              <div
-                class='px-3 py-9 text-center text-(length:--text-sm) text-muted-foreground empty:hidden'
-                hidden={props.hasHits || props.searching}
-                data-empty
-              >
-                {props.message}
-              </div>
-              <div
-                class='grid gap-3 p-3'
-                hidden={!props.searching || props.hasHits}
-                aria-hidden='true'
-                data-skeleton
-              >
-                {/* A mapped list, not three static siblings: three fully
+                <div
+                  class='px-3 py-6 text-center text-(length:--text-sm) text-muted-foreground empty:hidden'
+                  hidden={props.hasHits || props.searching}
+                  data-empty
+                >
+                  {props.message}
+                  {/* The idle and no-results states share the
+                    same sink, so both get working suggestions and a way into
+                    the docs index instead of a dead end. One delegated
+                    handler on the terms row keeps the compiled island small;
+                    the controller writes the chip's data-term into the input
+                    and re-runs the existing input path, so no second search
+                    engine exists. */}
+                  <div class='search-empty-help'>
+                    <span class='search-empty-label'>{props.suggestionLabel}</span>
+                    <span
+                      class='search-empty-terms'
+                      onClick={(event: Event) => searchSuggestedTerm(hostOf(event), event)}
+                    >
+                      <button type='button' class='search-suggestion' data-term={props.term1}>
+                        {props.term1}
+                      </button>
+                      <button type='button' class='search-suggestion' data-term={props.term2}>
+                        {props.term2}
+                      </button>
+                      <button type='button' class='search-suggestion' data-term={props.term3}>
+                        {props.term3}
+                      </button>
+                    </span>
+                    <a class='search-empty-docs' href={props.docsHref}>
+                      {props.docsLabel}
+                    </a>
+                  </div>
+                </div>
+                <div
+                  class='grid gap-3 p-3'
+                  hidden={!props.searching || props.hasHits}
+                  aria-hidden='true'
+                  data-skeleton
+                >
+                  {/* A mapped list, not three static siblings: three fully
                     static sibling elements compile to a static-sibling
                     DIRECTORY, and a committed directory stays permanently
                     consumed (M07-4 records this: "a directory claim that
@@ -234,29 +322,41 @@ function OpenSearch(props: {
                     reconnect below re-claims a directory it can never reopen.
                     A list keeps the same three `<span>` bytes and re-arms on
                     every connection. */}
-                {[0, 1, 2].map((row) => (
-                  <span key={row} class='block h-8 rounded-md bg-muted'></span>
+                  {[0, 1, 2].map((row) => (
+                    <span key={row} class='block h-8 rounded-md bg-muted'></span>
+                  ))}
+                </div>
+                {props.hits.map((hit) => (
+                  <a
+                    class='result block cursor-pointer p-3 text-inherit no-underline transition-[background] hover:bg-accent data-[highlighted]:bg-accent'
+                    href={hit.href}
+                    key={hit.key}
+                  >
+                    <div class='mb-1 text-(length:--text-xs) tracking-widest text-muted-foreground uppercase'>
+                      {hit.section}
+                    </div>
+                    <div class='mb-1 truncate text-(length:--text-sm) font-medium text-popover-foreground'>
+                      {hit.title}
+                    </div>
+                    <div class='line-clamp-2 text-(length:--text-sm) leading-normal text-muted-foreground'>
+                      {hit.before}
+                      <mark class='search-hit-mark'>{hit.match}</mark>
+                      {hit.after}
+                    </div>
+                  </a>
                 ))}
               </div>
-              {props.hits.map((hit) => (
-                <a
-                  class='result block cursor-pointer p-3 text-inherit no-underline transition-[background] hover:bg-accent data-[highlighted]:bg-accent'
-                  href={hit.href}
-                  key={hit.key}
-                >
-                  <div class='mb-1 text-(length:--text-xs) tracking-widest text-muted-foreground uppercase'>
-                    {hit.section}
-                  </div>
-                  <div class='mb-1 text-(length:--text-sm) font-medium text-popover-foreground'>
-                    {hit.title}
-                  </div>
-                  <div class='line-clamp-2 text-(length:--text-sm) leading-normal text-muted-foreground'>
-                    {hit.text}
-                  </div>
-                </a>
-              ))}
             </div>
           </div>
+          {/* Polite live region, empty at SSR. The controller writes the
+              loading/result/no-result text with textContent only. */}
+          <p
+            id='open-search-status'
+            class='sr-only'
+            role='status'
+            aria-live='polite'
+            aria-atomic='true'
+          ></p>
         </div>
       </div>
     </div>

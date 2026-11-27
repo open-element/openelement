@@ -9,9 +9,9 @@
  */
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { normalizeSiteHref } from '../app/site-ui/site-url.ts';
 import { SITE_LOCALES } from '../site-config.ts';
 import { loadRedirectTable } from './lib/site-retired.ts';
+import { siteRedirectSources, siteRedirectTarget } from '../lib/site-redirects.ts';
 import { rename, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 
@@ -21,15 +21,13 @@ const outFile = join(repoRoot, 'www/dist/_redirects');
 const mappings = await loadRedirectTable();
 const lines: string[] = [];
 for (const mapping of mappings) {
-  const perLocale = { en: mapping.to, zh: mapping.toZh ?? mapping.to };
   for (const locale of SITE_LOCALES) {
     const prefix = locale === 'en' ? '' : `/${locale}`;
-    const raw = perLocale[locale];
-    const [toPath, fragment] = raw.split('#');
-    // Redirect targets use the outward canonical form (D-02): a stale URL must
-    // not land on a second 308 hop.
-    const target = normalizeSiteHref(`${prefix}${toPath}${fragment ? `#${fragment}` : ''}`);
-    lines.push(`${prefix}${mapping.from}  ${target}  ${mapping.status}`);
+    // Shared with Vite dev responses so route slash and locale forms agree.
+    const target = siteRedirectTarget(mapping, locale);
+    for (const source of siteRedirectSources(mapping, prefix)) {
+      lines.push(`${source}  ${target}  ${mapping.status}`);
+    }
   }
 }
 

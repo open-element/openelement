@@ -45,5 +45,5 @@ chunk 到达之前，元素保留服务端标记与样式——DSD 内容，或 
 ## 另见
 
 - [Islands 与 SSR](/zh/guide/islands-and-ssr)——在应用中声明策略。
-- [Island Hydration](/zh/architecture/islands)——分层、manifest 与 claim。
+- [核心概念](/zh/guide/core-concepts)——组件契约，以及 island 策略所处的位置。
 - [术语表](/zh/guide/glossary)——island、策略、manifest 一处速查。
