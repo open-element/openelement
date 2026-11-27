@@ -644,7 +644,7 @@ describe('M09 intrinsic event/ref on the generated native element (Chromium)', (
           root: 'shadow-open',
           // The test supplies the imported binding as a non-callable value;
           // this exercises the runtime precondition, not production carry.
-          createBindings: () => ({ badHandler: 'not-a-function' }),
+          createInstance: () => ({ badHandler: 'not-a-function' }),
           createRecipe: mod.createFailureCardRecipe,
         });
         customElements.define(tagName, FailureElement);
@@ -722,7 +722,7 @@ describe('M09 intrinsic event/ref on the generated native element (Chromium)', (
         const EventFailureElement = mod.createGeneratedElementClass({
           tag: tagName,
           root: 'shadow-open',
-          createBindings: () => ({ badHandler: 'not-a-function' }),
+          createInstance: () => ({ badHandler: 'not-a-function' }),
           createRecipe: mod.createEventFailureCardRecipe,
         });
         customElements.define(tagName, EventFailureElement);

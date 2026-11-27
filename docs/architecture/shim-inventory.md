@@ -72,7 +72,6 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 | 22 | 私有实例保留账本（ADR-0181） | `packages/element/src/internal/compiled/runtime/instance-ledger.ts`（经 `runtime.ts` 对发射代码 re-export） | 条件到即删（Alpha17 预编译分发取代发射式保留计划、且无发射模块再 import 该账本） |
 | 23 | browser-entry-graph 观测工件与检查器（temporary-by-intent） | `packages/router/src/vite/internal/browser-entry-graph.ts`、`browser-entry-graph-artifact.ts`、`tools/repo/check-browser-entry-graph.ts` | 条件到即删（P1 判 MET 且该证据并入 release 门禁后移除一次性检查器；工件本身不进入发布面） |
 | 24 | `OE_ISLAND_STYLE_SHADOW_UNWIRED` 拒绝（ADR-0181） | `packages/router/src/vite/internal/ssg/island-scanner.ts` | 条件到即删（2026-11-20 已按书面条件退役一次：shadow 载体落地后范围收窄为 server-rendered 且无 producer 的诚实情形；client-only 半边随后也放开。剩余情形的删除条件：server-rendered 生成岛全部获得 producer） |
-| 25 | legacy allocation-only 绑定工厂（descriptor `createBindings`，M09-0 shell 测试遗留） | `packages/element/src/internal/compiled/generated-element/shell.ts`（descriptor `createBindings` 字段及其 allocation-only 契约注释，条目引用 `:448-470`） | 条件到即删（M09 shell 测试全部迁移到 `createInstance` 后删除） |
 | 26 | rolldown-vite `buildStart` 诊断面 workaround（#1616 报告先行契约） | `packages/router/src/vite/internal/build-diagnostics.ts`（"The interim contract, until the bundler is fixed"，条目引用 `:91`） | 条件到即删（rolldown-vite 修复对应缺陷后删除） |
 | 27 | #1558 前已发布产物的 permissive 样式边兼容读 | `packages/compiler/src/internal/compiler/compiled-artifact-style-requests.ts`（PERMISSIVE 读，条目引用 `:23-25`） | 条件到即删（#1558 前发布的产物退出受支持窗口后收紧为严格准入） |
 | 28 | `registerOpenUi` published-API 空操作垫片（`@openelement/ui`） | ~~packages/ui/src/register.ts~~ | **已删（1.0.0-alpha.16；该 shim 写的 breaking-alpha 条件已满足）** |
@@ -476,15 +475,6 @@ native 选择缝是主产物，不再作为垫片登记。）
   **准入**，该拒绝只剩 server-rendered 无 producer 一种诚实情形。
   证据：`island-styles.test.ts` 的新增准入行、`generated-element.client-styles.test.ts`、
   element-browser `client-only-styles.test.js`（真实浏览器 computed `:host`）。
-
-### 25. legacy allocation-only 绑定工厂（descriptor `createBindings`）——条件到即删
-
-- 所有者：element 生成元素 shell（`packages/element/src/internal/compiled/generated-element/shell.ts:448-470` 的 descriptor 字段、allocation-only 契约注释与 `createBindings?.() ?? {}` 回退；语义记载于
-  [M09 shell record](https://github.com/open-element/openelement/blob/8d50588914ea32f7b76ad8280d66496449273f29/docs/architecture/m09-generated-element-shell.md)——"the legacy allocation-only factory for hosts/tests"）。
-- 方向：descriptor（hosts/tests 手写 fixture，或尚未发射 `createInstance` 的旧路径）→ shell 每元素首次连接调用一次 → 返回记录保留整个元素生命周期（重连不重跑）。
-- 存在原因：M09-0 shell 测试先于 T3 的 `createInstance(owner, host)` 落地；该工厂拿不到 cleanup owner，契约因此被迫收窄为 allocation-only（不得申请任何需要清理的资源，只能分配 signals/computeds 与纯数据）。生成路径如今只对 ROOT 发射 `createInstance`，shell 仅为无 setup 快照的根保留 `createBindings?.() ?? {}` 回退。
-- 退役条件：M09 shell 测试全部迁移到 `createInstance`（带 owner 的 retained setup 工厂，descriptor-fixture 证据随之改写）之后，从 descriptor 契约中删除 `createBindings` 字段及其校验；与 `createInstance` 的互斥 fail-closed 判定随本字段一并退役（只剩一个 call-once/retain 位点，互斥规则自然消失）。
-- 处置：条件到即删。
 
 ### 26. rolldown-vite `buildStart` 诊断面 workaround——条件到即删
 

@@ -53,11 +53,7 @@
  *   `createInstance: __oe_rootInstance,` exactly when the generator reports
  *   that factory, so the shell creates the element/island-lifetime instance
  *   once and the root mount/claim alias its returned bindings record. A root
- *   with no setup snapshot emits neither, and the shell's
- *   `createBindings?.() ?? {}` path stays in force.
- * - `createBindings` — never emitted by the generated lane (the M09-1a
- *   bindings gate fails closed before the tail is built, and T3 does not add a
- *   binding source).
+ *   with no setup snapshot emits neither and receives an empty bindings record.
  *
  * The emitted tail executes no `customElements.define`; registration remains
  * the router entry's decision and belongs to M09-1b.

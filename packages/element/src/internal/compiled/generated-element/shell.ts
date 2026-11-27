@@ -633,7 +633,7 @@ interface ElementState {
   renderedProps: Record<string, unknown> | null;
   /**
    * The retained setup record: `createInstance`'s return value (or the legacy
-   * `createBindings` record). Survives disconnect; nulled by teardown/failed
+   * `createInstance` record). Survives disconnect; nulled by teardown/failed
    * first connect so a later connect re-runs setup on a new instance.
    */
   bindings: Readonly<Record<string, unknown>> | null;
@@ -1354,7 +1354,7 @@ function ensureInstance(state: ElementState, element: HTMLElement): LifetimeScop
   return retainGeneratedInstance(state, (instance) =>
     state.descriptor.createInstance !== undefined
       ? state.descriptor.createInstance(instance, instanceHostFor(state, element))
-      : (state.descriptor.createBindings?.() ?? {}),
+      : {},
   );
 }
 
