@@ -579,16 +579,7 @@ export function releaseRetainedChildren(owner: LifetimeScope): void {
   // This owner may itself be a joined member being torn down: drop the join
   // marker so a later root commit/abort skips the released ledger.
   ledger.joined = null;
-  if (transaction !== null) {
-    for (const member of [...transaction.members].reverse()) {
-      const memberLedger = ledgers.get(member.owner);
-      if (memberLedger === undefined || memberLedger.marks === null) continue;
-      if (memberLedger.pass !== member.pass) continue;
-      memberLedger.joined = null;
-      memberLedger.transaction = null;
-      abortPass(memberLedger);
-    }
-  }
+  abortJoinedPasses(transaction);
   // Bookkeeping first: remove the ledger before disposing anything, so a
   // cleanup that re-enters this module cannot observe or resurrect half of it.
   ledgers.delete(owner);
@@ -605,10 +596,6 @@ export function releaseRetainedChildren(owner: LifetimeScope): void {
   if (failure !== null) throw failure.error;
 }
 
-/**
- * Open one mount/claim pass on `owner`'s ledger. A pass never nests on one
- * owner: each generated body brackets its OWN instance scope.
- */
 /**
  * Open the ONE cross-ledger transaction of a mount/claim attempt on `owner`'s
  * ledger (the ROOT retaining body) and return its token.
@@ -752,6 +739,19 @@ function abortPass(ledger: Ledger): void {
   }
 }
 
+function abortJoinedPasses(transaction: InstanceTransaction | null): void {
+  if (transaction === null) return;
+  // Snapshot the members in deepest-first order before cleanup can re-enter.
+  for (const member of [...transaction.members].reverse()) {
+    const memberLedger = ledgers.get(member.owner);
+    if (memberLedger === undefined || memberLedger.marks === null) continue;
+    if (memberLedger.pass !== member.pass) continue;
+    memberLedger.joined = null;
+    memberLedger.transaction = null;
+    abortPass(memberLedger);
+  }
+}
+
 /**
  * Commit the root pass and every joined member pass (shallow-first).
  *
@@ -803,15 +803,6 @@ export function abortInstancePass(owner: LifetimeScope): void {
   if (ledger === undefined || ledger.marks === null) return;
   const transaction = ledger.transaction;
   ledger.transaction = null;
-  if (transaction !== null) {
-    for (const member of [...transaction.members].reverse()) {
-      const memberLedger = ledgers.get(member.owner);
-      if (memberLedger === undefined || memberLedger.marks === null) continue;
-      if (memberLedger.pass !== member.pass) continue;
-      memberLedger.joined = null;
-      memberLedger.transaction = null;
-      abortPass(memberLedger);
-    }
-  }
+  abortJoinedPasses(transaction);
   abortPass(ledger);
 }
