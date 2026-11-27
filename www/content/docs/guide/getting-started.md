@@ -1,24 +1,13 @@
 ---
 title: 'Getting Started'
-lede: 'OpenElement is a Web Components-native, static-first app framework: standard Custom Elements, pages, routes, selective upgrades, Vite/Nitro output.'
+lede: 'Create a starter app, run it locally, and build it for production.'
 order: 1
 ---
 
-> {{SOURCE_LINE_NOTE}}
-
-Scaffold a project, verify it, then add a page and an element and build for production.
-
 ## Install
 
-**Before you start:** Node.js 24.2 or newer and a package manager (`npm`, `pnpm`, `yarn`, or `bun`). Check the runtime first:
-
-```text
-node --version   # must print v24.2.0 or newer
-```
-
-Three commands to a running app — the generator installs the dependencies
-itself (with the invoking package manager, or the first one it finds on `PATH`),
-so there is no separate install step:
+Use Node.js 24.2 or newer (`node --version`) and a package manager such as npm, pnpm, Yarn, or Bun.
+Three commands start the published starter:
 
 ```bash
 {{INSTALL_COMMAND}}
@@ -32,27 +21,30 @@ What each step does:
 - `cd my-app` — enter the generated project.
 - `npm run dev` — start the project's Vite dev server.
 
-The scaffold uses the release behind the npm `latest` tag. See [Release Status](/changelog) for the published version and the source preview. The generated project runs its scripts with npm, pnpm, yarn or bun.
+> {{SOURCE_LINE_NOTE}}
+
+To build along with the rest of this guide, [preview the source checkout](https://github.com/open-element/openelement/blob/main/README.md#preview-the-source-checkout) in a temporary workspace. Start that app, return to [Verify](#verify), then continue to [Build a page](#build-a-page). [Release status](/changelog) lists both versions.
 
 ## Verify
 
-Success looks like this:
+**Check the starter**
 
-- The scaffold prints one `created <path>` line per generated file, then a handoff box naming the next commands in the package manager's spelling.
-- `npm run dev` prints its ready line and the local URL — `http://localhost:5173/` by default.
-- Open that URL and try the counter. The timer starts in the browser. Edit the heading in `app/routes/index.tsx` and save to see the home page update.
+- **Files created.** The scaffold prints a `created <path>` line for each file, then shows the next commands for your package manager.
+- **Server ready.** `npm run dev` prints the local URL, usually `http://localhost:5173/`.
+- **Page responds.** Open the local URL. Try the counter, check that the timer starts, then edit the heading in `app/routes/index.tsx` and save to see the page update.
 
-If something goes wrong before that:
+**Troubleshoot startup**
 
-| Symptom | What happened | What to do |
-| --- | --- | --- |
-| `This CLI requires Node.js 24.2.0 or newer` | the host's `node` is below the supported floor | run the same command on Node 24.2+ (the project's `.node-version` pins the 24.18 line); check `node --version` first |
-| `npm run dev` reports the port is in use | Vite defaults to 5173 and moves to the next free port unless asked to be strict | open the `Local:` URL it printed, or pin one — npm: `npm run dev -- --port 5180 --strictPort`; pnpm/yarn: `pnpm run dev --port 5180 --strictPort` (a first run under a second package manager re-installs dependencies) |
-| the install step fails, or `No package manager found` | the scaffold writes every project file before it installs; the failure is the install, not the scaffold | fix the network, registry or `PATH`, then install inside the project: `cd my-app && npm install` (or the same command for your manager) |
-| the install fails offline or against a private registry | dependency install is the only step that talks to the registry | scaffold without it using the generator's `--no-install` flag (pass it through your package manager), then install once the registry is reachable |
-| you use pnpm, yarn or bun | the scaffold installs with the manager it was invoked through, else the first of pnpm/npm/yarn/bun on `PATH` | keep using your manager — the scripts are manager-neutral: `pnpm run dev`, `yarn dev` and `bun run dev` all reach the same dev server |
+- **Older Node version.** If you see `This CLI requires Node.js 24.2.0 or newer`, check `node --version` and retry on Node 24.2+. The project's `.node-version` pins the 24.18 line.
+- **Port in use.** Vite tries the next free port when 5173 is busy. Open the printed `Local:` URL. To require port 5180, use `npm run dev -- --port 5180 --strictPort` with npm or `pnpm run dev --port 5180 --strictPort` with pnpm. Yarn accepts the same port flags as pnpm. Switching package managers can reinstall dependencies.
+- **Dependency install failed.** The project files are already written. Check the network and registry settings. For `No package manager found`, check your package manager is on `PATH`. Retry with `cd my-app && npm install` or your manager's equivalent.
+- **Registry unreachable.** Pass the create CLI's `--no-install` flag through your package manager to scaffold first. Install the dependencies once the registry is reachable.
 
-To run the examples below, use the project created by the [source preview steps](https://github.com/open-element/openelement/blob/main/README.md#preview-the-source-checkout).
+The scaffold uses the invoking package manager, or the first of pnpm/npm/yarn/bun it finds on `PATH`. Keep using the same manager. `pnpm run dev`, `yarn dev` and `bun run dev` start the same server.
+
+The remaining examples use the source-preview project. If you tried the npm release, follow the source-preview steps under [Install](#install) before you [build a page](#build-a-page).
+
+[Back to contents](#page-outline)
 
 ## Understand the project
 

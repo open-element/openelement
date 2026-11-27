@@ -54,6 +54,7 @@ const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const RUNTIME_CODE_SOURCES: readonly string[] = [
   'packages/protocol/src/errors.ts',
   'packages/router/src/internal/error-codes.ts',
+  'packages/router/src/vite/internal/browser-entry-boundary.ts',
 ];
 
 export interface CodeOccurrence {
@@ -73,9 +74,12 @@ export interface DiagnosticCode {
 }
 
 export interface RuntimeCode {
+  family: string;
   name: string;
   value: string;
   summary: string;
+  path: string;
+  line: number;
 }
 
 export interface ErrorCodesBuild {
@@ -249,16 +253,19 @@ export function collectRuntimeCodes(text: string, path: string, failures: string
             }
             const summary = ts
               .getJSDocCommentsAndTags(property)
-              .map((doc) =>
-                ts.isJSDoc(doc)
-                  ? ts.displayPartsToString(doc.comment).replace(/\s+/g, ' ').trim()
-                  : typeof (doc as ts.JSDocTag).comment === 'string'
-                    ? String((doc as ts.JSDocTag).comment)
-                    : '',
-              )
-              .filter((text) => text !== '')
-              .join(' ');
-            codes.push({ name: property.name.text, value, summary });
+              .filter(ts.isJSDoc)
+              .map((doc) => ts.getTextOfJSDocComment(doc.comment) ?? '')
+              .join(' ')
+              .replace(/\s+/g, ' ')
+              .trim();
+            codes.push({
+              family: mapName,
+              name: property.name.text,
+              value,
+              summary,
+              path,
+              line: source.getLineAndCharacterOfPosition(property.name.getStart(source)).line + 1,
+            });
           }
           if (codes.length === firstIndex) {
             failures.push(`${path}: ${mapName} declares no recognized error-code values`);

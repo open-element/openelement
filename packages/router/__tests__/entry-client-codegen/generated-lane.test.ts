@@ -1,14 +1,19 @@
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { expect, test } from 'vitest';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { expect, test, vi } from 'vitest';
+import { build } from 'vite';
 import type { IslandDecl } from '@openelement/protocol/ssg';
 import {
+  ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER,
   clientEntryHasClientJs,
   clientEntryNeedsElementRuntime,
   generateClientEntry,
 } from '../../src/vite/internal/ssg/entry-client-codegen.ts';
+import { VIRTUAL_RUNTIME_SPECIFIERS } from '../../src/vite/internal/ssg/entry-generators.ts';
 import { buildClientIslandEntries } from '../../src/vite/internal/ssg/client-island-entries.ts';
 import type { ClientIslandDeliveryEntry } from '../../src/vite/internal/ssg/delivery.ts';
 import {
@@ -92,6 +97,105 @@ test('generated-only entry keeps its factories but never waits for the executor 
   // Strategy scheduling still exists: the island activates on its strategy.
   expect(entry).toContain('createIslandScheduler');
   expect(entry).toContain('"gen-page": function () {');
+});
+
+test('Vite ships the registered default and named constructors without generated SSR exports', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-island-projection-'));
+  try {
+    const single = join(root, 'single.js');
+    const group = join(root, 'group.js');
+    await Promise.all([
+      writeFile(
+        single,
+        `
+        export default class { static marker = 'single-default'; }
+        export function Single__ssrHost() { return 'SINGLE_SERVER_RENDER_MARKER'; }
+      `,
+      ),
+      writeFile(
+        group,
+        `
+        export default class { static marker = 'group-default'; }
+        export class GroupNamed { static marker = 'group-named'; }
+        export function Group__ssrHost() { return 'GROUP_SERVER_RENDER_MARKER'; }
+      `,
+      ),
+    ]);
+    const entry = generateClientEntry([
+      { tagName: 'single-default', modulePath: single, strategy: 'load', generatedLane: true },
+      {
+        tagName: 'group-default',
+        modulePath: group,
+        strategy: 'load',
+        generatedLane: true,
+        tags: ['group-default', 'group-named'],
+        exportNames: { 'group-named': 'GroupNamed' },
+      },
+    ]);
+    const virtual = new Map([
+      ['virtual:projection-test-entry', entry],
+      [
+        VIRTUAL_RUNTIME_SPECIFIERS.scheduler,
+        `export function createIslandScheduler({ map }) {
+          globalThis.activation = Promise.all(Object.values(map).map((activate) => activate()));
+        }`,
+      ],
+      [
+        ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER,
+        `export function ensureDeepFragmentNavigation() {}
+        export function ensurePreHydrationClickCapture() {}`,
+      ],
+    ]);
+    await build({
+      root,
+      configFile: false,
+      logLevel: 'silent',
+      build: {
+        target: 'esnext',
+        modulePreload: false,
+        rollupOptions: {
+          input: 'virtual:projection-test-entry',
+          output: { entryFileNames: 'client.mjs', chunkFileNames: '[name].mjs' },
+        },
+      },
+      plugins: [
+        {
+          name: 'projection-test-entry',
+          resolveId: (id) => (virtual.has(id) ? '\0' + id : null),
+          load: (id) => virtual.get(id.slice(1)),
+        },
+      ],
+    });
+    const dist = join(root, 'dist');
+    const modules = await Promise.all(
+      (await readdir(dist)).map((file) => readFile(join(dist, file), 'utf8')),
+    );
+    const code = modules.join('\n');
+    expect(code).not.toMatch(/__ssrHost|SERVER_RENDER_MARKER/);
+    const registered = new Map<string, { marker: string }>();
+    const browser = {
+      customElements: {
+        get: (tag: string) => registered.get(tag),
+        define: (tag: string, constructor: { marker: string }) => registered.set(tag, constructor),
+      },
+      document: { createElement: () => ({ relList: { supports: () => true } }) },
+      window: {},
+    };
+    for (const [name, value] of Object.entries(browser)) vi.stubGlobal(name, value);
+    vi.stubGlobal('activation', undefined);
+    await import(/* @vite-ignore */ pathToFileURL(join(dist, 'client.mjs')).href);
+    const activation = (globalThis as { activation?: Promise<unknown> }).activation;
+    expect(activation).toBeInstanceOf(Promise);
+    await activation;
+    expect([...registered].map(([tag, constructor]) => [tag, constructor.marker]).sort()).toEqual([
+      ['group-default', 'group-default'],
+      ['group-named', 'group-named'],
+      ['single-default', 'single-default'],
+    ]);
+  } finally {
+    vi.unstubAllGlobals();
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('class-only entry keeps the executor-runtime factory and its measured ABI bytes', () => {

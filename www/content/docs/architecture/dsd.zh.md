@@ -38,7 +38,7 @@ Declarative Shadow DOM 通过带 `shadowrootmode` 的 template，让 HTML 在客
 
 ## 平台标准
 
-OpenElement 依赖 Web 平台契约，而非自研的注册表产品。Custom Elements、DSD、CEM、Request/Response 与 FormData 定义了公开应用模型的方向。
+openElement 依赖 Web 平台契约，而非自研的注册表产品。Custom Elements、DSD、CEM、Request/Response 与 FormData 定义了公开应用模型的方向。
 
 ### Elements + DSD
 
@@ -54,7 +54,6 @@ OpenElement 依赖 Web 平台契约，而非自研的注册表产品。Custom El
 
 ## 另见
 
-- [Island Hydration](/zh/architecture/islands)——组件何时进入客户端投递：分层与 hydration 策略。
 - [核心概念](/zh/guide/core-concepts)——声明组件的 root 模式。
 - [Light DOM、DSD、SSR 与 islands](/zh/guide/islands-and-ssr)——四个概念并排对照、当前编译默认，以及从请求到交互的流程。
 - [当前架构](/zh/architecture)——每个包在图中的位置。

@@ -2,6 +2,7 @@ import { definePage } from '@openelement/router';
 import { siteHead } from '#site-ui/head.ts';
 import { contentLocale } from '#site-ui/locale.ts';
 import { siteHref } from '#site-ui/site-url.ts';
+import { navSections } from '../../data/_generated-nav-data.ts';
 import { packageCountModifier, sourceLineStamp } from '../../data/version.ts';
 import { quickstartCommandCountPhrase } from '../../data/quickstart.ts';
 
@@ -30,28 +31,44 @@ const content = {
   en: {
     headTitle: 'Documentation',
     headDescription: `openElement documentation: guides, architecture notes and the supported public surface of the ${countEn} consumer set.`,
-    sidenote: 'Docs index',
-    eyebrow: 'Docs — The manual',
-    serifLine: 'Read the',
-    monoLine: 'MANUAL.',
-    lede: 'Five entrances cover the whole manual.',
-    navLabel: 'Documentation entrances',
+    lede: 'Build your first application, learn how it renders, or look up a supported API.',
+    navLabel: 'Documentation sections',
+    jumpLabel: 'On this page',
+    statusLabel: 'Release status',
+    startTitle: 'Start here',
+    startSteps: [
+      {
+        index: '1.',
+        title: 'Getting started',
+        copy: `Create and run your first application in ${quickstartEn}.`,
+        href: '/guide/getting-started',
+      },
+      {
+        index: '2.',
+        title: 'Tutorial',
+        copy: 'Build a page, an island and a form action.',
+        href: '/guide/tutorial',
+      },
+      {
+        index: '3.',
+        title: 'Core concepts',
+        copy: 'Learn the component and rendering model.',
+        href: '/guide/core-concepts',
+      },
+    ],
     examplesTitle: 'Examples',
-    examplesKicker: '4 scenarios · no hosted preview',
     examplesLabel: 'Example scenarios',
     examplesLede:
-      'Four scenarios, each tied to the repository file that implements it and the command that builds it. These are honest, local examples: the repository has no hosted demo app, so no card pretends to be one.',
-    examplesNote:
-      'Every card is reproducible from a fresh checkout at the source line shown above. The run steps are the fixture’s own package scripts, not invented commands; request-time scenarios need a Node server, the static scenario does not.',
+      'Run these examples locally. Each includes the source and the command to build or start it.',
     examplesPrepare:
-      'Prepare once, from the repository root: clone https://github.com/open-element/openelement and install the workspace (pnpm install). Then run each card’s command from that same root — these are repository fixtures, not commands for an already-created app.',
+      'For the repository examples, clone https://github.com/open-element/openelement, run pnpm install at its root, and run the fixture commands there. For the starter, run its command in the directory where you want to create my-app.',
     fieldSource: 'Source',
     fieldRun: 'Run (repo root)',
+    fieldRunStarter: 'Run (new app)',
     fieldDoc: 'Related doc',
     fieldLimits: 'Limits',
     examples: [
       {
-        index: '01',
         title: 'Static-first page',
         useCase:
           'A content or marketing page that ships complete HTML and needs no client JavaScript: docs pages, landing pages, article routes.',
@@ -65,21 +82,19 @@ const content = {
           'Fixture only — no hosted preview. The build lands in the fixture’s gitignored dist/; the fixture consumes workspace sources, so it proves this checkout, not an npm release.',
       },
       {
-        index: '02',
         title: 'Reusable Custom Element',
         useCase:
-          'A component reused across pages: a standard Custom Element authored as compiled TSX with @element / @property, optionally shadow-rooted as DSD.',
+          'Reuse a browser-native custom element across pages. The starter counter uses a TSX function component with a shadow root.',
         sourceLabel: 'create starter · my-counter',
         sourceHref: `${REPO}/blob/main/packages/create/templates/app/islands/my-counter.tsx.tmpl`,
         sourceFile: 'packages/create/templates/app/islands/my-counter.tsx.tmpl',
-        run: 'npm create @openelement my-app  # then: npm run dev',
+        run: 'npm create @openelement my-app && cd my-app && npm run dev',
         docLabel: 'Core concepts',
         docHref: '/guide/core-concepts',
         limits:
           'The starter counter is a demo, not a data contract; the file ships as a .tmpl and is written by the generator. No hosted preview — the quickstart is the run path.',
       },
       {
-        index: '03',
         title: 'SSR + island',
         useCase:
           'A server-rendered page that activates one interactive region: a notes app whose counter island hydrates on a request-time page.',
@@ -93,7 +108,6 @@ const content = {
           'Fixture only — no hosted preview. Request-time pages need a Node server: the fixture’s e2e harness serves the built app, and workspace sources (not a published package) are what get proven.',
       },
       {
-        index: '04',
         title: 'Form + routing',
         useCase:
           'A form that keeps validation and routing server-owned: native POST plus redirect, with optional client-side enhancement.',
@@ -111,28 +125,43 @@ const content = {
   zh: {
     headTitle: '文档',
     headDescription: `openElement 文档：指南、架构说明，以及${countZh}消费面的受支持公开接口。`,
-    sidenote: '文档索引',
-    eyebrow: '手册',
-    serifLine: '通读',
-    monoLine: '手册。',
-    lede: '五个入口覆盖全部手册。',
-    navLabel: '文档入口',
+    lede: '创建你的第一个应用，了解页面如何渲染，或查阅受支持的 API。',
+    navLabel: '文档分区',
+    jumpLabel: '本页目录',
+    statusLabel: '发布状态',
+    startTitle: '从这里开始',
+    startSteps: [
+      {
+        index: '1.',
+        title: '快速开始',
+        copy: `用 ${quickstartZh}创建并运行你的第一个应用。`,
+        href: '/guide/getting-started',
+      },
+      {
+        index: '2.',
+        title: '教程',
+        copy: '构建页面、island 与表单 action。',
+        href: '/guide/tutorial',
+      },
+      {
+        index: '3.',
+        title: '核心概念',
+        copy: '了解组件与渲染模型。',
+        href: '/guide/core-concepts',
+      },
+    ],
     examplesTitle: '示例',
-    examplesKicker: '4 个场景 · 无托管预览',
     examplesLabel: '示例场景',
-    examplesLede:
-      '四个场景，每张卡片都绑定实现它的仓库文件与构建它的命令。它们是诚实的本地示例：仓库没有托管演示站，因此没有卡片把自己伪装成在线 demo。',
-    examplesNote:
-      '每张卡片都可以从全新检出按上方所示源码线复现。运行步骤取自各 fixture 自己的 package script，不是编造的命令；请求时场景需要 Node 服务端，静态场景不需要。',
+    examplesLede: '这些示例可在本地运行。每项都附有源码和构建或启动命令。',
     examplesPrepare:
-      '先在仓库根目录准备一次：克隆 https://github.com/open-element/openelement 并安装工作区（pnpm install）。之后在同一个根目录执行每张卡片的命令——这些是仓库 fixture，不是已创建应用里的命令。',
+      '运行仓库示例前，先克隆 https://github.com/open-element/openelement，在仓库根目录执行 pnpm install，再从同一目录运行各个 fixture 命令。要运行起步模板，请先进入要创建 my-app 的目录，再运行该示例的命令。',
     fieldSource: '源码',
     fieldRun: '运行（仓库根目录）',
+    fieldRunStarter: '运行（创建应用）',
     fieldDoc: '相关文档',
     fieldLimits: '限制',
     examples: [
       {
-        index: '01',
         title: '静态优先页面',
         useCase:
           '输出完整 HTML、不需要客户端 JavaScript 的内容页或营销页：文档页、落地页、文章路由。',
@@ -146,21 +175,19 @@ const content = {
           '仅仓库示例——无托管预览。构建产物落在 fixture 的 gitignored dist/；fixture 直接消费 workspace 源码，证明的是当前检出而非 npm 发布版。',
       },
       {
-        index: '02',
         title: '可复用 Custom Element',
         useCase:
-          '跨页面复用的组件：以编译型 TSX 编写、带 @element / @property 的标准 Custom Element，可按需使用 DSD 影子根。',
+          '跨页面复用浏览器原生自定义元素。起步项目的计数器使用 TSX 函数组件和 shadow root。',
         sourceLabel: 'create 起手模板 · my-counter',
         sourceHref: `${REPO}/blob/main/packages/create/templates/app/islands/my-counter.tsx.tmpl`,
         sourceFile: 'packages/create/templates/app/islands/my-counter.tsx.tmpl',
-        run: 'npm create @openelement my-app  # 然后运行 npm run dev',
+        run: 'npm create @openelement my-app && cd my-app && npm run dev',
         docLabel: '核心概念',
         docHref: '/guide/core-concepts',
         limits:
           '起手计数器只是 demo，不是数据契约；该文件以 .tmpl 形式发布，由生成器写出。无托管预览——快速开始就是运行路径。',
       },
       {
-        index: '03',
         title: 'SSR + island',
         useCase: '服务端渲染页面只激活一个交互区域：笔记应用中的计数器 island 在请求时页面上水合。',
         sourceLabel: 'router-native-framework · note-counter',
@@ -173,7 +200,6 @@ const content = {
           '仅仓库示例——无托管预览。请求时页面需要 Node 服务端：fixture 的 e2e harness 会服务构建产物，证明的是 workspace 源码而非已发布包。',
       },
       {
-        index: '04',
         title: '表单 + 路由',
         useCase: '把校验与路由留在服务端的表单：原生 POST 加重定向，可选客户端增强。',
         sourceLabel: 'router-request-time · page-form',
@@ -189,23 +215,6 @@ const content = {
   },
 } as const;
 
-const entrances = {
-  en: [
-    ['Get started', `Zero to a running application in ${quickstartEn}.`, '/guide/getting-started'],
-    ['Tutorial', 'Build a page, an island and a form action, step by step.', '/guide/tutorial'],
-    ['API reference', `The ${countEn} surface, export by export.`, '/reference'],
-    ['Architecture', 'Who owns what, and why the boundaries hold.', '/architecture'],
-    ['Roadmap', 'Where the stable line goes next.', '/roadmap'],
-  ],
-  zh: [
-    ['快速开始', `${quickstartZh}，从零到可运行的应用。`, '/guide/getting-started'],
-    ['教程', '逐步构建一个页面、一个 island 与一个表单 action。', '/guide/tutorial'],
-    ['API 参考', `${countZh}接口面，逐个 export 列出。`, '/reference'],
-    ['架构', '谁负责什么，以及边界为何成立。', '/architecture'],
-    ['路线图', 'stable 线的下一步走向。', '/roadmap'],
-  ],
-} as const;
-
 /**
  * The docs hub as a server function page (alpha15 server architecture): the
  * route module's own exported TSX function, lowered by the compiler into a
@@ -213,26 +222,33 @@ const entrances = {
  * former component sheet's authored rules (www/site-chrome.css).
  */
 export function PageDocs(props: {
-  sidenote: string;
-  eyebrow: string;
-  serifLine: string;
-  monoLine: string;
+  title: string;
   lede: string;
   navLabel: string;
+  jumpLabel: string;
+  jumpLinks: Array<{ href: string; title: string }>;
+  statusLabel: string;
   version: string;
-  entrances: Array<{ index: string; title: string; copy: string; href: string }>;
+  statusHref: string;
+  startTitle: string;
+  startSteps: Array<{ index: string; title: string; copy: string; href: string }>;
+  learnTitle: string;
+  learnLinks: Array<{ title: string; href: string }>;
+  guidesTitle: string;
+  guidesLinks: Array<{ title: string; href: string }>;
+  referenceTitle: string;
+  referenceLinks: Array<{ title: string; href: string }>;
+  projectTitle: string;
+  projectLinks: Array<{ title: string; href: string }>;
   examplesTitle: string;
-  examplesKicker: string;
   examplesLabel: string;
   examplesLede: string;
-  examplesNote: string;
   examplesPrepare: string;
   fieldSource: string;
   fieldRun: string;
   fieldDoc: string;
   fieldLimits: string;
   examples: Array<{
-    index: string;
     title: string;
     useCase: string;
     sourceLabel: string;
@@ -250,62 +266,150 @@ export function PageDocs(props: {
 }) {
   return (
     <div class='page-docs bg-background text-foreground' data-pagefind-body>
-      <header class='masthead relative isolate px-[clamp(1.5rem,5vw,4.5rem)] pt-[clamp(4rem,11vh,8rem)] pb-[clamp(2.5rem,6vh,4.5rem)]'>
-        <span
-          class='absolute right-[clamp(0.5rem,1.5vw,1.5rem)] bottom-[clamp(1rem,4vh,2.5rem)] hidden font-mono text-(length:--font-size-micro) tracking-[0.2em] text-muted-foreground uppercase select-none [writing-mode:vertical-rl] min-[721px]:block'
-          aria-hidden='true'
-        >
-          {props.sidenote}
-        </span>
-        <div class='flex items-baseline justify-between gap-4'>
-          <p class='eyebrow m-0 flex items-center gap-3 font-mono text-(length:--text-xs) font-extrabold tracking-[0.29em] text-primary uppercase [&:lang(zh)]:normal-case [&:lang(zh)]:tracking-[0.08em]'>
-            {props.eyebrow}
-          </p>
-          <span class='font-mono text-(length:--text-xs) tracking-[0.08em] text-muted-foreground uppercase'>
-            {props.version}
-          </span>
-        </div>
-        <h1 class='mt-[clamp(1.5rem,4vh,3rem)] mb-0 leading-[0.92]'>
-          <span class='block font-serif text-[length:clamp(3.4rem,9vw,8rem)] font-normal tracking-[-0.02em] text-primary italic'>
-            {props.serifLine}
-          </span>{' '}
-          <span class='block font-mono text-[length:clamp(3rem,8vw,7rem)] font-extrabold tracking-[-0.05em] text-foreground'>
-            {props.monoLine}
-          </span>
+      <header class='masthead'>
+        <h1 class='m-0 text-[clamp(2.1rem,5vw,3.4rem)] font-semibold tracking-[-0.035em] text-foreground'>
+          {props.title}
         </h1>
-        <p class='mt-[clamp(1.25rem,3vh,2rem)] mb-0 max-w-[34rem] font-mono text-[length:clamp(1rem,1.2vw,1.1rem)] leading-[1.75] text-muted-foreground'>
+        <p class='mt-3 mb-0 max-w-[53ch] text-base leading-relaxed text-muted-foreground'>
           {props.lede}
         </p>
+        <a
+          class='mt-2 inline-flex min-h-8 items-center text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground'
+          href={props.statusHref}
+        >
+          {props.statusLabel} · {props.version}
+        </a>
+        <nav class='docs-jumps min-[901px]:hidden' aria-label={props.jumpLabel}>
+          {props.jumpLinks.map((link) => (
+            <a href={link.href} key={link.href}>
+              {link.title}
+            </a>
+          ))}
+        </nav>
       </header>
-      <nav class='grid border-t border-border' aria-label={props.navLabel}>
-        {props.entrances.map((entrance) => (
-          <a
-            class='group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-[clamp(1rem,4vw,4rem)] border-b border-border px-[clamp(1.5rem,5vw,4.5rem)] py-[clamp(1.25rem,3.5vh,2.5rem)] text-inherit no-underline transition-[background] duration-150 ease-[ease] hover:bg-[linear-gradient(90deg,color-mix(in_srgb,var(--color-primary)_8%,transparent),transparent)] min-[721px]:grid-cols-[minmax(5rem,0.16fr)_minmax(0,1fr)_auto]'
-            key={entrance.href}
-            href={entrance.href}
+      <section
+        class='border-t border-border px-[clamp(1.5rem,5vw,4.5rem)] py-[clamp(2rem,5vh,3.5rem)]'
+        aria-labelledby='docs-start-title'
+      >
+        <h2
+          id='docs-start-title'
+          class='m-0 text-[length:clamp(1.35rem,2.2vw,1.85rem)] font-semibold tracking-[-0.02em] text-foreground'
+        >
+          {props.startTitle}
+        </h2>
+        <ol class='mt-5 grid list-none grid-cols-1 gap-3 p-0 min-[721px]:grid-cols-3' role='list'>
+          {props.startSteps.map((step) => (
+            <li class='min-w-0' key={step.href}>
+              <a
+                class='grid min-h-11 grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 rounded-sm px-2 py-2 text-foreground no-underline hover:underline hover:underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring'
+                href={step.href}
+              >
+                <span class='text-sm tabular-nums text-muted-foreground' aria-hidden='true'>
+                  {step.index}
+                </span>
+                <div>
+                  <span class='block text-lg font-semibold'>{step.title}</span>
+                  <span class='mt-1 block text-sm leading-relaxed text-muted-foreground'>
+                    {step.copy}
+                  </span>
+                </div>
+              </a>
+            </li>
+          ))}
+        </ol>
+      </section>
+      <nav
+        class='grid grid-cols-1 gap-3 border-t border-border px-[clamp(1.5rem,5vw,4.5rem)] py-[clamp(2rem,5vh,3.5rem)] min-[721px]:grid-cols-2'
+        aria-label={props.navLabel}
+      >
+        <section class='rounded-lg border border-border p-5'>
+          <h2
+            id='learn'
+            tabindex='-1'
+            data-docs-group
+            class='m-0 text-lg font-semibold tracking-[-0.02em] text-foreground'
           >
-            <span
-              class='hidden font-mono text-[length:clamp(3rem,7vw,6rem)] font-extrabold leading-none text-transparent transition-[-webkit-text-stroke-color] duration-150 ease-[ease] [-webkit-text-stroke:1.5px_color-mix(in_srgb,var(--color-ring)_55%,transparent)] group-hover:[-webkit-text-stroke-color:var(--color-primary)] min-[721px]:block'
-              aria-hidden='true'
-            >
-              {entrance.index}
-            </span>
-            <div>
-              <span class='block font-mono text-[length:clamp(1.5rem,2.8vw,2.4rem)] font-extrabold leading-[1.05] tracking-[-0.02em] text-foreground transition-[color] duration-150 ease-[ease] group-hover:text-primary'>
-                {entrance.title}
-              </span>
-              <p class='mt-2 mb-0 font-mono text-(length:--text-xs) leading-[1.6] text-muted-foreground'>
-                {entrance.copy}
-              </p>
-            </div>
-            <span
-              class='font-mono text-(length:--text-5xl) text-ring transition-[transform,color] duration-150 ease-[ease] group-hover:translate-x-2 group-hover:text-primary'
-              aria-hidden='true'
-            >
-              →
-            </span>
-          </a>
-        ))}
+            {props.learnTitle}
+          </h2>
+          <ul class='mt-3 grid list-none gap-2 border-t border-border p-0 pt-3'>
+            {props.learnLinks.map((link) => (
+              <li key={link.href}>
+                <a
+                  class='text-(length:--text-sm) text-muted-foreground underline decoration-border underline-offset-4 hover:text-foreground'
+                  href={link.href}
+                >
+                  {link.title}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section class='rounded-lg border border-border p-5'>
+          <h2
+            id='guides'
+            tabindex='-1'
+            data-docs-group
+            class='m-0 text-lg font-semibold tracking-[-0.02em] text-foreground'
+          >
+            {props.guidesTitle}
+          </h2>
+          <ul class='mt-3 grid list-none gap-2 border-t border-border p-0 pt-3'>
+            {props.guidesLinks.map((link) => (
+              <li key={link.href}>
+                <a
+                  class='text-(length:--text-sm) text-muted-foreground underline decoration-border underline-offset-4 hover:text-foreground'
+                  href={link.href}
+                >
+                  {link.title}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section class='rounded-lg border border-border p-5'>
+          <h2
+            id='reference'
+            tabindex='-1'
+            data-docs-group
+            class='m-0 text-lg font-semibold tracking-[-0.02em] text-foreground'
+          >
+            {props.referenceTitle}
+          </h2>
+          <ul class='mt-3 grid list-none gap-2 border-t border-border p-0 pt-3'>
+            {props.referenceLinks.map((link) => (
+              <li key={link.href}>
+                <a
+                  class='text-(length:--text-sm) text-muted-foreground underline decoration-border underline-offset-4 hover:text-foreground'
+                  href={link.href}
+                >
+                  {link.title}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section class='rounded-lg border border-border p-5'>
+          <h2
+            id='project'
+            tabindex='-1'
+            data-docs-group
+            class='m-0 text-lg font-semibold tracking-[-0.02em] text-foreground'
+          >
+            {props.projectTitle}
+          </h2>
+          <ul class='mt-3 grid list-none gap-2 border-t border-border p-0 pt-3'>
+            {props.projectLinks.map((link) => (
+              <li key={link.href}>
+                <a
+                  class='text-(length:--text-sm) text-muted-foreground underline decoration-border underline-offset-4 hover:text-foreground'
+                  href={link.href}
+                >
+                  {link.title}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
       </nav>
       {/*
         WEB-201 (P2): an honest Examples entry. Four scenarios, each bound to a
@@ -313,85 +417,68 @@ export function PageDocs(props: {
         hosted demo app, so no card may simulate one — the section says that
         explicitly and every link is a repository/route link that exists today.
       */}
-      <section
-        class='border-t border-border px-[clamp(1.5rem,5vw,4.5rem)] py-[clamp(2.5rem,6vh,4.5rem)]'
-        aria-label={props.examplesLabel}
-      >
-        <div class='flex flex-wrap items-baseline justify-between gap-3'>
-          <h2 class='m-0 font-mono text-[length:clamp(1.6rem,3.2vw,2.4rem)] font-extrabold tracking-[-0.02em] text-foreground'>
-            {props.examplesTitle}
-          </h2>
-          <span class='font-mono text-(length:--font-size-micro) tracking-[0.14em] text-muted-foreground uppercase'>
-            {props.examplesKicker}
-          </span>
-        </div>
-        <p class='mt-3 mb-0 max-w-[46rem] font-mono text-(length:--text-sm) leading-[1.7] text-muted-foreground'>
-          {props.examplesLede}
-        </p>
-        <p class='mt-3 mb-0 max-w-[46rem] font-mono text-(length:--text-xs) leading-[1.6] text-muted-foreground'>
-          {props.examplesPrepare}
-        </p>
-        <ol class='mt-[clamp(1.5rem,4vh,2.5rem)] grid list-none grid-cols-1 gap-4 p-0 min-[901px]:grid-cols-2'>
-          {props.examples.map((example) => (
-            <li
-              class='flex min-w-0 flex-col rounded-xl border border-border bg-popover/58 p-[clamp(1rem,2.5vw,1.5rem)]'
-              key={example.index}
-            >
-              <h3 class='m-0 flex items-baseline gap-3 font-mono text-(length:--text-xs) font-extrabold tracking-[0.24em] text-primary uppercase [&:lang(zh)]:normal-case [&:lang(zh)]:tracking-[0.08em]'>
-                <span
-                  class='font-mono text-(length:--text-base) tracking-normal'
-                  aria-hidden='true'
-                >
-                  {example.index}
-                </span>
-                <span>{example.title}</span>
-              </h3>
-              <p class='mt-3 mb-0 text-(length:--text-sm) leading-[1.7] text-foreground'>
-                {example.useCase}
-              </p>
-              <dl class='mt-4 mb-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 font-mono text-(length:--text-xs) leading-[1.6]'>
-                <dt class='text-muted-foreground uppercase tracking-[0.08em]'>
-                  {example.fieldSource}
-                </dt>
-                <dd class='m-0 min-w-0 [overflow-wrap:anywhere]'>
-                  <a
-                    class='text-primary no-underline hover:underline'
-                    href={example.sourceHref}
-                    target='_blank'
-                    rel='noopener noreferrer'
-                  >
-                    {example.sourceLabel}
-                  </a>
-                  <span class='block text-muted-foreground'>{example.sourceFile}</span>
-                </dd>
-                <dt class='text-muted-foreground uppercase tracking-[0.08em]'>
-                  {example.fieldRun}
-                </dt>
-                <dd class='m-0 min-w-0 [overflow-wrap:anywhere]'>
-                  <code class='block rounded-md bg-muted px-2 py-1 text-foreground'>
-                    {example.run}
-                  </code>
-                </dd>
-                <dt class='text-muted-foreground uppercase tracking-[0.08em]'>
-                  {example.fieldDoc}
-                </dt>
-                <dd class='m-0 min-w-0'>
-                  <a class='text-primary no-underline hover:underline' href={example.docHref}>
-                    {example.docLabel}
-                  </a>
-                </dd>
-                <dt class='text-muted-foreground uppercase tracking-[0.08em]'>
-                  {example.fieldLimits}
-                </dt>
-                <dd class='m-0 min-w-0 text-muted-foreground'>{example.limits}</dd>
-              </dl>
-            </li>
-          ))}
-        </ol>
-        <p class='mt-4 mb-0 max-w-[46rem] font-mono text-(length:--text-xs) leading-[1.7] text-muted-foreground'>
-          {props.examplesNote}
-        </p>
-      </section>
+      <details class='border-t border-border px-[clamp(1.5rem,5vw,4.5rem)] py-5'>
+        <summary class='cursor-pointer font-mono text-(length:--text-sm) font-bold text-foreground'>
+          {props.examplesTitle}
+        </summary>
+        <section class='pt-6' aria-label={props.examplesLabel}>
+          <p class='mt-3 mb-0 max-w-[46rem] font-mono text-(length:--text-sm) leading-[1.7] text-muted-foreground'>
+            {props.examplesLede}
+          </p>
+          <p class='mt-3 mb-0 max-w-[46rem] font-mono text-(length:--text-xs) leading-[1.6] text-muted-foreground'>
+            {props.examplesPrepare}
+          </p>
+          <ul class='mt-6 grid list-none grid-cols-1 gap-4 p-0 min-[901px]:grid-cols-2' role='list'>
+            {props.examples.map((example) => (
+              <li
+                class='flex min-w-0 flex-col rounded-lg border border-border p-[clamp(1rem,2.5vw,1.5rem)]'
+                key={example.sourceHref}
+              >
+                <h2 class='m-0 text-lg font-semibold text-foreground'>{example.title}</h2>
+                <p class='mt-3 mb-0 text-(length:--text-sm) leading-[1.7] text-foreground'>
+                  {example.useCase}
+                </p>
+                <dl class='mt-4 mb-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 font-mono text-(length:--text-xs) leading-[1.6]'>
+                  <dt class='text-muted-foreground uppercase tracking-[0.08em]'>
+                    {example.fieldSource}
+                  </dt>
+                  <dd class='m-0 min-w-0 [overflow-wrap:anywhere]'>
+                    <a
+                      class='text-primary no-underline hover:underline'
+                      href={example.sourceHref}
+                      target='_blank'
+                      rel='noopener noreferrer'
+                    >
+                      {example.sourceLabel}
+                    </a>
+                    <span class='block text-muted-foreground'>{example.sourceFile}</span>
+                  </dd>
+                  <dt class='text-muted-foreground uppercase tracking-[0.08em]'>
+                    {example.fieldRun}
+                  </dt>
+                  <dd class='m-0 min-w-0 [overflow-wrap:anywhere]'>
+                    <code class='block rounded-md bg-muted px-2 py-1 text-foreground'>
+                      {example.run}
+                    </code>
+                  </dd>
+                  <dt class='text-muted-foreground uppercase tracking-[0.08em]'>
+                    {example.fieldDoc}
+                  </dt>
+                  <dd class='m-0 min-w-0'>
+                    <a class='text-primary no-underline hover:underline' href={example.docHref}>
+                      {example.docLabel}
+                    </a>
+                  </dd>
+                  <dt class='text-muted-foreground uppercase tracking-[0.08em]'>
+                    {example.fieldLimits}
+                  </dt>
+                  <dd class='m-0 min-w-0 text-muted-foreground'>{example.limits}</dd>
+                </dl>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </details>
     </div>
   );
 }
@@ -410,23 +497,38 @@ export default definePage(PageDocs, {
   props({ locale }) {
     const resolved = contentLocale(locale ?? 'en');
     const {
-      headTitle: _headTitle,
+      headTitle: title,
       headDescription: _headDescription,
       examples,
       ...text
     } = content[resolved];
-    const items = entrances[resolved];
+    const sections = navSections.map((section) => ({
+      title: resolved === 'zh' ? (section.sectionZh ?? section.section) : section.section,
+      links: section.items.map((item) => ({
+        title: resolved === 'zh' ? (item.labelZh ?? item.label) : item.label,
+        href: siteHref(item.path ?? item.href ?? '', resolved),
+      })),
+    }));
     return {
       ...text,
+      title,
       // Derived from release-state truth: "repository baseline" until the
       // source line ships to @alpha, then the plain version (data/version.ts).
       version: sourceLineStamp(resolved),
-      entrances: items.map(([title, copy, href], position) => ({
-        index: String(position + 1).padStart(2, '0'),
-        title,
-        copy,
-        href: siteHref(href, resolved),
+      statusHref: siteHref('/changelog', resolved),
+      jumpLinks: ['#learn', '#guides', '#reference', '#project'].map((href, index) => ({
+        href,
+        title: sections[index].title,
       })),
+      learnTitle: sections[0].title,
+      learnLinks: sections[0].links,
+      guidesTitle: sections[1].title,
+      guidesLinks: sections[1].links,
+      referenceTitle: sections[2].title,
+      referenceLinks: sections[2].links,
+      projectTitle: sections[3].title,
+      projectLinks: sections[3].links,
+      startSteps: text.startSteps.map((step) => ({ ...step, href: siteHref(step.href, resolved) })),
       // The Examples cards keep their repository links absolute (they leave the
       // site) and localize only the related in-site doc route.
       examples: examples.map((example) => ({
@@ -436,7 +538,7 @@ export default definePage(PageDocs, {
         // (OEC9013), so the localized field labels ride on every card rather
         // than being read from props.* inside the mapped item.
         fieldSource: text.fieldSource,
-        fieldRun: text.fieldRun,
+        fieldRun: example.run.startsWith('npm create ') ? text.fieldRunStarter : text.fieldRun,
         fieldDoc: text.fieldDoc,
         fieldLimits: text.fieldLimits,
       })),

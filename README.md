@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./www/public/assets/open-avatar.svg" alt="OpenElement logo" width="132" height="132" />
+  <img src="./www/public/favicon.svg" alt="openElement logo" width="64" height="64" />
 </p>
 
 # OpenElement

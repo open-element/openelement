@@ -221,24 +221,26 @@ test.describe('Search', () => {
     await expect(async () => {
       const geometry = await page.evaluate(() => {
         const panel = document.getElementById('open-search-positioner');
+        const control = document.getElementById('open-search-control');
         const field = document.getElementById('open-search-input');
-        if (!panel || !field) return null;
+        if (!panel || !control || !field) return null;
         const panelBox = panel.getBoundingClientRect();
+        const controlBox = control.getBoundingClientRect();
         const fieldBox = field.getBoundingClientRect();
         return {
-          xDelta: Math.abs(panelBox.x - fieldBox.x),
+          xDelta: Math.abs(panelBox.x - controlBox.x),
           topGap: panelBox.y - fieldBox.bottom,
-          widthDelta: Math.abs(panelBox.width - fieldBox.width),
+          widthDelta: Math.abs(panelBox.width - controlBox.width),
         };
       });
       expect(geometry).not.toBeNull();
-      // bottom-start: the panel's left edge tracks the input's left edge.
+      // bottom-start: the popover's left edge tracks the control row's edge.
       expect(geometry!.xDelta).toBeLessThanOrEqual(2);
-      // The panel sits below the input's bottom edge at the configured
-      // mainAxis offset (6px); 12px leaves room for rounding.
-      expect(geometry!.topGap).toBeGreaterThanOrEqual(0);
-      expect(geometry!.topGap).toBeLessThanOrEqual(12);
-      // sameWidth: the panel spans the input's width.
+      // The popover continues the panel surface directly (mainAxis 0), so the
+      // geometry is a shared edge: allow the subpixel rounding overlap.
+      expect(geometry!.topGap).toBeGreaterThanOrEqual(-1);
+      expect(geometry!.topGap).toBeLessThanOrEqual(2);
+      // sameWidth: the popover spans the whole control row (input + close).
       expect(geometry!.widthDelta).toBeLessThanOrEqual(2);
     }).toPass({ timeout: 10_000 });
   });
@@ -259,7 +261,7 @@ test.describe('Search', () => {
   });
 
   test('search panel follows theme token changes', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/guide/getting-started/');
     await page.waitForLoadState('networkidle');
     await page.waitForFunction(() => customElements.get('open-search'));
 
@@ -301,6 +303,11 @@ test.describe('Search', () => {
 
     const dialog = page.getByRole('dialog', { name: 'Search' });
     await expect(dialog).toBeVisible();
+    // Wait for the machine wiring before the backdrop click: the overlay is
+    // shown from SSR markup a few microtasks before its props land, and a
+    // click in that window can land on a not-yet-interactive backdrop under
+    // full-suite load (recorded flake on #1668).
+    await expect(page.locator('#open-search-results')).toHaveAttribute('data-state', 'open');
 
     // The backdrop (`.overlay`) covers the full viewport around the dialog;
     // a real click in its corner must dismiss the search like a user expects.
@@ -527,13 +534,19 @@ test.describe('Search session races', () => {
     // dialog's input instead of being swallowed on the trigger.
     await page.keyboard.press('Tab');
     await expect(ssrInput).toBeFocused();
+    await expect(dialog.getByRole('combobox')).toHaveCount(0);
 
     // The runtime lands, the session completes, and the full modal trap is
     // back: Tab can no longer fall through.
     chunk.release();
-    await expect(ssrInput).toBeFocused({ timeout: 10_000 });
+    const readyInput = dialog.getByRole('combobox');
+    await expect(readyInput).toBeFocused({ timeout: 10_000 });
     await page.keyboard.press('Tab');
-    await expect(ssrInput).toBeFocused();
+    await expect(dialog.getByRole('button', { name: 'Close dialog' })).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(readyInput).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(dialog.getByRole('link', { name: 'Browse the docs index' })).toBeFocused();
   });
 
   test('a transient first-open chunk failure closes the session cleanly and leaks no errors', async ({
@@ -764,7 +777,10 @@ test.describe('Search session races', () => {
     expect(attempts, 'opening the dialog must not load the index').toBe(0);
 
     await input.pressSequentially('routing');
-    await expect(empty).toContainText('Search index not found', { timeout: 15_000 });
+    // The dialog gives readers a localized recovery message. The build
+    // command belongs in the console.
+    await expect(empty).toContainText('Search is unavailable right now', { timeout: 15_000 });
+    await expect(empty).not.toContainText('pnpm');
 
     // The retry rides the next search round, which is where the load now lives.
     await page.keyboard.press('Escape');

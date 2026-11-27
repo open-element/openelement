@@ -31,6 +31,46 @@ import { MATRIX_HELPERS_SOURCE } from './wcag-contrast.ts';
 
 const PAGE = '/contributing/';
 
+for (const [prefix, idle, success, failure] of [
+  ['', 'Copy', 'Copied!', 'Failed'],
+  ['/zh', '复制', '已复制', '复制失败'],
+]) {
+  test(`article code copy feedback follows the document language on ${prefix || '/'}`, async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const copied: string[] = [];
+      Object.defineProperty(window, 'testCopiedCode', { value: copied });
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText(text: string) {
+            copied.push(text);
+            return copied.length === 1 ? Promise.resolve() : Promise.reject(new Error('Denied'));
+          },
+        },
+      });
+    });
+    await page.goto(`${prefix}/guide/getting-started/`);
+    const block = page.locator('.article-content open-code-block').first();
+    const visibleCopy = block.getByRole('button', { name: idle, exact: true });
+    const expected = await block.evaluate((host) => host.textContent);
+    expect(expected).toContain('npm run dev');
+
+    await visibleCopy.click();
+    await expect(block.getByRole('button', { name: success, exact: true })).toBeVisible();
+    await expect(block).toHaveJSProperty('copyLabel', 'Copied!');
+    await expect(visibleCopy).toBeVisible();
+    await visibleCopy.click();
+    await expect(block.getByRole('button', { name: failure, exact: true })).toBeVisible();
+    await expect(block).toHaveJSProperty('copyLabel', 'Failed');
+    await expect(visibleCopy).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => Reflect.get(window, 'testCopiedCode')))
+      .toEqual([expected, expected]);
+  });
+}
+
 /**
  * The contributing page's content renders inside the page component's own
  * shadow tree, so plain `document.querySelector` cannot see its components.
@@ -363,64 +403,74 @@ test.describe('open-theme-toggle', () => {
   });
 });
 
-test.describe('open-code-block copy control', () => {
+test.describe('Contributing setup copy control', () => {
   test('a real click copies and reports what the clipboard did', async ({ page, context }) => {
     // Chromium takes the permission grant; Firefox and WebKit reject the
-    // permission names, so the assertion below follows what the platform
-    // actually did rather than assuming a granted clipboard.
-    await context.grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => undefined);
+    // permission names and may still allow a write from a real user gesture.
+    const clipboardGranted = await context
+      .grantPermissions(['clipboard-read', 'clipboard-write'])
+      .then(
+        () => true,
+        () => false,
+      );
     await page.goto(PAGE);
-    const button = page.locator('open-code-block .copy-btn').first();
-    await expect(button).toHaveText('Copy');
-    const source = await page.evaluate(
-      ([query]) => {
-        const find = eval(query) as (selector: string) => Element[];
-        return (find('open-code-block')[0] as HTMLElement | undefined)?.textContent ?? '';
-      },
-      [DEEP_QUERY],
-    );
-    const canWrite = await page.evaluate(() =>
-      navigator.clipboard
-        .writeText('probe')
-        .then(() => true)
-        .catch(() => false),
-    );
+    await page.waitForFunction(() => customElements.get('open-copy-button') !== undefined);
+    const copy = page.locator('open-copy-button.contributing-copy');
+    const button = copy.getByRole('button', { name: 'Copy setup commands' });
+    const status = copy.getByRole('status');
+    const source = (await page.locator('#contributing-setup-commands').textContent())!.trimEnd();
+    await expect(button).toBeVisible();
     await button.click();
-    await expect.poll(() => button.textContent(), { timeout: 3000 }).not.toBe('Copy');
-    const label = (await button.textContent())!.trim();
-    if (canWrite) {
-      expect(label, 'the control reports the copy that happened').toBe('Copied!');
-      const clipboard = await page
-        .evaluate(() => navigator.clipboard.readText().catch(() => null))
-        .catch(() => null);
-      if (clipboard !== null) expect(clipboard).toBe(source);
-    } else {
-      expect(label, 'the control reports the copy that could not happen').toBe('Failed');
+    await expect(status).toHaveText(
+      /^(Setup commands copied to clipboard\.|Clipboard access is unavailable\.)/,
+    );
+    if (clipboardGranted) {
+      await expect(status).toHaveText('Setup commands copied to clipboard.');
+      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(source);
     }
-    // The feedback is transient: the label returns to the idle one.
-    await expect(button).toHaveText('Copy', { timeout: 5000 });
+    if ((await status.textContent()) === 'Setup commands copied to clipboard.') {
+      await expect(button).toHaveText('Copied');
+      await expect(button).toHaveText('Copy setup commands', { timeout: 5000 });
+    } else {
+      await expect(status).toContainText('Select the commands below and copy them manually.');
+      await expect(copy.getByRole('button', { name: 'Dismiss copy error' })).toBeVisible();
+    }
   });
 
-  test('a real click reports the failure when the write is refused', async ({ page }) => {
+  test('a refused write can be dismissed and retried with a real click', async ({ page }) => {
     await page.goto(PAGE);
-    // The failure is induced in the page, not in the engine: the platform
-    // clipboard is replaced by one whose write always rejects, so the
-    // component's failure path is exercised deterministically in every engine
-    // while the control that is clicked stays the real one.
+    await page.waitForFunction(() => customElements.get('open-copy-button') !== undefined);
+    // Replace only the clipboard boundary so each engine exercises one
+    // denied write followed by a successful retry through the real control.
     await page.evaluate(() => {
-      // The component reads `navigator.clipboard` at click time, so replacing
-      // the getter is enough — nothing else about the control changes.
-      Object.defineProperty(Navigator.prototype, 'clipboard', {
-        configurable: true,
-        get() {
-          return { writeText: () => Promise.reject(new Error('denied by the probe')) };
+      let denyWrite = true;
+      Object.defineProperty(navigator, 'clipboard', {
+        value: {
+          writeText(text: string): Promise<void> {
+            if (denyWrite) {
+              denyWrite = false;
+              return Promise.reject(new DOMException('Denied by the probe', 'NotAllowedError'));
+            }
+            document.documentElement.dataset.copiedCommands = text;
+            return Promise.resolve();
+          },
         },
       });
     });
-    const button = page.locator('open-code-block .copy-btn').first();
+    const copy = page.locator('open-copy-button.contributing-copy');
+    const button = copy.getByRole('button', { name: 'Copy setup commands' });
+    const status = copy.getByRole('status');
+    const dismiss = copy.getByRole('button', { name: 'Dismiss copy error' });
+    const source = (await page.locator('#contributing-setup-commands').textContent())!.trimEnd();
     await button.click();
-    await expect.poll(() => button.textContent(), { timeout: 3000 }).toBe('Failed');
-    await expect(button).toHaveText('Copy', { timeout: 5000 });
+    await expect(status).toContainText('Select the commands below and copy them manually.');
+    await dismiss.click();
+    await expect(dismiss).toBeHidden();
+    await expect(status).toBeEmpty();
+    await expect(button).toBeFocused();
+    await button.click();
+    await expect(status).toHaveText('Setup commands copied to clipboard.');
+    await expect(page.locator('html')).toHaveAttribute('data-copied-commands', source);
   });
 });
 

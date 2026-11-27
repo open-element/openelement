@@ -184,16 +184,15 @@ test('a prohibited declaration in the linked sheet is rejected deterministically
   expect(Object.keys(BARE_PALETTE_ALLOWLIST)).toEqual([]);
 });
 
-test('the linked sheet’s theme-invariant inks are aliases in site-css.ts', async () => {
+test('the linked sheet’s theme-invariant ink is an alias in site-css.ts', async () => {
   // www/site-css.ts is the site's sanctioned token-definition layer (the
   // gate's own doctrine names it): the palette citation lives there, the
   // consumer sheet names the alias. A rename on either side must fail here.
-  for (const name of ['--scrim-ink', '--grid-ink']) {
-    expect(siteCSS).toContain(`${name}:`);
-  }
+  // --grid-ink was the second alias; it retired when the violet page-hook
+  // grid overlays were removed for the flat site canvas (2026-11-26 unify).
+  expect(siteCSS).toContain('--scrim-ink:');
   const sheet = await readFile(CHROME_SHEET, 'utf8');
   expect(sheet).toContain('var(--scrim-ink)');
-  expect(sheet).toContain('var(--grid-ink)');
   // No bare palette citation may re-enter the linked sheet.
   expect(sheet).not.toMatch(/var\(--color-(?:zinc|violet)-\d+\)/);
 });

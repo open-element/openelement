@@ -1,216 +1,251 @@
-/**
- * Error-code reference route (#1414).
- *
- * The table below is a DERIVED artifact (P6): every row is projected from
- * www/app/data/_generated-error-codes.ts, which is rendered from the OEC code
- * literals in packages/<name>/src and the ErrorCode constants in
- * packages/protocol/src/errors.ts. A code the source raises
- * therefore cannot be missing here, and the page cannot restate a code the
- * source no longer has — `www#check:error-codes` (gate:source) fails on drift.
- * Only the surrounding prose is authored.
- */
+/** The diagnostics registry projects the generated compiler and runtime code lists. */
 import { definePage } from '@openelement/router';
+import { recoveryFor, recoveryGuides } from '#site-ui/error-recovery.ts';
 import { siteHead } from '#site-ui/head.ts';
 import { contentLocale } from '#site-ui/locale.ts';
+import { siteHref } from '#site-ui/site-url.ts';
 import '#site-ui/open-reading-shell.tsx';
-import '../site-ui/open-section-frame.tsx';
 import '../islands/open-page-rail.tsx';
-import type { SiteLocale } from '../../site-config.ts';
+import '../islands/open-registry-lookup.tsx';
 import { errorCodes } from '../data/_generated-error-codes.ts';
 import { sourceLineStamp } from '../data/version.ts';
 
 export const meta = { section: 'Reference', label: 'Error codes', order: 6 };
 
-type Locale = SiteLocale;
-
-/** One diagnostic code row, projected from the generated inventory. */
-export interface ErrorCodeItem {
-  key: string;
-  code: string;
-  family: string;
-  gloss: string;
-  /** Every distinct normalized message the code raises, joined for display. */
-  variants: string;
-  /** `path:line` of every source call site, joined for display. */
-  sites: string;
-  runtime: string;
-}
-
-/**
- * The OEC code families, keyed by the numeric range each occupies. A range
- * with no codes fails the projection below, so a family cannot outlive its
- * codes in the copy.
- */
-const families = [
-  { prefix: 'OEC90', label: { en: 'compiler grammar', zh: '编译器语法' } },
-] as const;
-
-function familyOf(code: string, locale: Locale): string {
-  for (const family of families) {
-    if (code.startsWith(family.prefix)) return family.label[locale];
-  }
-  return locale === 'en' ? 'diagnostic' : '诊断';
-}
+const compilerGrammarPrefix = 'OEC90';
 
 const content = {
   en: {
-    headTitle: 'Error codes',
-    headDescription:
-      'Every openElement error code, with the message each one raises and the exact source call sites — generated from the diagnostics themselves.',
-    pageTitle: 'Error codes',
-    lede: (v: string) =>
-      `The ${v} surface raises ${errorCodes.diagnostics.length} OEC compiler diagnostics plus ${errorCodes.runtime.length} runtime codes. Every row below is rendered from the source that raises it.`,
-    s1Index: '01 / code table',
-    s1Title: 'The codes, and where they are raised.',
-    s1Copy:
-      'OEC90xx codes are compiler diagnostics: each one names a grammar rule the compiled element boundary enforces, and each row lists the exact source call sites the build produced it from. Runtime codes are the ErrorCode constants an application can branch on. A code cannot appear in the source without appearing here.',
-    headCode: 'Code',
-    headGloss: 'Representative message',
-    headSites: 'Raised at',
-    variantsLabel: (count: number) => `${count} distinct messages`,
-    footnote:
-      'The gloss is the message the code raises most often; a code with several call-site messages expands to the full list. Source paths are repository-relative.',
-    footnoteCheckPre: 'Generated from the diagnostics by ',
-    footnoteCheckPost: ', so a new code cannot ship unlisted and a retired one cannot stay listed.',
-    family: familyOf,
+    title: 'Error codes',
+    headDescription: 'Look up openElement compiler diagnostics and runtime error codes.',
+    breadcrumb: 'Reference',
+    lede: (version: string) =>
+      `Paste a code or a line from your build or runtime log. This registry documents the ${version} source.`,
+    lookupLabel: 'Find an error code',
+    lookupSubmit: 'Go to code',
+    compilerTitle: 'Compiler diagnostics',
+    compilerHelp:
+      'Start with the first error that names a source file. Use its file, line, column, and full message to locate the failing code. The diagnostic envelope also includes a hint when the producer provides one.',
+    runtimeTitle: 'Runtime and framework error codes',
+    runtimeHelp:
+      'Use the full message and stack trace to find the failing call. The source declaration identifies the code. The check below points to the affected part of the framework.',
+    messageLabel: 'What it means',
+    sourceSummaryLabel: '',
+    grammarLabel: 'Compiler grammar',
+    detailsLabel: 'Message variants and source locations',
+    sourceDetailsLabel: 'Compiler source locations',
+    locationsLabel: 'Locations in the source checkout',
+    nextStepLabel: 'What to check',
+    declarationLabel: 'Source declaration on GitHub',
+    lookupAgain: 'Back to error lookup',
   },
   zh: {
-    headTitle: '错误码',
-    headDescription:
-      'openElement 的全部错误码：每个码触发的消息，以及它精确的源码调用点——由诊断本身生成。',
-    pageTitle: '错误码',
-    lede: (v: string) =>
-      `${v} 面共有 ${errorCodes.diagnostics.length} 个 OEC 编译器诊断与 ${errorCodes.runtime.length} 个运行时错误码。下表每一行都由触发它的源码渲染而成。`,
-    s1Index: '01 / 码表',
-    s1Title: '错误码，以及它们被触发的位置。',
-    s1Copy:
-      'OEC90xx 系列是编译器诊断：每个码对应一条编译元素边界强制执行的语法规则，每一行列出构建产生它的确切源码调用点。运行时错误码是应用可以分支处理的 ErrorCode 常量。码不可能只出现在源码里而不出现在这里。',
-    headCode: '错误码',
-    headGloss: '代表性消息',
-    headSites: '触发位置',
-    variantsLabel: (count: number) => `${count} 条不同消息`,
-    footnote:
-      '摘要取该码触发次数最多的消息；调用点消息不唯一时会展开完整列表。源码路径均为仓库相对路径。',
-    footnoteCheckPre: '由 ',
-    footnoteCheckPost: ' 从诊断生成，因此新码无法不登记，退役的码也无法留在表上。',
-    family: familyOf,
+    title: '错误码',
+    headDescription: '查询 openElement 的编译器诊断和运行时错误码。',
+    breadcrumb: '参考',
+    lede: (version: string) => `粘贴错误码或一行构建或运行时日志。本清单对应源码版本 ${version}。`,
+    lookupLabel: '查找错误码',
+    lookupSubmit: '跳到错误码',
+    compilerTitle: '编译器诊断',
+    compilerHelp:
+      '先查看第一条标明源文件的错误。根据文件、行列和完整消息定位出错的代码。若诊断的生成方提供了提示，诊断信封也会包含该提示。',
+    runtimeTitle: '运行时和框架错误码',
+    runtimeHelp: '根据完整消息和堆栈定位失败的调用。部分源码摘要保留英文，每条均附有中文检查步骤。',
+    messageLabel: '含义',
+    sourceSummaryLabel: '英文源码摘要',
+    grammarLabel: '编译器语法',
+    detailsLabel: '英文消息变体和源码位置',
+    sourceDetailsLabel: '编译器源码位置',
+    locationsLabel: '源码检出中的位置',
+    nextStepLabel: '检查步骤',
+    declarationLabel: '在 GitHub 查看源码声明',
+    lookupAgain: '返回错误码查找',
   },
 } as const;
 
-/**
- * Project the generated inventory onto the page's fixed row grammar. Row
- * fields are strings: the compiled list Block admits `{item.<field>}` values
- * and elements, not a nested list Block, so the multi-value columns are
- * joined here (the generator already sorted them deterministically).
- */
-function projectCodes(locale: Locale): ErrorCodeItem[] {
-  const t = content[locale];
-  return errorCodes.diagnostics.map((record) => ({
-    key: record.code,
-    code: record.code,
-    family: t.family(record.code, locale),
-    gloss: record.summary,
-    variants:
-      record.messages.length > 1
-        ? `${t.variantsLabel(record.messages.length)}: ${record.messages.join(' · ')}`
-        : '',
-    sites: record.occurrences.map((site) => `${site.path}:${site.line}`).join(' · '),
-    runtime: 'false',
-  }));
-}
-
-/**
- * The error-code reference as a server function page (alpha15 server
- * architecture): the route module's own exported TSX function, lowered by the
- * compiler into a generative HTML constructor. The nested `open-reading-shell`
- * / `open-page-rail` / `open-section-frame` hosts are build-admitted compiled
- * components, so they expand through `__ssr` with their slot children — the
- * same composition the retired class form produced. The page hook class
- * (`page-errors`) is the former component's scoping hook (www/site-chrome.css).
- */
 export function PageErrors(props: {
   metadata: { breadcrumb: string; title: string; lede: string };
   railItems: Array<{ id: string; href: string; label: string; depth: string }>;
   locale: string;
-  s1Index: string;
-  s1Title: string;
-  s1Copy: string;
-  headCode: string;
-  headGloss: string;
-  headSites: string;
-  codes: Array<{
-    key: string;
+  lookupLabel: string;
+  lookupSubmit: string;
+  lookupExample: string;
+  compilerTitle: string;
+  compilerHelp: string;
+  runtimeTitle: string;
+  runtimeHelp: string;
+  handlingHref: string;
+  handlingLink: string;
+  diagnostics: Array<{
     code: string;
-    family: string;
-    gloss: string;
+    anchor: string;
+    message: string;
     variants: string;
     sites: string;
-    runtime: string;
+    family: string;
+    messageLabel: string;
+    messageLang: string;
+    nextStep: string;
+    nextStepLabel: string;
+    guideHref: string;
+    guideLabel: string;
+    detailsLabel: string;
+    locationsLabel: string;
   }>;
-  footnote: string;
-  footnoteCheckPre: string;
-  footnoteCheckPost: string;
+  runtimeCodes: Array<{
+    code: string;
+    anchor: string;
+    constant: string;
+    description: string;
+    descriptionLang: string;
+    descriptionHidden: boolean;
+    sourceSummaryLabel: string;
+    sourceSummaryHidden: boolean;
+    declarationHref: string;
+    declarationLabel: string;
+    lookupAgain: string;
+    nextStep: string;
+    nextStepLabel: string;
+    guideHref: string;
+    guideLabel: string;
+  }>;
 }) {
   return (
-    // Without data-pagefind-body the page is absent from the index entirely:
-    // pagefind stops indexing every page that lacks the attribute. The shell
-    // already renders the one <main> landmark (#main-content).
-    <div class='page-errors text-foreground' data-pagefind-body>
-      <open-reading-shell meta rail footer metadata={props.metadata} locale={props.locale}>
+    <div class='page-errors text-foreground' data-registry='errors' data-pagefind-body>
+      <open-reading-shell meta rail metadata={props.metadata} locale={props.locale}>
         <div slot='rail'>
           <open-page-rail items={props.railItems} locale={props.locale}></open-page-rail>
         </div>
-        <open-section-frame>
-          <span slot='index'>{props.s1Index}</span>
-          <span slot='title'>{props.s1Title}</span>
-          <span slot='copy'>{props.s1Copy}</span>
-          <div class='border-t border-border' id='error-codes'>
-            <div
-              class='grid grid-cols-[minmax(0,0.35fr)_minmax(0,1.4fr)_minmax(0,1.25fr)] items-start gap-[clamp(1rem,4vw,3rem)] border-b border-border py-3 text-(length:--font-size-micro) font-bold tracking-[0.18em] text-muted-foreground uppercase max-[1100px]:hidden'
-              aria-hidden='true'
+        <div id='error-lookup' class='scroll-mt-[calc(var(--nav-height)+1rem)]' tabindex='-1'>
+          <open-registry-lookup
+            label={props.lookupLabel}
+            example={props.lookupExample}
+            submit={props.lookupSubmit}
+          ></open-registry-lookup>
+          <p class='mt-0 mb-8 text-sm'>
+            <a class='text-primary underline underline-offset-4' href={props.handlingHref}>
+              {props.handlingLink}
+            </a>
+          </p>
+        </div>
+        <section
+          id='error-codes'
+          class='mb-12 scroll-mt-[calc(var(--nav-height)+1rem)]'
+          aria-labelledby='compiler-codes-heading'
+        >
+          <h2 id='compiler-codes-heading' class='m-0 text-2xl font-bold'>
+            {props.compilerTitle}
+          </h2>
+          <p class='mt-2 mb-4 max-w-[68ch] text-sm text-muted-foreground'>{props.compilerHelp}</p>
+          {props.diagnostics.map((code) => (
+            <article
+              id={code.code}
+              data-lookup-label={code.code}
+              tabindex='-1'
+              class='scroll-mt-[calc(var(--nav-height)+1rem)] border-t border-border py-4 outline-offset-4 target:bg-muted/60 focus-visible:outline-2 focus-visible:outline-ring'
+              key={code.code}
             >
-              <span>{props.headCode}</span>
-              <span>{props.headGloss}</span>
-              <span>{props.headSites}</span>
-            </div>
-            {props.codes.map((code) => (
-              <div
-                class='grid grid-cols-[minmax(0,0.35fr)_minmax(0,1.4fr)_minmax(0,1.25fr)] items-start gap-[clamp(1rem,4vw,3rem)] border-b border-border py-4 data-[runtime=true]:bg-border/45 max-[1100px]:grid-cols-[minmax(0,1fr)] max-[1100px]:gap-2'
-                id={code.code}
-                data-runtime={code.runtime}
-                key={code.key}
+              <h3 class='m-0 font-mono text-base font-bold wrap-anywhere'>
+                <a class='text-primary underline underline-offset-4' href={code.anchor}>
+                  {code.code}
+                </a>
+              </h3>
+              <p class='mt-1 mb-0 text-xs text-muted-foreground empty:hidden'>{code.family}</p>
+              <dl class='my-2 max-w-[68ch] text-sm wrap-anywhere has-[dd:empty]:hidden'>
+                <dt class='font-semibold'>{code.messageLabel}</dt>
+                <dd class='m-0 text-muted-foreground' lang={code.messageLang}>
+                  {code.message}
+                </dd>
+              </dl>
+              <dl class='my-2 max-w-[68ch] text-sm wrap-anywhere has-[dd:empty]:hidden'>
+                <dt class='font-semibold'>{code.nextStepLabel}</dt>
+                <dd class='m-0 text-muted-foreground'>
+                  <p class='m-0'>{code.nextStep}</p>
+                  <a class='text-primary underline underline-offset-4' href={code.guideHref}>
+                    {code.guideLabel}
+                  </a>
+                </dd>
+              </dl>
+              <details class='mt-2 text-sm wrap-anywhere'>
+                <summary class='w-fit cursor-pointer py-1 text-primary'>
+                  {code.detailsLabel}
+                </summary>
+                <p
+                  class='mt-2 mb-0 whitespace-pre-line text-muted-foreground empty:hidden'
+                  lang='en'
+                >
+                  {code.variants}
+                </p>
+                <dl class='mt-4 mb-0'>
+                  <dt class='font-semibold'>{code.locationsLabel}</dt>
+                  <dd class='m-0 font-mono text-xs whitespace-pre-line text-muted-foreground'>
+                    {code.sites}
+                  </dd>
+                </dl>
+              </details>
+            </article>
+          ))}
+        </section>
+        <section
+          id='runtime-codes'
+          class='scroll-mt-[calc(var(--nav-height)+1rem)]'
+          aria-labelledby='runtime-codes-heading'
+        >
+          <h2 id='runtime-codes-heading' class='m-0 text-2xl font-bold'>
+            {props.runtimeTitle}
+          </h2>
+          <p class='mt-2 mb-4 max-w-[68ch] text-sm text-muted-foreground'>{props.runtimeHelp}</p>
+          {props.runtimeCodes.map((code) => (
+            <article
+              id={code.code}
+              data-lookup-label={code.code}
+              tabindex='-1'
+              class='scroll-mt-[calc(var(--nav-height)+1rem)] border-t border-border py-4 outline-offset-4 target:bg-muted/60 focus-visible:outline-2 focus-visible:outline-ring'
+              key={code.code}
+            >
+              <h3 class='m-0 font-mono text-base font-bold wrap-anywhere'>
+                <a class='text-primary underline underline-offset-4' href={code.anchor}>
+                  {code.code}
+                </a>
+              </h3>
+              <p
+                class='mt-2 mb-0 max-w-[68ch] text-sm text-muted-foreground'
+                lang={code.descriptionLang}
+                hidden={code.descriptionHidden}
               >
-                <div>
-                  <span class='inline font-mono text-base font-bold text-primary wrap-anywhere'>
-                    {code.code}
-                  </span>
-                  <span class='mt-1 block text-xs text-muted-foreground wrap-anywhere'>
-                    {code.family}
-                  </span>
-                </div>
-                <div>
-                  <p class='m-0 text-sm leading-normal text-muted-foreground wrap-anywhere'>
-                    {code.gloss}
-                  </p>
-                  <p class='m-0 text-xs leading-normal text-muted-foreground wrap-anywhere'>
-                    {code.variants}
-                  </p>
-                </div>
-                <span class='font-mono text-xs leading-normal text-muted-foreground wrap-anywhere'>
-                  {code.sites}
+                <span
+                  class='me-2 text-xs font-semibold whitespace-nowrap'
+                  lang='zh'
+                  data-source-summary-label
+                  hidden={code.sourceSummaryHidden}
+                >
+                  {code.sourceSummaryLabel}
                 </span>
-              </div>
-            ))}
-            <footer class='pt-6 text-xs leading-normal text-muted-foreground'>
-              <p class='m-0'>{props.footnote}</p>
-              <p class='mt-3 mb-0'>
-                {props.footnoteCheckPre}
-                <code class='text-primary'>pnpm --dir www run check:error-codes</code>
-                {props.footnoteCheckPost}
+                {code.description}
               </p>
-            </footer>
-          </div>
-        </open-section-frame>
+              <dl class='my-2 max-w-[68ch] text-sm wrap-anywhere has-[dd:empty]:hidden'>
+                <dt class='font-semibold'>{code.nextStepLabel}</dt>
+                <dd class='m-0 text-muted-foreground'>
+                  <p class='m-0'>{code.nextStep}</p>
+                  <a class='text-primary underline underline-offset-4' href={code.guideHref}>
+                    {code.guideLabel}
+                  </a>
+                </dd>
+              </dl>
+              <p class='mt-2 mb-0 font-mono text-xs text-muted-foreground wrap-anywhere'>
+                {code.constant}
+              </p>
+              <p class='mt-2 mb-0 flex flex-wrap gap-x-4 gap-y-1 text-sm'>
+                <a class='text-primary underline underline-offset-4' href={code.declarationHref}>
+                  {code.declarationLabel}
+                </a>
+                <a class='text-primary underline underline-offset-4' href='#error-lookup'>
+                  {code.lookupAgain}
+                </a>
+              </p>
+            </article>
+          ))}
+        </section>
       </open-reading-shell>
     </div>
   );
@@ -223,41 +258,79 @@ export default definePage(PageErrors, {
     return siteHead({
       route: '/errors',
       locale: resolved,
-      title: copy.headTitle,
+      title: copy.title,
       description: copy.headDescription,
     });
   },
   props({ locale }) {
-    const resolved: Locale = contentLocale(locale ?? 'en');
-    const t = content[resolved];
-    // Runtime codes carry their own declared name/summary; they are projected
-    // onto the same row grammar so a reader sees one table, not two.
-    const runtimeRows: ErrorCodeItem[] = errorCodes.runtime.map((record) => ({
-      key: record.value,
-      code: record.value,
-      family: resolved === 'en' ? 'runtime' : '运行时',
-      gloss: record.summary,
-      variants: '',
-      sites: record.name,
-      runtime: 'true',
-    }));
+    const resolved = contentLocale(locale ?? 'en');
+    const copy = content[resolved];
     return {
+      ...copy,
+      lookupExample: `[${errorCodes.diagnostics[0]?.code ?? ''}]`,
       metadata: {
-        breadcrumb: 'Reference',
-        title: t.pageTitle,
-        lede: t.lede(sourceLineStamp(resolved)),
+        breadcrumb: copy.breadcrumb,
+        title: copy.title,
+        lede: copy.lede(sourceLineStamp(resolved)),
       },
-      railItems: [{ id: 'error-codes', href: '#error-codes', label: t.headCode, depth: '3' }],
-      s1Index: t.s1Index,
-      s1Title: t.s1Title,
-      s1Copy: t.s1Copy,
-      headCode: t.headCode,
-      headGloss: t.headGloss,
-      headSites: t.headSites,
-      codes: [...projectCodes(resolved), ...runtimeRows],
-      footnote: t.footnote,
-      footnoteCheckPre: t.footnoteCheckPre,
-      footnoteCheckPost: t.footnoteCheckPost,
+      railItems: [
+        { id: 'error-codes', href: '#error-codes', label: copy.compilerTitle, depth: '3' },
+        { id: 'runtime-codes', href: '#runtime-codes', label: copy.runtimeTitle, depth: '3' },
+      ],
+      diagnostics: errorCodes.diagnostics.map((record) => {
+        // The parser passes through a TypeScript message specific to the input.
+        // Generated source excerpts for this code are expressions, not messages.
+        const fromTypeScriptParser = record.occurrences.some(
+          (site) =>
+            site.path.endsWith('/semantic-core/compiler-diagnostics.ts') &&
+            site.message === 'diagnosticMessage(…)',
+        );
+        const help = recoveryFor(record.code, 'compiler', resolved);
+        const variants = fromTypeScriptParser ? '' : record.messages.join('\n');
+        return {
+          code: record.code,
+          anchor: `#${record.code}`,
+          message: help.meaning || record.summary,
+          messageLabel: help.meaning
+            ? copy.messageLabel
+            : copy.sourceSummaryLabel || copy.messageLabel,
+          messageLang: help.meaning ? resolved : 'en',
+          nextStep: help.nextStep,
+          nextStepLabel: copy.nextStepLabel,
+          guideHref: siteHref(help.guide.href, resolved),
+          guideLabel: help.guide.label,
+          detailsLabel: variants ? copy.detailsLabel : copy.sourceDetailsLabel,
+          locationsLabel: copy.locationsLabel,
+          variants,
+          sites: record.occurrences.map((site) => `${site.path}:${site.line}`).join('\n'),
+          family: record.code.startsWith(compilerGrammarPrefix) ? copy.grammarLabel : '',
+        };
+      }),
+      runtimeCodes: errorCodes.runtime.map((record) => {
+        const help = recoveryFor(record.value, record.family, resolved);
+        const description = help.meaning || record.summary.replaceAll('`', '');
+        const showSourceSummary = resolved === 'zh' && !help.meaning && !!description;
+        return {
+          code: record.value,
+          anchor: `#${record.value}`,
+          constant: `${record.family}.${record.name}`,
+          description,
+          descriptionLang: help.meaning ? resolved : 'en',
+          descriptionHidden: !description,
+          sourceSummaryLabel: showSourceSummary ? copy.sourceSummaryLabel : '',
+          sourceSummaryHidden: !showSourceSummary,
+          declarationHref: `https://github.com/open-element/openelement/blob/main/${record.path}#L${record.line}`,
+          declarationLabel: copy.declarationLabel,
+          lookupAgain: copy.lookupAgain,
+          nextStep: help.nextStep,
+          nextStepLabel: copy.nextStepLabel,
+          guideHref: siteHref(help.guide.href, resolved),
+          guideLabel: help.guide.label,
+        };
+      }),
+      handlingHref: siteHref(recoveryGuides.envelope[resolved].href, resolved),
+      handlingLink: recoveryGuides.envelope[resolved].label,
+      locale: resolved,
     };
   },
 });

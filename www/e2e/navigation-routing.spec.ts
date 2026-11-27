@@ -156,7 +156,10 @@ test.describe('404 Page', () => {
     await page.goto('/404.html');
     await page.waitForLoadState('networkidle');
 
-    await expect(page.getByRole('heading', { name: '404' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
+    await page.goto('/zh/404');
+    await expect(page.getByRole('heading', { level: 1, name: '页面未找到' })).toBeVisible();
+    await expect(page.getByRole('link', { name: '阅读文档' })).toHaveAttribute('href', '/zh/docs/');
   });
 
   test('404 page has link back to home', async ({ page }) => {

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { installCommand } from '../app/data/_generated-install-command.ts';
 
 // Fonts are self-hosted (www/site-fonts.ts): every face is a same-origin
 // asset emitted by the build, so page loads wait on no third-party CDN and
@@ -8,7 +9,7 @@ const readingRoutes = [
   '/guide/getting-started/',
   '/guide/routing-and-data/',
   '/architecture/dsd/',
-  '/architecture/islands/',
+  '/guide/islands-and-ssr/',
 ];
 
 const guideRoutes = [
@@ -29,8 +30,7 @@ const guideRoutes = [
 const architectureRoutes = [
   '/architecture/',
   '/architecture/dsd/',
-  '/architecture/comparison/',
-  '/architecture/islands/',
+  '/architecture/web-component-admission/',
   '/architecture/design-system/',
 ];
 
@@ -60,7 +60,10 @@ test.describe('Unified page structure', () => {
     try {
       const page = await context.newPage();
       await page.goto('/changelog/');
-      await expect(page.getByRole('heading', { level: 1, name: 'Release Status' })).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1, name: 'Changelog' })).toBeVisible();
+      await expect(
+        page.getByRole('link', { name: 'Read release notes and breaking changes on GitHub' }),
+      ).toHaveAttribute('href', 'https://github.com/open-element/openelement/releases');
       await expect(page.locator('#published')).toContainText('latest');
       await expect(
         page.locator('#published').getByRole('link', { name: '@openelement/router' }),
@@ -76,48 +79,297 @@ test.describe('Unified page structure', () => {
   test('404 remains a compact recovery scene without WebGL', async ({ page }) => {
     await page.goto('/404');
     const scene = page.locator('.page-404');
-    await expect(scene.locator('h1')).toHaveText('404');
-    await expect(scene).toContainText('Lost in the shadow DOM.');
+    await expect(scene.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
+    await expect(scene.locator('.code')).toHaveText('404');
+    await expect(scene).toContainText('This link may be out of date');
+    await expect(scene.locator('.marquee')).toHaveCount(0);
     await expect(scene.locator('open-button[href="/"]')).toHaveCount(1);
     await expect(scene.locator('open-button[href="/docs/"]')).toHaveCount(1);
   });
 
-  test('docs landing is a v4 manual index with five entrances', async ({ page }) => {
+  for (const { prefix, search, home, docs, correction, typo } of [
+    {
+      prefix: '',
+      search: 'Search the docs',
+      home: 'Back home',
+      docs: 'Read the docs',
+      correction: 'Getting Started',
+      typo: 'getting-strated',
+    },
+    {
+      prefix: '/zh',
+      search: '搜索文档',
+      home: '回到首页',
+      docs: '阅读文档',
+      correction: '快速开始',
+      typo: 'getting-startd',
+    },
+  ]) {
+    test(`${prefix || '/'} shows its first install command on a phone`, async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto(`${prefix}/guide/getting-started/`);
+      await page.evaluate(async () => {
+        await document.fonts.ready;
+      });
+      const command = page.locator('.article-content pre').first();
+      await expect(command).toContainText(installCommand);
+      await expect(command).toBeInViewport();
+    });
+
+    test(`${prefix || '/'} 404 opens search locally and restores the recovery action`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto(`${prefix}/404`);
+      await expect(page.locator('#main-content > details')).toBeHidden();
+      const action = page.getByRole('main').getByRole('button', { name: search });
+      await expect(action).toBeInViewport();
+      await action.focus();
+      await page.keyboard.press('Enter');
+      const dialog = page.getByRole('dialog');
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole('combobox')).toBeFocused();
+      await page.keyboard.press('Escape');
+      await expect(dialog).toBeHidden();
+      await expect(action).toBeFocused();
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await expect(page.locator('.oe-content-frame > nav')).toBeHidden();
+    });
+
+    test(`${prefix || '/'} 404 offers a real page for a close URL typo`, async ({ page }) => {
+      const wrong = `${prefix}/guide/${typo}/`;
+      const unrelated = `${prefix}/guide/unrelated-destination/`;
+      // The test server uses a plain unmatched response. Reproduce the deployed
+      // error-document fallback while keeping the browser on the missing URL.
+      await page.route(
+        (url) => [wrong, unrelated].includes(url.pathname),
+        async (route) => {
+          const response = await route.fetch({
+            url: new URL(`${prefix}/404`, route.request().url()).href,
+          });
+          await route.fulfill({ response, status: 404 });
+        },
+      );
+      expect((await page.goto(wrong))?.status()).toBe(404);
+      await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex');
+      const suggestion = page.locator('[data-not-found-suggestion]');
+      const destination = suggestion.getByRole('link', { name: correction });
+      await expect(destination).toHaveAttribute('href', `${prefix}/guide/getting-started/`);
+      const duplicate = page.locator(
+        `.page-404 .popular a[href="${prefix}/guide/getting-started/"]`,
+      );
+      await expect(duplicate).toBeHidden();
+      await destination.press('Enter');
+      await expect(page).toHaveURL(new RegExp(`${prefix}/guide/getting-started/$`));
+
+      expect((await page.goto(unrelated))?.status()).toBe(404);
+      await expect(page.getByRole('main').getByRole('button', { name: search })).toBeVisible();
+      await expect(suggestion).toBeHidden();
+      await expect(duplicate).toBeVisible();
+    });
+
+    test(`${prefix || '/'} 404 keeps home and docs recovery links without JavaScript`, async ({
+      browser,
+      baseURL,
+    }) => {
+      const context = await browser.newContext({ baseURL, javaScriptEnabled: false });
+      try {
+        const page = await context.newPage();
+        await page.goto(`${prefix}/404`);
+        const main = page.getByRole('main');
+        await expect(main.locator('[data-search-recovery]')).toBeHidden();
+        await expect(main.locator('[data-not-found-suggestion]')).toBeHidden();
+        await expect(main.getByRole('link', { name: home })).toHaveAttribute('href', `${prefix}/`);
+        await expect(main.getByRole('link', { name: docs })).toHaveAttribute(
+          'href',
+          `${prefix}/docs/`,
+        );
+      } finally {
+        await context.close();
+      }
+    });
+
+    test(`${prefix || '/'} contributing setup wraps the clone command on a phone`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto(`${prefix}/contributing/`);
+      await page.evaluate(async () => {
+        await document.fonts.ready;
+      });
+      const code = page.locator('#contributing-setup-commands pre');
+      await expect(code).toHaveCSS('white-space', 'pre-wrap');
+      await expect.poll(() => code.evaluate((pre) => pre.scrollWidth - pre.clientWidth)).toBe(0);
+      expect((await code.textContent())?.split('\n')[0]).toBe(
+        'git clone https://github.com/open-element/openelement.git',
+      );
+    });
+  }
+
+  test('docs landing presents the four manual sections', async ({ page }) => {
     await page.goto('/docs/');
     const hub = page.locator('.page-docs');
-    await expect(hub.locator('h1')).toContainText('MANUAL.');
-    // The five entrances are the page's entrance navigation, not every link on
-    // the page: the WEB-201 Examples section below it adds its own repository
-    // and doc links (4 cards × source+doc), so an unscoped link count would
-    // encode a page shape that no longer exists.
-    const entrances = hub
-      .getByRole('navigation', { name: 'Documentation entrances' })
-      .getByRole('link');
-    await expect(entrances).toHaveCount(5);
-    await expect(entrances.first()).toHaveAttribute('href', '/guide/getting-started/');
-    // The tutorial is the guided second step, not just a sidebar entry.
-    await expect(entrances.nth(1)).toHaveAttribute('href', '/guide/tutorial/');
-    // WEB-201: the honest Examples entry sits below the entrances — four
-    // scenario cards, each bound to a real repository source and an in-site doc.
+    await expect(hub.getByRole('heading', { level: 1 })).toHaveText('Documentation');
+    const sections = hub.getByRole('navigation', { name: 'Documentation sections' });
+    await expect(sections.locator(':scope > section > h2')).toHaveText([
+      'LEARN',
+      'GUIDES',
+      'REFERENCE',
+      'PROJECT',
+    ]);
+    const sectionLinks = sections.getByRole('link');
+    await expect(sectionLinks).toHaveCount(28);
+    await expect(sectionLinks.first()).toHaveAttribute('href', '/guide/getting-started/');
+    await expect(sectionLinks.nth(6)).toHaveAttribute('href', '/guide/styling/');
+    await expect(sectionLinks.nth(18)).toHaveAttribute('href', '/reference/');
+    await expect(sectionLinks.nth(24)).toHaveAttribute('href', '/roadmap/');
+    const start = hub.getByRole('region', { name: 'Start here' });
+    await expect(start.getByRole('link')).toHaveCount(3);
+    await expect(start.getByRole('link').nth(1)).toHaveAttribute('href', '/guide/tutorial/');
+    await expect(hub.getByRole('link', { name: /Release status/ })).toHaveAttribute(
+      'href',
+      '/changelog/',
+    );
+    const disclosure = hub.locator('details');
+    await expect(disclosure).not.toHaveAttribute('open', '');
+    await disclosure.locator('summary').getByText('Examples', { exact: true }).click();
     const examples = hub.getByRole('region', { name: 'Example scenarios' });
     await expect(examples).toHaveCount(1);
-    await expect(examples.locator('h2')).toHaveText('Examples');
-    await expect(examples.locator('ol > li')).toHaveCount(4);
+    await expect(examples.getByRole('heading', { level: 2 })).toHaveText([
+      'Static-first page',
+      'Reusable Custom Element',
+      'SSR + island',
+      'Form + routing',
+    ]);
+    await expect(examples.locator('ul > li')).toHaveCount(4);
+    await expect(examples.locator('ol')).toHaveCount(0);
     await expect(examples.locator('a[target="_blank"]')).toHaveCount(4);
-    // Run location and first-time preparation are stated, not implied: the
-    // commands are repository fixture scripts, not app-local commands.
-    await expect(examples).toContainText('Run (repo root)');
+    await expect(examples.getByText('Run (repo root)', { exact: true })).toHaveCount(3);
+    const starter = examples.getByRole('listitem').filter({ hasText: 'Reusable Custom Element' });
+    await expect(starter.getByText('Run (new app)', { exact: true })).toBeVisible();
+    await expect(starter.locator('code')).toHaveText(
+      'npm create @openelement my-app && cd my-app && npm run dev',
+    );
     await expect(examples).toContainText('clone https://github.com/open-element/openelement');
   });
 
-  test('contributing is a v4 lab page with terminal, checklist and help rows', async ({ page }) => {
+  test('Chinese docs landing keeps the first step and optional examples in Chinese', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/zh/docs/');
+    const hub = page.locator('.page-docs');
+    await expect(hub.getByRole('heading', { level: 1 })).toHaveText('文档');
+    const start = hub.getByRole('region', { name: '从这里开始' }).getByRole('link').first();
+    await expect(start).toBeInViewport();
+    await expect(start).toHaveAttribute('href', '/zh/guide/getting-started/');
+    await expect(hub.getByRole('link', { name: /发布状态/ })).toHaveAttribute(
+      'href',
+      '/zh/changelog/',
+    );
+    await hub.locator('details > summary').getByText('示例', { exact: true }).click();
+    await expect(hub.getByRole('region', { name: '示例场景' }).getByRole('listitem')).toHaveCount(
+      4,
+    );
+  });
+
+  test('contributing offers a first task before setup and checks', async ({ page }) => {
     await page.goto('/contributing/');
     const lab = page.locator('.page-contributing');
-    await expect(lab.locator('h1')).toContainText('BUILD IT');
+    await expect(lab.getByRole('heading', { level: 1, name: 'Contributing' })).toBeVisible();
+    await expect(lab.getByRole('heading', { level: 2 }).allTextContents()).resolves.toEqual([
+      'Where to help',
+      'Development setup',
+      'Before a pull request',
+      'For maintainers',
+    ]);
     await expect(lab.locator('open-code-block')).toHaveCount(1);
+    await expect(lab.getByRole('button', { name: 'Copy setup commands' })).toBeVisible();
+    await expect(lab.getByRole('button', { name: 'Copy', exact: true })).toHaveCount(0);
     expect(await lab.locator('.checklist li').count()).toBeGreaterThan(0);
     expect(await lab.locator('.help-row').count()).toBe(3);
+    await lab.getByRole('link', { name: 'Choose a first task' }).click();
+    await expect(lab.getByRole('heading', { name: 'Where to help' })).toBeFocused();
+    await expect(lab.locator('.help-row').first()).toContainText('Try the starter');
+    await expect(
+      lab.getByRole('link', { name: 'When to write an architecture decision record (ADR)' }),
+    ).toHaveAttribute(
+      'href',
+      'https://github.com/open-element/openelement/blob/main/CONTRIBUTING.md#when-an-adr-is-required',
+    );
+    await expect(lab.getByRole('link', { name: 'Open Getting Started' })).toHaveAttribute(
+      'href',
+      '/guide/getting-started/',
+    );
+    await expect(
+      lab.getByRole('link', { name: 'Read the repository release process' }),
+    ).toHaveAttribute(
+      'href',
+      'https://github.com/open-element/openelement/blob/main/CONTRIBUTING.md#release-work',
+    );
+    await page.goto('/zh/contributing/');
+    await expect(lab.getByRole('heading', { level: 1, name: '参与贡献' })).toBeVisible();
+    await expect(lab.getByRole('button', { name: '复制配置命令' })).toBeVisible();
+    await expect(lab.getByRole('button', { name: 'Copy', exact: true })).toHaveCount(0);
+    await expect(lab.getByRole('link', { name: '打开快速开始' })).toHaveAttribute(
+      'href',
+      '/zh/guide/getting-started/',
+    );
   });
+
+  for (const copy of [
+    {
+      path: '/contributing/',
+      label: 'Copy setup commands',
+      denied: 'Select the commands below and copy them manually.',
+      dismiss: 'Dismiss copy error',
+      success: 'Setup commands copied to clipboard.',
+    },
+    {
+      path: '/zh/contributing/',
+      label: '复制配置命令',
+      denied: '请选中下方命令，手动复制。',
+      dismiss: '关闭复制错误提示',
+      success: '配置命令已复制到剪贴板。',
+    },
+  ]) {
+    test(`contributing setup recovers from blocked clipboard access on ${copy.path}`, async ({
+      page,
+    }) => {
+      await page.addInitScript(() => {
+        Object.defineProperty(navigator, 'clipboard', {
+          value: {
+            writeText: (commands: string) => {
+              if (!document.documentElement.hasAttribute('data-copy-retry')) {
+                return Promise.reject(
+                  new DOMException('Blocked by the browser', 'NotAllowedError'),
+                );
+              }
+              document.documentElement.dataset.copiedCommands = commands;
+              return Promise.resolve();
+            },
+          },
+        });
+      });
+      await page.goto(copy.path);
+      const button = page.getByRole('button', { name: copy.label });
+      const commands = page.locator('#contributing-setup-commands');
+      const copyState = page.locator('open-copy-button.contributing-copy [role="status"]');
+      await button.click();
+      await expect(copyState).toContainText(copy.denied);
+      const bounds = await commands.boundingBox();
+      const recovery = await copyState.boundingBox();
+      expect(recovery!.y).toBeLessThan(bounds!.y);
+      await page.getByRole('button', { name: copy.dismiss }).click();
+      await expect(button).toBeFocused();
+      await page.evaluate(() => document.documentElement.setAttribute('data-copy-retry', ''));
+      await button.click();
+      await expect(copyState).toHaveText(copy.success);
+      const visibleCommands = (await commands.textContent())?.trimEnd() ?? '';
+      expect(visibleCommands).toContain('pnpm install --frozen-lockfile');
+      await expect(page.locator('html')).toHaveAttribute('data-copied-commands', visibleCommands);
+    });
+  }
 
   test('former hero pages render content-first, without a mega hero', async ({ page }) => {
     // The editorial mega hero pushed all content below the fold; these pages
@@ -153,9 +405,7 @@ test.describe('Unified page structure', () => {
     // Light DOM only: the page hook is a class on a light-div (no shadow root
     // to pierce), so every one of the page's frames is addressable.
     await expect(frames).toHaveCount(5);
-    await expect(frames.first().locator('h2')).toContainText(
-      'Authoring starts at product packages.',
-    );
+    await expect(frames.first().locator('h2')).toContainText('Start with routes and components');
     // The second frame's body is the package registry; `.registry` went away
     // with the utility-first migration, and the generated rows now carry their
     // kind as data (the generated anchor id is not stable across packages).

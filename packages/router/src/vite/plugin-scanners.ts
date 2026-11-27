@@ -31,6 +31,7 @@ import type {
   EntryDescriptor,
   ForeignTagScanResult,
 } from './internal/ssg/index.ts';
+import { pageUrlCount } from './internal/ssg/page-url-forms.ts';
 import {
   buildPackageIslandDecls,
   registerPackageIslandStyleDeclarations,
@@ -931,7 +932,13 @@ export function createBuildStartHook(state: OpenPluginState): Pick<Plugin, 'buil
         // virtualEntryPlugin.load() renders from.
         await deriveDevRouteDocumentStyleLinks(state);
         syncEntryDescriptor(state, routes);
-        const pageCount = routes.filter((r) => r.type === 'page' && !r.special).length;
+        const pageRoutes = routes.filter((r) => r.type === 'page' && !r.special);
+        // URL forms, not route modules: the route layer answers the
+        // locale-prefixed forms the build emits documents for as well
+        // (page-url-forms.ts), so the line reports the same page set the
+        // build output covers — a 2× undercount was the visible symptom of
+        // the dev server registering only the default locale.
+        const pageCount = pageUrlCount(pageRoutes, state.ctx.plugins.i18nOptions);
         const apiCount = routes.filter((r) => r.type === 'api' && !r.special).length;
         const totalIslands =
           state.ctx.phase1.islandTagNames.length + state.ctx.phase1.packageIslandDecls.length;

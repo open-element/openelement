@@ -24,7 +24,7 @@ describe('canonicalRoutePath', () => {
     expect(canonicalRoutePath('/docs')).toBe('/docs/');
     expect(canonicalRoutePath('/docs/')).toBe('/docs/');
     expect(canonicalRoutePath('/guide/getting-started')).toBe('/guide/getting-started/');
-    expect(canonicalRoutePath('/architecture/comparison')).toBe('/architecture/comparison/');
+    expect(canonicalRoutePath('/architecture')).toBe('/architecture/');
     expect(canonicalRoutePath('/articles/how-to-build')).toBe('/articles/how-to-build/');
     // A slug that merely contains a dot is still a directory route: the static
     // rule is an explicit extension whitelist, not "the segment has a dot".
@@ -67,9 +67,7 @@ describe('siteHref', () => {
     expect(siteHref('/guide/configuration?x=1#middleware-use', 'en')).toBe(
       '/guide/configuration/?x=1#middleware-use',
     );
-    expect(siteHref('/architecture/comparison#实测输出', 'zh')).toBe(
-      '/zh/architecture/comparison/#实测输出',
-    );
+    expect(siteHref('/architecture#实测输出', 'zh')).toBe('/zh/architecture/#实测输出');
     expect(siteHref('/roadmap#now', 'en')).toBe('/roadmap/#now');
   });
 

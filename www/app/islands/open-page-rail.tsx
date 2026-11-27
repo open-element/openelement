@@ -27,13 +27,7 @@ interface RailItem {
 }
 
 export const openElement = defineIslandConfig({
-  // LIGHT, not the DSD default: `@element('open-page-rail')` carried no root
-  // option, so the class lane compiled a light-root program and the built page
-  // carries the outline inline. `www/site-chrome.css` selects
-  // `open-page-rail a::before` (the counter-rendered "§N" chip) in the document
-  // tree, which a shadow root would put out of reach — declaring `shadow` would
-  // be a behaviour change dressed as a migration (compiled slot updates,
-  // page-local slice). The activation strategy is unchanged: idle + SSR.
+  // The outline stays in the document tree, with real fragment links in SSR.
   root: 'light',
   hydrate: 'idle',
   ssr: true,
@@ -57,10 +51,7 @@ export const openElement = defineIslandConfig({
  * `OEC9043 [OEIR_UNCLASSIFIED_BINDING]`, while a component-local const arrow IS
  * admitted and emits a bound refresh (compiled slot updates).
  *
- * Everything else is byte-identical markup: the classes, both branches, the
- * `#start` overview anchor, `aria-label` from the locale and
- * `data-pagefind-ignore` on the outer div. The one rule the class kept in
- * `static styles` is the host box, which `www/site-chrome.css` still owns.
+ * Both branches link to the same section IDs and use the localized nav label.
  */
 function OpenPageRail(props: { items: RailItem[]; locale: string }) {
   const railLabel = (locale: string) => readingChromeStrings(locale).onThisPage;
@@ -101,9 +92,9 @@ function OpenPageRail(props: { items: RailItem[]; locale: string }) {
   return (
     <div data-pagefind-ignore>
       <div class='hidden min-[901px]:block'>
-        <nav class='grid gap-1 [counter-reset:rail-item]' aria-label={railLabel(props.locale)}>
+        <nav class='grid gap-1' aria-label={railLabel(props.locale)}>
           <a
-            class='block py-1 pe-0 ps-3 text-muted-foreground font-mono text-(length:--text-xs) leading-[1.45] no-underline border-s-2 border-s-transparent hover:text-foreground focus-visible:text-foreground data-[depth=3]:ps-5 data-[depth=3]:text-[length:calc(var(--text-xs)*0.94)] aria-[current=location]:text-foreground aria-[current=location]:font-extrabold aria-[current=location]:border-s-primary'
+            class='block py-1 pe-0 ps-3 text-muted-foreground text-sm leading-[1.45] no-underline border-s-2 border-s-transparent hover:text-foreground focus-visible:text-foreground aria-[current=location]:text-foreground aria-[current=location]:font-semibold aria-[current=location]:border-s-primary'
             href='#start'
           >
             {railOverview(props.locale)}
@@ -111,7 +102,7 @@ function OpenPageRail(props: { items: RailItem[]; locale: string }) {
           {props.items.map((item) => (
             <a
               key={item.id}
-              class='block py-1 pe-0 ps-3 text-muted-foreground font-mono text-(length:--text-xs) leading-[1.45] no-underline border-s-2 border-s-transparent hover:text-foreground focus-visible:text-foreground data-[depth=3]:ps-5 data-[depth=3]:text-[length:calc(var(--text-xs)*0.94)] aria-[current=location]:text-foreground aria-[current=location]:font-extrabold aria-[current=location]:border-s-primary'
+              class='block py-1 pe-0 ps-3 text-muted-foreground text-sm leading-[1.45] no-underline border-s-2 border-s-transparent hover:text-foreground focus-visible:text-foreground data-[depth=3]:ps-6 aria-[current=location]:text-foreground aria-[current=location]:font-semibold aria-[current=location]:border-s-primary'
               href={item.href}
               data-depth={item.depth}
             >
@@ -121,12 +112,15 @@ function OpenPageRail(props: { items: RailItem[]; locale: string }) {
         </nav>
       </div>
       <details class='block min-[901px]:hidden'>
-        <summary class='cursor-pointer rounded-lg border border-border bg-(--surface-1) px-4 py-3 font-mono text-(length:--text-xs) font-extrabold tracking-[0.12em] text-foreground uppercase'>
+        <summary
+          id='page-outline'
+          class='min-h-11 cursor-pointer scroll-mt-[calc(var(--nav-height)+1rem)] rounded-lg border border-border bg-(--surface-1) px-4 py-2 text-sm font-semibold text-foreground'
+        >
           {railLabel(props.locale)}
         </summary>
-        <nav class='grid gap-1 pt-3 [counter-reset:rail-item]' aria-label={railLabel(props.locale)}>
+        <nav class='grid gap-1 pt-3' aria-label={railLabel(props.locale)}>
           <a
-            class='block py-1 pe-0 ps-3 text-muted-foreground font-mono text-(length:--text-xs) leading-[1.45] no-underline border-s-2 border-s-transparent hover:text-foreground focus-visible:text-foreground data-[depth=3]:ps-5 data-[depth=3]:text-[length:calc(var(--text-xs)*0.94)] aria-[current=location]:text-foreground aria-[current=location]:font-extrabold aria-[current=location]:border-s-primary'
+            class='block py-1 pe-0 ps-3 text-muted-foreground text-sm leading-[1.45] no-underline border-s-2 border-s-transparent hover:text-foreground focus-visible:text-foreground aria-[current=location]:text-foreground aria-[current=location]:font-semibold aria-[current=location]:border-s-primary'
             href='#start'
           >
             {railOverview(props.locale)}
@@ -134,7 +128,7 @@ function OpenPageRail(props: { items: RailItem[]; locale: string }) {
           {props.items.map((item) => (
             <a
               key={item.id}
-              class='block py-1 pe-0 ps-3 text-muted-foreground font-mono text-(length:--text-xs) leading-[1.45] no-underline border-s-2 border-s-transparent hover:text-foreground focus-visible:text-foreground data-[depth=3]:ps-5 data-[depth=3]:text-[length:calc(var(--text-xs)*0.94)] aria-[current=location]:text-foreground aria-[current=location]:font-extrabold aria-[current=location]:border-s-primary'
+              class='block py-1 pe-0 ps-3 text-muted-foreground text-sm leading-[1.45] no-underline border-s-2 border-s-transparent hover:text-foreground focus-visible:text-foreground data-[depth=3]:ps-6 aria-[current=location]:text-foreground aria-[current=location]:font-semibold aria-[current=location]:border-s-primary'
               href={item.href}
               data-depth={item.depth}
             >

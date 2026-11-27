@@ -6,6 +6,7 @@ interface RailState {
   stop: (() => void) | null;
   links: HTMLAnchorElement[];
   intersecting: Set<string>;
+  status: HTMLElement | null;
 }
 
 const states = new WeakMap<RailHost, RailState>();
@@ -19,18 +20,23 @@ function railLinks(host: RailHost): HTMLAnchorElement[] {
 }
 
 function markCurrent(state: RailState, hash: string): void {
+  let label = '';
   for (const link of state.links) {
     const current = link.getAttribute('href') === hash;
     const marked = link.getAttribute('aria-current') === 'location';
+    if (current && !label) label = link.textContent?.trim() ?? '';
     if (current && !marked) link.setAttribute('aria-current', 'location');
     else if (!current && marked) link.removeAttribute('aria-current');
   }
+  if (state.status && state.status.textContent !== label) state.status.textContent = label;
 }
 
 /** The last rail target at or above the band top wins in the gaps. */
-function markSectionAboveBand(state: RailState, targets: Map<string, Element>): void {
-  // Same band the observer watches: top = 15% of viewport height.
-  const bandTop = globalThis.innerHeight * 0.15;
+function markSectionAboveBand(
+  state: RailState,
+  targets: Map<string, Element>,
+  bandTop = globalThis.innerHeight * 0.15,
+): void {
   let current = targets.keys().next().value ?? '';
   for (const [hash, target] of targets) {
     // Map insertion order is rail order is document order: stop at the
@@ -43,6 +49,16 @@ function markSectionAboveBand(state: RailState, targets: Map<string, Element>): 
 }
 
 function refreshFromIntersections(state: RailState, targets: Map<string, Element>): void {
+  const summary = state.status?.parentElement;
+  if (summary && summary.offsetHeight > 0) {
+    // The same clearance also seats native fragments below the sticky menu.
+    const heading = targets.values().next().value;
+    const margin = heading
+      ? Number.parseFloat(getComputedStyle(heading).scrollMarginBlockStart)
+      : 0;
+    markSectionAboveBand(state, targets, margin + 1);
+    return;
+  }
   let best: string | null = null;
   let bestTop = Infinity;
   for (const hash of state.intersecting) {
@@ -62,6 +78,67 @@ function viteDevMode(): boolean {
   return (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV ?? false;
 }
 
+function enhanceOutline(
+  details: HTMLDetailsElement,
+  summary: HTMLElement,
+  state: RailState,
+  targets: Map<string, Element>,
+): () => void {
+  const status = document.createElement('span');
+  status.className = 'rail-current';
+  summary.append(status);
+  state.status = status;
+
+  const panel = details.querySelector('nav');
+  const listeners = new AbortController();
+  const options = { signal: listeners.signal };
+  const closeOutside = (event: Event): void => {
+    if (!details.contains(event.target as Node)) details.open = false;
+  };
+  const selectSection = (event: MouseEvent): void => {
+    if (
+      !(event.target instanceof Element) ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey
+    )
+      return;
+    const link = event.target.closest('a[href^="#"]');
+    const target = targets.get(link?.getAttribute('href') ?? '');
+    if (!(target instanceof HTMLElement)) return;
+    details.open = false;
+    // The closed disclosure removes the selected link from the focus order.
+    // Focus its heading without cancelling the browser's own fragment jump.
+    if (!target.hasAttribute('tabindex')) {
+      target.tabIndex = -1;
+      target.addEventListener('blur', () => target.removeAttribute('tabindex'), { once: true });
+    }
+    target.focus({ preventScroll: true });
+  };
+  const onEscape = (event: KeyboardEvent): void => {
+    if (event.key !== 'Escape' || !details.open) return;
+    details.open = false;
+    summary.focus({ preventScroll: true });
+  };
+  const revealPanel = (): void => {
+    if (!details.open || !panel) return;
+    const overflow = panel.getBoundingClientRect().bottom - globalThis.innerHeight + 8;
+    if (overflow > 0) globalThis.scrollBy({ top: overflow, behavior: 'instant' });
+  };
+  details.setAttribute('data-outline-ready', '');
+  details.addEventListener('click', selectSection, options);
+  details.addEventListener('keydown', onEscape, options);
+  details.addEventListener('toggle', revealPanel, options);
+  document.addEventListener('pointerdown', closeOutside, options);
+  document.addEventListener('focusin', closeOutside, options);
+  return () => {
+    details.removeAttribute('data-outline-ready');
+    status.remove();
+    listeners.abort();
+  };
+}
+
 export function installRailScrollspy(host: RailHost): void {
   if (states.has(host) || typeof IntersectionObserver === 'undefined') return;
   const links = railLinks(host);
@@ -76,7 +153,10 @@ export function installRailScrollspy(host: RailHost): void {
     const target = document.getElementById(id);
     if (target) targets.set(hash, target);
   }
-  const state: RailState = { stop: null, links, intersecting: new Set() };
+  const article = host.closest('open-reading-shell')?.querySelector('.article-content');
+  const details = article ? host.querySelector('details') : null;
+  const summary = details?.querySelector('summary');
+  const state: RailState = { stop: null, links, intersecting: new Set(), status: null };
   // Register before any early return: an empty target set is deterministic
   // for this host, so re-entering must stay a no-op rather than rescanning.
   states.set(host, state);
@@ -88,6 +168,8 @@ export function installRailScrollspy(host: RailHost): void {
     }
     return;
   }
+  const restoreOutline =
+    details && summary ? enhanceOutline(details, summary, state, targets) : null;
   const byTarget = new Map<Element, string>();
   for (const [hash, target] of targets) byTarget.set(target, hash);
   const observer = new IntersectionObserver(
@@ -114,13 +196,19 @@ export function installRailScrollspy(host: RailHost): void {
     });
   };
   const onHashChange = (): void => {
-    const hash = globalThis.location.hash;
+    let hash = globalThis.location.hash;
+    try {
+      hash = decodeURIComponent(hash);
+    } catch {
+      // Use the raw fragment if it contains an invalid escape sequence.
+    }
     if (targets.has(hash)) markCurrent(state, hash);
     else refreshFromIntersections(state, targets);
   };
   globalThis.addEventListener('scroll', onScroll, { passive: true });
   globalThis.addEventListener('hashchange', onHashChange);
   state.stop = () => {
+    restoreOutline?.();
     observer.disconnect();
     globalThis.removeEventListener('scroll', onScroll);
     globalThis.removeEventListener('hashchange', onHashChange);

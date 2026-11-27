@@ -1,6 +1,7 @@
 import { localizePathIn } from './link.ts';
 import { normalizeLocalePath } from './i18n.ts';
 import { normalizeSiteHref } from './site-url.ts';
+import { SITE_DEFAULT_LOCALE } from '../../site-config.ts';
 
 const SAFE_URL_SCHEMES = new Set(['http:', 'https:', 'mailto:', 'tel:', 'sms:']);
 
@@ -8,27 +9,6 @@ const SAFE_URL_SCHEMES = new Set(['http:', 'https:', 'mailto:', 'tel:', 'sms:'])
 export const REPOSITORY_URL = 'https://github.com/open-element/openelement';
 
 const LOCALE_LABELS: Record<string, string> = { en: '中文', zh: 'English' };
-
-/**
- * The section family each URL subtree owns: a page's sidebar shows exactly the
- * families of its own basePath (and nothing else). Keys are basePaths, so a
- * generated section name missing from its basePath's list would vanish
- * silently from that page — www/tools/generate-site-nav.ts fails the build
- * instead. A basePath with no entry is unfiltered (the Docs hub shows the
- * whole manual). The project-links group is listed under `FALLBACK_SECTION`
- * ("Project"), the name the consumer gives the nameless generated group.
- */
-export const SECTION_MAP: Readonly<Record<string, readonly string[]>> = {
-  '/guide': ['Guide', 'Core', 'Recipes'],
-  '/architecture': ['Principles', 'Reference'],
-  '/reference': ['Reference'],
-  // The error-code reference is the second Reference page (#1413): its sidebar
-  // keeps the same single group so the two reference tables read as one family.
-  '/errors': ['Reference'],
-  '/roadmap': ['Project'],
-  '/changelog': ['Project'],
-  '/contributing': ['Project'],
-};
 
 /** Generated nav data leaves the project-links group nameless; label it. */
 export const FALLBACK_SECTION = 'Project';
@@ -118,6 +98,21 @@ function bareIdentity(path: string): string {
   return path === '/' ? path : path.replace(/\/+$/, '');
 }
 
+export function showsDocumentationSidebar(currentPath: string, locales: string[]): boolean {
+  // SSG may pass a bare route identity while Vite passes the locale-prefixed request path.
+  const { path } = normalizeLocalePath(currentPath, {
+    locales,
+    defaultLocale: SITE_DEFAULT_LOCALE,
+  });
+  return (
+    path !== '/' &&
+    path !== '/404' &&
+    path !== '/404.html' &&
+    path !== '/blog' &&
+    !path.startsWith('/blog/')
+  );
+}
+
 export function localeSwitchPath(
   currentPath: string,
   currentLocale: string,
@@ -162,16 +157,10 @@ export function localeSwitchScopeNote(currentLocale: string): string {
   return currentLocale === 'zh' ? '查看本页的英文版本。' : 'View this page in Chinese.';
 }
 
-export function filterNavSections(items: NavSection[], currentPath: string): NavSection[] {
-  const named = items.map((section) =>
+export function globalNavSections(items: NavSection[]): NavSection[] {
+  return items.map((section) =>
     section.section ? section : { ...section, section: FALLBACK_SECTION },
   );
-  for (const [prefix, sections] of Object.entries(SECTION_MAP)) {
-    if (currentPath.startsWith(prefix)) {
-      return named.filter((section) => sections.includes(section.section));
-    }
-  }
-  return named;
 }
 
 export function mobileSectionRoot(href: string, locales: string[]): string {
@@ -194,7 +183,7 @@ export interface DecoratedHeaderNavLink {
   key: string;
   href: string;
   label: string;
-  current: 'page' | false;
+  current: 'page' | 'location' | undefined;
 }
 
 export interface SidebarRow {
@@ -216,7 +205,6 @@ export interface FooterLink {
   key: string;
   href: string;
   label: string;
-  rel: string | false;
 }
 
 export interface FooterColumnModel {
@@ -224,7 +212,7 @@ export interface FooterColumnModel {
   links: FooterLink[];
 }
 
-export type FooterColumnId = 'framework' | 'docs' | 'project' | 'legal';
+export type FooterColumnId = 'docs' | 'project';
 
 const EXTERNAL_REL = 'noopener noreferrer';
 
@@ -243,6 +231,13 @@ export function decorateHeaderNav(
   }).path;
   const localizedCurrent = localizeLayoutPath(bare, locale, localeList, defaultLocale);
   const currentIdentity = bareIdentity(localizedCurrent);
+  const docsIdentity = localizeLayoutPath('/docs', locale, localeList, defaultLocale);
+  const docsRoute =
+    bare.startsWith('/guide/') ||
+    bare === '/architecture' ||
+    bare.startsWith('/architecture/') ||
+    bare === '/reference' ||
+    bare === '/errors';
   return links.map((link) => {
     const raw = typeof link.href === 'string' && isSafeLayoutUrl(link.href) ? link.href.trim() : '';
     const external = isExternalLayoutUrl(raw);
@@ -250,16 +245,21 @@ export function decorateHeaderNav(
     // builder owns localization (the router still localizes homeHref).
     const href = external ? raw : raw ? layoutSiteHref(raw, locale, localeList, defaultLocale) : '';
     const hrefIdentity = bareIdentity(href);
-    const isCurrent =
-      !external &&
-      href !== '' &&
-      (currentIdentity === hrefIdentity ||
-        (hrefIdentity !== '/' && currentIdentity.startsWith(`${hrefIdentity}/`)));
+    let current: DecoratedHeaderNavLink['current'];
+    if (!external && href) {
+      if (currentIdentity === hrefIdentity) current = 'page';
+      else if (
+        (hrefIdentity === docsIdentity && docsRoute) ||
+        (hrefIdentity !== '/' && currentIdentity.startsWith(`${hrefIdentity}/`))
+      ) {
+        current = 'location';
+      }
+    }
     return {
       key: href || link.label,
       href,
       label: localizedLabel(link.label, link.labelZh, locale),
-      current: isCurrent ? 'page' : false,
+      current,
     };
   });
 }
@@ -288,7 +288,7 @@ export function buildSidebarRows(
   const localizedCurrent = localizeLayoutPath(barePath, locale, localeList, defaultLocale);
   const currentIdentity = bareIdentity(localizedCurrent);
   const rows: SidebarRow[] = [];
-  for (const section of filterNavSections([...sections], barePath)) {
+  for (const section of globalNavSections([...sections])) {
     rows.push({
       key: `section:${section.section}`,
       kind: 'section',
@@ -332,41 +332,22 @@ interface FooterColumnSource {
 }
 
 const FOOTER_COLUMNS: Record<FooterColumnId, FooterColumnSource> = {
-  framework: {
-    labels: { en: 'Framework', zh: '框架' },
-    links: [
-      { path: '/guide/core-concepts', en: 'Core concepts', zh: '核心概念' },
-      { path: '/architecture/design-system', en: 'Design system', zh: '设计体系' },
-      { path: '/architecture', en: 'Architecture', zh: '架构' },
-      { path: '/architecture/dsd', en: 'Declarative Shadow DOM', zh: '声明式 Shadow DOM' },
-    ],
-  },
   docs: {
-    labels: { en: 'Documentation', zh: '文档' },
+    labels: { en: 'Docs', zh: '文档' },
     links: [
-      { path: '/guide/getting-started', en: 'Guide', zh: '指南' },
+      { path: '/docs', en: 'Documentation', zh: '文档首页' },
+      { path: '/guide/getting-started', en: 'Getting Started', zh: '快速开始' },
       { path: '/reference', en: 'API Reference', zh: 'API 参考' },
-      { path: '/guide/api', en: 'API Routes', zh: 'API 路由' },
       { path: '/errors', en: 'Error Codes', zh: '错误码' },
     ],
   },
   project: {
     labels: { en: 'Project', zh: '项目' },
     links: [
-      { path: REPOSITORY_URL, en: 'GitHub', zh: 'GitHub' },
-      { path: '/roadmap', en: 'Roadmap', zh: '路线图' },
-      { path: '/changelog', en: 'Releases', zh: '发布状态' },
+      { path: '/blog', en: 'Blog', zh: '博客' },
+      { path: '/changelog', en: 'Changelog', zh: '更新日志' },
       { path: '/contributing', en: 'Contributing', zh: '参与贡献' },
-    ],
-  },
-  legal: {
-    labels: { en: 'Legal', zh: '法律' },
-    links: [
-      {
-        path: 'https://github.com/open-element/openelement/blob/main/LICENSE',
-        en: 'MIT License',
-        zh: 'MIT 许可证',
-      },
+      { path: '/roadmap', en: 'Roadmap', zh: '路线图' },
     ],
   },
 };
@@ -383,52 +364,79 @@ export function footerColumn(
   const zh = locale === 'zh';
   return {
     label: source.labels[locale] ?? source.labels.en,
-    links: source.links.map((link) => {
-      const external = isExternalLayoutUrl(link.path);
-      return {
-        key: link.path,
-        href: external ? link.path : layoutSiteHref(link.path, locale, localeList, defaultLocale),
-        label: zh ? link.zh : link.en,
-        rel: external ? EXTERNAL_REL : false,
-      };
-    }),
+    links: source.links.map((link) => ({
+      key: link.path,
+      href: layoutSiteHref(link.path, locale, localeList, defaultLocale),
+      label: zh ? link.zh : link.en,
+    })),
   };
 }
 
-/** Bilingual shell-chrome UI strings (landmark labels, disclosures, tagline). */
+/** Bilingual shell-chrome UI strings. */
 export function layoutChromeStrings(locale: string): {
   sidebarLabel: string;
   sidebarToggle: string;
-  footerTagline: string;
   footerCopyright: string;
+  footerLicense: string;
   skipToMain: string;
   menuOpen: string;
+  menuClose: string;
+  themeToggleLabel: string;
+  themeSystemLabel: string;
+  themeSystemDescription: string;
+  /** Label for the group that states the current light, dark, or system mode. */
+  themeGroupLabel: string;
+  themeGroupLight: string;
+  themeGroupDark: string;
+  themeGroupSystem: string;
+  menuLabel: string;
   primaryNavLabel: string;
   mobileNavLabel: string;
+  menuAppearanceLabel: string;
   repositoryLabel: string;
 } {
   if (locale === 'zh') {
     return {
       sidebarLabel: '文档导航',
-      sidebarToggle: '文档',
-      footerTagline: '基于 OpenElement 构建 —— Web Components 原生应用框架',
-      footerCopyright: '(c) 2026 openElement。MIT 许可证。',
+      sidebarToggle: '浏览文档',
+      footerCopyright: '© 2026 openElement',
+      footerLicense: 'MIT 许可证',
       skipToMain: '跳到主要内容',
       menuOpen: '打开导航',
+      menuClose: '关闭导航',
+      themeToggleLabel: '切换主题',
+      themeSystemLabel: '跟随系统',
+      themeSystemDescription: '恢复跟随操作系统的浅色或深色设置。',
+      themeGroupLabel: '主题：跟随系统',
+      themeGroupLight: '主题：浅色',
+      themeGroupDark: '主题：深色',
+      themeGroupSystem: '主题：跟随系统',
+      menuLabel: '导航',
       primaryNavLabel: '主导航',
       mobileNavLabel: '移动端导航',
+      menuAppearanceLabel: '外观',
       repositoryLabel: 'GitHub 仓库（在新标签页打开）',
     };
   }
   return {
     sidebarLabel: 'Documentation navigation',
-    sidebarToggle: 'Documentation',
-    footerTagline: '',
-    footerCopyright: '(c) 2026 openElement. MIT License.',
+    sidebarToggle: 'Browse documentation',
+    footerCopyright: '© 2026 openElement',
+    footerLicense: 'MIT License',
     skipToMain: 'Skip to main content',
     menuOpen: 'Open navigation',
+    menuClose: 'Close navigation',
+    themeToggleLabel: 'Toggle theme',
+    themeSystemLabel: 'Follow system',
+    themeSystemDescription: 'Resume following your operating system’s light or dark setting.',
+    themeGroupLabel: 'Theme: follow system',
+    themeGroupLight: 'Theme: light',
+    themeGroupDark: 'Theme: dark',
+    themeGroupSystem: 'Theme: follow system',
+    menuLabel: 'Navigation',
     primaryNavLabel: 'Primary navigation',
     mobileNavLabel: 'Mobile navigation',
+    menuAppearanceLabel: 'Appearance',
     repositoryLabel: 'GitHub repository (opens in a new tab)',
   };
 }

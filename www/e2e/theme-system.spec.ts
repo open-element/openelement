@@ -40,7 +40,7 @@ async function waitForToggleReady(page: Page): Promise<void> {
 
 test.describe('Theme Toggle', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/guide/getting-started/');
     await page.waitForLoadState('networkidle');
     await waitForToggleReady(page);
   });
@@ -100,41 +100,41 @@ test.describe('Theme Toggle', () => {
     expect(themeAfter2).toBe(themeBefore);
   });
 
-  test('homepage surface colors follow the active theme', async ({ page }) => {
-    await page.evaluate(() => {
-      document.documentElement.setAttribute('data-theme', 'dark');
-      globalThis.dispatchEvent(
-        new CustomEvent('open:theme-change', {
-          detail: { theme: 'dark' },
-        }),
-      );
-    });
+  test('the home route keeps the theme control and repaints its canvas', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    // The homepage canvas is a two-theme surface now: both locale controls
+    // are rendered, the active one is visible, and flipping it repaints every
+    // home region (header, hero, code surface, footer) — not just the button.
+    await waitForToggleReady(page);
+    const toggle = page.locator('open-theme-toggle');
+    await expect(toggle).toBeVisible();
 
-    const dark = await page.evaluate(() => {
-      return {
-        canvas: getComputedStyle(document.body).backgroundImage,
-        surface: getComputedStyle(document.body).backgroundColor,
-      };
-    });
-
-    await page.evaluate(() => {
-      document.documentElement.setAttribute('data-theme', 'light');
-      globalThis.dispatchEvent(
-        new CustomEvent('open:theme-change', {
-          detail: { theme: 'light' },
-        }),
-      );
-    });
-
-    const light = await page.evaluate(() => {
-      return {
-        canvas: getComputedStyle(document.body).backgroundImage,
-        surface: getComputedStyle(document.body).backgroundColor,
-      };
-    });
-
-    expect(dark.canvas).not.toBe(light.canvas);
-    expect(dark.surface).not.toBe(light.surface);
+    const readSurfaces = () =>
+      page.evaluate(() => {
+        const home = document.querySelector('.page-home') as HTMLElement;
+        const pre = document.querySelector('.home-source pre') as HTMLElement;
+        return {
+          theme: document.documentElement.getAttribute('data-theme'),
+          canvas: getComputedStyle(document.body).backgroundColor,
+          ground: getComputedStyle(home).backgroundColor,
+          ink: getComputedStyle(home.querySelector('h1') as HTMLElement).color,
+          header: getComputedStyle(document.querySelector('header') as HTMLElement).backgroundColor,
+          footer: getComputedStyle(document.querySelector('footer') as HTMLElement).backgroundColor,
+          code: getComputedStyle(pre).backgroundColor,
+        };
+      });
+    const before = await readSurfaces();
+    await clickThemeToggle(page);
+    await page.waitForFunction(
+      (prev) => document.documentElement.getAttribute('data-theme') !== prev.theme,
+      before,
+    );
+    const after = await readSurfaces();
+    expect(after.theme).not.toBe(before.theme);
+    for (const key of ['canvas', 'ground', 'ink', 'header', 'footer', 'code'] as const) {
+      expect(after[key], `${key} must follow data-theme on the homepage`).not.toBe(before[key]);
+    }
   });
 });
 

@@ -2,11 +2,11 @@ import type { CollectionOptions, CollectionSchema } from './lib/content.ts';
 import { renderSiteMarkdown } from './lib/markdown.ts';
 
 /**
- * Article frontmatter is the single source of truth for the sidebar nav:
- * `order` sorts within the section, `section` groups the entry (defaulted
- * per collection), and `navLabel` is the short sidebar label when the full
- * `title` is too long. Route modules no longer duplicate this in a `meta`
- * export; www/tools/generate-site-nav.ts reads it from here.
+ * Article frontmatter owns article titles and short `navLabel` copy. The
+ * global documentation sidebar's four groups and their membership/order are
+ * curated in www/tools/generate-site-nav.ts so the same information
+ * architecture appears on every route; frontmatter `section` remains useful
+ * to other collection consumers but does not filter or regroup that tree.
  *
  * Every article collection renders through the shared build-time markdown
  * pipeline (www/lib/markdown.ts): fences compile to Shiki token spans at

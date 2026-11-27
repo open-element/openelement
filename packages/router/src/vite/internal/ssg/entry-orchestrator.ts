@@ -58,6 +58,7 @@ import { renderApiRoute, renderMiddleware } from './entry-server-codegen.ts';
 import { renderSsgSection } from './entry-render-ssg.ts';
 import { readGeneratedElementHost } from './generated-element-host-metadata.ts';
 import { isFunctionPage, pageKindOf } from './page-classification.ts';
+import { localeRouteAliases, NOT_FOUND_ROUTE_PATH } from './page-url-forms.ts';
 import { hasControlCharacter } from '../../../internal/control-characters.ts';
 import { buildError, DescriptorErrorCode } from '../../../internal/error-codes.ts';
 import { quoteGeneratedJavaScriptValue } from './codegen-literals.ts';
@@ -621,6 +622,9 @@ export function renderEntry(desc: EntryDescriptor): string {
     lines.push(`  ...__apiRouteRecords,`);
   }
   for (const route of desc.pageRoutes) {
+    // The SSG pass materializes the /404 document from its canonical page
+    // handler. The dev entry hands direct requests to the styled terminal.
+    if (!desc.isSSG && route.path === NOT_FOUND_ROUTE_PATH) continue;
     lines.push(
       `  { id: ${quoteGeneratedJavaScriptValue(route.filePath)}, path: ${quoteGeneratedJavaScriptValue(
         route.path,
@@ -628,15 +632,36 @@ export function renderEntry(desc: EntryDescriptor): string {
     );
   }
   lines.push(`], { methodNotAllowed: __methodNotAllowed });`);
-  // The route middleware IS the WinterCG shape: it registers as the app's
-  // route layer (after the fn-form mounts, before the notFound terminal)
-  // and falls through (next) when nothing matches, so the styled-404
-  // terminal below answers (#1560).
-  lines.push(`app.route(__routeMiddleware);`);
+
+  // The page aliases read the same documents the static build emits. The
+  // strict table keeps exact API and page matches, including method checks.
+  // The app owns one route layer, between the fn-form API mounts and the 404.
+  const pageAliases = desc.pageRoutes
+    .filter((route) => route.path !== '/' && route.path !== NOT_FOUND_ROUTE_PATH)
+    .map((route) => ({ id: route.filePath, path: route.path, canonicalPath: route.path }));
+  pageAliases.push(...localeRouteAliases(desc));
+  if (pageAliases.length) {
+    lines.push(`const __pageUrlMiddleware = __createRouteMiddleware([`);
+    for (const alias of pageAliases) {
+      lines.push(
+        `  { id: ${quoteGeneratedJavaScriptValue(alias.id)}, path: ${quoteGeneratedJavaScriptValue(
+          alias.path,
+        )}, handlers: { GET: __pageHandlers[${quoteGeneratedJavaScriptValue(alias.canonicalPath)}].GET } },`,
+      );
+    }
+    lines.push(`], { trailingSlash: "ignore" });`);
+    lines.push(`app.route((request, next) => __routeMiddleware(request, () =>`);
+    lines.push(
+      `  request.method === "GET" || request.method === "HEAD" ? __pageUrlMiddleware(request, next) : next(),`,
+    );
+    lines.push(`));`);
+  } else {
+    lines.push(`app.route(__routeMiddleware);`);
+  }
   lines.push('');
 
   // --- Styled 404 (#923): unmatched paths render the /404 page ---
-  const notFoundPage = desc.pageRoutes.find((r) => r.path === '/404');
+  const notFoundPage = desc.pageRoutes.find((r) => r.path === NOT_FOUND_ROUTE_PATH);
   if (notFoundPage) {
     renderNotFoundRoute(
       lines,

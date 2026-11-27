@@ -31,7 +31,7 @@ function isProbeError(result: unknown): result is ProbeError {
  * by the island controller after custom-element upgrade.
  */
 async function waitForHydratedSearch(page: Page): Promise<void> {
-  await page.goto('/');
+  await page.goto('/guide/getting-started/');
   await page.waitForLoadState('networkidle');
   await page.waitForFunction(
     () => !!customElements.get('open-search') && !!customElements.get('open-theme-toggle'),
