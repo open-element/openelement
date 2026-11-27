@@ -37,6 +37,7 @@ export {
 export {
   compileServerComponentIfAdmitted,
   compileServerComponentModule,
+  prepareServerComponentImports,
   type CompileServerComponentResult,
   type ResolvedServerComponentSource,
   type ServerComponentCompileOptions,

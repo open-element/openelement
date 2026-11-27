@@ -336,6 +336,71 @@ function exportedServerComponents(source: string, fileName: string): Map<string,
   return components;
 }
 
+/** Static named value imports are the only candidates for direct server JSX calls. */
+function* serverComponentValueImports(sourceFile: ts.SourceFile) {
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
+      continue;
+    }
+    const clause = statement.importClause;
+    const bindings = clause?.namedBindings;
+    if (clause?.isTypeOnly || bindings === undefined || !ts.isNamedImports(bindings)) continue;
+    const specifier = statement.moduleSpecifier.text;
+    const elements = bindings.elements.filter((element) => !element.isTypeOnly);
+    if (specifier !== SERVER_HELPER_SPECIFIER && elements.length > 0) {
+      yield { specifier, elements };
+    }
+  }
+}
+
+/** Resolve the compiler's static source candidates through an asynchronous host. */
+export async function prepareServerComponentImports(
+  source: string,
+  fileName: string,
+  resolve: (
+    specifier: string,
+  ) =>
+    | string
+    | ResolvedServerComponentSource
+    | undefined
+    | Promise<string | ResolvedServerComponentSource | undefined>,
+): Promise<ServerComponentCompileOptions['resolveModule']> {
+  if (
+    !isJsxModuleId(fileName) ||
+    !source.includes('export') ||
+    !source.includes('import') ||
+    !source.includes('<')
+  ) {
+    return undefined;
+  }
+  const { sourceFile, syntaxDiagnostics } = typescriptParser.parseModule(source, fileName);
+  if (syntaxDiagnostics.length > 0) return undefined;
+  const tags = new Set<string>();
+  const visit = (node: ts.Node): void => {
+    if (
+      (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+      ts.isIdentifier(node.tagName)
+    ) {
+      tags.add(node.tagName.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  for (const statement of sourceFile.statements) {
+    if (isExportedServerComponentDeclaration(statement)) visit(statement);
+  }
+  const specifiers = new Set<string>();
+  for (const { specifier, elements } of serverComponentValueImports(sourceFile)) {
+    if (elements.some((element) => tags.has(element.name.text))) specifiers.add(specifier);
+  }
+  if (specifiers.size === 0) return undefined;
+  const modules = new Map(
+    await Promise.all(
+      [...specifiers].map(async (specifier) => [specifier, await resolve(specifier)] as const),
+    ),
+  );
+  return (specifier) => modules.get(specifier);
+}
+
 function statementIsAsync(statement: ts.Statement): boolean {
   if (ts.isFunctionDeclaration(statement)) {
     return (ts.getModifiers(statement) ?? []).some(
@@ -422,18 +487,7 @@ export function compileServerComponentModule(
   const componentBindings = new Map<string, string>();
   const asyncComponents = new Set<string>();
   if (options.resolveModule !== undefined) {
-    for (const statement of sf.statements) {
-      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
-        continue;
-      }
-      const clause = statement.importClause;
-      if (clause === undefined || clause.isTypeOnly) continue;
-      const bindings = clause.namedBindings;
-      if (bindings === undefined || !ts.isNamedImports(bindings)) continue;
-      const valueImports = bindings.elements.filter((element) => !element.isTypeOnly);
-      if (valueImports.length === 0) continue;
-      const specifier = statement.moduleSpecifier.text;
-      if (specifier === SERVER_HELPER_SPECIFIER) continue;
+    for (const { specifier, elements } of serverComponentValueImports(sf)) {
       const importedModule = options.resolveModule(specifier);
       if (importedModule === undefined) continue;
       if (typeof importedModule !== 'string' && !isJsxModuleId(importedModule.fileName)) continue;
@@ -441,7 +495,7 @@ export function compileServerComponentModule(
         typeof importedModule === 'string' ? importedModule : importedModule.source,
         typeof importedModule === 'string' ? `${fileName}→${specifier}` : importedModule.fileName,
       );
-      for (const element of valueImports) {
+      for (const element of elements) {
         const imported = element.propertyName?.text ?? element.name.text;
         if (!importedComponents.has(imported)) continue;
         componentBindings.set(element.name.text, element.name.text);

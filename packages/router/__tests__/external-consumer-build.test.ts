@@ -143,6 +143,7 @@ async function buildFixture(): Promise<Fixture> {
       '',
       'export default defineConfig({',
       '  resolve: {',
+      "    extensions: ['.jsx', '.js', '.tsx', '.ts', '.mjs', '.mts', '.json'],",
       '    alias: {',
       "      '@shared': new URL('./app/shared', import.meta.url).pathname,",
       '    },',
@@ -309,6 +310,16 @@ export { readProofLabel as proofText } from './proof-copy.ts';
 `,
   );
   await write(
+    join(appDir, 'app/components/jsx-heading.tsx'),
+    `export const ExactHeading = () => <h2>Explicit TSX import</h2>;
+`,
+  );
+  await write(
+    join(appDir, 'app/components/jsx-heading.js'),
+    `export const JsxHeading = 'This is an ordinary value, not a JSX component';
+`,
+  );
+  await write(
     join(appDir, 'app/components/jsx-aside.jsx'),
     `import { defineIslandConfig } from '@openelement/router';
 
@@ -353,10 +364,11 @@ export default function JsxList(props) {
     join(appDir, 'app/routes/proof-jsx.jsx'),
     `import { definePage } from '@openelement/router';
 import { JsxHeading as Heading } from '../components/jsx-heading';
+import { ExactHeading } from '../components/jsx-heading.tsx';
 import '../components/jsx-aside.jsx';
 
 export function JsxPage() {
-  return <main><Heading /><oe-jsx-list heading="JSX list"></oe-jsx-list><oe-jsx-aside></oe-jsx-aside></main>;
+  return <main><Heading /><ExactHeading /><oe-jsx-list heading="JSX list"></oe-jsx-list><oe-jsx-aside></oe-jsx-aside></main>;
 }
 
 export default definePage(JsxPage, { renderIntent: { mode: 'static' } });
@@ -477,6 +489,7 @@ test('external consumer: a JSX route prerenders and a JSX island claims and upda
   const distDir = join(fixture.appDir, 'dist');
   const html = await readFile(join(distDir, 'proof-jsx/index.html'), 'utf8');
   expect(html).toContain('<h1>JSX authoring</h1>');
+  expect(html).toContain('<h2>Explicit TSX import</h2>');
   expect(html).toContain('Discovered JSX component</aside>');
   expect(html).toContain('<oe-jsx-list heading="JSX list"><template shadowrootmode="open">');
   expect(html).toContain('<section aria-label="JSX list">');

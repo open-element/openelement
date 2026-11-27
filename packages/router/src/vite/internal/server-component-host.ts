@@ -13,9 +13,11 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, resolve } from 'pathe';
-import type { ResolvedServerComponentSource } from '@openelement/compiler';
+import { isJsxModuleId, type ResolvedServerComponentSource } from '@openelement/compiler';
+import type { ModuleWalkResolver } from './module-graph-walk.ts';
 
 /** Module extensions whose text can carry (or import to) compiled programs. */
 const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts'] as const;
@@ -37,6 +39,24 @@ export type ServerComponentModuleResolver = (
   specifier: string,
   importer: string,
 ) => ResolvedServerComponentSource | null;
+
+/** Read the exact authored JSX source the active Vite environment resolved. */
+export async function resolveViteServerComponentSource(
+  specifier: string,
+  resolve: ModuleWalkResolver['resolve'],
+): Promise<ResolvedServerComponentSource | undefined> {
+  try {
+    const resolved = await resolve(specifier);
+    if (resolved === null || resolved.external) return undefined;
+    const fileName = resolved.id;
+    if (!isAbsolute(fileName) || fileName.includes('?') || !isJsxModuleId(fileName)) {
+      return undefined;
+    }
+    return { fileName, source: await readFile(fileName, 'utf8') };
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * True when a path spelling can carry authored source text. A spelling whose

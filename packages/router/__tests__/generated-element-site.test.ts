@@ -72,11 +72,11 @@ const pluginContext = {
 };
 
 /** Run a transform and keep the diagnostic the plugin reported, if any. */
-function transformCapturing(
+async function transformCapturing(
   hooks: ReturnType<typeof devHost>['hooks'],
   code: string,
   id: string,
-): { result: { code: string } | null; diagnostics: Array<{ message: string }> } {
+): Promise<{ result: { code: string } | null; diagnostics: Array<{ message: string }> }> {
   const diagnostics: Array<{ message: string }> = [];
   const context = {
     error(error: { message?: string }): never {
@@ -88,10 +88,10 @@ function transformCapturing(
     this: unknown,
     code: string,
     id: string,
-  ) => { code: string } | null;
+  ) => Promise<{ code: string } | null>;
   let result: { code: string } | null = null;
   try {
-    result = hook.call(context, code, id);
+    result = await hook.call(context, code, id);
   } catch {
     // the fake context throws after recording
   }
@@ -118,7 +118,7 @@ type TransformHook = (
   this: unknown,
   code: string,
   id: string,
-) => { code: string; map: unknown } | null;
+) => Promise<{ code: string; map: unknown } | null>;
 
 function transform(hooks: ReturnType<typeof devHost>['hooks'], code: string, id: string) {
   const hook = hooks.transform as unknown as TransformHook;
@@ -173,13 +173,13 @@ describe('M09-1b router dev host', () => {
   const islandFile = join(root, 'app/islands/dev-card.tsx');
   const islandId = '/proj/app/islands/dev-card.tsx';
 
-  test('emits the generated class for an admitted island', () => {
+  test('emits the generated class for an admitted island', async () => {
     const { hooks } = devHost({ viteRoot: '/proj' });
     mkdirSync(join(root, 'app/islands'), { recursive: true });
     writeFileSync(islandFile, PROFILE);
 
     const id = join(root, 'app/islands/dev-card.tsx');
-    const { result } = transformCapturing(hooks, PROFILE, id);
+    const { result } = await transformCapturing(hooks, PROFILE, id);
     expect(result).not.toBeNull();
     expect(result!.code).toContain('createGeneratedElementClass');
     expect(result!.code).toContain('export default __oeDevCardElement;');
@@ -190,9 +190,13 @@ describe('M09-1b router dev host', () => {
     expect(result!.code).not.toContain('root: "light"');
   });
 
-  test('an authored shadow sidecar still reaches the emitted descriptor root', () => {
+  test('an authored shadow sidecar still reaches the emitted descriptor root', async () => {
     const { hooks } = devHost({ viteRoot: '/proj' });
-    const { result } = transformCapturing(hooks, SHADOW_PROFILE, '/proj/app/islands/dev-card.tsx');
+    const { result } = await transformCapturing(
+      hooks,
+      SHADOW_PROFILE,
+      '/proj/app/islands/dev-card.tsx',
+    );
     expect(result).not.toBeNull();
     expect(result!.code).toContain('createGeneratedElementClass');
     // The resolver supplies the tag only; the root is the authored sidecar's
@@ -201,26 +205,30 @@ describe('M09-1b router dev host', () => {
     expect(result!.code).toContain('root: "shadow-open"');
   });
 
-  test('a hostless module never acquires the generated class', () => {
+  test('a hostless module never acquires the generated class', async () => {
     const { hooks } = devHost({ viteRoot: '/proj' });
-    const result = transform(hooks, PROFILE, '/proj/app/components/dev-card.tsx');
+    const result = await transform(hooks, PROFILE, '/proj/app/components/dev-card.tsx');
     expect(result === null || !result.code.includes('createGeneratedElementClass')).toBe(true);
   });
 
-  test('a missing island sidecar refuses with the coded diagnostic', () => {
+  test('a missing island sidecar refuses with the coded diagnostic', async () => {
     const { hooks } = devHost({ viteRoot: '/proj' });
     const source = `function DevCard() {
   return <p>generated</p>;
 }
 export default DevCard;
 `;
-    const { diagnostics } = transformCapturing(hooks, source, '/proj/app/islands/dev-card.tsx');
+    const { diagnostics } = await transformCapturing(
+      hooks,
+      source,
+      '/proj/app/islands/dev-card.tsx',
+    );
     expect(diagnostics.map((item) => item.message).join('\n')).toMatch(
       /OEIR_GENERATED_ELEMENT_MISSING_SITE_MARKER/,
     );
   });
 
-  test('a props parameter refuses with the coded diagnostic', () => {
+  test('a props parameter refuses with the coded diagnostic', async () => {
     const { hooks } = devHost({ viteRoot: '/proj' });
     // The M09-1a props gate: no `properties` table is declared here, so the
     // parameter has no attribute channel. A declared table replaces this gate
@@ -232,7 +240,11 @@ function DevCard(props) {
 }
 export default DevCard;
 `;
-    const { diagnostics } = transformCapturing(hooks, source, '/proj/app/islands/dev-card.tsx');
+    const { diagnostics } = await transformCapturing(
+      hooks,
+      source,
+      '/proj/app/islands/dev-card.tsx',
+    );
     expect(diagnostics.map((item) => item.message).join('\n')).toMatch(
       /OEIR_GENERATED_ELEMENT_UNDECLARED_PROPS/,
     );
@@ -243,7 +255,7 @@ export default DevCard;
     mkdirSync(join(root, 'app/islands'), { recursive: true });
     writeFileSync(islandFile, PROFILE);
     const id = islandId.replace('/proj', root);
-    expect(transform(hooks, PROFILE, id)).not.toBeNull();
+    expect(await transform(hooks, PROFILE, id)).not.toBeNull();
 
     const reloads: string[] = [];
     const hmr = {
@@ -266,7 +278,7 @@ export default DevCard;
 });
 
 describe('alpha16 tag-source slice: a page-local component in the dev host', () => {
-  test('a declared sidecar tag admits a module outside islandsDir to the lane', () => {
+  test('a declared sidecar tag admits a module outside islandsDir to the lane', async () => {
     // The reference case: www/app/site-ui/open-artifact-panel.tsx is neither an
     // island (no path convention) nor a package declaration, so before the
     // declared-tag source the dev transform declined it and emitted nothing.
@@ -285,10 +297,10 @@ describe('alpha16 tag-source slice: a page-local component in the dev host', () 
     const moduleId = '/proj/app/site-ui/open-artifact-panel.tsx';
 
     // Without the declared map the module is NOT a site: the pre-slice answer.
-    expect(transform(hooks, source, moduleId)).toBeNull();
+    expect(await transform(hooks, source, moduleId)).toBeNull();
 
     state.ctx.phase1.declaredElementTags = new Map([['app/site-ui/open-artifact-panel.tsx', tag]]);
-    const { result } = transformCapturing(hooks, source, moduleId);
+    const { result } = await transformCapturing(hooks, source, moduleId);
     expect(result).not.toBeNull();
     expect(result!.code).toContain('createGeneratedElementClass');
     expect(result!.code).toContain(`__oeElementTag = "${tag}"`);

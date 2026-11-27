@@ -34,11 +34,16 @@ import {
   compileGeneratedElementIfAdmitted,
   compileServerComponentIfAdmitted,
   compiledArtifactClassCandidates,
+  prepareServerComponentImports,
 } from '@openelement/compiler';
 import { join, resolve } from 'pathe';
 import { readComponentDeclaration } from './component-declaration.ts';
 import { islandStyleDeclarationFor } from './island-style-declarations.ts';
-import { createServerComponentSourceResolver } from './server-component-host.ts';
+import {
+  createServerComponentSourceResolver,
+  resolveViteServerComponentSource,
+} from './server-component-host.ts';
+import type { ModuleWalkResolver } from './module-graph-walk.ts';
 
 /** One module the collection pass should compile. */
 export interface CandidateModule {
@@ -79,6 +84,7 @@ export interface CollectShadowCandidatesOptions {
    * still compiles (with no `__ssr`-routed nested hosts).
    */
   readonly serverComponentTags?: readonly string[];
+  readonly viteResolver?: ModuleWalkResolver | undefined;
 }
 
 /**
@@ -191,9 +197,19 @@ export async function collectShadowClassCandidates(
     // authoritative registration.
     let serverCompiled: ReturnType<typeof compileServerComponentIfAdmitted>;
     try {
+      const resolver = options.viteResolver;
+      const resolveModule =
+        resolver === undefined
+          ? (specifier: string) =>
+              createServerComponentSourceResolver({ root: options.root })(specifier, file) ??
+              undefined
+          : await prepareServerComponentImports(source, file, (specifier) =>
+              resolveViteServerComponentSource(specifier, (target) =>
+                resolver.resolve(target, file),
+              ),
+            );
       serverCompiled = compileServerComponentIfAdmitted(source, file, {
-        resolveModule: (specifier) =>
-          createServerComponentSourceResolver({ root: options.root })(specifier, file) ?? undefined,
+        ...(resolveModule === undefined ? {} : { resolveModule }),
         ...(options.serverComponentTags === undefined
           ? {}
           : { compiledTags: options.serverComponentTags }),

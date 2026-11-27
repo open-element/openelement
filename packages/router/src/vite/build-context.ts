@@ -122,6 +122,8 @@ class Phase1Meta {
 
   /** User-provided resolve.alias in its original format */
   userResolveAlias: Record<string, string> | Alias[] | null = null;
+  /** Effective Vite extension precedence, reapplied to the client and SSG builds. */
+  sourceResolveExtensions: string[] | undefined;
 
   /**
    * The browser-client resolve policy the resolved Vite config actually
@@ -365,6 +367,7 @@ export class OpenElementBuildContext {
     this.buildArtifacts = null;
 
     const userResolveAlias = this.phase1.userResolveAlias;
+    const sourceResolveExtensions = this.phase1.sourceResolveExtensions;
     const clientResolveConditions = this.phase1.clientResolveConditions;
     const clientPreserveSymlinks = this.phase1.clientPreserveSymlinks;
     const i18nOptions = this.plugins.i18nOptions;
@@ -374,6 +377,7 @@ export class OpenElementBuildContext {
     // persist through buildStart() for Phase 2 and 3 to use.
     Object.assign(this.phase1, new Phase1Meta(), {
       userResolveAlias,
+      sourceResolveExtensions,
       clientResolveConditions,
       clientPreserveSymlinks,
     });

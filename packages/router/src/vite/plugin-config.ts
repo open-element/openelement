@@ -466,6 +466,7 @@ export function createConfigHooks(
 
     configResolved(cfg) {
       state.viteRoot = cfg.root;
+      state.ctx.phase1.sourceResolveExtensions = cfg.resolve?.extensions;
       // Captured for the scan-time admission derivation: the derived packages'
       // SSR externalization is appended to this live config's `ssr.noExternal`
       // in buildStart (after this hook returned), the same list the dev

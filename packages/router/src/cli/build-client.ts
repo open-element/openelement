@@ -91,7 +91,7 @@ import {
 } from '../vite/internal/style-assets.ts';
 import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
 import {
-  createServerComponentSourceResolver,
+  resolveViteServerComponentSource,
   serverComponentAdmissionTags,
 } from '../vite/internal/server-component-host.ts';
 import { compilerBehaviorDeclarations } from '../vite/internal/ssg/client-admission.ts';
@@ -956,7 +956,9 @@ async function buildClient(
         ? { conditions: [...ctx.phase1.clientResolveConditions] }
         : {}),
       ...(ctx.phase1.clientPreserveSymlinks ? { preserveSymlinks: true } : {}),
-      extensions: ['.ts', '.tsx', '.js', '.jsx', '.json'],
+      ...(ctx.phase1.sourceResolveExtensions === undefined
+        ? {}
+        : { extensions: ctx.phase1.sourceResolveExtensions }),
       dedupe: ['preact'],
     },
     ssr: {
@@ -1040,10 +1042,8 @@ async function buildClient(
         // constructors through the same transform — the client build must
         // lower them exactly as the dev and SSG hosts do, or the route
         // module would ship authored JSX.
-        resolveServerComponentModule: createServerComponentSourceResolver({
-          root,
-          workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
-        }),
+        resolveServerComponentModule: (specifier, _importer, resolve) =>
+          resolveViteServerComponentSource(specifier, resolve),
         // The union the entry's SSR registry carries (renderable islands plus
         // static compiled components): a function page's nested host rides
         // `__ssr` under exactly the tags the render can expand.

@@ -1,7 +1,7 @@
 /** Discover compiled static components reachable from local route imports. */
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { dirname, isAbsolute, relative, resolve } from 'pathe';
+import { isAbsolute, relative, resolve } from 'pathe';
 import type { RouteEntry } from '../../framework.ts';
 import type { StaticComponentDecl } from '@openelement/protocol/ssg';
 import { normalizeSeparators } from '@openelement/element/build-utils';
@@ -249,16 +249,6 @@ function readPageComponentSpecifier(
   return argument?.kind === 'import' ? { specifier: argument.specifier } : undefined;
 }
 
-/** Resolve a relative specifier against its importing module, with extension probing. */
-function resolveFrom(specifier: string, importer: string): string | undefined {
-  if (!specifier.startsWith('.')) return undefined;
-  const base = resolve(dirname(importer), specifier);
-  for (const candidate of [base, `${base}.tsx`, `${base}.ts`, `${base}/index.tsx`]) {
-    if (existsSync(candidate)) return candidate;
-  }
-  return undefined;
-}
-
 export async function scanStaticComponents(
   options: ScanStaticComponentsOptions,
 ): Promise<StaticComponentScanResult> {
@@ -299,11 +289,12 @@ export async function scanStaticComponents(
     const routeFile = resolve(routeRoot, route.filePath);
     const pageFacts = readPageComponentSpecifier(route, routeFile);
     if (pageFacts === undefined) continue;
-    const resolved = resolveFrom(pageFacts.specifier, routeFile);
+    const target = await options.resolve.resolve(pageFacts.specifier, routeFile).catch(() => null);
+    const resolved = target?.external ? undefined : target?.id.split('?', 1)[0];
     // A route that passes a LOCAL FUNCTION it declares itself is a server
     // function page, not an imported component: its module is the route module,
     // and re-recording it here would make every such page a static component.
-    if (resolved === undefined || resolved === routeFile) continue;
+    if (resolved === undefined || resolved === routeFile || !inside(root, resolved)) continue;
     pageComponentFiles.add(resolved);
   }
   const reachableFiles = [...new Set([...walk.files, ...pageComponentFiles])];

@@ -255,6 +255,7 @@ export function devStyleComponentsPlugin(state: OpenPluginState, session: DevSty
       if (facts.root === 'light') continue;
       await collectShadowClassCandidates({
         root,
+        viteResolver: state.resolveModule,
         modules: [{ path: facts.moduleId, tag: facts.tagName }],
         candidates: state.classCandidates,
       });
@@ -384,6 +385,7 @@ export function devStyleComponentsPlugin(state: OpenPluginState, session: DevSty
           // the whole app).
           await collectShadowClassCandidates({
             root,
+            viteResolver: state.resolveModule,
             modules: [{ path: file }],
             candidates: state.classCandidates,
           });

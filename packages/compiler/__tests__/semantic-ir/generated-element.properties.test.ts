@@ -428,12 +428,12 @@ test('a cyclic props type alias refuses instead of overflowing the stack (B1)', 
   }
 });
 
-test('the plugin boundary reports the coded cycle refusal, never a RangeError (B1)', () => {
+test('the plugin boundary reports the coded cycle refusal, never a RangeError (B1)', async () => {
   type TransformHook = (
     this: unknown,
     code: string,
     id: string,
-  ) => { code: string; map: unknown } | null;
+  ) => Promise<{ code: string; map: unknown } | null>;
   const source = island(
     'properties: { count: {} }',
     counter('props: A'),
@@ -451,7 +451,7 @@ test('the plugin boundary reports the coded cycle refusal, never a RangeError (B
   };
   const transform = (plugin.transform as unknown as TransformHook).bind(context);
   try {
-    transform(source, FILE);
+    await transform(source, FILE);
   } catch (error) {
     // The plugin's this.error path is the expected refusal channel.
     expect(error).toBe(thrown);

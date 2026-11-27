@@ -77,7 +77,7 @@ import {
 } from '../vite/generated-element-site.ts';
 import { serverStyleAssetPlugin } from '../vite/internal/style-assets.ts';
 import {
-  createServerComponentSourceResolver,
+  resolveViteServerComponentSource,
   serverComponentAdmissionTags,
 } from '../vite/internal/server-component-host.ts';
 import { normalizeViteAliases } from '../vite/alias-utils.ts';
@@ -729,10 +729,8 @@ async function buildSSG(
           workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
           // Route/island sources carry the island delivery policy statement;
           // the compiler admits it only through the injected descriptor.
-          resolveServerComponentModule: createServerComponentSourceResolver({
-            root,
-            workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
-          }),
+          resolveServerComponentModule: (specifier, _importer, resolve) =>
+            resolveViteServerComponentSource(specifier, resolve),
           // The union the entry's SSR registry carries — renderable islands
           // plus static compiled components (the same union
           // entry-orchestrator binds as the render's ssrRenderableTags), so a
@@ -809,7 +807,9 @@ async function buildSSG(
       ],
       resolve: {
         preserveSymlinks: false,
-        extensions: ['.ts', '.tsx', '.js', '.jsx', '.json'],
+        ...(ctx.phase1.sourceResolveExtensions === undefined
+          ? {}
+          : { extensions: ctx.phase1.sourceResolveExtensions }),
         ...(viteResolveAlias ? { alias: viteResolveAlias } : {}),
       },
     });

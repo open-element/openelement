@@ -899,6 +899,7 @@ export function createBuildStartHook(state: OpenPluginState): Pick<Plugin, 'buil
         if (state.produceMode === 'serve') {
           await collectShadowClassCandidates({
             root: process.cwd(),
+            viteResolver: state.resolveModule,
             candidates: state.classCandidates,
             modules: [
               ...(state.ctx.phase1.staticComponents ?? []).map((decl) => ({

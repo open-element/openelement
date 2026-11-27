@@ -130,7 +130,7 @@ function expectLocatedAwaitRefusal(
  * (OEC9032 on `this.error`) and must not come back as null, which is how the
  * host would leave the authored module on another lane.
  */
-function productionRefusal(source: string): { returned: unknown; message: string } {
+async function productionRefusal(source: string): Promise<{ returned: unknown; message: string }> {
   const plugin = compiledElementPlugin();
   const transform = plugin.transform;
   if (typeof transform !== 'function') {
@@ -139,7 +139,7 @@ function productionRefusal(source: string): { returned: unknown; message: string
   let returned: unknown = undefined;
   let thrown: unknown;
   try {
-    returned = transform.call(
+    returned = await transform.call(
       {
         error(message: unknown): never {
           throw new Error(typeof message === 'string' ? message : JSON.stringify(message));
@@ -169,8 +169,8 @@ function admissionRefusal(source: string): { returned: unknown; codes: string[] 
   }
 }
 
-function expectProductionOEC9032(source: string): void {
-  const pluginResult = productionRefusal(source);
+async function expectProductionOEC9032(source: string): Promise<void> {
+  const pluginResult = await productionRefusal(source);
   expect(pluginResult.returned).not.toBeNull();
   expect(pluginResult.returned).toBeUndefined();
   expect(pluginResult.message).toContain('OEC9032');
@@ -367,8 +367,8 @@ describe('full-await refusals stay located OEC9032', () => {
     ).toEqual(['OEC9032']);
   });
 
-  test('statements before the return fail closed on the production transform', () => {
-    expectProductionOEC9032(`
+  test('statements before the return fail closed on the production transform', async () => {
+    await expectProductionOEC9032(`
       export async function Page() {
         const title = await pending();
         return <p>{title}</p>;
@@ -406,8 +406,8 @@ describe('full-await refusals stay located OEC9032', () => {
     ).toEqual(['OEC9032']);
   });
 
-  test('a block-bodied async arrow fails closed on the production transform', () => {
-    expectProductionOEC9032(`
+  test('a block-bodied async arrow fails closed on the production transform', async () => {
+    await expectProductionOEC9032(`
       export const Page = async () => {
         return <p>{await pending()}</p>;
       };

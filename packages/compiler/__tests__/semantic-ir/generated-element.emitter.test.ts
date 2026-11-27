@@ -188,25 +188,25 @@ describe('M09-1a generated element emitter', () => {
     expect(compiled!.code).not.toContain('customElements');
   });
 
-  test('the plugin lane is inert without the internal site option and runs with it', () => {
+  test('the plugin lane is inert without the internal site option and runs with it', async () => {
     type TransformHook = (
       this: unknown,
       code: string,
       id: string,
-    ) => { code: string; map: unknown } | null;
+    ) => Promise<{ code: string; map: unknown } | null>;
     const context = {
       error(error: unknown): never {
         throw error;
       },
     };
     const inert = (compiledElementPlugin().transform as unknown as TransformHook).bind(context);
-    expect(inert(PROFILE, FILE)).toBeNull();
+    expect(await inert(PROFILE, FILE)).toBeNull();
 
     const activePlugin = compiledElementPlugin({
       generatedElementSite: (moduleId) => (moduleId === FILE ? SITE : null),
     });
     const active = (activePlugin.transform as unknown as TransformHook).bind(context);
-    const result = active(PROFILE, FILE);
+    const result = await active(PROFILE, FILE);
     expect(result).not.toBeNull();
     expect(result!.code).toContain('export default __oeProfileElement;');
     expect(result!.code).toContain('createGeneratedElementClass');

@@ -66,6 +66,7 @@ import {
   type ClassCandidateRegistry,
   compileGeneratedElementIfAdmitted,
   compileServerComponentIfAdmitted,
+  prepareServerComponentImports,
   readCompiledArtifactStyles,
   getStyleRequest,
   hasStyleImporter,
@@ -76,7 +77,7 @@ import {
   styleRequestsForImporter,
 } from '@openelement/compiler';
 import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
-import { createServerComponentSourceResolver } from './server-component-host.ts';
+import { resolveViteServerComponentSource } from './server-component-host.ts';
 import { islandStyleScopeTag, type IslandStyleDeclaration } from './island-style-declarations.ts';
 import { walkModuleGraph } from './module-graph-walk.ts';
 import { registerArtifactCandidates } from './collect-shadow-candidates.ts';
@@ -746,10 +747,6 @@ async function discoverServerRenderedModules(
   }
   const effectiveRoot = root ?? process.cwd();
   const workspaceRoot = findBuildWorkspaceRootOrUndefined(effectiveRoot);
-  const serverComponentResolver = createServerComponentSourceResolver({
-    root: effectiveRoot,
-    workspaceRoot,
-  });
   const walk = await walkModuleGraph(this, roots);
   if (walk.truncated) {
     this.warn(
@@ -818,14 +815,14 @@ async function discoverServerRenderedModules(
     // no shadow root), and its style EDGES are honestly skipped — a function
     // page owns no element class to hang the DSD `<link>` on, and a
     // registered edge with no consumer would emit an orphan CSS asset.
-    const serverCompiled = compileServerComponentIfAdmitted(
-      source,
-      stableModuleId(file, effectiveRoot, workspaceRoot),
-      {
-        resolveModule: (specifier) => serverComponentResolver(specifier, file) ?? undefined,
-        compiledTags: serverComponentTags,
-      },
+    const moduleId = stableModuleId(file, effectiveRoot, workspaceRoot);
+    const resolveModule = await prepareServerComponentImports(source, moduleId, (specifier) =>
+      resolveViteServerComponentSource(specifier, (target) => this.resolve(target, file)),
     );
+    const serverCompiled = compileServerComponentIfAdmitted(source, moduleId, {
+      ...(resolveModule === undefined ? {} : { resolveModule }),
+      compiledTags: serverComponentTags,
+    });
     if (serverCompiled !== null) {
       candidates.register(file, serverCompiled.classCandidates ?? [], { shadow: false });
       continue;
