@@ -112,10 +112,9 @@ const entries: Record<SiteLocale, TimelineEntry[]> = {
 const content = {
   en: {
     headTitle: 'Roadmap',
-    headDescription: `OpenElement’s current capabilities and planned work toward v1.0.`,
+    headDescription: `openElement’s current capabilities and planned work toward v1.0.`,
     pageTitle: 'Roadmap',
-    heroLede:
-      'Compose native Web UI with TSX, deliver HTML first, and activate interactions when needed.',
+    heroLede: 'See what you can use in the current checkout and what is planned for v1.0.',
     railItems:
       '[{"id":"release-line","label":"Release line"},{"id":"product-boundary","label":"Product boundary"},{"id":"decision-matrix","label":"Decision matrix"},{"id":"system-visual","label":"System visual"}]',
     architecture: 'Architecture',
@@ -135,12 +134,11 @@ const content = {
     } as Record<'CURRENT' | 'BASELINE' | 'NEXT', string>,
     designRuleTitle: 'Design rule',
     designRuleText:
-      'OpenElement uses standard HTTP, HTML-first delivery, and native Custom Elements. Layouts compose server pages, and third-party elements follow the interoperability contract.',
+      'openElement uses standard HTTP, HTML-first delivery, and native Custom Elements. Layouts compose server pages, and third-party elements follow the interoperability contract.',
     boundaryIndex: '02 / product boundary',
     boundaryTitle: 'Scope is explicit.',
     boundaryCopy:
       'Current capability, excluded promises and the visual contract are kept separate.',
-    inProductLabel: 'in product',
     inProductTitle: 'In product',
     inProductItems: [
       'JSX-first application API',
@@ -152,14 +150,12 @@ const content = {
       'Locale-prefixed routing with Document and head ownership',
       'Verified package and release boundaries',
     ],
-    outScopeLabel: 'out of current scope',
     outScopeTitle: 'Out of current scope',
     outScopeItems: [
       'Framework-owned sessions and data caching',
       'Component package registry',
       'Generic auth, ORM, or database platform claims',
     ],
-    siteRuleLabel: 'design rule',
     siteRuleTitle: 'Design rule',
     siteRuleText:
       'The public site is a working demonstration of the framework\u2019s static-first output.',
@@ -191,14 +187,14 @@ const content = {
     noFogLabel: 'Scope in the open',
     noFogCopy:
       'Users should understand what is shipped, current, planned, and explicitly out of scope.',
-    changelog: 'Release Status',
+    changelog: 'Changelog',
     deployment: 'Deployment',
   },
   zh: {
     headTitle: '路线图',
-    headDescription: `OpenElement 当前能力与通往 v1.0 的规划。`,
+    headDescription: `openElement 当前能力与通往 v1.0 的规划。`,
     pageTitle: '路线图',
-    heroLede: '用 TSX 组合原生 Web UI，先交付 HTML，再按需运行交互。',
+    heroLede: '了解当前源码可用的功能，以及 v1.0 的后续计划。',
     railItems:
       '[{"id":"release-line","label":"发布线"},{"id":"product-boundary","label":"产品边界"},{"id":"decision-matrix","label":"决策矩阵"},{"id":"system-visual","label":"系统图示"}]',
     architecture: '架构',
@@ -217,11 +213,10 @@ const content = {
     } as Record<'CURRENT' | 'BASELINE' | 'NEXT', string>,
     designRuleTitle: '设计规则',
     designRuleText:
-      'OpenElement 基于标准 HTTP、HTML 优先交付和原生 Custom Elements。Layout 负责组合服务端页面，第三方元素遵循互操作契约。',
+      'openElement 基于标准 HTTP、HTML 优先交付和原生 Custom Elements。Layout 负责组合服务端页面，第三方元素遵循互操作契约。',
     boundaryIndex: '02 / 产品边界',
     boundaryTitle: '范围是明确的。',
     boundaryCopy: '当前能力、被排除的承诺与视觉契约，分开陈述。',
-    inProductLabel: '产品内',
     inProductTitle: '产品内',
     inProductItems: [
       'JSX 优先的应用 API',
@@ -233,14 +228,12 @@ const content = {
       '带 locale 前缀的路由，以及 Document 与 head 归属',
       '经过验证的包与发布边界',
     ],
-    outScopeLabel: '当前范围外',
     outScopeTitle: '当前范围之外',
     outScopeItems: [
       '框架内置 session 与数据缓存',
       '组件包注册表',
       '通用的 auth、ORM 或数据库平台宣称',
     ],
-    siteRuleLabel: '设计规则',
     siteRuleTitle: '设计规则',
     siteRuleText: '官网即框架 static-first 产出的活体示范。',
     matrixIndex: '03 / 决策矩阵',
@@ -267,7 +260,7 @@ const content = {
     noGhostsCopy: '发布前用实际应用验证打包后的依赖组合。',
     noFogLabel: '边界公开',
     noFogCopy: '用户应能看懂什么是已发布、当前、规划中，以及明确排除在范围之外的。',
-    changelog: '发布状态',
+    changelog: '更新日志',
     deployment: '部署',
   },
 };
@@ -311,13 +304,10 @@ export function RoadmapPage(props: {
   boundaryIndex: string;
   boundaryTitle: string;
   boundaryCopy: string;
-  inProductLabel: string;
   inProductTitle: string;
   inProductItems: Array<{ key: string; value: string }>;
-  outScopeLabel: string;
   outScopeTitle: string;
   outScopeItems: Array<{ key: string; value: string }>;
-  siteRuleLabel: string;
   siteRuleTitle: string;
   siteRuleText: string;
   matrixIndex: string;
@@ -363,7 +353,7 @@ export function RoadmapPage(props: {
             <span slot='index'>{props.releaseLineIndex}</span>
             <span slot='title'>{props.releaseLineTitle}</span>
             <span slot='copy'>{props.releaseLineCopy}</span>
-            <div class='mt-5 mb-6 px-5 py-4 border border-border border-s-4 border-s-primary rounded-lg'>
+            <div class='mt-5 mb-6 px-5 py-4 border border-border rounded-lg'>
               {/* Retired ui open-badge → plain HTML+CSS recipe (#1557): the
                   warning-tone wash the component painted, inline. */}
               <span>{props.freezeBadge}</span>
@@ -379,7 +369,7 @@ export function RoadmapPage(props: {
               </p>
             </div>
             <div class='grid grid-cols-[minmax(0,1fr)] gap-[clamp(1.5rem,4vw,3rem)] items-start min-[1121px]:grid-cols-[minmax(0,1fr)_minmax(260px,0.34fr)]'>
-              <div class='timeline relative grid' aria-label={props.timelineAria}>
+              <div class='timeline relative grid' role='group' aria-label={props.timelineAria}>
                 {props.rows.map((phase) => (
                   <div
                     class='group relative pt-4 pb-4 ps-6 min-[641px]:ps-8'
@@ -428,50 +418,35 @@ export function RoadmapPage(props: {
             <span slot='index'>{props.boundaryIndex}</span>
             <span slot='title'>{props.boundaryTitle}</span>
             <span slot='copy'>{props.boundaryCopy}</span>
-            <div class='grid grid-cols-[minmax(0,1fr)] gap-4 min-[1121px]:grid-cols-3'>
-              <open-artifact-panel class='truth'>
-                <span slot='label'>{props.inProductLabel}</span>
-                <h2 class='mt-0 mb-4 text-foreground text-(length:--text-2xl) leading-[1.08] tracking-normal'>
-                  {props.inProductTitle}
-                </h2>
-                <ul class='grid gap-2 m-0 ps-5'>
+            {/* One composition, not three cards (owner direction 2026-11-27):
+                three equal columns on a shared baseline grid, separated by
+                hairlines. The eyebrow, title and body rows live on the grid
+                (subgrid), so the titles sit on one line across the columns at
+                every width where they stand side by side, even if an eyebrow
+                wraps. Geometry: .page-roadmap .boundary-grid, site-chrome.css. */}
+            <div class='boundary-grid'>
+              <div class='boundary-col'>
+                <h3 class='boundary-title'>{props.inProductTitle}</h3>
+                <ul class='boundary-list'>
                   {props.inProductItems.map((item) => (
-                    <li
-                      class='text-muted-foreground text-(length:--text-sm) leading-(--leading-normal)'
-                      key={item.key}
-                    >
-                      {item.value}
-                    </li>
+                    <li key={item.key}>{item.value}</li>
                   ))}
                 </ul>
-              </open-artifact-panel>
+              </div>
 
-              <open-artifact-panel class='truth'>
-                <span slot='label'>{props.outScopeLabel}</span>
-                <h2 class='mt-0 mb-4 text-foreground text-(length:--text-2xl) leading-[1.08] tracking-normal'>
-                  {props.outScopeTitle}
-                </h2>
-                <ul class='grid gap-2 m-0 ps-5'>
+              <div class='boundary-col'>
+                <h3 class='boundary-title'>{props.outScopeTitle}</h3>
+                <ul class='boundary-list'>
                   {props.outScopeItems.map((item) => (
-                    <li
-                      class='text-muted-foreground text-(length:--text-sm) leading-(--leading-normal)'
-                      key={item.key}
-                    >
-                      {item.value}
-                    </li>
+                    <li key={item.key}>{item.value}</li>
                   ))}
                 </ul>
-              </open-artifact-panel>
+              </div>
 
-              <open-artifact-panel class='truth'>
-                <span slot='label'>{props.siteRuleLabel}</span>
-                <h2 class='mt-0 mb-4 text-foreground text-(length:--text-2xl) leading-[1.08] tracking-normal'>
-                  {props.siteRuleTitle}
-                </h2>
-                <p class='text-muted-foreground text-(length:--text-sm) leading-(--leading-normal)'>
-                  {props.siteRuleText}
-                </p>
-              </open-artifact-panel>
+              <div class='boundary-col'>
+                <h3 class='boundary-title'>{props.siteRuleTitle}</h3>
+                <p class='boundary-body'>{props.siteRuleText}</p>
+              </div>
             </div>
           </open-section-frame>
         </section>
@@ -644,13 +619,10 @@ export default definePage(RoadmapPage, {
       boundaryIndex: t.boundaryIndex,
       boundaryTitle: t.boundaryTitle,
       boundaryCopy: t.boundaryCopy,
-      inProductLabel: t.inProductLabel,
       inProductTitle: t.inProductTitle,
       inProductItems: listItems(t.inProductItems),
-      outScopeLabel: t.outScopeLabel,
       outScopeTitle: t.outScopeTitle,
       outScopeItems: listItems(t.outScopeItems),
-      siteRuleLabel: t.siteRuleLabel,
       siteRuleTitle: t.siteRuleTitle,
       siteRuleText: t.siteRuleText,
       matrixIndex: t.matrixIndex,

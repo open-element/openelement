@@ -24,9 +24,13 @@ const DIST = join(import.meta.dirname ?? '.', '..', 'dist');
 test('build output: both homepages ship readable code and the canonical install command', () => {
   for (const route of ['index.html', 'zh/index.html']) {
     const html = readFileSync(join(DIST, route), 'utf8');
-    expect(html).toContain(`<code>${installCommand}</code>`);
-    expect(html).toMatch(/<open-code-block\b/);
+    expect(html).toContain(`<code id="home-install-command">${installCommand}</code>`);
     expect(html).toContain('open-counter.tsx');
+    // The hero sample is compiled by the site's one Shiki pipeline: fenced-code
+    // bytes (`class="shiki css-variables"` plus inline --shiki-* token vars),
+    // not escaped plain text.
+    expect(html).toContain('class="shiki css-variables"');
+    expect(html).toMatch(/--shiki-token-/);
     expect(html).toMatch(/<open-counter [^>]*><template shadowrootmode="open"/);
   }
 });
@@ -174,6 +178,13 @@ test('build output: artifact scan — no vendored highlighter, no CDN font refer
   }
 
   expect(violations, 'artifact scan violations').toEqual([]);
+});
+
+test('build output: static publication includes redirects, robots directives, and a sitemap', () => {
+  for (const file of ['_redirects', 'robots.txt', 'sitemap.xml']) {
+    expect(statSync(join(DIST, file)).size, `${file} is missing or empty`).toBeGreaterThan(0);
+  }
+  expect(existsSync(join(DIST, 'server'))).toBe(false);
 });
 
 test('build output: pagefind ships the core runtime and no UI suites (#1555)', () => {
@@ -432,9 +443,14 @@ test('build output: the element runtime ships as the one shared chunk islands ne
   expect(graph.islands.map(({ tag }) => tag).sort()).toEqual([
     'open-button',
     'open-code-block',
+    'open-copy-button',
     'open-counter',
+    'open-layer-strip',
     'open-page-rail',
+    'open-registry-lookup',
     'open-search',
+    'open-site-menu',
+    'open-source-toggle',
     'open-theme-toggle',
   ]);
   expect(

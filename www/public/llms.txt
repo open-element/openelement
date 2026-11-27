@@ -1,6 +1,6 @@
-# OpenElement
+# openElement
 
-> OpenElement is an open-source compiled-element web framework: author
+> openElement is an open-source compiled-element web framework: author
 > components with JSX-like element syntax, compile them into custom elements
 > with server-side rendering and islands hydration, and ship them through the
 > framework's own router and docs site engine. The workspace ships the
@@ -13,6 +13,7 @@
 - [Getting started](https://openelement.org/guide/getting-started/): install and scaffold a first project.
 - [Core concepts](https://openelement.org/guide/core-concepts/): elements, blocks, islands, and the compiled-element model.
 - [Tutorial](https://openelement.org/guide/tutorial/): a full walk through authoring, routing, and deployment.
+- [Blog](https://openelement.org/blog/): dated updates about the website and documentation.
 
 ## Reference
 

@@ -95,7 +95,7 @@ export function renderNotFoundRoute(
   lines.push(
     `    const content = __renderLayout(__content, ${quoteGeneratedJavaScriptValue(
       route.path,
-    )}, { routeMeta: __routeMetaValue, documentStyles: __documentStyles })`,
+    )}, { locale: __pageContext.locale, routeMeta: __routeMetaValue, documentStyles: __documentStyles })`,
   );
   lines.push(`    return c.html(wrapInDocument(content, {`);
   for (const optionLine of documentWrapOptionsLines({

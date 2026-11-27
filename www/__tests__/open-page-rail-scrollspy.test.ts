@@ -70,7 +70,7 @@ function withBrowserGlobals(
 
 test('uninstallRailScrollspy undoes every aria-current mark on the retained DOM', () => {
   const links = [makeLink('#start'), makeLink('#install')];
-  const host = { shadowRoot: { querySelectorAll: () => links } };
+  const host = { shadowRoot: { querySelectorAll: () => links }, closest: () => null };
   const sections = new Map([
     ['start', { top: 0 }],
     ['install', { top: 0 }],

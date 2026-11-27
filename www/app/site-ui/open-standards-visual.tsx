@@ -58,7 +58,7 @@ function OpenStandardsVisual(props: {
   return (
     <div class='grid gap-4 text-foreground [open-standards-visual[emphasis=high]_&]:gap-5'>
       {showPackages.value > 0 ? (
-        <div class='grid gap-3' aria-label={props.label}>
+        <div class='grid gap-3' role='group' aria-label={props.label}>
           <div class='package package--success relative grid grid-cols-1 items-start gap-1 overflow-hidden rounded-lg border border-border bg-card p-3 min-[761px]:grid-cols-[minmax(0,.36fr)_minmax(0,1fr)] [open-standards-visual[emphasis=high]_&]:bg-[linear-gradient(135deg,color-mix(in_srgb,var(--color-primary)_8.96%,transparent),transparent)]'>
             <span class='font-mono text-(length:--text-xs) font-extrabold tracking-normal text-success'>
               Elements

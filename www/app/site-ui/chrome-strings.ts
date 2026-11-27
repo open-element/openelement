@@ -69,7 +69,14 @@ export function searchChromeStrings(locale: string): {
   inputLabel: string;
   placeholder: string;
   resultsLabel: string;
+  resultCount: (count: number) => string;
   emptyMessage: string;
+  loadingMessage: string;
+  closeLabel: string;
+  clearLabel: string;
+  suggestionsLabel: string;
+  suggestions: [string, string, string];
+  docsLabel: string;
 } {
   if (locale === 'zh') {
     return {
@@ -78,7 +85,14 @@ export function searchChromeStrings(locale: string): {
       inputLabel: '搜索文档',
       placeholder: '搜索文档…',
       resultsLabel: '搜索结果',
+      resultCount: (count) => `${count} 条结果`,
       emptyMessage: '输入至少 2 个字符以搜索',
+      loadingMessage: '正在搜索…',
+      closeLabel: '关闭对话框',
+      clearLabel: '清除',
+      suggestionsLabel: '试试这些：',
+      suggestions: ['交互岛', '声明式 Shadow DOM', '水合'],
+      docsLabel: '浏览文档索引',
     };
   }
   return {
@@ -87,6 +101,13 @@ export function searchChromeStrings(locale: string): {
     inputLabel: 'Search documentation',
     placeholder: 'Search documentation...',
     resultsLabel: 'Search results',
+    resultCount: (count) => `${count} ${count === 1 ? 'result' : 'results'}`,
     emptyMessage: 'Type at least 2 characters to search',
+    loadingMessage: 'Searching…',
+    closeLabel: 'Close dialog',
+    clearLabel: 'Clear',
+    suggestionsLabel: 'Try:',
+    suggestions: ['islands', 'declarative shadow DOM', 'hydration'],
+    docsLabel: 'Browse the docs index',
   };
 }

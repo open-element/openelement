@@ -10,7 +10,7 @@ section: 'Core'
 
 ### Custom Element
 
-A browser component registered by a hyphenated tag name. OpenElement compiles a function component and its `defineIslandConfig` declaration into a Custom Element. Server function pages can compose those elements.
+A browser component registered by a hyphenated tag name. openElement compiles a function component and its `defineIslandConfig` declaration into a Custom Element. Server function pages can compose those elements.
 
 ### Signal
 
@@ -69,5 +69,5 @@ The explicit trust boundary for inserting pre-sanitized HTML during server rende
 ## See also
 
 - [Core Concepts](/guide/core-concepts) — the authoring model these terms belong to.
-- [Island Hydration](/architecture/islands) — layers, strategies and the manifest.
+- [Island Hydration](/guide/islands-and-ssr) — layers, strategies and the manifest.
 - [DSD Rendering](/architecture/dsd) — the server-side platform contract.

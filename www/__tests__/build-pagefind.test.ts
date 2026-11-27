@@ -13,7 +13,12 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { PAGEFIND_UI_SUITE_FILES, removeUiSuites, waitForUiCopy } from '../build-pagefind.ts';
+import {
+  PAGEFIND_UI_SUITE_FILES,
+  removeUiSuites,
+  separateAdjacentText,
+  waitForUiCopy,
+} from '../build-pagefind.ts';
 
 function makeOutputDir(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'pagefind-filter-'));
@@ -22,6 +27,24 @@ function makeOutputDir(): Promise<string> {
 async function touch(dir: string, name: string, bytes = 16): Promise<void> {
   await writeFile(join(dir, name), new Uint8Array(bytes));
 }
+
+test('separateAdjacentText joins minified block text without touching code', () => {
+  const separated = separateAdjacentText(
+    '<h2>Hydration</h2><p>when an island</p><span>IslandTransformOptions</span><span class="tags">interface</span><pre><code><span>const</span><span> x</span></code></pre>',
+  );
+  expect(separated).toContain('<h2>Hydration</h2><p> when an island');
+  expect(separated).toContain('IslandTransformOptions</span><span class="tags"> interface');
+  // Shiki's per-token spans are the index's code text; splitting them would
+  // break identifier searches, so the preserved regions stay byte-identical.
+  expect(separated).toContain('<pre><code><span>const</span><span> x</span></code></pre>');
+});
+
+test('separateAdjacentText does not insert spaces between Chinese characters', () => {
+  const separated = separateAdjacentText('<p>默认</p><p>服务端</p>');
+  // The block boundary is still separated by the source tags; the point is
+  // that no Latin-style space is invented between the CJK runs.
+  expect(separated).toEqual('<p>默认</p><p>服务端</p>');
+});
 
 test('removeUiSuites deletes exactly the UI suites and keeps the runtime artifacts', async () => {
   const dir = await makeOutputDir();

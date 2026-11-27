@@ -27,7 +27,7 @@
 
 # The OG/social image is referenced by absolute URL in every page's head; its
 # name is stable, so it gets a week, not a year.
-/assets/og-image.jpg
+/brand/og-default.png
   Cache-Control: public, max-age=604800
 
 # Search index: rebuilt per deploy, unhashed names, so revalidate every time.

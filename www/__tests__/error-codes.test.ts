@@ -18,19 +18,42 @@ test('/errors discovers every exported runtime error-code family', async () => {
   ]) {
     expect(runtimeValues.has(code), `${code} must be projected onto /errors`).toBeTruthy();
   }
+  expect(build.runtime.find(({ value }) => value === 'OE_COMPILER_INVALID_SOURCE')).toMatchObject({
+    family: 'CompilerErrorCode',
+    summary: 'A compile step was handed source it cannot analyse.',
+    path: 'packages/protocol/src/errors.ts',
+  });
+  expect(
+    build.runtime.find(({ value }) => value === 'OE_CLIENT_BUILD_BROWSER_ENTRY_NODE_BUILTIN'),
+  ).toMatchObject({
+    family: 'BrowserEntryBoundaryErrorCode',
+    path: 'packages/router/src/vite/internal/browser-entry-boundary.ts',
+  });
 });
 
 test('runtime error-code collection follows map declarations and rejects dynamic entries', () => {
   const failures: string[] = [];
   const runtime = collectRuntimeCodes(
-    `export const RouteScanErrorCode = { TAG_SHADOW: 'OE_ROUTE_SCAN_TAG_SHADOW' } as const;
+    `export const RouteScanErrorCode = {
+  /** A declared tag shadows an earlier entry. */
+  TAG_SHADOW: 'OE_ROUTE_SCAN_TAG_SHADOW'
+} as const;
 const unrelated = { LABEL: 'not an error code' };
 export const BadErrorCode = { VALUE: makeCode() } as const;`,
     'fixture/error-codes.ts',
     failures,
   );
 
-  expect(runtime.map((record) => record.value)).toEqual(['OE_ROUTE_SCAN_TAG_SHADOW']);
+  expect(runtime).toEqual([
+    {
+      family: 'RouteScanErrorCode',
+      name: 'TAG_SHADOW',
+      value: 'OE_ROUTE_SCAN_TAG_SHADOW',
+      summary: 'A declared tag shadows an earlier entry.',
+      path: 'fixture/error-codes.ts',
+      line: 3,
+    },
+  ]);
   expect(failures).toContain('fixture/error-codes.ts: BadErrorCode.VALUE has no static value');
   expect(failures).toContain(
     'fixture/error-codes.ts: BadErrorCode declares no recognized error-code values',

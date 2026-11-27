@@ -1,5 +1,5 @@
 /**
- * Doc-figures gate: the Measured-output numbers in comparison.md/.zh.md
+ * Doc-figures gate: the Measured-output numbers in architecture/architecture.md/.zh.md
  * must equal a fresh measurement of www/dist.
  *
  * Both sides derive — figure expectations come from regexing the two doc
@@ -25,8 +25,8 @@ import { spawnCommand } from '../../tools/repo/node-command.ts';
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const dist = join(repoRoot, 'www/dist');
 const docs = [
-  join(repoRoot, 'www/content/docs/architecture/comparison.md'),
-  join(repoRoot, 'www/content/docs/architecture/comparison.zh.md'),
+  join(repoRoot, 'www/content/docs/architecture/architecture.md'),
+  join(repoRoot, 'www/content/docs/architecture/architecture.zh.md'),
 ];
 
 const failures: string[] = [];

@@ -18,6 +18,7 @@ import * as combobox from '@zag-js/combobox';
 import { normalizeProps, spreadProps, VanillaMachine } from '@zag-js/vanilla';
 import { stripLocalePrefix } from '#site-ui/link.ts';
 import {
+  announce,
   IDS,
   input,
   overlay,
@@ -28,6 +29,7 @@ import {
   type SearchHost,
 } from './open-search-shared.ts';
 import { searchChromeStrings } from './chrome-strings.ts';
+import { buildSearchExcerpt } from './open-search-excerpt.ts';
 
 /** zh display names for the known first path segments; unknown segments pass through. */
 const ZH_SECTIONS: Record<string, string> = {
@@ -37,6 +39,7 @@ const ZH_SECTIONS: Record<string, string> = {
   reference: 'API 参考',
   roadmap: '路线图',
   changelog: '发布状态',
+  blog: '博客',
 };
 
 function sectionFor(url: string): string {
@@ -99,11 +102,13 @@ const pipelines = new WeakMap<SearchHost, PipelineState>();
 const COPY: Record<string, { noResults: (query: string) => string; indexMissing: string }> = {
   en: {
     noResults: (query: string) => `No results found for “${query}”`,
-    indexMissing: 'Search index not found — run pnpm --dir www run pagefind to generate it',
+    // When the index is missing, show readers a recovery message. The build
+    // command lives in the console warning for maintainers.
+    indexMissing: 'Search is unavailable right now. Browse the docs index, or try again shortly.',
   },
   zh: {
     noResults: (query: string) => `未找到“${query}”的相关结果`,
-    indexMissing: '未找到搜索索引——请运行 pnpm --dir www run pagefind 生成',
+    indexMissing: '搜索暂时不可用。请浏览文档索引，或稍后再试。',
   },
 };
 
@@ -111,27 +116,43 @@ function copy(): { noResults: (query: string) => string; indexMissing: string } 
   return COPY[searchLocale()] ?? COPY.en;
 }
 
-function plainExcerpt(excerpt: string): string {
-  const entities: Record<string, string> = {
-    lt: '<',
-    gt: '>',
-    amp: '&',
-    quot: '"',
-    '#39': "'",
-  };
-  return excerpt
-    .replace(/<\/?mark>/g, '')
-    .replace(/&(lt|gt|amp|quot|#39);/g, (match, name: string) => entities[name] ?? match);
+/**
+ * The input's aria-activedescendant points to a rendered option while the
+ * machine has a highlight and the dialog is open. Closing keeps the previous highlight in Zag's context (the
+ * machine deliberately remembers it across open/close); clearing it here
+ * makes the next synchronous prop spread REMOVE the attribute. A direct
+ * removeAttribute is also issued because the close path must be correct even
+ * if no prop flush follows (for example when the runtime is torn down).
+ */
+function clearActiveDescendant(host: SearchHost): void {
+  const field = input(host);
+  if (field?.hasAttribute('aria-activedescendant')) field.removeAttribute('aria-activedescendant');
 }
 
-/** Project raw Pagefind data into the declarative hit view-models. */
-function toHit(hit: { url: string; meta?: { title?: string }; excerpt?: string }): SearchHit {
+/**
+ * Project raw Pagefind data into the declarative hit view models.
+ * `buildSearchExcerpt` owns the sentence boundary, metadata stripping, and
+ * match split. The view renders the three strings using a `<mark>`.
+ */
+function toHit(
+  hit: { url: string; meta?: { title?: string }; excerpt?: string; raw_content?: string },
+  query: string,
+): SearchHit {
+  const excerpt = buildSearchExcerpt(
+    hit.raw_content ?? '',
+    query,
+    searchLocale(),
+    hit.excerpt ?? '',
+  );
   return {
     key: hit.url,
     href: hit.url,
     section: sectionFor(hit.url),
     title: hit.meta?.title || hit.url,
-    text: plainExcerpt(hit.excerpt ?? ''),
+    text: excerpt.text,
+    before: excerpt.before,
+    match: excerpt.match,
+    after: excerpt.after,
   };
 }
 
@@ -164,7 +185,8 @@ export function connectSearchRuntime(host: SearchHost, callbacks: RuntimeCallbac
       placement: 'bottom-start' as const,
       sameWidth: true,
       strategy: 'fixed' as const,
-      offset: { mainAxis: 6 },
+      // Place the popover flush with the panel so the surface is continuous.
+      offset: { mainAxis: 0 },
     },
     onInputValueChange(details) {
       // Only real typing drives Pagefind; machine-driven value writes
@@ -178,23 +200,66 @@ export function connectSearchRuntime(host: SearchHost, callbacks: RuntimeCallbac
         runtime.loadIndex(host);
       }
     },
+    // Moving focus from the input to the close button, a suggestion chip, or
+    // the docs link keeps the dialog open.
+    // Zag's content-scoped focus-outside would otherwise close the popup — and
+    // onOpenChange's false branch closes the whole dialog — before Tab can
+    // reach those controls. Pointer/focus outside the whole host still closes.
+    onFocusOutside(event) {
+      const target = event.detail.target;
+      const dialog = host.querySelector('.panel');
+      if (dialog && target instanceof Node && dialog.contains(target)) event.preventDefault();
+    },
+    onInteractOutside(event) {
+      const target = event.detail.target;
+      const dialog = host.querySelector('.panel');
+      if (dialog && target instanceof Node && dialog.contains(target)) event.preventDefault();
+    },
     onOpenChange(details) {
       const target = overlay(host);
       if (details.open) {
         if (target) target.hidden = false;
-        // The empty-state hint ("type at least 2 characters") is written on
-        // open — synchronously now, where it used to wait for the index load
-        // to finish. The index itself is NOT fetched here (T10 R3): opening the
-        // dialog is a look, not a search, and pagefind.js + its wasm (~86 KB
-        // compressed) used to ride every open, including opens closed without
-        // typing a character. The first real input change triggers the load.
-        runtime.runSearch(host);
+        // The idle hint ("type at least 2 characters") is already in the
+        // server-rendered tree, and every close restores it. Re-running the
+        // empty query here only rewrote the same host props and scheduled a
+        // render that could land on top of the reader tabbing through the
+        // recovery controls (focus fell to <body>, so the trap restarted at
+        // the input). Only a non-empty field has a query worth re-driving.
+        // Wait for the first query before fetching the index.
+        if ((input(host)?.value.trim().length ?? 0) >= 2) runtime.runSearch(host);
       } else if (target && !target.hidden) {
         callbacks.onClose(host);
       }
     },
   }));
   machine.start();
+
+  /**
+   * Create the in-field clear control with the lazy runtime. The input is
+   * unavailable until it connects, so deferring this button keeps the
+   * always-shipped search island smaller.
+   */
+  const clearControl = host.ownerDocument.createElement('button');
+  clearControl.type = 'button';
+  clearControl.id = IDS.clear;
+  clearControl.className = 'search-clear';
+  // Give the field-clear control a text label to distinguish it from the
+  // dialog close icon.
+  const clearLabel = searchChromeStrings(searchLocale()).clearLabel;
+  clearControl.setAttribute('aria-label', clearLabel);
+  clearControl.textContent = clearLabel;
+  clearControl.title = clearLabel;
+  const onClear = (): void => {
+    const field = input(host);
+    if (!field) return;
+    field.value = '';
+    field.focus({ preventScroll: true });
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  clearControl.addEventListener('click', onClear);
+  const control = host.querySelector(`#${IDS.control}`);
+  const closeControl = host.querySelector(`#${IDS.close}`);
+  if (control && closeControl) control.insertBefore(clearControl, closeControl);
 
   const cleanups = new Map<string, () => void>();
   /**
@@ -218,6 +283,22 @@ export function connectSearchRuntime(host: SearchHost, callbacks: RuntimeCallbac
   };
 
   const unsubscribe = machine.subscribe(() => scheduleSync());
+
+  /** Check whether more results remain below the scrollable list. */
+  const syncResultsOverflow = (): void => {
+    if (disposed) return;
+    const list = host.querySelector<HTMLElement>(`#${IDS.content}`);
+    if (!list) return;
+    const more = list.scrollHeight - list.scrollTop - list.clientHeight > 2;
+    if (more) list.setAttribute('data-scrollable', '');
+    else list.removeAttribute('data-scrollable');
+  };
+
+  const onResultsScroll = (event: Event): void => {
+    const target = event.target;
+    if (target instanceof HTMLElement && target.id === IDS.content) syncResultsOverflow();
+  };
+  host.addEventListener('scroll', onResultsScroll, true);
 
   /**
    * The standard property keys this runtime last wrote onto the positioner
@@ -329,6 +410,10 @@ export function connectSearchRuntime(host: SearchHost, callbacks: RuntimeCallbac
         ),
       );
     }
+    // The rendered hit list is committed after this sync's prop flush; one
+    // frame later the scroller has its final rows and can tell the fade
+    // whether a whole row remains below the fold.
+    globalThis.requestAnimationFrame(syncResultsOverflow);
   };
 
   async function loadIndex(nextHost: SearchHost): Promise<void> {
@@ -366,7 +451,14 @@ export function connectSearchRuntime(host: SearchHost, callbacks: RuntimeCallbac
       // The dialog may have closed while the fetch was failing — a closed
       // dialog must not receive the message either.
       if (overlay(nextHost)?.hidden !== false) return;
+      // Show the localized recovery message in the UI and log the build
+      // command once per failed index load.
+      console.warn('[open-search] search index missing — run pnpm --dir www run pagefind');
       showMessage(nextHost, copy().indexMissing);
+      // Clear results through the collection update so aria-activedescendant
+      // cannot point to an option that no longer renders.
+      runtime.syncHits(nextHost, []);
+      announce(nextHost, copy().indexMissing);
     }
   }
 
@@ -378,7 +470,9 @@ export function connectSearchRuntime(host: SearchHost, callbacks: RuntimeCallbac
       // Bump the sequence even on this early return: an in-flight request
       // must not land afterwards and re-fill the results.
       state.searchSequence++;
-      showMessage(nextHost, searchChromeStrings(searchLocale()).emptyMessage);
+      const emptyMessage = searchChromeStrings(searchLocale()).emptyMessage;
+      showMessage(nextHost, emptyMessage);
+      announce(nextHost, emptyMessage);
       runtime.syncHits(nextHost, []);
       return;
     }
@@ -388,6 +482,7 @@ export function connectSearchRuntime(host: SearchHost, callbacks: RuntimeCallbac
     // until the new round lands (no skeleton flash). The sequence guard keeps
     // a slow round from overwriting a newer one.
     if (!nextHost.hasHits) nextHost.searching = true;
+    announce(nextHost, searchChromeStrings(searchLocale()).loadingMessage);
     if (!state.pagefind) return;
 
     const sequence = ++state.searchSequence;
@@ -408,11 +503,15 @@ export function connectSearchRuntime(host: SearchHost, callbacks: RuntimeCallbac
         nextHost.searching = false;
         if (hits.length === 0) {
           showMessage(nextHost, copy().noResults(query));
+          announce(nextHost, copy().noResults(query));
           runtime.syncHits(nextHost, []);
           return;
         }
-        nextHost.hits = hits.map(toHit);
+        const chrome = searchChromeStrings(searchLocale());
+        nextHost.hits = hits.map((hit) => toHit(hit, query));
         nextHost.hasHits = true;
+        nextHost.resultCount = chrome.resultCount(nextHost.hits.length);
+        announce(nextHost, nextHost.resultCount);
         runtime.syncHits(nextHost, nextHost.hits);
       })
       .catch(() => {
@@ -441,18 +540,40 @@ export function connectSearchRuntime(host: SearchHost, callbacks: RuntimeCallbac
       // point is stale and must not re-fill the closed dialog.
       ownedPipeline.searchSequence++;
       const api = combobox.connect(machine.service, normalizeProps);
+      // Clear the highlight on every dismissal (Esc, close button, backdrop, result navigation) so
+      // the input cannot keep pointing at an option node after the overlay
+      // is hidden. The prop spread that follows removes the attribute.
+      api.clearHighlightValue();
+      clearActiveDescendant(host);
       if (api.open) api.setOpen(false, 'script');
       api.setInputValue('', 'script');
     },
     runSearch,
     loadIndex,
     syncHits(nextHost, hits) {
+      // A highlight is only meaningful while its option is in the
+      // rendered set. When the list is cleared (close, idle, no results,
+      // index failure) or replaced without the highlighted key, drop it
+      // BEFORE the next prop spread so aria-activedescendant is removed
+      // rather than re-established against a node that no longer exists.
+      const api = combobox.connect(machine.service, normalizeProps);
+      if (api.highlightedValue && !hits.some((hit) => hit.key === api.highlightedValue)) {
+        api.clearHighlightValue();
+        clearActiveDescendant(nextHost);
+      }
       machine.updateProps({
         collection: combobox.collection({
           items: hits.map((hit) => ({ value: hit.key, label: hit.title })),
         }),
       });
       scheduleSync();
+      // The view's keyed hit list commits on a later frame than the
+      // microtask above. Re-spread once after that commit so the items
+      // receive their role=option / id / aria wiring even when the first
+      // flush ran against the previous (empty) row set.
+      globalThis.requestAnimationFrame(() => {
+        if (!disposed) sync();
+      });
     },
     teardown() {
       // From here on no continuation of this runtime acts: queries drop,
@@ -462,8 +583,12 @@ export function connectSearchRuntime(host: SearchHost, callbacks: RuntimeCallbac
       // pollute the new install).
       disposed = true;
       ownedPipeline.searchSequence++;
+      clearActiveDescendant(host);
       if (pipelines.get(host) === ownedPipeline) pipelines.delete(host);
       unsubscribe();
+      host.removeEventListener('scroll', onResultsScroll, true);
+      clearControl.removeEventListener('click', onClear);
+      clearControl.remove();
       for (const cleanup of cleanups.values()) cleanup();
       cleanups.clear();
       for (const { node, original } of touched.values()) {

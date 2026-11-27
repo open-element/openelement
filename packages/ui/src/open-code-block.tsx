@@ -24,7 +24,8 @@
  * </open-code-block>
  * ```
  */
-import { onDispose, onPropertyChange } from '@openelement/element/lifecycle';
+import { computed, signal } from '@openelement/element';
+import { onConnect, onDispose, onPropertyChange } from '@openelement/element/lifecycle';
 import { defineComponentConfig } from './component-config.ts';
 import { cancelCopyReset, scheduleCopyReset } from './copy-feedback.ts';
 import { log } from './component-recipes.ts';
@@ -45,6 +46,30 @@ type CopyHost = HTMLElement & { copyLabel: string };
 
 /** Code block with a copy button. */
 function OpenCodeBlock(props: { copyLabel: string }) {
+  const chinese = signal(false);
+  // Preserve the public property values while presenting one accessible label.
+  const translatedLabel = computed(() =>
+    !chinese.value
+      ? props.copyLabel
+      : props.copyLabel === 'Copy'
+        ? '复制'
+        : props.copyLabel === 'Copied!'
+          ? '已复制'
+          : props.copyLabel === 'Failed'
+            ? '复制失败'
+            : props.copyLabel,
+  );
+
+  onConnect((env) => {
+    globalThis.queueMicrotask(() => {
+      if (env.signal.aborted) return;
+      const language =
+        env.host.closest('[lang]')?.getAttribute('lang') ??
+        env.host.ownerDocument.documentElement.lang;
+      chinese.value = /^zh(?:-|$)/i.test(language);
+    });
+  });
+
   /**
    * Copy the slotted light DOM: token spans (if the host highlighted at build
    * time) concatenate to the exact source text. The clipboard promise chain
@@ -105,7 +130,7 @@ function OpenCodeBlock(props: { copyLabel: string }) {
           copy((target.getRootNode() as ShadowRoot).host as HTMLElement);
         }}
       >
-        {props.copyLabel}
+        {translatedLabel.value}
       </button>
     </div>
   );

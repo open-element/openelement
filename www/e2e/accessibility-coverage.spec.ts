@@ -23,13 +23,14 @@ const SWEPT_ROUTES = [
   '/guide/getting-started/',
   '/guide/core-concepts/',
   '/architecture/',
-  '/architecture/comparison/',
+  '/guide/deployment/',
   '/changelog/',
   '/roadmap/',
   '/errors/',
   '/404',
   '/zh/',
   '/zh/docs/',
+  '/zh/guide/deployment/',
   '/zh/changelog/',
   '/zh/roadmap/',
   '/zh/errors/',
@@ -44,9 +45,6 @@ const SWEPT_ROUTES = [
  */
 const ZH_ARIA_ALLOWLIST: Readonly<Record<string, string>> = {
   openElement: 'the brand name, identical in both locales',
-  'Toggle theme':
-    'packages/ui/src/open-theme-toggle.tsx hardcodes the accessible name and the ' +
-    'component exposes no label input (T10 register B4, framework lane)',
 };
 
 // The two generated mega-pages (2.09 MB each) are scanned by
@@ -87,9 +85,7 @@ test.describe('Accessibility coverage sweep (axe)', () => {
         ),
       );
       for (const label of new Set(labels)) {
-        // The subject is untranslated English WORDS: a numeric or symbol-only
-        // label ("404" on the zh error page) is language-neutral, not a
-        // translation defect.
+        // Numeric and symbol-only labels are language-neutral.
         if (label === '' || !/^[\x20-\x7e]+$/u.test(label) || !/[A-Za-z]/u.test(label)) continue;
         if (label in ZH_ARIA_ALLOWLIST) continue;
         untranslated.push(`${route}: '${label}'`);
@@ -107,7 +103,7 @@ test.describe('Accessibility coverage sweep (axe)', () => {
     // (changelog register, package graph) must not leak the zh copy into the
     // English tree.
     for (const [route, forbidden] of [
-      ['/changelog/', '发布状态'],
+      ['/changelog/', '更新日志'],
       ['/roadmap/', '包依赖图'],
     ] as const) {
       await page.goto(route);

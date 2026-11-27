@@ -67,6 +67,62 @@ function unwrapTemplates(html: string): string {
   return html.replace(/<\/?template[^>]*>/g, '');
 }
 
+/** Raw-text/code regions where adjacent tokens are one word, not two. */
+const PRESERVE_TEXT_TAGS = new Set(['code', 'pre', 'script', 'style', 'textarea']);
+
+/**
+ * Insert a separator between adjacent text nodes whose visible characters
+ * meet at an element boundary (S4). The built HTML is minified, so the
+ * indexer legitimately sees `</h2><p>when` as one text run and exports
+ * "Hydrationwhen"; the reader-facing excerpt then glues words. Pagefind has
+ * no boundary data by the time it returns `raw_content`, so the fix belongs in
+ * the staging copy: a space is inserted only when the characters on both sides
+ * are ASCII word characters (Latin text), which leaves Chinese text, code and
+ * inline markup untouched.
+ *
+ * The walk is tag-tokenised rather than a single regex so `<pre>`/`<code>`
+ * contents (Shiki's per-token spans) are preserved verbatim — adding spaces
+ * there would split identifiers in the index.
+ */
+export function separateAdjacentText(html: string): string {
+  const tag = /<\/?([a-zA-Z][\w:-]*)\b[^>]*>/g;
+  let output = '';
+  let cursor = 0;
+  let preserveTag: string | null = null;
+  let lastVisible = '';
+  const appendText = (text: string): void => {
+    if (preserveTag !== null) {
+      output += text;
+      return;
+    }
+    if (text.length > 0) {
+      if (!/^\s/u.test(text) && /[A-Za-z0-9]$/u.test(lastVisible) && /^[A-Za-z0-9]/u.test(text)) {
+        output += ' ';
+      }
+      output += text;
+      lastVisible = /\s$/u.test(text) ? '' : text[text.length - 1]!;
+    }
+  };
+  for (const match of html.matchAll(tag)) {
+    appendText(html.slice(cursor, match.index));
+    const raw = match[0]!;
+    output += raw;
+    const name = match[1]!.toLowerCase();
+    const closing = raw.startsWith('</');
+    const selfClosing = /\/>$/.test(raw);
+    if (preserveTag !== null) {
+      // Only the matching close tag ends the preserved run; a `"</code>"`
+      // string inside a script is text, not structure.
+      if (closing && name === preserveTag) preserveTag = null;
+    } else if (PRESERVE_TEXT_TAGS.has(name) && !closing && !selfClosing) {
+      preserveTag = name;
+    }
+    cursor = (match.index ?? 0) + raw.length;
+  }
+  appendText(html.slice(cursor));
+  return output;
+}
+
 /**
  * Remove the unreferenced UI suites from the written output, failing closed
  * if any of them survives the removal (a pagefind rename would otherwise
@@ -103,7 +159,7 @@ async function stageDist(): Promise<number> {
     if (entry.isDirectory() || !entry.name.endsWith('.html')) continue;
     const entryPath = `${entry.parentPath}/${entry.name}`;
     const html = await readFile(entryPath, 'utf8');
-    const staged = unwrapTemplates(html);
+    const staged = separateAdjacentText(unwrapTemplates(html));
     const outPath = join(STAGE_DIR, relative(DIST_DIR, entryPath));
     await mkdir(join(outPath, '..'), { recursive: true });
     await writeFile(outPath, staged);

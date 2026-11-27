@@ -45,5 +45,5 @@ Until the chunk arrives the element keeps its server markup and styling — DSD 
 ## See also
 
 - [Islands and SSR](/guide/islands-and-ssr) — declaring strategies in an application.
-- [Island Hydration](/architecture/islands) — layers, the manifest and the claim.
+- [Core Concepts](/guide/core-concepts) — component contracts and where island strategies fit.
 - [Glossary](/guide/glossary) — island, strategy, manifest in one place.

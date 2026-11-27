@@ -176,6 +176,34 @@ ${compiledContract}
   const theme = contract.resolveSiteTheme(saved, prefersLight);
   contract.applyDocumentTheme(document.documentElement, theme);
 
+  // The theme control's three-state surface (H3) and the search shortcut's
+  // per-platform label (H4) are both first-paint facts: record them here, next
+  // to the theme write, so CSS can paint the right state without a post-
+  // hydration swap. A saved explicit choice is a mode; anything else follows
+  // the OS, exactly as resolveSiteTheme treats it.
+  try {
+    document.documentElement.dataset.themeMode =
+      saved === 'light' || saved === 'dark' ? saved : 'system';
+  } catch {
+    // The mode marker is presentation only.
+  }
+
+  let platform = 'other';
+  try {
+    const platformName = typeof navigator === 'undefined' ? '' : String(navigator.platform || '');
+    const userAgent = typeof navigator === 'undefined' ? '' : String(navigator.userAgent || '');
+    if (/Mac|iPhone|iPad|iPod/.test(platformName) || /Macintosh/.test(userAgent)) {
+      platform = 'apple';
+    }
+  } catch {
+    // Fall back to the portable shortcut label.
+  }
+  try {
+    document.documentElement.dataset.platform = platform;
+  } catch {
+    // The platform marker is presentation only.
+  }
+
   // The rendered search button is interactive before the module entry can
   // start framework replay. Retain only the intent on that particular host.
   if (typeof customElements !== 'undefined' && !customElements.get('open-search')) {
@@ -190,6 +218,16 @@ ${compiledContract}
     customElements.whenDefined('open-search').then(() => {
       document.removeEventListener('click', rememberSearch, true);
     });
+  }
+
+  // JavaScript is available. The linked stylesheet keys the no-JS
+  // presentation (hidden inert controls, the static counter) to the absence
+  // of this marker, so it must be written before first paint, not by an
+  // island that may never load. theme-init is the one eager script.
+  try {
+    document.documentElement.dataset.js = '1';
+  } catch {
+    // Byte-string fallback: the stylesheet treats a missing marker as no-JS.
   }
 
   try {

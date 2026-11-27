@@ -9,9 +9,9 @@
  * maintained for the Site; this suite is the visual contract that runs.
  *
  * Layout classes under test:
- *   - reading layouts (/guide/*, /architecture/*): filtered section sidebar
+ *   - reading layouts (/guide/*, /architecture/*): global section sidebar
  *     consuming the generated navSections, plus the full footer
- *   - home (/): no sidebar, full footer
+ *   - home and Blog: full-width main content and complete footer
  *   - zh locale: localized sidebar targets and bilingual footer columns
  *   - mobile viewport: sidebar collapses into a native details disclosure
  */
@@ -21,11 +21,11 @@ import { expect, test } from '@playwright/test';
 const DESKTOP = { width: 1280, height: 900 };
 const MOBILE = { width: 390, height: 844 };
 
-const FOOTER_COLUMNS_EN = ['Framework', 'Documentation', 'Project', 'Legal'] as const;
-const FOOTER_COLUMNS_ZH = ['框架', '文档', '项目', '法律'] as const;
+const FOOTER_COLUMNS_EN = ['Docs', 'Project'] as const;
+const FOOTER_COLUMNS_ZH = ['文档', '项目'] as const;
 
 test.describe('Site chrome: docs sidebar', () => {
-  test('guide pages render the filtered section sidebar with the active page marked', async ({
+  test('guide pages render the global section sidebar with the active page marked', async ({
     page,
   }) => {
     await page.setViewportSize(DESKTOP);
@@ -34,10 +34,15 @@ test.describe('Site chrome: docs sidebar', () => {
 
     const sidebar = page.getByRole('navigation', { name: 'Documentation navigation' });
     await expect(sidebar).toBeVisible();
+    await expect(
+      page
+        .getByRole('navigation', { name: 'Primary navigation' })
+        .getByRole('link', { name: 'Docs' }),
+    ).toHaveAttribute('aria-current', 'location');
 
     // Section headings come from the generated navSections tree.
-    await expect(sidebar.getByText('Guide', { exact: true })).toBeVisible();
-    await expect(sidebar.getByText('Core', { exact: true })).toBeVisible();
+    await expect(sidebar.getByText('GUIDES', { exact: true })).toBeVisible();
+    await expect(sidebar.getByText('LEARN', { exact: true })).toBeVisible();
 
     // The current page is marked exactly once, on its own link.
     const current = sidebar.getByRole('link', { name: 'Getting Started' });
@@ -53,35 +58,42 @@ test.describe('Site chrome: docs sidebar', () => {
       expect(href.startsWith('/') || href.startsWith('https://')).toBe(true);
     }
     // Spot-resolve one sidebar target end to end.
-    await sidebar.getByRole('link', { name: 'API Routes' }).click();
+    await sidebar.getByRole('link', { name: 'Route handlers' }).click();
     await page.waitForURL(/\/guide\/api\/?$/);
     await expect(page.getByRole('main').first()).toBeVisible();
   });
 
-  test('architecture pages filter the sidebar to the architecture family', async ({ page }) => {
+  test('architecture pages show the complete global sidebar', async ({ page }) => {
     await page.setViewportSize(DESKTOP);
     await page.goto('/architecture/dsd/');
     await page.waitForLoadState('networkidle');
 
     const sidebar = page.getByRole('navigation', { name: 'Documentation navigation' });
     await expect(sidebar).toBeVisible();
-    await expect(sidebar.getByText('Principles', { exact: true })).toBeVisible();
-    await expect(sidebar.getByText('Reference', { exact: true })).toBeVisible();
+    await expect(sidebar.getByText('LEARN', { exact: true })).toBeVisible();
+    await expect(sidebar.getByText('REFERENCE', { exact: true })).toBeVisible();
     await expect(sidebar.getByRole('link', { name: 'DSD Rendering' })).toHaveAttribute(
       'aria-current',
       'page',
     );
-    // The guide family is filtered out on architecture routes.
-    await expect(sidebar.getByRole('link', { name: 'Getting Started' })).toHaveCount(0);
+    // Global navigation keeps the guide links available from every page.
+    await expect(sidebar.getByRole('link', { name: 'Getting Started' })).toBeVisible();
   });
 
-  test('the home layout renders no sidebar', async ({ page }) => {
-    await page.setViewportSize(DESKTOP);
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+  for (const path of ['/', '/zh', '/zh/']) {
+    test(`${path} keeps the homepage free of documentation chrome on desktop and mobile`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(DESKTOP);
+      const response = await page.goto(path);
+      expect(response?.ok()).toBe(true);
+      await expect(page.locator('#home-title')).toBeVisible();
+      await expect(page.locator('.oe-content-frame > nav')).toBeHidden();
 
-    await expect(page.getByRole('navigation', { name: 'Documentation navigation' })).toBeHidden();
-  });
+      await page.setViewportSize(MOBILE);
+      await expect(page.locator('#main-content > details')).toBeHidden();
+    });
+  }
 
   test('zh guide pages localize the sidebar landmark, labels, and link targets', async ({
     page,
@@ -92,12 +104,12 @@ test.describe('Site chrome: docs sidebar', () => {
 
     const sidebar = page.getByRole('navigation', { name: '文档导航' });
     await expect(sidebar).toBeVisible();
-    // Sidebar labels follow the zh content titles (快速开始 / API 路由).
+    // Sidebar labels follow the zh content titles (快速开始 / 路由处理器).
     // Integration review: confirm final zh nav copy with the content agent.
     const current = sidebar.getByRole('link', { name: '快速开始' });
     await expect(current).toHaveAttribute('href', '/zh/guide/getting-started/');
     await expect(current).toHaveAttribute('aria-current', 'page');
-    await expect(sidebar.getByRole('link', { name: 'API 路由' })).toHaveAttribute(
+    await expect(sidebar.getByRole('link', { name: '路由处理器' })).toHaveAttribute(
       'href',
       '/zh/guide/api/',
     );
@@ -113,14 +125,15 @@ test.describe('Site chrome: docs sidebar', () => {
 
     // The desktop sidebar is out of the accessibility tree at mobile width; the
     // section navigation lives behind a details/summary disclosure instead.
-    const disclosure = page.locator('details', { hasText: 'Documentation' }).first();
+    const disclosure = page.locator('#main-content > details');
+    await expect(disclosure.locator('summary')).toHaveText('Browse documentation');
     await expect(disclosure).toBeVisible();
     await expect(disclosure).not.toHaveAttribute('open', '');
     await disclosure.locator('summary').click();
     await expect(disclosure).toHaveAttribute('open', '');
     const panel = page.getByRole('navigation', { name: 'Documentation navigation' });
     await expect(panel.getByRole('link', { name: 'Getting Started' })).toBeVisible();
-    await expect(panel.getByRole('link', { name: 'API Routes' })).toHaveAttribute(
+    await expect(panel.getByRole('link', { name: 'Route handlers' })).toHaveAttribute(
       'href',
       '/guide/api/',
     );
@@ -128,16 +141,13 @@ test.describe('Site chrome: docs sidebar', () => {
 });
 
 test.describe('Site chrome: the header always offers one navigation affordance', () => {
-  // The desktop pill and the mobile disclosure used to change over at different
-  // tiers — the pill appeared at 1041px while the disclosure was hidden from
-  // 901px — which left 901–1040 with NEITHER: no primary navigation in the
-  // header at all, on a laptop-width window. The two now switch at the same
-  // point, and this row walks each side of it plus both boundary pixels.
+  // Primary links stay visible down to 900px, where the mobile disclosure takes over.
   const TIERS = [
-    { width: 900, affordance: 'mobile' },
-    { width: 901, affordance: 'mobile' },
-    { width: 1040, affordance: 'mobile' },
-    { width: 1041, affordance: 'desktop' },
+    { width: 880, affordance: 'mobile' },
+    { width: 899, affordance: 'mobile' },
+    { width: 900, affordance: 'desktop' },
+    { width: 960, affordance: 'desktop' },
+    { width: 1024, affordance: 'desktop' },
   ] as const;
 
   for (const tier of TIERS) {
@@ -160,13 +170,11 @@ test.describe('Site chrome: the header always offers one navigation affordance',
         await summary.focus();
         await page.keyboard.press('Enter');
         await expect(summary.locator('xpath=..')).toHaveAttribute('open', '');
-        const target = mobileNav.getByRole('link', { name: 'Roadmap' });
+        const target = mobileNav.getByRole('link', { name: 'Docs' });
         await expect(target, 'the disclosure carries the primary links').toBeVisible();
         await target.focus();
         await page.keyboard.press('Enter');
-        await expect
-          .poll(() => new URL(page.url()).pathname, { timeout: 10_000 })
-          .toBe('/roadmap/');
+        await expect.poll(() => new URL(page.url()).pathname, { timeout: 10_000 }).toBe('/docs/');
         return;
       }
 
@@ -174,54 +182,95 @@ test.describe('Site chrome: the header always offers one navigation affordance',
       await expect(summary, 'the mobile disclosure is gone').toBeHidden();
 
       // The pill's links are reachable by keyboard and they navigate.
-      const target = pill.getByRole('link', { name: 'Roadmap' });
+      const target = pill.getByRole('link', { name: 'Docs' });
       await target.focus();
       await page.keyboard.press('Enter');
-      await expect.poll(() => new URL(page.url()).pathname, { timeout: 10_000 }).toBe('/roadmap/');
+      await expect.poll(() => new URL(page.url()).pathname, { timeout: 10_000 }).toBe('/docs/');
+    });
+  }
+});
+
+test.describe('Site chrome: Blog navigation', () => {
+  for (const { prefix, docs, blog } of [
+    { prefix: '', docs: 'Docs', blog: 'Blog' },
+    { prefix: '/zh', docs: '文档', blog: '博客' },
+  ]) {
+    test(`${prefix || '/'} marks Blog on its index and articles in both headers`, async ({
+      page,
+    }) => {
+      for (const { path, current } of [
+        { path: '/blog/', current: 'page' },
+        { path: '/blog/a-clearer-open-element-site/', current: 'location' },
+      ]) {
+        await page.setViewportSize(DESKTOP);
+        const response = await page.goto(`${prefix}${path}`);
+        expect(response?.ok()).toBe(true);
+        await expect(page.locator('.oe-content-frame > nav')).toBeHidden();
+
+        const header = page.getByRole('banner');
+        const desktopNav = header.getByRole('navigation', { name: /Primary navigation|主导航/ });
+        await expect(desktopNav.getByRole('link')).toHaveText([docs, blog]);
+        await expect(desktopNav.getByRole('link', { name: blog })).toHaveAttribute(
+          'aria-current',
+          current,
+        );
+        await expect(desktopNav.locator('[aria-current]')).toHaveCount(1);
+
+        await page.setViewportSize(MOBILE);
+        await expect(page.locator('#main-content > details')).toBeHidden();
+        await header.locator('summary').click();
+        const mobileNav = header.getByRole('navigation', { name: /Mobile navigation|移动端导航/ });
+        await expect(mobileNav.getByRole('link')).toHaveText([docs, blog]);
+        await expect(mobileNav.getByRole('link', { name: blog })).toHaveAttribute(
+          'aria-current',
+          current,
+        );
+        await expect(mobileNav.locator('[aria-current]')).toHaveCount(1);
+      }
     });
   }
 });
 
 test.describe('Site chrome: footer', () => {
   for (const route of ['/', '/guide/getting-started/', '/architecture/dsd/']) {
-    test(`footer on ${route} exposes the four labeled navigation columns`, async ({ page }) => {
+    test(`footer on ${route} exposes Docs, Project, and a single license link`, async ({
+      page,
+    }) => {
       await page.setViewportSize(DESKTOP);
       await page.goto(route);
       await page.waitForLoadState('networkidle');
 
       const footer = page.getByRole('contentinfo');
       await expect(footer).toHaveCount(1);
+      await expect(footer.getByRole('navigation')).toHaveCount(2);
       for (const column of FOOTER_COLUMNS_EN) {
         await expect(footer.getByRole('navigation', { name: column })).toBeVisible();
       }
-      // Column link targets resolve to real routes; externals are explicit.
       await expect(
         footer
-          .getByRole('navigation', { name: 'Documentation' })
-          .getByRole('link', { name: 'Guide' }),
+          .getByRole('navigation', { name: 'Docs' })
+          .getByRole('link', { name: 'Getting Started' }),
       ).toHaveAttribute('href', '/guide/getting-started/');
-      // The footer's API entry points are explicit: the reference table and the
-      // API-routes guide are different destinations (they used to share the
-      // bare label "API", which disagreed with the header's /reference entry).
       await expect(
         footer
-          .getByRole('navigation', { name: 'Documentation' })
+          .getByRole('navigation', { name: 'Docs' })
           .getByRole('link', { name: 'API Reference' }),
       ).toHaveAttribute('href', '/reference/');
       await expect(
         footer
-          .getByRole('navigation', { name: 'Documentation' })
-          .getByRole('link', { name: 'API Routes' }),
-      ).toHaveAttribute('href', '/guide/api/');
+          .getByRole('navigation', { name: 'Docs' })
+          .getByRole('link', { name: 'Documentation' }),
+      ).toHaveAttribute('href', '/docs/');
       await expect(
-        footer.getByRole('navigation', { name: 'Project' }).getByRole('link', { name: 'GitHub' }),
-      ).toHaveAttribute('href', 'https://github.com/open-element/openelement');
-      await expect(
-        footer.getByRole('navigation', { name: 'Legal' }).getByRole('link', {
-          name: 'MIT License',
-        }),
-      ).toHaveAttribute('href', 'https://github.com/open-element/openelement/blob/main/LICENSE');
-      await expect(footer).toContainText('(c) 2026 openElement. MIT License.');
+        footer.getByRole('navigation', { name: 'Project' }).getByRole('link', { name: 'Blog' }),
+      ).toHaveAttribute('href', '/blog/');
+      const license = footer.getByRole('link', { name: 'MIT License', exact: true });
+      await expect(license).toHaveCount(1);
+      await expect(license).toHaveAttribute(
+        'href',
+        'https://github.com/open-element/openelement/blob/main/LICENSE',
+      );
+      await expect(license.locator('..')).toContainText('© 2026 openElement');
     });
   }
 
@@ -231,11 +280,12 @@ test.describe('Site chrome: footer', () => {
     await page.waitForLoadState('networkidle');
 
     const footer = page.getByRole('contentinfo');
+    await expect(footer.getByRole('navigation')).toHaveCount(2);
     for (const column of FOOTER_COLUMNS_ZH) {
       await expect(footer.getByRole('navigation', { name: column })).toBeVisible();
     }
     await expect(
-      footer.getByRole('navigation', { name: '文档' }).getByRole('link', { name: '指南' }),
+      footer.getByRole('navigation', { name: '文档' }).getByRole('link', { name: '快速开始' }),
     ).toHaveAttribute('href', '/zh/guide/getting-started/');
     await expect(
       footer.getByRole('navigation', { name: '项目' }).getByRole('link', { name: '路线图' }),
@@ -243,6 +293,7 @@ test.describe('Site chrome: footer', () => {
     await expect(
       footer.getByRole('navigation', { name: '项目' }).getByRole('link', { name: '参与贡献' }),
     ).toHaveAttribute('href', '/zh/contributing/');
+    await expect(footer.getByRole('link', { name: 'MIT 许可证', exact: true })).toHaveCount(1);
   });
 
   test('mobile viewports keep the full footer chrome', async ({ page }) => {
@@ -313,7 +364,7 @@ test.describe('Site chrome: header repository link', () => {
     // Icon-only control: the accessible name must come from aria-label, and
     // the mark itself must stay out of the accessibility tree.
     await expect(link.locator('svg[aria-hidden="true"]')).toHaveCount(1);
-    // The header carries exactly one repository link (the footer has its own).
+    // The header carries exactly one repository link.
     await expect(banner.locator(`a[href="${REPOSITORY}"]`)).toHaveCount(1);
   });
 
@@ -340,6 +391,30 @@ test.describe('Site chrome: header repository link', () => {
 });
 
 test.describe('Site chrome: reading rail scrollspy', () => {
+  test('the mobile outline precedes the body and lands section links below the header', async ({
+    page,
+  }) => {
+    await page.setViewportSize(MOBILE);
+    for (const { path, fragment } of [
+      { path: '/guide/getting-started/', fragment: '#verify' },
+      { path: '/zh/reference/', fragment: '#api-reference' },
+    ]) {
+      await page.goto(path);
+      const disclosure = page.locator('open-reading-shell .rail details');
+      const target = page.locator(fragment);
+      const outline = disclosure.locator('summary');
+      await expect(outline).toBeVisible();
+      expect((await outline.boundingBox())!.y).toBeLessThan((await target.boundingBox())!.y);
+      await outline.click();
+      await disclosure.locator(`a[href="${fragment}"]`).click();
+      await expect(page).toHaveURL(new RegExp(`${fragment}$`));
+      const header = await page.getByRole('banner').boundingBox();
+      await expect
+        .poll(async () => (await target.boundingBox())!.y)
+        .toBeGreaterThanOrEqual(header!.y + header!.height);
+    }
+  });
+
   test('tracks rail fragment links and Back navigation', async ({ page }) => {
     await page.setViewportSize(DESKTOP);
     await page.goto('/guide/getting-started/');
@@ -391,10 +466,11 @@ test.describe('Site chrome: reading rail scrollspy', () => {
     const result = await rail.evaluate(async (host) => {
       const callbacks = (
         window as Window & {
-          railObserverCallbacks: Array<(target: Element) => void>;
+          railObserverCallbacks?: Array<(target: Element) => void>;
         }
       ).railObserverCallbacks;
-      const stale = callbacks[0]!;
+      const stale = callbacks?.[0];
+      if (!callbacks || !stale) throw new Error('The rail observer was not installed');
       const target = document.getElementById('install')!;
       const root = host.shadowRoot ?? host;
       const anchor = root.querySelector('a[href="#start"]');

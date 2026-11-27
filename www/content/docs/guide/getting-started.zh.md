@@ -1,22 +1,13 @@
 ---
 title: '快速开始'
-lede: 'OpenElement 是以 Web Components 为原生契约、static-first 的应用框架：标准 Custom Elements、pages、routes、按需升级，以及 Vite/Nitro 输出。'
+lede: '创建起步项目，在本地运行，再构建生产产物。'
 order: 1
 ---
 
-> {{SOURCE_LINE_NOTE}}
-
-本页演示如何创建并验证项目、添加页面和元素，以及构建生产产物。
-
 ## 安装
 
-**开始前：** 需要 Node.js 24.2 或更新版本，以及一个包管理器（`npm`、`pnpm`、`yarn` 或 `bun`）。先确认运行时：
-
-```text
-node --version   # 应输出 v24.2.0 或更新版本
-```
-
-三条命令跑起应用——依赖由生成器自己安装（用调用它的包管理器，或它在 `PATH` 上找到的第一个），没有单独的 install 步骤：
+使用 Node.js 24.2 或更新版本（用 `node --version` 确认），以及 npm、pnpm、Yarn 或 Bun 等包管理器。
+三条命令可启动已发布的起步项目：
 
 ```bash
 {{INSTALL_COMMAND}}
@@ -30,27 +21,30 @@ npm run dev
 - `cd my-app`——进入生成的项目。
 - `npm run dev`——启动项目的 Vite 开发服务器。
 
-脚手架使用 npm `latest` 标签对应的版本。可在[发布状态](/zh/changelog)查看当前 npm 版本和源码预览版本。生成项目的生命周期脚本支持 npm、pnpm、yarn 或 bun。
+> {{SOURCE_LINE_NOTE}}
+
+要跟着后续步骤动手，请在临时工作区[预览当前源码](https://github.com/open-element/openelement/blob/main/README.zh.md#预览当前源码)。启动该项目后，回到[验证](#验证)，继续[写一个页面](#写一个页面)。两个版本均列在[发布状态](/zh/changelog)。
 
 ## 验证
 
-成功的样子是：
+**确认起步项目运行正常**
 
-- 脚手架为每个生成文件打印一行 `created <path>`，随后打印一个交接框，用当前包管理器的写法给出接下来的命令。
-- `npm run dev` 打印 ready 行与本机 URL——默认是 `http://localhost:5173/`。
-- 打开该 URL 并试用计数器。计时器会在浏览器里启动。编辑 `app/routes/index.tsx` 的标题并保存，即可看到首页更新。
+- **文件已生成。** 脚手架为每个文件打印一行 `created <path>`，随后给出当前包管理器可用的后续命令。
+- **服务器已启动。** `npm run dev` 打印本机 URL，通常是 `http://localhost:5173/`。
+- **页面可以交互。** 打开本机 URL，试用计数器并确认计时器启动。编辑 `app/routes/index.tsx` 中的标题，保存后查看首页是否更新。
 
-如果在那之前出了问题：
+**排查启动问题**
 
-| 现象 | 发生了什么 | 怎么办 |
-| --- | --- | --- |
-| `This CLI requires Node.js 24.2.0 or newer` | 宿主机的 `node` 低于支持下限 | 在 Node 24.2+ 上重跑同一条命令（项目的 `.node-version` 钉住 24.18 线）；先看 `node --version` |
-| `npm run dev` 报端口被占用 | Vite 默认 5173，未要求严格模式时会自动改用下一个空闲端口 | 打开它打印的 `Local:` URL，或者显式钉住端口——npm：`npm run dev -- --port 5180 --strictPort`；pnpm/yarn：`pnpm run dev --port 5180 --strictPort`（换用第二个包管理器首次运行会重装依赖） |
-| 安装步骤失败，或出现 `No package manager found` | 脚手架在安装之前就写完了全部项目文件；失败的是安装，不是脚手架 | 修好网络、registry 或 `PATH`，然后在项目里安装：`cd my-app && npm install`（或你的包管理器对应的同一条命令） |
-| 离线或使用私有 registry 时安装失败 | 依赖安装是唯一访问 registry 的步骤 | 用生成器的 `--no-install` 旗标只做脚手架（经你的包管理器透传），等 registry 可达后再安装 |
-| 你用 pnpm、yarn 或 bun | 脚手架用被调用时的管理器安装，否则按 pnpm/npm/yarn/bun 的顺序取 `PATH` 上第一个 | 继续用你的管理器——脚本与包管理器无关：`pnpm run dev`、`yarn dev`、`bun run dev` 都会到达同一个开发服务器 |
+- **Node 版本过低。** 若出现 `This CLI requires Node.js 24.2.0 or newer`，请用 `node --version` 检查，并在 Node 24.2+ 上重试。项目的 `.node-version` 固定使用 24.18 版本线。
+- **端口被占用。** 5173 被占用时，Vite 会尝试下一个空闲端口。请打开输出中 `Local:` 后的 URL。若必须使用 5180，npm 可运行 `npm run dev -- --port 5180 --strictPort`，pnpm 可运行 `pnpm run dev --port 5180 --strictPort`（Yarn 用同样的参数）。换用包管理器可能会重新安装依赖。
+- **依赖安装失败。** 项目文件已生成。先检查网络和软件包注册表配置。若出现 `No package manager found`，确认包管理器在 `PATH` 中。然后运行 `cd my-app && npm install`，或使用当前包管理器对应的命令重试。
+- **软件包注册表无法访问。** 先通过包管理器向 create CLI 传入 `--no-install`，只生成项目文件。待注册表恢复访问后再安装依赖。
 
-[预览当前源码](https://github.com/open-element/openelement/blob/main/README.zh.md#预览当前源码)中的步骤会生成可运行下文示例的项目。
+脚手架优先使用调用它的包管理器，否则按 pnpm/npm/yarn/bun 的顺序使用 `PATH` 中第一个可用的管理器。请继续使用原来的包管理器。`pnpm run dev`、`yarn dev` 和 `bun run dev` 都会启动同一个开发服务器。
+
+后续示例使用源码预览项目。如果你试用的是 npm 发布版，请先完成[安装](#安装)中的源码预览步骤，再[写一个页面](#写一个页面)。
+
+[返回本页目录](#page-outline)
 
 ## 认识项目结构
 

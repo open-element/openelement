@@ -55,6 +55,23 @@ runs:
         if [ "${RUNNER_OS}" = "Linux" ] && [ "${WITH_DEPS}" = "true" ]; then
           install_linux_deps=true
           set -- --with-deps "$@"
+
+          # Playwright needs Ubuntu packages. The runner's separate Microsoft
+          # source can return 403 and block apt-get update (PR #1821).
+          microsoft_source=/etc/apt/sources.list.d/microsoft-prod.list
+          microsoft_backup="${microsoft_source}.disabled"
+          if [ "${RUNNER_ENVIRONMENT:-}" = "github-hosted" ] &&
+             [ -f "${microsoft_source}" ] && [ ! -e "${microsoft_backup}" ] &&
+             grep -Fq ' https://packages.microsoft.com/ubuntu/24.04/prod noble ' "${microsoft_source}"; then
+            trap 'if [ -f "${microsoft_backup}" ]; then
+              sudo -n mv -T -- "${microsoft_backup}" "${microsoft_source}" ||
+                echo "::warning::Could not restore the Microsoft Ubuntu APT source"
+            fi' EXIT
+            trap 'exit 130' INT
+            trap 'exit 143' TERM
+            sudo -n mv -T -- "${microsoft_source}" "${microsoft_backup}"
+            echo "Temporarily disabled the Microsoft Ubuntu APT source for Playwright"
+          fi
         fi
         for attempt in 1 2 3; do
           if [ "${install_linux_deps}" = "true" ]; then

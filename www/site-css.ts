@@ -46,16 +46,16 @@
  * of this list. 901 is the 900 desktop complement (min-width side).
  */
 export const SITE_BREAKPOINT_TIERS = [
-  480, 520, 640, 700, 720, 760, 768, 860, 900, 901, 940, 1040, 1100, 1120, 1200,
+  360, 480, 520, 640, 700, 720, 760, 768, 860, 900, 901, 940, 1040, 1041, 1100, 1120, 1200,
 ] as const;
 export const siteCSS = `
 :root,
 html[data-theme="light"],
 :host([data-theme="light"]),
 :root[data-theme="light"] {
-  --surface-1: var(--color-popover);
-  --surface-code: var(--color-muted);
-  --surface-code-foreground: var(--color-zinc-800);
+  --surface-1: var(--site-panel);
+  --surface-code: var(--site-code);
+  --surface-code-foreground: var(--site-code-foreground);
   --edge-highlight: color-mix(in srgb, var(--color-foreground) 10%, transparent);
   --border-strong: color-mix(in srgb, var(--color-border) 68%, var(--color-foreground));
   --nav-bg: var(--color-background);
@@ -65,10 +65,14 @@ html[data-theme="light"],
   --font-size-button: var(--text-sm);
   --font-size-body-sm: var(--text-sm);
   --font-size-caption: var(--text-xs);
-  --font-size-micro: 0.625rem;
+  /* Functional micro-copy floor, 12px (was 11px/0.6875rem): the micro token
+     feeds section headings, table headers, hints and inline metadata across
+     the site, so it is text a reader must be able to read, not decoration.
+     Genuinely decorative marks may still author 0.6875rem at the call site. */
+  --font-size-micro: 0.75rem;
   --font-size-tiny: 0.85rem;
   --font-size-lede: 1.1rem;
-  --font-size-overline: 0.6875rem;
+  --font-size-overline: 0.75rem;
   --font-size-article-title: 1.125rem;
   --font-size-display-sm: 1.75rem;
   --font-size-display-md: 2.125rem;
@@ -97,13 +101,26 @@ html[data-theme="light"],
      consumes by name. That sheet is scanned by the site theme-token gate, so
      its bare palette citations live HERE, in the site alias layer, never at
      the call site: --scrim-ink is the open-search dialog scrim's ink (no role
-     is theme-invariant dark — --color-foreground flips to zinc-50 in dark),
-     and --grid-ink is the fixed violet of the page-hook grid hairline (the
-     violet roles --color-ring/--color-primary flip shade per theme, which
-     would change the drawn line). Both are defined once, in this block, so
-     neither flips with the theme. */
-  --scrim-ink: var(--color-zinc-950);
-  --grid-ink: var(--color-violet-600);
+     is theme-invariant dark — --color-foreground changes with the theme).
+     It is defined once, in this block, so it never flips with the theme. The
+     page-hook grid alias (--grid-ink) retired with the violet grid overlays
+     when the docs/contributing mastheads joined the flat canvas. */
+  --scrim-ink: #080808;
+  /* The site-wide palette keeps quiet rules for structure and stronger edges
+     for controls. Fill steps separate the page, panel, raised controls, code
+     and active selection. State uses the same high-contrast ink as content. */
+  --site-ground: #f7f7f7;
+  --site-ink: #151515;
+  --site-ink-soft: #363636;
+  --site-muted: #595959;
+  --site-hairline: rgb(0 0 0 / 0.12);
+  --site-hairline-strong: #7d7d7d;
+  --site-panel: #ffffff;
+  --site-panel-raised: #efefef;
+  --site-panel-selected: #e4e4e4;
+  --site-code: #f4f4f4;
+  --site-code-foreground: var(--site-ink-soft);
+  --site-accent: var(--site-ink);
   /* Site override: real sans for prose. The shared token sheet maps
      --font-sans to JetBrains Mono (brand choice for the component layer);
      long-form reading on this site needs a true sans. Mono stays on
@@ -113,25 +130,41 @@ html[data-theme="light"],
 html[data-theme="dark"],
 :host([data-theme="dark"]),
 :root[data-theme="dark"] {
-  --surface-1: var(--color-popover);
-  --surface-code: var(--color-zinc-950);
-  --surface-code-foreground: var(--color-zinc-200);
+  --surface-1: var(--site-panel);
+  --surface-code: var(--site-code);
+  --surface-code-foreground: var(--site-code-foreground);
   --edge-highlight: color-mix(in srgb, var(--color-foreground) 14%, transparent);
   --border-strong: color-mix(in srgb, var(--color-border) 72%, var(--color-foreground));
   --nav-bg: var(--color-background);
   --nav-height: calc(var(--spacing) * 16);
+  --site-ground: #0e0e0e;
+  --site-ink: #f2f2f2;
+  --site-ink-soft: #d6d6d6;
+  --site-muted: #a5a5a5;
+  --site-hairline: rgb(255 255 255 / 0.14);
+  --site-hairline-strong: #858585;
+  --site-panel: #191919;
+  --site-panel-raised: #232323;
+  --site-panel-selected: #333333;
+  --site-code: #121212;
+  --site-code-foreground: var(--site-ink-soft);
+  --site-accent: var(--site-ink);
 }
 body {
   margin: 0;
-  background:    radial-gradient(circle at 50% -12%, color-mix(in srgb, var(--color-ring) 24%, transparent), transparent 42%),
-    linear-gradient(115deg, color-mix(in srgb, var(--color-secondary) 38%, transparent), transparent 46%),
-    linear-gradient(color-mix(in srgb, var(--color-border) 34%, transparent) calc(var(--spacing) * 0.25), transparent calc(var(--spacing) * 0.25)),
-    linear-gradient(90deg, color-mix(in srgb, var(--color-border) 30%, transparent) calc(var(--spacing) * 0.25), transparent calc(var(--spacing) * 0.25)),
-    var(--color-background);
-  background-size: auto, auto, 220px 128px, 220px 128px, auto;
-  color: var(--color-foreground);
+  /* One flat ground for the whole site. The old violet radial + grid wash was
+     the pre-unification brand; the design system's canvas is a single colour
+     that flips with data-theme (and prints white, see the print block in
+     www/site-chrome.css). */
+  background: var(--site-ground);
+  color: var(--site-ink);
   font-family: var(--font-sans);
   line-height: 1.7;
+}
+/* The document canvas follows the theme too, so overscroll never shows the
+ * UA's white/dark default behind the flat ground. */
+html {
+  background: var(--site-ground);
 }
 ::view-transition-old(open-brand-mark),
 ::view-transition-new(open-brand-mark) { animation-duration: 320ms; animation-timing-function: var(--ease-out); }
@@ -166,10 +199,13 @@ open-code-block pre {
    into every shadow tree — page prose renders inside page-component shadow
    roots, where [data-theme] selectors cannot reach. Light values are the
    bundled github-light palette; dark values are the bundled github-dark
-   palette except the comment gray, where the retired Prism chip styles'
-   measured #7d8590 (5.2:1 on the dark surface; #6a737d was 4.0:1) carries
-   over. The code surface stays site-owned: the theme's background and
-   foreground alias --surface-code / --surface-code-foreground. */
+   palette except the lighter comment gray #7d8590. The code surface stays
+   site-owned: the theme's background and
+   foreground alias --surface-code / --surface-code-foreground, which the
+   site-wide remap points at --site-code / --site-code-foreground. The home
+   hero sample is compiled by the same highlighter and reads the same table,
+   so both palettes serve every surface. The minimum contrast is 4.62:1
+   on light code and 5.02:1 on dark code. */
 :root {
   --shiki-background: var(--surface-code);
   --shiki-foreground: var(--surface-code-foreground);
@@ -214,6 +250,7 @@ open-code-block pre {
 /* User-preference adaptations (document-level: custom properties inherit
    into every shadow tree, so one rule covers components too). */
 @media (forced-colors: active) {
+  :root, :root[data-theme] { --site-panel-selected: Canvas; }
   /* Links distinguished by color alone collapse into surrounding text when
      the palette flattens: underline every link. !important outranks the
      scoped prose rules that otherwise remove underlines. Borders keep their
@@ -235,6 +272,7 @@ open-code-block pre {
     --color-foreground: #000; --color-muted-foreground: #000;
     --color-background: #fff; --color-muted: #fff; --color-card: #fff;
     --color-popover: #fff;
+    --site-panel-selected: white;
   }
   body {
     background: #fff !important;

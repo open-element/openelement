@@ -56,6 +56,8 @@ export function siteHead(input: SiteHeadInput): PageHead {
   const locale = contentLocale(input.locale ?? 'en');
   const title = brandedTitle(input.title);
   const canonical = `${SITE_ORIGIN}${siteHref(input.route, locale)}`;
+  const socialImageAlt =
+    locale === 'zh' ? 'openElement 图形标记与字标' : 'openElement mark and wordmark';
   const head: PageHead = {
     title,
     description: input.description,
@@ -63,11 +65,8 @@ export function siteHead(input: SiteHeadInput): PageHead {
       { property: 'og:title', content: title },
       { property: 'og:description', content: input.description },
       { property: 'og:url', content: canonical },
-      {
-        property: 'og:image:alt',
-        content:
-          locale === 'zh' ? 'openElement —— 组合而生的 Web。' : 'openElement — The Web, composed.',
-      },
+      { property: 'og:image:alt', content: socialImageAlt },
+      { name: 'twitter:image:alt', content: socialImageAlt },
     ],
   };
   // The front page declares the site itself: WebSite (name/url/description/

@@ -19,7 +19,7 @@ test.describe('SEO Meta Tags', () => {
 
   test('has Open Graph site name', async ({ page }) => {
     const content = await page.locator('meta[property="og:site_name"]').getAttribute('content');
-    expect(content).toBe('OpenElement');
+    expect(content).toBe('openElement');
   });
 
   test('has Open Graph type', async ({ page }) => {
@@ -43,10 +43,32 @@ test.describe('SEO Meta Tags', () => {
     expect(content).toContain('openelement.org');
   });
 
-  test('has Open Graph image', async ({ page }) => {
-    const content = await page.locator('meta[property="og:image"]').getAttribute('content');
-    expect(content).toBeTruthy();
-    expect(content).toContain('og-image');
+  test('declares the social card image and localized alt text', async ({ page }) => {
+    const image = 'https://openelement.org/brand/og-default.png';
+    await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', image);
+    await expect(page.locator('meta[name="twitter:image"]')).toHaveAttribute('content', image);
+    await expect(page.locator('meta[property="og:image:type"]')).toHaveAttribute(
+      'content',
+      'image/png',
+    );
+    await expect(page.locator('meta[property="og:image:width"]')).toHaveAttribute(
+      'content',
+      '1200',
+    );
+    await expect(page.locator('meta[property="og:image:height"]')).toHaveAttribute(
+      'content',
+      '630',
+    );
+    await expect(page.locator('meta[property="og:image:alt"]')).toHaveAttribute(
+      'content',
+      'openElement mark and wordmark',
+    );
+
+    await page.goto('/zh/');
+    await expect(page.locator('meta[property="og:image:alt"]')).toHaveAttribute(
+      'content',
+      'openElement 图形标记与字标',
+    );
   });
 
   test('has Twitter Card', async ({ page }) => {
@@ -57,7 +79,7 @@ test.describe('SEO Meta Tags', () => {
   test('has description meta tag', async ({ page }) => {
     const content = await page.locator('meta[name="description"]').getAttribute('content');
     expect(content).toBeTruthy();
-    expect(content).toContain('OpenElement');
+    expect(content).toContain('openElement');
     expect(content).toContain('Web Components-native');
   });
 
@@ -140,12 +162,36 @@ test.describe('HTML Structure', () => {
     expect(viewport).toContain('width=device-width');
   });
 
-  test('has favicon', async ({ page }) => {
+  test('ships the same mark in the header, downloadable vectors, and favicon', async ({
+    page,
+    request,
+  }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
-    const favicon = page.locator('link[rel="icon"]');
-    expect(await favicon.count()).toBeGreaterThan(0);
+    await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', '/favicon.svg');
+    await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute(
+      'href',
+      '/brand/apple-touch-icon.png',
+    );
+
+    const brand = page
+      .getByRole('link', { name: 'openElement', exact: true })
+      .filter({
+        has: page.locator('svg'),
+      })
+      .first();
+    await expect(brand).toContainText('openElement');
+    const path = brand.locator('svg path');
+    await expect(path).toHaveCount(1);
+    await expect(path).toHaveAttribute('fill', 'currentColor');
+    const contour = await path.getAttribute('d');
+    expect(contour).toBeTruthy();
+    for (const url of ['/brand/mark.svg', '/brand/lockup.svg', '/favicon.svg']) {
+      const response = await request.get(url);
+      expect(response.ok(), url).toBe(true);
+      expect(await response.text()).toContain(`d="${contour}"`);
+    }
   });
 
   test('has charset meta', async ({ page }) => {

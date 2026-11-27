@@ -29,9 +29,10 @@
  * site-chrome.css, whose own header recorded that plain `.css` files sat
  * outside this gate. That gap is closed here: a rule moved into an authored
  * sheet is checked by the same gate as the sheet it came from. The linked
- * sheet's two theme-invariant inks are site aliases in www/site-css.ts
- * (--scrim-ink, --grid-ink), which is where their palette citation lives — so
- * the allowlist stays empty.
+ * sheet's one theme-invariant ink is a site alias in www/site-css.ts
+ * (--scrim-ink), which is where its palette citation lives — so the allowlist
+ * stays empty. (The second alias, --grid-ink, retired with the violet grid
+ * overlays when every masthead moved onto the flat canvas.)
  *
  * Token definitions belong in packages/ui/src/theme.css (the single role
  * source, consumed through the preset) or www/site-css.ts (site aliases, the

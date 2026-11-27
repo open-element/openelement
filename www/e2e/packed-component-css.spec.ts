@@ -95,18 +95,30 @@ test.describe('with JavaScript disabled', () => {
     });
     await page.goto(PAGE);
 
-    // The component rendered on the server, its copy button visible in the DSD
-    // tree, and its layout decided by the external package sheet.
-    const button = page.locator('open-code-block .copy-btn');
+    // Contributing hides the package copy button in favor of the localized
+    // page control. The original button and code still render in the SSR
+    // component, and its package-authored tracking survives the site styles.
+    const block = page.locator('open-code-block');
+    const button = block.locator('.copy-btn');
     await expect(button, 'the package component rendered with its DSD content').toHaveCount(1);
+    await expect(button).toHaveText('Copy');
     const styles = await button.evaluate((element) => {
       const computed = getComputedStyle(element);
-      return { position: computed.position, display: computed.display };
+      return {
+        position: computed.position,
+        display: computed.display,
+        letterSpacing: Number.parseFloat(computed.letterSpacing),
+        fontSize: Number.parseFloat(computed.fontSize),
+      };
     });
-    expect(styles.position, 'the package sheet positions the button absolutely').toEqual(
-      'absolute',
+    expect(styles.position).toBe('absolute');
+    expect(styles.display, 'the site hides the duplicate package copy control').toBe('none');
+    expect(styles.letterSpacing, 'the emitted component sheet applies tracking-wider').toBeCloseTo(
+      styles.fontSize * 0.05,
+      2,
     );
-    expect(styles.display).not.toEqual('none');
+    await expect(block.locator('pre')).toBeVisible();
+    await expect(block.locator('pre code')).toContainText('pnpm install --frozen-lockfile');
     expect(failures, 'no stylesheet or asset request may fail').toEqual([]);
   });
 });

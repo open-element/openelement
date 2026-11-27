@@ -70,7 +70,7 @@ export const NARRATIVE_CLASSES: ReadonlyArray<{ name: string; why: string }> = [
   {
     name: 'cost and performance prose',
     why:
-      'measured OUTPUT is owned by check:doc-figures for the pages it measures (comparison.md, ±1% raw / ±3% gzip rows); ' +
+      'measured OUTPUT is owned by check:doc-figures for the pages it measures (architecture/architecture.md, ±1% raw / ±3% gzip rows); ' +
       'rounded figures stated in prose ("about 2 KB gzipped", a pasted dev-server transcript) are approximations with no ' +
       'authority file, so this gate only asserts that the measured pages stay inside the corpus',
   },

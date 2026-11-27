@@ -106,7 +106,7 @@ const FOCUS_PROBE = `(() => {
   }
   const label =
     element.getAttribute('aria-label') ||
-    (element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 48);
+    (element.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 48);
   return {
     key: describe(element),
     label,
@@ -286,7 +286,8 @@ test.describe('DX-02 keyboard: chrome path', () => {
       expect(capability.stops.some((stop) => stop.key === 'a')).toBe(false);
       return;
     }
-    await page.goto('/');
+    // The docs chrome keeps the theme toggle; home intentionally hides it.
+    await page.goto('/guide/getting-started/');
     await page.waitForLoadState('networkidle');
 
     // Stop at the banner boundary to measure only the shared chrome.
@@ -369,7 +370,7 @@ test.describe('DX-02 keyboard at 390px: the documentation disclosure', () => {
 
     const summary = await tabUntil(
       page,
-      (stop) => stop.key === 'summary' && stop.label === 'Documentation',
+      (stop) => stop.key === 'summary' && stop.label === 'Browse documentation',
     );
     expectVisibleRing(summary);
     // The disclosure starts closed; keyboard activation opens it.
