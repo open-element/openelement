@@ -4,14 +4,10 @@
  * The claim under test (plan §12a, ADR-0174 scope): **no production browser
  * entry LOADS the generic Part Program executor**. The evidence is the
  * observer plugin mounted in the real client build plus the checker that
- * evaluates its artifact. This suite proves the tool rather than the tree:
- * the tree is expected red today, and P1 is NOT claimed here.
+ * evaluates its artifact.
  *
- * Real-build proof matrix (no synthetic all-green fixture is the only
- * evidence — every positive/negative below is a real Vite/Rolldown build):
- *
- *   T1  real router CLI build of a class-island app → the artifact is emitted,
- *       deterministic/normalized, and VIOLATED with named executor entries.
+ *   T1  generated island built through the real Router CLI. The graph is
+ *       normalized, includes its style asset, and meets the executor gate.
  *   T2  direct Vite build of the generated-element shell + neutral primitives
  *       (write:false) → MET; report categories still listed.
  *   T3  an unused re-export of `convertToAttribute` from `facade-host.ts` →
@@ -44,6 +40,7 @@ import {
   EXECUTOR_ENTRY_RELATIVE_MODULES,
   STYLE_ASSET_VIRTUAL_MODULE_PREFIX,
   browserEntryGraphGateListDigest,
+  deriveBrowserEntryGraphSummary,
   evaluateBrowserEntryGraphArtifact,
   executorEntryModuleIds,
   isNormalizedBrowserEntryGraphModuleId,
@@ -123,26 +120,7 @@ export function ProbeHome() {
 export default definePage(ProbeHome, { head: { title: 'module graph probe' } });
 `;
 
-/**
- * The fixture island — VIOLATED BY CONSTRUCTION, through the one door the
- * generated lane still leaves open.
- *
- * The class lane reached the generic Part Program executor because every
- * compiled class RENDERED through its kernel, so any class island's chunk
- * closure contained the executor entries. That path is gone: a generated
- * element mounts through the shell and touches no Part Program. What remains is
- * the package ROOT barrel — `@openelement/element` is flagged `sideEffects`
- * (it installs the hydration and Block edges) and re-exports `renderToString`,
- * so a client module that imports a RUNTIME value from the root drags
- * `runtime-program.ts` / `runtime/hydrate.ts` / `runtime/program-kernel.ts`
- * into the island's chunk. That is the documented P1 cost of the root-barrel
- * error-boundary surface, and the exact class this observer exists to catch.
- *
- * The leak rides a plain helper module rather than the component body: the
- * compiler's tracked-slot classification (correctly) refuses an unclassified
- * root-barrel binding inside JSX, and a real application reaches the barrel
- * from ordinary module code.
- */
+/** Exercise a real browser import through the Element package entry. */
 const ISLAND_HELPER = `import { renderToString } from '@openelement/element';
 
 export const helperReachesTheRootBarrel = typeof renderToString;
@@ -372,13 +350,8 @@ const SHELL_ENTRY = [
 ].join('\n');
 
 interface RealEvidence {
-  t1: {
-    root: string;
-    build: RouterBuildResult;
-    artifact: BrowserEntryGraphArtifact;
-    source: string;
-  };
-  t2?: { root: string; artifact: BrowserEntryGraphArtifact; source: string };
+  t1: BrowserEntryGraphArtifact;
+  t2?: string;
 }
 
 let evidence: RealEvidence | undefined;
@@ -389,7 +362,7 @@ function readGraphArtifact(source: string, label: string): BrowserEntryGraphArti
   return JSON.parse(source) as BrowserEntryGraphArtifact;
 }
 
-test('T1 real router CLI build emits a normalized, VIOLATED browser-entry graph', async () => {
+test('T1 real router CLI build emits a normalized, MET browser-entry graph', async () => {
   const root = await makeRouterFixture();
   const build = await runRouterBuild(root);
   expect(build.code, build.output).toBe(0);
@@ -461,51 +434,13 @@ test('T1 real router CLI build emits a normalized, VIOLATED browser-entry graph'
   }
 
   const evaluation = evaluateBrowserEntryGraphArtifact(artifact);
-  expect(evaluation.verdict).toBe('VIOLATED');
-  expect(evaluation.violations.length).toBeGreaterThan(0);
-  const gateIds = new Set(executorEntryModuleIds(artifact.element.packageRoot));
-  for (const violation of evaluation.violations) {
-    expect(gateIds.has(violation.moduleId), violation.moduleId).toBe(true);
-    expect(artifact.chunks.some((chunk) => chunk.file === violation.chunkFile)).toBe(true);
-  }
-  // The island's chunk closure contains the executor chunk: the violation is
-  // attributable to the island, not to an unreachable module.
-  expect(
-    evaluation.violations.some((violation) => violation.islands.includes('probe-counter')),
-    JSON.stringify(evaluation.violations, null, 2),
-  ).toBe(true);
+  expect(evaluation.verdict, JSON.stringify(evaluation.violations, null, 2)).toBe('MET');
+  expect(evaluation.violations).toEqual([]);
 
-  // The checker's real CLI agrees, and names an executor entry in its output.
-  // Output discipline: a failing human run keeps stdout (the data channel)
-  // empty — the verdict block moves to stderr, and the structured verdict
-  // lives in the `--json` machine document.
-  const artifactArg = relative(REPO_ROOT, artifactPath);
-  const checked = await runChecker([artifactArg]);
-  expect(checked.code, checked.stderr).toBe(1);
-  expect(checked.stdout).toBe('');
-  expect(checked.stderr).toContain('VIOLATED');
-  expect(checked.stderr).toContain('loaded ');
-
-  const cliReport = JSON.parse((await runChecker(['--json', artifactArg])).stdout) as {
-    format: string;
-    exitCode: number;
-    artifacts: Array<{
-      verdict: string;
-      violations: Array<{ moduleId: string; islands: string[] }>;
-    }>;
-    summary: { met: number; violated: number; unproven: number };
-  };
-  expect(cliReport.format).toBe('openelement.browser-entry-graph-check/1');
-  expect(cliReport.exitCode).toBe(1);
-  expect(cliReport.summary).toEqual({ met: 0, violated: 1, unproven: 0 });
-  expect(cliReport.artifacts).toHaveLength(1);
-  expect(cliReport.artifacts[0]!.verdict).toBe('VIOLATED');
-  expect(
-    cliReport.artifacts[0]!.violations.some((violation) => gateIds.has(violation.moduleId)),
-    JSON.stringify(cliReport.artifacts[0]!.violations),
-  ).toBe(true);
-
-  evidence = { t1: { root, build, artifact, source } };
+  const checked = await runChecker([relative(REPO_ROOT, artifactPath)]);
+  expect(checked.code, checked.stderr).toBe(0);
+  expect(checked.stdout).toContain('MET');
+  evidence = { t1: artifact };
 });
 
 test('T2 real Vite build of the generated shell + neutral primitives is MET', async () => {
@@ -530,7 +465,7 @@ test('T2 real Vite build of the generated shell + neutral primitives is MET', as
   expect(evaluation.loadedModuleCount).toBeGreaterThan(0);
 
   if (evidence !== undefined) {
-    evidence.t2 = { root, artifact, source: source! };
+    evidence.t2 = source!;
   }
 });
 
@@ -733,15 +668,34 @@ test('T5 forged/derived artifacts fail closed: UNPROVEN exit 2, never a green cl
   expect(evidence?.t2, 'T2 real artifact is required').toBeDefined();
   const realEvidence = evidence!;
   const forgedDir = await makeTempRoot();
-  const t2Source = realEvidence.t2!.source;
+  const t2Source = realEvidence.t2!;
 
-  const cloneT1 = () => JSON.parse(realEvidence.t1.source) as Record<string, unknown>;
+  const cloneT1 = () => structuredClone(realEvidence.t1) as unknown as Record<string, unknown>;
   const cloneT2 = () => JSON.parse(t2Source) as Record<string, unknown>;
   const writeForged = async (name: string, value: unknown): Promise<string> => {
     const path = join(forgedDir, `${name}.json`);
     await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
     return relative(REPO_ROOT, path);
   };
+
+  // Put one rendered executor entry in a real island chunk. This keeps the
+  // failure probe independent of the application importing a retired runtime.
+  const violationProbe = structuredClone(realEvidence.t1);
+  const island = violationProbe.islands[0]!;
+  const gateId = executorEntryModuleIds(violationProbe.element.packageRoot).find(
+    (id) =>
+      !violationProbe.chunks.some((chunk) => chunk.modules.some((module) => module.id === id)),
+  )!;
+  const islandChunk = violationProbe.chunks.find((chunk) => chunk.file === island.chunkFile)!;
+  islandChunk.modules.push({ id: gateId, renderedLength: 1 });
+  if (!violationProbe.parsedModuleIds.includes(gateId)) violationProbe.parsedModuleIds.push(gateId);
+  Object.assign(violationProbe.predicate, deriveBrowserEntryGraphSummary(violationProbe));
+  expect(violationProbe.predicate.loadedViolations).toEqual([
+    { moduleId: gateId, chunkFile: island.chunkFile, islands: [island.tag] },
+  ]);
+  const violationPath = await writeForged('loaded-executor', violationProbe);
+  const cloneViolation = () =>
+    structuredClone(violationProbe) as unknown as Record<string, unknown>;
 
   // 1. Incomplete capture.
   const incomplete = cloneT1();
@@ -775,7 +729,7 @@ test('T5 forged/derived artifacts fail closed: UNPROVEN exit 2, never a green cl
   const emptyChunks = cloneT1();
   emptyChunks.chunks = [];
   // 9. A loaded violation hidden behind an unreachable chunk (forged green).
-  const hiddenViolation = cloneT1();
+  const hiddenViolation = cloneViolation();
   const entryChunk = (
     hiddenViolation.chunks as Array<{
       isEntry: boolean;
@@ -791,7 +745,7 @@ test('T5 forged/derived artifacts fail closed: UNPROVEN exit 2, never a green cl
   // 11. Self-inconsistent summary that hides a loaded violation (forged green):
   // the chunk facts still load executor entries, so a zeroed summary must be
   // caught rather than reported as MET.
-  const hiddenViolationSummary = cloneT1();
+  const hiddenViolationSummary = cloneViolation();
   (hiddenViolationSummary.predicate as { loadedViolations: unknown[] }).loadedViolations = [];
   // 12. The bundler's opaque style-asset id (base64url of an absolute path)
   // must never be accepted as an artifact id: it is a machine-path carrier.
@@ -806,16 +760,13 @@ test('T5 forged/derived artifacts fail closed: UNPROVEN exit 2, never a green cl
     opaqueStyle.chunks as Array<{ modules: Array<{ id: string; renderedLength: number }> }>
   )[0]!.modules.push({ id: opaqueStyleId, renderedLength: 10 });
   // 13. A non-canonical spelling of a gate id must not evade exact matching.
-  const nonCanonicalGate = cloneT1();
-  const gateViolation = (
-    nonCanonicalGate.predicate as { loadedViolations: Array<{ moduleId: string }> }
-  ).loadedViolations[0]!.moduleId;
-  const nonCanonicalSpelling = gateViolation.replace('packages/element/', 'packages//element/');
+  const nonCanonicalGate = cloneViolation();
+  const nonCanonicalSpelling = gateId.replace('packages/element/', 'packages//element/');
   for (const chunk of nonCanonicalGate.chunks as Array<{
     modules: Array<{ id: string; renderedLength: number }>;
   }>) {
     for (const moduleRecord of chunk.modules) {
-      if (moduleRecord.id === gateViolation) moduleRecord.id = nonCanonicalSpelling;
+      if (moduleRecord.id === gateId) moduleRecord.id = nonCanonicalSpelling;
     }
   }
   // 14. An unknown `\0` scheme (possible machine-path carrier) is malformed.
@@ -902,7 +853,7 @@ test('T5 forged/derived artifacts fail closed: UNPROVEN exit 2, never a green cl
   expect(opaqueCheck.stderr).not.toContain('/Users/');
   expect(opaqueCheck.stderr).not.toContain(REPO_ROOT);
 
-  // The same real artifacts keep their honest verdicts through the CLI.
+  // Check the real positive and the derived negative through the CLI.
   const t2Path = join(forgedDir, 'real-t2.json');
   await writeFile(t2Path, t2Source, 'utf8');
   const met = await runChecker([relative(REPO_ROOT, t2Path)]);
@@ -911,18 +862,13 @@ test('T5 forged/derived artifacts fail closed: UNPROVEN exit 2, never a green cl
   expect(met.stdout.split('\n').filter((line) => line.length > 0)).toHaveLength(1);
   expect(met.stdout).toContain('MET');
 
-  const violated = await runChecker([
-    relative(REPO_ROOT, join(realEvidence.t1.root, 'dist', 'client', GRAPH_ASSET)),
-  ]);
+  const violated = await runChecker([violationPath]);
   expect(violated.code, violated.stderr).toBe(1);
   // A failing human run keeps stdout a data channel (empty).
   expect(violated.stdout).toBe('');
 
   // --json is a deterministic document and repeats the honesty.
-  const jsonChecked = await runChecker([
-    '--json',
-    relative(REPO_ROOT, join(realEvidence.t1.root, 'dist', 'client', GRAPH_ASSET)),
-  ]);
+  const jsonChecked = await runChecker(['--json', violationPath]);
   expect(jsonChecked.code).toBe(1);
   const report = JSON.parse(jsonChecked.stdout) as {
     format: string;
