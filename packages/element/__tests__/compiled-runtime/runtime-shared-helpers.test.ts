@@ -1,58 +1,26 @@
-/**
- * M04b evidence — the browser-safe shared-helper extraction
- * (`runtime/values.ts` + `runtime/bindings.ts`), and the delegation proof for
- * the two modules that used to own copies:
- *
- * - `program-kernel.ts` re-exports the canonical value helpers from
- *   `values.ts` (it used to define `displayValue`, `assertSafeUrlAttribute`
- *   and `removeNodes`) and its subscription/update guards delegate to
- *   `bindings.ts`;
- * - `server/shared.ts` re-exports the canonical sink coercions and the shared
- *   validation failure from `values.ts` (it used to define them), so the
- *   browser DOM executor no longer imports a server module to coerce a value.
- *
- * Reference equality is the assertion for "one source, no duplicated table";
- * behaviour parity for the moved helpers is carried by the existing element
- * suites (`compiled-server/sink-coercions`, `compiled-escape-parity`,
- * `server-html`, `compiled-server/url-sink-screening`, the whole
- * `compiled-runtime` corpus) which run unchanged against the extraction — the
- * full element project run is the regression evidence in the PR body.
- */
-
 import { expect, test } from 'vitest';
 import { SIGNAL_BRAND } from '@openelement/protocol/signal';
 import type { SignalLike } from '@openelement/protocol/signal';
 import { RuntimeErrorCode, ServerErrorCode } from '@openelement/protocol/errors';
 import { trustedHtmlValue as securityTrustedHtmlValue } from '../../src/internal/core/security.ts';
 import { LifetimeScope } from '../../src/internal/compiled/lifetime-scope.ts';
-import * as kernel from '../../src/internal/compiled/runtime/program-kernel.ts';
-import * as serverShared from '../../src/internal/compiled/server/shared.ts';
+import * as leaf from '../../src/internal/compiled/leaf-runtime.ts';
 import { bindSignalWrites, guardUpdate } from '../../src/internal/compiled/runtime/bindings.ts';
 import { runtimeProbe } from '../../src/internal/compiled/runtime/observability.ts';
 import * as values from '../../src/internal/compiled/runtime/values.ts';
 import { signal } from '../../src/internal/signal/framework.ts';
 import { createTestEngine } from './test-engine.ts';
 
-test('M04b: program-kernel re-exports the ONE canonical value helpers', () => {
-  expect(kernel.displayValue).toBe(values.displayValue);
-  expect(kernel.assertSafeUrlAttribute).toBe(values.assertSafeUrlAttribute);
-  expect(kernel.removeNodes).toBe(values.removeNodes);
+test('the generated leaf entry exports the canonical value helpers', () => {
+  expect(leaf.displayValue).toBe(values.displayValue);
+  expect(leaf.assertSafeUrlAttribute).toBe(values.assertSafeUrlAttribute);
+  expect(leaf.removeNodes).toBe(values.removeNodes);
 });
 
-test('M04b: server/shared re-exports the ONE canonical sink coercions and failure class', () => {
-  expect(serverShared.attributeValueOf).toBe(values.attributeValueOf);
-  expect(serverShared.classValueOf).toBe(values.classValueOf);
-  expect(serverShared.styleValueOf).toBe(values.styleValueOf);
-  expect(serverShared.CompiledProgramValidationError).toBe(values.CompiledProgramValidationError);
-  // The coercions keep the same coded failure (behaviour unchanged).
-  try {
-    values.classValueOf(Symbol('nope'));
-    throw new Error('expected classValueOf to reject a symbol');
-  } catch (error) {
-    expect(error).toBeInstanceOf(serverShared.CompiledProgramValidationError);
-    expect((error as { code?: string }).code).toBe(ServerErrorCode.PROGRAM_INVALID);
-    expect((error as Error).message).toMatch(/class Part expects a string, array, or record/);
-  }
+test('invalid class values carry the coded validation error', () => {
+  expect(() => values.classValueOf(Symbol('nope'))).toThrow(
+    expect.objectContaining({ code: ServerErrorCode.PROGRAM_INVALID }),
+  );
 });
 
 test('M04b: the trusted-HTML capability is re-exported from the one trust boundary', () => {

@@ -3,10 +3,7 @@
  * semantics so shadow-internal captured targets are released by their host.
  *
  * ShadowRoot.parentNode is null by spec: a raw parentNode walk can never see
- * a host from inside its shadow tree. A failed activation whose kernel root
- * was never established falls back to releasing with the host element, so
- * records captured inside that host's shadow roots (open, closed, nested)
- * were retained forever (retained=1 after release). Ownership now walks the
+ * a host from inside its shadow tree. Ownership walks the
  * composed tree: parentNode first, then ShadowRoot.host, never crossing into
  * unrelated shadow trees, sibling islands, or detached subtrees.
  *
@@ -16,8 +13,6 @@
  *   - closed shadow: release works from the framework-held root and the host
  *   - nested shadow: ownership crosses multiple ShadowRoot.host hops
  *   - detached target: released and never replayed
- *   - failed activation before kernel.root: host fallback covers the bug
- *   - successful claim replay is unchanged (integration)
  */
 
 import { expect, test } from 'vitest';
@@ -32,10 +27,11 @@ import { cleanup, click } from './pre-upgrade-helpers.ts';
 
 // The facade captures its HTMLElement base at module evaluation time.
 const dom: FacadeDom = installFacadeDom();
-const { MAX_PRE_UPGRADE_CAPTURED_EVENTS } = await import('../../src/internal/compiled/runtime.ts');
+const { MAX_PRE_UPGRADE_CAPTURED_EVENTS } =
+  await import('../../src/internal/compiled/runtime/pre-upgrade-events.ts');
 
 const { capturePreUpgradeEvents, releasePreUpgradeEvents, replayPreUpgradeEvents } =
-  (await import('../../src/internal/compiled/runtime.ts')) as unknown as {
+  (await import('../../src/internal/compiled/runtime/pre-upgrade-events.ts')) as unknown as {
     capturePreUpgradeEvents: (
       root: EventTarget,
       types?: readonly string[],
@@ -291,32 +287,3 @@ test('composed release: a detached shadow target is swept and never replayed', (
     cleanup(host);
   }
 });
-
-// ─── Integration: failed activation before kernel.root ───
-
-test('failed activation before kernel.root releases shadow records via the host fallback', () => {
-  // Facade fallback when the compiled kernel never established a root
-  // (open-element-implementation.ts): `kernel.root ?? this`. The host is the
-  // release root, and its declarative shadow content is host-owned.
-  const host = new FacadeElement('oe-fallback-host', dom.document);
-  const shadow = host.attachShadow({ mode: 'open' });
-  const button = shadowButton(shadow);
-  dom.document.body.appendChild(host);
-  const capture = capturePreUpgradeEvents(dom.document as unknown as EventTarget, ['click']);
-  try {
-    button.dispatchEvent(click());
-    expect(capture.events.length, 'the DSD interaction is captured pre-upgrade').toEqual(1);
-
-    const kernelRoot: Node | undefined = undefined;
-    const releaseRoot = kernelRoot ?? (host as unknown as Node);
-    releasePreUpgradeEvents(releaseRoot, capture.events as readonly unknown[]);
-    expect(capture.events.length, 'retained=0 after the host-fallback release').toEqual(0);
-  } finally {
-    capture.stop();
-    cleanup(host);
-  }
-});
-
-// Successful-claim replay across the same composed ownership lives in
-// shadow-replay.test.ts (open and light islands, sibling isolation, live
-// clicks) and continues to pass unchanged.

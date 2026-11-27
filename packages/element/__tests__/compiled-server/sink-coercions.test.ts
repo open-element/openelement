@@ -1,24 +1,9 @@
-/**
- * @openelement/element — the shared sink coercions' edges (server serializer,
- * fresh DOM creation and hydration recovery read the SAME functions, which is
- * what makes the three modes byte-identical for one program).
- *
- * Each case is a value an author's binding can actually produce: a `class`
- * signal carrying an array or a record, a `style` record with a custom
- * property, a vendor-prefixed property, or a value that is not a declaration
- * at all. The two non-coercible shapes fail with a coded diagnostic instead of
- * rendering `[object Object]` into the document.
- */
-
 import { describe, expect, test } from 'vitest';
 import {
-  attributeNameIsSafe,
   attributeValueOf,
   classValueOf,
-  rawTextElement,
   styleValueOf,
-  voidElement,
-} from '../../src/internal/compiled/server/shared.ts';
+} from '../../src/internal/compiled/runtime/values.ts';
 
 describe('classValueOf', () => {
   test('empty shapes collapse to an empty attribute', () => {
@@ -76,24 +61,11 @@ describe('styleValueOf', () => {
   });
 });
 
-describe('attribute and element predicates', () => {
+describe('attributeValueOf', () => {
   test('a null or undefined attribute value removes the attribute', () => {
     expect(attributeValueOf(null)).toBeNull();
     expect(attributeValueOf(undefined)).toBeNull();
     expect(attributeValueOf(0)).toBe('0');
     expect(attributeValueOf(false)).toBe('false');
-  });
-
-  test('void and raw-text membership follows the HTML sets, not a prefix guess', () => {
-    expect(voidElement('img')).toBe(true);
-    expect(voidElement('div')).toBe(false);
-    expect(rawTextElement('script')).toBe(true);
-    expect(rawTextElement('div')).toBe(false);
-  });
-
-  test('an attribute name carrying markup or whitespace is not safe', () => {
-    expect(attributeNameIsSafe('data-probe')).toBe(true);
-    expect(attributeNameIsSafe('on click')).toBe(false);
-    expect(attributeNameIsSafe('on"click')).toBe(false);
   });
 });

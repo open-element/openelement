@@ -73,7 +73,7 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 | 23 | browser-entry-graph 观测工件与检查器（temporary-by-intent） | `packages/router/src/vite/internal/browser-entry-graph.ts`、`browser-entry-graph-artifact.ts`、`tools/repo/check-browser-entry-graph.ts` | 条件到即删（P1 判 MET 且该证据并入 release 门禁后移除一次性检查器；工件本身不进入发布面） |
 | 24 | `OE_ISLAND_STYLE_SHADOW_UNWIRED` 拒绝（ADR-0181） | `packages/router/src/vite/internal/ssg/island-scanner.ts` | 条件到即删（2026-11-20 已按书面条件退役一次：shadow 载体落地后范围收窄为 server-rendered 且无 producer 的诚实情形；client-only 半边随后也放开。剩余情形的删除条件：server-rendered 生成岛全部获得 producer） |
 | 26 | rolldown-vite `buildStart` 诊断面 workaround（#1616 报告先行契约） | `packages/router/src/vite/internal/build-diagnostics.ts`（"The interim contract, until the bundler is fixed"，条目引用 `:91`） | 条件到即删（rolldown-vite 修复对应缺陷后删除） |
-| 27 | #1558 前已发布产物的样式边兼容读 | ~~`packages/compiler/src/internal/compiler/compiled-artifact-style-requests.ts`~~ | **已删（Alpha17）** |
+| 27 | #1558 前已发布产物的样式边兼容读 | ~~compiled-artifact-style-requests.ts~~ | **已删（Alpha17）** |
 | 28 | `registerOpenUi` published-API 空操作垫片（`@openelement/ui`） | ~~packages/ui/src/register.ts~~ | **已删（1.0.0-alpha.16；该 shim 写的 breaking-alpha 条件已满足）** |
 
 没有"现在删"项：扫描发现的文本级残余（脚本头部陈旧的 `deno run` 用法

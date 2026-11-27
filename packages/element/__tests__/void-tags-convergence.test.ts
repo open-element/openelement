@@ -22,8 +22,7 @@ const REEXPORTERS = [
   'packages/protocol/src/part-program.ts',
 ];
 const CONSUMERS = [
-  'packages/element/src/internal/compiled/serializer/serialize-program.ts',
-  'packages/element/src/internal/compiled/server/shared.ts',
+  'packages/element/src/server.ts',
   'packages/compiler/src/internal/compiler/semantic-core/lower-program.ts',
 ];
 

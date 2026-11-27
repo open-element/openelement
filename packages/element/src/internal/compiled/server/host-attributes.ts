@@ -3,38 +3,10 @@ import { classValueOf, CompiledProgramValidationError, styleValueOf } from '../r
 
 type CompiledHostAttribute = readonly [name: string, value: unknown];
 
-/** One host attribute after the ONE canonical value algebra. */
-export interface NormalizedHostAttribute {
-  /** The attribute name, exactly as the caller supplied it. */
-  readonly name: string;
-  /**
-   * The canonical string value. A presence-only attribute (`true`) carries the
-   * canonical pair encoding of presence: the empty string.
-   */
-  readonly value: string;
-  /**
-   * Presence-only (`true`). The class writer emits the bare `name` spelling;
-   * the typed generated-host pair channel spells `name=""`. One algebra, two
-   * canonical wire spellings — parsed attribute presence is identical.
-   */
-  readonly bare: boolean;
-}
-
-/** The one normalized host-attribute result. */
-export interface NormalizedHostAttributes {
-  readonly attributes: readonly NormalizedHostAttribute[];
-  /**
-   * Lowercased names the raw input carried, INCLUDING values the algebra
-   * omitted (a `false` flag still names the attribute). The light-root writer
-   * needs the ledger for its `data-oe-light` ownership refusal.
-   */
-  readonly names: ReadonlySet<string>;
-}
-
 /** Check attribute names and normalize host values in authored order. */
 export function normalizeHostAttributePairs(
   raw: readonly CompiledHostAttribute[] | Record<string, unknown> | undefined,
-): NormalizedHostAttributes {
+): Array<readonly [string, string]> {
   let pairs: Array<CompiledHostAttribute>;
   if (Array.isArray(raw)) {
     pairs = raw.map((pair, index) => {
@@ -60,7 +32,7 @@ export function normalizeHostAttributePairs(
     pairs = [];
   }
   const seen = new Set<string>();
-  const attributes: NormalizedHostAttribute[] = [];
+  const attributes: Array<readonly [string, string]> = [];
   for (const [name, value] of pairs) {
     if (typeof name !== 'string' || !isSafeAttributeName(name)) {
       throw new CompiledProgramValidationError(
@@ -78,15 +50,15 @@ export function normalizeHostAttributePairs(
     seen.add(key);
     if (key === 'class' || key === 'style') {
       const serialized = key === 'class' ? classValueOf(value) : styleValueOf(value);
-      if (serialized !== '') attributes.push({ name, value: serialized, bare: false });
+      if (serialized !== '') attributes.push([name, serialized]);
       continue;
     }
     if (value === false || value === null || value === undefined) continue;
     if (value === true) {
-      attributes.push({ name, value: '', bare: true });
+      attributes.push([name, '']);
       continue;
     }
-    attributes.push({ name, value: String(value), bare: false });
+    attributes.push([name, String(value)]);
   }
-  return { attributes, names: seen };
+  return attributes;
 }

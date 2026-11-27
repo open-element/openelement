@@ -21,7 +21,6 @@ const PUBLIC_SOURCES = [
   'index.ts',
   // #1416: the shared export list both entries re-export.
   'public-surface.ts',
-  'client-only.ts',
   'authoring.ts',
   'build-utils.ts',
   'html.ts',

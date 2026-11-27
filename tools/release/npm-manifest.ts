@@ -76,19 +76,10 @@ const ENGINES: Record<string, Record<string, string>> = {
   '@openelement/ui': { node: '>=24.2' },
 };
 
-/**
- * The default and client-only Element entries import the Part Program Block
- * installers. For the builders to survive tree-shaking, preserve both
- * importing entries and the installer. These compiled .js paths mirror
- * packages/element/package.json. Create's bin also runs on import.
- */
+/** Compiled package side-effect metadata mirrors the source entry behavior. */
 const SIDE_EFFECTS: Record<string, false | string[]> = {
   '@openelement/protocol': false,
-  '@openelement/element': [
-    './src/index.js',
-    './src/client-only.js',
-    './src/internal/compiled/runtime/blocks-install.js',
-  ],
+  '@openelement/element': false,
   '@openelement/compiler': false,
   '@openelement/router': false,
   '@openelement/create': ['./src/cli.js'],

@@ -382,16 +382,13 @@ test('pack surface: module-scope seam installs are found, deferred ones are not'
 });
 
 test('pack surface: an undeclared seam install fails, a declared one passes', () => {
-  // The installer path in the fixture is the one the shipped element manifest
-  // declares, so "declared" below means the real declaration actually covers
-  // the real module — not a coincidental match on a test-only name.
-  const INSTALLER_PATH = 'src/internal/compiled/runtime/blocks-install.js';
+  const INSTALLER_PATH = 'src/install-probe.js';
   const packaged = (sideEffects: unknown): Map<string, string> =>
     new Map<string, string>([
       ['package/package.json', JSON.stringify(manifest('@openelement/element', { sideEffects }))],
       ['package/README.md', ''],
-      ['package/src/index.js', "import './internal/compiled/runtime/blocks-install.js';"],
-      [`package/${INSTALLER_PATH}`, 'installBlockBuilders(blockBuilders);'],
+      ['package/src/index.js', "import './install-probe.js';"],
+      [`package/${INSTALLER_PATH}`, 'installProbeRuntime(probeRuntime);'],
     ]);
   // Only the seam rule's findings: a fixture whose sideEffects differs from
   // packedMetadata() also trips the parity rule, which is not under test here.
@@ -406,16 +403,8 @@ test('pack surface: an undeclared seam install fails, a declared one passes', ()
   expect(undeclared.length).toEqual(1);
   expect(undeclared[0].path).toContain(INSTALLER_PATH);
 
-  // The shipped declaration clears it, and clears every other rule too.
-  expect(
-    scanPackedPackage(
-      '@openelement/element',
-      packaged(packedMetadata('@openelement/element').sideEffects),
-    ),
-  ).toEqual([]);
-
   // Wildcards and a flat `true` are honoured the way npm reads them.
-  for (const declared of [['./src/**'], true] as const) {
+  for (const declared of [[`./${INSTALLER_PATH}`, './src/index.js'], ['./src/**'], true] as const) {
     expect(seam(declared), `must pass with sideEffects=${JSON.stringify(declared)}`).toEqual([]);
   }
 
@@ -425,10 +414,5 @@ test('pack surface: an undeclared seam install fails, a declared one passes', ()
   expect(importerOnly.length).toEqual(1);
   expect(importerOnly[0].path).toContain(INSTALLER_PATH);
 
-  // Keep both importing entries and the installer in packed metadata.
-  expect(packedMetadata('@openelement/element').sideEffects).toEqual([
-    './src/index.js',
-    './src/client-only.js',
-    './src/internal/compiled/runtime/blocks-install.js',
-  ]);
+  expect(packedMetadata('@openelement/element').sideEffects).toBe(false);
 });

@@ -1,7 +1,7 @@
 /**
  * P8 guard for the sideEffects seam (see docs/architecture/seams.md).
  *
- * The `sideEffects` array in package.json is read by bundlers for in-repo
+ * The `sideEffects` declaration in package.json is read by bundlers for in-repo
  * builds (vite resolves this package from source), while the packed artifact
  * carries its own compiled-.js mirror written by the release manifest
  * (tools/release/npm-manifest.ts SIDE_EFFECTS). One side without the other is
@@ -17,10 +17,11 @@
  * "module scope". The packed side keeps its guard in pack-surface's scan of
  * the real tarball.
  */
-import { readdirSync, readFileSync, existsSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, normalize, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
+import { packedMetadata } from '../../../tools/release/npm-manifest.ts';
 import { findModuleScopeGlobalWrites } from '../../../tools/release/pack-surface.ts';
 
 const PKG_DIR = fileURLToPath(new URL('..', import.meta.url)).replace(/\/+$/, '');
@@ -46,18 +47,13 @@ const manifest = JSON.parse(readFileSync(join(PKG_DIR, 'package.json'), 'utf8'))
   sideEffects?: unknown;
 };
 
-test('sideEffects is the array form with package-relative paths', () => {
-  expect(Array.isArray(manifest.sideEffects)).toBe(true);
-  for (const entry of manifest.sideEffects as string[]) {
-    expect(entry.startsWith('./'), `${entry} must be package-relative ('./…')`).toBe(true);
-    if (!entry.includes('*')) {
-      expect(existsSync(join(PKG_DIR, entry)), `${entry} does not exist`).toBe(true);
-    }
-  }
+test('Element declares its import-time effects the same way in source and packed consumers', () => {
+  expect(manifest.sideEffects).toBe(false);
+  expect(packedMetadata('@openelement/element').sideEffects).toBe(false);
 });
 
 test('every module-scope side effect in src/ is declared (#1425 class)', () => {
-  const declared = new Set(manifest.sideEffects as string[]);
+  const declared = new Set(Array.isArray(manifest.sideEffects) ? manifest.sideEffects : []);
   const sources = listSourceFiles(join(PKG_DIR, 'src'));
   expect(sources.length).toBeGreaterThan(0);
 

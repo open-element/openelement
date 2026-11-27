@@ -21,7 +21,6 @@
   },
   "files": [
     "src/index.ts",
-    "src/client-only.ts",
     "src/jsx-runtime.ts",
     "src/jsx-dev-runtime.ts",
     "src/authoring.ts",
@@ -29,8 +28,6 @@
     "src/logger.ts",
     "src/build-utils.ts",
     "src/css-modules.d.ts",
-    "src/no-blocks.ts",
-    "src/base.ts",
     "src/server.ts",
     "src/internal/compiled/generated-element/shell.ts",
     "src/internal/compiled/generated-element/dsd-ssr.ts"

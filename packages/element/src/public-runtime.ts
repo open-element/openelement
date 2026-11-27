@@ -261,12 +261,7 @@ function serializeLightGeneratedHost(
   projectedChildren?: ReadonlyMap<string, string>,
   lightProjectionIntent = false,
 ): string {
-  const pairs =
-    authoredAttributes === undefined
-      ? []
-      : normalizeHostAttributePairs(authoredAttributes).attributes.map(
-          (attribute) => [attribute.name, attribute.bare ? '' : attribute.value] as const,
-        );
+  const pairs = normalizeHostAttributePairs(authoredAttributes);
   const attributes = pairs.map(([name, value]) => ` ${name}="${escapeAttrValue(value)}"`).join('');
   // Claim and light-root CSS scope use the ownership marker after authored attributes.
   const children = projectSlotAnchors(content, projectedChildren);
@@ -638,9 +633,7 @@ function renderToStringAtDepth(
       const hostAttributes =
         options.hostAttrs === undefined
           ? undefined
-          : normalizeHostAttributePairs(options.hostAttrs).attributes.map(
-              (attribute) => [attribute.name, attribute.bare ? '' : attribute.value] as const,
-            );
+          : normalizeHostAttributePairs(options.hostAttrs);
       return renderRegisteredGeneratedHost(
         input,
         rootGeneratedHostRenderer,

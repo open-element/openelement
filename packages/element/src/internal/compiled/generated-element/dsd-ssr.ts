@@ -1,37 +1,6 @@
 /**
- * generated-element/dsd-ssr.ts — the host-level DSD producer for the generated
- * native element (M09-2a).
- *
- * `dsd.ts` owns the ONE canonical DSD spelling and refuses to build a host tag;
- * the generated `<Name>__ssr` is content-only by contract. This leaf is the one
- * place that closes the two facts into the host artifact the browser parser
- * adopts: host tag, then the DSD template, then the light children.
- *
- * The shape mirrors the class serializer's host wrapping
- * (`server/index.ts` `serializeCompiledProgram`): the tag and its attributes,
- * `<template shadowrootmode="…" …>` around the content, light children AFTER
- * the template so the platform's own slot distribution does the work, and
- * `<tag>content</tag>` for a light root. It is deliberately narrower than that
- * serializer:
- *
- * - the template comes from `serializeShadowTemplate` (`dsd.ts`), so there is
- *   no second DSD spelling and no raw-markup prefix channel;
- * - attributes are `[name, value]` string pairs only, screened by the one
- *   canonical safe-attribute-name predicate and escaped by the shared
- *   `escapeAttrValue`, so there is no second escape table;
- * - no `<style>`, no CSS and no `class`/`style` value algebra: the caller
- *   normalizes values before they cross this boundary. External stylesheet
- *   delivery is the typed `styleLinks` channel: the template declares the
- *   canonical marked `<link>` nodes through the ONE browser-safe serializer
- *   (`internal/compiled/style-link-tags.ts`, M09-2e / #1803), never inline CSS.
- *
- * This module is a browser-safe leaf. It imports strings and validation only:
- * `dsd.ts`, the shared escapers, the safe-attribute predicate, the shared
- * marked-link writer and the compiled validation error. It never imports
- * `server/index.ts`, `server/shared.ts`, `serialize-program.ts`, the kernel or
- * any execution backend.
- *
- * @module ./dsd-ssr.ts
+ * Compose the generated content, declared stylesheet links, and light children
+ * into the host markup the browser parser adopts.
  */
 
 import { escapeAttrValue } from '../../core/html-escape.ts';

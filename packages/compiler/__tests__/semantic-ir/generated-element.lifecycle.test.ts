@@ -606,7 +606,7 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     const hook = 'onConnect(() => { globalThis.__oeX = 1; });';
     for (const specifier of [
       '@openelement/element/lifecycle/extra',
-      '@openelement/element/no-blocks',
+      '@openelement/element/authoring',
     ]) {
       expect(
         frontendCodes(

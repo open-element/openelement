@@ -10,8 +10,8 @@
  *       normalized, includes its style asset, and meets the executor gate.
  *   T2  direct Vite build of the generated-element shell + neutral primitives
  *       (write:false) → MET; report categories still listed.
- *   T3  an unused re-export of `convertToAttribute` from `facade-host.ts` →
- *       parsed-only executor residue recorded, loaded set MET, checker exit 0.
+ *   T3  a historical executor ID in a real artifact's parse capture → MET,
+ *       with the residue in the detailed report.
  *   T4  exact identity: a `node_modules/probe/facade-host.ts` copy is NOT the
  *       element executor entry (no suffix matching).
  *   T5  forged artifacts derived from T1/T2 (missing/malformed/incomplete/
@@ -573,40 +573,20 @@ test('T2c the writer still fails closed on a strategy-resolved island with no em
 });
 
 test('T3 a parsed-but-unused executor entry is a diagnostic, not a gate failure', async () => {
-  // The re-exported executor entry is a PARSE-ONLY residue: the bundler parses
-  // the module to build its export table and then tree-shakes the binding, so
-  // nothing of it loads. `runtime-program.ts` is the surviving gate-table entry
-  // that still exports a real value (`normalizePartProgram`) — the deleted
-  // facade module cannot carry this fixture, and using a live member of the
-  // frozen table keeps the assertion measuring the same predicate.
-  const root = await makeDirectFixture(
-    'parsed-only',
-    [
-      "import { createGeneratedElementClass } from '@openelement/element/internal/compiled/generated-element/shell';",
-      "export { normalizePartProgram } from 'oe-executor-entry';",
-      'globalThis.__oeBrowserGraphProbe = typeof createGeneratedElementClass;',
-      '',
-    ].join('\n'),
-  );
-  const build = await runDirectBuild({
-    root,
-    plugin: true,
-    aliases: {
-      'oe-executor-entry': join(ELEMENT_ROOT, 'src', 'internal', 'compiled', 'runtime-program.ts'),
-    },
-  });
-  const source = build.assets.get(GRAPH_ASSET);
-  expect(source).toBeDefined();
-  const artifact = readGraphArtifact(source!, 'T3');
-  const executorEntry = 'packages/element/src/internal/compiled/runtime-program.ts';
+  const root = await makeDirectFixture('parsed-only', SHELL_ENTRY);
+  const build = await runDirectBuild({ root, plugin: true });
+  const artifact = readGraphArtifact(build.assets.get(GRAPH_ASSET)!, 'T3');
+  const executorEntry = executorEntryModuleIds(artifact.element.packageRoot)[0]!;
+  expect(artifact.parsedModuleIds).not.toContain(executorEntry);
 
-  expect(artifact.parsedModuleIds).toContain(executorEntry);
+  artifact.parsedModuleIds.push(executorEntry);
+  Object.assign(artifact.predicate, deriveBrowserEntryGraphSummary(artifact));
   const evaluation = evaluateBrowserEntryGraphArtifact(artifact);
   expect(evaluation.verdict, JSON.stringify(evaluation, null, 2)).toBe('MET');
   expect(evaluation.parsedOnlyExecutorResidues).toContain(executorEntry);
 
   const artifactPath = join(root, 'parsed-only.json');
-  await writeFile(artifactPath, source!, 'utf8');
+  await writeFile(artifactPath, JSON.stringify(artifact), 'utf8');
   const reportPath = join(root, 'parsed-only-report.txt');
   const checked = await runChecker([
     relative(REPO_ROOT, artifactPath),
@@ -930,15 +910,11 @@ test('T7 determinism: two observer builds emit byte-identical artifacts', async 
   );
 });
 
-test('the frozen executor-entry table names existing modules and keeps its digest pinned', () => {
-  // Four, not six: `facade-host.ts` and `runtime/kernel.ts` were the class lane's
-  // own call surfaces and were deleted with the lane, so the gate now names the
-  // executor proper. The loop below is the assertion that made the stale naming
-  // visible — every id must still resolve on disk.
+test('the frozen table keeps rejecting retired executor IDs', () => {
   expect(EXECUTOR_ENTRY_RELATIVE_MODULES).toHaveLength(4);
   expect(new Set(EXECUTOR_ENTRY_RELATIVE_MODULES).size).toBe(4);
   for (const modulePath of EXECUTOR_ENTRY_RELATIVE_MODULES) {
-    expect(existsSync(join(ELEMENT_ROOT, modulePath)), modulePath).toBe(true);
+    expect(existsSync(join(ELEMENT_ROOT, modulePath)), modulePath).toBe(false);
   }
   // A reviewed change to the table changes this literal in the same commit.
   expect(browserEntryGraphGateListDigest()).toBe(

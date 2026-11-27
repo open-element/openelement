@@ -9,7 +9,6 @@
  * page-lifetime entry table).
  */
 
-import type { CompiledHydrationOptions } from './hydrate.ts';
 // The error dialect comes from its ORIGIN module, never from the executor's
 // `fail` micro-factory in program-kernel.ts. The two are byte-for-byte the same
 // failure — `fail(code, message)` IS `raiseFrameworkError('render', code,
@@ -19,7 +18,6 @@ import type { CompiledHydrationOptions } from './hydrate.ts';
 // page floor that must stay executor-free. Importing the origin is the same
 // rule leaf-runtime.ts states for `removeNodes`: import the origin, never the
 // re-export.
-import { ClaimErrorCode, raiseFrameworkError } from '@openelement/protocol/errors';
 // The shell's side of the replay contract (see that module's doc): this capture
 // module is the ONLY publisher, and it publishes at install time.
 import { installPreUpgradeReplayHook } from './pre-upgrade-replay-hook.ts';
@@ -417,22 +415,6 @@ function isInsideRoot(root: Node, target: EventTarget): target is Node {
     current = composedParentNode(current);
   }
   return false;
-}
-
-export function preUpgradeEventList(
-  source: CompiledHydrationOptions['preUpgradeEvents'],
-): readonly PreUpgradeEvent[] {
-  if (!source) return [];
-  if (Array.isArray(source)) return source;
-  if (typeof source === 'object' && 'stop' in source) {
-    source.stop();
-    return source.events;
-  }
-  raiseFrameworkError(
-    'render',
-    ClaimErrorCode.PRE_UPGRADE_EVENTS_INVALID,
-    '[compiled-hydration] preUpgradeEvents: expected an event array or capture object',
-  );
 }
 
 /**

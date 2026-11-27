@@ -198,11 +198,8 @@ export function assertStaticAttributeSeed(
  *
  * Family 2 is not server drift and never part of the parent's seed, so the same
  * check as {@linkcode assertStaticAttributeSeed} runs with those names excluded.
- * The names are the ONE runtime-only fact
- * ({@linkcode GENERATED_RUNTIME_ONLY_ATTRIBUTES}) the compiled hydration executor
- * already consumes; the scoping is identical — it applies only to a
- * custom-element host, which is why this function exists separately from the
- * intrinsic-element rule. A name the template itself declares static is NOT
+ * The exemption applies to custom-element hosts. A name the parent declares
+ * static is not
  * excluded: an authored value keeps the exact check (the runtime-only set names
  * child state, not an authored row).
  *

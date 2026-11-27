@@ -1,40 +1,6 @@
-/**
- * The single public export list of @openelement/element — the names every
- * entry of this package re-exports, spelled out exactly once (#1416).
- *
- * Two entries re-export this module and differ in exactly one thing: the
- * hydration executor install. `index.ts` (the default `.` entry) installs it, so
- * elements may hydrate server-rendered roots. `client-only.ts` does not, so a
- * bundle for a page where no island can hydrate server DOM carries no hydration
- * machinery at all. Keeping the list here rather than in each entry is what
- * stops the two surfaces from drifting apart.
- *
- * The list stays explicit — no star re-export from the implementation modules
- * (#488): the public surface is exactly the names written in this file.
- * SafeHtml, UnsafeHtml and StyleSheetRule stay internal (#487).
- */
-
-// ─── Core exports ───────────────────────────────────────
-//
-// `OpenElement` and `ErrorBoundary` were the CLASS lane's public base classes. The
-// lane is deleted (F16): the generated lane's authoring form is a default-exported
-// function component plus a `defineIslandConfig` sidecar, and its author-facing
-// hooks (`onConnect`, `onDispose`, `onError`, `ref`, `useHost`, `useContext`) are
-// the compiler-erased intrinsics re-exported further down this file. There is no
-// replacement base class and no compatibility shim: an app that extended one must
-// move to the generated lane.
-
+/** Public component authoring and rendering exports. */
 export { collectPublicProps } from './public-runtime.ts';
 
-// ─── Server render + client bootstrap (compiled pipeline) ──────────
-
-// renderToString serializes a compiled class to deterministic HTML for generated
-// server entries; ensurePreHydrationClickCapture installs the pre-upgrade
-// capture that the compiled hydration replays after upgrade (generated client
-// entries call it). The streamed-page shell executor (createStreamShellExecutor
-// and its three types) is DELETED with the class lane's compiled stream
-// channel: its one identity input was `componentClass.__partProgram`, and
-// every consumer retired with renderIntent.stream (2026-11-24).
 export { ensurePreHydrationClickCapture, renderToString } from './public-runtime.ts';
 // alpha15 S lane: the component-stylesheet URL channel the router's generated
 // SSR/SSG entry feeds before rendering (the DSD templates of components whose
