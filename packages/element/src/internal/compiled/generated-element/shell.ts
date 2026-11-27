@@ -87,21 +87,8 @@ export type {
 } from './descriptor.ts';
 
 /**
- * The generated element's ONE internal entry: the emitted module imports this
- * module's specifier for the class factory AND (M09-2a) for the host-level DSD
- * producer the appended `<Name>__ssrHost` calls. It is a re-export, not a
- * second implementation: `./dsd-ssr.ts` composes the canonical DSD spelling
- * (`../dsd.ts`) and is a browser-safe leaf. The producer is surfaced here
- * because the element package has exactly one generated-element export
- * subpath, and a second subpath would be new public surface (`D-packaging`).
- *
- * The consequence is stated rather than hidden: a module that imports this
- * specifier also has `dsd.ts` in its parse graph. A light generated module
- * never calls the producer and never emits `<Name>__ssrHost`, so the producer
- * is tree-shaken out of its shipped chunk; the two module-graph guards
- * (`generated-element.class.browser.test.ts` and
- * `generated-element.shadow.test.ts`) assert the rendered graph, and the
- * emitter's byte-identity test asserts the light tail text.
+ * The emitted class and its host-level SSR wrapper share this entry. Light
+ * components tree-shake the DSD serializer because they emit no host wrapper.
  */
 export { serializeGeneratedElementHtml } from './dsd-ssr.ts';
 export type { GeneratedElementSsrInput, GeneratedElementSsrRoot } from './dsd-ssr.ts';
@@ -122,15 +109,9 @@ function hostPropertyAttribute(property: GeneratedElementProperty): string | nul
 const GENERATED_HOST_ATTRIBUTES = '__oeHostAttributes';
 
 /**
- * Compiler-private record key carrying the names of the declared rows whose ONLY
- * host wire is the JSON prop seed: the JSON-seedable non-primitive rows
- * (`array`/`object`) and, since the 2026-11-23 ADR-0181 A5 amendment, the
- * property-only primitives (`attribute: null`). Non-enumerable, beside the
- * pairs, and written by the same seeder that decided the payload — never
- * re-derived by a consumer, because the derivation would also claim rows the
- * seed does not actually carry (a supplied getter is deliberately not read, so
- * it gets no seed) and that difference is exactly the one that would turn a
- * filtered pair into a lost value.
+ * Non-enumerable record of property names actually written to the JSON seed.
+ * Use it when omitting forwarded attribute pairs. A supplied getter can defer a
+ * value that the seed never carried, even for a seedable property.
  */
 const GENERATED_PROP_SEED_ROWS = '__oePropSeedRows';
 
@@ -158,16 +139,9 @@ const JSON_SEEDABLE_PROPERTY_TYPES: ReadonlySet<string> = new Set(['array', 'obj
 const PROP_SEED_MISMATCH = 'OEIR_SHELL_PROP_SEED_MISMATCH';
 
 /**
- * Internal identity for a supplied value the SSR→claim wire cannot carry
- * faithfully. Two cases reach it: an attribute-backed `boolean false` against a
- * presence-default `true` (rendering it would silently diverge: the server
- * content carries `false` while the claim can only re-read the presence
- * default), and a supplied JSON-family value whose serialization is not
- * encodable (a function, a symbol, a bigint, a cyclic graph). Property-only
- * primitives are no longer in this family: they travel on the JSON seed under
- * the ADR-0181 A5 amendment (2026-11-23) instead of silently losing their value
- * at claim time. Fail closed with an internal `OEIR_LEAF_*` identity (no public
- * catalogue row).
+ * The SSR wire cannot carry an attribute-backed false against a default of
+ * true or an unencodable JSON seed. Reject either before rendering bytes
+ * that would disagree with the upgraded property.
  */
 const UNSEEDABLE_PROPERTY = 'OEIR_LEAF_UNSEEDABLE_PROPERTY';
 
@@ -179,25 +153,9 @@ function primitiveRowFallback(property: GeneratedElementProperty): unknown {
 }
 
 /**
- * Whether ONE declared row may travel on the JSON prop seed
- * ({@link GENERATED_PROP_SEED}) — the predicate the producer and the claim
- * BOTH read, so the wire the seeder writes and the wire the claim accepts
- * cannot drift.
- *
- * Two families are carried:
- *
- * - a JSON-seedable NON-PRIMITIVE row (`array`/`object`), which has no
- *   attribute form at all (D-18c / M11-3);
- * - a PROPERTY-ONLY PRIMITIVE row (`attribute: null`). Before the 2026-11-23
- *   ADR-0181 A5 amendment this was the recorded boundary: the claim re-read the
- *   declared default and silently wiped the server content a page root had
- *   rendered (the typed-`definePage` route case). The row has no attribute name
- *   to carry it, so the seed is its ONE host wire.
- *
- * An ATTRIBUTE-BACKED primitive is deliberately NOT seedable: its declared
- * attribute pair is already the SSR→claim wire (M11-2), and putting one row on
- * two wires is the double spelling this fold refuses. `trustedHtml` stays
- * excluded: a brand cannot be reconstructed from JSON (D-18c).
+ * The producer and claim share the JSON seed rule. Arrays, objects and
+ * property-only primitives use the seed. Attribute-backed primitives already
+ * have a wire and a TrustedHtml brand cannot be reconstructed from JSON.
  */
 function isJsonPropertySeedRow(property: GeneratedElementProperty): boolean {
   if (JSON_SEEDABLE_PROPERTY_TYPES.has(property.type)) return true;
@@ -205,45 +163,14 @@ function isJsonPropertySeedRow(property: GeneratedElementProperty): boolean {
 }
 
 /**
- * Seed the generated host producer's content props from the host's canonical
- * attribute pairs (M11 complete vertical).
+ * Resolve the SSR host props with the client's attribute conversion and
+ * defaults. Supplied data values win over attributes. Unsupplied arrays and
+ * objects keep lazy per-instance defaults and supplied getters stay deferred.
  *
- * The generated element's server artifact is the emitted `<Name>__ssrHost`,
- * which must produce the SAME content the client class renders after upgrade.
- * Static/authored host attributes are standard SSR input, so the producer seeds
- * them here through the canonical compiled-property conversion
- * (`convertFromAttribute`, the same leaf the shell's own attribute channel
- * uses) plus the declared primitive default — never a server-only second
- * conversion table.
- *
- * Precedence mirrors the shell's initial state: a supplied property value (the
- * parent's in-process channel, which also travelled as a host attribute) wins
- * over the attribute wire; a primitive row supplied by neither falls back to
- * its declared default.
- *
- * The JSON-seeded family is documented separately, because its rows have no
- * attribute wire and therefore carry TWO different facts:
- *
- * - an UNSUPPLIED `array`/`object` row is not fabricated here: its generated
- *   factory default materialises per CLIENT instance, so this fold leaves the
- *   row absent rather than pretending a server value exists (the shell
- *   resolver still supplies the declared default lazily until a claim writes
- *   it);
- * - a SUPPLIED, JSON-encodable row travels to the claim: it is serialized into
- *   one {@link GENERATED_PROP_SEED} host attribute (ADR-0182 D-18c / M11-3),
- *   and the shell restores it BEFORE setup so the server bytes and the upgraded
- *   state are the same fact. That row is either a JSON-seedable
- *   `array`/`object`, or — under the 2026-11-23 ADR-0181 A5 amendment — a
- *   PROPERTY-ONLY PRIMITIVE (`attribute: null`), whose claim used to re-read the
- *   declared default and silently wipe the server content. An attribute-backed
- *   primitive is NOT seeded: its declared attribute pair already is the wire.
- *   The value is read once here; a supplied getter is deliberately deferred to
- *   the content leaf and therefore gets no seed. `trustedHtml` stays excluded
- *   on purpose — a brand cannot be reconstructed from JSON, and promoting a
- *   plain string back to it would be a raw-markup channel (D-18c records that as
- *   a separate decision).
- *
- * Pure: the input records are never mutated.
+ * Explicit JSON-seedable values are carried in the host's
+ * {@link GENERATED_PROP_SEED} attribute so claim restores them before setup.
+ * Attribute-backed values already use their attributes. Input records are
+ * preserved.
  */
 export function seedGeneratedElementHostProperties<P extends object = Record<string, unknown>>(
   properties: readonly GeneratedElementProperty[] | undefined,
@@ -956,30 +883,13 @@ function restatesDefault(property: NormalizedProperty, value: unknown): boolean 
 }
 
 /**
- * Reconcile own data properties that shadow a declared accessor. This is the
- * classic upgrade sequence:
+ * Reconcile properties assigned before custom-element upgrade. A real own
+ * data value takes precedence over the replayed attribute. Nullish values and
+ * values that restate a primitive attribute-backed default are ignored.
  *
- * ```js
- * <oe-profile label="server">   // parser-created; not upgraded yet
- * el.label = 'pre';             // own data property, shadowing nothing yet
- * customElements.define(...);   // after upgrade the own property shadows the accessor
- * ```
- *
- * Runs once, on the first connect and before `createRecipe`: the own property is
- * read and deleted, then a real pre-upgrade value is written through the same
- * property contract (coercion + reflection), so it wins over the attribute the
- * platform replayed. A value that merely restates the declared default is
- * ignored. `null`/`undefined` carry no pre-upgrade assignment intent (old
- * facade contract) and are ignored too. A non-configurable own property cannot
- * be deleted: fail loudly instead of leaving the accessor silently shadowed.
- *
- * Two passes: validate every own data descriptor first, then apply. A locked
- * descriptor discovered after a configurable one therefore leaves the element
- * untouched (no earlier delete, write or reflection) instead of half-applied.
- * The descriptor snapshot also means no getter is invoked to read a value. The
- * completion flag is set only after the apply pass, so every later connect
- * retries the same loud rejection rather than skipping validation and mounting
- * the still-shadowed accessor.
+ * Validate all own descriptors before deleting or reflecting anything.
+ * The snapshot avoids reading getters and a non-configurable property fails
+ * without a partial reconciliation. Record completion after applying writes.
  */
 function reconcilePreUpgradeProperties(element: HTMLElement, state: ElementState): void {
   if (state.ownPropertiesReconciled) return;
@@ -1022,28 +932,10 @@ function reconcilePreUpgradeProperties(element: HTMLElement, state: ElementState
 }
 
 /**
- * Restore the declared rows the SSR producer serialized into
- * {@link GENERATED_PROP_SEED}: JSON-seedable non-primitives (ADR-0182 D-18c /
- * M11-3) and, since the 2026-11-23 ADR-0181 A5 amendment, property-only
- * primitives — the rows with no attribute wire at all.
- *
- * The attribute is the SHELL's slot, not an author attribute: it is written by
- * the emitted `__ssrHost` / light-root producer and removed here, so the same
- * markup re-claims identically (the claim's static-seed check excludes it, and
- * an absent seed leaves every row at its declared default exactly as before).
- *
- * This runs from `connectedCallback` BEFORE the recipe is created (the same
- * seam the claim body reads its props from), so the resolved props a page root's
- * setup reads are the values the server rendered with, not the declared
- * defaults.
- *
- * Fail closed on anything the descriptor cannot explain: an unparseable
- * payload, a non-object, an unknown row name, or a row whose type has no JSON
- * wire (an attribute-backed primitive, a `trustedHtml` brand). Silently keeping
- * the default would render a page whose visible content and upgraded state
- * disagree — the defect this channel exists to remove — so it throws the
- * shell's own seed-mismatch identity ({@link PROP_SEED_MISMATCH}) instead of
- * keeping the default.
+ * Restore the producer's JSON property seed before component setup. The
+ * shell consumes and removes the attribute and claim excludes it from static
+ * validation. Missing seeds keep defaults. Malformed payloads or rows without
+ * a JSON wire fail with the coded seed mismatch.
  */
 function applyGeneratedPropSeed(element: HTMLElement, state: ElementState): void {
   const overrides = state.propSeedOverrides;
@@ -1161,23 +1053,9 @@ const PROPERTY_CHANGE_PROPERTY = '__oe_onPropertyChange';
 const ERROR_HANDLER_PROPERTY = '__oe_onError';
 
 /**
- * The compiler-private runtime property that hands generated code its
- * update-phase error sink (`16b-EB`).
- *
- * It is a GETTER, deliberately: registration order must not matter. A depth-1
- * retained child registers its handler from `<Name>__setup`, which runs AFTER
- * the retaining reference site already built the host literals, and a module
- * whose root has no `onError` but whose child does must still guard the child's
- * refreshes.
- *
- * The getter always returns the ONE cached reporter closure for this element;
- * the closure re-reads the live handler list at DISPATCH time and rethrows the
- * original error when the list is empty. That keeps the "no handler ⇒ unchanged
- * propagation" rule true even for a refresh subscribed before its handler was
- * registered, and it is why an empty list cannot leave a stale swallowing
- * closure behind. A module with no `onError` intrinsic never reads this
- * property: its generated subscriptions stay the bare two-name
- * `bindSignalWrites` call.
+ * Lazy access to the cached update error reporter. A retained child can
+ * register its handler after the enclosing host record has been constructed,
+ * so the reporter reads the live handler list at dispatch.
  */
 const ERROR_REPORT_PROPERTY = '__oe_reportError';
 
@@ -1212,26 +1090,9 @@ type ErrorHandler = (env: {
 }) => void;
 
 /**
- * The compiler-private runtime property that hands generated code its `16b-CTX`
- * context scope.
- *
- * A GETTER on the host records, deliberately: registration order must not
- * matter, and a depth-1 retained child's setup host forwards the same channel.
- * The getter returns the SAME adapter object for a given element, so repeated
- * reads cannot build a second owner chain.
- *
- * The emitted text names three calls, not the service:
- *
- * - `use(token)` — one persistent consumer-local signal.
- * - `provider(token, read)` — one owner-scope provider with a value thunk.
- * - `owner()` — a CHILD owner scope of this one. A hostless generated component
- *   (one that creates no element) calls this once in its retained setup and
- *   registers there, so it is a child of the element anchor rather than the
- *   anchor itself. Two sibling hostless children therefore cannot see each
- *   other's providers, while both still resolve the element's ancestors.
- *
- * The ROOT uses the anchor directly (no `owner()`), which is what makes a root
- * provider visible to every depth-1 child.
+ * The shared lazy context adapter. The root registers providers on the
+ * element anchor. Each retained hostless child uses its own child owner so
+ * sibling providers stay isolated while both can resolve the root's context.
  */
 const CONTEXT_SCOPE_PROPERTY = '__oe_context';
 
@@ -1345,24 +1206,10 @@ function withErrorReportChannel<T extends object>(
 }
 
 /**
- * Run a captured `16b-EB` throw through one snapshot of registered handlers.
- *
- * `handlers` is passed explicitly because the CONNECT capture point must run the
- * handlers of the instance that failed AFTER that instance's rollback has
- * already cleared the live list. Every handler runs (a throwing handler must not
- * hide the others), and the FIRST handler error is rethrown in place of the
- * original: the boundary's own failure is what the page needs to see, while the
- * original value stays reachable through `env.error`.
- *
- * An EMPTY snapshot means "no boundary": the caller keeps its unchanged
- * rethrow/rollback path. This function never swallows silently.
- *
- * The env is built here: `host` is the element the failing work belongs to,
- * `signal` is the signal of the phase that threw (the per-connection scope for a
- * connect/claim failure — by dispatch time it is aborted, because rollback
- * disposed that connection; the instance-lifetime signal otherwise), and
- * `states` is a getter so the one-shot internals record is attached only for a
- * handler that reads it.
+ * Dispatch to a stable snapshot. Connect rollback may have already cleared
+ * the live handler list. Every handler runs and the first handler error wins.
+ * The environment carries the failed phase's signal and attaches internals
+ * only if a handler reads states.
  */
 function runErrorHandlers(
   element: HTMLElement,
@@ -1407,17 +1254,8 @@ NO_LIVE_SCOPE_CONTROLLER.abort();
 const NO_LIVE_SCOPE_SIGNAL = NO_LIVE_SCOPE_CONTROLLER.signal;
 
 /**
- * The update-phase error reporter a host record exposes to generated code
- * (`16b-EB`). Generated code passes it as `guardUpdate`'s second argument.
- *
- * The reporter re-reads the LIVE handler list at DISPATCH time, not at
- * subscribe time: a handler registered later in the same setup still owns a
- * refresh subscribed earlier, and a list cleared by teardown cannot leave a
- * stale closure that silently swallows. When the list is empty the original
- * error is rethrown — that is the unchanged pre-`16b-EB` propagating behaviour.
- *
- * The signal is read at dispatch time too, so a reconnect (the instance is
- * retained) and a teardown are both reported against the right lifetime.
+ * Resolve handlers and the instance signal at dispatch. Late registrations
+ * own earlier subscriptions and clearing the handlers restores propagation.
  */
 function errorReporterFor(element: HTMLElement, state: ElementState): (error: unknown) => void {
   return (error: unknown): void => {
@@ -1558,15 +1396,8 @@ function ensureElementInternals(element: HTMLElement, state: ElementState): Elem
 }
 
 /**
- * Resolve the root once and retain it on the element state. The stored root is
- * the element's lifetime claim/mount parent: a later connect reuses it even
- * after a recipe/claim failure, so a retry cannot silently attach a second
- * root or clear borrowed DOM.
- *
- * Existing-root option validation happens AFTER the root is recorded. A
- * mismatch therefore keeps the resolved root (and closed internals) for the
- * next connect, which re-reports the same coded failure instead of falling
- * through to a second `attachInternals()` and a different error identity.
+ * Retain the root before validating its options. A retry must report the
+ * same mismatch and must never attach a second root or clear borrowed DOM.
  */
 function rootFor(element: HTMLElement, state: ElementState): HTMLElement | ShadowRoot {
   if (state.root !== null) {
