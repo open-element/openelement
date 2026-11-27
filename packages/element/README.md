@@ -91,9 +91,8 @@ IR, error dialect, admission descriptors) live in `@openelement/protocol`.
 
 `@openelement/element` does not own routing, Vite, Nitro, UI components,
 database, auth, or cache. It owns the framework-level signal API
-(`signal`/`computed`/`effect`) and a minimal internal `SignalEngine` protocol.
-The only engine supported and verified is the built-in
-`@preact/signals-core` adapter; Preact's own API is not Element public API,
+(`signal`/`computed`/`effect`), backed by the built-in
+`@preact/signals-core` adapter. It is the only supported and verified engine; Preact's own API is not Element public API,
 and arbitrary third-party engines are not promised.
 
 ## License
