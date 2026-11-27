@@ -73,7 +73,7 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 | 23 | browser-entry-graph 观测工件与检查器（temporary-by-intent） | `packages/router/src/vite/internal/browser-entry-graph.ts`、`browser-entry-graph-artifact.ts`、`tools/repo/check-browser-entry-graph.ts` | 条件到即删（P1 判 MET 且该证据并入 release 门禁后移除一次性检查器；工件本身不进入发布面） |
 | 24 | `OE_ISLAND_STYLE_SHADOW_UNWIRED` 拒绝（ADR-0181） | `packages/router/src/vite/internal/ssg/island-scanner.ts` | 条件到即删（2026-11-20 已按书面条件退役一次：shadow 载体落地后范围收窄为 server-rendered 且无 producer 的诚实情形；client-only 半边随后也放开。剩余情形的删除条件：server-rendered 生成岛全部获得 producer） |
 | 26 | rolldown-vite `buildStart` 诊断面 workaround（#1616 报告先行契约） | `packages/router/src/vite/internal/build-diagnostics.ts`（"The interim contract, until the bundler is fixed"，条目引用 `:91`） | 条件到即删（rolldown-vite 修复对应缺陷后删除） |
-| 27 | #1558 前已发布产物的 permissive 样式边兼容读 | `packages/compiler/src/internal/compiler/compiled-artifact-style-requests.ts`（PERMISSIVE 读，条目引用 `:23-25`） | 条件到即删（#1558 前发布的产物退出受支持窗口后收紧为严格准入） |
+| 27 | #1558 前已发布产物的样式边兼容读 | ~~`packages/compiler/src/internal/compiler/compiled-artifact-style-requests.ts`~~ | **已删（Alpha17）** |
 | 28 | `registerOpenUi` published-API 空操作垫片（`@openelement/ui`） | ~~packages/ui/src/register.ts~~ | **已删（1.0.0-alpha.16；该 shim 写的 breaking-alpha 条件已满足）** |
 
 没有"现在删"项：扫描发现的文本级残余（脚本头部陈旧的 `deno run` 用法
@@ -484,17 +484,12 @@ native 选择缝是主产物，不再作为垫片登记。）
 - 退役条件：rolldown-vite 修复该缺陷——`buildStart` 抛出的错误消息能原样到达 CLI——且修复版本进入受支持矩阵后，删除"报告先行"的中间契约，raise 点恢复直接 throw。上游修复是平台事件，条件到即删。
 - 处置：条件到即删。
 
-### 27. #1558 前已发布产物的 permissive 样式边兼容读——条件到即删
+### 27. #1558 前已发布产物的样式边兼容读——**已退役**（Alpha17）
 
-- 所有者：element 编译器（`packages/compiler/src/internal/compiler/compiled-artifact-style-requests.ts:23-25` 的 PERMISSIVE 读——只认相对 `.css` 默认 import 数组，对 `static styles` 数组的其余成员一概不碰）。
-- 方向：#1558 前发布的已编译产物模块 → 从 `static styles` 数组词法恢复样式边（构建期）→ 走与 authored 边相同的 style-edge registry / Vite CSS 管线。
-- 存在原因：#1558 把样式创作形态收敛为 `.css` 文件 + import 之前发布的产物（引用 plain module `StyleSheet` 的 legacy 内联 sheet）继续走旧路径不变——这里的严格准入会让每一个先前发布的包平白破产，换不来任何协议收益。
-- 交叉登记：接缝事实（单写者、守卫测试与 Missing/unreadable 行为）登记在
-  [seams.md](./seams.md) 的 "Compiled-artifact style-edge adoption (alpha.13 I1, KR-10b)" 行；迁移矩阵对应
-  [M01 消费者审计](https://github.com/open-element/openelement/blob/e655a0bab6f1396f4ed1a10208794e51e592b0ce/docs/architecture/m01-consumer-migration-matrix.md) C13（词法读、build only、"facts emitted, not re-parsed"）。
-- 退役条件：#1558 前发布的产物版本退出受支持窗口（消费方按
-  [M01 消费者审计](https://github.com/open-element/openelement/blob/e655a0bab6f1396f4ed1a10208794e51e592b0ce/docs/architecture/m01-consumer-migration-matrix.md) 完成重编译迁移）之后，把这段 permissive 读收紧为对 ONE 样式创作语法（`semantic-core/style-imports.ts`）的严格准入；届时旧形状在打包消费证据上 fail closed，而不是静默走旧路径。
-- 处置：条件到即删。
+- 所有者：原 Element 编译器的类产物样式边解析。
+- 退役条件：旧类组件模型退出支持范围。**条件已满足**，Alpha17 已删除兼容读。
+- `__partProgram` 类产物的 `static styles` 解析及构建、开发期注册路径随旧组件模型退役。
+- 生成式组件通过 `IslandConfig.styles` 声明样式。打包模块仍携带编译时确认的类名候选项。
 
 ### 28. `registerOpenUi` published-API 空操作垫片（`@openelement/ui`）——**已退役**（2026-11-20）
 

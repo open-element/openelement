@@ -1,8 +1,6 @@
 /** Authored browse descriptions keyed by source path and symbol. Full English notes remain available. */
 export const chineseExportSummaries: ReadonlyMap<string, string> = new Map([
   ['packages/compiler/src/internal/compiler/compiled-artifact-class-candidates.ts#compiledArtifactClassCandidates', '读取已编译模块记录的样式类名候选项。模块未记录候选项时返回 undefined。'],
-  ['packages/compiler/src/internal/compiler/compiled-artifact-style-requests.ts#compiledArtifactStyleRequests', '按源码中的顺序恢复已编译模块的 .css 依赖关系。模块形态不适用时返回 undefined。'],
-  ['packages/compiler/src/internal/compiler/compiled-artifact-style-requests.ts#readCompiledArtifactStyles', '一次读取已编译模块记录的样式依赖和根节点作用域。'],
   ['packages/compiler/src/internal/compiler/plugin.ts#registerStyleEdges', '把一个模块的样式依赖写入注册表。'],
   ['packages/compiler/src/internal/compiler/semantic-core/compiler-diagnostics.ts#CompiledElementError', 'Vite 插件和编译器测试使用的错误结构。'],
   ['packages/compiler/src/internal/compiler/semantic-core/compiler-diagnostics.ts#ElementCompilerDiagnostic', '包含稳定 OEC 错误码、消息和源码范围的编译器诊断。'],

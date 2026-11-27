@@ -2,8 +2,7 @@
  * The compiler hooks of the open build plugin (issue #1473 extraction).
  *
  * `transform` runs the generated Native Custom Element lane and the server
- * function lane over the authored module, and adopts this compiler's own
- * emitted artifacts (a package's shipped module) for their style edges;
+ * function lanes and registers class candidates.
  * `handleHotUpdate` decides between ordinary module HMR and a full reload by
  * comparing the emitted generated-module text. The per-plugin-instance shape
  * map stays an instance-local closure, so no shape can leak between Vite
@@ -20,13 +19,9 @@ import {
   diagnosticPluginError,
   isJsxModuleId,
   prepareServerComponentImports,
-  readCompiledArtifactStyles,
   recordCompilerDiagnostics,
-  registerStyleRequest,
   stableModuleId,
   styleEdgesForFile,
-  styleRequestFile,
-  styleRequestModuleId,
 } from '@openelement/compiler';
 import {
   collectPackageIslandModuleSites,
@@ -129,34 +124,6 @@ export function createCompilerHooks(
                 ),
               })
             : null;
-        // A shipped compiled artifact (a package's emitted module) has no
-        // authored grammar left to compile, but its `.css` imports are the
-        // same style edges — recovered through the artifact read so dev admits
-        // the packed form exactly as the build does (#1558/KR-10).
-        const artifact =
-          generatedResult || serverResult ? undefined : readCompiledArtifactStyles(code, id);
-        // This hook is the style-edge registry's dev writer (element's
-        // compiledElementPlugin is the build binding), so the registration
-        // travels with it; the dev plugin's intercept answers from this
-        // registry. Generated and server function modules own no authored `.css`
-        // import: a generated island's declared sheets are registered from its
-        // island declaration (`devAuthoredIslandStyleUrls`), and a server
-        // function page has no element class to hang a DSD `<link>` on.
-        if (artifact !== undefined) {
-          // The component's root scope is part of every edge (alpha15 S lane,
-          // S-C1.2): a light-root sheet leaves the build wrapped in
-          // `@scope (<tag>)`, and dev scopes the served adapter identically.
-          const scopeTag = artifact.scopeTag;
-          for (const specifier of artifact.requests) {
-            registerStyleRequest({
-              moduleId: styleRequestModuleId(id, specifier, scopeTag),
-              importer: id,
-              specifier,
-              file: styleRequestFile(id, specifier),
-              ...(scopeTag === undefined ? {} : { scopeTag }),
-            });
-          }
-        }
         // The class-candidate channel (alpha15 S lane) travels with the same
         // host binding: the compile's statically admitted class tokens are
         // registered exactly as the style edges are, so the build layer can
@@ -198,8 +165,6 @@ export function createCompilerHooks(
         if (serverResult !== null) {
           return { code: serverResult.code, map: serverResult.map };
         }
-        // The edge registration is the whole job for an adopted artifact:
-        // it ships as its own module, nothing to compile or hand back.
         return null;
       } catch (error) {
         // The SAME projection the standalone compiler plugin reports through
