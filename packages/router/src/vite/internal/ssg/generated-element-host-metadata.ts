@@ -175,9 +175,8 @@ export interface ResolveGeneratedElementHostInput {
   /** The authored module source the scan already read. */
   readonly source: string;
   /**
-   * The compiler module id: `stableModuleId(absolutePath, projectRoot)`, the
-   * same project-anchored identity `island-blocks-scan` uses. It is never the
-   * machine path, so a carried refusal diagnostic cannot leak one.
+   * The project-anchored compiler id from `stableModuleId(absolutePath, projectRoot)`.
+   * Refusal diagnostics carry that id so they cannot leak the machine path.
    */
   readonly moduleId: string;
   /** The islands-dir-relative path; its extension is the lane's own gate. */

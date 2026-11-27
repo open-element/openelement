@@ -43,17 +43,9 @@ export const RESOLVED_CLIENT_ENTRY_ID = '\0' + VIRTUAL_CLIENT_ENTRY_ID;
 const CLIENT_ENTRY_PUBLIC_PATH = 'client/islands/client.js';
 
 /**
- * The packages the dev dep optimizer must pre-bundle for an island page.
- *
- * B2 moved the element runtime behind `__loadElementRuntime()`'s dynamic
- * import, so on an island page Vite first meets `@openelement/element` and
- * `@openelement/router` while the first island hydrates — not while it scans
- * the entry. A discovery that late starts a SECOND optimization of the same
- * session, and until it commits Vite holds the module graph: the element
- * runtime (and with it the pre-upgrade click capture the runtime installs)
- * lands after the first real user click, which is then neither handled nor
- * queued — the click is lost. Naming the packages here puts them in the FIRST
- * optimization, which is what the page's own module graph asks for anyway.
+ * Pre-bundle framework dependencies that islands may reach on activation.
+ * Late optimizer discovery can hold the module graph while Vite starts a new
+ * optimization pass, delaying registration and early interaction handling.
  */
 export const DEV_RUNTIME_PREBUNDLE_PACKAGES = [
   '@openelement/element',

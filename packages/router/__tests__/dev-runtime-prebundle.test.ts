@@ -1,13 +1,10 @@
 /**
  * @openelement/router/vite - dev runtime pre-bundle decision (B2 follow-up)
  *
- * The island page's element runtime is loaded by __loadElementRuntime()'s
- * dynamic import, so Vite meets @openelement/element and @openelement/router
- * only while the first island hydrates. In an INSTALLED consumer that late
- * discovery starts a second dependency optimization of the same dev session
- * and the pre-upgrade click capture arrives after the first real click, which
- * is then lost; declaring the packages in optimizeDeps.include moves them into
- * the first optimization.
+ * Late dependency discovery during island activation can start a second dev
+ * optimization pass, while Vite holds the module graph. The installed
+ * framework dependencies enter the first optimization through
+ * `optimizeDeps.include`.
  *
  * The declaration is legal only for an installed copy. For a LINKED workspace
  * package (this repo's fixtures and www) forced pre-bundling would take the

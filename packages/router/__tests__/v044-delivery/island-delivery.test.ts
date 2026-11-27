@@ -147,7 +147,10 @@ test('v0.44 one capability module registers many native element constructors onc
   expect(code).toContain('mod["Calendar"]');
   expect(code).toContain('customElements.define("oe-clock"');
   expect(code).toContain('customElements.define("oe-calendar"');
-  expect(code).toContain("typeof __Ctor0_0 !== 'function'");
+  expect(code).toContain('Capability module ./clock.ts did not export a constructor for oe-clock');
+  expect(code).toContain(
+    'Capability module ./clock.ts did not export a constructor for oe-calendar',
+  );
   expect((code.match(/createIslandScheduler/g) ?? []).length).toEqual(1);
 });
 

@@ -142,8 +142,8 @@ describe('build - generateClientEntry', () => {
     expect(code).not.toContain('__loadElementRuntime');
     // The declared list is assigned before the island module can define, and
     // the scheduler that starts activations comes after both.
-    expect(code.indexOf('var __tags =') < code.indexOf('var __scheduler')).toEqual(true);
-    expect(code.indexOf('var __loadElementRuntime') < code.indexOf('var __map')).toEqual(true);
+    expect(code).toContain('var __tags = ["my-counter"];');
+    expect(code.indexOf('var __tags =')).toBeLessThan(captureIndex);
   });
 });
 

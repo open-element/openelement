@@ -163,29 +163,40 @@ test('the dev DSD declares the component sheet and the adapter carries the sheet
   expect(adapter, 'no style/link node is ever created').not.toContain('createElement');
 });
 
-test('the dev client entry imports the selected provider’s component-sheet adapter', async () => {
-  // Dev/build channel identity (KR-4): the generated client entry must
-  // register the component sheet exactly as the build does — build-client.ts
-  // resolves the adapter from the SELECTED provider's integration, so the
-  // client's expectedStyleLinks can recognize the DSD-declared link and the
-  // hydration claim accepts its own template. A provider-gated or
-  // Tailwind-hardcoded declaration would leave a UnoCSS dev app with no
-  // registered sheet, and every island upgrade would fail closed with
-  // "unexpected static stylesheet resource".
+test('the generated shadow island keeps the provider sheet after dev upgrade', async () => {
+  const { chromium } = await import('@playwright/test');
   const handle = await bootDev(openElement());
-  // The dev island client resolves its island set from the process cwd at
-  // request time — the shape of every real dev process (`pnpm dev` runs at
-  // the project root). Pin it for the request, as the real process would.
+  const browser = await chromium.launch();
   const previousCwd = process.cwd();
+  // The virtual client entry resolves its island imports from the dev process root.
   process.chdir(FIXTURE_DIR);
   try {
+    const page = await browser.newPage();
+    await page.addInitScript(() => {
+      const define = customElements.define.bind(customElements);
+      customElements.define = (tag, constructor, options) => {
+        if (tag === 'probe-unocss-card') {
+          const article = document.querySelector(tag)?.shadowRoot?.querySelector('article');
+          article?.setAttribute('data-test-before-upgrade', '');
+        }
+        define(tag, constructor, options);
+      };
+    });
+    await page.goto(handle.base);
+    const article = page.locator('probe-unocss-card article[data-test-before-upgrade]');
+    await page.waitForFunction(() =>
+      document.querySelector('probe-unocss-card')?.matches(':defined'),
+    );
+    expect(await article.textContent()).toContain('The shadow control compiles through UnoCSS.');
+    expect(await article.evaluate((element) => getComputedStyle(element).columnGap)).toBe('8px');
+    expect(await article.evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe(
+      '1px',
+    );
     const entry = await fetchText(`${handle.base}/client/islands/client.js`);
-    expect(
-      entry,
-      'the dev client entry registers the component-sheet adapter the selected provider owns',
-    ).toContain('oe-style-components-dev');
+    expect(entry).not.toContain('oe-style-components-dev');
   } finally {
     process.chdir(previousCwd);
+    await browser.close();
   }
 });
 
