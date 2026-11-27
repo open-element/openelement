@@ -1,5 +1,5 @@
 /** Server rendering and shared runtime exports for generated components. */
-import { normalizeHostAttributePairs } from './internal/compiled/server/index.ts';
+import { normalizeHostAttributePairs } from './internal/compiled/server/host-attributes.ts';
 import { SSR_REGISTRY_GENERATED_HOSTS } from '@openelement/protocol/registry-markers';
 import { requestTimeIslandStyleLinks } from './internal/compiled/server/style-links.ts';
 import type { DocumentStyleResources } from './internal/core/html-escape.ts';
