@@ -31,15 +31,29 @@ With neither set, the origin stays `http://<Host>`, which is correct for a serve
 
 `dist/publish-manifest.json` records each public file's relative path, size, SHA-256, and cache policy. Run `npx oe publish --check` before uploading `dist-public/` to a static host. Configure the host's directory index and error document rules for `index.html` and `404.html`. Deploy the request-time entry separately when the app uses dynamic routes or actions.
 
+### Pure static: Cloudflare Pages
+
+In the starter, `app/routes/404.tsx` starts with `renderIntent: { mode: 'dynamic' }`. Remove that option to prerender `404.html`. If your app has no other dynamic routes or actions, the build is static-only and the complete Pages upload is `dist-public/`.
+
+```bash
+set -e
+npm run build
+npx oe publish --check
+test -f dist-public/404.html
+npx wrangler pages deploy dist-public --project-name=your-project
+```
+
+For a Git-integrated Pages project, set its output directory to `dist-public` and include `npx oe publish --check` in the build command. [Cloudflare Pages uses a top-level `404.html` for unmatched paths](https://developers.cloudflare.com/pages/configuration/serving-pages/#not-found-behavior). After deployment, verify the homepage returns 200 and an unknown path returns 404 at the Pages origin.
+
 ## Request-time server
 
 When any route declares `renderIntent: { mode: 'dynamic' }` or any page exports an action, the build also emits `dist/server/`:
 
-- `index.js` — a portable `fetch(Request) -> Response` handler over the same SSR bundle.
+- `index.js` — the request-time entry over the same SSR bundle. Its default export accepts a Nitro request event and returns a `Response`.
 - `server-manifest.json` — the request-time (`'dynamic'`) routes, with their paths, parameter names and action flags.
 - `package.json` — marks the directory as ESM.
 
-Hybrid pages (static GET + action) keep their prerendered artifact for GET; their POSTs reach the server by method dispatch. Pure-static builds emit none of these, and the output contract is frozen. Local preview is served by `npm start` (the router `start` CLI), which runs the same handler on Node's `node:http` — the only browser-independent way to exercise the request-time path before deploying.
+Hybrid pages (static GET + action) keep their prerendered artifact for GET; their POSTs reach the server by method dispatch. Pure-static builds omit `dist/server/`. Run `npm start` to exercise the request-time entry locally before packaging it for your host.
 
 ### Public file verification
 
@@ -47,19 +61,11 @@ Hybrid pages (static GET + action) keep their prerendered artifact for GET; thei
 
 ## Nitro presets
 
-Nitro is the first-party production deployment adapter, and the mount is a near pass-through over the fetch-native seam: the event's standard `Request` goes in, the handler's `Response` comes out. Add a route that forwards everything the static layer does not own:
+Nitro receives the generated request-time entry and the verified public directory from the same build. The catch-all receives Nitro's fetch-native request event. Prerendered files serve static GETs, and dynamic routes, actions and request-time 404s reach the generated handler.
 
 ```ts
 // server/routes/[...path].ts
-import { createOpenElementNitroHandler } from '@openelement/router/nitro-mount';
-import openElementServer from '../../dist/server/index.js';
-
-// Catch-all over the Nitro static layer (dist-public/): prerendered files win,
-// everything else — dynamic routes, actions, 404s — reaches the built handler.
-export default createOpenElementNitroHandler({
-  handler: (request, context) =>
-    openElementServer({ req: request, env: (context?.env ?? {}) as Record<string, string> }),
-});
+export { default } from '../../dist/server/index.js';
 ```
 
 ```ts
@@ -70,26 +76,42 @@ const publicDir = fileURLToPath(new URL('./dist-public', import.meta.url));
 
 export default defineNitroConfig({
   serverDir: 'server',
-  preset: 'node-server', // or 'cloudflare_module' for Workers
   publicAssets: [{ dir: publicDir }],
   modules: [
     ({ options }) => {
       options.publicAssets = options.publicAssets.filter(({ dir }) => dir === publicDir);
     },
   ],
+  compatibilityDate: '2026-06-12',
+  cloudflare: { nodeCompat: true },
 });
 ```
 
-The Nitro module keeps asset discovery scoped to the verified build directory.
+The Nitro module limits static asset discovery to `dist-public/`. Both presets use this configuration.
 
-The deploy sequence is:
+```bash
+npm run build
+npx oe publish --check
+```
 
-1. `npm run build`
-2. Run `npx oe publish --check`. Nitro packages the verified `dist-public/` directory as public assets.
-3. Build the host: `npx nitro@3.0.260610-beta build` — the version this repository's Nitro proofs pin (`NITRO_VERSION`); `preset` selects `node-server` or `cloudflare_module`.
-4. Run the output (`.output/server/index.mjs` for `node-server`) with `PORT` and `HOST` set as your platform requires.
+### Node server
 
-Both presets are proven against real Nitro output: prerendered files, dynamic routes, actions, redirects, 404s and a Nitro cache route rule.
+```bash
+npx nitro@3.0.260610-beta build --preset=node-server
+HOST=127.0.0.1 PORT=4173 node .output/server/index.mjs
+```
+
+Use the local origin for the smoke script below. Set `HOST` and `PORT` for your platform when deploying the Node artifact.
+
+### Request-time routes: Workers through Nitro
+
+```bash
+npx nitro@3.0.260610-beta build --preset=cloudflare_module
+```
+
+Nitro writes the Worker module to `.output/server/index.mjs`, verified static files to `.output/public/`, and the generated Wrangler config to `.output/server/wrangler.json`. Check that the config enables Node.js compatibility and points `ASSETS` at the packaged public directory. The generated Router entry reads Workers bindings from Nitro's request and makes them available as `ctx.env` in loaders and actions.
+
+With access to the intended Cloudflare account, deploy the verified artifact from the project root with `npx nitro@3.0.260610-beta deploy --prebuilt`. Run the smoke script using the deployed origin. Also confirm a request-time loader can read an expected binding without returning its value. The repository fixture exercises Nitro output locally using a loopback Node server and the generated Worker module with local bindings.
 
 ## Dev server
 
@@ -97,7 +119,7 @@ Both presets are proven against real Nitro output: prerendered files, dynamic ro
 
 ## Verification
 
-Verify the artifact, not the log. After `npm run build`:
+Check the HTTP responses after building and starting the application.
 
 1. `ls dist/server/` tells you whether the build produced a request-time server at all. A pure-static project should show no `dist/server` directory.
 2. `npm start` prints which mode it loaded — `request-time server entry loaded (dynamic routes enabled)`, or `no dist/server — static-only preview`. That line is the artifact's own answer; if it disagrees with your routes, the build is what to look at.
@@ -111,20 +133,21 @@ Verify the artifact, not the log. After `npm run build`:
    | fetch (`x-openelement-action: true`) | `422`, `application/json`, body `{"type":"failure","status":422,"data":{…}}` | `200` (not 303), `application/json`, body `{"type":"redirect","status":303,"location":"…"}` |
 
    The PRG status rides inside the fetch channel's body because that answer is data, not a redirect to follow. `application/problem+json` is the channel's PROTOCOL-error shape (a rejected cross-site post, an unknown action, an unparseable body), not the shape a validation failure uses.
-6. Request a `'dynamic'` route twice and confirm the response body differs from the file on disk in `dist/` — that is the request-time path working.
+6. Request a dynamic route with two different inputs that its loader reads. Check that each response contains its own value and has `Cache-Control: private, no-cache`.
 
 ### Smoke script
 
-Steps 3–5 as one copyable block (substitute your form route). It fails on the first wrong status, so it doubles as a deploy gate:
+Set `BASE` to the local or deployed origin and `FORM_PATH` to a route that rejects an empty message with 422. Each status check must pass before the script prints its result.
 
 ```bash
 set -e
 BASE=http://localhost:4173
+FORM_PATH=/your-form-route
 test "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/")" = 200
 test "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/server/index.js")" = 404
 test "$(curl -s -o /dev/null -w '%{http_code}' -X POST \
-  -H 'x-openelement-action: true' --data 'message=' \
-  "$BASE/your-form-route")" = 422
+  -H "Origin: $BASE" -H 'x-openelement-action: true' --data 'message=' \
+  "$BASE$FORM_PATH")" = 422
 echo 'artifact answers: static 200, private 404, action 422'
 ```
 
@@ -135,102 +158,6 @@ Deploy the complete output of one `npm run build`. Update prerendered HTML, brow
 ## See also
 
 - [Build and configuration](/guide/configuration) — the build, routes and middleware options that shape the output.
+- [Form actions](/guide/recipe-form-actions) — form validation, native redirects, and enhancement.
 - [Security](/guide/security) — what the generated handlers enforce at request time.
 - [Testing](/guide/testing) — the checks worth running against a build.
-
-## Cloudflare deployment
-
-Run `npm run build`. Upload `dist/` to Cloudflare Pages for a static app. If the build emits `dist/server/index.js`, use Nitro to deploy that handler and public assets to Workers.
-
-## Pure static: Cloudflare Pages
-
-The starter ships its 404 route on the request-time path:
-
-```ts
-// app/routes/404.tsx — starter default
-export default definePage(NotFoundPage, {
-  renderIntent: { mode: "dynamic" },
-  head: { title: "404 — openElement" },
-});
-```
-
-That one line is why a starter build emits `dist/server/`: the request-time server renders the page with a real 404 status for unmatched paths, so no static 404 file is written. Delete the `renderIntent` line and the route becomes prerenderable — a build with no other request-time route then produces a pure-static `dist/`:
-
-```bash
-npm run build
-ls dist/
-# 404.html  assets/  index.html
-```
-
-The build itself confirms the mode (`Pure-static build: removed build-time SSR bundle (dist/server)`), and no `dist/server/` directory exists to leak server code into the upload. Upload the directory as a Pages project:
-
-```bash
-npx wrangler pages deploy dist
-```
-
-The first deploy creates the project (name it with `--project-name` or let the CLI prompt); later deploys upload new files and the site updates. Pages' static-asset convention serves a top-level `404.html` — with its 404 status — for any path that matches no file, so the styled prerendered 404 is the site's not-found page with zero server code.
-
-Verify the artifact, not the log (substitute your pages.dev host):
-
-```bash
-BASE=https://your-project.pages.dev
-test "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/")" = 200
-test "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/no-such-page")" = 404
-echo 'Pages artifact answers: home 200, miss 404'
-```
-
-## Request-time routes: Workers through Nitro
-
-When `npm run build` emits `dist/server/`, deploy the built handler to Cloudflare Workers behind a two-file Nitro host. The mount (`@openelement/router/nitro-mount`) is a near pass-through over the fetch-native seam: the event's standard `Request` goes in, the handler's `Response` comes out.
-
-```ts
-// server/routes/[...path].ts
-import { createOpenElementNitroHandler } from '@openelement/router/nitro-mount';
-import openElementServer from '../../dist/server/index.js';
-
-// Catch-all over the Nitro static layer (nitro-public/): prerendered files
-// win, everything else — dynamic routes, actions, 404s — reaches the built
-// handler.
-export default createOpenElementNitroHandler({
-  handler: (request, context) =>
-    openElementServer({
-      req: request,
-      env: (context?.env ?? {}) as Record<string, string>,
-    }),
-});
-```
-
-```ts
-// nitro.config.ts
-export default defineNitroConfig({
-  serverDir: 'server',
-  publicAssets: [{ dir: 'nitro-public' }],
-  compatibilityDate: '2026-06-12',
-  cloudflare: { nodeCompat: true },
-});
-```
-
-The `env` forwarding is what carries Workers bindings into your loaders and actions. On Workers, h3 v2 delivers bindings on the request itself (`req.runtime.cloudflare.env`) — the h3 event has no `env` field — and the mount resolves that runtime channel first, then an explicit `event.env`, then mount options. Forwarding `context.env` as above means `ctx.env` in a loader or action reads your Workers bindings directly.
-
-The deploy sequence:
-
-1. `npm run build`
-2. Publish the prerendered tree for Nitro's static layer. `dist/server/` is server code, not a public asset, and must never be published as one:
-
-   ```bash
-   mkdir -p nitro-public
-   cp -R dist/. nitro-public/
-   rm -rf nitro-public/server
-   ```
-
-3. Build the Workers output with the Nitro version this repository pins for compatibility (tools/release/nitro-compatibility.ts):
-
-   ```bash
-   npx nitro@3.0.260610-beta build --preset=cloudflare_module
-   ```
-
-4. Deploy `.output/`. Nitro emits `server/index.mjs` — a Workers module exporting `default fetch(request, env, context)` — plus `public/` and a generated `server/wrangler.json` (compatibility date, `nodejs_compat`, and the `ASSETS` binding pointed at `public/`). Deploy from the project root with `npx nitro deploy --prebuilt`, or from `.output/` with the wrangler command the generated `nitro.json` records (`npx wrangler --cwd ./ deploy`).
-
-Before deploying, prove the wiring on a host you can curl: the same two files build unmodified with `--preset=node-server`, and the `.output/server/index.mjs` entry boots under Node with `PORT` and `HOST` set — `curl` the static home (served from the static layer), a `'dynamic'` route (rendered by `dist/server` through the mount), and an unmatched path (the styled 404 with a real 404 status). Static files winning over the catch-all is the expected behavior, and it is also why `dist/server` must stay out of `nitro-public/`.
-
-Bindings are worth one explicit check: give the Worker a test binding and read it in a loader via `ctx.env`. If it shows up, the whole channel works — Workers env → `req.runtime.cloudflare.env` → mount → `dist/server` → `ctx.env`.
