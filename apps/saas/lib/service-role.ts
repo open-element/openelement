@@ -18,33 +18,30 @@ export function logPayment(level: 'info' | 'error', fields: Record<string, unkno
 export const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-interface ServiceRoleEnv {
+export interface ServiceRoleEnv {
   SUPABASE_URL?: unknown;
   SUPABASE_SERVICE_ROLE_KEY?: unknown;
 }
 
-/**
- * POST to a PostgREST RPC with the service-role key. Throws on missing
- * configuration, non-2xx status, or a fetch failure; resolves to the parsed
- * JSON body (`undefined` for 204 No Content).
- */
+export function serviceRoleConnection(env: ServiceRoleEnv) {
+  const url = typeof env.SUPABASE_URL === 'string' ? env.SUPABASE_URL : '';
+  const key =
+    typeof env.SUPABASE_SERVICE_ROLE_KEY === 'string' ? env.SUPABASE_SERVICE_ROLE_KEY : '';
+  if (!url || !key) throw new Error('service-role Supabase configuration unavailable');
+  return { url: url.replace(/\/$/, ''), headers: { apikey: key, authorization: `Bearer ${key}` } };
+}
+
+/** POST to a PostgREST RPC with the service-role key. */
 export async function serviceRoleRpc<T>(
   env: ServiceRoleEnv,
   name: string,
   body: unknown,
   fetchImpl: typeof fetch = fetch,
 ): Promise<T> {
-  const url = typeof env.SUPABASE_URL === 'string' ? env.SUPABASE_URL : '';
-  const key =
-    typeof env.SUPABASE_SERVICE_ROLE_KEY === 'string' ? env.SUPABASE_SERVICE_ROLE_KEY : '';
-  if (!url || !key) throw new Error('service-role Supabase configuration unavailable');
+  const { url, headers } = serviceRoleConnection(env);
   const response = await fetchImpl(`${url}/rest/v1/rpc/${name}`, {
     method: 'POST',
-    headers: {
-      apikey: key,
-      authorization: `Bearer ${key}`,
-      'content-type': 'application/json',
-    },
+    headers: { ...headers, 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(`${name} failed (${response.status})`);

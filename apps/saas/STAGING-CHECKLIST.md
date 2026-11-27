@@ -54,14 +54,43 @@ recovery and rollback. Do not use production customer data.
 - [ ] Upload allowed and disallowed MIME types, an empty file, and files at and
       above the configured size limit; record the actual responses. Confirm
       quota exhaustion and simultaneous reservations cannot exceed quota.
-- [ ] Verify another user and an anonymous session cannot list, download,
-      overwrite or delete the object, including by guessed key. Confirm a
-      pending or rejected scan cannot produce a download; confirm a clean scan
-      permits only the owner to obtain a short-lived signed URL.
+- [ ] Try the direct Storage API with owner, unrelated-user and anonymous
+      sessions. Verify it rejects listing, reads, signing, inserts, updates
+      and deletion in the attachment bucket, including an owner upload with a
+      matching reservation. Check that the authenticated app download only
+      serves a clean attachment to its owner, with no-store and an attachment
+      disposition. Pending and quarantined reservations must return no bytes.
 - [ ] Exercise the configured real scanner with safe clean and recognized test
       samples, plus an unavailable scanner. Verify fail-closed behavior,
       retries and eventual verdicts. Delete an object and verify quota release;
       exercise a failed deletion and verify Cron reconciliation.
+
+### Existing attachment deployments
+
+Fresh projects without prior attachment access can skip this upgrade check.
+
+- [ ] Keep attachments unavailable to users during cutover and pause scan
+      processing until the old write capabilities have been invalidated.
+- [ ] Account for legacy signed download and upload URLs. With the project
+      owner, rotate and revoke the old **Storage URL signing key** and purge
+      affected Storage CDN entries where supported. Purge cached authenticated
+      reads too. An expired or revoked token does not invalidate an existing
+      CDN or browser cache entry. If a verified purge is unavailable, retire
+      the old object identities and use fresh private identities under an
+      approved migration, or keep the cutover pending until the cache windows
+      expire and the old requests are denied. Record scope and results without
+      retaining any URLs or keys.
+- [ ] Verify denial of previously issued download and upload URLs and of
+      previously cached direct downloads using controlled fixtures. Record
+      any cache window that prevents qualification.
+- [ ] Apply the broker migration and run the candidate scanner and Queue
+      consumer together. Verify inherited clean rows stay unavailable until a
+      fresh broker scan marks them clean, and check that rescanning retains
+      quota and audit history. Verify app downloads resume only for clean rows.
+
+See the Supabase guides for
+[Storage URL signing keys](https://supabase.com/docs/guides/storage/security/signing-keys)
+and [Smart CDN caching](https://supabase.com/docs/guides/storage/cdn/smart-cdn).
 
 ## Payment and lifecycle
 

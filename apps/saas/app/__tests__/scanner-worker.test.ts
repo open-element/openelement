@@ -21,12 +21,13 @@ function successfulFetch(code: number) {
   const fetchImpl: typeof fetch = (input, init) => {
     const url = String(input);
     calls.push({ url, init });
-    if (url.endsWith('/rpc/authorize_attachment_scan')) {
+    if (url.endsWith('/rpc/authorize_brokered_attachment_scan')) {
       return Promise.resolve(
         Response.json({
           object_key: objectKey,
           byte_size: 4,
           content_type: 'application/pdf',
+          scan_policy: 'brokered-storage',
         }),
       );
     }
@@ -51,9 +52,9 @@ test('private scanner validates the reservation before downloading and scanning'
   const { fetchImpl, calls } = successfulFetch(0);
   const response = await createScannerWorker(fetchImpl).fetch(request(), env);
   expect(response.status).toEqual(200);
-  expect(await response.json()).toEqual({ verdict: 'clean' });
+  expect(await response.json()).toEqual({ verdict: 'clean', scanPolicy: 'brokered-storage' });
   expect(calls.map(({ url }) => new URL(url).pathname)).toEqual([
-    '/rest/v1/rpc/authorize_attachment_scan',
+    '/rest/v1/rpc/authorize_brokered_attachment_scan',
     '/storage/v1/object/authenticated/notes-attachments/owner/private-object.pdf',
     '/file/sync',
   ]);
@@ -83,7 +84,7 @@ test('scanner orchestration accepts a provider-neutral adapter without MetaDefen
   });
 
   expect(response.status).toEqual(200);
-  expect(await response.json()).toEqual({ verdict: 'clean' });
+  expect(await response.json()).toEqual({ verdict: 'clean', scanPolicy: 'brokered-storage' });
   expect(scanned).toEqual([new Uint8Array([1, 2, 3, 4])]);
   expect(base.calls.length).toEqual(2);
 });
@@ -94,7 +95,10 @@ test('private scanner quarantines infected, suspicious, and blocklisted results'
       request(),
       env,
     );
-    expect(await response.json()).toEqual({ verdict: 'quarantined' });
+    expect(await response.json()).toEqual({
+      verdict: 'quarantined',
+      scanPolicy: 'brokered-storage',
+    });
   }
 });
 
@@ -130,12 +134,13 @@ test('private scanner rejects oversized or mismatched object bytes', async () =>
     const response = await createScannerWorker((input) => {
       calls++;
       const url = String(input);
-      if (url.endsWith('/rpc/authorize_attachment_scan')) {
+      if (url.endsWith('/rpc/authorize_brokered_attachment_scan')) {
         return Promise.resolve(
           Response.json({
             object_key: objectKey,
             byte_size: declared,
             content_type: 'application/pdf',
+            scan_policy: 'brokered-storage',
           }),
         );
       }

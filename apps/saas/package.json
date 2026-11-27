@@ -12,6 +12,7 @@
     "test:notes-live:browser": "node scripts/notes-live-browser.ts",
     "nitro:build-workers": "node ../../tools/release/nitro-build.ts --root . --preset cloudflare_module --out .output-workers",
     "test:workspace-onboarding:browser": "node scripts/workspace-onboarding-browser.ts",
+    "test:attachment-storage": "sh scripts/attachment-storage-proof.sh",
     "test:workspace-rls": "sh scripts/workspace-rls-proof.sh"
   },
   "dependencies": {

@@ -1,4 +1,4 @@
-import { ATTACHMENT_BUCKET } from './lib/cloudflare-queues.ts';
+import { ATTACHMENT_BUCKET, ATTACHMENT_SCAN_POLICY } from './lib/cloudflare-queues.ts';
 import { createMetaDefenderProvider, type MalwareScannerProvider } from './lib/malware-scanner.ts';
 import { serviceRoleRpc, UUID_PATTERN } from './lib/service-role.ts';
 
@@ -19,6 +19,7 @@ interface AuthorizedAttachment {
   object_key: string;
   byte_size: number;
   content_type: string;
+  scan_policy: string;
 }
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -121,7 +122,7 @@ export function createScannerWorker(
 
         const attachment = await serviceRoleRpc<AuthorizedAttachment>(
           env,
-          'authorize_attachment_scan',
+          'authorize_brokered_attachment_scan',
           {
             target_reservation_id: body.reservationId,
             target_object_key: body.objectKey,
@@ -131,6 +132,10 @@ export function createScannerWorker(
         );
         if (attachment.object_key !== body.objectKey) {
           throw new Error('object substitution rejected');
+        }
+
+        if (attachment.scan_policy !== ATTACHMENT_SCAN_POLICY) {
+          throw new Error('attachment scan policy unavailable');
         }
 
         const object = await fetchImpl(storagePath(config.supabase, attachment.object_key), {
@@ -155,7 +160,7 @@ export function createScannerWorker(
         if (verdict !== 'clean' && verdict !== 'quarantined') {
           throw new Error('provider returned an invalid verdict');
         }
-        return Response.json({ verdict });
+        return Response.json({ verdict, scanPolicy: attachment.scan_policy });
       } catch (error) {
         console.error(
           JSON.stringify({

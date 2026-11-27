@@ -28,11 +28,11 @@ qualification is external pending; see
       after 24 hours. Redeeming a code grants member access to that workspace.
       PostgreSQL stores the SHA-256 digest of each code.
 - [x] explicit `middleware.corsOrigin` allowlist (deployed worker + localhost)
-- [x] /upload: no-JS multipart upload/list/delete in the private
-      `notes-attachments` bucket; unpredictable object ids, MIME/size guards,
-      60-second signed downloads, Storage RLS, and atomic Postgres quota
-      reservation/release reject anonymous, cross-user, and quota-race access;
-      objects are immutable after INSERT (no UPDATE/upsert policy)
+- [x] /upload: no-JS upload, list, download and delete for private attachments.
+      The server reserves quota before writing an object. Downloads require a
+      signed-in owner and a clean scan and stream through the application
+      with no-store. Direct user Storage operations are denied. Failed uploads
+      and interrupted deletes leave a reservation for scheduled cleanup.
 - [x] application-owned Cloudflare module entry composes Nitro `fetch` with
       Queue scan and Cron reconciliation handlers; unscanned objects stay
       hidden, duplicate verdicts are idempotent, and lifecycle events are audited
@@ -77,6 +77,7 @@ qualification is external pending; see
 vp run saas:verify   # local typecheck and stubbed unit tests
 vp run saas:workers  # local application and Workers builds + boundary check
 vp run --no-cache --fail-if-no-match --filter @openelement/saas test:workspace-rls
+vp run --no-cache --fail-if-no-match --filter @openelement/saas test:attachment-storage
 vp run --no-cache --fail-if-no-match --filter @openelement/saas test:workspace-onboarding:browser
 ```
 
@@ -84,7 +85,10 @@ Run these tasks from the repository root after the frozen-lockfile install
 described in [the agent contract](../../docs/agent-contract.md). The RLS proof
 requires `initdb`, `pg_ctl`, and `psql` on PATH and verifies the workspace
 migrations, including concurrent invitation redemption, in a disposable
-Postgres cluster. Build the SaaS app before running the browser proof. The
+Postgres cluster. The attachment Storage proof applies the full migration
+chain in a disposable PostgreSQL catalog and verifies broker privileges,
+reconciliation and rescanning of inherited attachments. Build the SaaS app
+before running the browser proof. The
 browser proof uses Chromium and a loopback Auth and Data API fixture. It
 exercises creation and joining with JavaScript disabled and checks code
 issuance and its no-store responses. Use the

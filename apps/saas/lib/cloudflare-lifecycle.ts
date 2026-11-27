@@ -1,4 +1,5 @@
-import { ATTACHMENT_BUCKET } from './cloudflare-queues.ts';
+import { ATTACHMENT_SCAN_POLICY } from './cloudflare-queues.ts';
+import { removeAttachment } from './attachment-storage.ts';
 import { logPayment, serviceRoleRpc as rpc } from './service-role.ts';
 
 export interface AttachmentScanMessage {
@@ -31,14 +32,6 @@ export interface WorkerEnv {
   PAYMENT_EVENT_QUEUE: { send(message: PaymentEventMessage): Promise<void> };
 }
 
-function headers(env: WorkerEnv): HeadersInit {
-  return {
-    apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-    authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-    'content-type': 'application/json',
-  };
-}
-
 export async function consumeAttachmentScans(
   batch: QueueBatch<AttachmentScanMessage>,
   env: WorkerEnv,
@@ -57,11 +50,14 @@ export async function consumeAttachmentScans(
         }),
       );
       if (!response.ok) throw new Error(`scanner failed (${response.status})`);
-      const result = (await response.json()) as { verdict?: string };
-      if (result.verdict !== 'clean' && result.verdict !== 'quarantined') {
+      const result = (await response.json()) as { verdict?: string; scanPolicy?: string };
+      if (
+        result.scanPolicy !== ATTACHMENT_SCAN_POLICY ||
+        (result.verdict !== 'clean' && result.verdict !== 'quarantined')
+      ) {
         throw new Error('scanner returned an invalid verdict');
       }
-      await rpc(env, 'complete_attachment_scan', {
+      await rpc(env, 'complete_brokered_attachment_scan', {
         reservation_id: message.body.reservationId,
         target_key: message.body.objectKey,
         verdict: result.verdict,
@@ -156,36 +152,12 @@ export async function reconcileAttachments(env: WorkerEnv): Promise<void> {
   );
   for (const reservation of deleting) {
     try {
-      const removed = await fetch(`${env.SUPABASE_URL}/storage/v1/object/${ATTACHMENT_BUCKET}`, {
-        method: 'DELETE',
-        headers: headers(env),
-        body: JSON.stringify({ prefixes: [reservation.object_key] }),
-      });
-      if (!removed.ok) continue;
+      await removeAttachment(env, reservation.object_key);
       await rpc(env, 'complete_pending_attachment_delete', {
         reservation_id: reservation.id,
       });
     } catch {
       // The deleting tombstone remains durable for the next Cron run.
-    }
-  }
-
-  const stale = await rpc<{ id: string; object_key: string }[]>(
-    env,
-    'list_stale_attachment_reservations',
-    {},
-  );
-  for (const reservation of stale) {
-    try {
-      const removed = await fetch(`${env.SUPABASE_URL}/storage/v1/object/${ATTACHMENT_BUCKET}`, {
-        method: 'DELETE',
-        headers: headers(env),
-        body: JSON.stringify({ prefixes: [reservation.object_key] }),
-      });
-      if (!removed.ok) continue;
-      await rpc(env, 'release_stale_attachment', { reservation_id: reservation.id });
-    } catch {
-      // One corrupt/transient object must not starve the rest of the Cron page.
     }
   }
 

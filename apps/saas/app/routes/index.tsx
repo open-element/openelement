@@ -25,7 +25,7 @@ export function HomePage() {
           <a href='/notes'>Protected notes (RLS)</a>
         </li>
         <li>
-          <a href='/upload'>Storage upload (owner-scoped bucket)</a>
+          <a href='/upload'>Attachments</a>
         </li>
         <li>
           <a href='/login'>Sign-in</a>

@@ -96,6 +96,10 @@
     {
       "file": "20261127062537_workspace_onboarding.sql",
       "sha256": "dd0b029d6c1be939637e8946688463e30774a37248dfee2622e04dfa24c918a2"
+    },
+    {
+      "file": "20261127063905_broker_attachment_storage.sql",
+      "sha256": "8f1ac4fb9315b27b611e8398a4d9b8ebed95982faf8de758f0f792a6d9b58a0f"
     }
   ]
 }
