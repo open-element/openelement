@@ -26,18 +26,11 @@
  * Screen-reader verification is performed manually.
  */
 import { expect, type Page, test } from '@playwright/test';
-
-type EnhanceReadyWindow = Window & { __enhanceReady?: Promise<void> };
+import { ENHANCE_READY_CONSOLE_PREFIX, gotoEnhanceReady } from './enhance-ready.ts';
 
 const readinessLog = new WeakMap<Page, string[]>();
-const readinessMessage = '[DX-02] open:enhance-ready';
 
-/**
- * Arm the enhance-readiness recorder BEFORE the first navigation (the
- * `open:enhance-ready` signal fires from the ready-time scan in
- * form-enhance.ts; a listener attached after `page.goto` resolves can miss it).
- */
-async function armEnhanceReady(page: Page): Promise<void> {
+test.beforeEach(({ page }) => {
   const log: string[] = [];
   readinessLog.set(page, log);
   page.on('request', (request) => {
@@ -55,44 +48,16 @@ async function armEnhanceReady(page: Page): Promise<void> {
   });
   page.on('pageerror', (error) => log.push(`page error ${error.message}`));
   page.on('console', (message) => {
-    if (message.text() === readinessMessage) log.push(message.text());
+    const text = message.text();
+    if (text.startsWith(ENHANCE_READY_CONSOLE_PREFIX)) log.push(text);
   });
-  await page.addInitScript((message) => {
-    (window as EnhanceReadyWindow).__enhanceReady = new Promise<void>((resolve) => {
-      document.addEventListener(
-        'open:enhance-ready',
-        () => {
-          console.debug(message);
-          resolve();
-        },
-        { once: true },
-      );
-    });
-  }, readinessMessage);
-}
-
-/** Resolve only after the enhancement's ready-time scan: the interceptor is attached. */
-async function waitForEnhanceReady(page: Page): Promise<void> {
-  // Await the event directly so observing it does not depend on animation frames.
-  await page.evaluate(() => {
-    const ready = (window as EnhanceReadyWindow).__enhanceReady;
-    if (!ready) throw new Error('DX-02 enhancement readiness recorder was not installed');
-    return ready;
-  });
-}
+});
 
 test.afterEach(({ page }, info) => {
   if (info.status === info.expectedStatus) return;
   const log = readinessLog.get(page);
   if (log) console.error(`DX-02 enhancement at ${page.url()}\n${log.join('\n')}`);
 });
-
-/** Set a window marker that survives anything but a full page reload. */
-async function markWindow(page: Page, name: string): Promise<void> {
-  await page.evaluate((marker) => {
-    (window as unknown as Record<string, number>)[marker] = 1;
-  }, name);
-}
 
 /** The deep active element: focus lands inside open shadow roots (#603 helper shape). */
 function deepActiveElementId(): string {
@@ -109,22 +74,31 @@ test.describe('DX-02 morph timing: an enhanced PRG submit morphs in place', () =
   test('a valid submit morphs into the created note without a full reload', async ({
     page,
   }, info) => {
-    await armEnhanceReady(page);
-    await page.goto('/notes/new');
-    await waitForEnhanceReady(page);
+    await gotoEnhanceReady(page, '/notes/new');
 
     const title = 'DX02 morph ' + info.project.name;
-    await markWindow(page, '__dx02Morph');
-    await page.fill('#title', title);
 
-    // Register the response wait BEFORE the click: a response that completed
-    // before the listener exists would otherwise wait out the full timeout
-    // (the same race FRM-07A removed from enhance-guards.spec.ts).
-    const createdPost = page.waitForResponse(
-      (response) => response.request().method() === 'POST' && response.url().includes('/notes/new'),
-    );
-    await page.click('#submit');
-    const response = await createdPost;
+    // Observe any document replacement from typing the title through the submit morph.
+    const documentRequests: string[] = [];
+    const documentLoads: string[] = [];
+    page.on('request', (request) => {
+      if (
+        request.isNavigationRequest() &&
+        request.resourceType() === 'document' &&
+        request.frame() === page.mainFrame()
+      ) {
+        documentRequests.push(`${request.method()} ${request.url()}`);
+      }
+    });
+    page.on('load', () => documentLoads.push(page.url()));
+    await page.fill('#title', title);
+    const [response] = await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' && response.url().includes('/notes/new'),
+      ),
+      page.click('#submit'),
+    ]);
 
     // The fetch channel carries the PRG status in the response (the browser's
     // fetch follows it; the enhancer consumes the followed HTML and morphs it
@@ -135,11 +109,8 @@ test.describe('DX-02 morph timing: an enhanced PRG submit morphs in place', () =
     expect(response.headers()['location']).toMatch(/^\/notes\/note-\d+\?created=1$/);
     await page.waitForURL(/\/notes\/note-\d+\?created=1$/);
     await expect(page.locator('#note-title')).toHaveText(title);
-    // The morph is not a navigation: the JavaScript context (and therefore the
-    // window marker) survives the URL change.
-    expect(await page.evaluate(() => (window as never as Record<string, number>).__dx02Morph)).toBe(
-      1,
-    );
+    expect(documentRequests, 'the PRG morph issues no main-frame document request').toEqual([]);
+    expect(documentLoads, 'the PRG morph does not load a new document').toEqual([]);
   });
 });
 
@@ -147,9 +118,7 @@ test.describe('DX-02 preserve: data-open-preserve exempts a subtree', () => {
   test('the exempted subtree is untouched while the same morph updates its sibling', async ({
     page,
   }) => {
-    await armEnhanceReady(page);
-    await page.goto('/notes/new');
-    await waitForEnhanceReady(page);
+    await gotoEnhanceReady(page, '/notes/new');
 
     // #last-intent exists in both the live and the re-rendered document (it is
     // selected by id inside the page element's shadow root — Playwright
@@ -188,9 +157,7 @@ test.describe('DX-02 preserve: data-open-preserve exempts a subtree', () => {
     // Same flow, same node, no `data-open-preserve`. The echo landing proves
     // the previous test's unchanged text is the exemption's effect and not an
     // upstream failure to morph at all.
-    await armEnhanceReady(page);
-    await page.goto('/notes/new');
-    await waitForEnhanceReady(page);
+    await gotoEnhanceReady(page, '/notes/new');
 
     const invalidPost = page.waitForResponse(
       (response) => response.request().method() === 'POST' && response.url().includes('/notes/new'),
@@ -204,9 +171,7 @@ test.describe('DX-02 preserve: data-open-preserve exempts a subtree', () => {
 
 test.describe('DX-02 preserve: node identity, control state and focus survive the morph', () => {
   test('an id-matched control keeps its node, typed value and focus', async ({ page }) => {
-    await armEnhanceReady(page);
-    await page.goto('/notes/new');
-    await waitForEnhanceReady(page);
+    await gotoEnhanceReady(page, '/notes/new');
 
     await page.fill('#title', 'ab');
     await page.fill('#body', 'typed body text');
