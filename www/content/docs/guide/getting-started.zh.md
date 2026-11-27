@@ -168,7 +168,7 @@ export default definePage(HelloPage, { head: { title: 'Hello — my-app' } });
 
 **试用可交互的 JSX island。** 将以下代码保存为 `app/islands/hello-counter.jsx`。
 
-```jsx
+```tsx
 import { signal } from '@openelement/element';
 import { defineIslandConfig } from '@openelement/router';
 

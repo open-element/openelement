@@ -168,7 +168,7 @@ Expected result: `/hello` now contains the badge's server-rendered markup — `<
 
 **Try an interactive JSX island.** Save the following as `app/islands/hello-counter.jsx`.
 
-```jsx
+```tsx
 import { signal } from '@openelement/element';
 import { defineIslandConfig } from '@openelement/router';
 
