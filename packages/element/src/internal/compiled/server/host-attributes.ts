@@ -1,6 +1,9 @@
 import { isSafeAttributeName } from '@openelement/protocol/forbidden-sinks';
 import { classValueOf, CompiledProgramValidationError, styleValueOf } from '../runtime/values.ts';
 
+/** Descriptor rows that the server function's prop-to-attribute handoff skips. */
+export const ssrPropertyOnlyNames = new WeakMap<CustomElementConstructor, ReadonlySet<string>>();
+
 type CompiledHostAttribute = readonly [name: string, value: unknown];
 
 /** Check attribute names and normalize host values in authored order. */

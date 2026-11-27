@@ -435,6 +435,59 @@ describe('A1 — the compiled children channel', () => {
     );
   });
 
+  test.each(['light', 'shadow', 'closed'] as const)(
+    'a %s host seeds property-only values without writing host attributes for them',
+    async (root) => {
+      const tag = 'oe-property-seed';
+      const host = await generatedHost(
+        `import { defineIslandConfig } from '@openelement/router';
+export const openElement = defineIslandConfig({
+  tag: '${tag}',
+  root: '${root}',
+  properties: {
+    details: { attribute: false, default: { name: '' } },
+    onFoo: { attribute: false, default: '' },
+    label: { attribute: 'data-label', default: '' },
+  },
+});
+export default function Host(props: { details: { name: string }; onFoo: string; label: string }) {
+  return <section><strong>{props.details.name}</strong><span>{props.onFoo}</span><slot /></section>;
+}`,
+        tag,
+      );
+      const entries = new Map([[tag, host]]);
+      const details = Object.assign(Object.create(null), { name: 'A & B' });
+      const html = await renderOf(
+        `export function Panel(props: { details: { name: string } }) {
+  return <oe-property-seed details={props.details} label="title" class="frame"><em>body</em></oe-property-seed>;
+}`,
+        { details },
+        entries,
+        { compiledTags: [tag] },
+      );
+      expect(html).toContain('A &amp; B');
+      expect(html).toContain('<em>body</em>');
+      expect(html).toContain('class="frame"');
+      expect(html).toContain('data-label="title"');
+      expect(html).toContain('data-oe-prop-seed="{&quot;details&quot;:{&quot;name&quot;:');
+      expect(html).not.toMatch(/<oe-property-seed[^>]* details=/u);
+
+      const { __ssr } = (await importEmitted(
+        "export { __ssr } from '@openelement/element/server';",
+        FILE,
+      )) as typeof import('@openelement/element/server');
+      withRegistry(entries, () => {
+        const declared = __ssr(tag, { onFoo: 'rendered' });
+        expect(declared).toContain('rendered');
+        expect(declared).toContain('data-oe-prop-seed="{&quot;onFoo&quot;:&quot;rendered&quot;}"');
+        expect(declared).not.toMatch(/<oe-property-seed[^>]* onFoo=/u);
+        expect(() => __ssr(tag, { onUnknown: 'refused' })).toThrow(/unsafe attribute name/);
+        const explicitAttributes = { props: {}, hostAttrs: [['onFoo', 'refused']] as const };
+        expect(() => renderToString(tag, explicitAttributes)).toThrow(/unsafe attribute name/);
+      });
+    },
+  );
+
   test('a shadow-root host receives the Block children as light DOM after its DSD template', async () => {
     // Native slot distribution does the routing: the children keep their own
     // `slot` attributes and the authored order.

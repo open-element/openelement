@@ -32,6 +32,7 @@ import { NESTED_HOST_PROPERTY } from '../runtime/nested-host.ts';
 import type { LifetimeScope } from '../lifetime-scope.ts';
 import { bindSignalWrites } from '../runtime/bindings.ts';
 import { abortInstancePass, releaseRetainedChildren } from '../runtime/instance-ledger.ts';
+import { ssrPropertyOnlyNames } from '../server/host-attributes.ts';
 import type { Projection } from '../runtime/recipe.ts';
 import {
   adoptGeneratedClientStyles,
@@ -1548,11 +1549,12 @@ export function createGeneratedElementClassWithFeatures<P extends object = Recor
   if (formMapping !== null && Form === undefined) {
     descriptorError('formAssociated requires the form-enabled class factory');
   }
-  const observedAttributes = Object.freeze(
-    normalized.properties
-      .map((property) => property.attribute)
-      .filter((attribute): attribute is string => attribute !== null),
-  );
+  const observedAttributes: string[] = [];
+  let propertyOnlyNames: Set<string> | undefined;
+  for (const { attribute, name } of normalized.properties) {
+    if (attribute === null) (propertyOnlyNames ??= new Set()).add(name);
+    else observedAttributes.push(attribute);
+  }
 
   class GeneratedElementShell extends OpenElementBase implements GeneratedElement {
     constructor() {
@@ -1950,7 +1952,7 @@ export function createGeneratedElementClassWithFeatures<P extends object = Recor
 
   Object.defineProperty(GeneratedElementShell, 'observedAttributes', {
     configurable: true,
-    value: observedAttributes,
+    value: Object.freeze(observedAttributes),
   });
   // `renderToString(constructor)` needs the descriptor's authoritative tag to
   // serialize a generated light root. The class name is compiler-minted and
@@ -1978,6 +1980,10 @@ export function createGeneratedElementClassWithFeatures<P extends object = Recor
       configurable: true,
       value: true,
     });
+  }
+
+  if (propertyOnlyNames !== undefined) {
+    ssrPropertyOnlyNames.set(GeneratedElementShell, propertyOnlyNames);
   }
 
   properties?.install(GeneratedElementShell.prototype, normalized.properties);

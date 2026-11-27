@@ -14,6 +14,7 @@ import {
   trustedHtml,
   trustedHtmlValue,
 } from './internal/core/security.ts';
+import { ssrPropertyOnlyNames } from './internal/compiled/server/host-attributes.ts';
 import { renderToString } from './public-runtime.ts';
 import { AuthoringErrorCode, frameworkError } from './internal/core/errors.ts';
 import { forbiddenSinkReason } from '@openelement/protocol/forbidden-sinks';
@@ -194,9 +195,18 @@ export function __ssr(
   sourceInfo?: SsrSourceInfo,
   composition?: SsrComposition,
 ): string {
-  // The generated producer resolves declared properties and forwards the
-  // remaining pairs as host attributes.
-  const hostAttrs = props === undefined ? [] : Object.entries(props);
+  const registered =
+    typeof customElements === 'undefined'
+      ? undefined
+      : (customElements.get(tag) as (CustomElementConstructor & { __ssr?: unknown }) | undefined);
+  const propertyOnlyNames =
+    registered === undefined ? undefined : ssrPropertyOnlyNames.get(registered);
+  const hostAttrs =
+    props === undefined
+      ? []
+      : Object.keys(props)
+          .filter((name) => !propertyOnlyNames?.has(name))
+          .map((name) => [name, props[name]] as const);
   const options: {
     props?: Record<string, unknown>;
     sourceInfo?: SsrSourceInfo;
@@ -211,10 +221,6 @@ export function __ssr(
   if (composition !== undefined && composition.groups.length > 0) {
     // Generated light roots expose a callable producer on their constructor.
     // Paired shadow hosts take light children after their DSD template.
-    const registered =
-      typeof customElements === 'undefined'
-        ? undefined
-        : (customElements.get(tag) as { __ssr?: unknown } | undefined);
     if (typeof registered?.__ssr === 'function') {
       const projected = new Map<string, string>();
       for (const [rawName, html] of composition.groups) {
