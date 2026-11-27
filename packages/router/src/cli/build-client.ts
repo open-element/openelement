@@ -90,6 +90,7 @@ import {
   styleRequestModuleId,
 } from '@openelement/compiler';
 import { ELEMENT_RUNTIME_MESSAGES_DEFINE } from '../vite/internal/element-error-messages.ts';
+import { ELEMENT_RUNTIME_PROBE_DEFINE } from '../vite/internal/element-runtime-probe.ts';
 import {
   type ServerRenderedSeeds,
   type StyleAssetRecord,
@@ -788,7 +789,7 @@ async function buildClient(
     // #1546: production bundles strip the element runtime's authored error
     // prose to its stable codes (element's protocol/errors.ts seam). Dev
     // builds never inject this, so dev keeps the full messages.
-    define: ELEMENT_RUNTIME_MESSAGES_DEFINE,
+    define: { ...ELEMENT_RUNTIME_MESSAGES_DEFINE, ...ELEMENT_RUNTIME_PROBE_DEFINE },
     // JSX automatic runtime must be configured in the internal
     // viteBuild() call — configFile:false means user's vite.config.ts is
     // NOT read. Without this, the oxc transform falls back to the react

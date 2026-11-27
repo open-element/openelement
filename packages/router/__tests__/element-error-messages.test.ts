@@ -80,5 +80,5 @@ test('build-client injects the seam record into the client build config', () => 
   // ship prose payloads again, so the wiring itself is pinned to the record
   // this file's builds consume.
   const source = readFileSync(join(ROUTER_DIR, 'src/cli/build-client.ts'), 'utf8');
-  expect(source).toContain('define: ELEMENT_RUNTIME_MESSAGES_DEFINE');
+  expect(source).toContain('...ELEMENT_RUNTIME_MESSAGES_DEFINE');
 });
