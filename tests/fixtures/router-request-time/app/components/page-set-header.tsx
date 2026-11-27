@@ -15,11 +15,13 @@ export const openElement = defineIslandConfig({
   root: 'shadow',
   properties: {
     doneText: { attribute: false, default: 'done=' },
+    identity: { attribute: false, default: 'anonymous' },
   },
 });
 
 interface SetHeaderPageProps {
   doneText: string;
+  identity: string;
 }
 
 export default function SetHeaderPage(props: SetHeaderPageProps) {
@@ -27,6 +29,7 @@ export default function SetHeaderPage(props: SetHeaderPageProps) {
     <main>
       <h1>set-header</h1>
       <p id='done'>{props.doneText}</p>
+      <p id='identity'>{props.identity}</p>
       <form method='post'>
         <button type='submit'>go</button>
       </form>

@@ -6,6 +6,7 @@
  * exactly like on static pages, and that static routes are untouched.
  */
 import { expect, test, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 
 /**
  * Wait until a page root has finished its claim.
@@ -63,8 +64,10 @@ test.describe('request-time rendering', () => {
   test('GET / serves the prerendered static page', async ({ page, request }) => {
     const response = await request.get('/');
     expect(response.ok()).toBe(true);
-    const html = await response.text();
-    expect(html).toContain('request-time fixture home');
+    expect(response.headers()['cache-control']).toBe('no-cache');
+    const artifact = await readFile(new URL('../dist-public/index.html', import.meta.url), 'utf8');
+    expect(await response.text()).toBe(artifact);
+    expect(response.headers()['x-oe-channel']).toBeUndefined();
 
     await page.goto('/');
     await expect(page.locator('#home-marker')).toHaveText('request-time fixture home');
@@ -129,8 +132,7 @@ test.describe('action protocol (ADR-0120, 0.42.0-alpha.2)', () => {
       maxRedirects: 0,
     });
     const body = await success.json();
-    expect(body.type).toBe('redirect');
-    expect(body.location).toBe('/form?echoed=hello');
+    expect(body).toEqual({ type: 'redirect', status: 303, location: '/form?echoed=hello' });
   });
 
   test('full form loop works with JavaScript disabled', async ({ browser }) => {

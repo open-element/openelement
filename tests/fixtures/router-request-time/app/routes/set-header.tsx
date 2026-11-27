@@ -12,6 +12,7 @@ import {
   type PagePropsContext,
   redirect,
 } from '@openelement/router';
+import { parse as parseCookie } from 'hono/utils/cookie';
 import SetHeaderPage from '../components/page-set-header.tsx';
 
 interface ChannelActionData {
@@ -33,18 +34,28 @@ export function action(ctx: {
   throw redirect('/set-header?done=1');
 }
 
-export function loader(ctx: { responseHeaders: Headers }): void {
+export function loader(ctx: {
+  request: Request;
+  env?: { REQUEST_TIME_PROOF_TOKEN?: string };
+  responseHeaders: Headers;
+}) {
   ctx.responseHeaders.append('x-oe-channel', 'loader-render');
   // Protocol headers always win: this must NOT override no-store.
   ctx.responseHeaders.append('cache-control', 'public, max-age=3600');
+  const token = ctx.env?.REQUEST_TIME_PROOF_TOKEN;
+  if (token && ctx.request.headers.get('authorization') === `Bearer ${token}`) {
+    return { identity: 'bearer' };
+  }
+  const session = parseCookie(ctx.request.headers.get('cookie') ?? '').oe_session;
+  return { identity: session === 'stub-ok' ? 'session' : 'anonymous' };
 }
 
 export default definePage(SetHeaderPage, {
   renderIntent: { mode: 'dynamic' },
-  props(context: PagePropsContext) {
+  props(context: PagePropsContext<{ identity: string }>) {
     const done = context.request
       ? new URL(context.request.url).searchParams.get('done')
       : undefined;
-    return { doneText: `done=${done ?? ''}` };
+    return { doneText: `done=${done ?? ''}`, identity: context.data?.identity ?? 'anonymous' };
   },
 });

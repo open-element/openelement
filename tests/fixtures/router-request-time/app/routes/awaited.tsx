@@ -1,11 +1,11 @@
 /**
  * /awaited — M14-3 fixture: a server function page that awaits a
- * deterministic promise in a text child.
+ * deterministic promise in a text child and in a nested server component prop.
  *
  * The component is declared in the route module itself: the route scanner
  * only records a `functionPage` when `definePage` receives a component the
- * module declares (the `seams.md:75` admission note), so importing it from
- * `app/components/` would silently fall back to the class lane.
+ * module declares. The nested server component is imported separately to
+ * exercise composition through the real build module graph.
  *
  * `settled()` is a plain identifier callee returning a real Promise — the
  * awaited operand grammar admits `await <identifier>(...)` but not member
@@ -14,14 +14,19 @@
  * request-time channel so the served bytes are produced per request.
  */
 import { definePage } from '@openelement/router';
+import { AwaitedValue } from '../components/awaited-value.tsx';
 
-/** The deterministic settled value; no timers, no loader data. */
-function settled() {
-  return Promise.resolve('awaited-settled-value');
+function settled(value: string) {
+  return Promise.resolve(value);
 }
 
 export async function AwaitedPage() {
-  return <p id="awaited-marker">{await settled()}</p>;
+  return (
+    <main>
+      <p id="awaited-marker">{await settled('awaited-settled-value')}</p>
+      <AwaitedValue value={await settled('awaited-prop-settled-value')} />
+    </main>
+  );
 }
 
 export default definePage(AwaitedPage, {
