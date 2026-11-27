@@ -35,7 +35,14 @@ export function UploadPage(props: {
   whoText: string;
   errorText: string;
   actionErrorText: string;
-  fileRows: Array<{ id: string; line: string }>;
+  fileRows: Array<{
+    id: string;
+    line: string;
+    downloadHref: string;
+    hideDownload: boolean;
+    state: string;
+    noDelete: boolean;
+  }>;
 }) {
   return (
     <main>
@@ -53,17 +60,18 @@ export function UploadPage(props: {
       </form>
       <ul id='files'>
         {props.fileRows.map((file) => (
-          <li key={file.id}>{file.line}</li>
+          <li key={file.id}>
+            <span>{file.line}</span> <span>{file.state}</span>
+            <a href={file.downloadHref} hidden={file.hideDownload}>
+              Download
+            </a>
+            <form method='post' action='/upload?/delete' hidden={file.noDelete}>
+              <input type='hidden' name='id' value={file.id} />
+              <button type='submit'>Delete</button>
+            </form>
+          </li>
         ))}
       </ul>
-      <form method='post' action='/upload?/delete'>
-        <p>
-          <label>
-            Object key <input type='text' name='key' required />
-          </label>
-        </p>
-        <button type='submit'>Delete</button>
-      </form>
       <p>
         <a href='/notes'>Back to notes</a>
       </p>

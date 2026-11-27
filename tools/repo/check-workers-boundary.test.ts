@@ -1,4 +1,12 @@
 import { expect, test } from 'vitest';
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  checkPackagedPublicFiles,
+  checkPublishOutput,
+  writePublishOutput,
+} from '../../packages/router/src/vite/internal/publish-manifest.ts';
 import {
   scanWorkersOutput,
   type WorkersManifest,
@@ -113,4 +121,27 @@ test('workers boundary: ignores bound process, typeof guards, comments, and stri
     }),
   );
   expect(violations).toEqual([]);
+});
+
+test('Workers packaging preserves the public inventory and permits its empty host control file', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'workers-public-'));
+  try {
+    const dist = join(tmp, 'dist');
+    mkdirSync(dist);
+    writeFileSync(join(dist, 'index.html'), 'public marker');
+    writePublishOutput(dist, ['index.html']);
+    const { root, files } = checkPublishOutput(dist);
+    const packaged = join(tmp, 'public');
+    mkdirSync(packaged);
+    copyFileSync(join(root, 'index.html'), join(packaged, 'index.html'));
+    writeFileSync(join(packaged, '_headers'), '');
+    expect(() => checkPackagedPublicFiles(packaged, files, '_headers')).not.toThrow();
+    writeFileSync(join(packaged, 'ordinary-host-note.txt'), 'unlisted marker');
+    expect(() => checkPackagedPublicFiles(packaged, files, '_headers')).toThrow();
+    rmSync(join(packaged, 'ordinary-host-note.txt'));
+    writeFileSync(join(packaged, 'index.html'), 'edited marker');
+    expect(() => checkPackagedPublicFiles(packaged, files, '_headers')).toThrow();
+  } finally {
+    rmSync(tmp, { recursive: true });
+  }
 });

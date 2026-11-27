@@ -94,12 +94,14 @@ beforeAll(async () => {
       "import { cycleA } from './cycle-a.ts';",
       "import { shared } from './shared.ts';",
       "import { shared as sharedAgain } from '../components/shared.ts';",
+      "import type { Input } from './type-import.ts';",
+      "export type { Model } from './type-export.ts';",
       "import 'external-probe';",
       "import 'virtual:probe';",
       'export async function lazy() {',
       "  return import('./dynamic-only.ts');",
       '}',
-      'export const page = [aliased, cycleA, shared, sharedAgain];',
+      'export const page: Input = [aliased, cycleA, shared, sharedAgain];',
       '',
     ].join('\n'),
   );
@@ -116,6 +118,8 @@ beforeAll(async () => {
   );
   write('app/components/shared.ts', 'export const shared = 1;\n');
   write('app/components/dynamic-only.ts', 'export const dynamicOnly = 1;\n');
+  write('app/components/type-import.ts', 'export type Input = unknown[];\n');
+  write('app/components/type-export.ts', 'export type Model = string;\n');
 
   const walkPlugin: Plugin = {
     name: 'probe-module-walk',
@@ -243,6 +247,8 @@ test('identity, ordering and boundaries are deliberate', () => {
   expect(skipped.virtual).toBeGreaterThanOrEqual(1);
   expect(skipped.nonSource).toBeGreaterThanOrEqual(2);
   expect(files.some((file) => file.endsWith('dynamic-only.ts'))).toBe(false);
+  expect(files).not.toContain('app/components/type-import.ts');
+  expect(files).not.toContain('app/components/type-export.ts');
   expect(files.some((file) => file.endsWith('probe.css'))).toBe(false);
   expect(truncated).toBe(false);
 });

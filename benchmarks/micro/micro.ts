@@ -92,7 +92,6 @@ import { promisify } from 'node:util';
 const execFile = promisify(execFileCallback);
 import { compileGeneratedElementIfAdmitted } from '../../packages/compiler/src/internal/compiler/semantic-ir/generated-element/compile.ts';
 import { LifetimeScope } from '../../packages/element/src/internal/compiled/lifetime-scope.ts';
-import * as leafRuntime from '../../packages/element/src/internal/compiled/leaf-runtime.ts';
 import {
   claimRecipe,
   insertRecipe,
@@ -112,6 +111,7 @@ import {
   toHtml,
   type FNode,
 } from './counting-dom.ts';
+import { loadGeneratedBenchmarkModule } from './load-generated-module.ts';
 import { buildData, type BenchRow } from './row-data.ts';
 
 /**
@@ -356,59 +356,17 @@ class CountingSignal<T> {
   }
 }
 
-/**
- * Evaluate the emitted module with the leaf runtime as its import surface.
- *
- * WHY `new Function`. The emitted bytes are the compiled artifact; importing
- * them as a real module would need a bundler or a temp file. The narrowest
- * loader that keeps the REAL emitted text (not a hand-written lookalike) is a
- * function whose parameters are the module's own imported symbols. The one
- * shell symbol (the CE-tail class factory) is a marker here: the benchmark
- * drives the emitted mount/claim/SSR functions directly and never registers a
- * custom element.
- *
- * `overrides` exists for the stability probe: replacing the leaf `signal`
- * symbol with the counting wrapper is how the suite observes a subscription
- * count on signals the generated module creates itself.
- */
+/** The stability probe overrides the leaf signal export to count real subscriptions. */
 function loadFixture(
   compiledCode: string,
   component: string,
   overrides: Readonly<Record<string, unknown>> = {},
 ): LoadedFixture {
-  const importLines = compiledCode.split('\n').filter((line) => line.startsWith('import {'));
-  const names: string[] = [];
-  for (const importLine of importLines) {
-    names.push(
-      ...importLine
-        .slice(importLine.indexOf('{') + 1, importLine.indexOf('}'))
-        .split(',')
-        .map((name) => name.trim())
-        .filter((name) => name.length > 0),
-    );
-  }
-  const body = compiledCode
-    .replace(/^import \{[^}]*\} from "[^"]+";$/gm, '')
-    .replace(/^export default .*$/gm, '')
-    .replace(/^export \{[^}]*\};$/gm, '')
-    .replace(/^export /gm, '');
-  const factory = new Function(
-    ...names,
-    `${body}\n; return { rootInstance: __oe_rootInstance, createRecipe: create${component}Recipe, ` +
-      `ssr: ${component}__ssr };`,
-  ) as (...values: unknown[]) => LoadedFixture;
-  const values = names.map((name) => {
-    if (name in overrides) return overrides[name];
-    if (name === 'createGeneratedElementClass') return (descriptor: unknown) => descriptor;
-    const value = (leafRuntime as unknown as Record<string, unknown>)[name];
-    if (value === undefined) {
-      throw new Error(
-        `[micro] the emitted module imports "${name}", which the benchmark cannot provide`,
-      );
-    }
-    return value;
-  });
-  return factory(...values);
+  return loadGeneratedBenchmarkModule<LoadedFixture>(
+    compiledCode,
+    `{ rootInstance: __oe_rootInstance, createRecipe: create${component}Recipe, ssr: ${component}__ssr }`,
+    overrides,
+  );
 }
 
 /** One compiled generated fixture plus its evaluated module. */

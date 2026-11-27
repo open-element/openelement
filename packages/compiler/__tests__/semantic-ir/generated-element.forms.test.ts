@@ -28,6 +28,7 @@ import {
 } from '../../src/internal/compiler/semantic-ir/generated-element/contract.ts';
 import {
   createGeneratedElementClass,
+  createGeneratedElementClassWithFeatures,
   type GeneratedElementDescriptor,
 } from '../../../element/src/internal/compiled/generated-element/shell.ts';
 
@@ -67,10 +68,13 @@ function codes(error: CompiledElementError): string[] {
 }
 
 describe('bounded formAssociated admission', () => {
-  test('the descriptor carries formAssociated and the normal property rows', () => {
+  test('the true sidecar selects the form factory and retains the existing descriptor rows', () => {
     const compiled = compileGeneratedElementIfAdmitted(VALID, FILE, { site: SITE });
     expect(compiled).not.toBeNull();
     expect(compiled!.code).toContain('formAssociated: true,');
+    expect(compiled!.code).toContain(
+      '__oe_createElementClass(__oeElementDescriptor, { form: __oe_formFeature, properties: __oe_propertiesFeature });',
+    );
     expect(compiled!.code).toContain(
       '    { name: "value", attribute: "value", type: "string", reflect: false, default: "" },',
     );
@@ -81,7 +85,7 @@ describe('bounded formAssociated admission', () => {
     expect(compiled!.code).not.toContain('formValue');
   });
 
-  test('formAssociated false/absent keeps the prior descriptor bytes', () => {
+  test('the absent and false sidecars both select the form-free factory', () => {
     const absent = compileGeneratedElementIfAdmitted(
       island("root: 'shadow', properties: { value: { default: '' } }"),
       FILE,
@@ -94,6 +98,13 @@ describe('bounded formAssociated admission', () => {
       { site: SITE },
     );
     expect(explicitFalse!.code).not.toContain('formAssociated');
+    expect(absent!.code).toContain(
+      'createGeneratedElementClassWithFeatures as __oe_createElementClass',
+    );
+    expect(absent!.code).toContain(
+      '__oe_createElementClass(__oeElementDescriptor, { properties: __oe_propertiesFeature });',
+    );
+    expect(explicitFalse!.code).toBe(absent!.code);
   });
 
   test('invalid or dynamic formAssociated facts fail closed', () => {
@@ -218,6 +229,25 @@ describe('shell descriptor form validation', () => {
     expect((ctor as unknown as { formAssociated?: boolean }).formAssociated).toBe(true);
     const plain = createGeneratedElementClass(base as GeneratedElementDescriptor);
     expect((plain as unknown as { formAssociated?: boolean }).formAssociated).not.toBe(true);
+  });
+
+  test('the form-free factory rejects a form-associated descriptor', () => {
+    expect(() =>
+      createGeneratedElementClassWithFeatures(
+        {
+          ...base,
+          properties: [],
+          formAssociated: true,
+        } as GeneratedElementDescriptor,
+        {},
+      ),
+    ).toThrow('formAssociated requires the form-enabled class factory');
+  });
+
+  test('the configured factory refuses rows without a declared-property feature', () => {
+    expect(() =>
+      createGeneratedElementClassWithFeatures(base as GeneratedElementDescriptor, {}),
+    ).toThrow('declared properties require the generated property runtime');
   });
 
   test('the button shape is a valid descriptor and may reflect disabled', () => {

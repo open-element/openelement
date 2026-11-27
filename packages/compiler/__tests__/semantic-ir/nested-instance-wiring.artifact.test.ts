@@ -33,7 +33,7 @@
  * depth >= 2 retention claim (that stays OWED behind the transaction protocol).
  */
 
-import { createHash } from 'node:crypto';
+import { hashBeforeFormFactorySplit } from './testlib/generated-element-baseline.ts';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
@@ -285,10 +285,6 @@ function ledgerText(text: string): readonly string[] {
   return LEDGER_CALLEES.filter((callee) => text.includes(callee));
 }
 
-function sha256(text: string): string {
-  return createHash('sha256').update(text, 'utf8').digest('hex');
-}
-
 /** Every module-scope function declaration name (mount/claim/setup/factory/SSR). */
 function declaredFunctions(module: string): readonly string[] {
   return [...module.matchAll(/^(?:export )?function ([\w$]+)\(/gm)].map((match) => match[1]!);
@@ -310,6 +306,9 @@ describe('T4 depth-1 nested-instance wiring — artifact contract', () => {
       expect(occurrences(body, 'endInstancePass(__oe_host.instance);')).toBe(1);
       expect(occurrences(body, 'retainChildInstance(')).toBe(1);
     }
+    expect(module).toContain(
+      '__oe_createElementClass(__oeElementDescriptor, { ledger: __oe_ledgerFeature, properties: __oe_propertiesFeature });',
+    );
     expect(occurrences(module, 'beginInstancePass(')).toBe(2);
     expect(occurrences(module, 'endInstancePass(')).toBe(2);
     expect(occurrences(module, 'retainChildInstance(')).toBe(2);
@@ -454,7 +453,9 @@ describe('T4 depth-1 nested-instance wiring — artifact contract', () => {
     // Captured from HEAD `2545e0ac6` by running that tree's generator on the
     // same source/id/site (byte equality verified against the primed baseline
     // tree; the pin makes the fallback a regression contract).
-    expect(sha256(module)).toBe('5c0b2a05fc86cb3ece4ac08a17c8c7d389426ef1723327012e7e79cfe893ddbc');
+    expect(hashBeforeFormFactorySplit(module)).toBe(
+      '5c0b2a05fc86cb3ece4ac08a17c8c7d389426ef1723327012e7e79cfe893ddbc',
+    );
     // A reachable root reference keeps the existing mount-cycle refusal, and the
     // marker adds no diagnostic: with and without the root marker the refusal is
     // the same code with the same span.
@@ -475,7 +476,10 @@ describe('T4 depth-1 nested-instance wiring — artifact contract', () => {
     // No retention marker in any factory literal (the factory keeps today's
     // exact `mountHost` bytes).
     expect(module).not.toContain('instance: __oe_host.instance');
-    expect(sha256(module)).toBe('baf64ddd675ff9be51a60aeb01fa735418410af0aac8eab6a1df0ba3343a1052');
+    expect(module).not.toContain('generatedElementLedger');
+    expect(hashBeforeFormFactorySplit(module)).toBe(
+      'baf64ddd675ff9be51a60aeb01fa735418410af0aac8eab6a1df0ba3343a1052',
+    );
     // Hostless leaf (direct leaf tests) stays byte-identical to the pre-change
     // hostless emission too: no marker, no factory, no alias.
     const hostless = generateLeafModule(frontModule(NO_REF_SOURCE));

@@ -125,7 +125,165 @@ function hasIslandHost(root: ParentNode, tag: string): boolean {
   return false;
 }
 
+interface StrategyHooks {
+  load(tag: string): boolean;
+  startBucket(strategy: string, tags: readonly string[]): void;
+  dispatchReady(strategy: string, tags: readonly string[]): void;
+  armProbe(): void;
+}
+
+export function installVisibleStrategy(
+  { doc, win, map, strategies }: IslandSchedulerDeps,
+  { load, startBucket, dispatchReady }: Omit<StrategyHooks, 'armProbe'>,
+): () => void {
+  // client:visible islands - load when their element enters viewport
+  const visibleTags = strategies.visible;
+  // Element -> observer, so a detached island can be released (it can never
+  // intersect again) and a remove/reinsert before intersection is re-observed
+  // instead of being skipped forever (#1039).
+  const observedEls = new Map<Element, IntersectionObserver>();
+
+  function queryAllDeep(root: ParentNode, tag: string, out: Element[]): void {
+    // Islands live inside page-element shadow roots; a plain
+    // document.querySelectorAll never sees them (#562).
+    const found = root.querySelectorAll(tag);
+    for (let i = 0; i < found.length; i++) out.push(found[i]);
+    const all = root.querySelectorAll('*');
+    for (let j = 0; j < all.length; j++) {
+      const shadow = (all[j] as HTMLElement).shadowRoot;
+      if (shadow) queryAllDeep(shadow, tag, out);
+    }
+  }
+
+  return function observeVisible(): void {
+    if (visibleTags.length === 0) return;
+    if (typeof win.IntersectionObserver !== 'function') {
+      startBucket('visible', visibleTags);
+      return;
+    }
+    // Release detached islands before scanning: their observers can never
+    // fire again, and keeping them referenced leaks the whole subtree.
+    // isConnected is compared strictly so non-DOM test doubles (which do
+    // not implement it) are left alone.
+    for (const [el, obs] of observedEls) {
+      if (el.isConnected === false) {
+        obs.disconnect();
+        observedEls.delete(el);
+      }
+    }
+    visibleTags.forEach((tag) => {
+      if (!map[tag]) return;
+      const els: Element[] = [];
+      queryAllDeep(doc, tag, els);
+      els.forEach((el) => {
+        // Re-observable after a morph: a replaced island is a new element and
+        // gets a fresh observer (#562).
+        if (observedEls.has(el)) return;
+        const Observer = win.IntersectionObserver;
+        const obs = new Observer(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) {
+                if (load(tag)) dispatchReady('visible', [tag]);
+                obs.disconnect();
+                observedEls.delete(el);
+              }
+            });
+          },
+          { rootMargin: '200px' },
+        );
+        observedEls.set(el, obs);
+        obs.observe(el);
+      });
+    });
+  };
+}
+
+export function installMediaStrategy(
+  deps: IslandSchedulerDeps,
+  { load, dispatchReady, armProbe }: Omit<StrategyHooks, 'startBucket'>,
+) {
+  const { strategies, log, map } = deps;
+  // client:media islands - import when their declarative media query matches.
+  // The generated entry creates these MediaQueryList values before
+  // constructing the scheduler. Delivery is one-shot per tag; subsequent
+  // route morphs see the native custom-element constructor already registered.
+  const mediaTags = strategies.media ?? [];
+  const mediaReady = new Set<string>();
+
+  const dispatchMedia = (tag: string): void => {
+    if (mediaReady.has(tag)) return;
+    if (!load(tag)) return;
+    mediaReady.add(tag);
+    dispatchReady('media', [tag]);
+  };
+
+  for (const tag of mediaTags) {
+    const query = deps.mediaQueries?.[tag];
+    if (!query) {
+      log.warn(`Media island "${tag}" has no supported matchMedia result; delivery skipped`);
+      continue;
+    }
+    if (query.matches) dispatchMedia(tag);
+    const listener = (event: MediaQueryListLike): void => {
+      if (!event.matches) return;
+      dispatchMedia(tag);
+      // FR-02: this listener is the ONLY event a query that starts
+      // non-matching ever produces, and dispatchMedia() is a no-op while the
+      // page has no host. Without an arm here a host created after the
+      // transition would never be discovered (the construction-time arm
+      // could not see this tag). Arming is idempotent and adds no activation
+      // authority: load() still owns the host gate.
+      if (map[tag]) armProbe();
+    };
+    if (query.addEventListener) query.addEventListener('change', listener);
+    else if (query.addListener) query.addListener(listener);
+  }
+
+  /**
+   * Re-read the current match result for every media tag whose factory is
+   * still in the map. A query that matched at construction made its one
+   * activation attempt then; with no host on the page it was a no-op and the
+   * factory stayed unconsumed. After a morph the host exists, and an
+   * always-matching query never fires a later `change` event, so this rescan
+   * is the only recovery path. The map entry remains the one-shot guard; the
+   * `change` listener above keeps covering a query that starts matching later.
+   */
+  function rescan(): void {
+    for (const tag of mediaTags) {
+      if (!map[tag]) continue;
+      if (deps.mediaQueries?.[tag]?.matches) dispatchMedia(tag);
+    }
+  }
+
+  return {
+    rescan,
+    appendPending(add: (tag: string) => void): void {
+      for (const tag of mediaTags) {
+        if (deps.mediaQueries?.[tag]?.matches === true) add(tag);
+      }
+    },
+  };
+}
+
+interface OptionalStrategies {
+  visible?: typeof installVisibleStrategy;
+  media?: typeof installMediaStrategy;
+}
+
+/** Generic entry point for callers without a build's strategy inventory. */
 export function createIslandScheduler(deps: IslandSchedulerDeps): IslandScheduler {
+  return createIslandSchedulerWithStrategies(deps, {
+    visible: installVisibleStrategy,
+    media: installMediaStrategy,
+  });
+}
+
+/** The generated entry imports only the strategy installers its declared buckets require. */
+export function createIslandSchedulerWithStrategies(
+  deps: IslandSchedulerDeps,
+  optional: OptionalStrategies,
+): IslandScheduler {
   const log = deps.log;
   const win = deps.win;
   const doc = deps.doc;
@@ -216,9 +374,10 @@ export function createIslandScheduler(deps: IslandSchedulerDeps): IslandSchedule
     return true;
   }
 
-  /** The subset of a bucket this page can activate. */
-  function loadAll(tags: readonly string[]): string[] {
-    return tags.filter(load);
+  /** Start and announce only the subset of a bucket this page can activate. */
+  function startBucket(strategy: string, tags: readonly string[]): void {
+    const activated = tags.filter(load);
+    if (activated.length > 0) dispatchReady(strategy, activated);
   }
 
   function onReady(fn: () => void): void {
@@ -240,33 +399,15 @@ export function createIslandScheduler(deps: IslandSchedulerDeps): IslandSchedule
   }
 
   // client:load islands - import immediately
-  const loadTags = loadAll(strategies.load);
-  if (loadTags.length > 0) dispatchReady('load', loadTags);
+  startBucket('load', strategies.load);
 
   // client:only islands - import immediately, no DSD/SSR expected
-  const onlyTags = loadAll(strategies.only);
-  if (onlyTags.length > 0) dispatchReady('only', onlyTags);
+  startBucket('only', strategies.only);
 
-  // client:visible islands - load when their element enters viewport
-  const visibleTags = strategies.visible;
-  // Element -> observer, so a detached island can be released (it can never
-  // intersect again) and a remove/reinsert before intersection is re-observed
-  // instead of being skipped forever (#1039).
-  const observedEls = new Map<Element, IntersectionObserver>();
+  const observeVisible = optional.visible?.(deps, { load, startBucket, dispatchReady });
+  const media = optional.media?.(deps, { load, dispatchReady, armProbe });
 
-  function queryAllDeep(root: ParentNode, tag: string, out: Element[]): void {
-    // Islands live inside page-element shadow roots; a plain
-    // document.querySelectorAll never sees them (#562).
-    const found = root.querySelectorAll(tag);
-    for (let i = 0; i < found.length; i++) out.push(found[i]);
-    const all = root.querySelectorAll('*');
-    for (let j = 0; j < all.length; j++) {
-      const shadow = (all[j] as HTMLElement).shadowRoot;
-      if (shadow) queryAllDeep(shadow, tag, out);
-    }
-  }
-
-  function observeVisible(): void {
+  function rescan(): void {
     // #1544/B2 follow-up: the ready-time scan is not the last word on the page
     // scope. An enhanced response morphs new HTML in, and this function is the
     // rescan the client runtime runs after every morph (#562). The first fix
@@ -276,108 +417,14 @@ export function createIslandScheduler(deps: IslandSchedulerDeps): IslandSchedule
     // never became interactive (F01). Re-run every unconsumed strategy here;
     // load() nulls its map entry when a load starts, so an already-activated
     // tag is skipped and open:ready keeps its one-event-per-activation shape.
-    const lateLoad = loadAll(strategies.load);
-    if (lateLoad.length > 0) dispatchReady('load', lateLoad);
-    const lateOnly = loadAll(strategies.only);
-    if (lateOnly.length > 0) dispatchReady('only', lateOnly);
+    startBucket('load', strategies.load);
+    startBucket('only', strategies.only);
     // Idle keeps its browser-idle semantics (the retry is scheduled, never
     // loaded synchronously); media re-reads the current match, since an
     // always-matching query has no future `change` event to recover on.
     rescanIdle();
-    rescanMedia();
-    if (visibleTags.length === 0) return;
-    if (typeof win.IntersectionObserver !== 'function') {
-      const activated = loadAll(visibleTags);
-      if (activated.length > 0) dispatchReady('visible', activated);
-      return;
-    }
-    // Release detached islands before scanning: their observers can never
-    // fire again, and keeping them referenced leaks the whole subtree.
-    // isConnected is compared strictly so non-DOM test doubles (which do
-    // not implement it) are left alone.
-    for (const [el, obs] of observedEls) {
-      if (el.isConnected === false) {
-        obs.disconnect();
-        observedEls.delete(el);
-      }
-    }
-    visibleTags.forEach((tag) => {
-      if (!map[tag]) return;
-      const els: Element[] = [];
-      queryAllDeep(doc, tag, els);
-      els.forEach((el) => {
-        // Re-observable after a morph: a replaced island is a new element and
-        // gets a fresh observer (#562).
-        if (observedEls.has(el)) return;
-        const Observer = win.IntersectionObserver;
-        const obs = new Observer(
-          (entries) => {
-            entries.forEach((entry) => {
-              if (entry.isIntersecting) {
-                if (load(tag)) dispatchReady('visible', [tag]);
-                obs.disconnect();
-                observedEls.delete(el);
-              }
-            });
-          },
-          { rootMargin: '200px' },
-        );
-        observedEls.set(el, obs);
-        obs.observe(el);
-      });
-    });
-  }
-
-  // client:media islands - import when their declarative media query matches.
-  // The generated entry creates these MediaQueryList values before
-  // constructing the scheduler. Delivery is one-shot per tag; subsequent
-  // route morphs see the native custom-element constructor already registered.
-  const mediaTags = strategies.media ?? [];
-  const mediaReady = new Set<string>();
-
-  const dispatchMedia = (tag: string): void => {
-    if (mediaReady.has(tag)) return;
-    if (!load(tag)) return;
-    mediaReady.add(tag);
-    dispatchReady('media', [tag]);
-  };
-
-  for (const tag of mediaTags) {
-    const query = deps.mediaQueries?.[tag];
-    if (!query) {
-      log.warn(`Media island "${tag}" has no supported matchMedia result; delivery skipped`);
-      continue;
-    }
-    if (query.matches) dispatchMedia(tag);
-    const listener = (event: MediaQueryListLike): void => {
-      if (!event.matches) return;
-      dispatchMedia(tag);
-      // FR-02: this listener is the ONLY event a query that starts
-      // non-matching ever produces, and dispatchMedia() is a no-op while the
-      // page has no host. Without an arm here a host created after the
-      // transition would never be discovered (the construction-time arm
-      // could not see this tag). Arming is idempotent and adds no activation
-      // authority: load() still owns the host gate.
-      if (map[tag]) armProbe();
-    };
-    if (query.addEventListener) query.addEventListener('change', listener);
-    else if (query.addListener) query.addListener(listener);
-  }
-
-  /**
-   * Re-read the current match result for every media tag whose factory is
-   * still in the map. A query that matched at construction made its one
-   * activation attempt then; with no host on the page it was a no-op and the
-   * factory stayed unconsumed. After a morph the host exists, and an
-   * always-matching query never fires a later `change` event, so this rescan
-   * is the only recovery path. The map entry remains the one-shot guard; the
-   * `change` listener above keeps covering a query that starts matching later.
-   */
-  function rescanMedia(): void {
-    for (const tag of mediaTags) {
-      if (!map[tag]) continue;
-      if (deps.mediaQueries?.[tag]?.matches) dispatchMedia(tag);
-    }
+    media?.rescan();
+    observeVisible?.();
   }
 
   // client:idle islands - defer to browser idle
@@ -395,8 +442,7 @@ export function createIslandScheduler(deps: IslandSchedulerDeps): IslandSchedule
     idlePending = true;
     const deferred = (): void => {
       idlePending = false;
-      const activated = loadAll(idleTags);
-      if (activated.length > 0) dispatchReady('idle', activated);
+      startBucket('idle', idleTags);
       // FR-02: the idle attempt was this page's only scheduled look for an
       // idle island. If a declared factory is still unconsumed, a host may
       // still arrive later — keep the late-host probe running for exactly
@@ -466,10 +512,7 @@ export function createIslandScheduler(deps: IslandSchedulerDeps): IslandSchedule
     if (!idlePending) {
       for (const tag of idleTags) add(tag);
     }
-    for (const tag of mediaTags) {
-      if (deps.mediaQueries?.[tag]?.matches !== true) continue;
-      add(tag);
-    }
+    media?.appendPending(add);
     return out;
   }
 
@@ -568,7 +611,7 @@ export function createIslandScheduler(deps: IslandSchedulerDeps): IslandSchedule
       // probe has nothing left to discover for those tags, while a tag still
       // missing a host keeps its remaining budget.
       for (const tag of hits) probeSettled.add(tag);
-      observeVisible();
+      rescan();
       // Everything this page was waiting for just activated: stop here rather
       // than spend a further attempt rediscovering an empty pending set. A
       // partial hit keeps probing — the island that just landed may itself be
@@ -688,19 +731,18 @@ export function createIslandScheduler(deps: IslandSchedulerDeps): IslandSchedule
   }
 
   /**
-   * The scheduler's public rescan, plus the arm. `observeVisible`'s body is
-   * untouched (F01 semantics are frozen); the arm only decides whether the
-   * probe should be running, and arming twice is a no-op, so this adds no
-   * behaviour to a rescan beyond "and keep looking".
+   * The scheduler's public rescan, plus the arm. The arm only decides whether
+   * the probe should be running, and arming twice is a no-op.
    */
   function rescanAndArm(): void {
-    observeVisible();
+    rescan();
     armProbe();
   }
 
   // Register the ready-time scan last: the rescan reads the media/idle state
   // above, and a synchronous `readyState` call must see it initialized.
-  if (visibleTags.length > 0) onReady(rescanAndArm);
+  const hasVisible = strategies.visible.length > 0;
+  if (hasVisible) onReady(rescanAndArm);
 
   // Arm last. When the ready-time visible scan is still waiting on
   // DOMContentLoaded, that scan owns the first look and this must not race it
@@ -709,7 +751,7 @@ export function createIslandScheduler(deps: IslandSchedulerDeps): IslandSchedule
   // instead: `rescanAndArm` runs it the moment DOMContentLoaded arrives. A
   // page with no islands and a page that hosted everything both leave here
   // with no timer at all.
-  if (visibleTags.length === 0 || doc.readyState !== 'loading') armProbe();
+  if (!hasVisible || doc.readyState !== 'loading') armProbe();
 
   return { observeVisible: rescanAndArm };
 }

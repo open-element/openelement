@@ -42,7 +42,9 @@ Stop when a safety fixture fails, SSR and claim disagree on identity, an authori
 
 Keep private server artifacts unreachable from static delivery. Structural public/private output isolation and the publication allowlist carry their own inventory and host-boundary proof. Retain the existing static boundary until each replacement consumer qualifies. URL prefix changes can be verified independently. [Private-artifact boundary](../adr/ADR-0171-private-artifact-static-boundary.md)
 
-Apply runtime, reference-island and home closure budgets to the reachable bytes, including generated code, adapter and shared helpers. The Site SLO and report-only release A/B measurements serve different scopes. Measured threshold changes require explicit approval. [Reference budget tracker](https://github.com/open-element/openelement/issues/1633)
+Apply runtime, reference-island and home closure budgets to the reachable bytes, including generated code, adapter and shared helpers. The checker sums each emitted response compressed separately at gzip level 9 and fails the release on a missing input or any cap overage. The Site SLO, Site figures and report-only release A/B measurements retain their own scopes. [Packed starter budget](../agent-contract.md#packed-starter-javascript-budget)
+
+The owner approved fixed Alpha16 gzip limits of 13,437 bytes for shared runtime and 17,071 bytes for home. The packed starter at `46ee1701804d41ca6e096416f263fb4e69475c3e` measured 13,045 and 16,573 bytes respectively. Each limit adds a 3% runner allowance to its measured baseline, rounding the allowance up to a whole byte and following the Site gzip figures precedent. The reference island retains its 2,000-byte limit. The owner moved further runtime size reduction to Alpha17. Future threshold changes require measured evidence and explicit owner approval. [Reference budget tracker](https://github.com/open-element/openelement/issues/1633)
 
 ### Retained platform concerns
 

@@ -19,15 +19,20 @@
  */
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { cp, mkdtemp, realpath, rm } from 'node:fs/promises';
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 
 import { join, resolve } from 'node:path';
 import { formatJson } from '@openelement/element/build-utils';
+import { DEV_SERVER_STARTER_PIN } from '../../packages/create/src/version.ts';
 import { PACKAGE_VERSION } from '../repo/project-constants.ts';
 import { VITE_DEV_PIN } from '../repo/deps-vite-check.ts';
 import { NITRO_VERSION } from './nitro-compatibility.ts';
 import { assertPackedTarballsFresh, reservePort, runProcess } from './consumer-packaged-shared.ts';
+import {
+  checkPackagedPublicFiles,
+  checkPublishOutput,
+} from '../../packages/router/src/vite/internal/publish-manifest.ts';
 
 const repoRoot = resolve(import.meta.dirname!, '../..');
 const INSTALL_TIMEOUT_MS = 10 * 60_000;
@@ -45,7 +50,7 @@ function run(
   cwd: string,
   env: Record<string, string>,
   timeoutMs?: number,
-): Promise<{ success: boolean; output: string }> {
+) {
   return runProcess(command, args, cwd, { timeoutMs, env });
 }
 
@@ -85,6 +90,10 @@ await assertPackedTarballsFresh([routerTarball, elementTarball, protocolTarball,
 const tmp = await mkdtemp(join(tmpdir(), `openelement-packed-serve-${runtime}-`));
 let server: import('node:child_process').ChildProcess | undefined;
 try {
+  // The Node leg also runs Vite dev. npm leaves the router's optional peer
+  // absent unless the scratch app declares it, as the generated starter does.
+  const devDependencies =
+    runtime === 'node' ? { '@hono/vite-dev-server': DEV_SERVER_STARTER_PIN } : {};
   // The unpublished @openelement/* file: pins resolve into the installed
   // node_modules tree instead of the registry. Since #1557 the packed
   // element/router tarballs carry transitive workspace pins (protocol,
@@ -106,6 +115,7 @@ try {
         hono: '4.12.0',
         nitro: NITRO_VERSION,
       },
+      devDependencies,
       // npm otherwise queries the registry for the packed packages' exact
       // cross-workspace version edges even though those packages are direct
       // file: dependencies. Each `$name` reuses that root file: specifier, so
@@ -132,7 +142,13 @@ try {
   if (!install.success) throw new Error(`Packed serve installation failed:\n${install.output}`);
   console.log(`PASS packed-serve-${runtime} install — tarballs installed under an empty npm cache`);
 
-  for (const name of ['@openelement/router', '@openelement/element', 'vite', 'hono']) {
+  for (const name of [
+    '@openelement/router',
+    '@openelement/element',
+    'vite',
+    'hono',
+    ...Object.keys(devDependencies),
+  ]) {
     const resolved = await realpath(join(tmp, 'node_modules', ...name.split('/')));
     if (resolved === repoRoot || resolved.startsWith(`${repoRoot}/`)) {
       throw new Error(`Packed serve consumer resolved ${name} into the repository: ${resolved}`);
@@ -145,17 +161,26 @@ try {
   // build generates no second production server.
   const nitroPreset = runtime === 'bun' ? 'bun' : 'node-server';
   const files: Record<string, string> = {
-    'nitro.config.ts': `export default defineNitroConfig({
+    'nitro.config.ts': `import { fileURLToPath } from 'node:url';
+
+const publicDir = fileURLToPath(new URL('./dist-public', import.meta.url));
+
+export default defineNitroConfig({
   serverDir: 'server',
   preset: '${nitroPreset}',
-  publicAssets: [{ dir: 'nitro-public' }],
+  publicAssets: [{ dir: publicDir }],
+  modules: [
+    ({ options }) => {
+      options.publicAssets = options.publicAssets.filter(({ dir }) => dir === publicDir);
+    },
+  ],
   output: { dir: '.output-serve' },
 });
 `,
     'server/routes/[...path].ts': `import { createOpenElementNitroHandler } from '@openelement/router/nitro-mount';
 import openElementServer from '../../dist/server/index.js';
 
-// Catch-all over the Nitro static layer (nitro-public/): prerendered files
+// Catch-all over the Nitro static layer (dist-public/): prerendered files
 // win, everything else — dynamic routes, actions, 404s — falls through to
 // the packed request-time server through the standard fetch seam.
 export default createOpenElementNitroHandler({
@@ -197,15 +222,32 @@ export default function PackedHome() {
   return (
     <main>
       <h1 id='home-marker'>packed-node-serve home</h1>
+      <packed-counter></packed-counter>
     </main>
   );
 }
 `,
-    'app/routes/live.tsx': `import { definePage, type LoaderContext } from '@openelement/router';
+    'app/islands/packed-counter.tsx': `import { defineIslandConfig } from '@openelement/router';
+
+export const openElement = defineIslandConfig({
+  tag: 'packed-counter', root: 'shadow', hydrate: 'load', ssr: false, dsd: false,
+});
+
+export default function PackedCounter() {
+  return <p>browser marker</p>;
+}
+`,
+    'app/lib/server-label.ts': `import '@openelement/protocol/server-only';
+
+export const serverLabel = (value: string) => value;
+`,
+    'app/routes/live.tsx': `import { basename } from 'node:path';
+import { serverLabel } from '../lib/server-label.ts';
+import { definePage, type LoaderContext } from '@openelement/router';
 import LivePage from '../components/page-live.tsx';
 
 export function loader(ctx: LoaderContext): { x: string } {
-  return { x: new URL(ctx.request.url).searchParams.get('x') ?? '' };
+  return { x: serverLabel(basename(new URL(ctx.request.url).searchParams.get('x') ?? '')) };
 }
 
 export default definePage<{ x: string }>(LivePage, {
@@ -252,19 +294,19 @@ export default function PackedLive(props: { xText: string }) {
   }
   console.log(`PASS packed-serve-${runtime} build — packed CLI emitted dist + request-time server`);
 
-  // Publish the prerendered tree for Nitro's static layer. dist/server/*
-  // is server code, not a public asset, so it stays out of nitro-public/.
-  mkdirSync(join(tmp, 'nitro-public'), { recursive: true });
-  for (const entry of readdirSync(join(tmp, 'dist'), { withFileTypes: true })) {
-    if (entry.name === 'server') continue;
-    await cp(join(tmp, 'dist', entry.name), join(tmp, 'nitro-public', entry.name), {
-      force: true,
-      recursive: entry.isDirectory(),
-    });
-  }
-  if (existsSync(join(tmp, 'nitro-public', 'server'))) {
-    throw new Error('Static publish leaked dist/server into the Nitro public dir');
-  }
+  const publicCheck = await run(
+    'npx',
+    ['--no-install', 'oe', 'publish', '--check'],
+    tmp,
+    {},
+    BUILD_TIMEOUT_MS,
+  );
+  if (!publicCheck.success)
+    throw new Error(`Packed public output check failed:\n${publicCheck.output}`);
+  // An ordinary source file created after the build is outside the verified
+  // snapshot. Nitro's auto-discovery must not include it in this package.
+  mkdirSync(join(tmp, 'public'), { recursive: true });
+  writeFileSync(join(tmp, 'public', 'ordinary-host-note.txt'), 'unlisted marker\n');
   // Nitro 3 builds on a Rolldown-based pipeline (native binding). The pinned
   // nitro CLI runs through npx (the temp consumer's own install satisfies the
   // pin without a re-download).
@@ -282,6 +324,12 @@ export default function PackedLive(props: { xText: string }) {
   }
   console.log(
     `PASS packed-serve-${runtime} nitro — ${nitroPreset} output built from the packed app`,
+  );
+
+  const publicOutput = checkPublishOutput(join(tmp, 'dist'));
+  checkPackagedPublicFiles(join(tmp, '.output-serve', 'public'), publicOutput.files);
+  console.log(
+    `PASS packed-serve-${runtime} public inventory — ${publicOutput.files.size} listed files`,
   );
 
   // Reserve a loopback port with the shared bind-and-close probe.
@@ -353,9 +401,80 @@ export default function PackedLive(props: { xText: string }) {
   if (!live.includes('packed-node-serve live') || !live.includes('x=1')) {
     throw new Error('packed serve /live missing the request-time marker or loader echo');
   }
+  for (const method of ['GET', 'HEAD']) {
+    const missing = await fetch(`${baseUrl}/publish-manifest.json`, { method });
+    if (missing.status !== 404)
+      throw new Error(`Unexpected metadata status for ${method}: ${missing.status}`);
+  }
   console.log(
     `PASS packed-serve-${runtime} serve — Nitro ${nitroPreset} output: static home + request-time /live green over HTTP under ${runtime}`,
   );
+  if (runtime === 'node') {
+    const islandPath = join(tmp, 'app', 'islands', 'packed-counter.tsx');
+    const islandSource = files['app/islands/packed-counter.tsx']!;
+    const diagnostic = 'OE_CLIENT_BUILD_BROWSER_ENTRY_SERVER_ONLY';
+    const devProbe = `
+      import { createServer } from 'vite';
+      const dev = await createServer({ configLoader: 'native', server: { middlewareMode: true } });
+      try {
+        const live = await dev.ssrLoadModule('/app/routes/live.tsx');
+        const { x } = live.loader({ request: new Request('http://localhost/live?x=/dev/ssr-marker') });
+        if (x !== 'ssr-marker') throw new Error('Packed dev SSR loader returned the wrong marker');
+        for (const path of process.argv.slice(1)) {
+          if (!(await dev.transformRequest(path))?.code) {
+            throw new Error('Packed dev returned no browser module for ' + path);
+          }
+        }
+      } finally {
+        await dev.close();
+      }
+    `;
+    const islandUrl = '/app/islands/packed-counter.tsx';
+    const helperUrl = '/app/lib/server-label.ts';
+    const devReady = await run(
+      process.execPath,
+      ['--input-type=module', '-e', devProbe, islandUrl],
+      tmp,
+      {},
+      BUILD_TIMEOUT_MS,
+    );
+    if (!devReady.success) {
+      throw new Error(
+        `Packed dev failed with a valid server loader and browser island:\n${devReady.output}`,
+      );
+    }
+    for (const { source, browserRequests } of [
+      {
+        source: "import '@openelement/protocol/server-only';\n" + islandSource,
+        browserRequests: [islandUrl],
+      },
+      {
+        source:
+          "import { serverLabel } from '../lib/server-label.ts';\n" +
+          islandSource.replace('browser marker', "{serverLabel('ordinary marker')}"),
+        browserRequests: [islandUrl, helperUrl],
+      },
+    ]) {
+      writeFileSync(islandPath, source);
+      const refused = await run(process.execPath, ['build.mjs'], tmp, {}, BUILD_TIMEOUT_MS);
+      if (refused.timedOut || refused.success || !refused.output.includes(diagnostic)) {
+        throw new Error(`Packed build failed to report ${diagnostic}:\n${refused.output}`);
+      }
+      const devRefused = await run(
+        process.execPath,
+        ['--input-type=module', '-e', devProbe, ...browserRequests],
+        tmp,
+        {},
+        BUILD_TIMEOUT_MS,
+      );
+      if (devRefused.timedOut || devRefused.success || !devRefused.output.includes(diagnostic)) {
+        throw new Error(`Packed dev failed to report ${diagnostic}:\n${devRefused.output}`);
+      }
+    }
+    console.log(
+      'PASS packed browser boundary — marked helper works on the server and is refused by direct and transitive browser imports in build and dev',
+    );
+  }
 } finally {
   try {
     server?.kill('SIGTERM');

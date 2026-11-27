@@ -33,6 +33,7 @@
  */
 
 import ts from 'typescript';
+import { authoredPropsType } from '../../semantic-core/parse-module.ts';
 import { camelToKebab, isSafeAttributeName } from '@openelement/protocol/forbidden-sinks';
 import type { RootMode } from '@openelement/protocol/part-program';
 import { literalValue } from '../../semantic-core/analyze-module.ts';
@@ -1583,26 +1584,28 @@ function readTypedProps(
       ),
     };
   }
-  if (parameter.type === undefined) {
+  const annotation = authoredPropsType(parameter);
+  if (annotation === undefined) {
     return {
       kind: 'refused',
       diagnostic: propertyDiagnostic(
         sourceFile,
         parameter,
         `the root component's props parameter "${parameter.name.text}" has no type annotation; ` +
-          'declare its primitive members inline (`props: { label: string }`) so the sidecar ' +
+          'declare its primitive members inline (`props: { label: string }` in TSX or ' +
+          '`@param {{ label: string }} props` in JSX) so the sidecar ' +
           'property table can be cross-checked',
         GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED,
       ),
     };
   }
-  const resolved = resolvePropsTypeMembers(sourceFile, parameter.type);
+  const resolved = resolvePropsTypeMembers(sourceFile, annotation);
   if ('reason' in resolved) {
     return {
       kind: 'refused',
       diagnostic: propertyDiagnostic(
         sourceFile,
-        resolved.node ?? parameter.type,
+        resolved.node ?? annotation,
         resolved.reason,
         GENERATED_ELEMENT_DIAGNOSTIC.PROPS_TYPE_UNSUPPORTED,
       ),

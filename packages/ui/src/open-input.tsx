@@ -55,7 +55,7 @@ import { syncInputDisabled, syncInputValue, type InputHost } from './input-machi
  * attribute wire — it is the live property the form contract and the compiled
  * sinks read.
  */
-export const openElement = defineComponentConfig({
+export const openElement = /* @__PURE__ */ defineComponentConfig({
   root: 'shadow',
   delegatesFocus: true,
   formAssociated: true,

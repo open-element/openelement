@@ -92,6 +92,14 @@
     {
       "file": "20260823160507_harden_reject_audit_mutation_search_path.sql",
       "sha256": "367904db7607c59c02e3a32611e4ccc7241601b822f336d1953a86fc6417c0b8"
+    },
+    {
+      "file": "20261127062537_workspace_onboarding.sql",
+      "sha256": "dd0b029d6c1be939637e8946688463e30774a37248dfee2622e04dfa24c918a2"
+    },
+    {
+      "file": "20261127063905_broker_attachment_storage.sql",
+      "sha256": "3fdf99f776d0ec6c12443e8db82a17314d3d8ffbde1596826c6da8bf217633b1"
     }
   ]
 }

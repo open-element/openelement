@@ -197,7 +197,7 @@ The docs site builds with openElement. These are the raw and gzip sizes of its i
 
 | Chunk                         | Raw bytes | gzip -9 |
 | ----------------------------- | --------- | ------- |
-| `element-runtime`             | 72,240    | 22,997  |
+| `element-runtime`             | 66,159    | 21,411  |
 | `island-open-button`          | 14,114    | 3,262   |
 | `island-open-code-block`      | 7,734     | 2,527   |
 | `island-open-copy-button`     | 11,426    | 2,758   |
@@ -210,7 +210,7 @@ The docs site builds with openElement. These are the raw and gzip sizes of its i
 | `island-open-source-toggle`   | 6,430     | 2,188   |
 | `island-open-theme-toggle`    | 18,254    | 3,790   |
 | `open-search-combobox`        | 108,612   | 35,531  |
-| `client.js`                   | 10,306    | 2,990   |
+| `client.js`                   | 9,977     | 2,881   |
 
 ```bash
 for file in www/dist/client/islands/*.js; do
@@ -224,9 +224,9 @@ Each route's payload includes all chunks named in its island manifest, the share
 
 | Route                    | Client payload (raw) | Distinct chunks |
 | ------------------------ | -------------------- | --------------- |
-| `/guide/mdx`             | 236,233 B            | 9               |
-| `/guide/getting-started` | 236,233 B            | 9               |
-| `/`                      | 266,187 B            | 13              |
+| `/guide/mdx`             | 230,065 B            | 9               |
+| `/guide/getting-started` | 230,065 B            | 9               |
+| `/`                      | 260,083 B            | 13              |
 
 Across 66 page manifests the site declares 11 island tags in 318 entries. Every page declares `open-search`, `open-site-menu` and `open-theme-toggle`. The site declares `open-page-rail` on 52 pages, `open-code-block` on 46 pages and `open-button` on 8 pages. In both languages, the homepage and contributing guide declare `open-copy-button`, and the error and API references declare `open-registry-lookup`. Both versions of the homepage declare `open-counter`, `open-layer-strip` and `open-source-toggle`.
 

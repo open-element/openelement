@@ -68,6 +68,35 @@ test('empty -> zero JS', () => {
   expect(generateClientEntry([]).includes('zero client JS needed')).toBeTruthy();
 });
 
+test('whole-entry scheduler imports follow the admitted strategy inventory', () => {
+  const entry = { tagName: 'x-base', modulePath: './base.ts', strategy: 'idle' as const };
+  const visible = { tagName: 'x-visible', modulePath: './vis.ts', strategy: 'visible' as const };
+  const media = {
+    tagName: 'x-media',
+    modulePath: './media.ts',
+    strategy: 'media' as const,
+    media: '(min-width: 700px)',
+  };
+  const options = { specializeScheduler: true };
+  const neither = generateClientEntry([entry, { ...visible, strategy: 'none' }], options);
+  expect(neither).toContain('createIslandSchedulerWithStrategies as __schedule');
+  expect(neither).not.toContain('installVisibleStrategy');
+  expect(neither).not.toContain('installMediaStrategy');
+  expect(neither).not.toContain('./vis.ts');
+  const visibleOnly = generateClientEntry([entry, visible], options);
+  expect(visibleOnly).toContain('visible: installVisibleStrategy');
+  expect(visibleOnly).not.toContain('installMediaStrategy');
+  const mediaOnly = generateClientEntry([entry, media], options);
+  expect(mediaOnly).toContain('media: installMediaStrategy');
+  expect(mediaOnly).not.toContain('installVisibleStrategy');
+  expect(mediaOnly).toContain("window.matchMedia('(min-width: 700px)')");
+  expect(generateClientEntry([entry, visible, media], options)).toContain(
+    'createIslandScheduler as __schedule',
+  );
+  expect(generateClientEntry([entry])).toContain('createIslandScheduler as __schedule');
+  for (const code of [neither, visibleOnly, mediaOnly]) assertEntrySyntax(code);
+});
+
 test('zero islands + enhancedForms emits the enhancement layer (#569)', () => {
   const code = generateClientEntry([], { enhancedForms: true });
   expect(!code.includes('zero client JS needed')).toBeTruthy();

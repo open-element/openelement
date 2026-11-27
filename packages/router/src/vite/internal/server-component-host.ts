@@ -13,8 +13,11 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, resolve } from 'pathe';
+import { isJsxModuleId, type ResolvedServerComponentSource } from '@openelement/compiler';
+import type { ModuleWalkResolver } from './module-graph-walk.ts';
 
 /** Module extensions whose text can carry (or import to) compiled programs. */
 const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts'] as const;
@@ -31,8 +34,29 @@ export interface ServerComponentHostOptions {
   readonly workspaceRoot?: string | undefined;
 }
 
-/** Resolve one specifier+importer pair to that module's source, or null. */
-export type ServerComponentModuleResolver = (specifier: string, importer: string) => string | null;
+/** Resolve one specifier+importer pair to that module's filename and source, or null. */
+export type ServerComponentModuleResolver = (
+  specifier: string,
+  importer: string,
+) => ResolvedServerComponentSource | null;
+
+/** Read the exact authored JSX source the active Vite environment resolved. */
+export async function resolveViteServerComponentSource(
+  specifier: string,
+  resolve: ModuleWalkResolver['resolve'],
+): Promise<ResolvedServerComponentSource | undefined> {
+  try {
+    const resolved = await resolve(specifier);
+    if (resolved === null || resolved.external) return undefined;
+    const fileName = resolved.id;
+    if (!isAbsolute(fileName) || fileName.includes('?') || !isJsxModuleId(fileName)) {
+      return undefined;
+    }
+    return { fileName, source: await readFile(fileName, 'utf8') };
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * True when a path spelling can carry authored source text. A spelling whose
@@ -60,7 +84,7 @@ function isSourceSpelling(path: string): boolean {
  * (`table.json/index.ts`), the bundler's own answer for a directory of that
  * name.
  */
-function probeSourceFile(base: string): string | null {
+function probeSourceFile(base: string): ResolvedServerComponentSource | null {
   const withoutExtension = /\.(?:[cm]?[tj]sx?)$/.test(base)
     ? base.replace(/\.(?:[cm]?[tj]sx?)$/, '')
     : base;
@@ -73,7 +97,7 @@ function probeSourceFile(base: string): string | null {
       ...SOURCE_EXTENSIONS.map((extension) => `${stem}/index${extension}`),
     ]) {
       try {
-        return readFileSync(candidate, 'utf8');
+        return { fileName: candidate, source: readFileSync(candidate, 'utf8') };
       } catch {
         // Not a readable file at this spelling; keep probing.
       }

@@ -9,7 +9,14 @@
  * paths byte for byte. Relative counters (shared mutable store) follow the
  * same convention as app-flow.spec.ts / enhance-guards.spec.ts.
  */
-import { type APIRequestContext, type Browser, expect, type Page, test } from '@playwright/test';
+import {
+  type APIRequestContext,
+  type Browser,
+  expect,
+  type Page,
+  type Request,
+  test,
+} from '@playwright/test';
 
 interface WireRecord {
   method: string;
@@ -37,46 +44,118 @@ async function actionCount(request: APIRequestContext): Promise<number> {
   return Number(value);
 }
 
-/** A window marker that survives anything but a full page reload. */
-async function markWindow(page: Page, name: string): Promise<void> {
-  await page.evaluate((marker) => {
-    (window as unknown as Record<string, number>)[marker] = 1;
-  }, name);
-}
+const sentUrl = /\/tuple-probes\?sent=1$/;
+const getUrl = /\/tuple-probes\?q=via-get$/;
 
-async function markerCleared(page: Page, name: string): Promise<void> {
-  await page.waitForFunction(
-    (marker) => (window as never as Record<string, number | undefined>)[marker] === undefined,
-    name,
+function mainDocumentRequest(page: Page, request: Request): boolean {
+  return (
+    request.isNavigationRequest() &&
+    request.resourceType() === 'document' &&
+    request.frame() === page.mainFrame()
   );
 }
 
-async function markerIntact(page: Page, name: string): Promise<void> {
-  expect(
-    await page.evaluate(
-      (marker) => (window as unknown as Record<string, number | undefined>)[marker],
-      name,
-    ),
-  ).toBe(1);
-}
-
-/** Enhanced (JS on) submit of the given control; returns after ?sent=1 lands. */
-async function enhancedSubmit(page: Page, selector: string, marker: string): Promise<void> {
+/** Enhanced form PRG finishes with a morph and URL update in the live document. */
+async function enhancedSubmit(
+  page: Page,
+  request: APIRequestContext,
+  selector: string,
+  prepare?: (page: Page) => Promise<void>,
+): Promise<WireRecord> {
   await page.goto('/tuple-probes');
-  await markWindow(page, marker);
-  await page.click(selector);
-  await page.waitForURL(/\/tuple-probes\?sent=1/);
-  await markerIntact(page, marker); // morph in place, never a reload
+  await prepare?.(page);
+  const documents: string[] = [];
+  let loads = 0;
+  const recordDocument = (outgoing: Request): void => {
+    if (mainDocumentRequest(page, outgoing))
+      documents.push(`${outgoing.method()} ${outgoing.url()}`);
+  };
+  const recordLoad = (): void => {
+    loads++;
+  };
+  page.on('request', recordDocument);
+  page.on('load', recordLoad);
+  try {
+    await Promise.all([page.waitForURL(sentUrl), page.locator(selector).click()]);
+    await expect(page.getByRole('heading', { name: 'tuple probes' })).toBeVisible();
+    const wire = await wireLast(request);
+    expect(documents, 'the enhanced PRG morph issues no main-frame document request').toEqual([]);
+    expect(loads, 'the enhanced PRG morph does not load a new document').toBe(0);
+    expect(wire?.method).toBe('POST');
+    expect(new URL(wire!.url).pathname).toBe('/tuple-probes');
+    expect(wire!.actionHeader).toBe('enhance');
+    return wire!;
+  } finally {
+    page.off('request', recordDocument);
+    page.off('load', recordLoad);
+  }
 }
 
-/** Native (JS disabled) submit of the given control; returns after ?sent=1. */
-async function nativeSubmit(browser: Browser, selector: string): Promise<void> {
+interface NativeSubmission {
+  method: 'GET' | 'POST';
+  finalUrl?: RegExp;
+}
+
+/** Observe the new document load and trace its response back to the actual submit. */
+async function submitDocument(
+  page: Page,
+  selector: string,
+  { method, finalUrl }: NativeSubmission,
+): Promise<void> {
+  const enhancedRequests: string[] = [];
+  const recordEnhanced = (request: Request): void => {
+    if (request.headers()['x-openelement-action'] !== undefined)
+      enhancedRequests.push(request.url());
+  };
+  page.on('request', recordEnhanced);
+  try {
+    const [response] = await Promise.all([
+      page.waitForResponse((response) => {
+        const redirect =
+          response.status() >= 300 && response.status() < 400 && response.headers().location;
+        return (
+          !redirect &&
+          mainDocumentRequest(page, response.request()) &&
+          (finalUrl === undefined || finalUrl.test(response.url()))
+        );
+      }),
+      page.waitForEvent('load'),
+      page.locator(selector).click(),
+    ]);
+    await expect(page).toHaveURL(response.url());
+
+    let submission = response.request();
+    for (
+      let previous = submission.redirectedFrom();
+      previous;
+      previous = previous.redirectedFrom()
+    ) {
+      submission = previous;
+    }
+    expect(mainDocumentRequest(page, submission)).toBe(true);
+    expect(submission.method()).toBe(method);
+    expect(new URL(submission.url()).pathname).toBe('/tuple-probes');
+    expect(enhancedRequests, 'native submission carries no enhancement header').toEqual([]);
+  } finally {
+    page.off('request', recordEnhanced);
+  }
+}
+
+async function nativeSubmit(
+  browser: Browser,
+  selector: string,
+  destination: NativeSubmission = { method: 'POST', finalUrl: sentUrl },
+  prepare?: (page: Page) => Promise<void>,
+): Promise<void> {
   const context = await browser.newContext({ javaScriptEnabled: false });
-  const page = await context.newPage();
-  await page.goto('/tuple-probes');
-  await page.click(selector);
-  await page.waitForURL(/\/tuple-probes\?sent=1/);
-  await context.close();
+  try {
+    const page = await context.newPage();
+    await page.goto('/tuple-probes');
+    await prepare?.(page);
+    await submitDocument(page, selector, destination);
+  } finally {
+    await context.close();
+  }
 }
 
 test.describe('effective submission tuple (#1339 §5)', () => {
@@ -87,14 +166,9 @@ test.describe('effective submission tuple (#1339 §5)', () => {
   }) => {
     await wireReset(request);
     const countBefore = await actionCount(request);
-    await enhancedSubmit(page, '#urlenc-submit', '__preUrlenc');
-    const enhanced = await wireLast(request);
-    expect(enhanced).not.toBeNull();
-    expect(enhanced!.method).toBe('POST');
-    expect(new URL(enhanced!.url).pathname).toBe('/tuple-probes');
-    expect(enhanced!.contentType).toBe('application/x-www-form-urlencoded');
-    expect(enhanced!.actionHeader).toBe('enhance');
-    expect(enhanced!.rawBody).toBe('title=hello+world&tag=a%26b&intent=urlenc');
+    const enhanced = await enhancedSubmit(page, request, '#urlenc-submit');
+    expect(enhanced.contentType).toBe('application/x-www-form-urlencoded');
+    expect(enhanced.rawBody).toBe('title=hello+world&tag=a%26b&intent=urlenc');
     expect(await actionCount(request)).toBe(countBefore + 1);
 
     await wireReset(request);
@@ -105,7 +179,7 @@ test.describe('effective submission tuple (#1339 §5)', () => {
     expect(new URL(native!.url).pathname).toBe('/tuple-probes');
     expect(native!.contentType).toBe('application/x-www-form-urlencoded');
     expect(native!.actionHeader).toBeNull();
-    expect(native!.rawBody).toBe(enhanced!.rawBody); // byte parity
+    expect(native!.rawBody).toBe(enhanced.rawBody); // byte parity
     expect(await actionCount(request)).toBe(countBefore + 2);
   });
 
@@ -120,31 +194,18 @@ test.describe('effective submission tuple (#1339 §5)', () => {
     // JS-disabled path — never a bare %0A or %0D.
     const typed = 'alpha\nbeta\rgamma\r\ndelta';
     const expectedBody = 'note=alpha%0D%0Abeta%0D%0Agamma%0D%0Adelta&intent=nl';
+    const fillNote = (page: Page) => page.locator('#nl-note').fill(typed);
 
     await wireReset(request);
-    await page.goto('/tuple-probes');
-    await markWindow(page, '__preNl');
-    await page.fill('#nl-note', typed);
-    await page.click('#nl-submit');
-    await page.waitForURL(/\/tuple-probes\?sent=1/);
-    await markerIntact(page, '__preNl'); // enhanced morph, not a reload
-    const enhanced = await wireLast(request);
-    expect(enhanced).not.toBeNull();
-    expect(enhanced!.method).toBe('POST');
-    expect(enhanced!.contentType).toBe('application/x-www-form-urlencoded');
-    expect(enhanced!.actionHeader).toBe('enhance');
-    expect(enhanced!.rawBody).toBe(expectedBody);
-    expect(enhanced!.rawBody).toContain('%0D%0A');
+    const enhanced = await enhancedSubmit(page, request, '#nl-submit', fillNote);
+    expect(enhanced.contentType).toBe('application/x-www-form-urlencoded');
+    expect(enhanced.rawBody).toBe(expectedBody);
+    expect(enhanced.rawBody).toContain('%0D%0A');
     // No lone LF/CR may survive: every %0A is preceded by %0D and vice versa.
-    expect(enhanced!.rawBody.replaceAll('%0D%0A', '')).not.toMatch(/%0[AD]/);
+    expect(enhanced.rawBody.replaceAll('%0D%0A', '')).not.toMatch(/%0[AD]/);
 
     await wireReset(request);
-    const context = await browser.newContext({ javaScriptEnabled: false });
-    const plainPage = await context.newPage();
-    await plainPage.goto('/tuple-probes');
-    await plainPage.fill('#nl-note', typed);
-    await plainPage.click('#nl-submit');
-    await plainPage.waitForURL(/\/tuple-probes\?sent=1/);
+    await nativeSubmit(browser, '#nl-submit', { method: 'POST', finalUrl: sentUrl }, fillNote);
     const native = await wireLast(request);
     expect(native).not.toBeNull();
     expect(native!.method).toBe('POST');
@@ -152,8 +213,7 @@ test.describe('effective submission tuple (#1339 §5)', () => {
     expect(native!.actionHeader).toBeNull();
     expect(native!.rawBody).toContain('%0D%0A');
     // Byte-level wire parity between the native and the enhanced path.
-    expect(native!.rawBody).toBe(enhanced!.rawBody);
-    await context.close();
+    expect(native!.rawBody).toBe(enhanced.rawBody);
   });
 
   test('multipart (form enctype): boundary is real, fields survive, paths agree', async ({
@@ -162,15 +222,12 @@ test.describe('effective submission tuple (#1339 §5)', () => {
     browser,
   }) => {
     await wireReset(request);
-    await enhancedSubmit(page, '#multipart-submit', '__preMultipart');
-    const enhanced = await wireLast(request);
-    expect(enhanced!.method).toBe('POST');
-    expect(enhanced!.contentType).toMatch(/^multipart\/form-data; boundary=.+/);
-    expect(enhanced!.actionHeader).toBe('enhance');
-    expect(enhanced!.rawBody).toContain('name="title"');
-    expect(enhanced!.rawBody).toContain('multi part');
-    expect(enhanced!.rawBody).toContain('name="intent"');
-    expect(enhanced!.rawBody).toContain('multipart');
+    const enhanced = await enhancedSubmit(page, request, '#multipart-submit');
+    expect(enhanced.contentType).toMatch(/^multipart\/form-data; boundary=.+/);
+    expect(enhanced.rawBody).toContain('name="title"');
+    expect(enhanced.rawBody).toContain('multi part');
+    expect(enhanced.rawBody).toContain('name="intent"');
+    expect(enhanced.rawBody).toContain('multipart');
 
     await wireReset(request);
     await nativeSubmit(browser, '#multipart-submit');
@@ -182,16 +239,15 @@ test.describe('effective submission tuple (#1339 §5)', () => {
       const boundary = record.contentType.split('boundary=')[1];
       return record.rawBody.replaceAll(boundary, 'BOUNDARY');
     };
-    expect(normalize(native!)).toBe(normalize(enhanced!));
+    expect(normalize(native!)).toBe(normalize(enhanced));
   });
 
   test('multipart via the submitter formenctype override', async ({ page, request, browser }) => {
     await wireReset(request);
-    await enhancedSubmit(page, '#mo-submit', '__preMo');
-    const enhanced = await wireLast(request);
-    expect(enhanced!.contentType).toMatch(/^multipart\/form-data; boundary=.+/);
-    expect(enhanced!.rawBody).toContain('via override');
-    expect(enhanced!.rawBody).toContain('name="intent"');
+    const enhanced = await enhancedSubmit(page, request, '#mo-submit');
+    expect(enhanced.contentType).toMatch(/^multipart\/form-data; boundary=.+/);
+    expect(enhanced.rawBody).toContain('via override');
+    expect(enhanced.rawBody).toContain('name="intent"');
 
     await wireReset(request);
     await nativeSubmit(browser, '#mo-submit');
@@ -206,24 +262,13 @@ test.describe('effective submission tuple (#1339 §5)', () => {
     request,
     browser,
   }) => {
-    const actionHeaderRequests: string[] = [];
-    page.on('request', (r) => {
-      if (r.headers()['x-openelement-action']) actionHeaderRequests.push(r.url());
-    });
     await wireReset(request);
     await page.goto('/tuple-probes');
-    await markWindow(page, '__preTextPlain');
     // text/plain falls back BEFORE preventDefault(): the browser submits
     // natively; whatever the server answers, the page performs a real
     // navigation (the tuple-probes action expects a form body, so the native
     // text/plain submission need not produce the ?sent=1 PRG target).
-    const posted = page.waitForResponse(
-      (r) => r.request().method() === 'POST' && r.url().includes('/tuple-probes'),
-    );
-    await page.click('#tp-submit');
-    await posted;
-    await markerCleared(page, '__preTextPlain'); // full native navigation
-    expect(actionHeaderRequests).toEqual([]);
+    await submitDocument(page, '#tp-submit', { method: 'POST' });
     const enhancedPath = await wireLast(request);
     expect(enhancedPath!.method).toBe('POST');
     expect(enhancedPath!.contentType).toBe('text/plain');
@@ -232,19 +277,11 @@ test.describe('effective submission tuple (#1339 §5)', () => {
     expect(enhancedPath!.rawBody).toContain('intent=tp');
 
     await wireReset(request);
-    const context = await browser.newContext({ javaScriptEnabled: false });
-    const plainPage = await context.newPage();
-    await plainPage.goto('/tuple-probes');
-    const nativePosted = plainPage.waitForResponse(
-      (r) => r.request().method() === 'POST' && r.url().includes('/tuple-probes'),
-    );
-    await plainPage.click('#tp-submit');
-    await nativePosted;
+    await nativeSubmit(browser, '#tp-submit', { method: 'POST' });
     const native = await wireLast(request);
     expect(native!.contentType).toBe('text/plain');
     expect(native!.actionHeader).toBeNull();
     expect(native!.rawBody).toBe(enhancedPath!.rawBody);
-    await context.close();
   });
 
   test('submitter formmethod=get on a POST form: native GET navigation, never intercepted', async ({
@@ -252,26 +289,13 @@ test.describe('effective submission tuple (#1339 §5)', () => {
     request,
     browser,
   }) => {
-    const actionHeaderRequests: string[] = [];
-    page.on('request', (r) => {
-      if (r.headers()['x-openelement-action']) actionHeaderRequests.push(r.url());
-    });
     await wireReset(request);
     await page.goto('/tuple-probes');
-    await markWindow(page, '__prePostGet');
-    await page.click('#pg-submit');
-    await page.waitForURL(/\/tuple-probes\?q=via-get/);
-    await markerCleared(page, '__prePostGet');
-    expect(actionHeaderRequests).toEqual([]);
+    await submitDocument(page, '#pg-submit', { method: 'GET', finalUrl: getUrl });
     expect(await wireLast(request)).toBeNull(); // no POST reached the wire
 
     await wireReset(request);
-    const context = await browser.newContext({ javaScriptEnabled: false });
-    const plainPage = await context.newPage();
-    await plainPage.goto('/tuple-probes');
-    await plainPage.click('#pg-submit');
-    await plainPage.waitForURL(/\/tuple-probes\?q=via-get/);
-    await context.close();
+    await nativeSubmit(browser, '#pg-submit', { method: 'GET', finalUrl: getUrl });
     expect(await wireLast(request)).toBeNull();
   });
 
@@ -282,12 +306,9 @@ test.describe('effective submission tuple (#1339 §5)', () => {
   }) => {
     await wireReset(request);
     const countBefore = await actionCount(request);
-    await enhancedSubmit(page, '#gp-submit', '__preGetPost');
-    const enhanced = await wireLast(request);
-    expect(enhanced!.method).toBe('POST');
-    expect(enhanced!.contentType).toBe('application/x-www-form-urlencoded');
-    expect(enhanced!.actionHeader).toBe('enhance');
-    expect(enhanced!.rawBody).toBe('q=via-post&intent=gp');
+    const enhanced = await enhancedSubmit(page, request, '#gp-submit');
+    expect(enhanced.contentType).toBe('application/x-www-form-urlencoded');
+    expect(enhanced.rawBody).toBe('q=via-post&intent=gp');
     expect(await actionCount(request)).toBe(countBefore + 1);
 
     await wireReset(request);
@@ -296,7 +317,7 @@ test.describe('effective submission tuple (#1339 §5)', () => {
     expect(native!.method).toBe('POST');
     expect(native!.contentType).toBe('application/x-www-form-urlencoded');
     expect(native!.actionHeader).toBeNull();
-    expect(native!.rawBody).toBe(enhanced!.rawBody);
+    expect(native!.rawBody).toBe(enhanced.rawBody);
   });
 
   test('method=dialog closes the dialog natively and is never fetch()ed', async ({
@@ -327,10 +348,22 @@ test.describe('effective submission tuple (#1339 §5)', () => {
     });
     await wireReset(request);
     await page.goto('/tuple-probes');
-    const popupPromise = page.waitForEvent('popup', { timeout: 5000 });
-    await page.click('#to-submit');
-    const popup = await popupPromise;
-    expect(popup.url()).toContain('/tuple-probes');
+    // The initial popup POST can start before Playwright exposes the popup page.
+    const [popup, posted] = await Promise.all([
+      page.waitForEvent('popup', { timeout: 5000 }),
+      page.context().waitForEvent('response', (response) => {
+        const submission = response.request();
+        return (
+          submission.isNavigationRequest() &&
+          submission.resourceType() === 'document' &&
+          submission.method() === 'POST' &&
+          new URL(submission.url()).pathname === '/tuple-probes'
+        );
+      }),
+      page.locator('#to-submit').click(),
+    ]);
+    await popup.waitForURL(sentUrl, { waitUntil: 'load' });
+    expect(posted.request().headers()['x-openelement-action']).toBeUndefined();
     expect(actionHeaderRequests).toEqual([]);
     // The native submission happens inside the new tab and lands on the wire
     // as a plain POST with no enhancement header.

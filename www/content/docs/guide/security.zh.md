@@ -12,7 +12,9 @@ order: 95
 
 ## 私有构建产物
 
-构建的请求时服务器产物——`dist/server/` 下的入口、SSR bundle 与请求时 manifest——是服务端代码，绝不是公开资源。`oe start` / `npm start` 只伺服公开输出：对该命名空间的 GET/HEAD 一律以无响应体的 `404` 应答，覆盖百分号编码写法、大小写变体、路径内部的 `..`、重复斜杠、查询字符串，以及规范化（realpath）目标落在 `dist/server/` 内的 in-root 符号链接；服务端 bundle 无法通过 HTTP 读取。这条规则就在 `start` 与 `--mode=preview` 共用的共享静态边界上，不是可能被遗漏的宿主配置。应用自己声明在保留段下的请求时路由仍保持优先、由应用处理，但静态命名空间永不对外伺服。宿主静态层（Nitro 的 `publicAssets` 目录）仍按[部署指南](/zh/guide/deployment)拷贝「除 `server/` 之外的一切」。
+`dist-public/` 是独立的公开文件目录。`oe start` 和静态预览会在启动时验证其中的文件与 `dist/publish-manifest.json` 完全一致，并在响应静态 GET 或 HEAD 前检查真实路径和内容。Nitro、Workers 和通用静态宿主在打包前运行 `npx oe publish --check`，只上传 `dist-public/`。应用环境持有 `dist/server/` 及清单。这份清单验证文件是否属于公开集合，应用仍负责内容和授权。[部署指南](/zh/guide/deployment)
+
+浏览器构建和开发服务器的浏览器模块环境拒绝 island 直接或间接引入 `node:*` 内建模块。只有服务端使用的 loader 或路由可以继续使用这些模块。要保护应用自己的服务端模块，请添加同版本的 `@openelement/protocol` 依赖，并在模块中写入 `import '@openelement/protocol/server-only';`。服务端导入和纯类型导入仍可使用。浏览器代码在运行时依赖该模块时，Router 报出 `OE_CLIENT_BUILD_BROWSER_ENTRY_SERVER_ONLY`。
 
 ## 隐式身份验证
 

@@ -233,21 +233,8 @@ export function resolveGeneratedElementRoot(
     return { kind: 'light', root: host, created: false };
   }
 
-  if (hasUnadoptedDsdTemplate(host)) {
-    fail(
-      SHELL_DSD_NOT_ADOPTED,
-      `a direct child template[shadowrootmode] was not adopted by the HTML parser; ` +
-        `the ${kind} root cannot be claimed (use the parser's DSD path, not innerHTML)`,
-    );
-  }
-
-  if (kind === 'open') {
-    const existing = host.shadowRoot;
-    if (existing !== null) {
-      return { kind: 'open', root: existing, created: false };
-    }
-    return { kind: 'open', root: attachRoot(host, 'open', delegatesFocus), created: true };
-  }
+  if (kind === 'open') return resolveGeneratedOpenRoot(host, delegatesFocus);
+  assertDeclarativeRootAdopted(host, kind);
 
   // closed
   if (host.shadowRoot !== null) {
@@ -261,4 +248,25 @@ export function resolveGeneratedElementRoot(
     return { kind: 'closed', root: existing, created: false };
   }
   return { kind: 'closed', root: attachRoot(host, 'closed', delegatesFocus), created: true };
+}
+
+function assertDeclarativeRootAdopted(host: HTMLElement, kind: 'open' | 'closed'): void {
+  if (hasUnadoptedDsdTemplate(host)) {
+    fail(
+      SHELL_DSD_NOT_ADOPTED,
+      `a direct child template[shadowrootmode] was not adopted by the HTML parser; ` +
+        `the ${kind} root cannot be claimed (use the parser's DSD path, not innerHTML)`,
+    );
+  }
+}
+
+export function resolveGeneratedOpenRoot(
+  host: HTMLElement,
+  delegatesFocus: boolean,
+): { readonly kind: 'open'; readonly root: ShadowRoot; readonly created: boolean } {
+  assertDeclarativeRootAdopted(host, 'open');
+  const existing = host.shadowRoot;
+  return existing === null
+    ? { kind: 'open', root: attachRoot(host, 'open', delegatesFocus), created: true }
+    : { kind: 'open', root: existing, created: false };
 }

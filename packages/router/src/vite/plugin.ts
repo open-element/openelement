@@ -13,6 +13,7 @@
 
 import type { Plugin } from 'vite';
 import type { FrameworkOptions } from './framework.ts';
+import { browserEntryBoundaryPlugin } from './internal/browser-entry-boundary.ts';
 import type { SsgBehaviorOptions } from '@openelement/protocol/ssg';
 import { OpenElementBuildContext } from './build-context.ts';
 import { buildPlugin } from './build.ts';
@@ -84,6 +85,7 @@ export function createOpenPlugin(
   const styleSession = createDevStyleSession(state);
 
   const plugins: Plugin[] = [
+    { ...browserEntryBoundaryPlugin(), apply: 'serve' },
     mdxPlugin({ routesDir: state.resolvedOptions.routesDir }),
     corePlugin,
     // the dev half of the island style asset protocol — the

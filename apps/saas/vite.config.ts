@@ -34,6 +34,7 @@ export default defineConfig({
       // Explicit CORS allowlist (#983): the deployed worker origin plus the
       // local request-time server (pnpm start, default port 4173).
       middleware: {
+        use: ['./app/middleware/private-pages.ts'],
         corsOrigin: [
           'https://openelement-saas.freemanzheng.workers.dev',
           'http://localhost:4173',

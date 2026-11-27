@@ -32,17 +32,21 @@ import {
   writeBuildEvidence,
 } from './build-plan.ts';
 import { DEFAULT_OUT_DIR } from './internal/paths.ts';
+import { readSsgPageManifest } from './internal/ssg/output-manifest.ts';
+import { authoredPublicPaths, writePublishOutput } from './internal/publish-manifest.ts';
 
 const log = createLogger('build');
 
 /** Phase 2: client island bundle. Shared by the SPA and SSG closeBundle paths. */
-async function runClientIslandBuild(ctx: OpenElementBuildContext): Promise<void> {
+async function runClientIslandBuild(ctx: OpenElementBuildContext): Promise<string[]> {
   log.info('[2/3] Client island build...');
   try {
     const { buildClient } = await import('../cli/build-client.ts');
-    ctx.clientAssetManifest = await buildClient(ctx);
+    const { manifest, files } = await buildClient(ctx);
+    ctx.clientAssetManifest = manifest;
     ctx.markComplete(2);
     log.info('[2/3] Client island build - complete');
+    return files;
   } catch (error) {
     log.error(`[2/3] Client island build - FAILED: ${error}`);
     throw error;
@@ -159,9 +163,10 @@ export function buildPlugin(
       const hasServerRenderedPages = (ctx.phase1.cachedRoutes ?? []).some(
         (route) => route.type === 'page',
       );
-      if (totalIslands > 0 || hasEnhancedForms || stylePlan || hasServerRenderedPages) {
-        await runClientIslandBuild(ctx);
-      }
+      const clientPublicFiles =
+        totalIslands > 0 || hasEnhancedForms || stylePlan || hasServerRenderedPages
+          ? await runClientIslandBuild(ctx)
+          : [];
 
       // The document stylesheet: Phase 2 emitted it (content-hashed, in
       // dist/client/assets/). Point the head artifact at it BEFORE Phase 3
@@ -216,6 +221,7 @@ export function buildPlugin(
         throw error;
       }
 
+      let islandManifestFiles: string[] = [];
       // -- Per-page island manifests + record the request-time asset manifest --
       // Runs after Phase 3: the island manifests post-process the rendered
       // pages, and dist/server/client-assets.js overwrites the placeholder
@@ -227,7 +233,8 @@ export function buildPlugin(
         try {
           const manifest = ctx.clientAssetManifest;
           if (manifest) {
-            const pageManifests = await postProcessClientIslandBuild(ctx);
+            const { pageManifests, files } = await postProcessClientIslandBuild(ctx);
+            islandManifestFiles = files;
             await writeRequestTimeClientAssets(ctx, manifest);
             log.info(`Client scripts rendered from the asset manifest: ${manifest.entry}`);
             // -- Per-page island-chunk prefetch (#1561) --
@@ -266,6 +273,20 @@ export function buildPlugin(
       if (!ctx.buildArtifacts.success) {
         throw new Error(`BuildPlan failed: ${ctx.buildArtifacts.errors.join('; ')}`);
       }
+      const outputDir = join(
+        ctx.phase3.root || process.cwd(),
+        ctx.phase3.outDir || DEFAULT_OUT_DIR,
+      );
+      const authored =
+        config.build.copyPublicDir && config.publicDir && existsSync(config.publicDir)
+          ? authoredPublicPaths(config.publicDir)
+          : [];
+      writePublishOutput(outputDir, [
+        ...authored,
+        ...clientPublicFiles,
+        ...islandManifestFiles,
+        ...readSsgPageManifest(outputDir),
+      ]);
     },
   };
 }

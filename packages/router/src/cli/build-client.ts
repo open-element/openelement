@@ -65,6 +65,7 @@ import {
 } from '../vite/internal/element-runtime-chunk.ts';
 import { requireViteHelperChunk, viteHelperChunkName } from '../vite/internal/vite-helper-chunk.ts';
 import { realpathSync } from 'node:fs';
+import { realPathKey } from '../vite/internal/real-path-key.ts';
 import { islandStyleDeclarations } from '../vite/internal/island-style-declarations.ts';
 import {
   setClientIslandStyleAssets,
@@ -91,7 +92,7 @@ import {
 } from '../vite/internal/style-assets.ts';
 import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
 import {
-  createServerComponentSourceResolver,
+  resolveViteServerComponentSource,
   serverComponentAdmissionTags,
 } from '../vite/internal/server-component-host.ts';
 import { compilerBehaviorDeclarations } from '../vite/internal/ssg/client-admission.ts';
@@ -327,6 +328,20 @@ export function findReachableIslandTags(
     }
   };
 
+  // Generated islands need not contain a registration call or an authored
+  // tag string. Join the import walk to the scanner's admitted file identity.
+  const islandsDir = ctx.phase3.islandsDir || DEFAULT_ISLANDS_DIR;
+  const deliveryByFile = new Map<string, string[]>();
+  ctx.phase1.islandTagNames.forEach((tag, index) => {
+    const islandFile = ctx.phase1.islandFiles[index];
+    if (islandFile === undefined) return;
+    const key = realPathKey(resolve(root, islandsDir, islandFile));
+    deliveryByFile.set(key, [
+      ...(deliveryByFile.get(key) ?? []),
+      ...deliveryTagsForLocal(tag, ctx.phase1.islandMeta[tag]),
+    ]);
+  });
+
   const visitedSourceFiles = new Set<string>();
   const recordSourceFile = (filePath: string): void => {
     const normalizedPath = resolve(filePath);
@@ -345,7 +360,10 @@ export function findReachableIslandTags(
     // Importing a local island module is an explicit registration-capability
     // edge even when its tag is created later by opaque third-party code.
     // The declaration itself is therefore observable reachability evidence.
-    for (const tag of semantics.definedCustomElementTags) {
+    for (const tag of [
+      ...semantics.definedCustomElementTags,
+      ...(deliveryByFile.get(realPathKey(normalizedPath)) ?? []),
+    ]) {
       if (candidateSet.has(tag)) reachable.add(tag);
     }
     for (const specifier of semantics.relativeImports) {
@@ -431,7 +449,9 @@ type ViteInlineConfigWithManifest = Omit<InlineConfig, 'build'> & {
   build?: ViteBuildOptionsWithManifest;
 };
 
-async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetManifest | null> {
+async function buildClient(
+  ctx: OpenElementBuildContext,
+): Promise<{ manifest: ClientAssetManifest | null; files: string[] }> {
   // the style-request registry's bookkeeping is this build's
   // lifetime — the SSR build clears and re-registers through its own
   // transforms, and a stale entry from an earlier build in this process must
@@ -580,7 +600,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
   ) {
     await removeClientDeliveryArtifacts(root, outDir);
     log.info('No islands found - zero client JS output');
-    return null;
+    return { manifest: null, files: [] };
   }
 
   const reachableTags = reachableScan.tags;
@@ -634,7 +654,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
   ) {
     await removeClientDeliveryArtifacts(root, outDir);
     log.info('No admitted reachable islands - zero client JS output');
-    return null;
+    return { manifest: null, files: [] };
   }
 
   const totalIslands =
@@ -755,6 +775,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
     const utilitySheet = componentSheetSpecifier();
     return generateClientEntry(islandEntries, {
       enhancedForms,
+      specializeScheduler: true,
       // The document stylesheet's module: for a `graph-entry` provider the
       // generated entry imports the CSS entry so the engine's pipeline
       // compiles it inside this build's CSS graph and Vite emits the
@@ -954,8 +975,18 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
         ? { conditions: [...ctx.phase1.clientResolveConditions] }
         : {}),
       ...(ctx.phase1.clientPreserveSymlinks ? { preserveSymlinks: true } : {}),
-      extensions: ['.ts', '.tsx', '.js', '.jsx', '.json'],
       dedupe: ['preact'],
+    },
+    // The client build discovers styles used by server-rendered modules too.
+    // Set the orders on the environments themselves. Vite prepends an explicit
+    // top-level extension list to both environment lists.
+    environments: {
+      ...(ctx.phase1.clientResolveExtensions === undefined
+        ? {}
+        : { client: { resolve: { extensions: ctx.phase1.clientResolveExtensions } } }),
+      ...(ctx.phase1.ssrResolveExtensions === undefined
+        ? {}
+        : { ssr: { resolve: { extensions: ctx.phase1.ssrResolveExtensions } } }),
     },
     ssr: {
       noExternal: (noExternalPatterns.length > 0 ? noExternalPatterns : undefined) as
@@ -1038,10 +1069,8 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
         // constructors through the same transform — the client build must
         // lower them exactly as the dev and SSG hosts do, or the route
         // module would ship authored JSX.
-        resolveServerComponentModule: createServerComponentSourceResolver({
-          root,
-          workspaceRoot: findBuildWorkspaceRootOrUndefined(root),
-        }),
+        resolveServerComponentModule: (specifier, _importer, resolve) =>
+          resolveViteServerComponentSource(specifier, resolve),
         // The union the entry's SSR registry carries (renderable islands plus
         // static compiled components): a function page's nested host rides
         // `__ssr` under exactly the tags the render can expand.
@@ -1194,6 +1223,11 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
 
   try {
     const outputs = await viteBuild(clientConfig);
+    const publicFiles = (Array.isArray(outputs) ? outputs : [outputs]).flatMap((result) =>
+      'output' in result
+        ? result.output.map((entry) => entry.fileName).filter((name) => !name.startsWith('.vite/'))
+        : [],
+    );
     log.info('Client bundle built -> ' + clientOutDir);
 
     // #1544, fail closed: the generated entry statically imports the element
@@ -1478,6 +1512,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
         // zero-JS shape after all, so leave no trace.
         await removeClientDeliveryArtifacts(root, outDir);
         log.info('No server-rendered style edges - zero client JS output');
+        return { manifest: null, files: [] };
       } else {
         log.info(
           `Style-only emission complete: ${emittedStyleResources} style asset(s), zero client JS`,
@@ -1486,14 +1521,21 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<ClientAssetMan
       // No client deliverable exists, so no client asset manifest is handed
       // back — exactly as the shortcut paths behave. Phase 3's script-tag and
       // island-manifest passes key off the manifest, and this app has neither.
-      return null;
+      return {
+        manifest: null,
+        files: publicFiles
+          .filter((name) => !name.startsWith('islands/'))
+          .map((name) => `client/${name}`),
+      };
     }
+    return {
+      manifest: ctx.clientAssetManifest,
+      files: publicFiles.map((name) => `client/${name}`),
+    };
   } catch (error) {
     log.error(`Client build failed: ${formatError(error)}`);
     throw error;
   }
-
-  return ctx.clientAssetManifest;
 }
 
 export { buildClient };

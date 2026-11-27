@@ -429,6 +429,8 @@ interface GenerateClientEntryOptions {
    * silently left as plain no-JS posts.
    */
   enhancedForms?: boolean;
+  /** Build/dev callers supply the whole merged client-entry island inventory. */
+  specializeScheduler?: boolean;
   /**
    * Whether the page's element entry installs the compiled when/each Block
    * builders (#1548). Defaults to true — the full runtime. `false` is the
@@ -735,7 +737,23 @@ var __loadElementRuntime = function () {
 };`
     : '';
 
-  const schedulerImport = `import { createIslandScheduler as __schedule } from '${VIRTUAL_RUNTIME_SPECIFIERS.scheduler}';`;
+  // Only the whole entry's admitted buckets can prove a handler absent.
+  // A per-page manifest would miss dynamic or morph-delivered hosts.
+  const optionalStrategies = [
+    ...(visibleTags ? [['visible', 'installVisibleStrategy']] : []),
+    ...(mediaTags ? [['media', 'installMediaStrategy']] : []),
+  ];
+  const specializeScheduler = options.specializeScheduler === true && optionalStrategies.length < 2;
+  const schedulerBindings = specializeScheduler
+    ? [
+        'createIslandSchedulerWithStrategies as __schedule',
+        ...optionalStrategies.map(([, name]) => name),
+      ]
+    : ['createIslandScheduler as __schedule'];
+  const schedulerOptions = specializeScheduler
+    ? `, {${optionalStrategies.map(([kind, name]) => ` ${kind}: ${name}`).join(',')}}`
+    : '';
+  const schedulerImport = `import { ${schedulerBindings.join(', ')} } from '${VIRTUAL_RUNTIME_SPECIFIERS.scheduler}';`;
   // ── Document services: one installer per emission shape ──────────────────
   //
   // The two document-level services (deep fragment navigation, pre-hydration
@@ -838,7 +856,7 @@ ${
   onIslandLoaded: function () { __enhance.repairUpgrades(document); __enhance.scanSubmitRoots(document); },`
     : '  // #597: no enhance layer — no submit-root rescan after island loads.\n  onIslandLoaded: null,'
 }
-});
+}${schedulerOptions});
 
 ${
   options.enhancedForms === true

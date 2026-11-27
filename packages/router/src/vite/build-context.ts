@@ -122,6 +122,9 @@ class Phase1Meta {
 
   /** User-provided resolve.alias in its original format */
   userResolveAlias: Record<string, string> | Alias[] | null = null;
+  /** Each inline build inherits the corresponding resolved Vite environment's extension order. */
+  clientResolveExtensions: string[] | undefined;
+  ssrResolveExtensions: string[] | undefined;
 
   /**
    * The browser-client resolve policy the resolved Vite config actually
@@ -365,15 +368,19 @@ export class OpenElementBuildContext {
     this.buildArtifacts = null;
 
     const userResolveAlias = this.phase1.userResolveAlias;
+    const clientResolveExtensions = this.phase1.clientResolveExtensions;
+    const ssrResolveExtensions = this.phase1.ssrResolveExtensions;
     const clientResolveConditions = this.phase1.clientResolveConditions;
     const clientPreserveSymlinks = this.phase1.clientPreserveSymlinks;
     const i18nOptions = this.plugins.i18nOptions;
-    // NOTE: userResolveAlias and the captured client resolve policy are NOT
+    // NOTE: userResolveAlias and the captured environment resolve policies are NOT
     // reset - they are configuration captured from the resolved Vite config,
     // not build state. They're set in config()/configResolved() and must
     // persist through buildStart() for Phase 2 and 3 to use.
     Object.assign(this.phase1, new Phase1Meta(), {
       userResolveAlias,
+      clientResolveExtensions,
+      ssrResolveExtensions,
       clientResolveConditions,
       clientPreserveSymlinks,
     });

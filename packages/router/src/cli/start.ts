@@ -52,6 +52,7 @@ import type { Server } from 'node:http';
 import { serveFetch, type FetchHandler, type RequestOriginPolicy } from '../internal/node-http.ts';
 import { formatError } from '@openelement/element';
 import { DEFAULT_OUT_DIR } from '../vite/internal/paths.ts';
+import { checkPublishOutput } from '../vite/internal/publish-manifest.ts';
 import { extractServeMode, type ServeMode } from '../internal/serve-mode.ts';
 import {
   createFetchHandler,
@@ -387,6 +388,7 @@ async function runPreview(rest: string[]): Promise<void> {
     process.exit(1);
   }
   const listen = parsePreviewFlags(rest);
+  const publicOutput = checkPublishOutput(distDir);
   if (listen.ignored.length > 0) {
     console.warn(
       `[openElement preview] ignoring unrecognized argument(s): ${listen.ignored.join(' ')} ` +
@@ -399,7 +401,8 @@ async function runPreview(rest: string[]): Promise<void> {
   // build shipped none), so pretty URLs, error-document misses, and the 404
   // status of /404.html all answer exactly as they do under `start`.
   const handler: FetchHandler = createFetchHandler({
-    distDir,
+    distDir: publicOutput.root,
+    publicFiles: publicOutput.files,
     serverMod: null,
     env: processEnvRecord(),
   });
@@ -443,6 +446,7 @@ async function runStart(): Promise<void> {
   const hostname = resolveHostname();
   const rawPort = process.env['OPEN_ELEMENT_PORT'] ?? process.env['PORT'] ?? '4173';
   const port = parsePortValue(rawPort, 'OPEN_ELEMENT_PORT / PORT', 'start');
+  const publicOutput = checkPublishOutput(distDir);
 
   let serverMod: RequestTimeServerModule | null = null;
   if (existsSync(serverEntry)) {
@@ -457,7 +461,8 @@ async function runStart(): Promise<void> {
   }
 
   const handler = createFetchHandler({
-    distDir,
+    distDir: publicOutput.root,
+    publicFiles: publicOutput.files,
     serverMod,
     env: processEnvRecord(),
   });

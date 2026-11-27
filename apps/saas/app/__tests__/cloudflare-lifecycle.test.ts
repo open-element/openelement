@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import {
   consumeAttachmentScanDeadLetters,
   consumeAttachmentScans,
@@ -13,7 +13,10 @@ function env(overrides: Partial<WorkerEnv> = {}): WorkerEnv {
   return {
     SUPABASE_URL: 'https://project.supabase.co',
     SUPABASE_SERVICE_ROLE_KEY: 'service-role-test',
-    ATTACHMENT_SCANNER: { fetch: () => Promise.resolve(Response.json({ verdict: 'clean' })) },
+    ATTACHMENT_SCANNER: {
+      fetch: () =>
+        Promise.resolve(Response.json({ verdict: 'clean', scanPolicy: 'brokered-storage' })),
+    },
     ATTACHMENT_SCAN_QUEUE: { send: () => Promise.resolve() },
     PAYMENT_EVENT_QUEUE: { send: () => Promise.resolve() },
     ...overrides,
@@ -51,27 +54,72 @@ test('queue scan acknowledges only after scanner verdict and atomic RPC', async 
   expect(rpcBodies).toEqual([{ reservation_id: 'r1', target_key: 'u/o', verdict: 'clean' }]);
 });
 
-test('queue scan retries invalid scanner responses without acknowledging', async () => {
-  let acked = 0;
-  let retried = 0;
-  await consumeAttachmentScans(
-    {
-      queue: 'openelement-attachment-scan',
-      messages: [
-        {
-          body: { type: 'attachment.scan', reservationId: 'r1', objectKey: 'u/o' },
-          ack: () => acked++,
-          retry: () => retried++,
-        },
-      ],
-    },
-    env({
-      ATTACHMENT_SCANNER: { fetch: () => Promise.resolve(Response.json({ verdict: 'unknown' })) },
-    }),
-  );
-  expect(acked).toEqual(0);
-  expect(retried).toEqual(1);
+test('queue acknowledges duplicate deliveries after scan completion and deletion', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: unknown[] = [];
+  globalThis.fetch = (input, init) => {
+    expect(String(input)).toMatch(/\/rpc\/complete_brokered_attachment_scan$/);
+    calls.push(JSON.parse(String(init?.body)));
+    return Promise.resolve(new Response(null, { status: 204 }));
+  };
+  const ack = vi.fn();
+  const retry = vi.fn();
+  const message = {
+    body: { type: 'attachment.scan', reservationId: 'r1', objectKey: 'u/o' } as const,
+    ack,
+    retry,
+  };
+  const batch = { queue: 'openelement-attachment-scan', messages: [message] };
+  const results = [
+    { verdict: 'clean', scanPolicy: 'brokered-storage' },
+    { status: 'terminal', scanPolicy: 'brokered-storage' },
+    { status: 'terminal', scanPolicy: 'brokered-storage' },
+  ];
+  const fixture = env({
+    ATTACHMENT_SCANNER: { fetch: () => Promise.resolve(Response.json(results.shift())) },
+  });
+  try {
+    // The initial delivery completes the scan. Then the same message is
+    // delivered in clean state and again after the reservation is deleted.
+    await consumeAttachmentScans(batch, fixture);
+    await consumeAttachmentScans(batch, fixture);
+    await consumeAttachmentScans(batch, fixture);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  expect(ack).toHaveBeenCalledTimes(3);
+  expect(retry).not.toHaveBeenCalled();
+  expect(calls).toEqual([{ reservation_id: 'r1', target_key: 'u/o', verdict: 'clean' }]);
 });
+
+test.each([
+  { verdict: 'unknown', scanPolicy: 'brokered-storage' },
+  { verdict: 'clean' },
+  { status: 'terminal' },
+])(
+  'queue scan retries invalid and legacy scanner responses without acknowledging',
+  async (result) => {
+    let acked = 0;
+    let retried = 0;
+    await consumeAttachmentScans(
+      {
+        queue: 'openelement-attachment-scan',
+        messages: [
+          {
+            body: { type: 'attachment.scan', reservationId: 'r1', objectKey: 'u/o' },
+            ack: () => acked++,
+            retry: () => retried++,
+          },
+        ],
+      },
+      env({
+        ATTACHMENT_SCANNER: { fetch: () => Promise.resolve(Response.json(result)) },
+      }),
+    );
+    expect(acked).toEqual(0);
+    expect(retried).toEqual(1);
+  },
+);
 
 test('DLQ acknowledges only after durable dead-letter persistence', async () => {
   const originalFetch = globalThis.fetch;
@@ -137,16 +185,13 @@ test('Cron removes stale objects before releasing quota and requeues pending sca
   globalThis.fetch = (input, init) => {
     const url = String(input);
     if (url.endsWith('/rpc/list_pending_attachment_deletions')) {
-      return Promise.resolve(Response.json([]));
-    }
-    if (url.endsWith('/rpc/list_stale_attachment_reservations')) {
       return Promise.resolve(Response.json([{ id: 'stale-1', object_key: 'u/stale' }]));
     }
     if (url.includes('/storage/v1/object/')) {
       operations.push(`storage:${init?.method}`);
       return Promise.resolve(Response.json({}));
     }
-    if (url.endsWith('/rpc/release_stale_attachment')) {
+    if (url.endsWith('/rpc/complete_pending_attachment_delete')) {
       operations.push('release');
       return Promise.resolve(new Response(null, { status: 204 }));
     }
@@ -184,7 +229,7 @@ test('Cron removes stale objects before releasing quota and requeues pending sca
 
 test('Cron retains an abandoned reservation across Storage failure and releases it on retry', async () => {
   // Reserve succeeded but the client never finalized: the row stays 'reserved'
-  // until the 15-minute stale sweep lists it (migration 20260817000002). The
+  // until the 15-minute sweep claims it as deleting. The
   // sweep must not release quota while the object removal failed, and must
   // converge on the next run — object removal strictly before quota release.
   const originalFetch = globalThis.fetch;
@@ -194,9 +239,6 @@ test('Cron retains an abandoned reservation across Storage failure and releases 
   globalThis.fetch = (input) => {
     const url = String(input);
     if (url.endsWith('/rpc/list_pending_attachment_deletions')) {
-      return Promise.resolve(Response.json([]));
-    }
-    if (url.endsWith('/rpc/list_stale_attachment_reservations')) {
       return Promise.resolve(
         Response.json(released ? [] : [{ id: 'stale-1', object_key: 'u/stale' }]),
       );
@@ -210,7 +252,7 @@ test('Cron retains an abandoned reservation across Storage failure and releases 
           : Response.json({}),
       );
     }
-    if (url.endsWith('/rpc/release_stale_attachment')) {
+    if (url.endsWith('/rpc/complete_pending_attachment_delete')) {
       released++;
       operations.push('release');
       return Promise.resolve(new Response(null, { status: 204 }));
@@ -250,7 +292,6 @@ test('Cron converges an interrupted attachment deletion', async () => {
       return Promise.resolve(new Response(null, { status: 204 }));
     }
     if (
-      url.endsWith('/rpc/list_stale_attachment_reservations') ||
       url.endsWith('/rpc/list_pending_attachment_scans') ||
       url.endsWith('/rpc/list_requested_attachment_scan_replays')
     )
@@ -289,7 +330,6 @@ test('Cron retains a deletion tombstone across Storage failure and converges on 
       return Promise.resolve(new Response(null, { status: 204 }));
     }
     if (
-      url.endsWith('/rpc/list_stale_attachment_reservations') ||
       url.endsWith('/rpc/list_pending_attachment_scans') ||
       url.endsWith('/rpc/list_requested_attachment_scan_replays')
     )
@@ -312,9 +352,6 @@ test('Cron isolates one enqueue failure so later pending scans still run', async
   globalThis.fetch = (input) => {
     const url = String(input);
     if (url.endsWith('/rpc/list_pending_attachment_deletions')) {
-      return Promise.resolve(Response.json([]));
-    }
-    if (url.endsWith('/rpc/list_stale_attachment_reservations')) {
       return Promise.resolve(Response.json([]));
     }
     if (url.endsWith('/rpc/list_pending_attachment_scans')) {
@@ -356,9 +393,6 @@ test('Cron marks replay only after Queue handoff succeeds', async () => {
   globalThis.fetch = (input) => {
     const url = String(input);
     if (url.endsWith('/rpc/list_pending_attachment_deletions')) {
-      return Promise.resolve(Response.json([]));
-    }
-    if (url.endsWith('/rpc/list_stale_attachment_reservations')) {
       return Promise.resolve(Response.json([]));
     }
     if (url.endsWith('/rpc/list_pending_attachment_scans')) {
@@ -404,9 +438,6 @@ test('Cron leaves a failed replay request durable and continues later rows', asy
   globalThis.fetch = (input, init) => {
     const url = String(input);
     if (url.endsWith('/rpc/list_pending_attachment_deletions')) {
-      return Promise.resolve(Response.json([]));
-    }
-    if (url.endsWith('/rpc/list_stale_attachment_reservations')) {
       return Promise.resolve(Response.json([]));
     }
     if (url.endsWith('/rpc/list_pending_attachment_scans')) {
@@ -603,9 +634,6 @@ test('Cron delegates attachment replay state and audit to one atomic RPC', async
   globalThis.fetch = (input, init) => {
     const url = String(input);
     if (url.endsWith('/rpc/list_pending_attachment_deletions')) {
-      return Promise.resolve(Response.json([]));
-    }
-    if (url.endsWith('/rpc/list_stale_attachment_reservations')) {
       return Promise.resolve(Response.json([]));
     }
     if (url.endsWith('/rpc/list_pending_attachment_scans')) {

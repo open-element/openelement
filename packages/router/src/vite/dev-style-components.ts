@@ -22,7 +22,7 @@
  *    re-evaluation, so an edit UPDATES the same sheet (every root holding it
  *    re-renders) instead of replacing the reference.
  *
- * HMR: a `.tsx` edit can change the admitted candidate set and a declared
+ * HMR: a JSX module edit can change the admitted candidate set and a declared
  * theme source edit changes the theme layer. Both dirty the compile cache; the
  * watcher re-registers the module's facts and only then invalidates the adapter
  * module — Vite then re-fetches the sheet through the adapter's
@@ -49,7 +49,7 @@ import {
 } from './internal/island-style-declarations.ts';
 import { DEFAULT_ISLANDS_DIR } from './internal/paths.ts';
 import { devAuthoredIslandStyleUrls } from './internal/style-assets.ts';
-import { compileGeneratedElementIfAdmitted } from '@openelement/compiler';
+import { compileGeneratedElementIfAdmitted, isJsxModuleId } from '@openelement/compiler';
 import { readFileSync } from 'node:fs';
 import type { DevStyleSession } from './internal/dev-style-session.ts';
 import { reportRecoveryFailure } from './internal/build-diagnostics.ts';
@@ -255,6 +255,7 @@ export function devStyleComponentsPlugin(state: OpenPluginState, session: DevSty
       if (facts.root === 'light') continue;
       await collectShadowClassCandidates({
         root,
+        viteResolver: state.resolveModule,
         modules: [{ path: facts.moduleId, tag: facts.tagName }],
         candidates: state.classCandidates,
       });
@@ -274,7 +275,8 @@ export function devStyleComponentsPlugin(state: OpenPluginState, session: DevSty
   };
   /** A change that may move the admitted candidates or the theme layer. */
   const relevantChange = (file: string): boolean =>
-    /\.(?:tsx|css)$/.test(file) ||
+    isJsxModuleId(file) ||
+    file.endsWith('.css') ||
     (session.current()?.plan.theme ?? []).some((source) => file.endsWith(source));
 
   return {
@@ -378,11 +380,12 @@ export function devStyleComponentsPlugin(state: OpenPluginState, session: DevSty
        */
       const onFile = async (file: string): Promise<void> => {
         if (!relevantChange(file)) return;
-        if (/\.tsx$/.test(file)) {
+        if (isJsxModuleId(file)) {
           // The compile is the same engine the transform runs (one module, not
           // the whole app).
           await collectShadowClassCandidates({
             root,
+            viteResolver: state.resolveModule,
             modules: [{ path: file }],
             candidates: state.classCandidates,
           });

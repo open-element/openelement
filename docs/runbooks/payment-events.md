@@ -1,9 +1,8 @@
 # Runbook: SaaS payment events
 
-Scope: Stripe webhook ingress, durable event storage, Cloudflare Queue
-delivery, dead-letter handling, and admin replay for `apps/saas`. This runbook
-contains no tokens and no live provider data; local verification uses
-test-mode credentials only.
+This runbook covers Stripe webhook ingress, durable event storage, Cloudflare
+Queue delivery, dead-letter handling, and admin replay for one-time Checkout
+payments in `apps/saas`.
 
 ## Boundaries
 
@@ -40,30 +39,48 @@ Additional rules:
 Event `processing_state` values: `received`, `processing`, `completed`,
 `dead_letter`, `replay_requested`.
 
-## Local verification (test mode)
+## Local verification
 
-Use the Stripe CLI against the local server; test-mode keys only:
+Run the SaaS checks from the repository root.
 
 ```sh
-pnpm --dir apps/saas run start   # local server on http://localhost:4173
-stripe listen --forward-to http://localhost:4173/api/stripe-webhook
-stripe trigger checkout.session.completed
+vp run saas:verify
+vp run saas:workers
 ```
 
-Expected: a verified event is persisted once, the Queue consumer reaches
-`completed`, and repeating the same trigger does not double-apply.
+The tests exercise webhook and lifecycle behavior with stubbed provider and
+Queue calls. The Workers task verifies the local build and its boundary. Plain
+`oe start` has no `PAYMENT_EVENT_QUEUE` binding, so the webhook responds with
+503 before accepting an event.
+
+## Staging verification (test mode)
+
+Follow the [SaaS staging checklist](../../apps/saas/STAGING-CHECKLIST.md) for
+the candidate Worker, Supabase migrations, and Queue, DLQ, and Cron bindings.
+Set `STRIPE_LIVEMODE` to `false` and configure the test-mode webhook endpoint
+at the staging Worker's `/api/stripe-webhook` using its endpoint signing
+secret as a Worker binding.
+
+Complete a one-time Checkout Session created by the staging app. Check that
+the signed provider event is stored, the Queue consumer reaches `completed`,
+and the matching order becomes paid. Resend the original Stripe event ID and
+verify that the event has one durable row and the order transition occurs
+once. Record the candidate revision and observed result using the staging
+checklist.
 
 ## Inspect state (read-only)
 
-Run with the service-role connection or the Supabase SQL editor:
+Run these queries through the Supabase SQL editor or with an authorized
+operator database role. The application's `service_role` grants expose
+lifecycle RPCs and exclude direct reads of `stripe_events`.
 
 ```sql
-select id, processing_state, received_at, replay_requested_at
+select provider_event_id, processing_state, received_at, replay_requested_at
 from public.stripe_events
 order by received_at desc
 limit 20;
 
-select id, processing_state, received_at
+select provider_event_id, processing_state, received_at
 from public.stripe_events
 where processing_state in ('dead_letter', 'replay_requested')
 order by received_at

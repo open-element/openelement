@@ -160,7 +160,7 @@ export const SSR_CONTEXT_PARAM = `${INTERNAL_PREFIX}ssrContext`;
  * forwarded through the host-record literals only for such a module, so every
  * other module keeps its exact bytes.
  */
-export function moduleUsesContext(state: EmitState): boolean {
+export function moduleUsesContext(state: Pick<EmitState, 'componentByName'>): boolean {
   for (const component of state.componentByName.values()) {
     if (component.contextProviders.length > 0) return true;
     if (component.resources.some((resource) => resource.kind === 'context')) return true;

@@ -27,6 +27,7 @@ import { mkdir, mkdtemp, readdir, realpath, rm, symlink, writeFile } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, expect, test } from 'vitest';
+import { createServer, optimizeDeps, resolveConfig } from 'vite';
 import {
   BrowserEntryBoundaryErrorCode,
   browserEntryBoundaryPlugin,
@@ -36,6 +37,8 @@ import {
 const REPO_ROOT = join(import.meta.dirname!, '..', '..', '..');
 const ROUTER_BUILD_CLI = join(REPO_ROOT, 'packages', 'router', 'src', 'cli', 'build.ts');
 const CODE = BrowserEntryBoundaryErrorCode.NODE_BUILTIN_IMPORT;
+const SERVER_ONLY_CODE = BrowserEntryBoundaryErrorCode.SERVER_ONLY_IMPORT;
+const SERVER_ONLY_IMPORT = "import '@openelement/protocol/server-only';";
 
 const fixtureRoots: string[] = [];
 
@@ -95,6 +98,8 @@ interface FixtureOptions {
   islandUse?: string;
   /** Write a helper module the island imports and uses. */
   helperImportsNode?: boolean;
+  /** The transitive fixture's regular helper imports the protocol marker. */
+  helperImportsServerMarker?: boolean;
   /** Route module body (defaults to the plain generated page). */
   routeSource?: string;
 }
@@ -114,7 +119,11 @@ async function makeFixture(name: string, options: FixtureOptions = {}): Promise<
       "import { openElement } from '@openelement/router/vite';",
       "import { defineConfig } from 'vite';",
       '',
-      "export default defineConfig({ base: '/', plugins: [...openElement({ layout: false })] });",
+      'export default defineConfig({',
+      "  base: '/',",
+      "  oxc: { jsx: { runtime: 'automatic', importSource: '@openelement/element' } },",
+      '  plugins: [...openElement({ layout: false })],',
+      '});',
       '',
     ].join('\n'),
   );
@@ -132,6 +141,13 @@ async function makeFixture(name: string, options: FixtureOptions = {}): Promise<
     await write(
       join(root, 'app', 'islands', 'probe-helper.ts'),
       "import { readFileSync } from 'node:fs';\n\nexport const helperReadsNode = (): number => readFileSync('.').length;\n",
+    );
+  }
+  if (options.helperImportsServerMarker === true) {
+    await write(
+      join(root, 'app', 'islands', 'probe-helper.ts'),
+      `${SERVER_ONLY_IMPORT}\nexport const ordinaryMarker = () => 'server-authored marker';\n` +
+        'export type MarkerShape = { label: string };\n',
     );
   }
   await write(
@@ -171,7 +187,7 @@ interface BuildResult {
 
 function runBuild(root: string): Promise<BuildResult> {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [ROUTER_BUILD_CLI], { cwd: root });
+    const child = spawn(process.execPath, [ROUTER_BUILD_CLI, '--diagnostics=json'], { cwd: root });
     let output = '';
     child.stdout.on('data', (chunk) => (output += chunk));
     child.stderr.on('data', (chunk) => (output += chunk));
@@ -182,6 +198,8 @@ function runBuild(root: string): Promise<BuildResult> {
 let direct: BuildResult;
 let transitive: BuildResult;
 let loader: BuildResult;
+let markedDirect: BuildResult;
+let markedTransitive: BuildResult;
 
 beforeAll(async () => {
   const directRoot = await makeFixture('direct', {
@@ -193,7 +211,10 @@ beforeAll(async () => {
     islandUse: 'const marker = helperReadsNode();',
   });
   const loaderRoot = await makeFixture('loader', {
+    helperImportsServerMarker: true,
+    islandImport: "import type { MarkerShape } from './probe-helper.ts';\n",
     routeSource: [
+      SERVER_ONLY_IMPORT,
       "import { readFile } from 'node:fs/promises';",
       "import { definePage } from '@openelement/router';",
       "import ProbeHome from '../components/probe-home.tsx';",
@@ -206,10 +227,20 @@ beforeAll(async () => {
       '',
     ].join('\n'),
   });
-  [direct, transitive, loader] = await Promise.all([
+  const markerRoot = await makeFixture('marked-direct', {
+    islandImport: SERVER_ONLY_IMPORT + '\n',
+  });
+  const helperRoot = await makeFixture('marked-transitive', {
+    helperImportsServerMarker: true,
+    islandImport: "import { ordinaryMarker } from './probe-helper.ts';\n",
+    islandUse: 'const marker = ordinaryMarker();',
+  });
+  [direct, transitive, loader, markedDirect, markedTransitive] = await Promise.all([
     runBuild(directRoot),
     runBuild(transitiveRoot),
     runBuild(loaderRoot),
+    runBuild(markerRoot),
+    runBuild(helperRoot),
   ]);
 }, 240_000);
 
@@ -266,3 +297,82 @@ test('a route loader importing node:* still builds: the server graph is not the 
   );
   expect(islands.length).toBeGreaterThan(0);
 });
+
+test('authored server-only markers reject direct side-effect and transitive imports', () => {
+  for (const [result, file] of [
+    [markedDirect, 'app/islands/probe-counter.tsx'],
+    [markedTransitive, 'app/islands/probe-helper.ts'],
+  ] as const) {
+    expect(result.code, result.output).not.toEqual(0);
+    expect(result.output).toContain(SERVER_ONLY_CODE);
+    expect(result.output).toContain(file);
+    const json = result.output
+      .split('\n')
+      .find((line) => line.includes('openelement.diagnostics/1'));
+    expect(JSON.parse(json ?? '{}').diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: SERVER_ONLY_CODE,
+          hint: expect.stringContaining('server loader'),
+        }),
+      ]),
+    );
+  }
+});
+
+test('development prebundling refuses a dependency that imports the marker', async () => {
+  const root = await makeFixture('optimized');
+  const dependency = join(root, 'node_modules', 'marked-label');
+  await write(
+    join(dependency, 'package.json'),
+    JSON.stringify({ name: 'marked-label', type: 'module', exports: './index.js' }),
+  );
+  await write(
+    join(dependency, 'index.js'),
+    `${SERVER_ONLY_IMPORT}\nexport const label = 'ordinary example';\n`,
+  );
+  const config = await resolveConfig(
+    {
+      root,
+      configLoader: 'native',
+      optimizeDeps: { include: ['marked-label'], noDiscovery: true },
+    },
+    'serve',
+  );
+  await expect(optimizeDeps(config, true)).rejects.toThrow(SERVER_ONLY_CODE);
+});
+
+test('development checks browser imports and admits the server loader', async () => {
+  for (const { root, file, code, helper } of [
+    { root: direct.root, file: 'app/islands/probe-counter.tsx', code: CODE },
+    { root: transitive.root, file: 'app/islands/probe-helper.ts', code: CODE, helper: true },
+    { root: markedDirect.root, file: 'app/islands/probe-counter.tsx', code: SERVER_ONLY_CODE },
+    {
+      root: markedTransitive.root,
+      file: 'app/islands/probe-helper.ts',
+      code: SERVER_ONLY_CODE,
+      helper: true,
+    },
+    { root: loader.root, file: 'app/routes/index.tsx' },
+  ]) {
+    const dev = await createServer({
+      root,
+      configLoader: 'native',
+      server: { middlewareMode: true },
+    });
+    try {
+      if (root === loader.root) {
+        const resolved = await dev.ssrLoadModule('/' + file);
+        expect(typeof resolved.loader).toBe('function');
+      } else {
+        if (helper) {
+          const island = await dev.transformRequest('/app/islands/probe-counter.tsx');
+          expect(island?.code).toContain('probe-helper.ts');
+        }
+        await expect(dev.transformRequest('/' + file)).rejects.toThrow(code!);
+      }
+    } finally {
+      await dev.close();
+    }
+  }
+}, 30000);

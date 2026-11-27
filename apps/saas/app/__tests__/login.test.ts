@@ -102,7 +102,10 @@ test('login sanitizes provider failures', async () => {
   )(context(credentials()));
   expect(isActionFailure(result)).toBeTruthy();
   expect(result.status).toEqual(422);
-  expect(JSON.stringify(result.data).includes('eyJsecret')).toEqual(false);
+  expect(result.data).toEqual({
+    error: 'Sign-in failed. Check your email and password and try again.',
+    email: 'user@example.com',
+  });
 });
 test('login success redirects with PRG', async () => {
   const error = await assertRejectsIncludes(() =>

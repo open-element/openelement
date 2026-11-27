@@ -203,7 +203,9 @@ afterAll(async () => {
 describe('M09-2a authored delegatesFocus island (Chromium)', () => {
   test('the lane + emitter own the focus fact (Node half)', () => {
     expect(tag).toBe('profile-focus');
-    expect(compiledCode).toContain('root: "shadow-open"');
+    expect(compiledCode).toContain(
+      'createDirectShadowElementClassWithProjection as __oe_createElementClass',
+    );
     expect(compiledCode).toContain('delegatesFocus: true');
     expect(compiledCode).toContain('dsd: { delegatesFocus: true },');
     expect(compiledCode).toContain(

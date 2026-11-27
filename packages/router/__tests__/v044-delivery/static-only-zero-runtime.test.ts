@@ -1,86 +1,96 @@
-/**
- * @openelement/router — v0.44 zero-runtime proof for the static-only
- * fixture (#1171).
- *
- * Builds tests/fixtures/router-static-only/ through the repo's
- * own build path — the same CLI module the `tests/fixtures/router-static-only#build`
- * task invokes — and pins the empty-islands delivery contract end to end
- * (buildClient()'s zero-island path, which backs removeClientDeliveryArtifacts
- * and the Phase 2 skip):
- *   - the build exits 0 and the expected HTML pages are emitted
- *   - no client runtime artifacts survive: no dist/client directory, no
- *     dist/island-manifests directory
- *   - the built HTML contains no OpenElement client script tags
- *
- * The fixture dist is gitignored. The test rebuilds from a clean dist and
- * removes it afterwards, so repeated runs are deterministic and the worktree
- * ends clean. Run it through the package-qualified suite task:
- *   pnpm --dir packages/router test   (or: vp run --fail-if-no-match @openelement/router#test)
- */
-
+/** Source-gate build and mutation proof for the release fixture check (#1171, #1633). */
 import { spawn } from 'node:child_process';
-import { readFile, rm, stat } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import process from 'node:process';
-import { expect, test } from 'vitest';
-import { join } from 'node:path';
+import { afterAll, beforeAll, expect, test } from 'vitest';
+import { assertZeroIslandOutput } from '../../../../tests/fixtures/router-static-only/check-zero-island.ts';
+import type { PageIslandManifest } from '../../src/vite/internal/ssg/island-manifest.ts';
 
 const fixtureDir = join(import.meta.dirname!, '../../../../tests/fixtures/router-static-only');
 const distDir = join(fixtureDir, 'dist');
 
-const HTML_PAGES = ['index.html', 'about/index.html', 'mdx-page/index.html'];
-
 async function removeDist(): Promise<void> {
-  await rm(distDir, { recursive: true }).catch(() => undefined);
+  await rm(distDir, { recursive: true, force: true });
 }
 
-async function buildFixture(): Promise<void> {
+beforeAll(async () => {
   await removeDist();
-  // The router build CLI is node-hosted (B1a): spawn it directly.
   const build = spawn(
     process.execPath,
     [join(fixtureDir, '../../../packages/router/src/cli/build.ts')],
-    {
-      cwd: fixtureDir,
-    },
+    { cwd: fixtureDir },
   );
-  const [outChunks, errChunks] = await Promise.all([
-    Array.fromAsync(build.stdout!),
-    Array.fromAsync(build.stderr!),
+  const [outChunks, errChunks, code] = await Promise.all([
+    Array.fromAsync(build.stdout),
+    Array.fromAsync(build.stderr),
+    new Promise<number | null>((resolve, reject) => {
+      build.once('error', reject);
+      build.once('exit', resolve);
+    }),
   ]);
   const logs = Buffer.concat([...outChunks, ...errChunks]).toString();
-  const code = await new Promise<number>((resolve) => build.once('exit', (c) => resolve(c ?? -1)));
   expect(code, `static-only fixture build failed:\n${logs}`).toEqual(0);
-}
+});
 
-test('v0.44 static-only build ships zero client runtime (#1171)', async () => {
+afterAll(removeDist);
+
+test('v0.44 static-only build ships zero client runtime (#1171)', () => {
+  assertZeroIslandOutput(distDir);
+});
+
+const islandManifest: PageIslandManifest = {
+  route: '/',
+  islands: [
+    {
+      tagName: 'mutant-island',
+      chunkUrl: '/client/islands/mutant-island.js',
+      strategy: 'idle',
+      layer: 'dsd-static',
+    },
+  ],
+  builtAt: '1970-01-01T00:00:00.000Z',
+};
+
+test.each([
+  {
+    file: 'island-manifests/mutant.json',
+    addition: JSON.stringify(islandManifest),
+    error: 'emitted dist/island-manifests',
+  },
+  {
+    file: 'index.html',
+    addition: '<link rel="modulepreload" href="/client/element-runtime-mutant.js">',
+    error: 'document dist/index.html references a client asset',
+  },
+  {
+    file: 'about/index.html',
+    addition: '<link rel="prefetch" as="fetch" href="/assets/mutant-island.js">',
+    error: 'document dist/about/index.html references a client asset',
+  },
+  {
+    file: 'mdx-page/index.html',
+    addition: '<script type="module" src="/client/client.js"></script>',
+    error: 'document dist/mdx-page/index.html contains a script tag',
+  },
+  {
+    file: 'assets/element-runtime-mutant.js',
+    addition: 'export {};',
+    error: 'emitted JavaScript at dist/assets/element-runtime-mutant.js',
+  },
+])('zero-island checker rejects a mutation to $file (#1633)', async ({ file, addition, error }) => {
+  const mutatedDist = await mkdtemp(join(tmpdir(), 'oe-zero-island-'));
   try {
-    await buildFixture();
-
-    // Expected HTML pages are emitted.
-    for (const page of HTML_PAGES) {
-      const stats = await stat(join(distDir, page)).catch(() => null);
-      expect(stats?.isFile() === true, `expected prerendered page dist/${page}`).toBeTruthy();
-    }
-
-    // No client runtime artifact directories.
-    for (const artifactDir of ['client', 'island-manifests']) {
-      expect(
-        await stat(join(distDir, artifactDir))
-          .then(() => true)
-          .catch(() => false),
-        `zero-runtime build must not emit dist/${artifactDir}`,
-      ).toEqual(false);
-    }
-
-    // No OpenElement client script tags in any built HTML page.
-    for (const page of HTML_PAGES) {
-      const html = await readFile(join(distDir, page), 'utf8');
-      expect(
-        html.includes('<script'),
-        `dist/${page} must not contain a client script tag in a zero-runtime build`,
-      ).toEqual(false);
-    }
+    await cp(distDir, mutatedDist, { recursive: true });
+    const output = join(mutatedDist, file);
+    await mkdir(dirname(output), { recursive: true });
+    const content = file.endsWith('.html')
+      ? (await readFile(output, 'utf8')).replace('</head>', `${addition}</head>`)
+      : addition;
+    await writeFile(output, content);
+    expect(() => assertZeroIslandOutput(mutatedDist)).toThrow(error);
   } finally {
-    await removeDist();
+    await rm(mutatedDist, { recursive: true, force: true });
   }
 });

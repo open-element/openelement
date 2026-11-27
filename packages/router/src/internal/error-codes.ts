@@ -256,6 +256,13 @@ export const ClientBuildErrorCode = {
   STYLE_ASSET_UNREGISTERED: 'OE_CLIENT_BUILD_STYLE_ASSET_UNREGISTERED',
 } as const;
 
+export const BrowserEntryBoundaryErrorCode = {
+  /** Move the Node builtin behind a server loader or use a browser-safe module. */
+  NODE_BUILTIN_IMPORT: 'OE_CLIENT_BUILD_BROWSER_ENTRY_NODE_BUILTIN',
+  /** Move the marked module behind a server loader or import only its types. */
+  SERVER_ONLY_IMPORT: 'OE_CLIENT_BUILD_BROWSER_ENTRY_SERVER_ONLY',
+} as const;
+
 /**
  * Stable codes for the Phase 2 client asset manifest
  * (`vite/client-asset-manifest.ts`) and the SSG post-processor's

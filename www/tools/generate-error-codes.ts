@@ -54,7 +54,6 @@ const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const RUNTIME_CODE_SOURCES: readonly string[] = [
   'packages/protocol/src/errors.ts',
   'packages/router/src/internal/error-codes.ts',
-  'packages/router/src/vite/internal/browser-entry-boundary.ts',
 ];
 
 export interface CodeOccurrence {

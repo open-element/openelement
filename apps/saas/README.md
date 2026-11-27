@@ -23,12 +23,16 @@ qualification is external pending; see
       response-header channel (`lib/supabase-server.ts`)
 - [x] /notes loader: getUser + RLS-scoped query; anonymous renders the denied
       branch over a hard database-level RLS floor
+- [x] /workspaces: signed-in users create a workspace and become its admin in
+      one transaction. Admins generate single-use invitation codes that expire
+      after 24 hours. Redeeming a code grants member access to that workspace.
+      PostgreSQL stores the SHA-256 digest of each code.
 - [x] explicit `middleware.corsOrigin` allowlist (deployed worker + localhost)
-- [x] /upload: no-JS multipart upload/list/delete in the private
-      `notes-attachments` bucket; unpredictable object ids, MIME/size guards,
-      60-second signed downloads, Storage RLS, and atomic Postgres quota
-      reservation/release reject anonymous, cross-user, and quota-race access;
-      objects are immutable after INSERT (no UPDATE/upsert policy)
+- [x] /upload: no-JS upload, list, download and delete for private attachments.
+      The server reserves quota before writing an object. Downloads require a
+      signed-in owner and a clean scan and stream through the application
+      with no-store. Direct user Storage operations are denied. Failed uploads
+      and interrupted deletes leave a reservation for scheduled cleanup.
 - [x] application-owned Cloudflare module entry composes Nitro `fetch` with
       Queue scan and Cron reconciliation handlers; unscanned objects stay
       hidden, duplicate verdicts are idempotent, and lifecycle events are audited
@@ -67,29 +71,75 @@ qualification is external pending; see
   MetaDefender Core is a reference adapter; the scanner fails closed when no
   provider is configured.
 
+## Run the app locally
+
+Install workspace dependencies with `pnpm install --frozen-lockfile` from
+the repository root. With Docker running, start the local Supabase stack
+and apply pending migrations.
+
+```sh
+(
+  cd apps/saas
+  supabase start
+  supabase migration up
+  supabase status
+)
+```
+
+Create `apps/saas/.env` with the local Project URL and Publishable key from
+`supabase status`. Older CLI versions label the public key `anon key`.
+`SUPABASE_URL` and `SUPABASE_ANON_KEY` are enough for sign-in, Notes, and
+Workspaces. See [`.env.example`](.env.example) for the other integrations.
+
+From the repository root, build the app and start it on loopback.
+
+```sh
+vp run --no-cache --fail-if-no-match --filter @openelement/saas build
+OPEN_ELEMENT_HOST=localhost OPEN_ELEMENT_PORT=4173 \
+  vp run --no-cache --fail-if-no-match --filter @openelement/saas start:local
+```
+
+`start:local` loads `apps/saas/.env` and serves the built app. Open
+`http://localhost:4173/login` and choose **Create account**. The default local
+configuration takes you directly to Notes. If the app asks you to check your
+email, open the local Mailpit inbox listed by `supabase status` and follow the
+confirmation link in the same browser. Keep the app URL on `localhost` for
+its configured Auth callback. Open **Workspaces** from Notes after signing in.
+
+A workspace admin can generate a code in **Workspace invitations** and share
+it with the intended recipient. Generation requires JavaScript because the
+issuing response delivers the code once. The recipient pastes the code into
+**Join a workspace** while signed in.
+
 ## Tasks
 
 ```sh
-pnpm --dir apps/saas run build               # OpenElement build (dist/, request-time server entry)
-pnpm --dir apps/saas run nitro:build         # Nitro build, node-server preset → .output-node/
-pnpm --dir apps/saas run nitro:build-workers # Nitro build, cloudflare_module preset → .output-workers/
-pnpm --dir apps/saas run start               # local run of the built server (http://localhost:4173)
-pnpm --dir apps/saas run check               # type-check routes, islands, shell, lib
-pnpm --dir apps/saas run test                # unit smoke for route logic (stubbed Supabase client)
+vp run saas:verify   # local typecheck and stubbed unit tests
+vp run saas:workers  # local application and Workers builds + boundary check
+vp run --no-cache --fail-if-no-match --filter @openelement/saas test:workspace-rls
+vp run --no-cache --fail-if-no-match --filter @openelement/saas test:attachment-storage
+vp run --no-cache --fail-if-no-match --filter @openelement/saas test:workspace-onboarding:browser
 ```
+
+Run these tasks from the repository root after the frozen-lockfile install
+described in [the agent contract](../../docs/agent-contract.md). The RLS proof
+requires `initdb`, `pg_ctl`, and `psql` on PATH and verifies the workspace
+migrations, including concurrent invitation redemption, in a disposable
+Postgres cluster. The attachment Storage proof applies the full migration
+chain in a disposable PostgreSQL catalog and verifies broker privileges,
+reconciliation and rescanning of inherited attachments. Build the SaaS app
+before running the Chromium proof. The proof starts its own loopback Auth
+and Data API fixture and can run without Supabase CLI or Docker. It exercises
+creation and joining with JavaScript disabled and checks code issuance and
+its no-store responses. Use the
+[staging checklist](STAGING-CHECKLIST.md) to record hosted provider evidence.
 
 ## Migrations
 
-```sh
-supabase start          # local emulator
-supabase migration up   # apply ordered migrations locally
-```
-
-Local development and tests run against the emulator. Hosted-project
-migration and deployment qualification is external pending; the operator
-procedure, credential boundary, and rollback policy are documented in
-[`docs/runbooks/supabase-migrations.md`](../../docs/runbooks/supabase-migrations.md).
-Runtime service-role credentials are not migration credentials.
+See [Run the app locally](#run-the-app-locally) for the emulator migration
+commands. The hosted migration procedure, credential boundary, and rollback
+policy are in [the migration runbook](../../docs/runbooks/supabase-migrations.md).
+Hosted migration and deployment qualification are pending.
 
 Payment delivery, DLQ recovery, and replay operations are documented in
 [`docs/runbooks/payment-events.md`](../../docs/runbooks/payment-events.md).
@@ -154,3 +204,7 @@ project and a deployed Worker:
 - **Real scan-engine qualification: external pending** (ADR-0139). The
   provider-neutral fail-closed state machine is implemented and unit-tested
   without commercial credentials or paid container infrastructure.
+
+For the operator's detailed two-workspace and hosted-provider acceptance matrix,
+see [the staging checklist](STAGING-CHECKLIST.md). This is a procedure, not a
+record of completed hosted qualification.

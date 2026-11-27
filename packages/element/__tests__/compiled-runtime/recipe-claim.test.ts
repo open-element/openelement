@@ -245,6 +245,52 @@ test('validation failure writes nothing; activation failure may keep an earlier 
   expect(element.getAttribute('data-n')).toBe('4');
 });
 
+test('generic claim keeps the preflight read order and invokes recipe methods with their receiver', () => {
+  const doc = new TestDocument();
+  const parent = doc.createElement('div');
+  const insertionOwner = new LifetimeScope();
+  const reads: string[] = [];
+  const recipe = {
+    get definitionOwner() {
+      reads.push('owner');
+      return insertionOwner;
+    },
+    get source() {
+      reads.push('source');
+      return 'fixtures/Getter.tsx';
+    },
+    get createProps() {
+      reads.push('get props');
+      return function (this: unknown) {
+        expect(this).toBe(recipe);
+        reads.push('props');
+        return {};
+      };
+    },
+    mount() {
+      return [];
+    },
+    get claim() {
+      reads.push('get claim');
+      return function (this: unknown) {
+        expect(this).toBe(recipe);
+        reads.push('claim');
+        return [];
+      };
+    },
+  };
+  claimRecipe(insertionOwner, recipe, parent as unknown as Node).dispose();
+  expect(reads).toEqual([
+    'owner',
+    'source',
+    'get claim',
+    'get props',
+    'props',
+    'get claim',
+    'claim',
+  ]);
+});
+
 test('a recipe without claim fails before an owner is created', () => {
   const doc = new TestDocument();
   const parent = doc.createElement('div');

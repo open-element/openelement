@@ -9,12 +9,12 @@ order: 100
 脚手架生成的项目把脚本接到 router 的 bin——`oe`（短名；`openelement` 是同一个 dispatcher）：
 
 ```bash
-npm run build  # SSG + 请求时服务器，产出到 dist/
-npm start      # 伺服 dist/；dynamic 路由与变更请求分派给 dist/server
+npm run build  # 生成公开目录与请求时产物
+npm start      # 伺服 dist-public/；dynamic 路由与变更请求分派给 dist/server
 npm run dev    # Vite 开发服务器
 ```
 
-`npm start` 静态伺服 `dist/`，并在 `dist/server/index.js` 存在时把 dynamic 路由与变更请求分派给它。端口取 `OPEN_ELEMENT_PORT`（其次 `PORT`，默认 4173），主机取 `OPEN_ELEMENT_HOST`。同一条命令加 `--mode=preview`（`openelement start --mode=preview`）即只伺服静态产物，发现 `dist/server` 时会拒绝运行并指向 start 模式——只对没有请求时路由的项目使用它。
+`npm start` 静态伺服 `dist-public/`，并在 `dist/server/index.js` 存在时把 dynamic 路由与变更请求分派给它。端口取 `OPEN_ELEMENT_PORT`（其次 `PORT`，默认 4173），主机取 `OPEN_ELEMENT_HOST`。同一条命令加 `--mode=preview`（`openelement start --mode=preview`）即只伺服静态产物，发现 `dist/server` 时会拒绝运行并指向 start 模式——只对没有请求时路由的项目使用它。
 
 ### 部署在代理之后
 
@@ -27,65 +27,94 @@ npm run dev    # Vite 开发服务器
 
 ## 静态输出
 
-`npm run build` 把预渲染站点写入 `dist/`：
+`npm run build` 生成独立的 `dist-public/`。其中包含预渲染页面、`public/` 中的公开资源、浏览器代码和样式，以及每页的 island 清单。浏览器 URL 仍使用 `/client/` 资源前缀。
 
-- `dist/<route>/index.html`，每个预渲染路由一份。标记为 `renderIntent: { mode: 'dynamic' }` 的 not-found 路由由请求时服务器渲染（带真实 404 状态），而不是写成静态文件；可预渲染的 not-found 路由才写成 `dist/404.html`。
-- `public/` 下的内容原样拷贝——favicon、`robots.txt`、图片。
-- 应用存在 island 或增强表单时产出 `dist/client/`：共享入口 `client.js`，以及 `dist/client/islands/` 下每个 island 标签一个 chunk。
-- `dist/island-manifests/page-<hash>.json`，每页一份，列出该页每个 island 的标签、chunk URL、策略与层级——构建产物自己回答「这个页面加载哪些 JavaScript」。
+`dist/publish-manifest.json` 记录每个公开文件的相对路径、字节数、SHA-256 和缓存策略。上传到静态托管前，运行 `npx oe publish --check` 验证目录与清单完全一致。静态宿主只接收 `dist-public/`，可以为目录下的 `index.html` 和站点的 `404.html` 配置相应规则。需要请求时路由或 action 的应用另行部署服务端入口。
 
-没有 island、没有增强表单、没有 action、也没有 `'dynamic'` 路由的项目，产物就是这样一个目录：上传到任意静态托管即可，完全不涉及服务端代码。不需要浏览器行为的组件在这些文件里就是普通 HTML，因此预渲染产物在无 JavaScript 时依然样式完整、可读。
+### 纯静态：Cloudflare Pages
+
+要将脚手架项目改为纯静态，删除 `app/routes/404.tsx` 中的 `renderIntent: { mode: 'dynamic' }`，让构建预渲染 `404.html`。删除示例请求时端点 `app/routes/api/ping.ts` 及其对应的 ping 测试。按纯静态应用部署前，还要确认应用没有其他请求时路由或 action。
+
+```bash
+set -e
+npm run build
+test ! -e dist/server
+npx oe publish --check
+test -f dist-public/404.html
+npx wrangler pages deploy dist-public --project-name=your-project
+```
+
+如果 Pages 项目使用 Git 集成，将输出目录设为 `dist-public`，并在构建命令中加入 `npx oe publish --check`。[Cloudflare Pages 会用顶层的 `404.html` 处理未匹配的路径](https://developers.cloudflare.com/pages/configuration/serving-pages/#not-found-behavior)。部署后，在 Pages 站点验证首页返回 200，未知路径返回 404。
 
 ## 请求时服务器
 
 当任何路由声明 `renderIntent: { mode: 'dynamic' }` 或任何页面导出 action 时，构建还会产出 `dist/server/`：
 
-- `index.js`——挂在同一个 SSR bundle 上的可移植 `fetch(Request) -> Response` 处理器。
+- `index.js`——接入同一个 SSR bundle 的请求时入口。默认导出接收 Nitro 请求事件，返回 `Response`。
 - `server-manifest.json`——请求时（`'dynamic'`）路由，含路径、参数名与 action 标记。
 - `package.json`——把该目录标记为 ESM。
 
-混合页（静态 GET + action）的 GET 仍由预渲染产物伺服，其 POST 按方法分派到服务器。纯静态构建三者都不产出，该输出契约已冻结。本地预览由 `npm start`（router 的 start CLI）提供，它在 Node 的 `node:http` 上运行同一个处理器——这是部署前在浏览器之外演练请求时路径的唯一方式。
+混合页（静态 GET + action）的 GET 仍由预渲染产物伺服，其 POST 按方法分派到服务器。纯静态构建不会生成 `dist/server/`。为托管平台打包前，可以用 `npm start` 在本地运行请求时入口。
 
-### 私有 `dist/server` 边界
+### 公开文件校验
 
-`npm start`（`oe start`）把 `dist/` 作为公开输出伺服，构建的私有产物不在它可能伺服的命名空间内。GET 或 HEAD 的路径经解码、规范化后若以 `server/` 开头——`/server/index.js`、`/Server/index.js`、`/%73erver/index.js`、`//server/index.js`、`/foo/../server/index.js`——一律应答 `404`；请求经 in-root 符号链接、其规范化（realpath）目标落在 `dist/server/` 内时同样被拒。拒绝时不读取 `dist/server/` 下任何内容，只回一个没有响应体的 `404`，也不会把该请求交给请求时服务器。`start` 与 `--mode=preview` 走同一个共享静态边界，因此不存在会发布这些产物的伺服模式。
-
-首个路径段是保留名：作者自己放在 `public/server/` 下的文件同样不会被发布，公开资源请避开这个名称。其余静态产物——页面、`client/` 资源、`island-manifests/`、`public/` 的其他拷贝——不受影响，构建也从不通过静态边界发布 `dist/server`。
+`oe start` 和静态预览在启动时验证 `dist-public/` 的完整清单。静态 GET 和 HEAD 仅使用清单列出的文件，并检查实际路径与内容。`dist/` 是构建工作目录，`dist/server/` 是请求时服务端产物。公开路径的首段 `server` 保留给框架。
 
 ## Nitro 预设
 
-Nitro 是第一方生产部署 adapter，挂载在 fetch 原生接缝上近乎透传：event 的标准 `Request` 进，handler 的 `Response` 出。添加一条把静态层不负责的请求转发下去的路由：
+Nitro 接收同一次构建生成的请求时入口和校验过的公开目录。兜底路由接收 Nitro 原生的 fetch 请求事件。静态 GET 由预渲染文件响应，动态路由、action 和请求时 404 交给生成的处理器。
 
 ```ts
 // server/routes/[...path].ts
-import { createOpenElementNitroHandler } from '@openelement/router/nitro-mount';
-import openElementServer from '../../dist/server/index.js';
-
-// 覆盖 Nitro 静态层（nitro-public/）的 catch-all：预渲染文件优先，
-// 其余——dynamic 路由、action、404——落到构建出的 handler。
-export default createOpenElementNitroHandler({
-  handler: (request, context) =>
-    openElementServer({ req: request, env: (context?.env ?? {}) as Record<string, string> }),
-});
+export { default } from '../../dist/server/index.js';
 ```
 
 ```ts
 // nitro.config.ts
+import { fileURLToPath } from 'node:url';
+
+const publicDir = fileURLToPath(new URL('./dist-public', import.meta.url));
+
 export default defineNitroConfig({
   serverDir: 'server',
-  preset: 'node-server', // Workers 用 'cloudflare_module'
-  publicAssets: [{ dir: 'nitro-public' }],
+  publicAssets: [{ dir: publicDir }],
+  modules: [
+    ({ options }) => {
+      options.publicAssets = options.publicAssets.filter(({ dir }) => dir === publicDir);
+    },
+  ],
+  compatibilityDate: '2026-06-12',
+  cloudflare: { nodeCompat: true },
 });
 ```
 
-部署顺序：
+Nitro 模块将静态资源发现范围限定在 `dist-public/`。两个预设使用同一份配置。
 
-1. `npm run build`
-2. 把 `dist/` 下除 `server/` 之外的一切拷进 `nitro-public/`。`dist/server` 是服务端代码，不是公开资源，绝不能作为公开资源发布。（`npm start` 在静态边界执行同一规则，见上文；对 Nitro 而言，这一步拷贝才是把该目录挡在宿主静态层之外的操作。）
-3. 构建宿主：`npx nitro@3.0.260610-beta build`——本仓库 Nitro 证明锁定的版本（`NITRO_VERSION`）；`preset` 选择 `node-server` 或 `cloudflare_module`。
-4. 运行产物（`node-server` 为 `.output/server/index.mjs`），并按平台要求设置 `PORT` 与 `HOST`。
+```bash
+npm run build
+npx oe publish --check
+```
 
-两个预设都对真实 Nitro 产物做过验证：预渲染文件、dynamic 路由、action、重定向、404 与一条 Nitro 缓存路由规则。
+### Node 服务器
+
+```bash
+npx nitro@3.0.260610-beta build --preset=node-server
+HOST=127.0.0.1 PORT=4173 node .output/server/index.mjs
+```
+
+用本地来源运行下方的冒烟脚本。部署 Node 产物时，按托管平台要求设置 `HOST` 和 `PORT`。
+
+### 请求时路由：经 Nitro 上 Workers
+
+```bash
+npx nitro@3.0.260610-beta build --preset=cloudflare_module
+```
+
+Nitro 将 Worker 模块写入 `.output/server/index.mjs`，将校验过的静态文件写入 `.output/public/`，并生成 `.output/server/wrangler.json`。检查配置是否开启 Node.js 兼容，并确认 `ASSETS` 指向打包后的公开目录。Router 生成的入口从 Nitro 请求中读取 Workers 绑定，使 loader 和 action 可以通过 `ctx.env` 访问它们。
+
+对 `/guestbook` 这样的混合页面，Cloudflare 静态资源路由可能在 Worker 收到 POST 之前返回 405。在 Nitro 配置中将 `cloudflare.wrangler.assets.run_worker_first` 设为混合页面路径列表，例如 `['/guestbook']`。如果 Workers 绑定存在，兜底路由将这些路径的 GET 和 HEAD 转发给 `event.req.runtime.cloudflare.env.ASSETS.fetch(event.req)`，其余方法交给 Router 生成的处理器。如果 Router 声明 `/guestbook` 这类不带尾斜杠的路径，将 `cloudflare.wrangler.assets.html_handling` 设为 `'drop-trailing-slash'`，使页面表单提交到 action 对应的路径。[Cloudflare 静态资源路由](https://developers.cloudflare.com/workers/static-assets/routing/worker-script/)
+
+仓库 fixture 用 Wrangler 的本地 workerd 运行时对生成的 Worker 执行 HTTP 验证。取得目标 Cloudflare 账号的部署权限后，从项目根目录运行 `npx nitro@3.0.260610-beta deploy --prebuilt` 部署校验过的产物。在部署后的来源再次运行冒烟脚本，并确认请求时 loader 能读取预期的绑定且响应不包含绑定值。[Router/Nitro fixture](https://github.com/open-element/openelement/tree/main/tests/fixtures/router-nitro)
 
 ## Dev 服务器
 
@@ -93,7 +122,7 @@ export default defineNitroConfig({
 
 ## 验证
 
-验证产物，而不是日志。`npm run build` 之后：
+构建并启动应用后，检查 HTTP 响应。
 
 1. `ls dist/server/` 直接告诉你构建是否产出了请求时服务器。纯静态项目应当没有 `dist/server` 目录。
 2. `npm start` 会打印它加载了哪种模式——`request-time server entry loaded (dynamic routes enabled)`，或 `no dist/server — static-only preview`。这一行是产物自己的答案；若它与你的路由不符，要检查的是构建。
@@ -107,20 +136,21 @@ export default defineNitroConfig({
    | fetch（`x-openelement-action: true`） | `422`，`application/json`，响应体 `{"type":"failure","status":422,"data":{…}}` | `200`（不是 303），`application/json`，响应体 `{"type":"redirect","status":303,"location":"…"}` |
 
    PRG 状态出现在 fetch 通道的响应体里，因为那条应答是数据、不是一次可跟随的重定向。`application/problem+json` 是这个通道的协议错误形状（被拒的跨站提交、未知 action、无法解析的请求体），不是校验失败用的形状。
-6. 连续请求同一个 `'dynamic'` 路由两次，确认响应体与 `dist/` 中磁盘上的文件不同——那说明请求时路径在工作。
+6. 用 loader 会读取的两个不同输入请求同一条动态路由。确认每个响应包含各自的值，且响应头包含 `Cache-Control: private, no-cache`。
 
 ### 冒烟脚本
 
-第 3–5 步合为一块可复制的脚本（把表单路由换成你的）。第一个错误状态即失败，可直接做部署门禁：
+将 `BASE` 设为本地或部署后的来源，将 `FORM_PATH` 设为拒绝空消息并返回 422 的路由。所有状态检查通过后才会输出结果。
 
 ```bash
 set -e
 BASE=http://localhost:4173
+FORM_PATH=/your-form-route
 test "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/")" = 200
 test "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/server/index.js")" = 404
 test "$(curl -s -o /dev/null -w '%{http_code}' -X POST \
-  -H 'x-openelement-action: true' --data 'message=' \
-  "$BASE/你的表单路由")" = 422
+  -H "Origin: $BASE" -H 'x-openelement-action: true' --data 'message=' \
+  "$BASE$FORM_PATH")" = 422
 echo 'artifact answers: static 200, private 404, action 422'
 ```
 
@@ -131,101 +161,6 @@ echo 'artifact answers: static 200, private 404, action 422'
 ## 另见
 
 - [构建与配置](/zh/guide/configuration)——决定产物形态的构建、路由与中间件选项。
+- [Form action](/zh/guide/recipe-form-actions)——表单校验、原生重定向与增强提交。
 - [安全](/zh/guide/security)——生成的 handler 在请求时强制执行的内容。
 - [测试](/zh/guide/testing)——针对构建产物值得运行的检查。
-
-## Cloudflare 部署
-
-运行 `npm run build`。纯静态应用可以把 `dist/` 上传到 Cloudflare Pages。构建产出 `dist/server/index.js` 时，通过 Nitro 将处理器和公开资源部署到 Cloudflare Workers。
-
-## 纯静态：Cloudflare Pages
-
-脚手架的 404 路由出厂就在请求时路径上：
-
-```ts
-// app/routes/404.tsx — starter 默认
-export default definePage(NotFoundPage, {
-  renderIntent: { mode: "dynamic" },
-  head: { title: "404 — openElement" },
-});
-```
-
-这一行正是 starter 构建产出 `dist/server/` 的原因：请求时服务器对未匹配路径以真实 404 状态渲染该页，因此不会写出静态 404 文件。删掉 `renderIntent` 一行，该路由即变为可预渲染——没有其它请求时路由的构建随之产出纯静态的 `dist/`：
-
-```bash
-npm run build
-ls dist/
-# 404.html  assets/  index.html
-```
-
-构建自身会确认该模式（`Pure-static build: removed build-time SSR bundle (dist/server)`），且不存在会被带进上传的 `dist/server/` 目录。把这个目录作为 Pages 项目上传：
-
-```bash
-npx wrangler pages deploy dist
-```
-
-首次部署会创建项目（用 `--project-name` 命名，或让 CLI 交互提示）；后续部署上传新文件，站点随之更新。Pages 的静态资源约定会对任何未匹配文件的路径伺服顶层 `404.html`——带 404 状态——因此带样式的预渲染 404 就是站点的 not-found 页，零服务端代码。
-
-验证产物，而不是日志（把 pages.dev 主机换成你的）：
-
-```bash
-BASE=https://your-project.pages.dev
-test "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/")" = 200
-test "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/no-such-page")" = 404
-echo 'Pages artifact answers: home 200, miss 404'
-```
-
-## 请求时路由：经 Nitro 上 Workers
-
-当 `npm run build` 产出 `dist/server/` 时，把构建出的处理器部署到 Cloudflare Workers，宿主是两文件的 Nitro 工程。挂载（`@openelement/router/nitro-mount`）在 fetch 原生接缝上近乎透传：event 的标准 `Request` 进，handler 的 `Response` 出。
-
-```ts
-// server/routes/[...path].ts
-import { createOpenElementNitroHandler } from '@openelement/router/nitro-mount';
-import openElementServer from '../../dist/server/index.js';
-
-// 覆盖 Nitro 静态层（nitro-public/）的 catch-all：预渲染文件优先，
-// 其余——dynamic 路由、action、404——落到构建出的 handler。
-export default createOpenElementNitroHandler({
-  handler: (request, context) =>
-    openElementServer({
-      req: request,
-      env: (context?.env ?? {}) as Record<string, string>,
-    }),
-});
-```
-
-```ts
-// nitro.config.ts
-export default defineNitroConfig({
-  serverDir: 'server',
-  publicAssets: [{ dir: 'nitro-public' }],
-  compatibilityDate: '2026-06-12',
-  cloudflare: { nodeCompat: true },
-});
-```
-
-`env` 转发正是把 Workers 绑定送进 loader 与 action 的通道。在 Workers 上，h3 v2 把绑定放在请求自身（`req.runtime.cloudflare.env`）——h3 event 本身没有 `env` 字段——而挂载会先解析该运行时通道，其次显式的 `event.env`，再次挂载选项。按上面转发 `context.env`，loader 或 action 里的 `ctx.env` 读到的就是你的 Workers 绑定。
-
-部署顺序：
-
-1. `npm run build`
-2. 把预渲染树发布给 Nitro 的静态层。`dist/server/` 是服务端代码，不是公开资源，绝不能作为公开资源发布：
-
-   ```bash
-   mkdir -p nitro-public
-   cp -R dist/. nitro-public/
-   rm -rf nitro-public/server
-   ```
-
-3. 用本仓库在 tools/release/nitro-compatibility.ts 中锁定的兼容 Nitro 版本构建 Workers 产物：
-
-   ```bash
-   npx nitro@3.0.260610-beta build --preset=cloudflare_module
-   ```
-
-4. 部署 `.output/`。Nitro 产出 `server/index.mjs`——导出 `default fetch(request, env, context)` 的 Workers 模块——外加 `public/` 和生成的 `server/wrangler.json`（compatibility date、`nodejs_compat`，以及指向 `public/` 的 `ASSETS` 绑定）。在项目根用 `npx nitro deploy --prebuilt` 部署，或在 `.output/` 里用生成 `nitro.json` 记录的 wrangler 命令（`npx wrangler --cwd ./ deploy`）。
-
-部署之前，先在你 curl 得到的宿主上证明接线无误：同样两个文件不加修改地以 `--preset=node-server` 构建，`.output/server/index.mjs` 入口设好 `PORT` 与 `HOST` 即可在 Node 下启动——curl 静态首页（由静态层伺服）、一条 `'dynamic'` 路由（经挂载由 `dist/server` 渲染）、一条未匹配路径（带真实 404 状态的带样式 404）。静态文件优先于 catch-all 是预期行为，这也正是 `dist/server` 必须留在 `nitro-public/` 之外的原因。
-
-绑定值得一次显式检查：给 Worker 一个测试绑定，并在某个 loader 里经 `ctx.env` 读取。它出现了，整条通道就是通的——Workers env → `req.runtime.cloudflare.env` → 挂载 → `dist/server` → `ctx.env`。

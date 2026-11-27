@@ -132,7 +132,8 @@ tooling subpaths `@openelement/router/cli/build` and
 
 ```bash
 openelement build          # production build (SSG + client)
-openelement start          # serve built output
+openelement start          # serve the verified public directory and request-time routes
+openelement publish --check # verify dist-public/ before uploading it
 ```
 
 The package declares a second bin, the short alias `oe`, pointing at the

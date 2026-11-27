@@ -60,7 +60,7 @@ function coreTransform(): (
   this: TransformContext,
   code: string,
   id: string,
-) => { code: string; map?: { mappings: string } } | string | null {
+) => Promise<{ code: string; map?: { mappings: string } } | string | null> {
   const core = createOpenPlugin().find((plugin: Plugin) => plugin.name === 'open:core');
   expect(core, 'open:core plugin must be registered').toBeTruthy();
   expect(
@@ -70,8 +70,8 @@ function coreTransform(): (
   return core.transform as unknown as ReturnType<typeof coreTransform>;
 }
 
-test('open:core hands the real map to Vite without a double map story', () => {
-  const transformed = coreTransform().call(failingContext(), SOURCE, FILE);
+test('open:core hands the real map to Vite without a double map story', async () => {
+  const transformed = await coreTransform().call(failingContext(), SOURCE, FILE);
   expect(
     transformed !== null && typeof transformed === 'object',
     'open:core must return code+map',
@@ -101,7 +101,7 @@ test('open:core hands the real map to Vite without a double map story', () => {
   ).toBeTruthy();
 });
 
-test('open:core leaves a module that only mentions the retired @element marker untouched', () => {
+test('open:core leaves a module that only mentions the retired @element marker untouched', async () => {
   // A decorator application appears only inside a string literal and comments.
   // The class grammar that used to read this marker is retired, and the two
   // surviving lanes both decline the module (no island sidecar, no admitted
@@ -115,7 +115,11 @@ test('open:core leaves a module that only mentions the retired @element marker u
     '}',
   ].join('\n');
   expect(
-    coreTransform().call(failingContext(), mentionOnly, '/project/app/components/mention.tsx'),
+    await coreTransform().call(
+      failingContext(),
+      mentionOnly,
+      '/project/app/components/mention.tsx',
+    ),
   ).toEqual(null);
 });
 
@@ -146,7 +150,7 @@ function recordingContext(): { error: unknown[]; context: TransformContext } {
   };
 }
 
-test('open:core reports the compiler’s structured diagnostic, not a bare message', () => {
+test('open:core reports the compiler’s structured diagnostic, not a bare message', async () => {
   // Both hosts of one compiler must hand the build the same shape (#1413): the
   // standalone plugin passes `diagnosticPluginError(...)` — `{id, loc, frame,
   // diagnostics}` — and the Router's open:core used to pass `error.message`,
@@ -161,7 +165,7 @@ test('open:core reports the compiler’s structured diagnostic, not a bare messa
     '}',
   ].join('\n');
   const { error, context } = recordingContext();
-  expect(() => coreTransform().call(context, broken, FILE)).toThrow();
+  await expect(coreTransform().call(context, broken, FILE)).rejects.toThrow();
   expect(error.length, 'the host was told about the failure').toBeGreaterThan(0);
   const reported = error[0] as {
     id?: string;

@@ -8,12 +8,13 @@
 import { expect, test } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer, type AddressInfo } from 'node:net';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import process from 'node:process';
 import { join } from 'node:path';
 import { OpenElementError } from '@openelement/element/authoring';
 import { extractServeMode } from '../src/internal/serve-mode.ts';
+import { writePublishOutput } from '../src/vite/internal/publish-manifest.ts';
 import { ServeErrorCode } from '../src/internal/error-codes.ts';
 
 const startCli = join(import.meta.dirname!, '../src/cli/start.ts');
@@ -73,26 +74,35 @@ test('start cli: extractServeMode rejects unknown or missing mode values', () =>
   }
 });
 
-async function runCli(
+function runCli(
   cwd: string,
+  args: string[],
+  env: Record<string, string> = {},
+): Promise<{ code: number; output: string }> {
+  return runCommand(cwd, startCli, args, env);
+}
+
+async function runCommand(
+  cwd: string,
+  command: string,
   args: string[],
   env: Record<string, string> = {},
 ): Promise<{ code: number; output: string }> {
   // The start CLI is node-hosted (B1a); the run passes the env through so the
   // child sees OPEN_ELEMENT_PORT/HOST.
-  const child = spawn(process.execPath, [startCli, ...args], {
+  const child = spawn(process.execPath, [command, ...args], {
     cwd,
     env: { ...process.env, ...env },
+  });
+  const exited = new Promise<number>((resolve) => {
+    child.once('exit', (code) => resolve(code ?? -1));
   });
   const [out, err] = await Promise.all([
     Array.fromAsync(child.stdout),
     Array.fromAsync(child.stderr),
   ]);
   const output = Buffer.concat([...out, ...err]).toString();
-  const code = await new Promise<number>((resolve) => {
-    child.once('exit', (c) => resolve(c ?? -1));
-  });
-  return { code, output };
+  return { code: await exited, output };
 }
 
 test('start cli: both modes refuse when dist/ is missing', async () => {
@@ -106,6 +116,47 @@ test('start cli: both modes refuse when dist/ is missing', async () => {
       // packageManager pin, so a `pnpm build` spelling would be wrong advice.
       expect(output).toContain('not found. Run `oe build` first.');
     }
+  } finally {
+    await rm(dir, { recursive: true });
+  }
+});
+
+test('start and publish reject missing, modified, and unexpected public output', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'start-publish-'));
+  const dist = join(dir, 'dist');
+  const upload = join(dir, 'dist-public');
+  const manifest = join(dist, 'publish-manifest.json');
+  const routerCli = join(import.meta.dirname!, '../src/cli/cli.ts');
+  try {
+    await mkdir(dist);
+    await writeFile(join(dist, 'index.html'), 'public marker');
+    await writeFile(join(dist, 'ordinary-staging-note.txt'), 'staging marker');
+    writePublishOutput(dist, ['index.html']);
+    await expect(access(join(upload, 'ordinary-staging-note.txt'))).rejects.toThrow();
+    const check = () => runCommand(dir, routerCli, ['publish', '--check']);
+    expect((await check()).code).toBe(0);
+
+    const rejects = async () => {
+      const results = await Promise.all([runCli(dir, []), check()]);
+      for (const { code, output } of results) {
+        expect(code).toBe(1);
+        expect(output).toContain('publish-manifest.json');
+      }
+    };
+
+    await writeFile(join(upload, 'ordinary-extra.txt'), 'unexpected marker');
+    await rejects();
+    await rm(join(upload, 'ordinary-extra.txt'));
+    await symlink(join(dist, 'ordinary-staging-note.txt'), join(upload, 'ordinary-link.txt'));
+    await rejects();
+    await rm(join(upload, 'ordinary-link.txt'));
+    await writeFile(join(upload, 'index.html'), 'edited marker');
+    await rejects();
+    writePublishOutput(dist, ['index.html']);
+    await writeFile(manifest, '{}');
+    await rejects();
+    await rm(manifest);
+    await rejects();
   } finally {
     await rm(dir, { recursive: true });
   }
@@ -155,6 +206,7 @@ test('start cli: an occupied port answers one actionable line and exits 1', asyn
   try {
     await mkdir(join(dir, 'dist'), { recursive: true });
     await writeFile(join(dir, 'dist', 'index.html'), '<h1>port busy</h1>\n');
+    writePublishOutput(join(dir, 'dist'), ['index.html']);
 
     const { code, output } = await runCli(dir, [], {
       OPEN_ELEMENT_PORT: String(port),
@@ -191,6 +243,7 @@ test('start cli: a fatal error prints the message without a raw stack (#1413)', 
   try {
     await mkdir(join(dir, 'dist'), { recursive: true });
     await makeFailingServerEntry(dir);
+    writePublishOutput(join(dir, 'dist'), []);
 
     const { code, output } = await runCli(dir, []);
     expect(code).toEqual(1);
@@ -212,6 +265,7 @@ test('start cli: --debug expands the raw stack (#1413)', async () => {
   try {
     await mkdir(join(dir, 'dist'), { recursive: true });
     await makeFailingServerEntry(dir);
+    writePublishOutput(join(dir, 'dist'), []);
 
     const { code, output } = await runCli(dir, ['--debug']);
     expect(code).toEqual(1);
@@ -240,6 +294,7 @@ test('start cli: start mode serves dist/ statically over HTTP', async () => {
     await mkdir(join(dir, 'dist'), { recursive: true });
     await writeFile(join(dir, 'dist', 'index.html'), '<h1>merged cli</h1>\n');
     await writeFile(join(dir, 'dist', '404.html'), '<h1>cli not found</h1>\n');
+    writePublishOutput(join(dir, 'dist'), ['index.html', '404.html']);
 
     server = spawn(process.execPath, [startCli], {
       cwd: dir,
@@ -313,6 +368,7 @@ test('start cli: preview mode serves the SAME static contract as start mode', as
     await writeFile(join(dir, 'dist', 'index.html'), '<h1>merged cli</h1>\n');
     await writeFile(join(dir, 'dist', 'about', 'index.html'), '<h1>about page</h1>\n');
     await writeFile(join(dir, 'dist', '404.html'), '<h1>cli not found</h1>\n');
+    writePublishOutput(join(dir, 'dist'), ['index.html', 'about/index.html', '404.html']);
 
     server = spawn(
       process.execPath,
@@ -377,6 +433,7 @@ test('start cli: preview mode probes the next port when the requested one is bus
   try {
     await mkdir(join(dir, 'dist'), { recursive: true });
     await writeFile(join(dir, 'dist', 'index.html'), '<h1>probed port</h1>\n');
+    writePublishOutput(join(dir, 'dist'), ['index.html']);
 
     server = spawn(
       process.execPath,
@@ -525,6 +582,7 @@ test('start cli: preview mode still owns its --port/--host/--strictPort flags', 
   try {
     await mkdir(join(dir, 'dist'), { recursive: true });
     await writeFile(join(dir, 'dist', 'index.html'), '<h1>preview flags</h1>\n');
+    writePublishOutput(join(dir, 'dist'), ['index.html']);
 
     server = spawn(
       process.execPath,

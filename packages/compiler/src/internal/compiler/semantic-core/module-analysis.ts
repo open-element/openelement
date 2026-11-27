@@ -2,6 +2,7 @@
 
 import ts from 'typescript';
 import { hasIslandPolicyStatement } from './island-policy-statement.ts';
+import { isJsxModuleId } from './jsx-module-id.ts';
 
 /**
  * The bundler-neutral facts one module source yields: its relative imports, the
@@ -13,7 +14,7 @@ import { hasIslandPolicyStatement } from './island-policy-statement.ts';
 export interface ModuleSemanticFacts {
   relativeImports: string[];
   /**
-   * Every static import/export specifier the module spells, relative or not —
+   * Every runtime-capable static import/export specifier, relative or not —
    * present only when the caller asks for it (`collectSpecifiers`), because a
    * host that walks a module graph through its own resolver (S-C1.4's
    * server-rendered style-edge pass) needs the aliased and package specifiers
@@ -568,7 +569,7 @@ export function analyzeModuleSemantics(
     source,
     ts.ScriptTarget.Latest,
     true,
-    fileName.endsWith('.tsx') || fileName.endsWith('.jsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+    isJsxModuleId(fileName) ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
   const imports = createModuleIntrinsicBindings(sourceFile);
   const vocabulary = [...CORE_VOCABULARY, ...(options.vocabulary ?? [])];
@@ -584,7 +585,10 @@ export function analyzeModuleSemantics(
     if (
       (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) &&
       statement.moduleSpecifier &&
-      ts.isStringLiteral(statement.moduleSpecifier)
+      ts.isStringLiteral(statement.moduleSpecifier) &&
+      !(ts.isImportDeclaration(statement)
+        ? statement.importClause?.isTypeOnly
+        : statement.isTypeOnly)
     ) {
       moduleSpecifiers.add(statement.moduleSpecifier.text);
       if (statement.moduleSpecifier.text.startsWith('.'))

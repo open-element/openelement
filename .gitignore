@@ -31,7 +31,11 @@ packages/element/__wtr__/generated/
 
 # Build output
 dist/
+dist-public/
+dist-public-stage-*/
 custom-dist/
+custom-dist-public/
+custom-dist-public-stage-*/
 dist-test-*/
 # Nitro/Vite-Nitro build output in any fixture (node-server, cloudflare_module,
 # workers). One rule, not one per fixture: a new Nitro fixture must not depend

@@ -196,26 +196,15 @@ test.describe('native validation ordering (JS on)', () => {
       if (r.method() === 'POST') posts.push(r.url());
     });
 
-    await page.fill('#title', 'to be cleared');
-    await page.fill('#title', '');
+    const title = page.locator('#title');
+    await title.fill('to be cleared');
+    await title.fill('');
     await page.click('#submit');
-    // Constraint validation focuses the first invalid control — deterministic
-    // proof the browser (not the action) rejected the submission. The input
-    // lives in the page's shadow root, so walk the deep active element.
-    await expect
-      .poll(() =>
-        page.evaluate(() => {
-          let active = document.activeElement;
-          while (active && active.shadowRoot && active.shadowRoot.activeElement) {
-            active = active.shadowRoot.activeElement;
-          }
-          return active ? active.id : null;
-        }),
-      )
-      .toBe('title');
-    const valueMissing = await page
-      .locator('#title')
-      .evaluate((el) => (el as HTMLInputElement).validity.valueMissing);
+    // Native constraint validation focuses the invalid control in its shadow root.
+    await expect(title).toBeFocused();
+    const valueMissing = await title.evaluateAll(
+      (fields) => fields.length === 1 && (fields[0] as HTMLInputElement).validity.valueMissing,
+    );
     expect(valueMissing).toBe(true);
 
     expect(posts).toEqual([]);

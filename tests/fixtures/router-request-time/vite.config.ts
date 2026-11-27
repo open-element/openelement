@@ -19,6 +19,17 @@ export default defineConfig({
     },
   },
   plugins: [
+    {
+      name: 'fixture-build-note',
+      apply: 'build',
+      generateBundle() {
+        this.emitFile({
+          type: 'asset',
+          fileName: 'fixture-build-note.txt',
+          source: 'fixture build workspace marker\n',
+        });
+      },
+    },
     ...openElement({
       routesDir: 'app/routes',
       islandsDir: 'app/islands',

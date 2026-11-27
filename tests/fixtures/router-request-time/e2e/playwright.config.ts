@@ -42,6 +42,7 @@ export default defineConfig({
     // `exec` replaces the shell with the node server process, so the webServer
     // child is killed (not orphaned) when the suite finishes or is interrupted.
     command: `OPEN_ELEMENT_DISABLE_CSRF=1 exec node server.ts --port ${PORT} --dir ../dist`,
+    env: { REQUEST_TIME_PROOF_TOKEN: 'fixture-node-token' },
     url: baseURL,
     reuseExistingServer: false,
     timeout: 60_000,

@@ -5,12 +5,16 @@
   "type": "module",
   "scripts": {
     "build": "node ../../packages/router/src/cli/build.ts",
-    "nitro:build": "node ../../tools/release/nitro-build.ts --root . --preset node-server --out .output-node --prune-public server",
+    "nitro:build": "node ../../tools/release/nitro-build.ts --root . --preset node-server --out .output-node",
     "start": "node ../../packages/router/src/cli/start.ts",
+    "start:local": "node --env-file=.env ../../packages/router/src/cli/start.ts",
     "check": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --root ../.. --project saas",
     "test:notes-live:browser": "node scripts/notes-live-browser.ts",
-    "nitro:build-workers": "node ../../tools/release/nitro-build.ts --root . --preset cloudflare_module --out .output-workers --prune-public server"
+    "nitro:build-workers": "node ../../tools/release/nitro-build.ts --root . --preset cloudflare_module --out .output-workers",
+    "test:workspace-onboarding:browser": "node scripts/workspace-onboarding-browser.ts",
+    "test:attachment-storage": "sh scripts/attachment-storage-proof.sh",
+    "test:workspace-rls": "sh scripts/workspace-rls-proof.sh"
   },
   "dependencies": {
     "@openelement/compiler": "workspace:*",

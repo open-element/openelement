@@ -466,6 +466,7 @@ function hasMeaningfulVoidChild(child: ts.JsxChild): boolean {
 /** A discovered component candidate: the function node plus its authored name. */
 interface ComponentCandidate {
   readonly name: string;
+  readonly bindingName: ts.Identifier;
   readonly node: ComponentFunction;
 }
 
@@ -473,7 +474,7 @@ function discoverComponents(sourceFile: ts.SourceFile): ComponentCandidate[] {
   const candidates: ComponentCandidate[] = [];
   for (const statement of sourceFile.statements) {
     if (ts.isFunctionDeclaration(statement) && statement.body !== undefined && statement.name) {
-      candidates.push({ name: statement.name.text, node: statement });
+      candidates.push({ name: statement.name.text, bindingName: statement.name, node: statement });
       continue;
     }
     if (!ts.isVariableStatement(statement)) continue;
@@ -484,7 +485,11 @@ function discoverComponents(sourceFile: ts.SourceFile): ComponentCandidate[] {
         initializer !== undefined &&
         (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer))
       ) {
-        candidates.push({ name: declaration.name.text, node: initializer });
+        candidates.push({
+          name: declaration.name.text,
+          bindingName: declaration.name,
+          node: initializer,
+        });
       }
     }
   }
@@ -517,6 +522,7 @@ class FunctionFrontendBuilder {
   private readonly lifecycleAdmission: FunctionLifecycleAdmission | undefined;
   private readonly diagnostics: CompilerDiagnostic[] = [];
   private readonly recipeIds = new Map<ts.Node, string>();
+  private readonly componentBindings = new Map<string, number>();
   /**
    * Component-scope identifier → recipe id for a direct JSX initializer
    * (M06b1a-2): the one place a `{name}` slot is known to be an insertion site
@@ -1474,6 +1480,10 @@ class FunctionFrontendBuilder {
     const value = unwrap(node);
     if (ts.isJsxElement(value) || ts.isJsxSelfClosingElement(value)) {
       const opening = ts.isJsxElement(value) ? value.openingElement : value;
+      if (ts.isPropertyAccessExpression(opening.tagName)) {
+        this.fail(opening.tagName, CODES.form, 'a JSX component tag must be a plain identifier');
+        return null;
+      }
       const tag = opening.tagName.getText(this.sourceFile);
       return isComponentTag(tag)
         ? this.buildComponentRef(value, opening, tag)
@@ -1646,7 +1656,18 @@ class FunctionFrontendBuilder {
     opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
     tag: string,
   ): FunctionModelComponentRef | null {
-    const name = tag.split('.')[0] ?? tag;
+    const target = this.componentBindings.get(tag);
+    if (target !== undefined && ts.isIdentifier(opening.tagName)) {
+      const binding = this.resolved.resolveIdentifier(opening.tagName);
+      if (binding?.declarationSpan.start !== target) {
+        this.fail(
+          opening.tagName,
+          CODES.form,
+          `component '<${tag}>' refers to a local value that shadows the component declaration`,
+        );
+        return null;
+      }
+    }
     const props = this.buildAttributes(opening.attributes, tag, false);
     // JSX children on a component reference are the children recipe passed as
     // `props.children` (JSX value model §4.4): one fragment recipe per ref site,
@@ -1666,7 +1687,7 @@ class FunctionFrontendBuilder {
     }
     return {
       kind: 'component-ref',
-      name,
+      name: tag,
       props,
       childrenRecipeId,
       span: spanOf(this.sourceFile, node),
@@ -1805,6 +1826,9 @@ class FunctionFrontendBuilder {
 
   build(candidates: readonly ComponentCandidate[]): FunctionModelModule | null {
     const components: FunctionModelComponent[] = [];
+    for (const candidate of candidates) {
+      this.componentBindings.set(candidate.name, candidate.bindingName.getStart(this.sourceFile));
+    }
     for (const candidate of candidates) {
       this.currentPropsParam =
         candidate.node.parameters[0] !== undefined &&

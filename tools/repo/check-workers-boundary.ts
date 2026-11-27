@@ -17,10 +17,15 @@
  */
 
 import { readdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, join, resolve } from 'node:path';
 import process from 'node:process';
 import ts from 'typescript';
 import { emitSummary, reportPathArg } from './checker-io.ts';
 import { extractStaticModuleSpecifiers, parseTypeScript } from '../lib/typescript-ast.ts';
+import {
+  checkPackagedPublicFiles,
+  checkPublishOutput,
+} from '../../packages/router/src/vite/internal/publish-manifest.ts';
 
 export interface WorkersManifest {
   preset?: string;
@@ -284,5 +289,22 @@ if (import.meta.main) {
     for (const violation of violations) console.error(`  ${violation}`);
     process.exit(1);
   }
-  emitSummary(`Workers output boundary check passed (${modules.length} server modules).`);
+  const { files } = checkPublishOutput(join(dirname(outputRoot), 'dist'));
+  const wrangler = JSON.parse(await readFile(join(serverDir, 'wrangler.json'), 'utf8')) as {
+    assets?: { binding?: string; directory?: string };
+  };
+  const packagedRoot = resolve(outputRoot, 'public');
+  if (
+    wrangler.assets?.binding !== 'ASSETS' ||
+    typeof wrangler.assets.directory !== 'string' ||
+    resolve(serverDir, wrangler.assets.directory) !== packagedRoot
+  ) {
+    throw new Error('Workers ASSETS must bind the verified public output directory');
+  }
+  // Nitro writes an empty _headers control file when this application
+  // declares no host headers. Any authored file remains subject to the manifest.
+  checkPackagedPublicFiles(packagedRoot, files, '_headers');
+  emitSummary(
+    `Workers output boundary check passed (${modules.length} server modules, ${files.size} public files).`,
+  );
 }

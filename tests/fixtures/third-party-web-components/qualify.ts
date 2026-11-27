@@ -45,6 +45,7 @@ import { fileURLToPath } from 'node:url';
 
 import type { Page } from '@playwright/test';
 import { formatJson } from '@openelement/element/build-utils';
+import { checkPublishOutput } from '../../../packages/router/src/vite/internal/publish-manifest.ts';
 import { escapeRegExp } from '../../../tools/lib/text.ts';
 import { runStep } from '../../lib/qualify-harness/command-run.ts';
 import { extractSsrAdmissionPlan } from '../../lib/qualify-harness/admission-plan.ts';
@@ -1173,8 +1174,10 @@ async function main(): Promise<void> {
   try {
     const appDir = await prepareFixtureApp(tmpRoot);
     await verifySsrHtml(appDir);
-    const html = await readFile(join(appDir, 'dist', 'third-party-wc', 'index.html'), 'utf8');
-    const entryJs = await readFile(join(appDir, 'dist', 'server', 'entry.js'), 'utf8');
+    const distDir = join(appDir, 'dist');
+    const { root: publicDir } = checkPublishOutput(distDir);
+    const html = await readFile(join(publicDir, 'third-party-wc', 'index.html'), 'utf8');
+    const entryJs = await readFile(join(distDir, 'server', 'entry.js'), 'utf8');
     const plan = extractSsrAdmissionPlan(entryJs);
     const decisionByTag = new Map(plan.decisions.map((d) => [d.tagName, d]));
     // Build once, then run the same probes on every contract engine. The
@@ -1186,7 +1189,7 @@ async function main(): Promise<void> {
       Record<QualifyBrowserName, Awaited<ReturnType<typeof verifyBrowser>>>
     > = {};
     for (const engine of engines) {
-      perEngine[engine] = await verifyBrowser(join(appDir, 'dist'), engine);
+      perEngine[engine] = await verifyBrowser(publicDir, engine);
     }
     // The advisory tier report keeps its historical basis — SSR HTML observed
     // once, plus the reference engine's upgrade probes — so its numbers stay

@@ -217,6 +217,8 @@ jobs:
         run: vp run --no-cache --fail-if-no-match --filter @openelement/www check:theme-init
       - name: Generate all artifacts
         run: vp run generate:all
+      - name: Site and Playwright typecheck (gate:source)
+        run: vp run --no-cache --fail-if-no-match --filter @openelement/www typecheck
       - name: Tools typecheck (gate:source)
         # `gate:source` runs `@openelement/tools-repo#typecheck` (which compiles
         # tools/tsconfig.json: tools/repo, tools/lib, tools/release), and no CI

@@ -58,7 +58,7 @@ import {
  * the authored package stylesheets, and the declared property rows. Only
  * `open` reflects property updates back to the attribute.
  */
-export const openElement = defineComponentConfig({
+export const openElement = /* @__PURE__ */ defineComponentConfig({
   root: 'shadow',
   delegatesFocus: true,
   styles: ['./overlay-recipe.css', './open-dialog.css'],

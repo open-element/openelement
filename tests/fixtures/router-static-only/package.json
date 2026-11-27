@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "node ../../../tools/repo/clean.ts dist && node ../../../packages/router/src/cli/build.ts",
-    "gate": "node ../../../tools/repo/gate.ts @openelement/fixture-router-static-only#build @openelement/fixture-router-static-only#typecheck",
+    "check:zero-island": "node check-zero-island.ts",
+    "gate": "node ../../../tools/repo/gate.ts @openelement/fixture-router-static-only#build @openelement/fixture-router-static-only#typecheck @openelement/fixture-router-static-only#check:zero-island",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

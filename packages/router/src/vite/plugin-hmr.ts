@@ -18,6 +18,8 @@ import {
   compileGeneratedElementIfAdmitted,
   compileServerComponentIfAdmitted,
   diagnosticPluginError,
+  isJsxModuleId,
+  prepareServerComponentImports,
   readCompiledArtifactStyles,
   recordCompilerDiagnostics,
   registerStyleRequest,
@@ -33,7 +35,7 @@ import {
 import { styleAssetGraphId } from './internal/style-assets.ts';
 import { devClientModulePath } from './internal/dev-client-path.ts';
 import {
-  createServerComponentSourceResolver,
+  resolveViteServerComponentSource,
   serverComponentAdmissionTags,
 } from './internal/server-component-host.ts';
 import type { OpenPluginState } from './plugin-config.ts';
@@ -94,7 +96,7 @@ export function createCompilerHooks(
   const generatedShape = (code: string): string => JSON.stringify({ generatedElement: code });
 
   return {
-    transform(code, id) {
+    async transform(code, id) {
       try {
         const moduleId = stableModuleId(id, state.viteRoot, state.workspaceRoot);
         // The generated Native Custom Element lane (M09-1b): when the host
@@ -111,15 +113,16 @@ export function createCompilerHooks(
         // resolves through the host resolver (the compiler never reads the
         // filesystem); the tags the render can expand — renderable islands plus
         // static compiled components — route nested hosts through `__ssr`.
-        const serverComponentResolver = createServerComponentSourceResolver({
-          root: state.viteRoot ?? process.cwd(),
-          workspaceRoot: state.workspaceRoot,
-        });
+        const resolveModule =
+          generatedResult === null
+            ? await prepareServerComponentImports(code, moduleId, (specifier) =>
+                resolveViteServerComponentSource(specifier, (target) => this.resolve(target, id)),
+              )
+            : undefined;
         const serverResult =
           generatedResult === null
             ? compileServerComponentIfAdmitted(code, moduleId, {
-                resolveModule: (specifier) =>
-                  serverComponentResolver(specifier, moduleId) ?? undefined,
+                ...(resolveModule === undefined ? {} : { resolveModule }),
                 compiledTags: serverComponentAdmissionTags(
                   state.ctx.phase1.staticComponents,
                   state.ctx.phase1.ssrAdmissionPlan?.renderableTags,
@@ -252,7 +255,7 @@ export function createCompilerHooks(
         }
         return [];
       }
-      if (!/\.tsx$/.test(hmr.file)) return;
+      if (!isJsxModuleId(hmr.file)) return;
       let source: string;
       try {
         source = await readFile(hmr.file, 'utf8');

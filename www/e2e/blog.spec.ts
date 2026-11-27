@@ -55,7 +55,18 @@ test.describe('Blog pages with JavaScript disabled', () => {
         `${prefix}/changelog/`,
       );
       await expect(content.locator('time')).toHaveText(date);
-      await content.getByRole('link', { name: title, exact: true }).click();
+      const article = content.getByRole('link', { name: title, exact: true });
+      await article.scrollIntoViewIfNeeded();
+      // The cross-document transition can still intercept pointer input after the page loads.
+      await expect
+        .poll(() =>
+          article.evaluate((link) => {
+            const { x, y, width, height } = link.getBoundingClientRect();
+            return link.contains(document.elementFromPoint(x + width / 2, y + height / 2));
+          }),
+        )
+        .toBe(true);
+      await article.click();
 
       await expect(page).toHaveURL(new RegExp(`${post}$`));
       await expect(page.locator('html')).toHaveAttribute('lang', lang);

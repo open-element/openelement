@@ -32,7 +32,7 @@
  * LOCAL Node evidence. Not an M13 matrix row, not a public API freeze.
  */
 
-import { createHash } from 'node:crypto';
+import { hashBeforeFormFactorySplit } from './testlib/generated-element-baseline.ts';
 import { describe, expect, test } from 'vitest';
 import {
   compileFunctionModule,
@@ -72,10 +72,6 @@ function site(name: string): { file: string; site: GeneratedElementSite } {
 function compileIsland(name: string, source: string): string {
   const fact = site(name);
   return compileGeneratedElementIfAdmitted(source, fact.file, { site: fact.site }).code;
-}
-
-function sha256(text: string): string {
-  return createHash('sha256').update(text).digest('hex');
 }
 
 function codes(error: unknown): string[] {
@@ -226,10 +222,10 @@ describe('16b-EB error boundary — emitted artifact contract (Node)', () => {
   test('B4 a module WITHOUT the intrinsic keeps the exact pre-16b-EB bytes (SHA-256 pins)', () => {
     // Pins captured from the clean tree BEFORE the change; the rule they guard
     // is "admitting a fourth name moves nobody else's output".
-    expect(sha256(compileIsland('pbase-hooked', THREE_INTRINSICS_SOURCE))).toBe(
+    expect(hashBeforeFormFactorySplit(compileIsland('pbase-hooked', THREE_INTRINSICS_SOURCE))).toBe(
       '6a5f8c697e4172135ea7a0f230f0dc079489b380687d1e452b98a0bf39cc84cf',
     );
-    expect(sha256(compileIsland('pbase-plain', PLAIN_SOURCE))).toBe(
+    expect(hashBeforeFormFactorySplit(compileIsland('pbase-plain', PLAIN_SOURCE))).toBe(
       'cf0343e9d45a8e8b3a99572c2860a217837e988e3430f832caa392059b094823',
     );
     const hooked = compileIsland('pbase-hooked-shape', THREE_INTRINSICS_SOURCE);

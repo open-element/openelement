@@ -36,7 +36,7 @@
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { relative, isAbsolute } from 'pathe';
-import { stableModuleId } from '@openelement/compiler';
+import { isJsxModuleId, stableModuleId } from '@openelement/compiler';
 import {
   walkModuleGraph,
   type ModuleWalkDiagnostic,
@@ -112,7 +112,7 @@ function inside(root: string, candidate: string): boolean {
 }
 
 /**
- * Read every reachable in-project `.tsx` module's declared sidecar tag into one
+ * Read every reachable in-project JSX-bearing module's declared sidecar tag into one
  * `moduleId -> tag` map. Nothing is imported or executed: the walk asks the
  * bundler for edges and the sidecar parser reads literal text.
  */
@@ -206,9 +206,9 @@ export async function scanDeclaredElementTags(
       hostExports.set(moduleId, identity.kind === 'producer' ? identity.ssrHostExport : '');
       continue;
     }
-    // The generated lane is a TSX lane (`compileGeneratedElementIfAdmitted`
-    // refuses a non-TSX id), and a package module's identity is its manifest.
-    if (!file.endsWith('.tsx')) continue;
+    // Match the generated lane's extension gate. A package module's identity
+    // still comes from its manifest.
+    if (!isJsxModuleId(file)) continue;
     let source: string;
     try {
       source = await readFile(file, 'utf8');

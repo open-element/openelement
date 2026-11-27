@@ -10,7 +10,7 @@ into the others' graphs.
 
 | Subpath                                | Import it for                                                                                                                                 |
 | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@openelement/protocol`                | The umbrella re-export of every contract below.                                                                                              |
+| `@openelement/protocol`                | The umbrella re-export of the shared contracts.                                                                                              |
 | `@openelement/protocol/app-model`      | Host-agnostic route and asset contracts shared by app and build drivers (the route tree node, matched-path shapes).                          |
 | `@openelement/protocol/client-assets`  | The client asset manifest protocol (#1471): compile-time island identity joined with build output for per-page script wiring.                 |
 | `@openelement/protocol/data`           | The platform-neutral data adapter protocol.                                                                                                  |
@@ -28,6 +28,7 @@ into the others' graphs.
 | `@openelement/protocol/registry-markers` | SSR customElements registry marker contract (#965).                                                                                        |
 | `@openelement/protocol/render`         | Render pipeline types (render errors, hydration hints, SSR admission decisions).                                                                                    |
 | `@openelement/protocol/runtime`        | Runtime adapter protocol.                                                                                                                    |
+| `@openelement/protocol/server-only`    | Side-effect import that marks an application module as server-only in Router browser builds and dev.                                         |
 | `@openelement/protocol/signal`         | Signal contracts (`Signal`, `ReadonlySignal`, brands).                                                                                       |
 | `@openelement/protocol/ssg`            | SSG engine contracts (route manifests, island declarations, stream route manifests).                                                        |
 | `@openelement/protocol/stream-frame-policy` | The canonical deny lists a deferred text/Block Part frame must satisfy for the browser installer to accept it.                          |

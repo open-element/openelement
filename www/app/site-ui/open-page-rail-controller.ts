@@ -93,7 +93,12 @@ function enhanceOutline(
   const listeners = new AbortController();
   const options = { signal: listeners.signal };
   const closeOutside = (event: Event): void => {
-    if (!details.contains(event.target as Node)) details.open = false;
+    const target = event.target;
+    if (!(target instanceof Node) || details.contains(target)) return;
+    // WebKit may focus the enclosing landmark on pointerdown on a link.
+    // Keep the panel open so pointerup can still reach the selected link.
+    if (event.type === 'focusin' && target.contains(details)) return;
+    details.open = false;
   };
   const selectSection = (event: MouseEvent): void => {
     if (
@@ -107,14 +112,17 @@ function enhanceOutline(
     const link = event.target.closest('a[href^="#"]');
     const target = targets.get(link?.getAttribute('href') ?? '');
     if (!(target instanceof HTMLElement)) return;
-    details.open = false;
-    // The closed disclosure removes the selected link from the focus order.
-    // Focus its heading without cancelling the browser's own fragment jump.
-    if (!target.hasAttribute('tabindex')) {
-      target.tabIndex = -1;
-      target.addEventListener('blur', () => target.removeAttribute('tabindex'), { once: true });
-    }
-    target.focus({ preventScroll: true });
+    // Let the native fragment action run while the selected link is still
+    // rendered. WebKit cancels that action if its details closes during click.
+    requestAnimationFrame(() => {
+      if (listeners.signal.aborted || event.defaultPrevented) return;
+      details.open = false;
+      if (!target.hasAttribute('tabindex')) {
+        target.tabIndex = -1;
+        target.addEventListener('blur', () => target.removeAttribute('tabindex'), { once: true });
+      }
+      target.focus({ preventScroll: true });
+    });
   };
   const onEscape = (event: KeyboardEvent): void => {
     if (event.key !== 'Escape' || !details.open) return;

@@ -133,8 +133,10 @@ task by design: the repo vitest `tools` project (`vitest.config.ts`) owns
 | Build the docs site into `www/dist` | `vp run site:build` |
 | Site verification (links, tokens, content) | `vp run site:verify` |
 | Full release precheck (local writes + network; not read-only) | `vp run release:check` |
+| Site app and Playwright typecheck (after generation) | `vp run --no-cache --fail-if-no-match --filter @openelement/www typecheck` |
 | Content dates (read-only validation) | `vp run --no-cache --fail-if-no-match --filter @openelement/www check:content-dates` |
 | Interface snapshot (check / write) | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot` / `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo interface:snapshot:write` |
+| Packed starter JS budget (after starter setup) | `vp run --no-cache --fail-if-no-match --filter @openelement/tools-release reference-payload:check` |
 | Doc figures (measured-output gate) | `vp run --no-cache --fail-if-no-match --filter @openelement/www check:doc-figures` |
 | Version bump (one knob, twelve release-line points + four member stamps) | `pnpm --dir tools/repo run version-bump <version> [--write]` |
 | Workflow lint (after any `.github` touch) | `zizmor --offline .` |
@@ -201,17 +203,23 @@ graph; it does not execute the gate.
 | `vp run release:check` | `@openelement/ui#ui-manifest:check` → `@openelement/ui#ui-cem:check` → `@openelement/www#check:theme-init` → `@openelement/tools-repo#generate:all` → `@openelement/tools-repo#release:registry-check` → `@openelement/tools-repo#gate:release` → `@openelement/tools-release#gate:packed` → `@openelement/tools-release#publish:npm:dry-run` |
 | `vp run saas:verify` | `@openelement/saas#check` → `@openelement/saas#test` |
 | `vp run saas:workers` | `@openelement/saas#build` → `@openelement/saas#nitro:build-workers` → `@openelement/tools-repo#workers:boundary-check` |
-| `vp run site:build` | `@openelement/tools-repo#generate:all` → `@openelement/www#build` → `@openelement/www#pagefind` → `@openelement/www#emit:redirects` → `@openelement/www#emit:sitemap` |
+| `vp run site:build` | `@openelement/www#build` |
 | `vp run site:verify` | `site:build` → `@openelement/www#check:links` → `@openelement/www#check:theme-tokens` → `@openelement/www#check:content` → `@openelement/tools-repo#retired-api:check` |
 | `vp run test:e2e` | `site:build` → `@openelement/www#e2e:browsers` → `@openelement/fixture-router-native-framework#e2e` |
 | `vp run verify` | `check` → `test` → `@openelement/tools-repo#gate:source` → `saas:verify` → `saas:workers` → `@openelement/tools-release#gate:packed` |
 | `vp run verify:core` | `@openelement/tools-repo#gate:source` → `@openelement/tools-release#gate:packed` |
 <!-- derived:gates:end -->
 
+The Site workspace's `build` task owns generation, the Router build, Pagefind,
+redirects, and the sitemap that seals the public snapshot. The root
+`site:build` and `pages:build` tasks delegate to it. On Cloudflare Pages,
+the verified snapshot occupies `www/dist` for the existing upload setting.
+
 Layers, not just lists:
 
 - **PR layer** (`.github/workflows/autoflow-ci.yml`): fast checks
-  (`vp run check`), `vp run generate:all`, the interface snapshot,
+  (`vp run check`), `vp run generate:all`, the Site app and Playwright typecheck,
+  the interface snapshot,
   governance boundaries, every package's tests (element, router, compiler,
   ui, create, www, the tools project), the chromium browser gate, the site
   build + e2e, and pack + packed-consumer verification.
@@ -223,6 +231,36 @@ Layers, not just lists:
   typecheck, the release dependency-graph check, the pack-surface check and
   the export-files check. The hooks are a courtesy — the gates above are the
   contract.
+
+## Packed starter JavaScript budget
+
+The release train measures the production build made by the packed starter
+smoke setup (`vp run --no-cache --fail-if-no-match --filter @openelement/e2e-starter-smoke setup`).
+The checker uses the starter home document, the home island manifest, the Vite
+import graph, and the router's emitted module graph. It attributes deferred
+imports to the page that can load them and counts each JavaScript file once
+per reported closure. Cross-page prefetches, HTML and CSS are outside the
+reference JavaScript budget.
+
+- Shared runtime includes the client bootstrap and its dependencies, plus
+  common imports of multiple active islands. It has a 13,437-byte gzip limit.
+- Reference island is the starter's `my-counter` and its dependencies, after
+  removing files already charged to shared runtime. It has a 2,000-byte gzip
+  limit. The report also shows the island with its own dependency closure.
+- Reference home includes the document's scripts and module preloads, both
+  islands and their reachable dependencies. It has a 17,071-byte gzip limit.
+
+The shared and home limits use the measured packed Alpha16 baseline at
+`46ee1701804d41ca6e096416f263fb4e69475c3e`. The 13,045-byte shared runtime and
+16,573-byte home each receive a one-sided runner allowance of 3% of the
+measured bytes, rounded up and added once to set the fixed limit. The
+allowance follows the [Site gzip figures precedent](../www/tools/check-doc-figures.ts).
+
+The checker uses Node zlib to compress each emitted response separately at
+gzip level 9 and adds the results. It also reports raw and Brotli level 11 bytes, plus
+bundler-reported module sizes for attribution. A missing input or an exceeded
+limit fails the release. The official Site figures still use their eager
+static-import closure and their existing tolerance.
 
 ## Reading build failures: the diagnostics envelope (#1612)
 

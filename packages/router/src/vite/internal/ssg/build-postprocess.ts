@@ -133,7 +133,7 @@ export function islandChunkMapFromAssetManifest(
  */
 export async function postProcessClientIslandBuild(
   ctx: BuildContextView,
-): Promise<PageIslandManifest[]> {
+): Promise<{ pageManifests: PageIslandManifest[]; files: string[] }> {
   const root = ctx.phase3.root || process.cwd();
   const outDir = ctx.phase3.outDir || DEFAULT_OUT_DIR;
   const outputDir = join(root, outDir);
@@ -188,7 +188,7 @@ export async function postProcessClientIslandBuild(
   ) as Record<string, ComponentLayer>;
 
   const pageManifests = generateIslandManifests(outputDir, chunkMap, strategyMap, layerMap);
-  await writeIslandManifests(outputDir, pageManifests);
+  const files = await writeIslandManifests(outputDir, pageManifests);
 
   // B2/#1544: project the same per-page facts onto the document head. The
   // runtime chunk's address is the build's own emitted artifact (the client
@@ -210,7 +210,7 @@ export async function postProcessClientIslandBuild(
       injectElementRuntimePreload(outputDir, pageManifests, runtimeUrl);
     }
   }
-  return pageManifests;
+  return { pageManifests, files };
 }
 
 /**

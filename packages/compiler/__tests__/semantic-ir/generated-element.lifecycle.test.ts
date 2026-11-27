@@ -40,7 +40,7 @@
  * hook admission, no connection-scope helper channel, no public API freeze.
  */
 
-import { createHash } from 'node:crypto';
+import { hashBeforeFormFactorySplit } from './testlib/generated-element-baseline.ts';
 import { describe, expect, test } from 'vitest';
 import { originalPositionFor, TraceMap } from '@jridgewell/trace-mapping';
 import {
@@ -104,10 +104,6 @@ function frontModuleWithRoot(
 function compileIsland(name: string, source: string): string {
   const fact = site(name);
   return compileGeneratedElementIfAdmitted(source, fact.file, { site: fact.site }).code;
-}
-
-function sha256(text: string): string {
-  return createHash('sha256').update(text).digest('hex');
 }
 
 function codes(error: unknown): string[] {
@@ -384,18 +380,18 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
       '/proj/src/leaf.tsx',
     );
     const hostlessWithSetupLeaf = generateLeafModule(hostlessWithSetup);
-    expect(sha256(hostlessWithSetupLeaf.module!)).toBe(
+    expect(hashBeforeFormFactorySplit(hostlessWithSetupLeaf.module!)).toBe(
       'fb1ae5f28641db6ad094d64b4038369293037df9210b404895f94fda2e660ed7',
     );
     const hostlessPlain = frontModule(
       'function Plain(props) { return <p>{props.x}</p>; }\n',
       '/proj/src/leaf.tsx',
     );
-    expect(sha256(generateLeafModule(hostlessPlain).module!)).toBe(
+    expect(hashBeforeFormFactorySplit(generateLeafModule(hostlessPlain).module!)).toBe(
       'b20d1a40affc168631728a4ee51079acf8007fa4edb287c11aac2f8be9f9160b',
     );
     const hostlessSetupSsr = functionText(hostlessWithSetupLeaf.module!, 'Hostless__ssr');
-    expect(sha256(hostlessSetupSsr)).toBe(
+    expect(hashBeforeFormFactorySplit(hostlessSetupSsr)).toBe(
       '87ae3b6b19ce0205c105f3b2bb7be75c83416ea96debb2e0a206c626558018b0',
     );
 
@@ -414,10 +410,10 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     // to the lifecycle surface, so the pin moves once and the shape assertion
     // below states what changed.
     expect(rootSetup).toContain('  ssrProducer: SeedCard__ssr,');
-    expect(sha256(rootSetup)).toBe(
+    expect(hashBeforeFormFactorySplit(rootSetup)).toBe(
       'e07b0675516972e7e9fb037f897bc13b6295e63ef34e3ddce63c6cac4fecfbba',
     );
-    expect(sha256(functionText(rootSetup, 'SeedCard__ssr'))).toBe(
+    expect(hashBeforeFormFactorySplit(functionText(rootSetup, 'SeedCard__ssr'))).toBe(
       '328059b07b89719ed2fc03f659a041a022982e21a5837f7628046bae6b473d50',
     );
 
@@ -431,10 +427,10 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     );
     // Same B4 row as above: the light-root producer is one descriptor line.
     expect(rootPlain).toContain('  ssrProducer: PlainCard__ssr,');
-    expect(sha256(rootPlain)).toBe(
+    expect(hashBeforeFormFactorySplit(rootPlain)).toBe(
       'ef0659e8e63ea38a51998739a073893ecab9a1b34b04aa0eaedcb79e6cc434d3',
     );
-    expect(sha256(functionText(rootPlain, 'PlainCard__ssr'))).toBe(
+    expect(hashBeforeFormFactorySplit(functionText(rootPlain, 'PlainCard__ssr'))).toBe(
       '16e96344e5dc9cd26db72789d8bab36f12c2b815b15c646be3da4c383f28bef1',
     );
 
@@ -453,10 +449,10 @@ describe('16b-LC lifecycle hooks — emitted artifact contract (Node)', () => {
     );
     // Same B4 row: one light-root producer line on a composable light host.
     expect(rootChild).toContain('  ssrProducer: Host__ssr,');
-    expect(sha256(rootChild)).toBe(
+    expect(hashBeforeFormFactorySplit(rootChild)).toBe(
       '32b9ea75adce82c8bd34d522f371a550311aa17769b4fca44d77e2a97cdc8411',
     );
-    expect(sha256(functionText(rootChild, 'Host__ssr'))).toBe(
+    expect(hashBeforeFormFactorySplit(functionText(rootChild, 'Host__ssr'))).toBe(
       'd361eae8d21a2959954c5ca83cf12b68887ed2fe5e4da21a21fd335259526863',
     );
   });

@@ -16,9 +16,25 @@ English | [简体中文](./README.zh.md)
 
 OpenElement is a framework for server-rendered HTML and interactive Custom Elements. **Compiler** turns TSX into Custom Elements and server renderers. **Element** provides the runtime. **Router** handles routes, navigation, loaders and actions.
 
+## Start with npm
+
+Use Node.js 24.2 or newer. The default command uses the npm `latest` tag, which currently serves an alpha release.
+
+```sh
+npm create @openelement my-app
+cd my-app
+npm run dev
+```
+
+Open the URL printed by the dev server. Edit `app/routes/index.tsx` to change the home page. Stop the server before running `npm run build`.
+
+To select the alpha channel explicitly, run `npm create @openelement@alpha my-app` in place of the first command. Check both tags with `npm view @openelement/create dist-tags`. The [changelog](./CHANGELOG.md) lists how to install Alpha16 once it is published.
+
+Follow the [first app tutorial](https://openelement.org/guide/tutorial/) to add a page, an interactive island, and a form action. See the [deployment guide](https://openelement.org/guide/deployment/) for static hosting, Node, and Cloudflare Workers.
+
 ## Preview the source checkout
 
-This checkout previews `1.0.0-alpha.16` with server function pages and compiler-generated Custom Elements. The setup task builds the packages from this checkout and installs them into a temporary starter app. [Release state](./docs/release/release-state.json)
+This checkout previews `1.0.0-alpha.16` with JSX and TSX function components for server-rendered pages and interactive islands. The setup task builds the packages from this checkout and installs them into a temporary starter app. [Release state](./docs/release/release-state.json)
 
 ```sh
 pnpm install --frozen-lockfile
@@ -29,18 +45,6 @@ pnpm run dev
 ```
 
 Edit `app/routes/index.tsx` to try the starter's file routing. Run `pnpm test` and `pnpm run build` after stopping the dev server. [Starter package](./packages/create/README.md)
-
-## Start with npm
-
-Use Node.js 24.2 or newer. This command scaffolds the version on the npm `latest` tag. Check it with `npm view @openelement/create dist-tags`.
-
-```sh
-npm create @openelement my-app
-cd my-app
-npm run dev
-```
-
-Open the URL printed by the dev server. Stop it before running `npm run build`.
 
 ## Repository
 

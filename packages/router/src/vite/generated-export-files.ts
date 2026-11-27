@@ -49,6 +49,7 @@ export const OPENELEMENT_EXPORT_FILES: Record<string, Record<string, string>> = 
     'registry-markers': 'src/registry-markers.ts',
     render: 'src/render.ts',
     runtime: 'src/runtime.ts',
+    'server-only': 'src/server-only.ts',
     signal: 'src/signal.ts',
     ssg: 'src/ssg.ts',
     'stream-frame-policy': 'src/stream-frame-policy.ts',

@@ -1010,6 +1010,7 @@ test('Q1-C: one light instance disconnecting leaves the shared delivery and the 
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await page.goto('/combobox', { waitUntil: 'load' });
   await defineEveryIsland(page);
+  await waitForPageClaim(page, 'combobox-page');
 
   const before = await deliveryState(page);
   expect(

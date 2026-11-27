@@ -29,6 +29,12 @@ export interface ParserPort {
   parseModule(source: string, fileName: string): ParsedModule;
 }
 
+/** Inline TSX and inline JSX JSDoc annotations feed the same props readers. */
+export function authoredPropsType(parameter: ts.ParameterDeclaration): ts.TypeNode | undefined {
+  const isJavaScriptJsx = parameter.getSourceFile().fileName.split('?', 1)[0]!.endsWith('.jsx');
+  return parameter.type ?? (isJavaScriptJsx ? ts.getJSDocType(parameter) : undefined);
+}
+
 /** The one TypeScript-backed `ParserPort` implementation. */
 export const typescriptParser: ParserPort = {
   parseModule(source, fileName) {

@@ -7,40 +7,12 @@
  * native/neutral fixture owns the shared coverage before that fixture is
  * deleted (ADR-0152 2026-11-08 owner ruling).
  */
-import { expect, type Page, test } from '@playwright/test';
-
-/**
- * Arm the readiness recorder before the first navigation.
- *
- * The client entry's enhance layer announces itself with
- * `open:enhance-ready` once its ready-time scan has run (form-enhance.ts).
- * `open:ready` is NOT a substitute: it fires per island strategy bucket that
- * has a HOST on the page, and /notes/new carries no island host.
- */
-async function armEnhanceReady(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    document.addEventListener(
-      'open:enhance-ready',
-      () => {
-        (window as unknown as { __enhanceReady?: boolean }).__enhanceReady = true;
-      },
-      { once: true },
-    );
-  });
-}
-
-/** Resolve only after that announcement: the submit interceptor is attached. */
-async function waitForEnhanceReady(page: Page): Promise<void> {
-  await page.waitForFunction(
-    () => (window as never as { __enhanceReady?: boolean }).__enhanceReady === true,
-  );
-}
+import { expect, test } from '@playwright/test';
+import { gotoEnhanceReady } from './enhance-ready.ts';
 
 for (const target of [undefined, '', '_self'] as const) {
   test(`base target fallback preserves explicit target ${String(target)}`, async ({ page }) => {
-    await armEnhanceReady(page);
-    await page.goto('/playground');
-    await waitForEnhanceReady(page);
+    await gotoEnhanceReady(page, '/playground');
     await page.evaluate((override) => {
       const base = document.createElement('base');
       base.target = '_blank';
@@ -73,9 +45,7 @@ for (const target of [undefined, '', '_self'] as const) {
 for (const outcome of ['html', 'network-error'] as const) {
   test(`a disposed form cannot apply its late ${outcome}`, async ({ page, request }) => {
     const html = await (await request.get('/notes')).text();
-    await armEnhanceReady(page);
-    await page.goto('/notes/new');
-    await waitForEnhanceReady(page);
+    await gotoEnhanceReady(page, '/notes/new');
     let release!: () => void;
     const held = new Promise<void>((resolve) => (release = resolve));
     let received!: () => void;

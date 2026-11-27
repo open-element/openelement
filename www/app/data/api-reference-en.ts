@@ -1,5 +1,8 @@
 /** Quick summaries where the upstream note has no complete short opening, plus the documented definePage overload. */
 export const englishExportOverrides: ReadonlyMap<string, string> = new Map([
+  ['packages/compiler/src/internal/compiler/semantic-core/jsx-module-id.ts#isJsxModuleId', 'Check whether a module ID names a .jsx or .tsx file, ignoring the query suffix.'],
+  ['packages/compiler/src/internal/compiler/semantic-core/server-component.ts#prepareServerComponentImports', 'Resolve named imports used as server component tags and return a synchronous lookup for the compiler.'],
+  ['packages/compiler/src/internal/compiler/semantic-core/server-component.ts#ResolvedServerComponentSource', 'Carry the source text and resolved filename of an imported server component. The filename selects the parser syntax.'],
   ['packages/element/src/internal/core/compile-lifecycle.ts#onConnect', 'Run a callback on each element connection. If it returns a cleanup function, run that function on disconnect.'],
   ['packages/element/src/internal/core/compile-lifecycle.ts#onDispose', 'Run a callback once when the generated element is disposed, after its connection cleanups.'],
   ['packages/element/src/internal/core/compile-lifecycle.ts#onPropertyChange', 'Run a callback after a declared property changes through an attribute or property write.'],
@@ -15,9 +18,9 @@ export const englishExportOverrides: ReadonlyMap<string, string> = new Map([
   ['packages/protocol/src/framework.ts#CompatibilityTier', 'The tag’s build compatibility level: server-rendered, client-only, experimental, or rejected.'],
   ['packages/protocol/src/framework.ts#ComponentLayer', 'A component’s delivery layer: static DSD, interactive DSD, a client-only island, or light DOM.'],
   ['packages/protocol/src/framework.ts#LayoutConfig', 'Select the built-in layout, declare a custom layout with its module and props, or disable the layout.'],
-  ['packages/protocol/src/framework.ts#OpenElementBlogOptions', 'Blog options stored in the build context by @openelement/content.'],
+  ['packages/protocol/src/framework.ts#OpenElementBlogOptions', 'The optional blog content directory and URL base path in the build context.'],
   ['packages/protocol/src/framework.ts#OpenElementI18nContextOptions', 'Locale options stored in the build context by @openelement/i18n.'],
-  ['packages/protocol/src/framework.ts#OpenElementNavSection', 'A navigation group declared by @openelement/content.'],
+  ['packages/protocol/src/framework.ts#OpenElementNavSection', 'A navigation group with a path, label, and optional order for each item.'],
   ['packages/protocol/src/framework.ts#RouteEntry', 'A discovered route’s URL, source, type, generated binding name, and optional custom element tag.'],
   ['packages/protocol/src/module-descriptors.ts#ModuleVocabularyDescriptor', 'Describe a binding that the module scanner recognizes and the information it records for calls to that binding.'],
   ['packages/protocol/src/module-descriptors.ts#StaticSidecarDescriptor', 'Identify a colocated static policy declaration for the element compiler.'],

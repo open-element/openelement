@@ -280,15 +280,19 @@ describe('M09-2b primitive property metadata (Chromium)', () => {
           countText: countNode.textContent,
         };
 
-        // Removing a reflected attribute restores the declared default in both
-        // channels; a property-only row ignores its (unobserved) attribute.
+        // Removal restores both property defaults. Only count reflects back
+        // to the attribute. Padding ignores its unobserved attribute.
         host.removeAttribute('count');
+        host.removeAttribute('label');
         host.setAttribute('padding', '5');
         await tick();
         const afterRemoval = {
           count: (host as unknown as { count: number }).count,
           countAttribute: host.getAttribute('count'),
           countText: countNode.textContent,
+          label: (host as unknown as { label: string }).label,
+          labelAttribute: host.getAttribute('label'),
+          labelText: labelNode.textContent,
           padding: (host as unknown as { padding: number }).padding,
         };
 
@@ -354,12 +358,15 @@ describe('M09-2b primitive property metadata (Chromium)', () => {
         count: 0,
         countAttribute: '0',
         countText: '0',
+        label: 'untitled',
+        labelAttribute: null,
+        labelText: 'untitled',
         padding: 0,
       });
       expect(result.reconnected).toEqual({
         sameRoot: true,
         count: 0,
-        label: 'hello',
+        label: 'untitled',
         identity: true,
         attachShadowCalls: 0,
       });

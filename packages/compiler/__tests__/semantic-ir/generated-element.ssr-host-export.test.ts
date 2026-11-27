@@ -169,7 +169,7 @@ describe('M11 prerequisite — compiler-owned ssrHostExport metadata', () => {
     // its content props are seeded from the descriptor rows through the shell's
     // canonical conversion — the metadata field itself still never enters text.
     expect(emitted.module).toContain(
-      '  const __oeHostProps = seedGeneratedElementHostProperties(__oeElementDescriptor.properties, props, attributes);',
+      '  const __oeHostProps = seedGeneratedElementHostProperties(props, attributes);',
     );
     expect(emitted.module).toContain('    ...(attributes === undefined ? {} : { attributes }),');
     // Return-only: the emitted text is the leaf prefix plus the tail, the
@@ -309,7 +309,9 @@ export default Card;
     // decision (M11 review §4.4) and is deliberately not this lane's verdict.
     expect(compiled).not.toBeNull();
     expect(compiled!.ssrHostExport).toBeNull();
-    expect(compiled!.code).toContain('root: "shadow-open"');
+    expect(compiled!.code).toContain(
+      'createDirectShadowElementClassWithProjection as __oe_createElementClass',
+    );
     expect(compiled!.code).not.toContain('__ssrHost');
     // The leaf still emits its `__ssr` body — the leaf does not read the sidecar's
     // `ssr` fact. What must be absent is the HOST PRODUCER, which is this lane's

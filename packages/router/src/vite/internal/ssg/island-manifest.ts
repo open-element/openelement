@@ -202,7 +202,8 @@ export function generateIslandManifests(
 export async function writeIslandManifests(
   outputDir: string,
   manifests: PageIslandManifest[],
-): Promise<void> {
+): Promise<string[]> {
+  const written: string[] = [];
   const manifestDir = join(outputDir, 'island-manifests');
   mkdirSync(manifestDir, { recursive: true });
 
@@ -210,5 +211,7 @@ export async function writeIslandManifests(
     const hash = await stableHash(manifest.route);
     const filename = `page-${hash}.json`;
     writeFileSync(join(manifestDir, filename), formatJson(manifest), 'utf8');
+    written.push(`island-manifests/${filename}`);
   }
+  return written;
 }

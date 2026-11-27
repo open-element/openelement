@@ -55,16 +55,7 @@ function failProjection(code: string, source: ProjectionSource, prose: string): 
   );
 }
 
-/**
- * Assert that `projectionOwner` may project a recipe defined by
- * `definitionOwner`. Throws a coded, source-located failure otherwise; returns
- * silently when the projection is legal.
- */
-export function assertProjectionAllowed(
-  definitionOwner: LifetimeScope,
-  projectionOwner: LifetimeScope,
-  source: ProjectionSource,
-): void {
+function assertDefinitionOwnerLive(definitionOwner: LifetimeScope, source: ProjectionSource): void {
   if (definitionOwner.disposed) {
     recordLineage(false);
     failProjection(
@@ -75,6 +66,25 @@ export function assertProjectionAllowed(
         'not supported)',
     );
   }
+}
+
+/** The generated site's definition and insertion owner is the same scope. */
+export function assertOwnProjectionAllowed(owner: LifetimeScope, source: ProjectionSource): void {
+  assertDefinitionOwnerLive(owner, source);
+  recordLineage(true);
+}
+
+/**
+ * Assert that `projectionOwner` may project a recipe defined by
+ * `definitionOwner`. Throws a coded, source-located failure otherwise; returns
+ * silently when the projection is legal.
+ */
+export function assertProjectionAllowed(
+  definitionOwner: LifetimeScope,
+  projectionOwner: LifetimeScope,
+  source: ProjectionSource,
+): void {
+  assertDefinitionOwnerLive(definitionOwner, source);
   if (projectionOwner.disposed) {
     recordLineage(false);
     failProjection(KernelErrorCode.DISPOSED, source, 'cannot project into a disposed owner');

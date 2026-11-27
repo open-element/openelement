@@ -2,7 +2,7 @@
  * Request-time fixture server.
  *
  * Serves the built app:
- *   - static files from dist/ (exact file, /path -> /path/index.html, /path.html)
+ *   - static files from dist-public/ (exact file, /path -> /path/index.html, /path.html)
  *   - request-time routes are delegated to the generated dist/server/index.js:
  *     the named isRequestTimePath export (derived from the route table,
  *     #556, narrowed to admission-only by #1215) decides whether a pathname
@@ -25,6 +25,8 @@ import {
   importRequestTimeServer,
 } from '../../../../packages/router/src/vite/internal/static-serve.ts';
 
+import { checkPublishOutput } from '../../../../packages/router/src/vite/internal/publish-manifest.ts';
+
 const args: Record<string, string> = {};
 const cliArgs = process.argv.slice(2);
 for (let i = 0; i < cliArgs.length; i += 2) {
@@ -34,6 +36,7 @@ for (let i = 0; i < cliArgs.length; i += 2) {
 const PORT = Number(args.port ?? '4180');
 const ROOT = resolve(process.cwd(), args.dir ?? '../dist');
 
+const publicOutput = checkPublishOutput(ROOT);
 const serverEntry = await importRequestTimeServer(join(ROOT, 'server/index.js'));
 
 serve({
@@ -41,7 +44,8 @@ serve({
   hostname: '127.0.0.1',
   fetch: (request) =>
     dispatchRequest(request, {
-      distDir: ROOT,
+      distDir: publicOutput.root,
+      publicFiles: publicOutput.files,
       serverMod: serverEntry,
       env: process.env as Record<string, string>,
       onHandlerError: (error) => console.error('[fixture server] handler error:', error),

@@ -24,6 +24,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import {
   mkdir,
   mkdtemp,
@@ -34,9 +35,13 @@ import {
   symlink,
   writeFile,
 } from 'node:fs/promises';
+import { createServer as createHttpServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import process from 'node:process';
 import { afterAll, beforeAll, expect, test } from 'vitest';
+import { serveFetch } from '../src/internal/node-http.ts';
+import { createFetchHandler } from '../src/vite/internal/static-serve.ts';
 
 const REPO_ROOT = join(import.meta.dirname!, '..', '..', '..');
 const ROUTER_BUILD_CLI = join(REPO_ROOT, 'packages', 'router', 'src', 'cli', 'build.ts');
@@ -149,6 +154,10 @@ async function buildFixture(): Promise<Fixture> {
       '    // to the custom target.',
       "    conditions: ['oe-proof-flavor', 'module', 'browser', 'development|production'],",
       '  },',
+      '  environments: {',
+      "    client: { resolve: { extensions: ['.ts', '.js', '.jsx', '.tsx', '.mjs', '.mts', '.json'] } },",
+      "    ssr: { resolve: { extensions: ['.jsx', '.js', '.ts', '.tsx', '.mjs', '.mts', '.json'] } },",
+      '  },',
       '  plugins: [openElement()],',
       '});',
       '',
@@ -157,6 +166,40 @@ async function buildFixture(): Promise<Fixture> {
   await write(
     join(appDir, 'app', 'shared', 'tag.ts'),
     "export const sharedTag = 'shared-alias-target';\n",
+  );
+  await write(
+    join(appDir, 'app/shared/environment-priority.ts'),
+    "export const extensionPriority = 'client-extension-priority';\n",
+  );
+  await write(
+    join(appDir, 'app/shared/environment-priority.js'),
+    "export const extensionPriority = 'server-extension-priority';\n",
+  );
+  await write(
+    join(appDir, 'app/shared/proof-authoring.js'),
+    `export const itemLabels = [
+  { id: 'a', label: 'Alpha' },
+  { id: 'b', label: 'Beta' },
+];
+export const formatLabel = (label) => label?.trim() ?? 'Untitled';
+`,
+  );
+  await write(
+    join(appDir, 'app/shared/proof-authoring-barrel.js'),
+    `export { itemLabels, formatLabel as labelFor } from './proof-authoring.js';
+`,
+  );
+  await write(
+    join(appDir, 'app/shared/proof-copy.ts'),
+    `export type ProofLabel = string;
+export const readProofLabel = (label: ProofLabel): string => label;
+`,
+  );
+  await write(
+    join(appDir, 'app/shared/proof-copy-barrel.ts'),
+    `export type { ProofLabel } from './proof-copy.ts';
+export { readProofLabel as proofText } from './proof-copy.ts';
+`,
   );
   // B2 gap (a) fixture shape: a module this island reaches ONLY through a
   // nested dynamic `import()` of its own. This is the www `open-search` shape
@@ -179,6 +222,9 @@ async function buildFixture(): Promise<Fixture> {
       "import { conditionTarget } from '@acme/conditions';",
       "import { flavor } from '@acme/conditions/flavor';",
       "import { sharedTag } from '@shared/tag.ts';",
+      "import { extensionPriority } from '../shared/environment-priority';",
+      "import { proofText } from '../shared/proof-copy-barrel.ts';",
+      "import type { ProofLabel } from '../shared/proof-copy-barrel.ts';",
       '',
       'export const openElement = defineIslandConfig({',
       "  tag: 'oe-proof-counter',",
@@ -202,7 +248,7 @@ async function buildFixture(): Promise<Fixture> {
       '  // resolution reaches the emitted terminal bytes. A module-scope statement',
       '  // is not part of the admitted component grammar: the generated lane lowers',
       '  // the component body, not arbitrary top-level side effects.',
-      "  return <span class='source' data-proof={`${conditionTarget}:${sharedTag}:${flavor}`}>{props.proofSource}</span>;",
+      "  return <span class='source' data-proof={`${conditionTarget}:${sharedTag}:${flavor}:${extensionPriority}`}>{proofText(props.proofSource as ProofLabel)}</span>;",
       '}',
       '',
     ].join('\n'),
@@ -271,6 +317,77 @@ async function buildFixture(): Promise<Fixture> {
       "export default definePage(ProofStaticPage, { renderIntent: { mode: 'static' } });",
       '',
     ].join('\n'),
+  );
+
+  await write(
+    join(appDir, 'app/components/jsx-heading.jsx'),
+    `export const JsxHeading = () => <h1>JSX authoring</h1>;
+`,
+  );
+  await write(
+    join(appDir, 'app/components/jsx-heading.tsx'),
+    `export const ExactHeading = () => <h2>Explicit TSX import</h2>;
+`,
+  );
+  await write(
+    join(appDir, 'app/components/jsx-heading.js'),
+    `export const JsxHeading = 'This is an ordinary value, not a JSX component';
+`,
+  );
+  await write(
+    join(appDir, 'app/components/jsx-aside.jsx'),
+    `import { defineIslandConfig } from '@openelement/router';
+
+export const openElement = defineIslandConfig({ tag: 'oe-jsx-aside', root: 'shadow', ssr: true });
+export default function Aside() {
+  return <aside>Discovered JSX component</aside>;
+}
+`,
+  );
+  await write(
+    join(appDir, 'app/islands/oe-jsx-list.jsx'),
+    `import { computed, signal } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
+import { itemLabels, labelFor } from '../shared/proof-authoring-barrel.js';
+
+export const openElement = defineIslandConfig({
+  root: 'shadow',
+  hydrate: 'load',
+  ssr: true,
+  properties: { heading: { default: 'Default JSX list' } },
+});
+
+function Panel(props) {
+  return <section aria-label={props.title}>{props.children}</section>;
+}
+
+/** @param {{ heading: string }} props */
+export default function JsxList(props) {
+  const flipped = signal(false);
+  const items = computed(() => flipped.value ? [...itemLabels].reverse() : itemLabels);
+  return (
+    <Panel title={props.heading}>
+      <button type="button" onClick={() => { flipped.value = !flipped.value; }}>Reverse</button>
+      {flipped.value && <p>Reversed</p>}
+      <ul>{items.value.map((item) => <li key={item.id}>{labelFor(item.label)}</li>)}</ul>
+    </Panel>
+  );
+}
+`,
+  );
+  await write(
+    join(appDir, 'app/routes/proof-jsx.jsx'),
+    `import { definePage } from '@openelement/router';
+import { JsxHeading as Heading } from '../components/jsx-heading';
+import { ExactHeading } from '../components/jsx-heading.tsx';
+import '../components/jsx-aside.jsx';
+
+export function JsxPage() {
+  return <main><Heading /><ExactHeading /><oe-jsx-list heading="JSX list"></oe-jsx-list><oe-jsx-aside></oe-jsx-aside></main>;
+}
+
+export default definePage(JsxPage, { renderIntent: { mode: 'static' } });
+`,
   );
 
   // pnpm-style symlinks: the app's node_modules links the workspace packages
@@ -363,13 +480,11 @@ test('external consumer: the client chunk bundles the browser condition and the 
   const clientIslands = await readdir(join(distDir, 'client', 'islands'));
   // Single-chunk read, as before the executor-split experiment (withdrawn in
   // 07963b738 — this assertion was not rolled back with it). The pre-split
-  // layout is back: the local island's own chunk IS the whole static closure of
+  // layout is back: the counter island's own chunk IS the whole static closure of
   // the modules it reaches, so the condition/alias resolution must be IN that
   // chunk — the assertions judge the client graph's CONTENT, and reading one
-  // chunk is the honest unit for a one-importer static edge. The fixture has
-  // TWO islands (the first test in this file proves both own a chunk); only
-  // oe-proof-counter's closure reaches these marker modules, so reading its
-  // chunk is exactly the closure under test, not a sample of it.
+  // chunk is the honest unit for a one-importer static edge. Only the counter
+  // imports these marker modules, so the test reads its complete static closure.
   const counterChunk = clientIslands.find((file) => file.startsWith('island-oe-proof-counter'))!;
   const code = await readFile(join(distDir, 'client', 'islands', counterChunk), 'utf8');
   // The browser-condition target of @acme/conditions was bundled (not the
@@ -383,7 +498,100 @@ test('external consumer: the client chunk bundles the browser condition and the 
   // client defaults (no oe-proof-flavor) would never name.
   expect(code).toContain('flavor-custom-target');
   expect(code).not.toContain('flavor-import-target');
+  expect(code).toContain('client-extension-priority');
+  expect(code).not.toContain('server-extension-priority');
 });
+
+test('external consumer: dev SSR resolves the same nested JSX as the production build', async () => {
+  const { createServer } = await import('vite');
+  const previousCwd = process.cwd();
+  process.chdir(fixture.appDir);
+  try {
+    const vite = await createServer({
+      root: fixture.appDir,
+      server: { middlewareMode: true, ws: false },
+      logLevel: 'silent',
+    });
+    const server = createHttpServer((request, response) => {
+      vite.middlewares(request, response, (error: unknown) => {
+        response.statusCode = error ? 500 : 404;
+        response.end(error instanceof Error ? error.message : 'Not found');
+      });
+    });
+    try {
+      const listening = once(server, 'listening');
+      server.listen(0, '127.0.0.1');
+      await listening;
+      const address = server.address();
+      if (address === null || typeof address === 'string') throw new Error('No loopback address');
+      const response = await fetch(`http://127.0.0.1:${address.port}/proof-jsx`);
+      const html = await response.text();
+      expect(response.status, html).toBe(200);
+      expect(html).toContain('<h1>JSX authoring</h1>');
+      expect(html).toContain('<h2>Explicit TSX import</h2>');
+    } finally {
+      try {
+        if (server.listening) {
+          const closed = once(server, 'close');
+          server.close();
+          await closed;
+        }
+      } finally {
+        await vite.close();
+      }
+    }
+  } finally {
+    process.chdir(previousCwd);
+  }
+}, 30_000);
+
+test('external consumer: a JSX route prerenders and a JSX island claims and updates in the browser', async () => {
+  const distDir = join(fixture.appDir, 'dist');
+  const html = await readFile(join(distDir, 'proof-jsx/index.html'), 'utf8');
+  expect(html).toContain('<h1>JSX authoring</h1>');
+  expect(html).toContain('<h2>Explicit TSX import</h2>');
+  expect(html).toContain('Discovered JSX component</aside>');
+  expect(html).toContain('<oe-jsx-list heading="JSX list"><template shadowrootmode="open">');
+  expect(html).toContain('<section aria-label="JSX list">');
+  expect(html).toContain('Alpha');
+  expect(html).toContain('Beta');
+
+  const { chromium } = await import('@playwright/test');
+  const browser = await chromium.launch();
+  const server = serveFetch({
+    hostname: '127.0.0.1',
+    port: 0,
+    handler: createFetchHandler({ distDir }),
+  });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once('listening', resolve);
+      server.once('error', reject);
+    });
+    const address = server.address();
+    if (address === null || typeof address === 'string') throw new Error('No loopback address');
+    const page = await browser.newPage();
+    page.setDefaultTimeout(5_000);
+    await page.goto(`http://127.0.0.1:${address.port}/proof-jsx/`);
+    await page.waitForFunction(() => customElements.get('oe-jsx-list') !== undefined);
+    const island = page.locator('oe-jsx-list');
+    const panel = island.getByRole('region', { name: 'JSX list' });
+    const items = panel.getByRole('listitem');
+    expect(await items.allTextContents()).toEqual(['Alpha', 'Beta']);
+    const alpha = await items.first().elementHandle();
+    await panel.getByRole('button', { name: 'Reverse' }).click();
+    await panel.getByText('Reversed').waitFor();
+    expect(await items.allTextContents()).toEqual(['Beta', 'Alpha']);
+    expect(await items.last().evaluate((node, original) => node === original, alpha)).toBe(true);
+    await island.evaluate((host) => host.setAttribute('heading', 'Updated JSX list'));
+    await island.getByRole('region', { name: 'Updated JSX list' }).waitFor();
+  } finally {
+    await browser.close();
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+}, 30_000);
 
 test('external consumer: the SSR bundle and prerendered HTML carry the import condition', async () => {
   const distDir = join(fixture.appDir, 'dist');
@@ -398,6 +606,8 @@ test('external consumer: the SSR bundle and prerendered HTML carry the import co
   // (browser-condition) marker leaked into the server-rendered document.
   const homeHtml = await readFile(join(distDir, 'index.html'), 'utf8');
   expect(homeHtml).toContain('proof-counter-source');
+  expect(homeHtml).toContain('server-extension-priority');
+  expect(homeHtml).not.toContain('client-extension-priority');
   expect(homeHtml).not.toContain('condition-browser-target');
 });
 

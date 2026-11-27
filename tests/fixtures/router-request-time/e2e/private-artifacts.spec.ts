@@ -14,6 +14,7 @@
  * Run: pnpm run e2e -- private-artifacts
  */
 import { expect, test } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 
 test.describe('private dist/server boundary', () => {
   test('refuses the build private artifacts and keeps the site serving', async ({ request }) => {
@@ -43,5 +44,20 @@ test.describe('private dist/server boundary', () => {
 
     const dynamic = await request.get('/panel-dynamic');
     expect(dynamic.status()).toBe(200);
+  });
+
+  test('serves the declared public snapshot and keeps build metadata private', async ({
+    request,
+  }) => {
+    const staged = new URL('../dist/fixture-build-note.txt', import.meta.url);
+    expect(await readFile(staged, 'utf8')).toContain('fixture build workspace marker');
+
+    const asset = await request.get('/publish-proof.txt');
+    expect(asset.status()).toBe(200);
+    expect(await asset.text()).toContain('request-time fixture public marker');
+    for (const name of ['fixture-build-note.txt', 'publish-manifest.json']) {
+      expect((await request.get('/' + name)).status()).toBe(404);
+      expect((await request.head('/' + name)).status()).toBe(404);
+    }
   });
 });

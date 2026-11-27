@@ -18,6 +18,7 @@ import {
   executorEntryModuleIds,
   evaluateBrowserEntryGraphArtifact,
 } from '../../packages/router/src/vite/internal/browser-entry-graph-artifact.ts';
+import { checkPublishOutput } from '../../packages/router/src/vite/internal/publish-manifest.ts';
 
 const DIST = join(import.meta.dirname ?? '.', '..', 'dist');
 
@@ -187,10 +188,14 @@ test('build output: static publication includes redirects, robots directives, an
   expect(existsSync(join(DIST, 'server'))).toBe(false);
 });
 
-test('build output: pagefind ships the core runtime and no UI suites (#1555)', () => {
+test('build output: the public snapshot includes Pagefind and the final Site metadata', () => {
   expect(existsSync(DIST), `Build output is missing: ${DIST}`).toBeTruthy();
   const pagefindDir = join(DIST, 'pagefind');
   expect(existsSync(pagefindDir), `Pagefind output is missing: ${pagefindDir}`).toBeTruthy();
+  const { files } = checkPublishOutput(DIST);
+  for (const path of ['_redirects', 'robots.txt', 'sitemap.xml']) {
+    expect(files.has(path), `Public snapshot is missing ${path}`).toBeTruthy();
+  }
 
   // The search island loads only /pagefind/pagefind.js; that entry plus its
   // worker and the entry manifest are the artifacts the runtime fetches. The
@@ -202,6 +207,7 @@ test('build output: pagefind ships the core runtime and no UI suites (#1555)', (
       emitted.includes(required),
       `Pagefind core runtime artifact is missing: ${required}`,
     ).toBeTruthy();
+    expect(files.has(`pagefind/${required}`)).toBeTruthy();
   }
   const uiSuites = emitted.filter((f) =>
     (PAGEFIND_UI_SUITE_FILES as readonly string[]).includes(f),

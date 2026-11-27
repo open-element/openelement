@@ -12,7 +12,9 @@ Generated action POST handlers ship with a fail-closed same-origin floor: a requ
 
 ## Private build artifacts
 
-The build's request-time server output — `dist/server/` with the entry, the SSR bundle and the request-time manifest — is server code, never a public asset. `oe start` / `npm start` serves only the public output and answers GET/HEAD for that namespace with a bare `404`, including percent-encoded spellings, case variants, interior `..`, doubled slashes, query strings, and an in-root symlink whose canonical target resolves inside `dist/server/`; the server bundle cannot be read over HTTP. The rule lives in the shared static boundary that `start` and `--mode=preview` both use — it is not a host configuration that can be missed. A request-time route the application itself declares under the reserved segment keeps its precedence and is still handled by the application, but the static namespace is never served. For host static layers (a Nitro `publicAssets` directory) keep copying "everything except `server/`", as the [deployment guide](/guide/deployment) shows.
+`dist-public/` is the isolated public file tree. `oe start` and static preview compare the directory with `dist/publish-manifest.json` before listening and check the canonical path and bytes before serving static GET or HEAD. Run `npx oe publish --check` before packaging `dist-public/` for Nitro, Workers, or a generic static host. Keep `dist/server/` and the manifest with the application. The manifest verifies public file membership and integrity. The application owns content safety and authorization. [Deployment guide](/guide/deployment)
+
+Production browser builds and the development browser module environment reject direct and transitive `node:*` imports. Server loaders and routes can use those modules. To protect an application module, add the matching `@openelement/protocol` dependency and put `import '@openelement/protocol/server-only';` in that module. Server imports and type-only imports remain valid. If browser code reaches the module at runtime, the Router reports `OE_CLIENT_BUILD_BROWSER_ENTRY_SERVER_ONLY`.
 
 ## Ambient authentication
 

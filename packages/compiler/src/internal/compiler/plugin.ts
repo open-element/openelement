@@ -18,7 +18,11 @@
 
 import type { Plugin } from 'vite';
 import { CompiledElementError } from './semantic-core/compiler-diagnostics.ts';
-import { compileServerComponentIfAdmitted } from './semantic-core/server-component.ts';
+import {
+  compileServerComponentIfAdmitted,
+  prepareServerComponentImports,
+  type ResolvedServerComponentSource,
+} from './semantic-core/server-component.ts';
 import { compileGeneratedElementIfAdmitted } from './semantic-ir/generated-element/compile.ts';
 import type { GeneratedElementSite } from './semantic-ir/generated-element/contract.ts';
 import {
@@ -107,14 +111,27 @@ export interface CompiledElementPluginOptions {
   /**
    * Host-supplied resolver for the server function component lane's nested
    * imports (`resolveModule` of {@link compileServerComponentModule}): given
-   * a specifier and the importing module id, return that module's SOURCE so
+   * a specifier and the importing module id, return that module's source so
    * a nested server function component composes by direct call. Omitting it
    * (or answering undefined) keeps nested composition a coded rejection.
    * The compiler itself never reads the filesystem — resolution stays the
    * host's job, so this option carries the host's capability rather than a
-   * path convention.
+   * path convention. The third argument resolves a specifier in the active
+   * Vite environment with the actual importing id.
    */
-  resolveServerComponentModule?: (specifier: string, importer: string) => string | null;
+  resolveServerComponentModule?: (
+    specifier: string,
+    importer: string,
+    resolve: (specifier: string) => Promise<{
+      id: string;
+      external?: boolean | 'absolute' | 'relative';
+    } | null>,
+  ) =>
+    | string
+    | ResolvedServerComponentSource
+    | null
+    | undefined
+    | Promise<string | ResolvedServerComponentSource | null | undefined>;
   /**
    * The custom-element host tags the host build admitted as @element compiled
    * components: JSX children in a server function component ride
@@ -196,7 +213,7 @@ function createCompiledElementPlugin(options: CompiledElementPluginOptions = {})
     // (which would rewrite JSX into runtime _jsx() calls no lane admits).
     enforce: 'pre',
 
-    transform(code, id) {
+    async transform(code, id) {
       try {
         const moduleId = stableModuleId(id, viteRoot, workspaceRoot);
         // The generated Native Custom Element lane (M09-1) runs first: a
@@ -209,6 +226,18 @@ function createCompiledElementPlugin(options: CompiledElementPluginOptions = {})
                 site: options.generatedElementSite(moduleId),
               })
             : null;
+        const resolveServerModule = options.resolveServerComponentModule;
+        const resolveModule =
+          generated === null && resolveServerModule !== undefined
+            ? await prepareServerComponentImports(
+                code,
+                moduleId,
+                async (specifier) =>
+                  (await resolveServerModule(specifier, moduleId, (target) =>
+                    this.resolve(target, id),
+                  )) ?? undefined,
+              )
+            : undefined;
         // The server function component lane (alpha15) answers for what the
         // generated lane declined: an exported JSX-returning function the
         // compiler lowers into __h/__t/__ssr constructors. The class
@@ -221,14 +250,7 @@ function createCompiledElementPlugin(options: CompiledElementPluginOptions = {})
         const serverCompiled =
           generated === null
             ? compileServerComponentIfAdmitted(code, moduleId, {
-                ...(options.resolveServerComponentModule === undefined
-                  ? {}
-                  : {
-                      resolveModule: (specifier: string) => {
-                        const resolved = options.resolveServerComponentModule!(specifier, moduleId);
-                        return resolved ?? undefined;
-                      },
-                    }),
+                ...(resolveModule === undefined ? {} : { resolveModule }),
                 ...(options.compiledTags === undefined
                   ? {}
                   : { compiledTags: options.compiledTags }),

@@ -408,6 +408,7 @@ test.describe('Site chrome: reading rail scrollspy', () => {
       await outline.click();
       await disclosure.locator(`a[href="${fragment}"]`).click();
       await expect(page).toHaveURL(new RegExp(`${fragment}$`));
+      await expect(target).toBeInViewport();
       const header = await page.getByRole('banner').boundingBox();
       await expect
         .poll(async () => (await target.boundingBox())!.y)

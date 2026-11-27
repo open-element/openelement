@@ -49,7 +49,7 @@
  * LOCAL Node evidence. Not an M13 matrix row, not a public API freeze.
  */
 
-import { createHash } from 'node:crypto';
+import { hashBeforeFormFactorySplit } from './testlib/generated-element-baseline.ts';
 import { describe, expect, test } from 'vitest';
 import {
   compileFunctionModule,
@@ -98,10 +98,6 @@ function site(fragment: string): { file: string; site: GeneratedElementSite } {
 function compileIsland(name: string, source: string): string {
   const fact = site(name);
   return compileGeneratedElementIfAdmitted(source, fact.file, { site: fact.site }).code;
-}
-
-function sha256(text: string): string {
-  return createHash('sha256').update(text).digest('hex');
 }
 
 function codes(error: unknown): string[] {
@@ -361,6 +357,24 @@ const SSR_DEFAULT_SOURCE =
   'export default Root;\n';
 
 describe('16b-CTX context intrinsics — emitted artifact contract (Node)', () => {
+  test('the configured feature imports leave authored binding names available', () => {
+    const source =
+      sidecar('') +
+      "import { useContext } from '@openelement/element';\n" +
+      "import { Theme } from '../ctx-tokens.ts';\n" +
+      'export default function Reader() {\n' +
+      '  const createGeneratedElementContext = useContext(Theme);\n' +
+      '  return <p>{createGeneratedElementContext.value}</p>;\n' +
+      '}\n';
+    const module = compileIsland('ctx-author-binding', source);
+    expect(module).toContain('createGeneratedElementContext as __oe_contextFeature');
+    expect(module).toContain('{ context: __oe_contextFeature }');
+    expect(module).toMatch(/createGeneratedElementContext\s*\.\s*value/);
+    expect(
+      attempt(source.replaceAll('createGeneratedElementContext', '__oe_contextFeature')),
+    ).toBeInstanceOf(CompiledElementError);
+  });
+
   test('C1 the intrinsics are erased: the module imports and calls neither one', () => {
     const module = compileIsland('ctx-erased', ROOT_SOURCE);
     expect(callsAuthoredUseContext(module)).toBe(false);
@@ -473,7 +487,7 @@ describe('16b-CTX context intrinsics — emitted artifact contract (Node)', () =
       '  return <button onClick={() => { globalThis.__e = props.seed; }}>{props.seed}</button>;\n' +
       '}\n' +
       'export default Hooked;\n';
-    expect(sha256(compileIsland('rbase-four', FOUR_INTRINSICS_SOURCE))).toBe(
+    expect(hashBeforeFormFactorySplit(compileIsland('rbase-four', FOUR_INTRINSICS_SOURCE))).toBe(
       '827b9c30395462ca535a5cdfcba9fe063f0abbeb9597842bbd1bfde11f043079',
     );
     const PLAIN_SOURCE =
@@ -482,7 +496,7 @@ describe('16b-CTX context intrinsics — emitted artifact contract (Node)', () =
       '  return <span className="x">{props.seed}</span>;\n' +
       '}\n' +
       'export default Plain;\n';
-    expect(sha256(compileIsland('rbase-plain', PLAIN_SOURCE))).toBe(
+    expect(hashBeforeFormFactorySplit(compileIsland('rbase-plain', PLAIN_SOURCE))).toBe(
       'f42169e087cb7fbb66ac5007244126501eddf2770fd91ce9ab8798375c39b097',
     );
     const LOCAL_SOURCE =
@@ -492,7 +506,7 @@ describe('16b-CTX context intrinsics — emitted artifact contract (Node)', () =
       '  return <em>{doubled}</em>;\n' +
       '}\n' +
       'export default Local;\n';
-    expect(sha256(compileIsland('rbase-local', LOCAL_SOURCE))).toBe(
+    expect(hashBeforeFormFactorySplit(compileIsland('rbase-local', LOCAL_SOURCE))).toBe(
       '11d72ce142ddf6a0895cf1bd137db0ead351b6642e8af4922e7a541a749bf5f1',
     );
     for (const source of [FOUR_INTRINSICS_SOURCE, PLAIN_SOURCE, LOCAL_SOURCE]) {

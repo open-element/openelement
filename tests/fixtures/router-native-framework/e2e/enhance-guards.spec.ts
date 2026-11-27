@@ -20,6 +20,7 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test';
+import { gotoEnhanceReady } from './enhance-ready.ts';
 
 /** Current store action-invocation counter, read off a dynamic page's header. */
 async function actionCount(request: APIRequestContext): Promise<number> {
@@ -51,34 +52,6 @@ async function markerIntact(page: Page, name: string): Promise<void> {
       name,
     ),
   ).toBe(1);
-}
-/**
- * Arm the enhance-readiness recorder BEFORE the first navigation.
- *
- * The enhance client announces `open:enhance-ready` once its ready-time scan
- * has attached the submit interceptor (form-enhance.ts). A listener
- * registered after `page.goto` resolves can miss that announcement — the
- * ready scan runs from DOMContentLoaded, before the navigation is reported
- * settled — so the recorder is installed as an init script that runs before
- * any page script.
- */
-async function armEnhanceReady(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    document.addEventListener(
-      'open:enhance-ready',
-      () => {
-        (window as unknown as { __enhanceReady?: boolean }).__enhanceReady = true;
-      },
-      { once: true },
-    );
-  });
-}
-
-/** Resolve only after that announcement: the submit interceptor is attached. */
-async function waitForEnhanceReady(page: Page): Promise<void> {
-  await page.waitForFunction(
-    () => (window as never as { __enhanceReady?: boolean }).__enhanceReady === true,
-  );
 }
 
 test.describe('9. submitter formaction override -> named action', () => {
@@ -137,9 +110,7 @@ test.describe('10. forms the enhancement must NOT intercept', () => {
     // enhancement once its ready-time scan has run. Without this, a click
     // delivered early falls back to a native submission and the assertion
     // would be describing a pre-enhance page.
-    await armEnhanceReady(page);
-    await page.goto('/playground');
-    await waitForEnhanceReady(page);
+    await gotoEnhanceReady(page, '/playground');
     await markWindow(page, '__prePlain');
     const enhancedPosts: string[] = [];
     page.on('request', (r) => {

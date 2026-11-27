@@ -2,14 +2,15 @@
 /**
  * @openelement/router - the `openelement` lifecycle CLI.
  *
- * One entry, two bin names, three subcommands (plus version/help). `build` and
+ * One entry, two bin names, four subcommands (plus version/help). `build` and
  * `start` are also packaged subpath entries (`./cli/build`, `./cli/start`);
  * `dev` is bin-only (no app imports a dev server) but rides the same
  * dispatcher. Each subcommand body is exactly the module it dispatches to:
  *
  *   openelement dev              -> ./dev.ts (Vite dev server: SSR + HMR)
  *   openelement build            -> ./build.ts (buildApp: SSG + client phases)
- *   openelement start            -> ./start.ts (serve dist/ over node:http)
+ *   openelement start            -> ./start.ts (serve dist-public/ over node:http)
+ *   openelement publish --check  -> verify the static deployment snapshot
  *   openelement start --mode=preview
  *                                -> ./start.ts with the mode flag passed
  *                                   through (static-only; refuses a build
@@ -56,6 +57,7 @@ const USAGE = [
   '                         production build (SSG + client) into dist/; the',
   '                         diagnostics flags add a machine-readable report',
   '  start [--mode=preview] serve the built output; preview is static-only',
+  '  publish --check        verify the public upload directory',
   '  version                print the router package version',
   '',
   'Options:',
@@ -98,6 +100,23 @@ async function main(): Promise<void> {
   if (command === 'start') {
     const { runServeCli } = await import('./start.ts');
     await runServeCli(rest);
+    return;
+  }
+  if (command === 'publish') {
+    if (rest.length !== 1 || rest[0] !== '--check') {
+      console.error('Usage: oe publish --check');
+      process.exit(2);
+    }
+    const { checkPublishOutput } = await import('../vite/internal/publish-manifest.ts');
+    const { DEFAULT_OUT_DIR } = await import('../vite/internal/paths.ts');
+    try {
+      const { root, files } = checkPublishOutput(DEFAULT_OUT_DIR);
+      console.log(`Verified ${files.size} public files in ${root}/.`);
+    } catch (error) {
+      const { formatError } = await import('@openelement/element');
+      console.error(formatError(error));
+      process.exit(1);
+    }
     return;
   }
   if (command === 'version' || command === '--version' || command === '-v') {

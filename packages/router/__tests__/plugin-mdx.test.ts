@@ -92,7 +92,7 @@ test('mdxToCompiledPageSource fails closed outside the static subset', () => {
   );
 });
 
-test('mdxToCompiledPageSource output passes through the compiler unchanged in shape', () => {
+test('mdxToCompiledPageSource output passes through the compiler unchanged in shape', async () => {
   const tsx = mdxToCompiledPageSource('# Title\n\nBody text.\n', '/project/app/routes/title.mdx');
   // The plugin needs the host's site fact to admit a GENERATED module (the same
   // fact the router passes in a real build); without it the lane declines and the
@@ -102,7 +102,7 @@ test('mdxToCompiledPageSource output passes through the compiler unchanged in sh
       moduleId.includes('title') ? { tag: 'title-page' } : null,
   }).transform;
   expect(typeof transform === 'function').toBeTruthy();
-  const result = transform.call(
+  const result = (await transform.call(
     {
       error: (message: string): never => {
         throw new Error(message);
@@ -110,7 +110,7 @@ test('mdxToCompiledPageSource output passes through the compiler unchanged in sh
     } as never,
     tsx,
     '/project/app/routes/title.mdx.tsx',
-  ) as { code: string } | null;
+  )) as { code: string } | null;
   // The standalone compiledElementPlugin returns the compiled module ({code,map}).
   expect(typeof result?.code === 'string').toBeTruthy();
   // The lowered module compiles through the GENERATED lane now, so the artifact is
