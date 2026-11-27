@@ -1,7 +1,7 @@
 /** Lower server component JSX to the tree and Parts consumed by its emitter. */
 
 import ts from 'typescript';
-import { CompiledElementError, sourceRange } from './compiler-diagnostics.ts';
+import { CompiledElementError } from './compiler-diagnostics.ts';
 import { diagnosticAt } from './diagnostics/index.ts';
 import {
   type CompiledField,
@@ -16,12 +16,8 @@ import {
   conditionLiteralAllowed,
   type ConditionOperator,
   type ProgramCondition,
-  type ProgramDependencyRecord,
   type ProgramLocation,
-  type ProgramLocationRecord,
   type ProgramPart,
-  type ProgramBlockRecord,
-  type ProgramSourceRecord,
   type ProgramTreeNode,
   type PropertyValueType,
   VOID_TAGS,
@@ -220,10 +216,6 @@ function hasMeaningfulJsxChild(sf: ts.SourceFile, child: ts.JsxChild): boolean {
 
 export class Lowering {
   readonly parts: ProgramPart[] = [];
-  readonly blocks: ProgramBlockRecord[] = [];
-  readonly dependencies: ProgramDependencyRecord[] = [];
-  readonly locations: ProgramLocationRecord[] = [];
-  readonly sourceRecords: ProgramSourceRecord[] = [];
   readonly fieldNames: Set<string>;
   readonly fieldTypes: Map<string, PropertyValueType>;
   /** Inline conditional class expressions indexed by their synthetic Part signal. */
@@ -254,7 +246,7 @@ export class Lowering {
    * Server-lane await text slots (element id → the expression the constructor
    * emitter splices in place of a tag). The text is built only from the
    * admitted await grammar, then wrapped in `__t`, so it crosses the one
-   * text escape. Absent on the class path.
+   * text escape.
    */
   readonly serverExpressionSlots = new Map<string, string>();
   private readonly server: ServerComponentBindings;
@@ -288,16 +280,8 @@ export class Lowering {
     }
   }
 
-  private addSource(id: string, kind: ProgramSourceRecord['kind'], node: ts.Node): void {
-    if (this.sourceRecords.some((record) => record.id === id)) return;
-    this.sourceRecords.push({ id, kind, source: sourceRange(this.sf, node) });
-  }
-
-  private reserveElement(tag: string, path: number[], node: ts.Node): string {
-    const id = `e${this.elementSerial++}`;
-    this.locations.push({ id, kind: 'element', tag, path: [...path] });
-    this.addSource(id, 'element', node);
-    return id;
+  private nextElementId(): string {
+    return `e${this.elementSerial++}`;
   }
 
   private addElement(
@@ -317,12 +301,7 @@ export class Lowering {
     };
   }
 
-  private addPart(
-    part: ProgramPartInput,
-    path: number[],
-    node: ts.Node,
-    targetNode?: string,
-  ): number {
+  private addPart(part: ProgramPartInput, path: number[], targetNode?: string): number {
     const index = this.parts.length;
     const isAnchor = part.k === 'text' || part.k === 'when' || part.k === 'each';
     const location: ProgramLocation = {
@@ -331,49 +310,7 @@ export class Lowering {
       path: [...path],
       ...(targetNode ? { node: targetNode } : {}),
     };
-    const fullPart = { ...part, index, location } as ProgramPart;
-    this.parts.push(fullPart);
-    if (isAnchor) {
-      this.locations.push({ id: `p${index}`, kind: 'anchor', part: index, path: [...path] });
-    } else {
-      this.locations.push({
-        id: `p${index}`,
-        kind: 'sink',
-        part: index,
-        node: targetNode!,
-        path: [...path],
-      });
-    }
-    const sourceKind = part.k === 'when' || part.k === 'each' ? 'region' : 'part';
-    this.addSource(`p${index}`, sourceKind, node);
-    if (part.k === 'when' || part.k === 'each') {
-      this.blocks.push({
-        id: `r${index}`,
-        index,
-        kind: part.k,
-        anchor: `p${index}`,
-        end: `p${index}:end`,
-        source: `p${index}`,
-      });
-      this.addSource(`r${index}`, 'region', node);
-    }
-    if (
-      part.k === 'text' ||
-      part.k === 'prop' ||
-      part.k === 'attr' ||
-      part.k === 'bool' ||
-      part.k === 'class' ||
-      part.k === 'style' ||
-      part.k === 'html' ||
-      part.k === 'when' ||
-      part.k === 'each'
-    ) {
-      this.dependencies.push({
-        signal: part.signal,
-        owner: { kind: part.k === 'when' || part.k === 'each' ? 'region' : 'part', index },
-        location: `p${index}`,
-      });
-    }
+    this.parts.push({ ...part, index, location } as ProgramPart);
     return index;
   }
 
@@ -474,8 +411,7 @@ export class Lowering {
    * `Promise<...>` read at a text or attribute sink. The check is on the READ,
    * never on the declaration — `{await props.<field>}` is the sanctioned
    * spelling and splices through {@link serverAwaitExpression}, which never
-   * reaches this guard. Server mode only: the class path has no promise-field
-   * table, so its diagnostics do not move.
+   * reaches this guard.
    */
   private refusePromiseField(
     expr: ts.Expression,
@@ -528,13 +464,9 @@ export class Lowering {
   ): ProgramTreeNode {
     const tag = tagNameNode.getText(this.sf);
     // Server function components (alpha15 server lane): an uppercase JSX tag
-    // is a nested server function component — composed by a DIRECT function
-    // call to the imported binding, resolved at compile time from the
-    // authored imports. The class grammar rejects identifier tags
-    // (composition by tag name); the server lane's composition channel is the
-    // import, so the same walk branches here before the intrinsic-tag rule.
+    // An uppercase tag calls an imported server function component directly.
     if (ts.isIdentifier(tagNameNode) && /^[A-Z]/.test(tag)) {
-      return this.lowerComponentElement(tagNameNode, attributes, children, path, sourceNode);
+      return this.lowerComponentElement(tagNameNode, attributes, children, path);
     }
     // alpha.8: custom-element hosts (<x-y>) are admitted as nested hosts — the
     // page/layout composition renders them as host tags that the server entry
@@ -555,7 +487,7 @@ export class Lowering {
     const tagReason = forbiddenSinkReason('tag', tag);
     if (tagReason !== null) this.fail(tagNameNode, 'OEC9010', tagReason);
     const attrs: Array<[string, string]> = [];
-    const elementId = this.reserveElement(tag, path, sourceNode);
+    const elementId = this.nextElementId();
     // Server function components: a build-admitted compiled host renders
     // through `__ssr` — the component path's literal runtime function. The
     // recording rides the ordinary host walk (attributes cross as raw props).
@@ -720,7 +652,7 @@ export class Lowering {
                 'the shared deny list on every boundary; rename the attribute',
             );
           }
-          this.addPart({ k: 'prop', signal: field, name, path }, path, prop, elementId);
+          this.addPart({ k: 'prop', signal: field, name, path }, path, elementId);
           continue;
         }
         this.lowerDynamicAttribute(name, field, tag, path, prop, elementId, trustedHtmlCapability);
@@ -778,12 +710,6 @@ export class Lowering {
     return this.addElement(elementId, tag, attrs, lowered);
   }
 
-  /**
-   * The one children walk both the class path and the server component
-   * branch share: JSX text cleaning, expression children (field read /
-   * literal / when / each), nested elements, and the fragments-and-spreads
-   * rejection. `elementPath` is the owning element's own address.
-   */
   private lowerChildren(
     children: ts.JsxChild[],
     staticOnly: boolean,
@@ -845,7 +771,6 @@ export class Lowering {
     attributes: ts.JsxAttributes,
     children: ts.JsxChild[],
     path: number[],
-    sourceNode: ts.Node,
   ): ProgramTreeNode {
     const name = tagNameNode.getText(this.sf);
     const local = this.server.components.get(name);
@@ -866,7 +791,7 @@ export class Lowering {
           'because HTML is built only after the child settles. Mark the parent async.',
       );
     }
-    const elementId = this.reserveElement(local, path, sourceNode);
+    const elementId = this.nextElementId();
     const propsEntries: Array<[string, string]> = [];
     for (const prop of attributes.properties) {
       if (ts.isJsxSpreadAttribute(prop)) {
@@ -976,7 +901,7 @@ export class Lowering {
     while (this.fieldNames.has(name)) name = `_${name}`;
     this.fieldNames.add(name);
     this.synthesizedFields.push({ name, computed: { body: expr } });
-    this.addPart({ k: 'class', signal: name, path }, path, sourceNode, elementId);
+    this.addPart({ k: 'class', signal: name, path }, path, elementId);
   }
 
   private lowerDynamicAttribute(
@@ -995,10 +920,10 @@ export class Lowering {
     // attribute branch, exactly what the pre-extraction fallthrough did.
     switch (classifyIntrinsicAttribute(name, tag)) {
       case 'class':
-        this.addPart({ k: 'class', signal, path }, path, sourceNode, elementId);
+        this.addPart({ k: 'class', signal, path }, path, elementId);
         return;
       case 'style':
-        this.addPart({ k: 'style', signal, path }, path, sourceNode, elementId);
+        this.addPart({ k: 'style', signal, path }, path, elementId);
         return;
       case 'html':
         // Trusted-HTML sink: the marker admits the sink at compile time and the
@@ -1025,7 +950,7 @@ export class Lowering {
               'container element (e.g. <div>)',
           );
         }
-        this.addPart({ k: 'html', signal, path }, path, sourceNode, elementId);
+        this.addPart({ k: 'html', signal, path }, path, elementId);
         return;
       case 'boolean':
         if (forbiddenSinkReason('bool', name) !== null) {
@@ -1036,7 +961,7 @@ export class Lowering {
               'event handlers (on*) or forbidden sinks; use an admitted attribute name',
           );
         }
-        this.addPart({ k: 'bool', signal, name, path }, path, sourceNode, elementId);
+        this.addPart({ k: 'bool', signal, name, path }, path, elementId);
         return;
       case 'property':
         if (forbiddenSinkReason('prop', name) !== null) {
@@ -1047,7 +972,7 @@ export class Lowering {
               'shared deny list on every boundary; rename the sink',
           );
         }
-        this.addPart({ k: 'prop', signal, name, path }, path, sourceNode, elementId);
+        this.addPart({ k: 'prop', signal, name, path }, path, elementId);
         return;
       case 'event':
       case 'key':
@@ -1061,7 +986,7 @@ export class Lowering {
               'event handlers (on*) or forbidden sinks; use an admitted attribute name',
           );
         }
-        this.addPart({ k: 'attr', signal, name, path }, path, sourceNode, elementId);
+        this.addPart({ k: 'attr', signal, name, path }, path, elementId);
         return;
     }
   }
@@ -1115,7 +1040,7 @@ export class Lowering {
     }
     if (ts.isAwaitExpression(expr)) {
       if (staticOnly) this.fail(child, 'OEC9032', serverAwaitRefusal('staticBranch'));
-      const id = this.reserveElement('slot', path, child);
+      const id = this.nextElementId();
       this.serverExpressionSlots.set(id, `__t(${this.serverAwaitExpression(expr)})`);
       return this.addElement(id, 'slot', [], []);
     }
@@ -1136,7 +1061,7 @@ export class Lowering {
             'attribute (e.g. data-label={this.<property>})',
         );
       }
-      const index = this.addPart({ k: 'text', signal: field }, path, child);
+      const index = this.addPart({ k: 'text', signal: field }, path);
       return { k: 'part', id: `p${index}`, index };
     }
     const literal = literalValue(expr, this.sf);
@@ -1158,7 +1083,6 @@ export class Lowering {
       const index = this.addPart(
         { k: 'when', signal: test.signal, test, on: [on], off: [off] },
         path,
-        child,
       );
       return { k: 'part', id: `p${index}`, index };
     }
@@ -1319,7 +1243,7 @@ export class Lowering {
     if (!key) this.fail(body, 'OEC9014', 'list Block items require key={<item>.<field>}');
 
     const itemFields: string[] = [];
-    const item = this.lowerItemElement(body, param, itemFields, [], true);
+    const item = this.lowerItemElement(body, param, itemFields, true);
     const uniqueFields = [...new Set(itemFields)];
     if (uniqueFields.length === 0) {
       this.fail(
@@ -1339,7 +1263,6 @@ export class Lowering {
         item: [item],
       },
       path,
-      near,
     );
     return { k: 'part', id: `p${index}`, index };
   }
@@ -1348,7 +1271,6 @@ export class Lowering {
     element: ts.JsxElement | ts.JsxSelfClosingElement,
     param: string,
     itemFields: string[],
-    path: number[],
     allowKey = false,
   ): ProgramTreeNode {
     const tagName = ts.isJsxElement(element) ? element.openingElement.tagName : element.tagName;
@@ -1371,7 +1293,7 @@ export class Lowering {
     }
     const itemTagReason = forbiddenSinkReason('tag', tag);
     if (itemTagReason !== null) this.fail(tagName, 'OEC9010', itemTagReason);
-    const elementId = this.reserveElement(tag, path, element);
+    const elementId = this.nextElementId();
     const attrs: Array<[string, string]> = [];
     const iattrs: Array<[string, string]> = [];
     const attributeNames = new Set<string>();
@@ -1492,7 +1414,6 @@ export class Lowering {
       );
     }
     for (const child of rawChildren) {
-      const childPath = [...path, children.length];
       if (ts.isJsxText(child)) {
         const text = cleanJsxText(child.text);
         if (text !== '') children.push({ k: 'text', value: text });
@@ -1516,7 +1437,7 @@ export class Lowering {
         this.fail(child, 'OEC9013', `item child must be {${param}.<field>}`);
       }
       if (ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child)) {
-        children.push(this.lowerItemElement(child, param, itemFields, childPath));
+        children.push(this.lowerItemElement(child, param, itemFields));
         continue;
       }
       this.fail(

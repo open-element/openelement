@@ -1,13 +1,4 @@
-/**
- * The expression-and-field primitives the two surviving lanes share with the
- * lowering walk (#1473 split).
- *
- * This module once also carried the `@element` class-shape analysis
- * (decorator options, canonical heritage, the `@property` inventory). That
- * lane is retired: with no parser feeding it, keeping the analysis here would
- * leave a second, unreachable reading of the same module grammar that could
- * drift from the grammar the generated lane actually admits.
- */
+/** Shared expression checks and the field facts read by server lowering. */
 
 import ts from 'typescript';
 import { type CompilerFail } from './compiler-diagnostics.ts';
@@ -17,24 +8,7 @@ import { isSafeAttributeName as canonicalIsSafeAttributeName } from '@openelemen
 /** The property inventory a caller hands the lowering walk. */
 export interface CompiledField {
   name: string;
-  reflect: boolean;
-  attribute: string | null;
   type: PropertyValueType;
-  converter: PropertyValueType;
-  typeConstructor: 'String' | 'Number' | 'Boolean' | 'Array' | 'Object';
-  accessibility: 'public' | 'protected' | 'private' | '';
-  typeText: string;
-  initializerText: string;
-  defaultValue: SerializableValue;
-  node: ts.PropertyDeclaration;
-  /**
-   * Computed field (alpha.8): the source initializer is
-   * `computed(() => <expr>)` (optionally behind a type assertion). The
-   * compiled accessor returns the derived value. The compiler records the
-   * source-signal dependencies and emits a `__computedFields` factory over the
-   * instance's signal record; no field initializer runs on the generated class.
-   */
-  computed?: { deps: string[]; factoryText: string; body: ts.Expression };
 }
 
 /** The compiler face of the one canonical attribute-name predicate. */
