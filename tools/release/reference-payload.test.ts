@@ -105,6 +105,23 @@ describe('Client payload closure', () => {
     );
   });
 
+  test.each(['</ScRiPt \t\n\f\r>', '</script/>', '</script data-note="1 > 0">'])(
+    'accounts for external scripts and rejects inline code ending with %j',
+    (endTag) => {
+      const baseline = referencePayloadUrls(viteManifest, browser, html, page);
+      const manifest = { ...viteManifest, preload: { file: 'preload.js' } };
+      const external = `${html}<script src="/client/settings.js">${endTag}
+<link rel="modulepreload" href="/client/preload.js">`;
+      expect(referencePayloadUrls(manifest, browser, external, page).home).toEqual(
+        new Set([...baseline.home, '/client/settings.js', '/client/preload.js']),
+      );
+      const inline = `${html}<script>void 0;${endTag}`;
+      expect(() => referencePayloadUrls(viteManifest, browser, inline, page)).toThrow(
+        'Reference home has executable inline JavaScript',
+      );
+    },
+  );
+
   test('rejects a missing Vite edge and a stale page manifest', () => {
     const missingControls = { ...viteManifest };
     delete missingControls.controls;

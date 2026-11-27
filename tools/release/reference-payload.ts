@@ -35,7 +35,11 @@ function documentScripts(html: string): Set<string> {
   // This is the reference starter's emitted HTML. Fail if it starts shipping
   // inline code, whose gzip transfer cannot be separated from the HTML.
   const urls = new Set<string>();
-  for (const [, attributes, content] of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
+  // HTML accepts whitespace, a slash, and ignored attributes on a script end
+  // tag. A quoted attribute value can itself contain a greater-than sign.
+  const scripts =
+    /<script(?=[\t\n\f\r />])([^>]*)>([\s\S]*?)<\/script(?=[\t\n\f\r />])(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
+  for (const [, attributes, content] of html.matchAll(scripts)) {
     const type = htmlAttribute(attributes, 'type')?.toLowerCase();
     if (type && !['module', 'text/javascript', 'application/javascript'].includes(type)) continue;
     const src = htmlAttribute(attributes, 'src');
