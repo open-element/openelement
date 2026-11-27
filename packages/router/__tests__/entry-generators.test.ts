@@ -101,12 +101,12 @@ test('zero islands + enhancedForms emits the enhancement layer (#569)', () => {
   const code = generateClientEntry([], { enhancedForms: true });
   expect(!code.includes('zero client JS needed')).toBeTruthy();
   // #868: the runtime is a real bundled module — the entry wires it.
-  expect(code.includes('createEnhanceClient'), 'enhancement runtime is wired').toBeTruthy();
+  expect(code.includes('observeFormEnhancement'), 'enhancement runtime is wired').toBeTruthy();
   expect(
     code.includes('virtual:open-client-runtime/enhance'),
     'enhance import emitted',
   ).toBeTruthy();
-  expect(code.includes('scanSubmitRoots'), 'submit interception wiring is emitted').toBeTruthy();
+  expect(code.includes('__scanEnhancement'), 'submit interception wiring is emitted').toBeTruthy();
   assertEntrySyntax(code);
 });
 
@@ -331,15 +331,14 @@ test('client entry includes the ADR-0120 form enhancement layer', () => {
     [{ tagName: 'x-counter', modulePath: './counter.ts', strategy: 'load' }],
     { enhancedForms: true },
   );
-  // #868: the runtime is the real enhance-client.ts module, bundled via the
-  // virtual specifier — the entry wires it (behavior is unit-tested against
-  // the module in __tests__/enhance-client.test.ts).
-  expect(code.includes('createEnhanceClient')).toBeTruthy();
+  // The entry wires the form loader, which discovers the document capability
+  // before evaluating the separate enhancement runtime.
+  expect(code.includes('observeFormEnhancement')).toBeTruthy();
   expect(code.includes('virtual:open-client-runtime/enhance')).toBeTruthy();
   expect(code.includes('actionHeader: "x-openelement-action"')).toBeTruthy();
   // Wiring for ADR-0121: submit listeners attach per shadow root, late-hydrate
   // rescan after island loads, and the scheduler hook.
-  expect(code.includes('scanSubmitRoots(document)')).toBeTruthy();
+  expect(code.includes('__scanEnhancement()')).toBeTruthy();
   expect(code.includes('observeVisible: __scheduler.observeVisible')).toBeTruthy();
   // The entry must NOT carry the runtime internals inline any more (#868).
   expect(!code.includes('attachSubmit')).toBeTruthy();
@@ -366,12 +365,12 @@ test('islands without enhancedForms omit the enhancement layer (#569 complement)
     { tagName: 'x-counter', modulePath: './counter.ts', strategy: 'load' },
   ]);
   expect(code.includes('live-counter') === false).toBeTruthy(); // sanity: only x-counter
-  expect(!code.includes('createEnhanceClient')).toBeTruthy();
+  expect(!code.includes('observeFormEnhancement')).toBeTruthy();
   expect(!code.includes('virtual:open-client-runtime/enhance')).toBeTruthy();
   expect(code.includes('the form enhancement layer is omitted')).toBeTruthy();
-  // #597: the scheduler must not reference scanSubmitRoots when the enhance
+  // #597: the scheduler must not reference __scanEnhancement when the enhance
   // layer is omitted — that symbol only exists in the enhance module.
-  expect(!code.includes('scanSubmitRoots')).toBeTruthy();
+  expect(!code.includes('__scanEnhancement')).toBeTruthy();
 });
 
 test('#597/#584 late-hydrate rescan only when enhancedForms', () => {
@@ -379,10 +378,10 @@ test('#597/#584 late-hydrate rescan only when enhancedForms', () => {
     [{ tagName: 'x-counter', modulePath: './counter.ts', strategy: 'load' }],
     { enhancedForms: true },
   );
-  expect(withEnhance.includes('scanSubmitRoots(document)')).toBeTruthy();
+  expect(withEnhance.includes('__scanEnhancement()')).toBeTruthy();
   const without = generateClientEntry(
     [{ tagName: 'x-counter', modulePath: './counter.ts', strategy: 'load' }],
     { enhancedForms: false },
   );
-  expect(!without.includes('scanSubmitRoots')).toBeTruthy();
+  expect(!without.includes('__scanEnhancement')).toBeTruthy();
 });

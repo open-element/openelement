@@ -1,13 +1,8 @@
 /**
  * enhance-client.ts - data-open-enhance browser runtime.
  *
- * Single source of truth for the form-enhancement and morph client (#610):
- * the generated client entry imports this module through the
- * virtual:open-client-runtime specifier (resolved by build-client.ts) and the
- * bundler wires it in — there is no string copy to drift, and the logic
- * carries normal unit tests (__tests__/enhance-client.test.ts). The module
- * stays import-free and touches browser globals only through the injected
- * deps, so it bundles into any consumer build unchanged.
+ * Composes submit interception and morphing. The document's form loader
+ * dynamically imports this module when it finds a marked form.
  *
  * Forms marked data-open-enhance submit via fetch and the returned document
  * is morphed into the live tree — INSIDE the page element's shadow root,
@@ -45,7 +40,7 @@ interface EnhanceLogger {
   warn: (...args: unknown[]) => void;
 }
 
-interface EnhanceClientDeps {
+export interface EnhanceClientDeps {
   log: EnhanceLogger;
   /** Island tag names (lowercase) — survival checks treat them specially. */
   tags: readonly string[];
@@ -60,7 +55,7 @@ interface EnhanceClientDeps {
   observeVisible: () => void;
 }
 
-interface EnhanceClient {
+export interface EnhanceClient {
   /**
    * Attach the submit interceptor to every current shadow root. Idempotent;
    * runs at ready time, after every morph (new hosts may appear), and after

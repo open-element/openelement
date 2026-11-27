@@ -74,7 +74,8 @@ test.each([false, true])(
     expect(entry).toContain(ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER);
     expect(entry).toContain('__installDeepFragments();');
     expect(entry).toContain('__installPreHydrationCapture(document, __tags);');
-    expect(entry).toContain('createEnhanceClient');
+    expect(entry).toContain('observeFormEnhancement');
+    expect(entry).not.toContain('createEnhanceClient');
     expect(entry).not.toContain('__loadElementRuntime');
     expect(entry).not.toContain('element-services');
   },

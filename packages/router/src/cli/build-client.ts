@@ -1059,7 +1059,7 @@ async function buildClient(
             return runtimeModulePath('./ssg/island-scheduler.ts');
           }
           if (id === VIRTUAL_RUNTIME_SPECIFIERS.enhance) {
-            return runtimeModulePath('./ssg/enhance-client.ts');
+            return runtimeModulePath('./ssg/form-enhancement-loader.ts');
           }
           // The generated entry reaches document services
           // through a stable virtual id (so the emitted entry text is

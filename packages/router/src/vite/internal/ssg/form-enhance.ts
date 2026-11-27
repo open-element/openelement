@@ -13,6 +13,7 @@
  *      in shadow roots).
  */
 
+import { markEnhancedNavigation } from './enhanced-history.ts';
 import type { IslandLifecycle } from './island-lifecycle.ts';
 import type { MorphAlign } from './morph-align.ts';
 
@@ -161,24 +162,6 @@ export function createFormEnhance(deps: FormEnhanceDeps): FormEnhance {
     }
   }
 
-  // #578: the marker lives in sessionStorage so it survives a page reload
-  // (a memory variable resets, and Back after a reload would show stale
-  // content for the restored URL — the exact thing §10 forbids).
-  const NAV_KEY = 'openelement:enhanced-nav';
-  function markEnhancedNav(): void {
-    try {
-      win.sessionStorage.setItem(NAV_KEY, '1');
-    } catch {
-      /* privacy modes */
-    }
-  }
-  function hasEnhancedNav(): boolean {
-    try {
-      return win.sessionStorage.getItem(NAV_KEY) === '1';
-    } catch {
-      return false;
-    }
-  }
   function onSubmit(event: Event): void {
     const form = event.target as HTMLFormElement;
     if (!(form instanceof win.HTMLFormElement)) return;
@@ -309,7 +292,7 @@ export function createFormEnhance(deps: FormEnhanceDeps): FormEnhance {
               target.pathname === win.location.pathname && target.search === win.location.search;
             const finalUrl = target.href + (samePage && !target.hash ? win.location.hash : '');
             if (finalUrl !== win.location.href) {
-              markEnhancedNav();
+              markEnhancedNavigation(win);
               win.history.pushState({}, '', finalUrl);
             }
             return;
@@ -355,21 +338,6 @@ export function createFormEnhance(deps: FormEnhanceDeps): FormEnhance {
   } else {
     readyScan();
   }
-
-  // Enhanced navigation is pushState-based; back/forward
-  // reloads the restored URL so content never disagrees with the address bar.
-  // The guard keeps the listener inert on pages that never enhanced-navigated
-  // (e.g. sites running their own client-side routing on the same bundle);
-  // the marker persists across reloads via sessionStorage (#578).
-  win.addEventListener('popstate', () => {
-    if (hasEnhancedNav()) win.location.reload();
-  });
-  // bfcache restores do not fire popstate (Firefox restores the morphed
-  // document as-is); a persisted pageshow with the marker set is the same
-  // situation and must also reload.
-  win.addEventListener('pageshow', (event) => {
-    if ((event as PageTransitionEvent).persisted && hasEnhancedNav()) win.location.reload();
-  });
 
   return { scanSubmitRoots: scanSubmitRoots };
 }

@@ -182,9 +182,8 @@ export interface DevLiveStyleSheetGroup {
 
 interface GenerateClientEntryOptions {
   /**
-   * True when any page route carries data-open-enhance (#569): emit the form
-   * enhancement layer even with zero islands, so enhanced forms are not
-   * silently left as plain no-JS posts.
+   * The app declares enhanced forms (#569). Include the capability even
+   * without islands. Each document discovers forms before fetching the runtime.
    */
   enhancedForms?: boolean;
   /** Build/dev callers supply the whole merged client-entry island inventory. */
@@ -402,7 +401,7 @@ var __oeAttachDevLiveStyles = function (Ctor, tag) {
   const documentServicesImport = `import { ensureDeepFragmentNavigation as __installDeepFragments, ensurePreHydrationClickCapture as __installPreHydrationCapture } from '${ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER}';\n`;
   const enhanceImport =
     options.enhancedForms === true
-      ? `import { createEnhanceClient } from '${VIRTUAL_RUNTIME_SPECIFIERS.enhance}';\n`
+      ? `import { observeFormEnhancement } from '${VIRTUAL_RUNTIME_SPECIFIERS.enhance}';\n`
       : '';
   const importsBlock = `${schedulerImport}
 ${documentServicesImport}${enhanceImport}
@@ -436,27 +435,16 @@ var __scheduler = __schedule({
 ${mediaEntries.length > 0 ? `  mediaQueries: {\n${mediaQueries}\n  },\n` : ''}
 ${
   options.enhancedForms === true
-    ? `  // #584: late-hydrating islands create their shadow roots after the
-  // ready-time scan; rescan so enhanced forms inside them are heard.
-  // #604: a definition that lands after the morph repaired nothing at
-  // insertion time (no constructor existed yet), so the same WebKit repair
-  // runs again here — the moment the element can actually upgrade.
-  onIslandLoaded: function () { __enhance.repairUpgrades(document); __enhance.scanSubmitRoots(document); },`
+    ? '  onIslandLoaded: function () { __scanEnhancement(); },'
     : '  // #597: no enhance layer — no submit-root rescan after island loads.\n  onIslandLoaded: null,'
 }
 }${schedulerOptions});
 
 ${
   options.enhancedForms === true
-    ? `// Form enhancement:
-// forms marked data-open-enhance submit via fetch and the returned document
-// is morphed into the live tree — INSIDE the page element's shadow root,
-// which is where page content lives under DSD. Without JavaScript the same
-// form is a native POST (303/422 HTML), so behavior degrades to the browser
-// by construction. Runtime: enhance-client.ts (bundled via #868).
-var __enhance = createEnhanceClient({
+    ? `// Load enhancement when a marked form exists in this document.
+var __scanEnhancement = observeFormEnhancement({
   log: log,
-  // Islands only: a page root is morphed through its DSD shadow tree below.
   tags: __tags,
   actionHeader: ${quoteGeneratedJavaScriptValue(ACTION_FETCH_HEADER)},
   win: window,

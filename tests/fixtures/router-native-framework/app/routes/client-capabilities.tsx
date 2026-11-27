@@ -13,6 +13,7 @@ export function ClientCapabilities(props: { mode: string; message: string }) {
     <main>
       <h1>Client capabilities</h1>
       {props.mode === 'island' ? <note-counter></note-counter> : <span hidden></span>}
+      {props.mode === 'late-form' ? <late-form></late-form> : <span hidden></span>}
       {props.mode === 'form' ? (
         <form method="post" data-open-enhance>
           <button type="submit">Submit</button>
