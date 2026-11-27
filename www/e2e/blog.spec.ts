@@ -56,6 +56,7 @@ test.describe('Blog pages with JavaScript disabled', () => {
       );
       await expect(content.locator('time')).toHaveText(date);
       const article = content.getByRole('link', { name: title, exact: true });
+      await article.scrollIntoViewIfNeeded();
       // The cross-document transition can still intercept pointer input after the page loads.
       await expect
         .poll(() =>
