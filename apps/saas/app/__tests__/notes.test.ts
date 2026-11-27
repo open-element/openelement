@@ -11,6 +11,7 @@ import { NOTES_HTML_BUDGET_BYTES, NOTES_PAGE_SIZE } from '../../lib/notes-pagina
 import { compileFunctionPage } from './compile-page.ts';
 
 const {
+  createLogoutAction,
   createNoteAction,
   createNotesLoader,
   MAX_NOTE_BODY_LENGTH,
@@ -243,4 +244,36 @@ test('create note returns database/RLS errors as 422 without redirecting', async
   expect(isActionFailure(result)).toBeTruthy();
   expect(result.status).toEqual(422);
   expect(result.data?.error).toEqual('row level security');
+});
+
+test('failed sign-out renders a retry and keeps subsequent Notes requests protected', async () => {
+  const logout = createLogoutAction(() => ({
+    auth: { signOut: () => Promise.resolve({ error: { message: 'Private provider detail' } }) },
+  }));
+  const request = new Request('http://localhost/notes?/logout', { method: 'POST' });
+  const context = { ...ctx(), request };
+  const result = await logout(context);
+  expect(isActionFailure(result)).toBe(true);
+  expect(result.status).toBe(409);
+  const loadNotes = createNotesLoader(stubClient({ user: null }));
+  const data = await loadNotes(context);
+  expect(data).toEqual({ denied: true });
+  const html = await renderNotesPageFunction(
+    notesPageProps({ ...context, data, actionData: result.data, meta: {} }),
+  );
+  expect(html).toContain('role="alert">Could not sign out. Try again.');
+  expect(html).toContain('Sign out');
+  expect(html).not.toContain('Private provider detail');
+  const redirect = await assertRejectsIncludes(() =>
+    loadNotes({ ...ctx(), request: new Request(request.url) }),
+  );
+  expect(isOpenElementRedirect(redirect) && redirect.location).toBe('/login');
+});
+
+test('successful sign-out keeps the sign-in redirect', async () => {
+  const logout = createLogoutAction(() => ({
+    auth: { signOut: () => Promise.resolve({ error: null }) },
+  }));
+  const redirect = await assertRejectsIncludes(() => logout(ctx()));
+  expect(isOpenElementRedirect(redirect) && redirect.location).toBe('/login');
 });

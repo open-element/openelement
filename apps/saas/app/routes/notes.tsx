@@ -54,7 +54,9 @@ export function NotesPage(props: {
       <h1>Notes</h1>
       <p id='who'>{props.whoText}</p>
       <p id='error'>{props.errorText}</p>
-      <p id='action-error'>{props.actionErrorText}</p>
+      <p id='action-error' role='alert'>
+        {props.actionErrorText}
+      </p>
       <form method='post' action='/notes?/create' data-open-enhance>
         <p>
           <label>

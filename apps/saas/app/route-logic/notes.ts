@@ -95,8 +95,13 @@ export type NotesClientFactory = (
 export const MAX_NOTE_TITLE_LENGTH = 120;
 export const MAX_NOTE_BODY_LENGTH = 10_000;
 
+const failedLogoutRequests = new WeakSet<Request>();
+
 export function createNotesLoader(createClient: NotesClientFactory = createServerSupabase) {
   return async function loader(ctx: LoaderContext<Record<string, string>>): Promise<NotesData> {
+    // A native action failure re-runs the loader with the same request. Render
+    // the retry form without another Auth call or any private Notes data.
+    if (failedLogoutRequests.delete(ctx.request)) return { denied: true };
     const supabase = createClient(ctx.env, ctx.request, ctx.responseHeaders);
     const {
       data: { user },
@@ -171,15 +176,23 @@ export function createNoteAction(createClient: NotesClientFactory = createServer
   };
 }
 
-export async function logoutAction(ctx: {
-  env: Record<string, string>;
-  request: Request;
-  responseHeaders: Headers;
-}): Promise<never> {
-  const supabase = createServerSupabase(ctx.env, ctx.request, ctx.responseHeaders);
-  await supabase.auth.signOut();
-  throw redirect('/login');
+type LogoutContext = Pick<LoaderContext, 'env' | 'request' | 'responseHeaders'>;
+type LogoutClientFactory = (...args: Parameters<typeof createServerSupabase>) => {
+  auth: { signOut(): PromiseLike<{ error: { message: string } | null }> };
+};
+
+export function createLogoutAction(createClient: LogoutClientFactory = createServerSupabase) {
+  return async function logout(ctx: LogoutContext) {
+    const { error } = await createClient(ctx.env, ctx.request, ctx.responseHeaders).auth.signOut();
+    if (error) {
+      failedLogoutRequests.add(ctx.request);
+      return fail(409, { error: 'Could not sign out. Try again.' });
+    }
+    throw redirect('/login');
+  };
 }
+
+export const logoutAction = createLogoutAction();
 
 /** Project the notes, cursor and Realtime handoff into request-time page props. */
 export function notesPageProps(context: PagePropsContext<NotesData>): Record<string, unknown> {
