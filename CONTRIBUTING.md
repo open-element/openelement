@@ -91,7 +91,7 @@ cross-system boundaries need a consumer test and an entry in the
 
 Open the failed job in [AutoFlow CI](./.github/workflows/autoflow-ci.yml).
 Base CI checks pull requests and pushes to `main`. The local
-`tools/repo#gate:source` (20 steps: 19 `@`-qualified tasks plus `check:dep-age`)
+`tools/repo#gate:source` (21 steps: 20 `@`-qualified tasks plus `check:dep-age`)
 runs through `vp run verify:core`. Sixteen of those steps also
 run in CI through the fast jobs. The request-time and base-path fixture gates
 run in Full qualification. Run `shims:check` and `adr-index:check` locally.

@@ -33,7 +33,7 @@ With neither set, the origin stays `http://<Host>`, which is correct for a serve
 
 ### Pure static: Cloudflare Pages
 
-To make the starter static-only, remove `renderIntent: { mode: 'dynamic' }` from `app/routes/404.tsx` so the build prerenders `404.html`. Remove the example request-time endpoint `app/routes/api/ping.ts` and its test, `tests/ping.test.ts`. The application must also be free of any other request-time routes and actions before you deploy it as a static-only app.
+To make the starter static-only, remove `renderIntent: { mode: 'dynamic' }` from `app/routes/404.tsx` so the build prerenders `404.html`. Remove the example request-time endpoint `app/routes/api/ping.ts` and the corresponding ping test. The application must also be free of any other request-time routes and actions before you deploy it as a static-only app.
 
 ```bash
 set -e
@@ -112,7 +112,9 @@ npx nitro@3.0.260610-beta build --preset=cloudflare_module
 
 Nitro writes the Worker module to `.output/server/index.mjs`, verified static files to `.output/public/`, and the generated Wrangler config to `.output/server/wrangler.json`. Check that the config enables Node.js compatibility and points `ASSETS` at the packaged public directory. The generated Router entry reads Workers bindings from Nitro's request and makes them available as `ctx.env` in loaders and actions.
 
-With access to the intended Cloudflare account, deploy the verified artifact from the project root with `npx nitro@3.0.260610-beta deploy --prebuilt`. Run the smoke script using the deployed origin. Also confirm a request-time loader can read an expected binding without returning its value. The repository fixture exercises Nitro output locally using a loopback Node server and the generated Worker module with local bindings.
+For a hybrid page such as `/guestbook`, Cloudflare's asset router can return 405 for a POST before the Worker receives it. Set `cloudflare.wrangler.assets.run_worker_first` in the Nitro config to the hybrid page paths, for example `['/guestbook']`. On those paths, forward GET and HEAD in the catch-all to `event.req.runtime.cloudflare.env.ASSETS.fetch(event.req)` when the Workers binding is present. Other methods go to the generated Router handler. Use `cloudflare.wrangler.assets.html_handling: 'drop-trailing-slash'` if Router declares paths such as `/guestbook`, so a form on the served page submits to the same path that owns the action. [Cloudflare asset routing](https://developers.cloudflare.com/workers/static-assets/routing/worker-script/)
+
+The repository fixture verifies the generated Worker over HTTP with Wrangler's local workerd runtime. With access to the intended Cloudflare account, deploy the verified artifact from the project root with `npx nitro@3.0.260610-beta deploy --prebuilt`. Run the smoke script again at the deployed origin and confirm a request-time loader can read an expected binding without returning its value. [Router/Nitro fixture](https://github.com/open-element/openelement/tree/main/tests/fixtures/router-nitro)
 
 ## Dev server
 

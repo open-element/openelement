@@ -33,7 +33,7 @@ npm run dev    # Vite 开发服务器
 
 ### 纯静态：Cloudflare Pages
 
-要将脚手架项目改为纯静态，删除 `app/routes/404.tsx` 中的 `renderIntent: { mode: 'dynamic' }`，让构建预渲染 `404.html`。删除示例请求时端点 `app/routes/api/ping.ts` 及其测试 `tests/ping.test.ts`。按纯静态应用部署前，还要确认应用没有其他请求时路由或 action。
+要将脚手架项目改为纯静态，删除 `app/routes/404.tsx` 中的 `renderIntent: { mode: 'dynamic' }`，让构建预渲染 `404.html`。删除示例请求时端点 `app/routes/api/ping.ts` 及其对应的 ping 测试。按纯静态应用部署前，还要确认应用没有其他请求时路由或 action。
 
 ```bash
 set -e
@@ -112,7 +112,9 @@ npx nitro@3.0.260610-beta build --preset=cloudflare_module
 
 Nitro 将 Worker 模块写入 `.output/server/index.mjs`，将校验过的静态文件写入 `.output/public/`，并生成 `.output/server/wrangler.json`。检查配置是否开启 Node.js 兼容，并确认 `ASSETS` 指向打包后的公开目录。Router 生成的入口从 Nitro 请求中读取 Workers 绑定，使 loader 和 action 可以通过 `ctx.env` 访问它们。
 
-有目标 Cloudflare 账号的部署权限后，从项目根目录运行 `npx nitro@3.0.260610-beta deploy --prebuilt` 部署校验过的产物。用部署后的来源运行冒烟脚本，并确认请求时 loader 能读取预期的绑定且响应不包含绑定值。仓库 fixture 在本地用回环 Node 服务器以及带本地绑定的生成 Worker 模块验证 Nitro 产物。
+对 `/guestbook` 这样的混合页面，Cloudflare 静态资源路由可能在 Worker 收到 POST 之前返回 405。在 Nitro 配置中将 `cloudflare.wrangler.assets.run_worker_first` 设为混合页面路径列表，例如 `['/guestbook']`。如果 Workers 绑定存在，兜底路由将这些路径的 GET 和 HEAD 转发给 `event.req.runtime.cloudflare.env.ASSETS.fetch(event.req)`，其余方法交给 Router 生成的处理器。如果 Router 声明 `/guestbook` 这类不带尾斜杠的路径，将 `cloudflare.wrangler.assets.html_handling` 设为 `'drop-trailing-slash'`，使页面表单提交到 action 对应的路径。[Cloudflare 静态资源路由](https://developers.cloudflare.com/workers/static-assets/routing/worker-script/)
+
+仓库 fixture 用 Wrangler 的本地 workerd 运行时对生成的 Worker 执行 HTTP 验证。取得目标 Cloudflare 账号的部署权限后，从项目根目录运行 `npx nitro@3.0.260610-beta deploy --prebuilt` 部署校验过的产物。在部署后的来源再次运行冒烟脚本，并确认请求时 loader 能读取预期的绑定且响应不包含绑定值。[Router/Nitro fixture](https://github.com/open-element/openelement/tree/main/tests/fixtures/router-nitro)
 
 ## Dev 服务器
 
