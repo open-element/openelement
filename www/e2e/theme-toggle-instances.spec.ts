@@ -58,17 +58,16 @@ test.describe('open-theme-toggle (generated element)', () => {
       .toMatch(/^(light|dark)$/);
   });
 
-  test('an explicit attribute wins over the pre-paint document theme', async ({ page }) => {
-    await page.emulateMedia({ colorScheme: 'dark' });
-    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
-    const toggle = await appendToggle(page, 'light');
-    expect(await toggle.evaluate((el) => el.getAttribute('data-theme'))).toBe('light');
-    expect(
-      await toggle.evaluate((el) =>
-        (el as HTMLElement).shadowRoot?.querySelector('button')?.getAttribute('data-theme'),
-      ),
-    ).toBe('light');
-    expect(await docTheme(page)).toBe('light');
+  test.describe('with a dark system preference before navigation', () => {
+    test.use({ colorScheme: 'dark' });
+
+    test('an explicit attribute wins over the pre-paint document theme', async ({ page }) => {
+      expect(await docTheme(page)).toBe('dark');
+      const toggle = await appendToggle(page, 'light');
+      await expect(toggle).toHaveAttribute('data-theme', 'light');
+      await expect(toggle.getByRole('button')).toHaveAttribute('data-theme', 'light');
+      await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    });
   });
 
   test('the live document theme wins over a stale stored preference', async ({ page }) => {
