@@ -313,6 +313,10 @@ open-search .search-hit-mark {
   background: color-mix(in srgb, var(--site-ground) 94%, transparent);
 }
 
+.oe-shell .oe-site-header {
+  background: var(--nav-bg);
+}
+
 /* Current section: one hairline under the label, as on the homepage. */
 .oe-header-inner > nav a:hover {
   transform: none;
@@ -2480,10 +2484,9 @@ open-reading-shell:not([rail]) .main {
   }
 }
 
-/* Center the complete Markdown reading layout, including the docs sidebar.
-   Wide registries and pages without docs navigation use their own measures. */
+/* Use the same outer frame wherever the desktop docs sidebar is shown. */
 @media screen and (min-width: 901px) {
-  .oe-content-frame:has(> nav:not([hidden])):has(> main open-reading-shell[rail] .article-content) {
+  .oe-content-frame:has(> nav:not([hidden])) {
     width: min(100% - 2rem, var(--site-container-wide));
   }
 
@@ -3985,8 +3988,16 @@ open-section-frame > section > div {
 }
 
 /* ── Docs hub ───────────────────────────────────────────────────────────── */
+.page-docs {
+  --docs-gutter: clamp(1.5rem, 4vw, 3rem);
+}
+
+.page-docs > :is(.masthead, .docs-start, .docs-paths, .docs-examples) {
+  padding-inline: var(--docs-gutter);
+}
+
 .page-docs .masthead {
-  padding: clamp(2rem, 4.5vh, 3.25rem) clamp(1.5rem, 4vw, 3rem)
+  padding-block: clamp(2rem, 4.5vh, 3.25rem)
     clamp(1.5rem, 3.5vh, 2.25rem);
 }
 
@@ -3996,6 +4007,68 @@ open-section-frame > section > div {
 
 .page-docs [data-docs-group] {
   scroll-margin-block-start: calc(var(--nav-height) + 1rem);
+}
+
+.docs-path {
+  display: grid;
+  row-gap: 0.25rem;
+  padding-block: 1rem;
+}
+
+.docs-path + .docs-path {
+  border-block-start: 1px solid var(--site-hairline);
+}
+
+.docs-path :is(h2, p) {
+  margin: 0;
+}
+
+.docs-path h2 {
+  color: var(--site-ink);
+  font-size: var(--text-base);
+  font-weight: 650;
+}
+
+.docs-path p {
+  color: var(--site-muted);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.docs-path a {
+  display: inline-flex;
+  min-block-size: 44px;
+  align-items: center;
+  justify-self: start;
+  gap: 0.55rem;
+  color: var(--site-ink);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: underline var(--site-hairline-strong);
+  text-underline-offset: 0.2em;
+}
+
+.docs-path a::after {
+  width: 0.4rem;
+  height: 0.4rem;
+  flex: 0 0 auto;
+  border-block-start: 1px solid currentColor;
+  border-inline-end: 1px solid currentColor;
+  content: '';
+  transform: rotate(45deg);
+}
+
+.docs-path a:hover {
+  text-decoration-color: currentColor;
+}
+
+@media (min-width: 760px) {
+  .docs-path {
+    grid-template-columns: minmax(6.5rem, 0.34fr) minmax(0, 1fr) 10.5rem;
+    align-items: center;
+    column-gap: 1.25rem;
+    padding-block: 0.75rem;
+  }
 }
 
 @media screen and (max-width: 900px) {

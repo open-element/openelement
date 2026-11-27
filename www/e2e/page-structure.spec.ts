@@ -206,7 +206,7 @@ test.describe('Unified page structure', () => {
     });
   }
 
-  test('docs landing presents the four manual sections', async ({ page }) => {
+  test('docs landing offers four task routes alongside the complete sidebar', async ({ page }) => {
     await page.goto('/docs/');
     const hub = page.locator('.page-docs');
     await expect(hub.getByRole('heading', { level: 1 })).toHaveText('Documentation');
@@ -218,11 +218,27 @@ test.describe('Unified page structure', () => {
       'PROJECT',
     ]);
     const sectionLinks = sections.getByRole('link');
-    await expect(sectionLinks).toHaveCount(28);
-    await expect(sectionLinks.first()).toHaveAttribute('href', '/guide/getting-started/');
-    await expect(sectionLinks.nth(6)).toHaveAttribute('href', '/guide/styling/');
-    await expect(sectionLinks.nth(18)).toHaveAttribute('href', '/reference/');
-    await expect(sectionLinks.nth(24)).toHaveAttribute('href', '/roadmap/');
+    await expect(sectionLinks).toHaveText([
+      'Read about hydration',
+      'Build a form action',
+      'Browse exported symbols',
+      'Read the release roadmap',
+    ]);
+    const sidebarLinks = page.locator('.oe-content-frame > nav').getByRole('link');
+    await expect(sidebarLinks).toHaveCount(28);
+    const paths = await sectionLinks.evaluateAll((links) =>
+      links.map((link) => link.getAttribute('href')),
+    );
+    expect(paths).toEqual([
+      '/guide/islands-and-ssr/#hydration-boundary',
+      '/guide/routing-and-data/#form-actions',
+      '/reference/#api-reference',
+      '/roadmap/#release-line',
+    ]);
+    const tree = await sidebarLinks.evaluateAll((links) =>
+      links.map((link) => link.getAttribute('href')),
+    );
+    expect(paths.some((href) => tree.includes(href))).toBe(false);
     const start = hub.getByRole('region', { name: 'Start here' });
     await expect(start.getByRole('link')).toHaveCount(3);
     await expect(start.getByRole('link').nth(1)).toHaveAttribute('href', '/guide/tutorial/');
@@ -267,10 +283,54 @@ test.describe('Unified page structure', () => {
       'href',
       '/zh/changelog/',
     );
+    const paths = hub.getByRole('navigation', { name: '文档分区' }).getByRole('link');
+    await expect(paths).toHaveText([
+      '了解水合边界',
+      '实现表单提交',
+      '浏览导出项',
+      '查看发布路线图',
+    ]);
+    expect(
+      await paths.evaluateAll((links) => links.map((link) => link.getAttribute('href'))),
+    ).toEqual([
+      '/zh/guide/islands-and-ssr/#hydration-边界',
+      '/zh/guide/routing-and-data/#表单-action',
+      '/zh/reference/#api-reference',
+      '/zh/roadmap/#release-line',
+    ]);
     await hub.locator('details > summary').getByText('示例', { exact: true }).click();
     await expect(hub.getByRole('region', { name: '示例场景' }).getByRole('listitem')).toHaveCount(
       4,
     );
+  });
+
+  test('the hub, guides, reference, and errors share one desktop sidebar frame', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1467, height: 900 });
+    const frames = [];
+    for (const path of [
+      '/zh/docs/',
+      '/zh/guide/getting-started/',
+      '/zh/reference/',
+      '/zh/errors/',
+    ]) {
+      await page.goto(path);
+      const frame = page.locator('.oe-content-frame');
+      const sidebar = frame.locator(':scope > nav');
+      await expect(sidebar).toBeVisible();
+      frames.push({
+        clientWidth: await page.evaluate(() => document.documentElement.clientWidth),
+        frame: (await frame.boundingBox())!,
+        sidebar: (await sidebar.boundingBox())!,
+      });
+    }
+    for (const current of frames) {
+      expect(current.frame.width).toBeCloseTo(1240, 0);
+      expect(current.frame.x).toBeCloseTo((current.clientWidth - current.frame.width) / 2, 0);
+      expect(current.sidebar.x).toBeCloseTo(current.frame.x, 0);
+      expect(current.sidebar.width).toBeCloseTo(frames[0].sidebar.width, 0);
+    }
   });
 
   test('contributing offers a first task before setup and checks', async ({ page }) => {

@@ -26,6 +26,7 @@ const quickstartZh = quickstartCommandCountPhrase('zh');
 // that implements the scenario. These are real, current sources — no invented
 // demo links and no hosted preview exists to link to.
 const REPO = 'https://github.com/open-element/openelement';
+const pathIds = ['learn', 'guides', 'reference', 'project'] as const;
 
 const content = {
   en: {
@@ -54,6 +55,28 @@ const content = {
         title: 'Core concepts',
         copy: 'Learn the component and rendering model.',
         href: '/guide/core-concepts',
+      },
+    ],
+    paths: [
+      {
+        copy: 'See what the server renders and which regions hydrate in the browser.',
+        action: 'Read about hydration',
+        href: '/guide/islands-and-ssr#hydration-boundary',
+      },
+      {
+        copy: 'Add a native form and handle submissions on the server.',
+        action: 'Build a form action',
+        href: '/guide/routing-and-data#form-actions',
+      },
+      {
+        copy: 'Check import paths, signatures, and source notes for public exports.',
+        action: 'Browse exported symbols',
+        href: '/reference#api-reference',
+      },
+      {
+        copy: 'See the current release line and upcoming milestones.',
+        action: 'Read the release roadmap',
+        href: '/roadmap#release-line',
       },
     ],
     examplesTitle: 'Examples',
@@ -134,7 +157,7 @@ const content = {
       {
         index: '1.',
         title: '快速开始',
-        copy: `用 ${quickstartZh}创建并运行你的第一个应用。`,
+        copy: `用 ${quickstartZh}创建并运行应用。`,
         href: '/guide/getting-started',
       },
       {
@@ -148,6 +171,28 @@ const content = {
         title: '核心概念',
         copy: '了解组件与渲染模型。',
         href: '/guide/core-concepts',
+      },
+    ],
+    paths: [
+      {
+        copy: '了解哪些内容由服务端生成，哪些交互区域在浏览器中激活。',
+        action: '了解水合边界',
+        href: '/guide/islands-and-ssr#hydration-边界',
+      },
+      {
+        copy: '为页面添加原生表单，在服务端处理提交。',
+        action: '实现表单提交',
+        href: '/guide/routing-and-data#表单-action',
+      },
+      {
+        copy: '查阅公开导出项的导入路径、签名和源码说明。',
+        action: '浏览导出项',
+        href: '/reference#api-reference',
+      },
+      {
+        copy: '查看当前发布线和后续里程碑。',
+        action: '查看发布路线图',
+        href: '/roadmap#release-line',
       },
     ],
     examplesTitle: '示例',
@@ -232,14 +277,7 @@ export function PageDocs(props: {
   statusHref: string;
   startTitle: string;
   startSteps: Array<{ index: string; title: string; copy: string; href: string }>;
-  learnTitle: string;
-  learnLinks: Array<{ title: string; href: string }>;
-  guidesTitle: string;
-  guidesLinks: Array<{ title: string; href: string }>;
-  referenceTitle: string;
-  referenceLinks: Array<{ title: string; href: string }>;
-  projectTitle: string;
-  projectLinks: Array<{ title: string; href: string }>;
+  paths: Array<{ id: string; title: string; copy: string; action: string; href: string }>;
   examplesTitle: string;
   examplesLabel: string;
   examplesLede: string;
@@ -288,7 +326,7 @@ export function PageDocs(props: {
         </nav>
       </header>
       <section
-        class='border-t border-border px-[clamp(1.5rem,5vw,4.5rem)] py-[clamp(2rem,5vh,3.5rem)]'
+        class='docs-start border-t border-border py-[clamp(2rem,5vh,3.5rem)]'
         aria-labelledby='docs-start-title'
       >
         <h2
@@ -318,98 +356,16 @@ export function PageDocs(props: {
           ))}
         </ol>
       </section>
-      <nav
-        class='grid grid-cols-1 gap-3 border-t border-border px-[clamp(1.5rem,5vw,4.5rem)] py-[clamp(2rem,5vh,3.5rem)] min-[721px]:grid-cols-2'
-        aria-label={props.navLabel}
-      >
-        <section class='rounded-lg border border-border p-5'>
-          <h2
-            id='learn'
-            tabindex='-1'
-            data-docs-group
-            class='m-0 text-lg font-semibold tracking-[-0.02em] text-foreground'
-          >
-            {props.learnTitle}
-          </h2>
-          <ul class='mt-3 grid list-none gap-2 border-t border-border p-0 pt-3'>
-            {props.learnLinks.map((link) => (
-              <li key={link.href}>
-                <a
-                  class='text-(length:--text-sm) text-muted-foreground underline decoration-border underline-offset-4 hover:text-foreground'
-                  href={link.href}
-                >
-                  {link.title}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </section>
-        <section class='rounded-lg border border-border p-5'>
-          <h2
-            id='guides'
-            tabindex='-1'
-            data-docs-group
-            class='m-0 text-lg font-semibold tracking-[-0.02em] text-foreground'
-          >
-            {props.guidesTitle}
-          </h2>
-          <ul class='mt-3 grid list-none gap-2 border-t border-border p-0 pt-3'>
-            {props.guidesLinks.map((link) => (
-              <li key={link.href}>
-                <a
-                  class='text-(length:--text-sm) text-muted-foreground underline decoration-border underline-offset-4 hover:text-foreground'
-                  href={link.href}
-                >
-                  {link.title}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </section>
-        <section class='rounded-lg border border-border p-5'>
-          <h2
-            id='reference'
-            tabindex='-1'
-            data-docs-group
-            class='m-0 text-lg font-semibold tracking-[-0.02em] text-foreground'
-          >
-            {props.referenceTitle}
-          </h2>
-          <ul class='mt-3 grid list-none gap-2 border-t border-border p-0 pt-3'>
-            {props.referenceLinks.map((link) => (
-              <li key={link.href}>
-                <a
-                  class='text-(length:--text-sm) text-muted-foreground underline decoration-border underline-offset-4 hover:text-foreground'
-                  href={link.href}
-                >
-                  {link.title}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </section>
-        <section class='rounded-lg border border-border p-5'>
-          <h2
-            id='project'
-            tabindex='-1'
-            data-docs-group
-            class='m-0 text-lg font-semibold tracking-[-0.02em] text-foreground'
-          >
-            {props.projectTitle}
-          </h2>
-          <ul class='mt-3 grid list-none gap-2 border-t border-border p-0 pt-3'>
-            {props.projectLinks.map((link) => (
-              <li key={link.href}>
-                <a
-                  class='text-(length:--text-sm) text-muted-foreground underline decoration-border underline-offset-4 hover:text-foreground'
-                  href={link.href}
-                >
-                  {link.title}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </section>
+      <nav class='docs-paths border-t border-border' aria-label={props.navLabel}>
+        {props.paths.map((path) => (
+          <section class='docs-path' key={path.id}>
+            <h2 id={path.id} tabindex='-1' data-docs-group>
+              {path.title}
+            </h2>
+            <p>{path.copy}</p>
+            <a href={path.href}>{path.action}</a>
+          </section>
+        ))}
       </nav>
       {/*
         WEB-201 (P2): an honest Examples entry. Four scenarios, each bound to a
@@ -417,7 +373,7 @@ export function PageDocs(props: {
         hosted demo app, so no card may simulate one — the section says that
         explicitly and every link is a repository/route link that exists today.
       */}
-      <details class='border-t border-border px-[clamp(1.5rem,5vw,4.5rem)] py-5'>
+      <details class='docs-examples border-t border-border py-5'>
         <summary class='cursor-pointer font-mono text-(length:--text-sm) font-bold text-foreground'>
           {props.examplesTitle}
         </summary>
@@ -500,15 +456,18 @@ export default definePage(PageDocs, {
       headTitle: title,
       headDescription: _headDescription,
       examples,
+      paths,
       ...text
     } = content[resolved];
-    const sections = navSections.map((section) => ({
-      title: resolved === 'zh' ? (section.sectionZh ?? section.section) : section.section,
-      links: section.items.map((item) => ({
-        title: resolved === 'zh' ? (item.labelZh ?? item.label) : item.label,
-        href: siteHref(item.path ?? item.href ?? '', resolved),
-      })),
-    }));
+    const taskPaths = paths.map((path, index) => {
+      const section = navSections[index];
+      return {
+        ...path,
+        id: pathIds[index],
+        title: resolved === 'zh' ? (section.sectionZh ?? section.section) : section.section,
+        href: siteHref(path.href, resolved),
+      };
+    });
     return {
       ...text,
       title,
@@ -516,18 +475,8 @@ export default definePage(PageDocs, {
       // source line ships to @alpha, then the plain version (data/version.ts).
       version: sourceLineStamp(resolved),
       statusHref: siteHref('/changelog', resolved),
-      jumpLinks: ['#learn', '#guides', '#reference', '#project'].map((href, index) => ({
-        href,
-        title: sections[index].title,
-      })),
-      learnTitle: sections[0].title,
-      learnLinks: sections[0].links,
-      guidesTitle: sections[1].title,
-      guidesLinks: sections[1].links,
-      referenceTitle: sections[2].title,
-      referenceLinks: sections[2].links,
-      projectTitle: sections[3].title,
-      projectLinks: sections[3].links,
+      paths: taskPaths,
+      jumpLinks: taskPaths.map(({ id, title }) => ({ href: `#${id}`, title })),
       startSteps: text.startSteps.map((step) => ({ ...step, href: siteHref(step.href, resolved) })),
       // The Examples cards keep their repository links absolute (they leave the
       // site) and localize only the related in-site doc route.
