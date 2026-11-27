@@ -10,11 +10,39 @@
  * so an exclusion is a reviewed decision, not a shrug.
  */
 import { AxeBuilder } from '@axe-core/playwright';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { observeWithTimeoutClassification } from './helpers.ts';
 
 /** Routes the gate scans: one per page template, plus the zh variant. */
 const SCANNED_ROUTES = ['/', '/guide/getting-started/', '/docs/', '/reference/'] as const;
+
+async function waitForReferenceReady(page: Page): Promise<void> {
+  const options = { timeout: 30_000 };
+  // The registry form starts hidden in the server markup. The outline and
+  // chrome also upgrade after navigation. A prefetch for another route can
+  // still be pending after this page is ready for a full axe scan.
+  await Promise.all([
+    expect(page.locator('#main-content')).toBeVisible(options),
+    expect(page.locator('open-registry-lookup form')).toBeVisible(options),
+    expect(page.locator('open-page-rail nav a[aria-current="location"]').first()).toBeAttached(
+      options,
+    ),
+    page.waitForFunction(
+      () => {
+        const chrome = ['open-search', 'open-site-menu', 'open-theme-toggle'];
+        const sheets = document.head.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]');
+        return (
+          chrome.every((tag) => customElements.get(tag) !== undefined) &&
+          sheets.length > 0 &&
+          [...sheets].every((link) => link.sheet !== null) &&
+          document.fonts.status === 'loaded'
+        );
+      },
+      null,
+      options,
+    ),
+  ]);
+}
 
 test.describe('Accessibility gate (axe)', () => {
   for (const route of SCANNED_ROUTES) {
@@ -24,12 +52,12 @@ test.describe('Accessibility gate (axe)', () => {
       // CI runner, so that scan alone carries a wider ceiling.
       test.setTimeout(route === '/reference/' ? 420_000 : 120_000);
       await page.goto(route);
-      // Let hydration settle: the islands upgrade synchronously after the
-      // module loads, and the scan should see the page a reader sees. A
-      // ceiling that expires in the load/settle or the scan is an engine/probe
-      // timeout, never an assertion failure (FR-05C).
       await observeWithTimeoutClassification({ phase: 'axe-gate', url: route }, async () => {
-        await page.waitForLoadState('networkidle');
+        if (route === '/reference/') {
+          await waitForReferenceReady(page);
+        } else {
+          await page.waitForLoadState('networkidle');
+        }
       });
 
       const builder = new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']);
