@@ -70,15 +70,17 @@ checklist.
 
 ## Inspect state (read-only)
 
-Run with the service-role connection or the Supabase SQL editor:
+Run these queries through the Supabase SQL editor or with an authorized
+operator database role. The application's `service_role` grants expose
+lifecycle RPCs and exclude direct reads of `stripe_events`.
 
 ```sql
-select id, processing_state, received_at, replay_requested_at
+select provider_event_id, processing_state, received_at, replay_requested_at
 from public.stripe_events
 order by received_at desc
 limit 20;
 
-select id, processing_state, received_at
+select provider_event_id, processing_state, received_at
 from public.stripe_events
 where processing_state in ('dead_letter', 'replay_requested')
 order by received_at
