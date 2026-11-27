@@ -639,15 +639,28 @@ const browser = await browserType.launch({ headless: true });
 try {
   const page = await browser.newPage();
   await page.goto(baseUrl + '/notes', { waitUntil: 'load' });
-  // A full document reload would drop this marker; continuation must not reload.
-  await page.evaluate(() => {
-    (globalThis as { __packedContinuation?: string }).__packedContinuation = 'alive';
+  const mainFrame = page.mainFrame();
+  let documentRequests = 0;
+  let documentLoads = 0;
+  // Observe main-frame document navigation after the initial load. Same-document
+  // navigation issues no new document request or load, and subframes do not count.
+  page.on('request', (request) => {
+    if (
+      request.isNavigationRequest() &&
+      request.resourceType() === 'document' &&
+      request.frame() === mainFrame
+    ) {
+      documentRequests++;
+    }
   });
-  const assertNoReload = async (): Promise<void> => {
-    const marker = await page.evaluate(() =>
-      (globalThis as { __packedContinuation?: string }).__packedContinuation ?? null
-    );
-    if (marker !== 'alive') throw new Error('a full document reload dropped the continuation marker');
+  page.on('load', () => { documentLoads++; });
+  const assertNoReload = (): void => {
+    if (documentRequests !== 0 || documentLoads !== 0) {
+      throw new Error(
+        'continuation triggered a main-frame document navigation; observed ' +
+        documentRequests + ' request(s) and ' + documentLoads + ' load(s)'
+      );
+    }
   };
 
   // The compiled kernel CLAIMS the island DSD: the SSR node identity must
@@ -658,18 +671,23 @@ try {
     'var c=i&&i.shadowRoot&&i.shadowRoot.querySelector("#count");' +
     'return !!(c&&c.textContent==="' + expected + '");})()';
   await page.waitForFunction(islandCountText('0'), undefined, { timeout: 60000 });
+  assertNoReload();
   const count = page.locator('note-counter #count');
   const ssrCount = await count.elementHandle();
   const button = page.locator('note-counter #increment');
   await button.click();
+  assertNoReload();
   await page.waitForFunction(islandCountText('1'), undefined, { timeout: 60000 });
+  assertNoReload();
   await button.click();
+  assertNoReload();
   await page.waitForFunction(islandCountText('2'), undefined, { timeout: 60000 });
+  assertNoReload();
   const activeCount = await count.elementHandle();
   if (!await ssrCount!.evaluate((node, candidate) => node === candidate, activeCount)) {
     throw new Error('native kernel re-rendered instead of claiming the SSR node');
   }
-  await assertNoReload();
+  assertNoReload();
   console.log('BROWSER-CONTINUATION-OK ' + renderer + ' ' + browserName + ' ' + browser.version());
 } finally {
   await browser.close();
