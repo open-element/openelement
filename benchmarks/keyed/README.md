@@ -11,15 +11,15 @@ Each run launches a fresh headless Chromium process, opens a 1280 × 900 viewpor
 From the repository root after installing workspace dependencies and Playwright Chromium:
 
 ```sh
-node benchmarks/keyed/run.ts --note 'AC power, no competing build' --out /tmp/keyed-candidate.json
-node benchmarks/keyed/compare.ts noise /tmp/keyed-candidate.json
+vp run --no-cache bench:keyed --note 'AC power, no competing build' --out /tmp/keyed-candidate.json
+vp run --no-cache bench:keyed:compare noise /tmp/keyed-candidate.json
 ```
 
 For an A/B comparison, install dependencies in a separate checkout with a compatible generated-element compiler. Run the same harness from the candidate checkout and pass the comparison checkout as the build root:
 
 ```sh
-node benchmarks/keyed/run.ts --build-root /path/to/baseline --note 'AC power, no competing build' --out /tmp/keyed-baseline.json
-node benchmarks/keyed/compare.ts ab /tmp/keyed-baseline.json /tmp/keyed-candidate.json
+vp run --no-cache bench:keyed --build-root /path/to/baseline --note 'AC power, no competing build' --out /tmp/keyed-baseline.json
+vp run --no-cache bench:keyed:compare ab /tmp/keyed-baseline.json /tmp/keyed-candidate.json
 ```
 
 Use `--runs` and `--samples` to override the defaults for a harness check. For evidence, keep at least five launches per build and 15 samples per launch. The A/B command requires the same machine, browser, DPR, harness, and workload. Review the recorded load and power conditions alongside the comparison.
@@ -27,3 +27,29 @@ Use `--runs` and `--samples` to override the defaults for a harness check. For e
 ## Statistics
 
 For each run, quartiles use linear interpolation at index `(n - 1) × q` in the sorted samples. Within-run spread is `100 × (Q3 - Q1) / median`. Consecutive run drift is `100 × abs(nextMedian - previousMedian) / previousMedian`. A pair clears the issue’s noise floor when its drift is below 3% and both runs’ spreads are below 5%. The report also shows whether every recorded pair clears the floor. A/B uses the median of each build’s run medians and reports `100 × (candidate - baseline) / baseline`. Positive values mean slower. Threshold outcomes use unrounded values, and the comparison exits successfully when it produces a valid report.
+
+## 2026-11-27 local pilot
+
+The [baseline receipt](results/2026-11-27-baseline.json) and
+[candidate receipt](results/2026-11-27-candidate.json) contain all 150 samples.
+The baseline uses `8d5058891`. The candidate uses the compiler and Element
+sources at `35b196837` with the harness commit `c9c92ee67`. An earlier checkout
+did not compile the same fixture, so no timings from that checkout enter the
+comparison.
+
+The arms ran baseline first on an eight-core Apple M2, under AC power, at
+DPR 1 in Chromium 147.0.7727.15. No checkout-owned pack, coverage, or browser
+test was running concurrently. macOS Storage Management was active, the
+one-minute load ranged from 7.77 to 8.18 during the capture, and macOS
+reported no thermal warnings.
+
+| Build | Median of five run medians | Run IQR/median range | Consecutive pairs within floor |
+| --- | ---: | ---: | ---: |
+| Baseline | 17.700 ms | 3.736–7.759% | 1 / 4 |
+| Candidate | 17.300 ms | 3.216–5.491% | 3 / 4 |
+
+The candidate's first four runs cleared the within-run spread floor, and all
+four consecutive median deltas were below 3%. Its fifth run exceeded the
+spread floor. The baseline also failed the floor across the full series.
+The observed A/B delta was −2.26%. The background load and the observed
+variance leave the direction of a runtime change unestablished.

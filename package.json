@@ -23,6 +23,8 @@
     "clean": "node tools/repo/clean.ts",
     "clean:deep": "node tools/repo/clean.ts --deep",
     "bench": "vitest run --project benchmarks",
+    "bench:keyed": "node benchmarks/keyed/run.ts",
+    "bench:keyed:compare": "node benchmarks/keyed/compare.ts",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "lint": "oxlint",
