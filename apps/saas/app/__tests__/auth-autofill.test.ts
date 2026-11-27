@@ -5,7 +5,7 @@ const cases = [
   {
     route: 'login',
     component: 'LoginPage',
-    props: { email: '', errorText: '', oauthProviders: [] },
+    props: { email: '', errorText: '', oauthGoogle: 0, oauthGithub: 0, oauthNone: 1 },
     password: 'current-password',
     email: 'username',
   },
