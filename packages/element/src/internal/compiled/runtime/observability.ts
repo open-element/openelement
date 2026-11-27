@@ -83,8 +83,10 @@ export function recordRegionAllocated(): void {
 
 /** One insertion committed: the region and its top-level nodes are owned. */
 export function recordProjection(nodes: number): void {
-  if (typeof OE_RUNTIME_PROBE === 'undefined' || OE_RUNTIME_PROBE) counts.projections++;
-  if (typeof OE_RUNTIME_PROBE === 'undefined' || OE_RUNTIME_PROBE) counts.nodes += nodes;
+  if (typeof OE_RUNTIME_PROBE === 'undefined' || OE_RUNTIME_PROBE) {
+    counts.projections++;
+    counts.nodes += nodes;
+  }
 }
 
 /** One region range cleanup was registered. */
