@@ -123,7 +123,10 @@ export async function compileFunctionPage(
     throw new Error(`${sourceUrl} is not admitted by the server-component lane`);
   }
   const rewritten = compiled.code
-    .replaceAll('@openelement/element/server', SERVER_URL)
+    .replace(
+      /from (['"])@openelement\/element\/server\1/g,
+      (_match, quote: string) => `from ${quote}${SERVER_URL}${quote}`,
+    )
     .replaceAll("from '@openelement/element'", `from '${ELEMENT_URL}'`)
     .replaceAll("from '@openelement/router'", `from '${APP_URL}'`)
     .replaceAll(

@@ -1,11 +1,7 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { expect, test } from 'vitest';
 import { assertRejectsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
 import { isActionFailure, isOpenElementRedirect } from '@openelement/router';
-import { compileServerComponentModule } from '@openelement/compiler';
+import { compileFunctionPage } from './compile-page.ts';
 
 // v0.44: route logic lives in app/route-logic/ so tests never evaluate the
 // authoring module's compile-time-only constructs; SSR assertions compile the
@@ -20,41 +16,7 @@ const {
 type LoginAuthClient = import('../route-logic/login.ts').LoginAuthClient;
 type LoginOAuthClient = import('../route-logic/login.ts').LoginOAuthClient;
 
-// The page component lives in its ROUTE module (D-M11: the server function page
-// lane admits only a component function the route module declares itself), so
-// the SSR assertions compile that module and call its render with the
-// projector's rows — the same bytes the request-time handler renders. The
-// emitted module imports the element server helpers and the router entry by
-// bare specifier, so both are re-pointed at the workspace sources (the rewrite
-// `compile-page.ts` performs for the retired class form); relative imports are
-// rebased onto the route module's own directory.
-const ELEMENT_SERVER_URL = import.meta.resolve('@openelement/element/server');
-const ROUTER_URL = import.meta.resolve('@openelement/router');
-
-async function renderLoginPage(props: Record<string, unknown>): Promise<string> {
-  const routeUrl = new URL('../routes/login.tsx', import.meta.url);
-  const compiled = compileServerComponentModule(
-    await readFile(routeUrl, 'utf8'),
-    routeUrl.pathname,
-  );
-  if (compiled === null) throw new Error('the login route module compiled to nothing');
-  const rewritten = compiled.code
-    .replaceAll("from '@openelement/element/server'", `from '${ELEMENT_SERVER_URL}'`)
-    .replaceAll("from '@openelement/router'", `from '${ROUTER_URL}'`)
-    .replaceAll(
-      /from (['"])(\.[^'"]*)\1/g,
-      (_match, quote: string, specifier: string) =>
-        `from ${quote}${new URL(specifier, routeUrl).href}${quote}`,
-    );
-  const tempDir = await mkdtemp(join(tmpdir(), 'oe-saas-login-page-'));
-  const tempModule = join(tempDir, 'login-page.ts');
-  await writeFile(tempModule, rewritten, 'utf8');
-  const mod = (await import(pathToFileURL(tempModule).href)) as Record<string, unknown>;
-  await rm(tempDir, { recursive: true, force: true });
-  const render = mod.LoginPage;
-  if (typeof render !== 'function') throw new Error('the login route emitted no LoginPage render');
-  return String((render as (pageProps: Record<string, unknown>) => unknown)(props));
-}
+const renderLoginPage = await compileFunctionPage('../routes/login.tsx', 'LoginPage');
 
 function client(error: { message: string } | null = null): () => LoginAuthClient {
   return () => ({ auth: { signInWithPassword: () => Promise.resolve({ error }) } });
