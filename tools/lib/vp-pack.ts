@@ -176,10 +176,9 @@ function isAmbientDeclarationTarget(pkg: PackageInfo, subpath: string, target: s
 }
 
 /**
- * The pack entry list: every TypeScript exports target (the compiled public
- * surface) plus, for the router, the path-delivered client-runtime modules and
- * the `openelement` bin dispatcher. Asset export targets are not compile
- * entries. Order-stable and deduplicated.
+ * The pack entry list preserves exported modules, Router's generated-code
+ * targets and bin, and Element's internal observation hook for packed tests.
+ * Asset and ambient declaration targets are copied without compilation.
  */
 export function vpPackEntries(pkg: PackageInfo): string[] {
   const map = exportsMap(pkg);
@@ -194,6 +193,9 @@ export function vpPackEntries(pkg: PackageInfo): string[] {
     if (isAssetExportTarget(pkg, subpath, target)) continue;
     if (isAmbientDeclarationTarget(pkg, subpath, target)) continue;
     push(requireSrcModule(pkg, subpath, target));
+  }
+  if (pkg.name === '@openelement/element') {
+    push('src/internal/compiled/runtime/observability.ts');
   }
   if (pkg.name === '@openelement/router') {
     for (const entry of ROUTER_CLIENT_RUNTIME_ENTRIES) push(entry);

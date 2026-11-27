@@ -50,10 +50,16 @@ const ELEMENT_EXPORTS: Record<string, string> = {
   './vite': './src/vite.ts',
 };
 
-test('vpPackEntries derives ordered entries from exports', () => {
-  expect(vpPackEntries(pkg('@openelement/element', ELEMENT_EXPORTS))).toEqual([
+test('Element keeps the internal runtime probe in the pack without a package export', () => {
+  const element = pkg('@openelement/element', ELEMENT_EXPORTS);
+  expect(vpPackEntries(element)).toEqual([
     'src/index.ts',
     'src/vite.ts',
+    'src/internal/compiled/runtime/observability.ts',
+  ]);
+  expect(Object.keys(synthesizedPackedManifest(element).exports as object)).toEqual([
+    '.',
+    './vite',
   ]);
 });
 
