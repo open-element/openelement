@@ -535,14 +535,10 @@ export function compileServerComponentModule(
         : (statement as ts.FunctionDeclaration),
       fail,
     );
-    // THE semantic authority: the same walk the @element render body takes.
-    const lowering = new Lowering(sf, component.fields, [], {
-      computedLocal: null,
-      server: {
-        ...serverBinding,
-        asyncFunction: component.isAsync,
-        promiseFields: component.promiseFields,
-      },
+    const lowering = new Lowering(sf, component.fields, {
+      ...serverBinding,
+      asyncFunction: component.isAsync,
+      promiseFields: component.promiseFields,
     });
     const root = lowering.lowerRoot(component.returned);
     if (root.k !== 'el') {
@@ -915,7 +911,7 @@ export class ConstructorEmitter {
         const signal = this.identifier(part.signal, 'the class sink');
         const synthesized = this.lowering.synthesizedFields.find((field) => field.name === signal);
         const value = synthesized
-          ? `(${synthesized.computed!.body.getText(this.sf)})`
+          ? `(${synthesized.computed.body.getText(this.sf)})`
           : `${this.parameter}.${signal}`;
         attrEntries.push(`${JSON.stringify('class')}: ${value}`);
         continue;

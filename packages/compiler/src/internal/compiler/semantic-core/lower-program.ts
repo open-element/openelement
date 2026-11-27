@@ -1,10 +1,4 @@
-// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the Lowering walk is a single pass over the analyzed render() tree, and the compiler-owned location identities, source records and Part/Block shape invariants span every construct it lowers, so per-construct files would duplicate them; the boundary is its input (analyze-module facts over the classified AST) and its output (Part Program records with stable compiler-owned paths) — nothing else in the compiler authors locations.
-/**
- * JSX → Part Program lowering for the compiled grammar (#1473 split): the
- * {@link Lowering} walk turns
- * the analyzed render() tree into fixed Parts, Blocks, locations and source
- * records with stable compiler-owned paths.
- */
+/** Lower server component JSX to the tree and Parts consumed by its emitter. */
 
 import ts from 'typescript';
 import { CompiledElementError, sourceRange } from './compiler-diagnostics.ts';
@@ -15,16 +9,14 @@ import {
   literalValue,
   primitiveText,
   unwrapExpression,
-  validateComputedExpressionBody,
+  conditionalClassReadsProp,
 } from './analyze-module.ts';
 import { classifyIntrinsicAttribute } from './attribute-classification.ts';
 import {
   conditionLiteralAllowed,
   type ConditionOperator,
-  type ItemEventBinding,
   type ProgramCondition,
   type ProgramDependencyRecord,
-  type ProgramEventAction,
   type ProgramLocation,
   type ProgramLocationRecord,
   type ProgramPart,
@@ -36,32 +28,7 @@ import {
 } from '@openelement/protocol/part-program';
 import { forbiddenSinkReason } from '@openelement/protocol/forbidden-sinks';
 
-export interface GeneratedHandler {
-  name: string;
-  action: ProgramEventAction;
-  node: ts.ArrowFunction;
-}
-
-/**
- * Local name the generated module binds the canonical `computed` import to
- * when a synthesized conditional-class field (#1556) exists but the authored
- * module never imported computed. The synthesized name cannot collide with an
- * authored binding the compiler would have resolved (a canonical computed
- * import is reused by name instead), and the emitter adds the import
- * alongside it.
- */
-export const SYNTHESIZED_COMPUTED_LOCAL = '__openelementComputed';
-
-/**
- * The server function component binding surface (alpha15 server lane): when
- * set, the ONE lowering walk reads component state from the component
- * function's `props` parameter instead of `this`, resolves uppercase JSX tags
- * against the imported server function components, and records which
- * custom-element hosts the host build admitted as compiled components
- * (rendered through `__ssr`). Every other rule — attribute-name safety, sink
- * denial, the trustedHtml boundary, the single-return grammar, the OEC
- * diagnostics — is exactly the @element class path's: one semantic authority.
- */
+/** Props and composition facts for one server function component. */
 export interface ServerComponentBindings {
   /** The component function's single parameter (fixed `props` by admission). */
   readonly parameter: string;
@@ -86,22 +53,6 @@ export interface ServerComponentBindings {
   readonly promiseFields: ReadonlySet<string>;
 }
 
-/** Lowering inputs beyond the analyzed module shape. */
-export interface LoweringOptions {
-  /**
-   * The authored module's canonical `computed` local binding (aliases
-   * followed), when present. Synthesized conditional-class factories
-   * reference it; when null the emitter binds
-   * {@linkcode SYNTHESIZED_COMPUTED_LOCAL} and adds the import.
-   */
-  readonly computedLocal: string | null;
-  /**
-   * Server function component mode (alpha15 server lane). Absent: the walk
-   * behaves byte-identically to the @element class path.
-   */
-  readonly server?: ServerComponentBindings;
-}
-
 /** Distributive input union for addPart (Omit<union> collapses; do not use). */
 type ProgramPartInput =
   | { k: 'text'; signal: string }
@@ -111,14 +62,6 @@ type ProgramPartInput =
   | { k: 'class'; signal: string; path: number[] }
   | { k: 'style'; signal: string; path: number[] }
   | { k: 'html'; signal: string; path: number[] }
-  | { k: 'ref'; ref: string; path: number[] }
-  | {
-      k: 'event';
-      event: string;
-      handler: string;
-      action: ProgramEventAction;
-      path: number[];
-    }
   | {
       k: 'when';
       signal: string;
@@ -281,21 +224,10 @@ export class Lowering {
   readonly dependencies: ProgramDependencyRecord[] = [];
   readonly locations: ProgramLocationRecord[] = [];
   readonly sourceRecords: ProgramSourceRecord[] = [];
-  readonly generatedHandlers: GeneratedHandler[] = [];
   readonly fieldNames: Set<string>;
-  readonly methodNames: Set<string>;
-  readonly computedNames: Set<string>;
   readonly fieldTypes: Map<string, PropertyValueType>;
-  /**
-   * Compiler-synthesized computed fields (#1556): one per inline conditional
-   * class. The caller appends them to the analyzed fields after lowering so
-   * the metadata, `__compiledProps` and `__computedFields` emission treat
-   * them exactly like authored computeds — the Part Program IR itself stays
-   * v1 (one class Part bound to the synthesized signal).
-   */
-  readonly synthesizedFields: CompiledField[] = [];
-  /** True when the authored module binds the canonical `computed` import. */
-  readonly sourceBindsComputed: boolean;
+  /** Inline conditional class expressions indexed by their synthetic Part signal. */
+  readonly synthesizedFields: Array<{ name: string; computed: { body: ts.Expression } }> = [];
   /**
    * The component's statically admitted class tokens (alpha15 S lane): every
    * whitespace-separated token of every compile-time `class` value the
@@ -325,32 +257,18 @@ export class Lowering {
    * text escape. Absent on the class path.
    */
   readonly serverExpressionSlots = new Map<string, string>();
-  private readonly server?: ServerComponentBindings;
+  private readonly server: ServerComponentBindings;
   private readonly plainFieldNames: Set<string>;
-  private readonly computedFieldNames: Set<string>;
   private readonly sf: ts.SourceFile;
-  private readonly options: LoweringOptions;
   private elementSerial = 0;
   private conditionalClassSerial = 0;
 
-  constructor(
-    sf: ts.SourceFile,
-    fields: CompiledField[],
-    methodNames: string[],
-    options: LoweringOptions = { computedLocal: null },
-  ) {
+  constructor(sf: ts.SourceFile, fields: CompiledField[], server: ServerComponentBindings) {
     this.sf = sf;
     this.fieldNames = new Set(fields.map((field) => field.name));
-    this.methodNames = new Set(methodNames);
-    this.computedNames = new Set(
-      fields.filter((field) => field.computed).map((field) => field.name),
-    );
     this.fieldTypes = new Map(fields.map((field) => [field.name, field.type]));
-    this.plainFieldNames = new Set(fields.filter((field) => !field.computed).map((f) => f.name));
-    this.computedFieldNames = new Set(this.computedNames);
-    this.sourceBindsComputed = options.computedLocal !== null;
-    this.options = options;
-    this.server = options.server;
+    this.plainFieldNames = new Set(this.fieldNames);
+    this.server = server;
   }
 
   fail(node: ts.Node, code: string, message: string): never {
@@ -461,7 +379,7 @@ export class Lowering {
 
   /** True when the generated server call must be awaited (async child). */
   isServerAsyncComponent(name: string): boolean {
-    return this.server?.asyncComponents.has(name) === true;
+    return this.server.asyncComponents.has(name);
   }
 
   private expressionContainsAwait(node: ts.Node): boolean {
@@ -475,7 +393,7 @@ export class Lowering {
    * `props.<field>` arguments, or a `props.<field>` read. Nothing else.
    */
   private serverAwaitExpression(node: ts.AwaitExpression): string {
-    if (this.server?.asyncFunction !== true) {
+    if (!this.server.asyncFunction) {
       this.fail(
         node,
         'OEC9032',
@@ -486,7 +404,7 @@ export class Lowering {
   }
 
   private serverAwaitOperand(expr: ts.Expression): string {
-    const parameter = this.server?.parameter ?? 'props';
+    const parameter = this.server.parameter;
     if (
       ts.isPropertyAccessExpression(expr) &&
       ts.isIdentifier(expr.expression) &&
@@ -509,7 +427,7 @@ export class Lowering {
         callee === '__t' ||
         callee === '__ssr' ||
         callee === 'eval' ||
-        this.server?.components.has(callee) === true
+        this.server.components.has(callee)
       ) {
         this.fail(expr, 'OEC9032', serverAwaitRefusal('reservedCallee'));
       }
@@ -534,24 +452,13 @@ export class Lowering {
     if (value.kind === ts.SyntaxKind.NullKeyword) return 'null';
     if (ts.isNumericLiteral(value) && Number.isFinite(Number(value.text))) return value.text;
     const field = this.fieldAccess(value);
-    if (field !== null && this.server !== undefined) return `${this.server.parameter}.${field}`;
+    if (field !== null) return `${this.server.parameter}.${field}`;
     this.fail(expr, 'OEC9032', serverAwaitRefusal('operand'));
   }
 
   private fieldAccess(expr: ts.Expression): string | null {
     const value = unwrapExpression(expr);
     if (
-      ts.isPropertyAccessExpression(value) &&
-      value.expression.kind === ts.SyntaxKind.ThisKeyword &&
-      this.fieldNames.has(value.name.text)
-    ) {
-      return value.name.text;
-    }
-    // Server mode: the component function's `props` parameter plays the
-    // field role — the same field-name table, the same sink classification,
-    // one accessor spelling difference.
-    if (
-      this.server !== undefined &&
       ts.isPropertyAccessExpression(value) &&
       ts.isIdentifier(value.expression) &&
       value.expression.text === this.server.parameter &&
@@ -576,7 +483,7 @@ export class Lowering {
     position: 'child' | 'attribute',
   ): void {
     const server = this.server;
-    if (server === undefined || server.promiseFields.size === 0) return;
+    if (server.promiseFields.size === 0) return;
     const value = unwrapExpression(expr);
     if (
       !ts.isPropertyAccessExpression(value) ||
@@ -588,18 +495,6 @@ export class Lowering {
     }
     const read = `${server.parameter}.${value.name.text}`;
     this.fail(node, 'OEC9032', promiseSinkRefusal(read, position));
-  }
-
-  private methodAccess(expr: ts.Expression): string | null {
-    const value = unwrapExpression(expr);
-    if (
-      ts.isPropertyAccessExpression(value) &&
-      value.expression.kind === ts.SyntaxKind.ThisKeyword &&
-      this.methodNames.has(value.name.text)
-    ) {
-      return value.name.text;
-    }
-    return null;
   }
 
   lowerRoot(expr: ts.Expression): ProgramTreeNode {
@@ -638,7 +533,7 @@ export class Lowering {
     // authored imports. The class grammar rejects identifier tags
     // (composition by tag name); the server lane's composition channel is the
     // import, so the same walk branches here before the intrinsic-tag rule.
-    if (this.server !== undefined && ts.isIdentifier(tagNameNode) && /^[A-Z]/.test(tag)) {
+    if (ts.isIdentifier(tagNameNode) && /^[A-Z]/.test(tag)) {
       return this.lowerComponentElement(tagNameNode, attributes, children, path, sourceNode);
     }
     // alpha.8: custom-element hosts (<x-y>) are admitted as nested hosts — the
@@ -664,7 +559,7 @@ export class Lowering {
     // Server function components: a build-admitted compiled host renders
     // through `__ssr` — the component path's literal runtime function. The
     // recording rides the ordinary host walk (attributes cross as raw props).
-    if (this.server !== undefined && isCustomHost && this.server.compiledTags.has(tag)) {
+    if (isCustomHost && this.server.compiledTags.has(tag)) {
       this.ssrCalls.add(elementId);
     }
     const attributeNames = new Set<string>();
@@ -692,15 +587,7 @@ export class Lowering {
       const name = this.normalizeAttributeName(prop.name.getText(this.sf));
       const init = prop.initializer;
       if (name === 'trustedHtml') continue;
-      const isDynamicEvent =
-        /^on[A-Z]/.test(name) &&
-        init !== undefined &&
-        ts.isJsxExpression(init) &&
-        init.expression !== undefined;
-      // Server function components render static HTML: event handlers are a
-      // client-only construct, refused with the server-lane code (the class
-      // path's handler lowering never runs here).
-      if (this.server !== undefined && /^on[A-Z]/.test(name)) {
+      if (/^on[A-Z]/.test(name)) {
         this.fail(
           prop,
           'OEC9031',
@@ -709,15 +596,7 @@ export class Lowering {
             '(a compiled component), not to server markup',
         );
       }
-      if (isCustomHost && (isDynamicEvent || /^on[A-Z]/.test(name))) {
-        this.fail(
-          prop,
-          'OEC9017',
-          `custom-element host <${tag}> may not carry event handlers — bind the handler on an ` +
-            'intrinsic element, or attach the listener imperatively in a lifecycle method',
-        );
-      }
-      if (!isSafeAttributeName(name) && !isDynamicEvent && name !== 'innerHTML') {
+      if (!isSafeAttributeName(name) && name !== 'innerHTML') {
         this.fail(
           prop,
           'OEC9011',
@@ -772,42 +651,14 @@ export class Lowering {
         );
       }
       const expr = unwrapExpression(init.expression);
-      if (/^on[A-Z]/.test(name)) {
-        if (staticOnly) {
-          this.fail(
-            prop,
-            'OEC9012',
-            `${BRANCH_BOUNDARY} — an event handler cannot bind inside a branch`,
-          );
-        }
-        this.lowerEvent(name, expr, path, prop, elementId);
-        continue;
-      }
       if (name === 'ref') {
-        if (this.server !== undefined) {
-          this.fail(
-            prop,
-            'OEC9031',
-            'refs are a client-only construct — a server function component renders static HTML ' +
-              'and may not carry a ref; element access belongs to an @element island (a compiled ' +
-              'component), not to server markup',
-          );
-        }
-        if (isCustomHost) {
-          this.fail(
-            prop,
-            'OEC9017',
-            `custom-element host <${tag}> may not carry a ref — query the host imperatively ` +
-              'in a lifecycle method (e.g. connectedCallback)',
-          );
-        }
-        if (staticOnly) {
-          this.fail(prop, 'OEC9012', `${BRANCH_BOUNDARY} — a ref cannot bind inside a branch`);
-        }
-        const ref = this.fieldAccess(expr);
-        if (!ref) this.fail(prop, 'OEC9011', 'ref must reference this.<field>');
-        this.addPart({ k: 'ref', ref, path }, path, prop, elementId);
-        continue;
+        this.fail(
+          prop,
+          'OEC9031',
+          'refs are a client-only construct — a server function component renders static HTML ' +
+            'and may not carry a ref; element access belongs to an @element island (a compiled ' +
+            'component), not to server markup',
+        );
       }
       // Inline conditional class (#1556): admitted on intrinsic elements in
       // the dynamic grammar. Block branches keep their boundary — a branch
@@ -816,7 +667,7 @@ export class Lowering {
       // custom-element hosts keep today's diagnostics. Both fail closed here
       // with the located boundary diagnostic instead of the generic
       // unsupported-expression one.
-      if (this.server !== undefined && this.expressionContainsAwait(expr)) {
+      if (this.expressionContainsAwait(expr)) {
         this.fail(prop, 'OEC9032', serverAwaitRefusal('attribute'));
       }
       if (name === 'class' && ts.isConditionalExpression(expr)) {
@@ -997,7 +848,7 @@ export class Lowering {
     sourceNode: ts.Node,
   ): ProgramTreeNode {
     const name = tagNameNode.getText(this.sf);
-    const local = this.server!.components.get(name);
+    const local = this.server.components.get(name);
     if (local === undefined) {
       this.fail(
         tagNameNode,
@@ -1007,7 +858,7 @@ export class Lowering {
           'function component; @element components compose by tag name)',
       );
     }
-    if (this.server!.asyncComponents.has(local) && this.server!.asyncFunction !== true) {
+    if (this.server.asyncComponents.has(local) && this.server.asyncFunction !== true) {
       this.fail(
         tagNameNode,
         'OEC9032',
@@ -1058,7 +909,7 @@ export class Lowering {
       const expr = unwrapExpression(initializer.expression!);
       const field = this.fieldAccess(expr);
       if (field !== null) {
-        propsEntries.push([propName, `${this.server!.parameter}.${field}`]);
+        propsEntries.push([propName, `${this.server.parameter}.${field}`]);
         continue;
       }
       if (ts.isAwaitExpression(expr)) {
@@ -1086,142 +937,7 @@ export class Lowering {
     return this.addElement(elementId, local!, [], []);
   }
 
-  private lowerEvent(
-    attributeName: string,
-    expr: ts.Expression,
-    path: number[],
-    sourceNode: ts.Node,
-    elementId: string,
-  ): number {
-    const action = this.eventAction(expr, sourceNode);
-    return this.addPart(
-      {
-        k: 'event',
-        event: attributeName.slice(2).toLowerCase(),
-        handler: action.handler,
-        action: action.action,
-        path,
-      },
-      path,
-      sourceNode,
-      elementId,
-    );
-  }
-
-  private eventAction(
-    expr: ts.Expression,
-    sourceNode: ts.Node,
-  ): { handler: string; action: ProgramEventAction } {
-    const method = this.methodAccess(expr);
-    if (method) return { handler: method, action: { kind: 'method', name: method } };
-    if (!ts.isArrowFunction(expr) || expr.parameters.length > 1) {
-      this.fail(
-        sourceNode,
-        'OEC9016',
-        'event handlers must be this.<method> or a single-action arrow',
-      );
-    }
-    const expression = ts.isBlock(expr.body)
-      ? expr.body.statements.length === 1 && ts.isExpressionStatement(expr.body.statements[0])
-        ? expr.body.statements[0].expression
-        : undefined
-      : expr.body;
-    if (!expression) {
-      this.fail(
-        sourceNode,
-        'OEC9016',
-        'event arrow handlers must contain exactly one supported action',
-      );
-    }
-    const action = this.parseEventMutation(expression, sourceNode);
-    let name = `__compiledEvent${this.generatedHandlers.length}`;
-    while (this.methodNames.has(name) || this.fieldNames.has(name)) name = `_${name}`;
-    this.methodNames.add(name);
-    this.generatedHandlers.push({ name, action, node: expr });
-    this.addSource(`handler:${name}`, 'handler', expr);
-    return { handler: name, action };
-  }
-
-  private parseEventMutation(expr: ts.Expression, near: ts.Node): ProgramEventAction {
-    const value = unwrapExpression(expr);
-    const assertWritable = (signal: string): void => {
-      if (this.computedNames.has(signal)) {
-        this.fail(
-          near,
-          'OEC9024',
-          `event actions may not write computed field "${signal}" — assign its source properties`,
-        );
-      }
-    };
-    if (ts.isPostfixUnaryExpression(value) || ts.isPrefixUnaryExpression(value)) {
-      const signal = this.fieldAccess(value.operand);
-      if (
-        !signal ||
-        (value.operator !== ts.SyntaxKind.PlusPlusToken &&
-          value.operator !== ts.SyntaxKind.MinusMinusToken)
-      ) {
-        this.fail(near, 'OEC9016', 'event mutations support only this.<number>++ or --');
-      }
-      assertWritable(signal!);
-      return {
-        kind: value.operator === ts.SyntaxKind.PlusPlusToken ? 'increment' : 'decrement',
-        signal: signal!,
-      };
-    }
-    if (ts.isBinaryExpression(value)) {
-      const signal = this.fieldAccess(value.left);
-      const literal = literalValue(value.right, this.sf);
-      if (!signal || literal === undefined) {
-        this.fail(near, 'OEC9016', 'event assignment values must be serializable literals');
-      }
-      assertWritable(signal!);
-      if (value.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
-        return { kind: 'assign', signal, value: literal! };
-      }
-      if (
-        (value.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken ||
-          value.operatorToken.kind === ts.SyntaxKind.MinusEqualsToken) &&
-        typeof literal === 'number'
-      ) {
-        return {
-          kind: value.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken ? 'add' : 'subtract',
-          signal,
-          value: literal,
-        };
-      }
-      this.fail(near, 'OEC9016', 'event arithmetic supports only numeric += or -= literals');
-    }
-    if (ts.isCallExpression(value) && value.arguments.length === 0) {
-      const method = this.methodAccess(value.expression);
-      if (method) return { kind: 'call', name: method };
-    }
-    this.fail(
-      near,
-      'OEC9016',
-      'unsupported event action; use this.<field>++, assignment or this.<method>()',
-    );
-  }
-
-  /**
-   * Inline conditional class (#1556): `class={this.<cond> ? 'a' : 'b'}` is
-   * authoring sugar for a computed field bound to the element's class Part —
-   * exactly the shape the author would hand-write as
-   * `@property({ reflect: false, attribute: false }) x = computed(() => ...)`
-   * plus `class={x}`. The lowering therefore reuses the computed-field
-   * machinery end to end: the condition validates under the same body grammar
-   * (only `this.<declared plain property>` reads; module-scope values pass
-   * through), the synthesized factory rides the existing `__computedFields`
-   * emission, and the Part Program stays v1 — one `class` Part whose signal
-   * is the synthesized computed signal. No runtime or IR shape changes; the
-   * serialized class value and its reactivity are the existing class-Part
-   * and computed-signal semantics on every execution mode.
-   *
-   * Both branches must be string literals (the class-attribute text); an
-   * empty string is the idiomatic off-branch. Everything else fails closed
-   * with OEC9011 — no runtime fallback (P2). A condition reading no declared
-   * property would emit a computed entry with an empty dep list, which the
-   * wire validator rejects, so it fails here at the source.
-   */
+  /** Lower a conditional class with literal branches and a declared props read. */
   private lowerConditionalClass(
     expr: ts.ConditionalExpression,
     path: number[],
@@ -1242,56 +958,24 @@ export class Lowering {
       // candidates (alpha15 S lane) exactly like a static class attribute.
       this.collectClassCandidates(value.text);
     }
-    const { deps, bodyText } = validateComputedExpressionBody(
-      expr,
-      this.sf,
-      this.plainFieldNames,
-      this.computedFieldNames,
-      (node, code, message) => this.fail(node, code, message),
-      {
-        actor: 'conditional class conditions',
-        single: 'conditional class condition',
-        plural: 'conditional class conditions',
-      },
-      this.server === undefined ? undefined : { parameter: this.server.parameter },
-    );
-    if (deps.length === 0) {
+    if (
+      !conditionalClassReadsProp(
+        expr,
+        this.plainFieldNames,
+        this.server.parameter,
+        this.fail.bind(this),
+      )
+    ) {
       this.fail(
         sourceNode,
         'OEC9011',
-        `conditional class conditions must read at least one ${
-          this.server === undefined ? 'this' : this.server.parameter
-        }.<property>`,
+        `conditional class conditions must read at least one ${this.server.parameter}.<property>`,
       );
     }
-    const computedName = this.options.computedLocal ?? SYNTHESIZED_COMPUTED_LOCAL;
     let name = `__compiledClass${this.conditionalClassSerial++}`;
-    while (this.methodNames.has(name) || this.fieldNames.has(name)) name = `_${name}`;
+    while (this.fieldNames.has(name)) name = `_${name}`;
     this.fieldNames.add(name);
-    this.computedNames.add(name);
-    // The synthesized declaration has no authored PropertyDeclaration; the
-    // conditional expression is the truthful origin for every consumer (the
-    // property source record and the emission mapping). The prototype-linked
-    // shim projects `name`/`initializer` onto it and inherits the node's own
-    // position/text accessors.
-    const node = Object.assign(Object.create(expr), {
-      name: expr,
-      initializer: expr,
-    }) as unknown as ts.PropertyDeclaration;
-    this.synthesizedFields.push({
-      name,
-      reflect: false,
-      attribute: null,
-      type: 'string',
-      converter: 'string',
-      typeConstructor: 'String',
-      accessibility: '',
-      typeText: '',
-      initializerText: '',
-      defaultValue: null,
-      node,
-      computed: { deps, factoryText: `(__s) => ${computedName}(() => ${bodyText})`, body: expr },
-    });
+    this.synthesizedFields.push({ name, computed: { body: expr } });
     this.addPart({ k: 'class', signal: name, path }, path, sourceNode, elementId);
   }
 
@@ -1416,7 +1100,6 @@ export class Lowering {
     // ordinary field path and the code generator emits it raw (compiler-
     // produced final HTML).
     if (
-      this.server !== undefined &&
       ts.isPropertyAccessExpression(expr) &&
       ts.isIdentifier(expr.expression) &&
       expr.expression.text === this.server.parameter &&
@@ -1430,13 +1113,13 @@ export class Lowering {
           'props type: the JSX children a caller nests compose it as one final-HTML string',
       );
     }
-    if (this.server !== undefined && ts.isAwaitExpression(expr)) {
+    if (ts.isAwaitExpression(expr)) {
       if (staticOnly) this.fail(child, 'OEC9032', serverAwaitRefusal('staticBranch'));
       const id = this.reserveElement('slot', path, child);
       this.serverExpressionSlots.set(id, `__t(${this.serverAwaitExpression(expr)})`);
       return this.addElement(id, 'slot', [], []);
     }
-    if (this.server !== undefined && this.expressionContainsAwait(expr)) {
+    if (this.expressionContainsAwait(expr)) {
       this.fail(child, 'OEC9032', serverAwaitRefusal(this.refusedAwaitChildPosition(expr)));
     }
     this.refusePromiseField(expr, child, 'child');
@@ -1636,13 +1319,7 @@ export class Lowering {
     if (!key) this.fail(body, 'OEC9014', 'list Block items require key={<item>.<field>}');
 
     const itemFields: string[] = [];
-    // Per-item event bindings (#1556 IR v2): `on<event>={this.<method>}` (or a
-    // single-action arrow) inside the item template lowers to ItemEventBinding
-    // entries on the each part — the runtime attaches them per item and
-    // dispatches with (event, item), the same action union as fixed event
-    // parts.
-    const itemEvents: ItemEventBinding[] = [];
-    const item = this.lowerItemElement(body, param, itemFields, [], true, itemEvents, '');
+    const item = this.lowerItemElement(body, param, itemFields, [], true);
     const uniqueFields = [...new Set(itemFields)];
     if (uniqueFields.length === 0) {
       this.fail(
@@ -1660,7 +1337,6 @@ export class Lowering {
         // multi-field templates omit it — every ival/iattrs slot owns its own.
         ...(uniqueFields.length === 1 ? { field: uniqueFields[0] } : {}),
         item: [item],
-        ...(itemEvents.length > 0 ? { itemEvents } : {}),
       },
       path,
       near,
@@ -1674,8 +1350,6 @@ export class Lowering {
     itemFields: string[],
     path: number[],
     allowKey = false,
-    itemEvents?: ItemEventBinding[],
-    selector = '',
   ): ProgramTreeNode {
     const tagName = ts.isJsxElement(element) ? element.openingElement.tagName : element.tagName;
     const attributes = ts.isJsxElement(element)
@@ -1760,44 +1434,14 @@ export class Lowering {
           `item template attribute "${name}" must be a static literal or {${param}.<field>}`,
         );
       }
-      // Per-item event handlers (#1556 IR v2): `on<event>={this.<method>}` (or
-      // a single-action arrow) lowers to an ItemEventBinding on the each part
-      // instead of a fixed-path event Part — the runtime re-attaches it per
-      // item and dispatches with (event, item). Custom-element hosts inside
-      // item templates stay handler-free, matching the host rule above.
       if (/^on[A-Z]/.test(name)) {
-        if (this.server !== undefined) {
-          this.fail(
-            prop,
-            'OEC9031',
-            `event handlers are a client-only construct — a server function component renders ` +
-              `static HTML and may not carry ${name}; interactivity belongs to an @element island ` +
-              '(a compiled component), not to server markup',
-          );
-        }
-        if (isCustomHost) {
-          this.fail(
-            prop,
-            'OEC9017',
-            `custom-element host <${tag}> may not carry event handlers — bind the handler on an ` +
-              'intrinsic element, or attach the listener imperatively in a lifecycle method',
-          );
-        }
-        if (itemEvents === undefined) {
-          this.fail(
-            prop,
-            'OEC9012',
-            'event handlers are only supported on list Block item templates',
-          );
-        }
-        const action = this.eventAction(unwrapExpression(prop.initializer.expression), prop);
-        itemEvents.push({
-          event: name.slice(2).toLowerCase(),
-          handler: action.handler,
-          action: action.action,
-          ...(selector ? { selector } : {}),
-        });
-        continue;
+        this.fail(
+          prop,
+          'OEC9031',
+          `event handlers are a client-only construct — a server function component renders ` +
+            `static HTML and may not carry ${name}; interactivity belongs to an @element island ` +
+            '(a compiled component), not to server markup',
+        );
       }
       // alpha.8: per-item attribute slots — `name={item.<field>}` resolves from
       // the current item at mount/claim (true emits a bare attribute, falsy
@@ -1847,7 +1491,6 @@ export class Lowering {
         `custom-element host <${tag}> may not have children in the compiler grammar (slots are unsupported)`,
       );
     }
-    let elementChildIndex = 0;
     for (const child of rawChildren) {
       const childPath = [...path, children.length];
       if (ts.isJsxText(child)) {
@@ -1857,7 +1500,7 @@ export class Lowering {
       }
       if (ts.isJsxExpression(child) && child.expression) {
         const expr = unwrapExpression(child.expression);
-        if (this.server !== undefined && this.expressionContainsAwait(expr)) {
+        if (this.expressionContainsAwait(expr)) {
           this.fail(child, 'OEC9032', serverAwaitRefusal('listItem'));
         }
         if (
@@ -1873,23 +1516,7 @@ export class Lowering {
         this.fail(child, 'OEC9013', `item child must be {${param}.<field>}`);
       }
       if (ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child)) {
-        // Structural selector for nested item-event targets (#1556 IR v2):
-        // `:nth-child` counts element siblings only, and item templates are
-        // static, so the element position is a compile-time constant. The
-        // root binding carries no selector.
-        const childSelector = `${selector || ':scope'} > *:nth-child(${elementChildIndex + 1})`;
-        children.push(
-          this.lowerItemElement(
-            child,
-            param,
-            itemFields,
-            childPath,
-            false,
-            itemEvents,
-            childSelector,
-          ),
-        );
-        elementChildIndex += 1;
+        children.push(this.lowerItemElement(child, param, itemFields, childPath));
         continue;
       }
       this.fail(

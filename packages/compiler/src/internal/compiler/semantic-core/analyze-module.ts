@@ -110,124 +110,40 @@ export function primitiveText(value: SerializableValue): string | null {
   return null;
 }
 
-/**
- * Message actors for computed-body diagnostics. One validation walk serves
- * both computed-field initializers and the inline conditional class (#1556);
- * the subjects keep each caller's diagnostic prose precise while the shared
- * defaults reproduce the computed-field messages byte-identically.
- */
-export interface ComputedBodySubjects {
-  /** Actor for shape violations ("X may not nest non-arrow functions"). */
-  readonly actor: string;
-  /** Actor for computed-field reads ("X may not read computed field ..."). */
-  readonly single: string;
-  /** Actor for undeclared reads ("X may only read this.<declared property>"). */
-  readonly plural: string;
-}
-
-const COMPUTED_FIELD_SUBJECTS: ComputedBodySubjects = {
-  actor: 'computed field arrows',
-  single: 'computed field',
-  plural: 'computed fields',
-};
-
-/**
- * Validate one computed-body expression and derive its factory text (#1556
- * split of parseComputedInitializer). The body may read `this.<field>` of any
- * NON-computed declared field (rewritten to the signal-record read) and use
- * any module-scope values; `this` in any other position, reads of computed
- * fields, and nested non-arrow functions fail closed (OEC9024). Returns the
- * source-signal dependency list (declaration order) and the body text with
- * every `this.<field>` read rewritten to `__s.<field>.value`.
- *
- * `binding` (alpha15 server lane) switches the read accessor from
- * `this.<field>` to `<parameter>.<field>` (a server function component's
- * props parameter): the same declared-field table and the same messages —
- * only the accessor spelling differs, and no signal-record rewrite applies
- * (the generated constructor reads the props object directly). The default
- * keeps the class path's behavior and messages byte-identical.
- */
-export function validateComputedExpressionBody(
+/** Validate the condition's props reads and report whether it reads any. */
+export function conditionalClassReadsProp(
   body: ts.Expression,
-  sf: ts.SourceFile,
-  plainFieldNames: ReadonlySet<string>,
-  computedFieldNames: ReadonlySet<string>,
+  declaredFields: ReadonlySet<string>,
+  parameter: string,
   fail: CompilerFail,
-  subjects: ComputedBodySubjects = COMPUTED_FIELD_SUBJECTS,
-  binding?: { readonly parameter: string },
-): { deps: string[]; bodyText: string } {
-  const deps: string[] = [];
-  const replacements: Array<{ start: number; end: number; name: string }> = [];
+): boolean {
+  let readsProp = false;
   const visit = (node: ts.Node): void => {
     if (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) {
       fail(
         node,
         'OEC9024',
-        `${subjects.actor} may not nest non-arrow functions — hoist the function to module ` +
-          'scope and import it',
+        'conditional class conditions may not nest non-arrow functions — hoist the function to module scope and import it',
       );
     }
-    if (binding !== undefined) {
-      if (
-        ts.isPropertyAccessExpression(node) &&
-        ts.isIdentifier(node.expression) &&
-        node.expression.text === binding.parameter
-      ) {
-        const name = node.name.text;
-        if (computedFieldNames.has(name)) {
-          fail(
-            node,
-            'OEC9024',
-            `${subjects.single} may not read computed field "${name}" — read its source ` +
-              `${binding.parameter}.<property> inputs instead (computed fields cannot chain)`,
-          );
-        }
-        if (!plainFieldNames.has(name)) {
-          fail(
-            node,
-            'OEC9024',
-            `${subjects.plural} may only read ${binding.parameter}.<declared property> (found ` +
-              `${binding.parameter}.${name})`,
-          );
-        }
-        if (!deps.includes(name)) deps.push(name);
-        return;
-      }
-    }
-    if (ts.isPropertyAccessExpression(node) && node.expression.kind === ts.SyntaxKind.ThisKeyword) {
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === parameter
+    ) {
       const name = node.name.text;
-      if (computedFieldNames.has(name)) {
+      if (!declaredFields.has(name)) {
         fail(
           node,
           'OEC9024',
-          `${subjects.single} may not read computed field "${name}" — read its source ` +
-            'this.<property> inputs instead (computed fields cannot chain)',
+          `conditional class conditions may only read ${parameter}.<declared property> (found ${parameter}.${name})`,
         );
       }
-      if (!plainFieldNames.has(name)) {
-        fail(
-          node,
-          'OEC9024',
-          `${subjects.plural} may only read this.<declared property> (found this.${name})`,
-        );
-      }
-      if (!deps.includes(name)) deps.push(name);
-      replacements.push({ start: node.getStart(sf), end: node.getEnd(), name });
+      readsProp = true;
       return;
-    }
-    if (node.kind === ts.SyntaxKind.ThisKeyword || node.kind === ts.SyntaxKind.SuperKeyword) {
-      fail(node, 'OEC9024', `${subjects.actor} may only reference this.<property>`);
     }
     ts.forEachChild(node, visit);
   };
   visit(body);
-  let bodyText = body.getText(sf);
-  for (const replacement of replacements.sort((a, b) => b.start - a.start)) {
-    const offset = body.getStart(sf);
-    bodyText =
-      bodyText.slice(0, replacement.start - offset) +
-      `__s.${replacement.name}.value` +
-      bodyText.slice(replacement.end - offset);
-  }
-  return { deps, bodyText };
+  return readsProp;
 }
