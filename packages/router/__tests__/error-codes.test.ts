@@ -18,7 +18,7 @@ import { resolvePageDocument } from '../src/document.ts';
 import type { PagePropsContext } from '../src/index.ts';
 import { packageIslandIdentity } from '../src/cli/build-client.ts';
 import {
-  requireElementRuntimeChunk,
+  collectElementRuntimeChunks,
   requireEntryStaticGraphFreeOfRuntime,
   resolveElementRuntimeIdentity,
 } from '../src/vite/internal/element-runtime-chunk.ts';
@@ -328,9 +328,9 @@ test('error codes: the client island build reports build-phase codes', () => {
   expect(identityError.code).toEqual(ClientBuildErrorCode.ELEMENT_RUNTIME_IDENTITY_UNRESOLVED);
   expect(identityError.phase).toEqual('build');
   const chunkError = assertThrowsIncludes(
-    () => requireElementRuntimeChunk([], { packageRoot: '/nowhere/packages/element' }),
+    () => collectElementRuntimeChunks([], { packageRoot: '/nowhere/packages/element' }),
     OpenElementError,
-    'shared element-runtime chunk never fired',
+    'has no runtime module',
   );
   expect(chunkError.code).toEqual(ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING);
   expect(chunkError.phase).toEqual('build');

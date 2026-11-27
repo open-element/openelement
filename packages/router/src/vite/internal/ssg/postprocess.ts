@@ -26,7 +26,6 @@ import { buildError, SsgRenderErrorCode } from '../../../internal/error-codes.ts
 import { visitHtmlFiles, walkHtmlFileEntries } from '../html-files.ts';
 import {
   type PageIslandManifest,
-  pageHasClientIslands,
   readTagName,
   routeFromRelativePath,
   skipThroughClosingTag,
@@ -341,61 +340,38 @@ export function injectIslandPrefetchRules(
 
 // ─── Element-runtime modulepreload projection (#1544, B2) ─────────────
 
-/** Marker attribute carried by the one runtime-preload link per page. */
+/** Identifies runtime preload links so repeated projection is idempotent. */
 export const ELEMENT_RUNTIME_PRELOAD_ATTRIBUTE = 'data-open-element-runtime-preload';
 
-/**
- * The one modulepreload tag for the shared element-runtime chunk (#1544).
- * `modulepreload` is the resource hint that fetches + parses a module graph
- * entry before it is requested, so an island-bearing page keeps the runtime's
- * warm start now that the client entry no longer statically imports it (B2).
- */
 export function buildElementRuntimePreloadLink(runtimeUrl: string): string {
   return `<link rel="modulepreload" href="${escapeAttr(
     runtimeUrl,
   )}" ${ELEMENT_RUNTIME_PRELOAD_ATTRIBUTE}>`;
 }
 
-/**
- * Inject the shared element-runtime chunk's `<link rel="modulepreload">` into
- * exactly the pages whose island manifest records a client-activatable
- * island (B2, #1544).
- *
- * This is a PROJECTION of the per-page island manifests — the build's one
- * source of page→island facts (`generateIslandManifests`/`postProcessClientIslandBuild`),
- * never a re-derived scan and never a registry:
- *
- *  - a page with a client-activatable island gets the one preload, so the
- *    runtime its hydration will need is already in flight when the entry
- *    executes;
- *  - a page whose manifest is empty (or names only `hydrate: 'none'` islands,
- *    which never enter the client bundle) gets nothing, and because island
- *    activation is host-gated (island-scheduler.ts) no island chunk or
- *    runtime fetch can start there — the runtime stays out of the page's
- *    JS graph;
- *  - the marker attribute makes re-runs idempotent, like the #1561 lane's
- *    `data-open-island-prefetch`.
- *
- * `runtimeUrl` is the emitted chunk's own address (from the client asset
- * manifest). The caller fails closed when an island-bearing native build
- * cannot name it; this writer never guesses one.
- */
+/** Preload the static runtime dependencies of this page's client islands. */
 export function injectElementRuntimePreload(
   dir: string,
   pageManifests: readonly PageIslandManifest[],
-  runtimeUrl: string,
+  runtimePreloads: ReadonlyMap<string, readonly string[]>,
 ): void {
-  const bearing = new Set(
-    pageManifests
-      .filter((manifest) => pageHasClientIslands(manifest))
-      .map((manifest) => manifest.route),
-  );
-  if (bearing.size === 0) return;
-  const link = buildElementRuntimePreloadLink(runtimeUrl);
+  const linksByRoute = new Map<string, string>();
+  for (const manifest of pageManifests) {
+    const urls = new Set<string>();
+    for (const island of manifest.islands) {
+      if (island.strategy === 'none') continue;
+      for (const url of runtimePreloads.get(island.chunkUrl) ?? []) urls.add(url);
+    }
+    if (urls.size > 0) {
+      linksByRoute.set(manifest.route, [...urls].map(buildElementRuntimePreloadLink).join('\n'));
+    }
+  }
+  if (linksByRoute.size === 0) return;
   for (const entry of walkHtmlFileEntries(dir)) {
-    if (!bearing.has(routeFromRelativePath(entry.relativePath))) continue;
+    const links = linksByRoute.get(routeFromRelativePath(entry.relativePath));
+    if (!links) continue;
     const content = readFileSync(entry.absolutePath, 'utf8');
     if (content.includes(ELEMENT_RUNTIME_PRELOAD_ATTRIBUTE)) continue;
-    writeFileSync(entry.absolutePath, insertAfterHead(content, link), 'utf8');
+    writeFileSync(entry.absolutePath, insertAfterHead(content, links), 'utf8');
   }
 }

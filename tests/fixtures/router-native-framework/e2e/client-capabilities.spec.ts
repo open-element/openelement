@@ -103,3 +103,56 @@ test('an island can reveal a previously absent enhanced form in open shadow DOM'
   await expect(page.getByRole('status')).toHaveText('Submitted through enhancement');
   expect(scripts.filter((path) => path === enhance)).toHaveLength(1);
 });
+
+test('Counter omits optional context and keyed-list code used by separate islands', async ({
+  page,
+}) => {
+  const graph: BrowserEntryGraphArtifact = JSON.parse(await readFile(graphPath, 'utf8'));
+  expect(graph.status).toBe('complete');
+  const chunks = new Map(graph.chunks.map((chunk) => [chunk.file, chunk]));
+  const markers = [
+    /\/generated-element\/context\.[jt]s$/,
+    /\/runtime\/context\.[jt]s$/,
+    /\/runtime\/each-reconcile\.[jt]s$/,
+  ];
+  const optionalFiles = new Set<string>();
+  for (const marker of markers) {
+    const carrying = graph.chunks.filter((chunk) =>
+      chunk.modules.some((module) => module.renderedLength > 0 && marker.test(module.id)),
+    );
+    expect(carrying, marker.toString()).toHaveLength(1);
+    optionalFiles.add(carrying[0].file);
+  }
+
+  const counter = graph.islands.find((island) => island.tag === 'note-counter');
+  expect(counter).toBeDefined();
+  const pending = [graph.entry.chunkFile, counter!.chunkFile];
+  const seen = new Set<string>();
+  for (const file of pending) {
+    if (seen.has(file)) continue;
+    seen.add(file);
+    expect(optionalFiles.has(file), file).toBe(false);
+    const chunk = chunks.get(file);
+    expect(chunk).toBeDefined();
+    pending.push(...chunk!.imports);
+  }
+
+  const scripts = requestedScripts(page);
+  await page.goto('/client-capabilities?mode=island');
+  await page.locator('note-counter #increment').click();
+  await expect(page.locator('note-counter #count')).toHaveText('1');
+  await page.waitForLoadState('networkidle');
+  for (const file of optionalFiles) expect(scripts).not.toContain('/client/' + file);
+
+  scripts.length = 0;
+  const response = await page.goto('/optional-capabilities');
+  expect(response?.status()).toBe(200);
+  await expect(page.locator('capability-reader output')).toHaveText('Copper');
+  const list = page.locator('capability-provider li');
+  await expect(list).toHaveText(['First item', 'Second item']);
+  await list.first().evaluate((item) => item.setAttribute('data-before-reorder', ''));
+  await page.getByRole('button', { name: 'Reverse list' }).click();
+  await expect(list).toHaveText(['Second item', 'First item']);
+  await expect(list.last()).toHaveAttribute('data-before-reorder', '');
+  for (const file of optionalFiles) expect(scripts).toContain('/client/' + file);
+});

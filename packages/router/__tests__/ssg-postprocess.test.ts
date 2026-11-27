@@ -148,22 +148,9 @@ test('islandChunkMapFromAssetManifest fails closed for every island when no mani
 
 // ─── postProcessClientIslandBuild (manifest-driven, no HTML surgery) ────
 
-function writeImportManifest(dist: string) {
-  const vite = join(dist, 'client', '.vite');
-  mkdirSync(vite, { recursive: true });
-  writeFileSync(
-    join(vite, 'manifest.json'),
-    JSON.stringify({
-      'app/islands/counter.ts': { file: 'islands/island-counter-Ab12.js', imports: ['_middle.js'] },
-      'app/islands/native.ts': {
-        file: 'islands/island-native-Cd34.js',
-        dynamicImports: ['_runtime.js'],
-      },
-      '_middle.js': { file: 'islands/middle-Ef56.js', imports: ['_runtime.js'] },
-      '_runtime.js': { file: 'islands/element-runtime-Bh4sh.js' },
-    }),
-  );
-}
+const PROJECTION_RUNTIME_PRELOADS = new Map([
+  ['/client/islands/island-counter-Ab12.js', ['/client/islands/element-runtime-Bh4sh.js']],
+]);
 
 /** Minimal BuildContextView for the island-manifest pass. */
 function ctxView(manifest: ClientAssetManifest | null, root: string) {
@@ -202,8 +189,7 @@ test('postProcessClientIslandBuild writes per-page manifests with manifest-keyed
       shared: ['/client/islands/element-runtime-Bh4sh.js'],
       styles: [],
     };
-    writeImportManifest(dist);
-    await postProcessClientIslandBuild(ctxView(manifest, tmp));
+    await postProcessClientIslandBuild(ctxView(manifest, tmp), PROJECTION_RUNTIME_PRELOADS);
 
     // The island identity resolves through the manifest, chunk URL intact.
     const homeManifest = JSON.parse(readFileSync(await pageManifestPath(dist, '/'), 'utf8')) as {
@@ -353,7 +339,6 @@ test('postProcessClientIslandBuild validates only the local metadata Phase 2 sel
       shared: ['/client/islands/element-runtime-Bh4sh.js'],
       styles: [],
     };
-    writeImportManifest(dist);
     await postProcessClientIslandBuild({
       phase3: { root: tmp, outDir: 'dist', base: '/', upgradeStrategy: 'idle' as const },
       phase1: {
@@ -394,9 +379,8 @@ test('postProcessClientIslandBuild validates only the local metadata Phase 2 sel
 // ─── #1544/B2 element-runtime modulepreload projection ──────────────
 //
 // The projection is read off the per-page island manifests the same pass just
-// wrote, and the chunk's address off the emitted client asset manifest. These
-// pin the three decisions the pass owns: which pages get the link, what
-// happens when the chunk cannot be named, and that a re-run is a no-op.
+// wrote, intersected with the Phase 2 graph's runtime dependency addresses.
+// These pin eligible pages and idempotent output.
 
 /** An island-bearing page and a zero-island page in one dist. */
 function writeProjectionPages(dist: string): void {
@@ -425,9 +409,14 @@ test('#1544/B2: the runtime modulepreload lands on the island-bearing page only,
   try {
     const dist = join(tmp, 'dist');
     writeProjectionPages(dist);
-    writeImportManifest(dist);
-    await postProcessClientIslandBuild(ctxView(PROJECTION_MANIFEST, tmp));
-    await postProcessClientIslandBuild(ctxView(PROJECTION_MANIFEST, tmp));
+    await postProcessClientIslandBuild(
+      ctxView(PROJECTION_MANIFEST, tmp),
+      PROJECTION_RUNTIME_PRELOADS,
+    );
+    await postProcessClientIslandBuild(
+      ctxView(PROJECTION_MANIFEST, tmp),
+      PROJECTION_RUNTIME_PRELOADS,
+    );
     const homeHtml = readFileSync(join(dist, 'index.html'), 'utf8');
     expect(homeHtml.match(/rel="modulepreload"/g)?.length).toEqual(1);
     expect(homeHtml).toContain(
@@ -475,7 +464,6 @@ test('#1544/B2: in a mixed app a native-only page receives no Element runtime pr
   try {
     const dist = join(tmp, 'dist');
     writeProjectionPages(dist);
-    writeImportManifest(dist);
     writeFileSync(
       join(dist, 'foreign.html'),
       '<html><head></head><foreign-card></foreign-card></html>',
@@ -491,7 +479,7 @@ test('#1544/B2: in a mixed app a native-only page receives no Element runtime pr
       tmp,
     );
     context.phase1.islandTagNames.push('foreign-card');
-    await postProcessClientIslandBuild(context);
+    await postProcessClientIslandBuild(context, PROJECTION_RUNTIME_PRELOADS);
     expect(readFileSync(join(dist, 'index.html'), 'utf8')).toContain(
       'data-open-element-runtime-preload',
     );

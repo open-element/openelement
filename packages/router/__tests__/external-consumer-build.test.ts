@@ -615,17 +615,13 @@ test('external consumer: the SSR bundle and prerendered HTML carry the import co
 test('external consumer (#1544/B2): the runtime preload is a per-page projection and the runtime leaves the entry static graph', async () => {
   const distDir = join(fixture.appDir, 'dist');
   const islandsDir = join(distDir, 'client', 'islands');
-  const clientIslands = await readdir(islandsDir);
-  const runtimeFile = clientIslands.find((file) => /^element-runtime-.+\.js$/.test(file));
-  expect(runtimeFile, `client islands: ${clientIslands.join(', ')}`).toBeTruthy();
-
-  // Island-bearing prerendered page: exactly one modulepreload, naming the
-  // chunk this build actually emitted (no hand-maintained runtime list).
   const homeHtml = await readFile(join(distDir, 'index.html'), 'utf8');
-  const preloads = homeHtml.match(/<link rel="modulepreload"[^>]*>/g) ?? [];
-  expect(preloads).toEqual([
-    `<link rel="modulepreload" href="/client/islands/${runtimeFile}" data-open-element-runtime-preload>`,
-  ]);
+  const preloads = [
+    ...homeHtml.matchAll(
+      /<link rel="modulepreload" href="\/client\/([^"]+)" data-open-element-runtime-preload>/g,
+    ),
+  ].map((match) => match[1]);
+  expect(preloads.length).toBeGreaterThan(0);
 
   const staticHtml = await readFile(join(distDir, 'proof-static', 'index.html'), 'utf8');
   expect(staticHtml).not.toMatch(/modulepreload|client\.js|data-open-island-prefetch/);
@@ -635,17 +631,28 @@ test('external consumer (#1544/B2): the runtime preload is a per-page projection
   ) as BrowserEntryGraphArtifact;
   expect(graph.status).toBe('complete');
   const chunks = new Map(graph.chunks.map((chunk) => [chunk.file, chunk]));
-  const seen = new Set<string>();
-  const queue = ['islands/client.js'];
-  for (const file of queue) {
-    if (seen.has(file)) continue;
-    seen.add(file);
-    const chunk = chunks.get(file);
-    expect(chunk, file).toBeDefined();
-    queue.push(...chunk!.imports);
+  function closure(roots: string[]): Set<string> {
+    const seen = new Set<string>();
+    for (const file of roots) {
+      if (seen.has(file)) continue;
+      seen.add(file);
+      const chunk = chunks.get(file);
+      expect(chunk, file).toBeDefined();
+      roots.push(...chunk!.imports);
+    }
+    return seen;
   }
-  expect(seen.size).toBeGreaterThan(1);
-  expect(seen).not.toContain(`islands/${runtimeFile}`);
+  const eager = closure([graph.entry.chunkFile]);
+  const home = closure(
+    graph.islands
+      .filter((island) => homeHtml.includes(`<${island.tag}`))
+      .map((island) => island.chunkFile),
+  );
+  expect(eager.size).toBeGreaterThan(1);
+  for (const preload of preloads) {
+    expect(home).toContain(preload);
+    expect(eager).not.toContain(preload);
+  }
   // Guard against a vacuous pass: the same entry does carry the island wiring
   // and its dynamic island imports.
   const entryCode = await readFile(join(islandsDir, 'client.js'), 'utf8');

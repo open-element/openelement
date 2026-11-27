@@ -38,15 +38,15 @@ import { authoredPublicPaths, writePublishOutput } from './internal/publish-mani
 const log = createLogger('build');
 
 /** Phase 2: client island bundle. Shared by the SPA and SSG closeBundle paths. */
-async function runClientIslandBuild(ctx: OpenElementBuildContext): Promise<string[]> {
+async function runClientIslandBuild(ctx: OpenElementBuildContext) {
   log.info('[2/3] Client island build...');
   try {
     const { buildClient } = await import('../cli/build-client.ts');
-    const { manifest, files } = await buildClient(ctx);
-    ctx.clientAssetManifest = manifest;
+    const result = await buildClient(ctx);
+    ctx.clientAssetManifest = result.manifest;
     ctx.markComplete(2);
     log.info('[2/3] Client island build - complete');
-    return files;
+    return result;
   } catch (error) {
     log.error(`[2/3] Client island build - FAILED: ${error}`);
     throw error;
@@ -163,10 +163,10 @@ export function buildPlugin(
       const hasServerRenderedPages = (ctx.phase1.cachedRoutes ?? []).some(
         (route) => route.type === 'page',
       );
-      const clientPublicFiles =
+      const clientOutput =
         totalIslands > 0 || hasEnhancedForms || stylePlan || hasServerRenderedPages
           ? await runClientIslandBuild(ctx)
-          : [];
+          : undefined;
 
       // The document stylesheet: Phase 2 emitted it (content-hashed, in
       // dist/client/assets/). Point the head artifact at it BEFORE Phase 3
@@ -233,7 +233,10 @@ export function buildPlugin(
         try {
           const manifest = ctx.clientAssetManifest;
           if (manifest) {
-            const { pageManifests, files } = await postProcessClientIslandBuild(ctx);
+            const { pageManifests, files } = await postProcessClientIslandBuild(
+              ctx,
+              clientOutput?.runtimePreloads,
+            );
             islandManifestFiles = files;
             await writeRequestTimeClientAssets(ctx, manifest);
             log.info(`Client scripts rendered from the asset manifest: ${manifest.entry}`);
@@ -277,7 +280,7 @@ export function buildPlugin(
           : [];
       writePublishOutput(outputDir, [
         ...authored,
-        ...clientPublicFiles,
+        ...(clientOutput?.files ?? []),
         ...islandManifestFiles,
         ...readSsgPageManifest(outputDir),
       ]);

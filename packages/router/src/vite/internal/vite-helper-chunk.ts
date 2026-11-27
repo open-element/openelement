@@ -66,9 +66,8 @@ export function viteHelperChunkName(moduleId: string): string | undefined {
 
 /**
  * The emitted helper chunk's file among a client output file list — the
- * grouping name plus the hash `chunkFileNames` appends, the same address
- * contract {@linkcode ./element-runtime-chunk.ts | findElementRuntimeChunkFile}
- * reads for the runtime. Exactly one file may carry the identity; a second one
+ * grouping name plus the hash `chunkFileNames` appends. Exactly one file
+ * may carry the identity. A second one
  * is a split the callers below reject rather than take a first hit.
  */
 export function findViteHelperChunkFile(files: readonly string[]): string | undefined {

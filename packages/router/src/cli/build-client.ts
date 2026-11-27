@@ -61,7 +61,8 @@ import {
   documentServiceModuleIds,
   isDocumentServiceModule,
   elementRuntimeChunkName,
-  requireElementRuntimeChunk,
+  collectElementRuntimeChunks,
+  elementRuntimePreloads,
   requireEntryStaticGraphFreeOfRuntime,
   resolveElementRuntimeIdentity,
 } from '../vite/internal/element-runtime-chunk.ts';
@@ -320,18 +321,9 @@ export function findReachableIslandTags(
   const allowed = candidates.filter((tag) => admitted.has(tag));
   const reachable = new Set<string>();
   const candidateSet = new Set(allowed);
-  const recordSource = (source: string, filePath?: string): void => {
-    if (filePath) {
-      const semantics = analyzeModuleSemantics(source, filePath, {
-        vocabulary: ROUTER_MODULE_VOCABULARY,
-      });
-      for (const tag of semantics.referencedCustomElementTags) {
-        if (candidateSet.has(tag)) reachable.add(tag);
-      }
-    } else {
-      for (const tag of extractCustomElementTags(source)) {
-        if (candidateSet.has(tag)) reachable.add(tag);
-      }
+  const recordTags = (tags: Iterable<string>): void => {
+    for (const tag of tags) {
+      if (candidateSet.has(tag)) reachable.add(tag);
     }
   };
 
@@ -363,16 +355,12 @@ export function findReachableIslandTags(
     const semantics = analyzeModuleSemantics(source, normalizedPath, {
       vocabulary: ROUTER_MODULE_VOCABULARY,
     });
-    recordSource(source, normalizedPath);
+    recordTags(semantics.referencedCustomElementTags);
     // Importing a local island module is an explicit registration-capability
     // edge even when its tag is created later by opaque third-party code.
     // The declaration itself is therefore observable reachability evidence.
-    for (const tag of [
-      ...semantics.definedCustomElementTags,
-      ...(deliveryByFile.get(realPathKey(normalizedPath)) ?? []),
-    ]) {
-      if (candidateSet.has(tag)) reachable.add(tag);
-    }
+    recordTags(semantics.definedCustomElementTags);
+    recordTags(deliveryByFile.get(realPathKey(normalizedPath)) ?? []);
     for (const specifier of semantics.relativeImports) {
       const imported = resolveSourceImport(normalizedPath, specifier, root);
       if (imported) recordSourceFile(imported);
@@ -380,7 +368,7 @@ export function findReachableIslandTags(
   };
 
   for (const entry of walkHtmlFileEntries(resolve(root, outDir))) {
-    recordSource(readFileSync(entry.absolutePath, 'utf8'));
+    recordTags(extractCustomElementTags(readFileSync(entry.absolutePath, 'utf8')));
   }
 
   const routesDir = ctx.phase3.routesDir || 'app/routes';
@@ -456,9 +444,11 @@ type ViteInlineConfigWithManifest = Omit<InlineConfig, 'build'> & {
   build?: ViteBuildOptionsWithManifest;
 };
 
-async function buildClient(
-  ctx: OpenElementBuildContext,
-): Promise<{ manifest: ClientAssetManifest | null; files: string[] }> {
+async function buildClient(ctx: OpenElementBuildContext): Promise<{
+  manifest: ClientAssetManifest | null;
+  files: string[];
+  runtimePreloads?: ReadonlyMap<string, readonly string[]>;
+}> {
   // the style-request registry's bookkeeping is this build's
   // lifetime — the SSR build clears and re-registers through its own
   // transforms, and a stale entry from an earlier build in this process must
@@ -850,16 +840,15 @@ async function buildClient(
                 includeDependenciesRecursively: false,
               },
               {
+                // Group by static reachability from each island entry. Merging
+                // unrelated subgroups would make a small island download
+                // context and list support used only by a different island.
+                name: (id) => elementRuntimeChunkName(id, elementRuntimeIdentity) ?? null,
+                entriesAware: true,
+                priority: 50,
+              },
+              {
                 name(id: string) {
-                  // #1544: the element runtime rides one shared chunk
-                  // every island imports, instead of homing inside
-                  // whichever island chunk its import reached first. The
-                  // match is exact package-root containment from the
-                  // identity pass — a native build that groups zero
-                  // runtime modules fails the post-build guard below
-                  // rather than shipping per-island copies.
-                  const runtimeChunk = elementRuntimeChunkName(id, elementRuntimeIdentity);
-                  if (runtimeChunk) return runtimeChunk;
                   // Force preact + preact/hooks into a single chunk so the
                   // shared options object is not duplicated across chunks
                   // (which breaks hooks).
@@ -888,16 +877,7 @@ async function buildClient(
       },
     },
     resolve: {
-      alias: [
-        // #1548: with the blocks scan's proof of absence, the WHOLE client
-        // graph resolves the element runtime to the blocks-free entry — the
-        // generated entry's specifier alone cannot prune the blocks cluster,
-        // because every island module imports `@openelement/element` for its
-        // base class and the package's sideEffects declaration (#1425) keeps
-        // the default entry's installs alive in every graph that touches it.
-        // Undefined keeps the default resolution.
-        ...serializedAlias,
-      ],
+      alias: serializedAlias,
       // The browser-client resolve policy the outer resolved config carries
       // (captured in the open plugin's configResolved). Empty conditions and
       // an unset preserveSymlinks mean "nothing to override" and this build
@@ -1177,7 +1157,12 @@ async function buildClient(
     const shipsGeneratedIsland = islandEntries.some(
       (entry) => entry.generatedLane === true && entry.strategy !== 'none',
     );
-    requireElementRuntimeChunk(emittedChunks, elementRuntimeIdentity, shipsGeneratedIsland);
+    const runtimeFiles = collectElementRuntimeChunks(
+      emittedChunks,
+      elementRuntimeIdentity,
+      shipsGeneratedIsland,
+    );
+    const runtimePreloads = elementRuntimePreloads(emittedChunks, runtimeFiles, clientBase);
     requireViteHelperChunk(emittedChunks);
     if (entryHasClientJs) {
       requireEntryStaticGraphFreeOfRuntime(emittedChunks, elementRuntimeIdentity);
@@ -1451,6 +1436,7 @@ async function buildClient(
     }
     return {
       manifest: ctx.clientAssetManifest,
+      runtimePreloads,
       files: publicFiles.map((name) => `client/${name}`),
     };
   } catch (error) {

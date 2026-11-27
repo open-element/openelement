@@ -39,8 +39,6 @@ export interface ViteClientManifestEntry {
   file?: string;
   name?: string;
   isEntry?: boolean;
-  /** Manifest keys of static imports; dynamic imports are separate edges. */
-  imports?: string[];
   /** The emitted CSS files of this entry's chunk (Vite's manifest schema). */
   css?: string[];
 }

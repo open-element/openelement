@@ -24,16 +24,10 @@ import { createLogger, formatError } from '@openelement/element';
 import {
   buildError,
   ClientAssetErrorCode,
-  ClientBuildErrorCode,
   SsgHygieneErrorCode,
 } from '../../../internal/error-codes.ts';
-import { readViteClientManifest } from '../../client-asset-manifest.ts';
 import type { PageIslandManifest } from './island-manifest.ts';
-import {
-  generateIslandManifests,
-  pageHasClientIslands,
-  writeIslandManifests,
-} from './island-manifest.ts';
+import { generateIslandManifests, writeIslandManifests } from './island-manifest.ts';
 import { expandIslandDeliveryDecl, resolveIslandHydrate } from './island-scanner.ts';
 import {
   type IslandDeliveryMeta,
@@ -41,53 +35,12 @@ import {
   resolveIslandDeliveryTags,
 } from './delivery.ts';
 import { DEFAULT_OUT_DIR } from './../paths.ts';
-import { findElementRuntimeChunkFile } from '../element-runtime-chunk.ts';
 import { injectElementRuntimePreload } from './postprocess.ts';
 import { safeReadDir } from './route-scanner-fs.ts';
 
 export { buildIslandPrefetchLinks } from './speculation-rules.ts';
 
 const log = createLogger('build-postprocess');
-
-/** Find the island chunks that reach the runtime through static imports. */
-async function runtimePreloadPages(
-  outputDir: string,
-  base: string,
-  pages: readonly PageIslandManifest[],
-  runtimeUrl: string,
-): Promise<PageIslandManifest[]> {
-  const manifest = await readViteClientManifest(
-    join(outputDir, 'client', '.vite', 'manifest.json'),
-  );
-  const urlPrefix = `${base || '/'}client/`;
-  const importedBy = new Map<string, string[]>();
-  const pending: string[] = [];
-  for (const [key, chunk] of Object.entries(manifest)) {
-    if (`${urlPrefix}${chunk.file}` === runtimeUrl) pending.push(key);
-    for (const dependency of chunk.imports ?? []) {
-      const importers = importedBy.get(dependency);
-      if (importers) importers.push(key);
-      else importedBy.set(dependency, [key]);
-    }
-  }
-  if (pending.length === 0) {
-    throw buildError(
-      ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING,
-      `The client import graph does not name the shared element runtime at ${runtimeUrl}`,
-    );
-  }
-  const seen = new Set<string>();
-  const dependentUrls = new Set<string>();
-  for (const key of pending) {
-    if (seen.has(key)) continue;
-    seen.add(key);
-    dependentUrls.add(`${urlPrefix}${manifest[key].file}`);
-    pending.push(...(importedBy.get(key) ?? []));
-  }
-  return pages.filter((page) =>
-    page.islands.some((island) => island.strategy !== 'none' && dependentUrls.has(island.chunkUrl)),
-  );
-}
 
 /** Narrow view of OpenElementBuildContext used by the SSG post-processor. */
 export interface BuildContextView {
@@ -161,8 +114,8 @@ export function islandChunkMapFromAssetManifest(
  * client script tags themselves were already embedded at render time
  * (#1471) — this pass records the identity-driven chunk/strategy/layer
  * manifests and then feeds the one HTML write derived from them (B2/#1544):
- * the shared element-runtime chunk's `<link rel="modulepreload">` on the
- * pages with an island whose emitted chunk imports that runtime. The
+ * the runtime preload links for the actual static dependencies of each
+ * page's emitted island chunks. The
  * per-page speculation-rules injection (#1561) is a separate lane fed by
  * the manifests this function returns. Fail-closed: the chunk map is
  * resolved — and any missing island asset thrown — before a single page
@@ -172,6 +125,7 @@ export function islandChunkMapFromAssetManifest(
  */
 export async function postProcessClientIslandBuild(
   ctx: BuildContextView,
+  runtimePreloads?: ReadonlyMap<string, readonly string[]>,
 ): Promise<{ pageManifests: PageIslandManifest[]; files: string[] }> {
   const root = ctx.phase3.root || process.cwd();
   const outDir = ctx.phase3.outDir || DEFAULT_OUT_DIR;
@@ -229,17 +183,8 @@ export async function postProcessClientIslandBuild(
   const pageManifests = generateIslandManifests(outputDir, chunkMap, strategyMap, layerMap);
   const files = await writeIslandManifests(outputDir, pageManifests);
 
-  const bearingPages = pageManifests.filter((manifest) => pageHasClientIslands(manifest));
-  const assets = ctx.clientAssetManifest;
-  const runtimeUrl = findElementRuntimeChunkFile([
-    ...new Set([
-      ...(assets?.shared ?? []),
-      ...Object.values(assets?.islands ?? {}).map((asset) => asset.file),
-    ]),
-  ]);
-  if (bearingPages.length > 0 && runtimeUrl !== undefined) {
-    const pages = await runtimePreloadPages(outputDir, ctx.phase3.base, bearingPages, runtimeUrl);
-    injectElementRuntimePreload(outputDir, pages, runtimeUrl);
+  if (runtimePreloads?.size) {
+    injectElementRuntimePreload(outputDir, pageManifests, runtimePreloads);
   }
   return { pageManifests, files };
 }
