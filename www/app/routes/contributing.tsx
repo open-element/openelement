@@ -152,17 +152,7 @@ const content = {
   },
 } as const;
 
-/**
- * The contributing page as a server function page (alpha15 server
- * architecture): the route module's own exported TSX function, lowered by the
- * compiler into a generative HTML constructor. The page hook class
- * (`page-contributing`) scopes the former component sheet's authored rules in
- * the linked document stylesheet (www/site-chrome.css); the retired sheet's
- * shadow-only rules (`:host` box/ink, the universal box-sizing basis) retire
- * with the shadow root — the page is light DOM now and the document preflight
- * reaches it.
- *
- */
+/** The page-contributing class scopes rules in site-chrome.css. */
 export function PageContributing(props: {
   title: string;
   lede: string;

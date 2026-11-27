@@ -1,8 +1,3 @@
-/**
- * /admin — request-time admin route (thin wrapper). The compiled page element
- * lives in app/components/page-admin.tsx, the loader/action logic in
- * app/route-logic/admin.ts.
- */
 import { definePage } from '@openelement/router';
 import { defineIslandConfig } from '@openelement/router';
 import {
@@ -12,13 +7,7 @@ import {
   createReplayAction,
 } from '../route-logic/admin.ts';
 
-/**
- * The page component is declared IN THIS MODULE (execution-plan §19.9): the
- * server function page lane records `pageComponentName` only for an exported
- * component function the route module declares itself, so an imported class
- * could not be admitted. Was `app/components/page-admin.tsx`.
- */
-
+// The compiler admits page functions declared in their route module.
 export const openElement = defineIslandConfig({
   tag: 'admin-page',
   root: 'shadow',

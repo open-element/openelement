@@ -1,19 +1,8 @@
-/**
- * /signup — request-time sign-up route. Thin wrapper: the compiled page
- * element lives in app/components/page-signup.tsx, the loader/action logic in
- * app/route-logic/signup.ts.
- */
 import { definePage } from '@openelement/router';
 import { defineIslandConfig } from '@openelement/router';
 import { createSignupAction, signupLoader, signupPageProps } from '../route-logic/signup.ts';
 
-/**
- * The page component is declared IN THIS MODULE (execution-plan §19.9): the
- * server function page lane records `pageComponentName` only for an exported
- * component function the route module declares itself, so an imported class
- * could not be admitted. Was `app/components/page-signup.tsx`.
- */
-
+// The compiler admits page functions declared in their route module.
 export const openElement = defineIslandConfig({
   tag: 'signup-page',
   root: 'shadow',

@@ -1,8 +1,3 @@
-/**
- * /magic-link — request-time magic-link route. Thin wrapper: the compiled
- * page element lives in app/components/page-magic-link.tsx, the
- * loader/action logic in app/route-logic/magic-link.ts.
- */
 import { definePage } from '@openelement/router';
 import { defineIslandConfig } from '@openelement/router';
 import {
@@ -11,13 +6,7 @@ import {
   magicLinkPageProps,
 } from '../route-logic/magic-link.ts';
 
-/**
- * The page component is declared IN THIS MODULE (execution-plan §19.9): the
- * server function page lane records `pageComponentName` only for an exported
- * component function the route module declares itself, so an imported class
- * could not be admitted. Was `app/components/page-magic-link.tsx`.
- */
-
+// The compiler admits page functions declared in their route module.
 export const openElement = defineIslandConfig({
   tag: 'magic-link-page',
   root: 'shadow',

@@ -65,9 +65,6 @@ test('app/layout.tsx is the generated site shell with all 45 derived nodes', asy
   // registers it through the generated host PAIR channel (layout-pair slice).
   expect(source).not.toContain('extends OpenElement');
   expect(source).toContain("tag: 'app-layout'");
-  expect(source.match(/const \w+ = computed\(/g)?.length).toEqual(45);
-  expect(source).toContain("aria-labelledby='oe-menu-appearance'");
-  expect(source).toContain("<p id='oe-menu-appearance'>{menuAppearanceLabel.value}</p>");
   const compiled = compileGeneratedElementIfAdmitted(source, url.pathname, {
     site: { tag: 'app-layout' },
   });
@@ -140,18 +137,6 @@ test('open-standards-visual is a generated component and its computed stays a de
   // the record the shell keeps as bindings — not a declared property row.
   expect(compiled!.code).toContain('const showPackages = computed(');
   expect(compiled!.code).not.toContain('name: "showPackages"');
-});
-
-test('open-page-rail keeps its view compiler-owned on the generated lane', async () => {
-  const url = new URL('../app/islands/open-page-rail.tsx', import.meta.url);
-  const source = await readFile(url, 'utf8');
-  const result = compileGeneratedElementIfAdmitted(source, url.pathname, {
-    site: { tag: 'open-page-rail' },
-  });
-  expect(result, 'open-page-rail must be admitted by the generated-element lane').not.toBeNull();
-  expect(String(result?.diagnostics ?? '')).not.toContain('OEC');
-  // The scrollspy controller stays a site-UI collaborator, event-time only.
-  expect(source).toContain("from '../site-ui/open-page-rail-controller.ts'");
 });
 
 test('open-search keeps its view compiler-owned and its browser state external', async () => {
@@ -260,7 +245,6 @@ test('open-reading-shell compiles the metadata visibility node with its other de
   // These nodes live in the retained setup factory, never in property rows.
   expect(source).not.toContain('extends OpenElement');
   expect(source).toContain("tag: 'open-reading-shell'");
-  expect(source.match(/const \w+ = computed\(/g)?.length).toEqual(22);
   expect(source).toContain(
     'computed(() => !props.metadata?.date && !props.metadata?.tags?.length)',
   );

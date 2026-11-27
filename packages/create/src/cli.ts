@@ -219,8 +219,7 @@ function printUsage(): void {
  * Resolve the template. One template ships (#1530), so there is nothing to
  * ask: `-t/--template` names it explicitly (an unknown value fails with the
  * available name), and a bare run takes that same default — on a TTY exactly
- * as under CI. The former TTY confirmation asked a question with one possible
- * answer, which only made a first run feel like an interrogation.
+ * as under CI.
  */
 function resolveTemplate(flag: string | undefined): string {
   if (flag !== undefined && flag !== TEMPLATE_NAME) {

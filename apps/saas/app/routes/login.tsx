@@ -1,20 +1,4 @@
-/**
- * /login page (v0.44 compiled). Request-time rendered; the props projector
- * lives in app/route-logic/login.ts. Provider buttons post to the named `oauth`
- * action (the clicked button carries the provider id); each known provider is a
- * fully static conditional branch, and the placeholder keeps "no provider
- * configured" an explicit page state that Tier-2 evidence can assert on.
- *
- * The page component is declared IN THIS MODULE (D-M11, 2026-11-20): the server
- * function page lane records `pageComponentName` only when `definePage(…)`'s
- * first argument is a plain identifier naming an exported component function
- * this route module declares itself
- * (`packages/compiler/src/internal/compiler/semantic-core/module-analysis.ts`,
- * the `serverComponents.has(…)` admission; `www/app/routes/404.tsx` is the
- * production precedent). An imported component is not admitted, so the retired
- * `components/page-login.tsx` class moved here with the class→function
- * migration; loader/action logic stays in app/route-logic/login.ts unchanged.
- */
+/** The compiler admits page functions declared in their route module. */
 import { definePage } from '@openelement/router';
 import {
   createLoginAction,

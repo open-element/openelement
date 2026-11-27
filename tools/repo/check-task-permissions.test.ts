@@ -143,12 +143,6 @@ test('task permissions: --allow-ffi only on audited tasks', () => {
 });
 
 test('task permissions: unit suites run on vitest', () => {
-  // DISCLOSED SEMANTIC CHANGE (B3): the former assertions audited
-  // `deno test --deny-ffi --no-prompt` flags on the unit-suite tasks. The
-  // B3 cutover moves those tasks to vitest on the node host, where no deno
-  // permission model exists — the flags have nothing to attach to. The
-  // invariant that remains is the runner itself: the migrated unit-suite
-  // tasks must stay on vitest.
   for (const [path, name] of [
     ['packages/element/package.json', 'test'],
     ['packages/compiler/package.json', 'test'],
@@ -163,14 +157,7 @@ test('task permissions: unit suites run on vitest', () => {
 });
 
 test('task permissions: create template lifecycle is flag-free on the Node host', () => {
-  // DISCLOSED SEMANTIC CHANGE (B5): the former assertion pinned --allow-ffi
-  // on the template's Deno tasks (vite native binding). The B5 cutover makes
-  // the generated starter a Node/pnpm project (ADR-0161) — there is no
-  // permission model to scope, so the invariant that REMAINS: the lifecycle
-  // scripts exist and carry no host permission flags at all. The audit list
-  // follows the shipped lifecycle: preview retired from the starter (owner
-  // ruling 2026-10-09) and the remaining scripts run the router's
-  // `openelement` bin, which host permission flags have no handle on either.
+  // Node-hosted starter tasks must not carry Deno permission flags.
   const template = templateScripts();
   for (const name of TEMPLATE_FFI_REQUIRED) {
     const command = template[name];
