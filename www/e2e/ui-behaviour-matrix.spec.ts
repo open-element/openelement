@@ -598,15 +598,9 @@ test.describe('shipped colour pairs', () => {
 });
 
 test.describe('forced colours', () => {
-  // Two rows in one: the capability probe decides which one this engine gets.
-  // Entering the mode is the engine's business — `emulateMedia` reports the
-  // media query as matching even where the engine then changes nothing
-  // (measured: the macOS WebKit build). So the probe asks whether an authored
-  // colour actually resolved to something else, and only the capable branch
-  // asserts the product's mapping. The other branch is recorded as N/A and
-  // asserts the inverse fact — that the authored ink survives — which is what
-  // the run can honestly claim there.
-  //
+  // The media query drives the site's explicit system-colour tokens. The
+  // independent probe records whether the browser also forces bare authored
+  // colours, which can differ from applying the site's own media rules.
   // Every colour comparison here is by PARSED value, never by the serialised
   // string: an engine prints the same colour as `oklab(…)` on one read and
   // `oklch(…)` on the next, so a string compare would report a difference that
@@ -669,6 +663,8 @@ test.describe('forced colours', () => {
         return {
           mediaActive: matchMedia('(forced-colors: active)').matches,
           probeChanged: !sameColour(probeValue, authoredInk),
+          controlChanged: !sameColour(colour, authoredInk),
+          controlUsesSystemColour: Object.values(system).some((value) => sameColour(value, colour)),
           colour,
           system,
         };
@@ -680,25 +676,15 @@ test.describe('forced colours', () => {
       description: `media=${observed.mediaActive} authoredColourResolved=${observed.probeChanged}`,
     });
 
-    if (!observed.mediaActive || !observed.probeChanged) {
-      testInfo.annotations.push({
-        type: 'N/A',
-        description:
-          'this engine reports the forced-colors media query without applying it; the system-colour mapping row is not measured on it',
-      });
-      expect(
-        observed.colour,
-        'an engine that does not apply forced colours keeps the authored ink',
-      ).toBe(authored);
+    if (!observed.mediaActive) {
+      expect(observed.controlChanged, 'an inactive media query keeps the authored ink').toBe(false);
       return;
     }
-    // With the UA owning hue, the authored role colour is gone and the ink is
-    // one of the resolved system colours.
-    expect(observed.colour, 'the authored role colour is gone').not.toBe(authored);
+    expect(observed.controlChanged, 'the authored role colour is gone').toBe(true);
     expect(
-      Object.values(observed.system),
+      observed.controlUsesSystemColour,
       `${observed.colour} is a system colour (system: ${JSON.stringify(observed.system)})`,
-    ).toContain(observed.colour);
+    ).toBe(true);
   });
 });
 

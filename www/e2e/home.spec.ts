@@ -1,6 +1,7 @@
 import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
+import process from 'node:process';
 import { installCommand } from '../app/data/_generated-install-command.ts';
 import { MINIMUM_NODE_VERSION } from '../../packages/create/src/node-version.ts';
 
@@ -154,6 +155,7 @@ for (const locale of locales) {
 
   test(`${locale.path} takes phone visitors from the hero to the live counter`, async ({
     page,
+    browserName,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(locale.path);
@@ -165,8 +167,12 @@ for (const locale of locales) {
     await jump.press('Enter');
     await expect(page).toHaveURL(`${locale.path}#home-live-demo`);
     await expect(demo).toBeFocused();
-    await page.keyboard.press('Tab');
+    // macOS WebKit uses Option+Tab to include page controls in traversal.
+    await page.keyboard.press(
+      browserName === 'webkit' && process.platform === 'darwin' ? 'Alt+Tab' : 'Tab',
+    );
     await expect(increment).toBeFocused();
+    await expect(increment).toBeInViewport({ ratio: 1 });
   });
 
   test(`${locale.path} passes WCAG A and AA in the dark theme`, async ({ page }) => {
