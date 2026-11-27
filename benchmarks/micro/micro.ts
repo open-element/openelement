@@ -423,7 +423,7 @@ function round3(value: number): number {
 }
 
 function medianOf(samples: number[]): number {
-  const sorted = [...samples].sort((a, b) => a - b);
+  const sorted = samples.toSorted((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
