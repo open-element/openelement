@@ -120,7 +120,7 @@ test('#1548: the default entry builds the same when Block', async () => {
 test('#1548: the client-only entry builds the same when Block', async () => {
   const { code, out, err } = await runEsmSubprocess(probe(CLIENT_ONLY_ENTRY_URL));
   expect(code, `probe should complete. stderr: ${err}`).toEqual(0);
-  expect(out.trim(), 'the blocks axis is independent of the claim axis').toEqual('OK 8 1 8');
+  expect(out.trim(), 'anchor comment, branch element, end comment').toEqual('OK 8 1 8');
 });
 
 test('#1548: all four entries export exactly the same names', () => {
@@ -130,7 +130,6 @@ test('#1548: all four entries export exactly the same names', () => {
   for (const surface of surfaces.slice(1)) {
     expect(surface, 'an entry must not add, drop, or rename a public export').toEqual(surfaces[0]);
   }
-  // Same floor pin as the claim-split test: the shared surface is the full
-  // package surface; additions are snapshot-owned, drops are always failures.
+  // The entry aliases share the complete public surface.
   expect(surfaces[0].length >= 30, 'the surface is the full package surface').toBeTruthy();
 });
