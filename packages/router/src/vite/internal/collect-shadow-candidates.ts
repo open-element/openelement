@@ -37,7 +37,7 @@ import {
   prepareServerComponentImports,
 } from '@openelement/compiler';
 import { join, resolve } from 'pathe';
-import { readComponentDeclaration } from './component-declaration.ts';
+import { readComponentDeclaration, type ComponentDeclaration } from './component-declaration.ts';
 import { islandStyleDeclarationFor } from './island-style-declarations.ts';
 import {
   createServerComponentSourceResolver,
@@ -103,6 +103,18 @@ export function registerArtifactCandidates(
   return recovered !== undefined;
 }
 
+/** Prefer the scanned tag and root, falling back to the source sidecar for unstyled islands. */
+function generatedCandidateSite(
+  file: string,
+  source: string,
+  fallbackTag: string | undefined,
+): Pick<ComponentDeclaration, 'tag' | 'root'> | undefined {
+  const scanned = islandStyleDeclarationFor(file);
+  if (scanned !== undefined) return { tag: scanned.tagName, root: scanned.root };
+  const reading = readComponentDeclaration(source, fallbackTag);
+  return reading.kind === 'declared' ? reading.declaration : undefined;
+}
+
 /**
  * Compile every listed module and register its admitted class candidates in the
  * caller's registry. Returns how many modules contributed candidates
@@ -138,46 +150,14 @@ export async function collectShadowClassCandidates(
     // grew a second, wrong copy of the `@element(` gate. A config-declared
     // module list is small enough to pay one admission attempt per module.
     //
-    // The GENERATED lane comes FIRST (P-1, 2026-11-21). A generated island is
-    // also an exported JSX-returning function, so the server component lane
-    // below would claim it as a LIGHT page component and register its tokens in
-    // the wrong scope — measured: the fixture's shadow island registered 15
-    // tokens as light and the shadow sheet compiled empty. The island
-    // declaration is the authoritative site fact (tag + root), so the lane is
-    // asked only for a module that has one.
-    // The gate is the SIDECAR, not the style-declaration registry (F16): that
-    // registry only carries islands that declare `styles`, so using it here skipped
-    // every generated component with class tokens but no authored sheet — its tokens
-    // still compile into the shared component sheet and it still needs them in the
-    // shadow scope. The declaration reader answers "is this a generated component,
-    // and which root", which is exactly the admission question.
-    // The style-declaration registry is preferred when it HAS an entry: it is the
-    // authoritative tag+root the scan already resolved, and using it keeps every
-    // styled island's registration byte-identical. The SIDECAR READER is the
-    // fallback, and it exists because that registry only carries islands declaring
-    // `styles` — without the fallback a generated component with class tokens but no
-    // authored sheet was skipped entirely, so its tokens never reached the scope
-    // that compiles them (F16).
-    const declaration = islandStyleDeclarationFor(file);
-    const reading =
-      declaration === undefined ? readComponentDeclaration(source, entry.tag) : undefined;
-    const declaredRoot =
-      declaration !== undefined
-        ? declaration.root
-        : reading?.kind === 'declared'
-          ? (reading.declaration.root ?? 'light')
-          : undefined;
-    const declaredTag =
-      declaration !== undefined
-        ? declaration.tagName
-        : reading?.kind === 'declared'
-          ? reading.declaration.tag
-          : undefined;
-    if (declaredTag !== undefined) {
-      let generated: ReturnType<typeof compileGeneratedElementIfAdmitted> = null;
+    // Try generated islands first so the server component lane does not
+    // register a shadow island's tokens in the light sheet (P-1, F16).
+    const site = generatedCandidateSite(file, source, entry.tag);
+    if (site?.tag !== undefined) {
+      let generated: ReturnType<typeof compileGeneratedElementIfAdmitted>;
       try {
         generated = compileGeneratedElementIfAdmitted(source, file, {
-          site: { tag: declaredTag },
+          site: { tag: site.tag },
         });
       } catch {
         // The authoritative compile reports diagnostics; see the module header.
@@ -185,7 +165,7 @@ export async function collectShadowClassCandidates(
       }
       if (generated !== null) {
         options.candidates.register(file, generated.classCandidates, {
-          shadow: declaredRoot === 'shadow',
+          shadow: site.root === 'shadow',
         });
         if (generated.classCandidates.length > 0) contributed += 1;
         continue;

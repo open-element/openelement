@@ -1428,15 +1428,8 @@ function resolveValueMemberType(
       readonly node: ts.Node;
     } {
   const brandLocals = trustedHtmlTypeLocalNames(sourceFile);
-  const primitive: GeneratedElementPrimitiveType | null =
-    typeNode.kind === ts.SyntaxKind.StringKeyword
-      ? 'string'
-      : typeNode.kind === ts.SyntaxKind.NumberKeyword
-        ? 'number'
-        : typeNode.kind === ts.SyntaxKind.BooleanKeyword
-          ? 'boolean'
-          : null;
-  if (primitive !== null) return { kind: 'primitive', type: primitive };
+  const primitive = primitiveType(typeNode);
+  if (primitive !== undefined) return { kind: 'primitive', type: primitive };
   if (isCanonicalTrustedHtmlType(sourceFile, typeNode)) {
     return { kind: 'trustedHtml', type: 'trustedHtml' };
   }
@@ -1452,39 +1445,20 @@ function resolveValueMemberType(
       node: typeNode,
     };
   }
-  const arrayElement = (
+  const resolveArrayMember = (
     element: ts.TypeNode,
   ):
-    | { readonly ok: true }
-    | { readonly ok: false; readonly reason: string; readonly node?: ts.Node } => {
-    if (
-      element.kind === ts.SyntaxKind.StringKeyword ||
-      element.kind === ts.SyntaxKind.NumberKeyword ||
-      element.kind === ts.SyntaxKind.BooleanKeyword
-    ) {
-      return { ok: true };
-    }
-    return proveObjectShape(sourceFile, element);
-  };
-  if (ts.isTupleTypeNode(typeNode)) {
-    return {
-      reason:
-        `the props member type "${typeNode.getText(sourceFile)}" is a tuple; this lane admits ` +
-        'T[] or Array<T> with a primitive or opaque object element',
-      node: typeNode,
-    };
-  }
-  if (ts.isArrayTypeNode(typeNode)) {
-    const element = arrayElement(typeNode.elementType);
-    if (!element.ok) {
+    | { readonly kind: 'array'; readonly type: 'array' }
+    | { readonly reason: string; readonly node: ts.Node } => {
+    if (primitiveType(element) !== undefined) return { kind: 'array', type: 'array' };
+    const shape = proveObjectShape(sourceFile, element);
+    if (!shape.ok) {
       return {
-        reason:
-          `the array element type "${typeNode.elementType.getText(sourceFile)}" is not admitted ` +
-          `(${element.reason})`,
-        node: element.node ?? typeNode.elementType,
+        reason: `the array element type "${element.getText(sourceFile)}" is not admitted (${shape.reason})`,
+        node: shape.node ?? element,
       };
     }
-    const nestedBrand = findNestedTrustedHtml(sourceFile, typeNode.elementType, brandLocals);
+    const nestedBrand = findNestedTrustedHtml(sourceFile, element, brandLocals);
     if (nestedBrand !== null) {
       return {
         reason:
@@ -1494,7 +1468,16 @@ function resolveValueMemberType(
       };
     }
     return { kind: 'array', type: 'array' };
+  };
+  if (ts.isTupleTypeNode(typeNode)) {
+    return {
+      reason:
+        `the props member type "${typeNode.getText(sourceFile)}" is a tuple; this lane admits ` +
+        'T[] or Array<T> with a primitive or opaque object element',
+      node: typeNode,
+    };
   }
+  if (ts.isArrayTypeNode(typeNode)) return resolveArrayMember(typeNode.elementType);
   if (ts.isTypeReferenceNode(typeNode) && ts.isIdentifier(typeNode.typeName)) {
     const referenceName = typeNode.typeName.text;
     if (referenceName === 'ReadonlyArray') {
@@ -1513,23 +1496,7 @@ function resolveValueMemberType(
           node: typeNode,
         };
       }
-      const element = arrayElement(args[0]!);
-      if (!element.ok) {
-        return {
-          reason: `the array element type "${args[0]!.getText(sourceFile)}" is not admitted (${element.reason})`,
-          node: element.node ?? args[0]!,
-        };
-      }
-      const nestedBrand = findNestedTrustedHtml(sourceFile, args[0]!, brandLocals);
-      if (nestedBrand !== null) {
-        return {
-          reason:
-            'a nested TrustedHtml inside an opaque array element is not admitted; declare a ' +
-            'top-level property-only trustedHtml member instead',
-          node: nestedBrand,
-        };
-      }
-      return { kind: 'array', type: 'array' };
+      return resolveArrayMember(args[0]!);
     }
   }
   const objectShape = proveObjectShape(sourceFile, typeNode);
@@ -1552,6 +1519,18 @@ function resolveValueMemberType(
       'primitive or opaque object, an opaque object shape, or the canonical TrustedHtml type',
     node: objectShape.node ?? typeNode,
   };
+}
+
+function primitiveType(node: ts.TypeNode): GeneratedElementPrimitiveType | undefined {
+  switch (node.kind) {
+    case ts.SyntaxKind.StringKeyword:
+      return 'string';
+    case ts.SyntaxKind.NumberKeyword:
+      return 'number';
+    case ts.SyntaxKind.BooleanKeyword:
+      return 'boolean';
+  }
+  return undefined;
 }
 
 /**
