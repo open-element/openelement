@@ -1,54 +1,7 @@
 /**
- * Server function component composition and host-attribute normalization
- * (alpha15 R3 A1/A2): the compiled artifact EXECUTED against the element
- * server runtime, asserting the resulting HTML.
- *
- * alpha16 RETIREMENT — the FIXTURES moved, the CAPABILITY did not. The hosts in
- * this file used to be hand-built `testProgram({ ... })` Part Programs wrapped in
- * a fake class. `__partProgram` is produced only by the class lane, which alpha16
- * DELETED, and `renderToString` now fails closed for every class that carries one
- * (`failUncompiled`). What this file pins — a server function page projecting its
- * authored children into a compiled host's slots — SURVIVES, so every host below
- * is a REAL module emitted by the generated element lane
- * (`compileGeneratedElementIfAdmitted`), transpiled and imported exactly the way
- * the server component is. The hosts are NESTED inside the server component,
- * which is the supported shape: a generated LIGHT element cannot be a page ROOT,
- * but a nested light host projects normally.
- *
- * One row could not move lanes: "the class lane attributes the same Block shape
- * identically" compares the server function lane against a Part Program
- * serialized by the DELETED class page root. No surviving producer can build that
- * artifact, so the row is kept verbatim — its assertion is neither weakened nor
- * deleted — and is reported as the retirement's open item.
- *
- * A1 — a server function page rendering an admitted compiled host
- * (`__ssr(tag, props, undefined, { groups })`) must deliver its children the
- * way the host's own root mode consumes them, exactly like the class path's
- * nested expansion did (the SHARED composition semantics: one `slotNameOf`, one
- * projected-children channel):
- *
- *   - static `slot` children project into the matching `<slot name>` of a
- *     light root and are appended in authored order after the DSD template of
- *     a shadow root;
- *   - generated LIGHT hosts route every selected conditional/list root by its
- *     own static or dynamic `slot` value, including roots in fragments;
- *   - generated SHADOW hosts keep caller markup in authored order after the DSD
- *     template, where native slot distribution reads the element's `slot`;
- *   - a dynamic per-child `slot` value crosses the boundary with the
- *     serializer's canonical attribute-value coercion
- *     (`attributeValueOf`: null/undefined → the default slot, anything else →
- *     its attribute text), so the group key names the same slot the class
- *     lane's `slotNameOf` would name.
- *
- * A2 — the `class`/`style` host-attribute values the compiled host forwards
- * (`__ssr`'s undeclared-prop passthrough → `serializeHostAttributes`) normalize
- * through the SAME `classValueOf`/`styleValueOf` the element serializer and
- * `__h` use. Assertion is on the wire bytes, not on source text.
- *
- * The rows drive the REAL artifact: the generated host module and the generated
- * server component are transpiled, imported, executed with concrete props under
- * a stubbed SSR registry, and the returned HTML is asserted — never a snapshot
- * of the generated source.
+ * Compile both producer and caller, then exercise the generated HTML.
+ * Light roots substitute named projections, shadow roots preserve authored
+ * children for native slotting, and host attributes use the shared coercions.
  */
 
 import { mkdir, rm, writeFile } from 'node:fs/promises';
@@ -223,18 +176,8 @@ ${jsx}
 }
 
 /**
- * Build one REAL generated-lane host from its authored source.
- *
- * WHY source instead of a hand-built host: a class is only renderable when a
- * compiler emitted it. The class lane (the only producer of `__partProgram`) is
- * deleted, so a `__partProgram` class is a fail-closed artifact now, and the
- * generated element lane is the one surviving producer of a renderable host.
- *
- * The emitted module exports the element class as BOTH `default` and
- * `<Name>Element`; `default` is what the registry map wants. A shadow descriptor
- * additionally emits `<Name>__ssrHost`, whose name the compiler owns
- * (`ssrHostExport`), so the name is read from that field instead of being
- * re-derived from the module text.
+ * Compile the constructor and resolve any paired shadow producer through its
+ * emitted export name.
  */
 async function generatedHost(source: string, tag: string): Promise<GeneratedHost> {
   const fileName = `/proj/app/islands/${tag}.tsx`;
@@ -648,28 +591,6 @@ describe('A1 — the compiled children channel', () => {
         '</oe-shell>',
     );
   });
-
-  /**
-   * RETIRED-LANE ROW — kept verbatim, and NOT passing.
-   *
-   * This is the one row that can only hold for the deleted class artifact: it
-   * renders a hand-built Part Program through `renderToString`'s class page-root
-   * path (`componentClass`) and compares that output with the server function
-   * lane's. `__partProgram` has no surviving producer, and `renderToString` fails
-   * closed for any class that carries one, so the comparison cannot run on a
-   * surviving lane. The fixture and the assertion are left untouched rather than
-   * re-pointed at a generated host, because a generated-vs-generated comparison
-   * would pin nothing about "the class lane" while pretending it did.
-   */
-  // A row here compared the server-function lane against the CLASS lane: it compiled the
-  // same authored shape with @element and asserted both producers attributed a Block to the
-  // default slot identically. The comparison is RETIRED with the class lane (Alpha16):
-  // `__partProgram` has no producer left, `renderToString` fails closed for a class carrying
-  // one, and the class page-root serialization that built the baseline is gone. Comparing
-  // generated-vs-generated would prove nothing about the rule the row existed to establish,
-  // so the row is deleted rather than re-pointed at a lane it was never about. What survives
-  // of its subject — Block-to-default-slot attribution in the server-function lane — is
-  // pinned by every A2 expectation above, which asserts the exact projected bytes.
 
   test('the emitted module type-checks for dynamic slot bindings of every prop type', () => {
     // The composition name crosses the boundary as the child's own runtime

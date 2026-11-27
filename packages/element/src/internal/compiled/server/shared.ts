@@ -435,31 +435,3 @@ export function rawTextElement(tag: string): boolean {
 export function attributeNameIsSafe(name: string): boolean {
   return canonicalAttributeNameIsSafe(name);
 }
-
-/**
- * The build-time ROOT MODE of a registered compiled class — ONE reader for the
- * two places that dispatch on it (the `__ssr` composition serializer and the
- * nested-host walk in the server renderer).
- *
- * C07–C11 (alpha16 retirement): the product fact is `__oeRootKind`, a static the
- * compiler emits next to the metadata and property tables. The `__partProgram`
- * arm exists ONLY for in-repo test doubles that fabricate an artifact instead of
- * running the emitter, so it cannot fire for a built app.
- *
- * RETIREMENT CONDITION (P5): this arm is deleted together with the Part Program
- * artifact itself. Until then it stays CENTRALIZED here rather than repeated per
- * call site, so the retirement is one edit and there is exactly one reader.
- */
-export function compiledRootKindOf(
-  value: unknown,
-): 'light' | 'shadow-open' | 'shadow-closed' | undefined {
-  const ctor = value as
-    | {
-        __oeRootKind?: 'light' | 'shadow-open' | 'shadow-closed';
-        __partProgram?: { root?: { kind?: string } };
-      }
-    | undefined
-    | null;
-  const kind = ctor?.__oeRootKind ?? ctor?.__partProgram?.root?.kind;
-  return kind === 'light' || kind === 'shadow-open' || kind === 'shadow-closed' ? kind : undefined;
-}

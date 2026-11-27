@@ -1,41 +1,10 @@
-/**
- * @openelement/element/server — the server HTML constructor helpers
- * (`__h`, `__t`, `__ssr`).
- *
- * The runtime half of the server-only TSX function component lane: the
- * compiler lowers an admitted server function component (the same semantic
- * walk the @element class render body goes through) into a plain exported
- * function whose body is composed of THESE calls — the artifact is generated
- * TS/JS, not an IR and not an interpreter. Internal by convention (`__`
- * prefix): application code calls the compiled components, never the helpers
- * directly, exactly like the generated entry's `__setRequestTimeStyleSheetUrls`.
- *
- * One implementation, many references — this module COPIES NO ESCAPER:
- *
- *   - `__t` is `escapeText` (the ONE DSD-serializer text escape, B1.1/F3)
- *     over the serializer's own displayValue coercion, refusing a thenable
- *     first (a Promise is not a normal child — M14-2);
- *   - `__h` escapes every attribute value through `escapeAttr` (the ONE
- *     canonical attribute escape), validates names through the one canonical
- *     safe-attribute-name predicate, screens URL-carrying values through the
- *     ONE shared stream-frame URL policy, and routes the `innerHTML` key
- *     through the ONE trustedHtml brand check;
- *   - `__ssr` is the component path's literal server entry: it renders a
- *     registered compiled host through `renderToString` (the compiled
- *     serializer), so a nested @element component in a server function and a
- *     page-level component render through byte-identical machinery.
- *
- * This entry is server-graph-only by construction: it imports the compiled
- * serializer internals directly and never touches the root barrel, so the
- * hydration/claim installs stay out of every server function component module
- * (zero client emission).
- */
+/** HTML constructors called by the server function component compiler. */
 
 import { escapeText } from './internal/compiled/escape-text.ts';
-import { displayValue } from './internal/compiled/runtime/program-kernel.ts';
 import {
   attributeValueOf,
   classValueOf,
+  displayValue,
   styleValueOf,
 } from './internal/compiled/runtime/values.ts';
 import { escapeAttr } from './internal/core/html-escape.ts';
@@ -46,7 +15,6 @@ import {
   trustedHtmlValue,
 } from './internal/core/security.ts';
 import { renderToString } from './public-runtime.ts';
-import { compiledRootKindOf } from './internal/compiled/server/shared.ts';
 import { AuthoringErrorCode, frameworkError } from './internal/core/errors.ts';
 import { forbiddenSinkReason } from '@openelement/protocol/forbidden-sinks';
 import { unsafeStreamFrameAttribute } from '@openelement/protocol/stream-frame-policy';
@@ -65,42 +33,11 @@ interface SsrSourceInfo {
   source?: string;
 }
 
-/**
- * The composition a nested host receives (the compiled children channel):
- * authored-order `[slotName, html]` pairs, one per child, where `slotName` is
- * the child's static `slot` attribute (`''` is the default slot). Every html
- * value is COMPILER-PRODUCED final HTML — the same trust level as an `__ssr`
- * result — never loader/props data, and the record carries the two forms the
- * class path's own nested expansion derives from the same walk
- * (serialize-program.ts):
- *
- * - a shadow-root host receives the concatenated groups after its DSD
- *   template as light DOM — native slot distribution routes each child by its
- *   own `slot` attribute, and within-slot order is the authored order;
- * - a light-root host receives the groups folded into projected children,
- *   each slot substituting into its own `<slot>` elements through the
- *   compiled serializer's projected-children channel.
- *
- * The runtime reads the host's own root mode (the registered class's Part
- * Program — the same fact the serializer branches on) and delivers the
- * matching form, exactly like the class path does for a nested host.
- *
- * Internal compiler-to-runtime transport type, deliberately NOT exported: the
- * emitted `__ssr` call carries the record as a structural literal and never
- * this name, so exporting it would publish a contract the application side
- * cannot use for anything (the entry is internal by convention — README
- * `@openelement/element/server`). TypeScript needs no export for the
- * signature: a non-exported declaration is emitted into the `.d.ts` beside
- * the exported `__ssr`.
- */
+/** Compiler-produced children in authored order. */
 interface SsrComposition {
   /**
-   * The name element is the child's own runtime value: the compiler hands a
-   * static `slot` attribute over as its text, and a dynamic `slot={props.x}`
-   * binding over as that prop's value (any type, hence `unknown`). It is
-   * coerced at the fold below with the serializer's own attribute-value rule
-   * (`attributeValueOf`), so a dynamic name lands in exactly the slot the
-   * class lane's `slotNameOf` would name.
+   * Each group carries the child's raw `slot` value and compiler-produced HTML.
+   * Light roots coerce the slot name with the same rule as host attributes.
    */
   groups: ReadonlyArray<readonly [unknown, string]>;
 }
@@ -240,31 +177,6 @@ export function __h(
   return `${open}>${content}</${tag}>`;
 }
 
-/**
- * Render one registered compiled host (an @element component) to HTML — the
- * component path's literal runtime function: the tag resolves through the SSR
- * registry the generated server entry maintains, and the compiled serializer
- * produces the bytes. Fails closed for unregistered tags (islands and foreign
- * hosts are emitted as plain tags by the compiler instead of routed here).
- *
- * `composition` carries the compiled children channel: an authored-order list
- * of `[slotName, html]` pairs, where `slotName` is the child's static `slot`
- * attribute coerced by the serializer's own attribute rule (`''` is the default
- * slot). The dispatch follows the host's own root mode —
- * read from the registered class's Part Program, the same fact the class
- * path's nested expansion branches on — so a shadow host receives the
- * children as light DOM after its template and a light host consumes the
- * slots through the serializer's projected-children channel. Without
- * composition the call is byte-identical to the three-argument form the
- * pre-composition lane emitted.
- */
-/**
- * The tags this server render may expand as nested hosts (F16).
- *
- * The generated entry injects the set once per process, the same shape as
- * `__setRequestTimeStyleSheetUrls`. Empty means "nothing to expand", which keeps a
- * page with no admitted nested tags byte-identical.
- */
 let ssrRenderableTags: readonly string[] = [];
 
 /** Inject the renderable nested-host tags for this server process. */
@@ -273,13 +185,8 @@ export function __setSsrRenderableTags(tags: readonly string[] | null | undefine
 }
 
 /**
- * Serialize one admitted component's server markup.
- *
- * A generated element's producer is a string builder, so a nested host inside its
- * markup reaches its own producer only through the render's nested-host expander. A
- * class page used to receive that expander from `renderToString`; a SERVER FUNCTION
- * PAGE's compiled `render` calls this function directly, so the expander travels
- * through the module-level set above instead (F16).
+ * Render a registered generated host. Light roots substitute children into
+ * their slots, while shadow roots receive the children after their template.
  */
 export function __ssr(
   tag: string,
@@ -287,37 +194,9 @@ export function __ssr(
   sourceInfo?: SsrSourceInfo,
   composition?: SsrComposition,
 ): string {
-  // Undeclared props (a `class` on a component host, the same attribute the
-  // class path's nested expansion forwards as hostAttrs) ride the host tag,
-  // never the compiled property seed: the seed only reads declared property
-  // records, so an undeclared key would silently vanish. Declared-ness is
-  // read from the same registry class the serializer resolves, with the
-  // identical name/attribute matching the nested expansion uses — and like
-  // that expansion, a host with NO declared properties passes every attribute
-  // through (the site-ui frames carry `class='truth'` on a zero-property
-  // host; gating the passthrough on a non-empty property table dropped it).
-  let hostAttrs: Array<readonly [string, unknown]> | undefined;
-  const propEntries = props === undefined ? [] : Object.entries(props);
-  if (propEntries.length > 0) {
-    const resolved =
-      typeof customElements === 'undefined'
-        ? undefined
-        : (customElements.get(tag) as
-            | {
-                __compiledProperties?: readonly { name: string; attribute: string | null }[];
-              }
-            | undefined);
-    // C07–C11: the property table is the ONE source of the declared names; the
-    // Part Program fallback reached the same rows through the execution artifact.
-    const records = resolved?.__compiledProperties ?? [];
-    const declared = new Set<string>();
-    for (const record of records) {
-      declared.add(record.name);
-      if (record.attribute !== null) declared.add(record.attribute);
-    }
-    const passthrough = propEntries.filter(([name]) => !declared.has(name));
-    if (passthrough.length > 0) hostAttrs = passthrough;
-  }
+  // The generated producer resolves declared properties and forwards the
+  // remaining pairs as host attributes.
+  const hostAttrs = props === undefined ? [] : Object.entries(props);
   const options: {
     props?: Record<string, unknown>;
     sourceInfo?: SsrSourceInfo;
@@ -327,41 +206,16 @@ export function __ssr(
   } = {
     ...(props === undefined ? {} : { props }),
     ...(sourceInfo === undefined ? {} : { sourceInfo }),
-    ...(hostAttrs === undefined ? {} : { hostAttrs }),
+    ...(hostAttrs.length === 0 ? {} : { hostAttrs }),
   };
   if (composition !== undefined && composition.groups.length > 0) {
-    // Two lanes expose the root mode, and both must be read here: a compiled
-    // CLASS carries the build-time `__oeRootKind` static (C07–C11 — it is its own
-    // fact now, so this read never depends on the execution artifact); a GENERATED
-    // element carries the compiler-attached `__ssr` producer ONLY when its
-    // descriptor root is light. Without the second read a generated light host
-    // falls into the shadow branch, its authored children ride the wrong channel,
-    // and the light serializer drops them — the host renders with empty slots.
+    // Generated light roots expose a callable producer on their constructor.
+    // Paired shadow hosts take light children after their DSD template.
     const registered =
       typeof customElements === 'undefined'
         ? undefined
-        : (customElements.get(tag) as
-            | {
-                __oeRootKind?: 'light' | 'shadow';
-                __partProgram?: { root?: { kind?: string } };
-                __ssr?: unknown;
-              }
-            | undefined);
-    // C07–C11: ONE reader for the build-time root mode (`compiledRootKindOf`),
-    // whose retirement condition for its Part Program arm is written there. The
-    // second arm here stays because a GENERATED element has no Part Program at all
-    // and marks its light root by carrying the `__ssr` producer.
-    const rootKind =
-      compiledRootKindOf(registered) ??
-      (typeof registered?.__ssr === 'function' ? 'light' : undefined);
-    if (rootKind === 'light') {
-      // Light root: fold the authored-order groups into per-slot projections
-      // (the serializer substitutes each group into its own <slot>). The name
-      // crosses with the serializer's own attribute-value coercion — the rule
-      // the class lane's `slotNameOf` runs over the same authored value
-      // (attributeValueOf: null/undefined collapse to the default slot, every
-      // other value is its attribute text, so 0 names <slot name="0">) — one
-      // rule, both lanes, no second normalization to drift.
+        : (customElements.get(tag) as { __ssr?: unknown } | undefined);
+    if (typeof registered?.__ssr === 'function') {
       const projected = new Map<string, string>();
       for (const [rawName, html] of composition.groups) {
         const name = attributeValueOf(rawName) ?? '';
@@ -371,15 +225,9 @@ export function __ssr(
         [...projected].map(([name, html]) => [name, trustedHtml(html)]),
       );
     } else {
-      // Shadow root: the children ride after the DSD template as light DOM in
-      // authored order (the platform distributes them by their slot
-      // attributes), exactly like the class path's nested expansion.
       options.hostChildren = trustedHtml(composition.groups.map(([, html]) => html).join(''));
     }
   }
-  // The nested-host expander is built from this set INSIDE renderToString, so
-  // forwarding it here is what lets a function page expand the components in its
-  // own markup (F16). Absent tags keep the pre-slice bytes exactly.
   return renderToString(
     tag,
     ssrRenderableTags.length === 0 ? options : { ...options, ssrRenderableTags },
