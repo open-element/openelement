@@ -70,13 +70,18 @@ qualification is external pending; see
 ## Tasks
 
 ```sh
-pnpm --dir apps/saas run build               # OpenElement build (dist/, request-time server entry)
-pnpm --dir apps/saas run nitro:build         # Nitro build, node-server preset → .output-node/
-pnpm --dir apps/saas run nitro:build-workers # Nitro build, cloudflare_module preset → .output-workers/
-pnpm --dir apps/saas run start               # local run of the built server (http://localhost:4173)
-pnpm --dir apps/saas run check               # type-check routes, islands, shell, lib
-pnpm --dir apps/saas run test                # unit smoke for route logic (stubbed Supabase client)
+vp run saas:verify   # local typecheck and stubbed unit tests
+vp run saas:workers  # local application and Workers builds + boundary check
 ```
+
+Run both from the repository root after the frozen-lockfile install described in
+[the agent contract](../../docs/agent-contract.md). These local checks exercise
+code and build boundaries; they do not prove hosted Auth, RLS, Realtime, email,
+Queues or scanner delivery. Record hosted results separately using the
+[staging checklist](STAGING-CHECKLIST.md). The app already provides sign-in,
+recovery, notes, uploads, checkout and admin routes; the payment runbook covers
+operator replay and recovery. Workspace membership is operator-provisioned in
+this qualification fixture, not managed by an application UI.
 
 ## Migrations
 
@@ -154,3 +159,7 @@ project and a deployed Worker:
 - **Real scan-engine qualification: external pending** (ADR-0139). The
   provider-neutral fail-closed state machine is implemented and unit-tested
   without commercial credentials or paid container infrastructure.
+
+For the operator's detailed two-workspace and hosted-provider acceptance matrix,
+see [the staging checklist](STAGING-CHECKLIST.md). This is a procedure, not a
+record of completed hosted qualification.
