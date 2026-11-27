@@ -27,7 +27,6 @@ interface WorkspacesData {
 type SessionContext = Pick<LoaderContext, 'env' | 'request' | 'responseHeaders'>;
 
 async function authenticatedClient(ctx: SessionContext) {
-  ctx.responseHeaders.set('cache-control', 'no-store');
   const client = createServerSupabase(ctx.env, ctx.request, ctx.responseHeaders);
   const {
     data: { user },

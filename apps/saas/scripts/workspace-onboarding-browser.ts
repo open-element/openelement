@@ -120,21 +120,34 @@ try {
     const signedOut = await ownerPage.request.get(`${origin}/workspaces`, { maxRedirects: 0 });
     assert.equal(signedOut.status(), 302);
     assert.equal(signedOut.headers().location, '/login');
+    const ownerWithoutJs = await browser.newPage({ javaScriptEnabled: false });
+    await ownerWithoutJs
+      .context()
+      .addCookies([{ name: 'sb-127-auth-token', value: admin.cookie, url: origin }]);
+    await ownerWithoutJs.goto(`${origin}/workspaces`);
+    await ownerWithoutJs.getByRole('textbox', { name: 'Workspace name' }).fill(workspace.name);
+    await ownerWithoutJs.getByRole('button', { name: 'Create workspace' }).click();
+    await expect(
+      ownerWithoutJs.getByRole('link', { name: `${workspace.name} (admin)` }),
+    ).toBeVisible();
+    assert((await ownerWithoutJs.locator('noscript').textContent())?.includes('Enable JavaScript'));
+    await ownerWithoutJs.close();
+
     await ownerPage
       .context()
       .addCookies([{ name: 'sb-127-auth-token', value: admin.cookie, url: origin }]);
     await ownerPage.goto(`${origin}/workspaces`);
-    await ownerPage.getByRole('textbox', { name: 'Workspace name' }).fill(workspace.name);
-    await ownerPage.getByRole('button', { name: 'Create workspace' }).click();
-    await expect(ownerPage.getByRole('link', { name: `${workspace.name} (admin)` })).toBeVisible();
-
     const native = await ownerPage.request.post(inviteUrl, { form: { workspace: workspace.id } });
     assert.equal(native.status(), 400);
+    assert.equal(native.headers()['cache-control'], 'no-store');
+    assert(!native.headers()[WORKSPACE_INVITATION_HEADER]);
     const crossSite = await ownerPage.request.post(inviteUrl, {
       form: { workspace: workspace.id },
       headers: { [ACTION_FETCH_HEADER]: 'true', origin: 'https://untrusted.example' },
     });
     assert.equal(crossSite.status(), 403);
+    assert.equal(crossSite.headers()['cache-control'], 'no-store');
+    assert(!crossSite.headers()[WORKSPACE_INVITATION_HEADER]);
     assert.equal(issuanceCalls, 0);
 
     const issued = ownerPage.waitForResponse(
@@ -160,11 +173,12 @@ try {
     assert.equal(ownerPage.url(), `${origin}/workspaces`);
     for (const path of ['/workspaces', '/workspaces?/invite']) {
       const fresh = await ownerPage.request.get(origin + path);
+      assert.equal(fresh.headers()['cache-control'], 'no-store');
       assert(!fresh.headers()[WORKSPACE_INVITATION_HEADER]);
       assert(!(await fresh.text()).includes(fixtureCode));
     }
 
-    const memberPage = await browser.newPage();
+    const memberPage = await browser.newPage({ javaScriptEnabled: false });
     await memberPage
       .context()
       .addCookies([{ name: 'sb-127-auth-token', value: member.cookie, url: origin }]);
@@ -183,6 +197,7 @@ try {
       headers: { [ACTION_FETCH_HEADER]: 'true' },
     });
     assert.equal(denied.status(), 403);
+    assert.equal(denied.headers()['cache-control'], 'no-store');
     assert(!denied.headers()[WORKSPACE_INVITATION_HEADER]);
     await memberPage.getByRole('textbox', { name: 'Invitation code' }).fill(fixtureCode);
     await memberPage.getByRole('button', { name: 'Join workspace' }).click();

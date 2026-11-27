@@ -85,7 +85,9 @@ described in [the agent contract](../../docs/agent-contract.md). The RLS proof
 requires `initdb`, `pg_ctl`, and `psql` on PATH and verifies the workspace
 migrations, including concurrent invitation redemption, in a disposable
 Postgres cluster. Build the SaaS app before running the browser proof. The
-browser proof uses Chromium and a loopback Auth and Data API fixture. Use the
+browser proof uses Chromium and a loopback Auth and Data API fixture. It
+exercises creation and joining with JavaScript disabled and checks code
+issuance and its no-store responses. Use the
 [staging checklist](STAGING-CHECKLIST.md) to record hosted provider evidence.
 
 Open **Workspaces** from Notes after sign-in to create or join a workspace.
