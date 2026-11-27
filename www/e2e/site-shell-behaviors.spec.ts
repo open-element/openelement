@@ -43,7 +43,9 @@ test.describe('site shell behavior boundaries', () => {
     await page.goto('/guide/islands-and-ssr/');
     const menu = page.locator('details.oe-site-menu');
     await expect(menu.locator('summary')).toHaveAttribute('aria-label', 'Open navigation');
-    const focusedOutside = await menu.evaluate((details) => {
+    const focusedOutside = await menu.evaluate((element) => {
+      if (!(element instanceof HTMLDetailsElement)) throw new Error('Expected a details element');
+      const details = element;
       const originalRequest = window.requestAnimationFrame;
       const originalCancel = window.cancelAnimationFrame;
       const frames = new Map<number, FrameRequestCallback>();
