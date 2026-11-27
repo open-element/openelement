@@ -956,10 +956,18 @@ async function buildClient(
         ? { conditions: [...ctx.phase1.clientResolveConditions] }
         : {}),
       ...(ctx.phase1.clientPreserveSymlinks ? { preserveSymlinks: true } : {}),
-      ...(ctx.phase1.sourceResolveExtensions === undefined
-        ? {}
-        : { extensions: ctx.phase1.sourceResolveExtensions }),
       dedupe: ['preact'],
+    },
+    // The client build discovers styles used by server-rendered modules too.
+    // Set the orders on the environments themselves. Vite prepends an explicit
+    // top-level extension list to both environment lists.
+    environments: {
+      ...(ctx.phase1.clientResolveExtensions === undefined
+        ? {}
+        : { client: { resolve: { extensions: ctx.phase1.clientResolveExtensions } } }),
+      ...(ctx.phase1.ssrResolveExtensions === undefined
+        ? {}
+        : { ssr: { resolve: { extensions: ctx.phase1.ssrResolveExtensions } } }),
     },
     ssr: {
       noExternal: (noExternalPatterns.length > 0 ? noExternalPatterns : undefined) as

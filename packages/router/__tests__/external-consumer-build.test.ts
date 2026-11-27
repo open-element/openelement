@@ -24,6 +24,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import {
   mkdir,
   mkdtemp,
@@ -34,8 +35,10 @@ import {
   symlink,
   writeFile,
 } from 'node:fs/promises';
+import { createServer as createHttpServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import process from 'node:process';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 import { serveFetch } from '../src/internal/node-http.ts';
 import { createFetchHandler } from '../src/vite/internal/static-serve.ts';
@@ -143,7 +146,6 @@ async function buildFixture(): Promise<Fixture> {
       '',
       'export default defineConfig({',
       '  resolve: {',
-      "    extensions: ['.jsx', '.js', '.tsx', '.ts', '.mjs', '.mts', '.json'],",
       '    alias: {',
       "      '@shared': new URL('./app/shared', import.meta.url).pathname,",
       '    },',
@@ -151,6 +153,10 @@ async function buildFixture(): Promise<Fixture> {
       "    // resolved config's condition list can resolve '@acme/conditions/flavor'",
       '    // to the custom target.',
       "    conditions: ['oe-proof-flavor', 'module', 'browser', 'development|production'],",
+      '  },',
+      '  environments: {',
+      "    client: { resolve: { extensions: ['.ts', '.js', '.jsx', '.tsx', '.mjs', '.mts', '.json'] } },",
+      "    ssr: { resolve: { extensions: ['.jsx', '.js', '.ts', '.tsx', '.mjs', '.mts', '.json'] } },",
       '  },',
       '  plugins: [openElement()],',
       '});',
@@ -160,6 +166,14 @@ async function buildFixture(): Promise<Fixture> {
   await write(
     join(appDir, 'app', 'shared', 'tag.ts'),
     "export const sharedTag = 'shared-alias-target';\n",
+  );
+  await write(
+    join(appDir, 'app/shared/environment-priority.ts'),
+    "export const extensionPriority = 'client-extension-priority';\n",
+  );
+  await write(
+    join(appDir, 'app/shared/environment-priority.js'),
+    "export const extensionPriority = 'server-extension-priority';\n",
   );
   await write(
     join(appDir, 'app/shared/proof-authoring.js'),
@@ -208,6 +222,7 @@ export { readProofLabel as proofText } from './proof-copy.ts';
       "import { conditionTarget } from '@acme/conditions';",
       "import { flavor } from '@acme/conditions/flavor';",
       "import { sharedTag } from '@shared/tag.ts';",
+      "import { extensionPriority } from '../shared/environment-priority';",
       "import { proofText } from '../shared/proof-copy-barrel.ts';",
       "import type { ProofLabel } from '../shared/proof-copy-barrel.ts';",
       '',
@@ -233,7 +248,7 @@ export { readProofLabel as proofText } from './proof-copy.ts';
       '  // resolution reaches the emitted terminal bytes. A module-scope statement',
       '  // is not part of the admitted component grammar: the generated lane lowers',
       '  // the component body, not arbitrary top-level side effects.',
-      "  return <span class='source' data-proof={`${conditionTarget}:${sharedTag}:${flavor}`}>{proofText(props.proofSource as ProofLabel)}</span>;",
+      "  return <span class='source' data-proof={`${conditionTarget}:${sharedTag}:${flavor}:${extensionPriority}`}>{proofText(props.proofSource as ProofLabel)}</span>;",
       '}',
       '',
     ].join('\n'),
@@ -483,7 +498,52 @@ test('external consumer: the client chunk bundles the browser condition and the 
   // client defaults (no oe-proof-flavor) would never name.
   expect(code).toContain('flavor-custom-target');
   expect(code).not.toContain('flavor-import-target');
+  expect(code).toContain('client-extension-priority');
+  expect(code).not.toContain('server-extension-priority');
 });
+
+test('external consumer: dev SSR resolves the same nested JSX as the production build', async () => {
+  const { createServer } = await import('vite');
+  const previousCwd = process.cwd();
+  process.chdir(fixture.appDir);
+  try {
+    const vite = await createServer({
+      root: fixture.appDir,
+      server: { middlewareMode: true, ws: false },
+      logLevel: 'silent',
+    });
+    const server = createHttpServer((request, response) => {
+      vite.middlewares(request, response, (error: unknown) => {
+        response.statusCode = error ? 500 : 404;
+        response.end(error instanceof Error ? error.message : 'Not found');
+      });
+    });
+    try {
+      const listening = once(server, 'listening');
+      server.listen(0, '127.0.0.1');
+      await listening;
+      const address = server.address();
+      if (address === null || typeof address === 'string') throw new Error('No loopback address');
+      const response = await fetch(`http://127.0.0.1:${address.port}/proof-jsx`);
+      const html = await response.text();
+      expect(response.status, html).toBe(200);
+      expect(html).toContain('<h1>JSX authoring</h1>');
+      expect(html).toContain('<h2>Explicit TSX import</h2>');
+    } finally {
+      try {
+        if (server.listening) {
+          const closed = once(server, 'close');
+          server.close();
+          await closed;
+        }
+      } finally {
+        await vite.close();
+      }
+    }
+  } finally {
+    process.chdir(previousCwd);
+  }
+}, 30_000);
 
 test('external consumer: a JSX route prerenders and a JSX island claims and updates in the browser', async () => {
   const distDir = join(fixture.appDir, 'dist');
@@ -546,6 +606,8 @@ test('external consumer: the SSR bundle and prerendered HTML carry the import co
   // (browser-condition) marker leaked into the server-rendered document.
   const homeHtml = await readFile(join(distDir, 'index.html'), 'utf8');
   expect(homeHtml).toContain('proof-counter-source');
+  expect(homeHtml).toContain('server-extension-priority');
+  expect(homeHtml).not.toContain('client-extension-priority');
   expect(homeHtml).not.toContain('condition-browser-target');
 });
 

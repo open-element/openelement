@@ -807,9 +807,9 @@ async function buildSSG(
       ],
       resolve: {
         preserveSymlinks: false,
-        ...(ctx.phase1.sourceResolveExtensions === undefined
+        ...(ctx.phase1.ssrResolveExtensions === undefined
           ? {}
-          : { extensions: ctx.phase1.sourceResolveExtensions }),
+          : { extensions: ctx.phase1.ssrResolveExtensions }),
         ...(viteResolveAlias ? { alias: viteResolveAlias } : {}),
       },
     });

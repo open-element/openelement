@@ -466,7 +466,12 @@ export function createConfigHooks(
 
     configResolved(cfg) {
       state.viteRoot = cfg.root;
-      state.ctx.phase1.sourceResolveExtensions = cfg.resolve?.extensions;
+      // Vite merges top-level resolve settings into each environment before
+      // this hook. Use the top-level order if a host omits that environment.
+      state.ctx.phase1.clientResolveExtensions =
+        cfg.environments?.client?.resolve?.extensions ?? cfg.resolve?.extensions;
+      state.ctx.phase1.ssrResolveExtensions =
+        cfg.environments?.ssr?.resolve?.extensions ?? cfg.resolve?.extensions;
       // Captured for the scan-time admission derivation: the derived packages'
       // SSR externalization is appended to this live config's `ssr.noExternal`
       // in buildStart (after this hook returned), the same list the dev

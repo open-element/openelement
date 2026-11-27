@@ -60,7 +60,7 @@
 
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import type { Plugin, ViteDevServer } from 'vite';
+import { BuildEnvironment, createIdResolver, type Plugin, type ViteDevServer } from 'vite';
 import {
   analyzeModuleSemantics,
   type ClassCandidateRegistry,
@@ -79,7 +79,7 @@ import {
 import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
 import { resolveViteServerComponentSource } from './server-component-host.ts';
 import { islandStyleScopeTag, type IslandStyleDeclaration } from './island-style-declarations.ts';
-import { walkModuleGraph } from './module-graph-walk.ts';
+import { walkModuleGraph, type ModuleWalkResolver } from './module-graph-walk.ts';
 import { registerArtifactCandidates } from './collect-shadow-candidates.ts';
 import { findBuildWorkspaceRootOrUndefined } from '../workspace-alias.ts';
 import {
@@ -631,12 +631,34 @@ export function serverRenderedStyleEdgesPlugin(
    * from elsewhere than its root would otherwise bound the workspace wrong).
    */
   let resolvedRoot: string | undefined;
+  let serverResolver: ModuleWalkResolver | undefined;
   return {
     name: 'open:server-rendered-style-edges',
     enforce: 'pre',
     apply: 'build',
     configResolved(config) {
       resolvedRoot = config.root;
+      serverResolver = undefined;
+      const client = config.environments.client?.resolve.extensions;
+      const ssr = config.environments.ssr?.resolve.extensions;
+      if (
+        ssr === undefined ||
+        (client?.length === ssr.length &&
+          client.every((extension, index) => extension === ssr[index]))
+      )
+        return;
+
+      // This discovery runs inside the client build but reads the server's
+      // source. Reuse Vite's resolver when the environments rank extensions
+      // differently, so a client sibling cannot replace a server component.
+      const resolve = createIdResolver(config);
+      const environment = new BuildEnvironment('ssr', config);
+      serverResolver = {
+        async resolve(specifier, importer) {
+          const id = await resolve(environment, specifier, importer);
+          return id === undefined ? null : { id };
+        },
+      };
     },
     // The DISCOVERY phase runs in buildStart, which is why this plugin is
     // mounted BEFORE every consumer of its facts: the compiler facts it
@@ -655,6 +677,7 @@ export function serverRenderedStyleEdgesPlugin(
         resolvedRoot,
         admissionMode,
         serverComponentTags,
+        serverResolver ?? this,
       );
     },
     // The module-LOADING phase: reaching a sheet's text through Vite's `?inline`
@@ -673,7 +696,7 @@ export function serverRenderedStyleEdgesPlugin(
 }
 
 /**
- * The DISCOVERY half: resolve the seeds through this build's own resolver, walk
+ * The DISCOVERY half: resolve the seeds with the server's extension order, walk
  * their static module graph once, and register every module's compiler facts —
  * the authored `.css` edges and the statically admitted class candidates —
  * into the build's registries. Returns the edge facts the emission half needs.
@@ -697,6 +720,7 @@ async function discoverServerRenderedModules(
   admissionMode: 'auto' | 'manual' = 'auto',
   /** The admitted static component tags the server function component lane routes through `__ssr`. */
   serverComponentTags: readonly string[] = [],
+  resolver: ModuleWalkResolver = this,
 ): Promise<Map<string, RegisteredStyleRequest>> {
   // The generated-island style declarations (GH issue #1800): the island scan
   // is their ONE producer, and this pass is the ONE consumer that turns a
@@ -723,7 +747,7 @@ async function discoverServerRenderedModules(
     // SSR build's own failure: it imports the same specifier.
     let resolved: { id: string; external?: boolean | 'absolute' | 'relative' } | null;
     try {
-      resolved = await this.resolve(specifier);
+      resolved = await resolver.resolve(specifier);
     } catch {
       continue;
     }
@@ -747,7 +771,7 @@ async function discoverServerRenderedModules(
   }
   const effectiveRoot = root ?? process.cwd();
   const workspaceRoot = findBuildWorkspaceRootOrUndefined(effectiveRoot);
-  const walk = await walkModuleGraph(this, roots);
+  const walk = await walkModuleGraph(resolver, roots);
   if (walk.truncated) {
     this.warn(
       'Server-rendered module discovery stopped at its module bound; some server-only ' +
@@ -817,7 +841,7 @@ async function discoverServerRenderedModules(
     // registered edge with no consumer would emit an orphan CSS asset.
     const moduleId = stableModuleId(file, effectiveRoot, workspaceRoot);
     const resolveModule = await prepareServerComponentImports(source, moduleId, (specifier) =>
-      resolveViteServerComponentSource(specifier, (target) => this.resolve(target, file)),
+      resolveViteServerComponentSource(specifier, (target) => resolver.resolve(target, file)),
     );
     const serverCompiled = compileServerComponentIfAdmitted(source, moduleId, {
       ...(resolveModule === undefined ? {} : { resolveModule }),
