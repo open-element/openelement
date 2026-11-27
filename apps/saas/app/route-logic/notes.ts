@@ -183,10 +183,16 @@ type LogoutClientFactory = (...args: Parameters<typeof createServerSupabase>) =>
 
 export function createLogoutAction(createClient: LogoutClientFactory = createServerSupabase) {
   return async function logout(ctx: LogoutContext) {
-    const { error } = await createClient(ctx.env, ctx.request, ctx.responseHeaders).auth.signOut();
+    const authHeaders = new Headers();
+    const { error } = await createClient(ctx.env, ctx.request, authHeaders).auth.signOut();
     if (error) {
+      // Auth can emit cookie deletions even when remote revocation fails.
+      // Keep the browser's existing cookies so the user can retry.
       failedLogoutRequests.add(ctx.request);
       return fail(409, { error: 'Could not sign out. Try again.' });
+    }
+    for (const cookie of authHeaders.getSetCookie()) {
+      ctx.responseHeaders.append('set-cookie', cookie);
     }
     throw redirect('/login');
   };

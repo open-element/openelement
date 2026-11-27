@@ -247,14 +247,21 @@ test('create note returns database/RLS errors as 422 without redirecting', async
 });
 
 test('failed sign-out renders a retry and keeps subsequent Notes requests protected', async () => {
-  const logout = createLogoutAction(() => ({
-    auth: { signOut: () => Promise.resolve({ error: { message: 'Private provider detail' } }) },
-  }));
+  const logout = createLogoutAction((_env, _request, headers) => {
+    headers.append('set-cookie', 'auth=; Max-Age=0');
+    return {
+      auth: { signOut: () => Promise.resolve({ error: { message: 'Private provider detail' } }) },
+    };
+  });
   const request = new Request('http://localhost/notes?/logout', { method: 'POST' });
   const context = { ...ctx(), request };
+  context.responseHeaders.set('x-request-id', 'id');
+  context.responseHeaders.append('set-cookie', 'other=keep');
   const result = await logout(context);
   expect(isActionFailure(result)).toBe(true);
   expect(result.status).toBe(409);
+  expect(context.responseHeaders.getSetCookie()).toEqual(['other=keep']);
+  expect(context.responseHeaders.get('x-request-id')).toBe('id');
   const loadNotes = createNotesLoader(stubClient({ user: null }));
   const data = await loadNotes(context);
   expect(data).toEqual({ denied: true });
@@ -270,10 +277,21 @@ test('failed sign-out renders a retry and keeps subsequent Notes requests protec
   expect(isOpenElementRedirect(redirect) && redirect.location).toBe('/login');
 });
 
-test('successful sign-out keeps the sign-in redirect', async () => {
-  const logout = createLogoutAction(() => ({
-    auth: { signOut: () => Promise.resolve({ error: null }) },
-  }));
-  const redirect = await assertRejectsIncludes(() => logout(ctx()));
+test('successful sign-out forwards Auth cookie removals and redirects to sign-in', async () => {
+  const logout = createLogoutAction((_env, _request, headers) => {
+    headers.append('set-cookie', 'auth.0=; Max-Age=0');
+    headers.append('set-cookie', 'auth.1=; Max-Age=0');
+    return { auth: { signOut: () => Promise.resolve({ error: null }) } };
+  });
+  const context = ctx();
+  context.responseHeaders.set('x-request-id', 'id');
+  context.responseHeaders.append('set-cookie', 'other=keep');
+  const redirect = await assertRejectsIncludes(() => logout(context));
   expect(isOpenElementRedirect(redirect) && redirect.location).toBe('/login');
+  expect(context.responseHeaders.getSetCookie()).toEqual([
+    'other=keep',
+    'auth.0=; Max-Age=0',
+    'auth.1=; Max-Age=0',
+  ]);
+  expect(context.responseHeaders.get('x-request-id')).toBe('id');
 });
