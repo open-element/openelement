@@ -646,9 +646,9 @@ test('createServerComponentSourceResolver probes relative spellings and fails op
     await writeFile(join(dir, 'parts', 'index.tsx'), `export const x = 1;`);
     const resolve = createServerComponentSourceResolver({ root: dir });
     const importer = join(dir, 'about.tsx');
-    expect(await resolve('./shell.tsx', importer)).toContain('export function Shell()');
-    expect(await resolve('./header', importer)).toContain('export function Header()');
-    expect(await resolve('./parts', importer)).toContain('export const x = 1;');
+    expect(resolve('./shell.tsx', importer)?.source).toContain('export function Shell()');
+    expect(resolve('./header', importer)?.source).toContain('export function Header()');
+    expect(resolve('./parts', importer)?.source).toContain('export const x = 1;');
     // Unreadable targets answer null — the compile turns that into its own
     // coded unresolvable-import rejection.
     expect(await resolve('./missing.tsx', importer)).toEqual(null);
@@ -702,10 +702,10 @@ test('an explicit non-source import is never satisfied by a source sibling', asy
     expect(await resolve('./page.css', importer)).toEqual(null);
     // The sibling source files are real and reachable through their OWN
     // spellings — the rejection is the identity rule, not a blanket ban.
-    expect(await resolve('./table.json.ts', importer)).toContain('export function Ghost');
+    expect(resolve('./table.json.ts', importer)?.source).toContain('export function Ghost');
     // A dotted DIRECTORY keeps its bundler resolution: index probing names
     // another module identity, not a source suffix appended to this spelling.
-    expect(await resolve('./parts.v2', importer)).toContain('export const v2');
+    expect(resolve('./parts.v2', importer)?.source).toContain('export const v2');
   } finally {
     await rm(dir, { recursive: true }).catch(() => {});
   }
@@ -723,17 +723,20 @@ test('extension resolution still resolves every real source candidate', async ()
     const resolve = createServerComponentSourceResolver({ root: dir });
     const importer = join(dir, 'about.tsx');
     // Explicit source spellings read that file.
-    expect(await resolve('./plain.ts', importer)).toContain("'ts'");
-    expect(await resolve('./view.tsx', importer)).toContain("'tsx'");
-    expect(await resolve('./mod.mts', importer)).toContain("'mts'");
+    expect(resolve('./plain.ts', importer)?.source).toContain("'ts'");
+    expect(resolve('./view', importer)).toEqual({
+      fileName: join(dir, 'view.tsx'),
+      source: `export const kind = 'tsx';`,
+    });
+    expect(resolve('./mod.mts', importer)?.source).toContain("'mts'");
     // Extensionless spellings keep probing the whole candidate list.
-    expect(await resolve('./mod', importer)).toContain("'mts'");
-    expect(await resolve('./legacy', importer)).toContain("'js'");
+    expect(resolve('./mod', importer)?.source).toContain("'mts'");
+    expect(resolve('./legacy', importer)?.source).toContain("'js'");
     // A `.js` spelling whose file is authored `.ts` (the TS ESM import
     // rewrite) still resolves through the stripped stem.
-    expect(await resolve('./plain.js', importer)).toContain("'ts'");
+    expect(resolve('./plain.js', importer)?.source).toContain("'ts'");
     // Directory spellings resolve their index.
-    expect(await resolve('./parts', importer)).toContain("'index-tsx'");
+    expect(resolve('./parts', importer)?.source).toContain("'index-tsx'");
   } finally {
     await rm(dir, { recursive: true }).catch(() => {});
   }

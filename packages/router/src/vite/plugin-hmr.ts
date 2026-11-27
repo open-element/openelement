@@ -18,6 +18,7 @@ import {
   compileGeneratedElementIfAdmitted,
   compileServerComponentIfAdmitted,
   diagnosticPluginError,
+  isJsxModuleId,
   readCompiledArtifactStyles,
   recordCompilerDiagnostics,
   registerStyleRequest,
@@ -252,7 +253,7 @@ export function createCompilerHooks(
         }
         return [];
       }
-      if (!/\.tsx$/.test(hmr.file)) return;
+      if (!isJsxModuleId(hmr.file)) return;
       let source: string;
       try {
         source = await readFile(hmr.file, 'utf8');

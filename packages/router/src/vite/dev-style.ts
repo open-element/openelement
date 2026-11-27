@@ -38,6 +38,7 @@
 
 import process from 'node:process';
 import type { Plugin, ResolvedConfig, ViteDevServer } from 'vite';
+import { isJsxModuleId } from '@openelement/compiler';
 import { createLogger } from '@openelement/element';
 import {
   renderTailwindEntry,
@@ -311,7 +312,9 @@ export function devStylePlugin(state: OpenPluginState, session: DevStyleSession)
         // `onConfigurationChange` below, which is what keeps one rebuild with
         // two listeners rather than two channels racing to discover it.
         relevantChange: (file) =>
-          /\.(?:tsx|css)$/.test(file) || plan.theme.some((source) => file.endsWith(source)),
+          isJsxModuleId(file) ||
+          file.endsWith('.css') ||
+          plan.theme.some((source) => file.endsWith(source)),
       };
       server.middlewares.use(async (request, response, next) => {
         const path = (request.url ?? '').split('?', 1)[0];

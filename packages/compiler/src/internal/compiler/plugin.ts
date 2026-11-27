@@ -18,7 +18,10 @@
 
 import type { Plugin } from 'vite';
 import { CompiledElementError } from './semantic-core/compiler-diagnostics.ts';
-import { compileServerComponentIfAdmitted } from './semantic-core/server-component.ts';
+import {
+  compileServerComponentIfAdmitted,
+  type ResolvedServerComponentSource,
+} from './semantic-core/server-component.ts';
 import { compileGeneratedElementIfAdmitted } from './semantic-ir/generated-element/compile.ts';
 import type { GeneratedElementSite } from './semantic-ir/generated-element/contract.ts';
 import {
@@ -114,7 +117,10 @@ export interface CompiledElementPluginOptions {
    * host's job, so this option carries the host's capability rather than a
    * path convention.
    */
-  resolveServerComponentModule?: (specifier: string, importer: string) => string | null;
+  resolveServerComponentModule?: (
+    specifier: string,
+    importer: string,
+  ) => string | ResolvedServerComponentSource | null;
   /**
    * The custom-element host tags the host build admitted as @element compiled
    * components: JSX children in a server function component ride

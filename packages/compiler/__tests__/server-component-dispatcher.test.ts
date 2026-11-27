@@ -9,7 +9,7 @@
  * and the admitted @element compiled-host tag set).
  */
 
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { compileServerComponentIfAdmitted } from '../src/compiler.ts';
 
 const FILE = '/proj/app/routes/home.tsx';
@@ -80,6 +80,35 @@ describe('compileServerComponentIfAdmitted: the admission bridge', () => {
   test('the cheap prefilter keeps modules without export or JSX off the compile', () => {
     expect(compileServerComponentIfAdmitted(`const x = 1;`, FILE)).toBeNull();
     expect(compileServerComponentIfAdmitted(`export const x = 1;`, FILE)).toBeNull();
+  });
+
+  test('a JSX server component uses the same props table from a JSDoc parameter', () => {
+    const result = compileServerComponentIfAdmitted(
+      `/** @param {{ name: string }} props */
+      export function Card(props) { return <article>{props.name}</article>; }`,
+      '/proj/app/routes/home.jsx',
+    );
+    expect(result?.components).toEqual(['Card']);
+    expect(result?.code).toContain('__t(props.name)');
+  });
+
+  test.each([
+    "import type { Child } from './child.jsx';",
+    "import { type Child } from './child.jsx';",
+  ])('a type-only component import does not resolve as a renderable value (%s)', (statement) => {
+    const resolveModule = vi.fn(() => 'export function Child() { return <span />; }');
+    expect(() =>
+      compileServerComponentIfAdmitted(
+        `${statement}\nexport function Page() { return <Child />; }`,
+        FILE,
+        { resolveModule },
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        diagnostics: [expect.objectContaining({ code: 'OEC9032', file: FILE, line: 2 })],
+      }),
+    );
+    expect(resolveModule).not.toHaveBeenCalled();
   });
 
   test('host options thread through: nested components resolve by source and compose by call', () => {

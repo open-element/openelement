@@ -15,7 +15,7 @@ import {
   isSafeAttributeName,
 } from '@openelement/protocol/forbidden-sinks';
 import { createLogger } from '@openelement/element';
-import { stableModuleId } from '@openelement/compiler';
+import { isJsxModuleId, stableModuleId } from '@openelement/compiler';
 import { normalizeSeparators, pathToTagName } from '@openelement/element/build-utils';
 import { hasControlCharacter } from '../../../internal/control-characters.ts';
 import { checkIslandStyleList } from '../../../internal/island-style-specifiers.ts';
@@ -450,7 +450,7 @@ export function attachPackageIslandHostIdentities(
     } catch {
       return declaration;
     }
-    if (!/\.tsx$/.test(file)) return declaration;
+    if (!isJsxModuleId(file)) return declaration;
     let source: string;
     try {
       source = readFileSync(file, 'utf8');
@@ -1407,7 +1407,7 @@ function admitIslandStyles(input: {
  *
  * M11 prerequisite: the same pass resolves each local island's compiler-owned
  * generated-host identity from the source it just read (one extra compiler
- * call per `.tsx` island, including `ssr: false` ones — the classification is
+ * call per JSX-bearing island, including `ssr: false` ones — the classification is
  * admission-independent, so the scan never needs a second pass once a consumer
  * asks for it). The host-site fact comes from the existing
  * `createGeneratedElementSiteResolver`, the ONE identity helper the transform

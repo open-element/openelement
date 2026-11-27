@@ -2,7 +2,7 @@
  * M09-1a — the generated-element lane entry.
  *
  * Mirrors `compileServerComponentIfAdmitted`: returns null for a module the
- * lane does not own (no host site fact, non-TSX, or the class lane's decorator
+ * lane does not own (no host site fact, non-JSX-bearing, or the class lane's decorator
  * grammar) and fails closed with the single compiler error dialect when it does
  * own a module it must refuse. The host calls it between the class lane and the
  * server function lane in `compiledElementPlugin.transform`.
@@ -21,6 +21,7 @@ import {
   type FunctionModelComponent,
   type FunctionModelNode,
 } from '../../semantic-core/function-frontend.ts';
+import { isJsxModuleId } from '../../semantic-core/jsx-module-id.ts';
 import { analyzeModuleSemantics } from '../../semantic-core/module-analysis.ts';
 import { typescriptParser } from '../../semantic-core/parse-module.ts';
 import type { CompiledElementSourceMap } from '../../semantic-core/source-map.ts';
@@ -157,8 +158,8 @@ export function compileGeneratedElementIfAdmitted(
 ): CompiledGeneratedElement | null {
   if (options.site === null) return null;
   // The site predicate is a host decision, but the lane never parses a
-  // non-TSX id as JSX: the function grammar cannot appear in one.
-  if (!/\.tsx(?:\?|$)/.test(id)) return null;
+  // plain script id as JSX: the function grammar cannot appear in one.
+  if (!isJsxModuleId(id)) return null;
 
   const classFacts = analyzeModuleSemantics(code, id);
   if (classFacts.compiledElementDecorator || classFacts.unsupportedElementDecorator !== undefined) {

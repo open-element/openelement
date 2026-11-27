@@ -50,7 +50,8 @@ import {
 } from './module-analysis.ts';
 import { Lowering } from './lower-program.ts';
 import { type CompiledElementSourceMap, SourceMapSegmentBuilder } from './source-map.ts';
-import { typescriptParser } from './parse-module.ts';
+import { authoredPropsType, typescriptParser } from './parse-module.ts';
+import { isJsxModuleId } from './jsx-module-id.ts';
 import { type CompiledField } from './analyze-module.ts';
 import {
   type ProgramCondition,
@@ -58,6 +59,12 @@ import {
   type ProgramTreeNode,
   type PropertyValueType,
 } from '@openelement/protocol/part-program';
+
+/** Authored source with the resolved filename that determines its syntax. */
+export interface ResolvedServerComponentSource {
+  readonly fileName: string;
+  readonly source: string;
+}
 
 /** Host-supplied inputs for the server function component compile. */
 export interface ServerComponentCompileOptions {
@@ -67,9 +74,13 @@ export interface ServerComponentCompileOptions {
    * binding (compile-time resolved, deterministic). Absent or returning
    * undefined: importing components from that specifier is a coded rejection.
    * Resolution of specifiers to files stays the host's job — the compiler
-   * never reads the filesystem.
+   * never reads the filesystem. Supply the resolved filename when resolution
+   * can pick a different extension from the authored specifier. A source-only
+   * answer uses the specifier as the parser's filename.
    */
-  readonly resolveModule?: (specifier: string) => string | undefined;
+  readonly resolveModule?: (
+    specifier: string,
+  ) => string | ResolvedServerComponentSource | undefined;
   /**
    * The custom-element host tags the host build admitted as @element
    * compiled components: those JSX children ride `__ssr(tag, props)`.
@@ -237,7 +248,7 @@ function admitComponent(statement: ts.Statement, fail: CompilerFail): AdmittedCo
         fail(parameters[0], 'OEC9032', 'the props parameter must be a plain identifier');
       }
       parameter = parameters[0].name.text;
-      const facts = fieldsOfPropsType(parameters[0].type, fail);
+      const facts = fieldsOfPropsType(authoredPropsType(parameters[0]), fail);
       fields = facts.fields;
       promiseFields = facts.promiseFields;
     }
@@ -266,7 +277,7 @@ function admitComponent(statement: ts.Statement, fail: CompilerFail): AdmittedCo
       fail(arrow.parameters[0], 'OEC9032', 'the props parameter must be a plain identifier');
     }
     parameter = arrow.parameters[0].name.text;
-    const facts = fieldsOfPropsType(arrow.parameters[0].type, fail);
+    const facts = fieldsOfPropsType(authoredPropsType(arrow.parameters[0]), fail);
     fields = facts.fields;
     promiseFields = facts.promiseFields;
   }
@@ -415,17 +426,22 @@ export function compileServerComponentModule(
       if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
         continue;
       }
+      const clause = statement.importClause;
+      if (clause === undefined || clause.isTypeOnly) continue;
+      const bindings = clause.namedBindings;
+      if (bindings === undefined || !ts.isNamedImports(bindings)) continue;
+      const valueImports = bindings.elements.filter((element) => !element.isTypeOnly);
+      if (valueImports.length === 0) continue;
       const specifier = statement.moduleSpecifier.text;
       if (specifier === SERVER_HELPER_SPECIFIER) continue;
-      const importedSource = options.resolveModule(specifier);
-      if (importedSource === undefined) continue;
+      const importedModule = options.resolveModule(specifier);
+      if (importedModule === undefined) continue;
+      if (typeof importedModule !== 'string' && !isJsxModuleId(importedModule.fileName)) continue;
       const importedComponents = exportedServerComponents(
-        importedSource,
-        `${fileName}→${specifier}`,
+        typeof importedModule === 'string' ? importedModule : importedModule.source,
+        typeof importedModule === 'string' ? `${fileName}→${specifier}` : importedModule.fileName,
       );
-      const bindings = statement.importClause?.namedBindings;
-      if (!bindings || !ts.isNamedImports(bindings)) continue;
-      for (const element of bindings.elements) {
+      for (const element of valueImports) {
         const imported = element.propertyName?.text ?? element.name.text;
         if (!importedComponents.has(imported)) continue;
         componentBindings.set(element.name.text, element.name.text);
@@ -619,7 +635,7 @@ function serverComponentNearMiss(
  *   single-return shape) is NOT null: it goes through
  *   {@link compileServerComponentModule}, which fails closed with OEC9032.
  *   Returning null would hand the authored module to another lane unchanged;
- * - a non-`.tsx` id can never carry the JSX grammar: null;
+ * - a plain script id never carries the JSX grammar: null;
  * - the cheap `export` + `<` prefilter (the same conservative superset idea
  *   the class lane's prefilter uses) keeps plainly inert modules off the
  *   parse. A module that does not parse stays null so the host reports the
@@ -633,7 +649,7 @@ export function compileServerComponentIfAdmitted(
   id: string,
   options: ServerComponentCompileOptions = {},
 ): CompileServerComponentResult | null {
-  if (!/\.tsx(?:\?|$)/.test(id)) return null;
+  if (!isJsxModuleId(id)) return null;
   if (!code.includes('export') || !code.includes('<')) return null;
   const facts = analyzeModuleSemantics(code, id);
   if (facts.compiledElementDecorator || facts.unsupportedElementDecorator !== undefined)

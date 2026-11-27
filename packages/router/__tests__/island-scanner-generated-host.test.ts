@@ -467,11 +467,11 @@ test('an unexpected compiler failure propagates instead of being recorded as a r
   // `lane-refused` data. The compiler module is mocked in isolation so the
   // real generated-host resolver is exercised without a second test file.
   vi.resetModules();
-  vi.doMock('@openelement/compiler', () => ({
+  vi.doMock(import('@openelement/compiler'), async (importOriginal) => ({
+    ...(await importOriginal()),
     compileGeneratedElementIfAdmitted: () => {
       throw new Error('injected compiler crash');
     },
-    CompiledElementError: class InjectedCompiledElementError extends Error {},
   }));
   try {
     const isolated = await import('../src/vite/internal/ssg/generated-element-host-metadata.ts');

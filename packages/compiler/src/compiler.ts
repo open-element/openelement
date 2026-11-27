@@ -12,6 +12,7 @@ export {
   registerStyleEdges,
   stableModuleId,
 } from './internal/compiler/plugin.ts';
+export { isJsxModuleId } from './internal/compiler/semantic-core/jsx-module-id.ts';
 // The artifact adoption read (#1558/KR-10): the style edges of a shipped
 // compiled module. Host builds whose compiled-element binding is not
 // `compiledElementPlugin` (the router dev transform, plugin-hmr.ts) register
@@ -37,13 +38,14 @@ export {
   compileServerComponentIfAdmitted,
   compileServerComponentModule,
   type CompileServerComponentResult,
+  type ResolvedServerComponentSource,
   type ServerComponentCompileOptions,
 } from './internal/compiler/semantic-core/server-component.ts';
 // The generated Native Custom Element lane host bridge (M09-1b): the ONE
 // admission entry a host whose compiler binding is not the Vite plugin (the
 // Router's dev transform, plugin-hmr.ts) calls with its island-derived site
 // fact. It returns null for a module the lane does not own (no site fact, a
-// non-TSX id, or a module still carrying the retired `@element` decorator
+// non-JSX-bearing id, or a module still carrying the retired `@element` decorator
 // facts) and fails closed with the internal `OEIR_GENERATED_ELEMENT_*` codes
 // when it owns a module it must refuse.
 // `GeneratedElementSite` is the host-supplied fact (a tag plus the root mode

@@ -12,7 +12,7 @@
  *
  * - the ONE scan (`scanIslandMeta`) already reads every island source for its
  *   static sidecar facts; it calls {@linkcode resolveGeneratedElementHost} in
- *   the same pass for `.tsx` islands, so the build and the dev island rescan
+ *   the same pass for `.tsx` and `.jsx` islands, so the build and the dev island rescan
  *   get the identity from the same producer (no second scan, no second naming
  *   rule, no namespace suffix scan, no class static, no runtime module-shape
  *   read);
@@ -43,6 +43,7 @@
 import {
   CompiledElementError,
   compileGeneratedElementIfAdmitted,
+  isJsxModuleId,
   type GeneratedElementSite,
 } from '@openelement/compiler';
 import type { IslandDecl } from '@openelement/protocol/ssg';
@@ -101,7 +102,7 @@ export type GeneratedElementHostIdentity =
     }
   /**
    * The generated lane did not own the module. `non-tsx` is the lane's own
-   * extension gate; `site-not-admitted` means the host's one site fact does not
+   * extension gate (neither `.tsx` nor `.jsx`); `site-not-admitted` means the host's one site fact does not
    * admit this path; `compiler-declined` is the lane's structural opt-out
    * (class-owned module, non-component default export, missing sidecar, …).
    * The class lane keeps its existing byte paths untouched.
@@ -207,9 +208,7 @@ export interface ResolveGeneratedElementHostInput {
 export function resolveGeneratedElementHost(
   input: ResolveGeneratedElementHostInput,
 ): GeneratedElementHostIdentity {
-  // The lane's own extension gate: `compileGeneratedElementIfAdmitted` never
-  // parses a non-TSX id as JSX, so a `.ts/.js/.jsx` island cannot carry a host.
-  if (!/\.tsx(?:[?#]|$)/.test(input.filePath)) {
+  if (!isJsxModuleId(input.filePath)) {
     return { kind: 'lane-declined', reason: 'non-tsx' };
   }
   // No host-site admission: the transform will decline the module too, so
