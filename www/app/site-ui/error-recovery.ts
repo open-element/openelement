@@ -516,7 +516,6 @@ export const runtimeStages: Readonly<Record<string, keyof typeof stages>> = {
   SsgRenderErrorCode: 'build',
   SsgHygieneErrorCode: 'build',
   SsgDynamicErrorCode: 'routing',
-  StreamErrorCode: 'data',
   WorkspaceAnchorErrorCode: 'build',
 };
 

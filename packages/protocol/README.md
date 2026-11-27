@@ -24,14 +24,14 @@ into the others' graphs.
 | `@openelement/protocol/module-descriptors` | Binding-identity module descriptors shared by the compiler's semantic core and its hosts (#1557 package split).                           |
 | `@openelement/protocol/module-vocabulary` | The router's module-scan vocabulary injected into the element semantic core.                                                               |
 | `@openelement/protocol/part-program`   | Server JSX lowering types and the generated host markers and root modes. |
-| `@openelement/protocol/policy`         | Numeric build/runtime admission budgets (stream bounds, composition depth, action body limit, timeouts).                                     |
+| `@openelement/protocol/policy`         | Numeric bounds for composition depth, action bodies, and idle delivery.                                     |
 | `@openelement/protocol/registry-markers` | SSR customElements registry marker contract (#965).                                                                                        |
 | `@openelement/protocol/render`         | Render pipeline types (render errors, hydration hints, SSR admission decisions).                                                                                    |
 | `@openelement/protocol/runtime`        | Runtime adapter protocol.                                                                                                                    |
 | `@openelement/protocol/server-only`    | Side-effect import that marks an application module as server-only in Router browser builds and dev.                                         |
 | `@openelement/protocol/signal`         | Signal contracts (`Signal`, `ReadonlySignal`, brands).                                                                                       |
-| `@openelement/protocol/ssg`            | SSG engine contracts (route manifests, island declarations, stream route manifests).                                                        |
-| `@openelement/protocol/stream-frame-policy` | The canonical deny lists a deferred text/Block Part frame must satisfy for the browser installer to accept it.                          |
+| `@openelement/protocol/ssg`            | SSG engine contracts (route manifests, island declarations).                                                        |
+| `@openelement/protocol/stream-frame-policy` | URL safety checks shared by generated DOM writes and server markup.                          |
 | `@openelement/protocol/style-sheet`    | The cross-environment `StyleSheet` abstraction contract.                                                                                     |
 | `@openelement/protocol/void-tags`      | The canonical HTML void-element set shared by rendering and compilation.                                               |
 

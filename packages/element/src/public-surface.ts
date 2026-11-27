@@ -116,12 +116,6 @@ export type { TrustedHtml } from './public-runtime.ts';
  */
 export { DANGEROUS_KEYS, injectPropsSafe, isDangerousKey } from './public-runtime.ts';
 
-// ─── Streamed-frame policy (re-export from core) ───────────────────
-
-// The streamed-frame admission policy: one deny list for the build manifest
-// scan, the stream executor admission, and the generated browser installer.
-// Consumed by the router's streaming pipeline and available to custom
-// stream executors.
 export {
   STREAM_FRAME_FORBIDDEN_TAGS,
   STREAM_FRAME_UNSAFE_URL,
@@ -130,21 +124,10 @@ export {
   unsafeStreamFrameAttribute,
 } from './public-runtime.ts';
 
-// ─── Build/runtime policy budgets (re-export from core) ────────────
-
-// The numeric admission budgets (streaming field/owner/seed/payload bounds,
-// composition depth, action body limit, stream timeout, idle fallback): one
-// value per policy boundary for the router's build pipeline, the generated
-// entries, and the element runtime itself.
 export {
   IDLE_FALLBACK_TIMEOUT_MS,
   MAX_ACTION_BODY_BYTES,
   MAX_COMPOSITION_DEPTH,
-  STREAM_MAX_FIELDS,
-  STREAM_MAX_OWNERS,
-  STREAM_MAX_PAYLOAD_LENGTH,
-  STREAM_MAX_SEED_PROPERTIES,
-  STREAM_TIMEOUT_MS,
 } from './public-runtime.ts';
 
 // ─── Island types (protocol) ─────────────────────────────

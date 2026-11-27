@@ -9,11 +9,8 @@
  *   a) the generated source parses as a standalone module (TypeScript parse
  *      diagnostics must be empty — the bundler-facing parse floor);
  *   b) the entry carries NO runtime helper function bodies: every function
- *      DECLARATION in the emitted source must be an allowlisted name (since
- *      Amendment 1 the request-time section allows none — the deferred-shell
- *      gate is the typed stream-runtime factory — and the four SSG
- *      prerender-section functions remain), and the retired helper names must
- *      never reappear;
+ *      declaration in the emitted source is allowlisted. Retired helper names
+ *      must remain absent.
  *   c) no serialized DANGEROUS_KEYS copy — the factory imports the canonical
  *      set from the kernel-free /authoring leaf;
  *   d) server-only code never enters the client graph: a real static import
@@ -47,31 +44,10 @@ const fullRoutes: RouteEntry[] = [
   { path: '/404', filePath: '404.tsx', type: 'page', varName: 'page404' },
 ];
 
-/** One build-shaped stream manifest so the gates cover the streamed entry (Amendment 1). */
-const streamRoutes = [
-  {
-    ...basicRoutes[0],
-    streamManifest: {
-      program: { version: 1, tag: 'page-index', sha256: 'a'.repeat(64) },
-      fields: [
-        {
-          field: 'first',
-          signal: 'first',
-          owners: [{ kind: 'part' as const, index: 0, location: 'p0', source: {} as never }],
-        },
-      ],
-    },
-  },
-];
-
 /** Every generated shape a consumer build can produce. */
 function generatedEntries(): Array<{ label: string; code: string }> {
   return [
     { label: 'native dev', code: renderEntry(buildEntryDescriptor(basicRoutes)) },
-    {
-      label: 'native dev streamed',
-      code: renderEntry(buildEntryDescriptor(streamRoutes)),
-    },
     {
       label: 'native SSG full',
       code: renderEntry(
@@ -133,14 +109,7 @@ function emittedFunctionDeclarations(code: string): string[] {
   return names;
 }
 
-/**
- * The ONLY function declarations a generated entry may carry, and where:
- * since ADR-0160 Amendment 1 the request-time section carries none (the
- * deferred-shell gate is the typed stream-runtime factory) and the SSG
- * prerender section carries four (the renderer-scope-parity oracle pins the
- * `__matchingRenderers` re-expression).
- */
-const REQUEST_TIME_ALLOWED = new Set<string>([]);
+/** The SSG section is the only section that declares helper functions. */
 const SSG_ALLOWED = new Set([
   '__rendererContext',
   '__matchingRenderers',
@@ -154,25 +123,13 @@ test('gate: emitted function declarations are exactly the allowlisted set', () =
     const requestTime = isSSG ? code.slice(0, code.indexOf('export const routeInfo = [')) : code;
     const ssg = isSSG ? code.slice(code.indexOf('export const routeInfo = [')) : '';
 
-    const requestTimeDeclarations = emittedFunctionDeclarations(requestTime);
     expect(
-      requestTimeDeclarations.filter((name) => !REQUEST_TIME_ALLOWED.has(name)),
-      `request-time section of "${label}" carries non-allowlisted function declarations`,
-    ).toEqual([]);
-    // The request-time section carries no function declarations at all —
-    // streamed entries included, since Amendment 1 moved the deferred-shell
-    // gate into the typed stream runtime (the gate descriptors here have no
-    // stream routes; `streamedEntries` below covers the streamed shape).
-    expect(requestTimeDeclarations).toEqual([]);
-
-    const ssgDeclarations = emittedFunctionDeclarations(ssg);
-    expect(
-      ssgDeclarations.filter((name) => !SSG_ALLOWED.has(name)),
-      `SSG section of "${label}" carries non-allowlisted function declarations`,
+      emittedFunctionDeclarations(requestTime),
+      `request-time section of "${label}" must only wire the runtime`,
     ).toEqual([]);
     expect(
-      isSSG ? ssgDeclarations.sort() : [],
-      `SSG section of "${label}" must carry exactly the prerender-section functions`,
+      emittedFunctionDeclarations(ssg).sort(),
+      `SSG section of "${label}" must declare exactly the prerender helpers`,
     ).toEqual(isSSG ? [...SSG_ALLOWED].sort() : []);
   }
 });
@@ -209,7 +166,6 @@ test('gate: retired helper emissions never reappear in generated entries', () =>
     'const __DANGEROUS_KEYS = new Set(',
     'const __maxActionBodyBytes =',
     'const __actionBodyLimit = __createActionBodyLimit(',
-    // the deferred-shell gate (Amendment 1 — the typed stream-runtime factory)
     'async function __createStreamPageShell(',
   ];
   for (const { label, code } of generatedEntries()) {

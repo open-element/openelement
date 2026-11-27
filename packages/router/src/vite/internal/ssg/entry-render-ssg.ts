@@ -65,11 +65,7 @@ export function renderSsgSection(desc: EntryDescriptor): string {
         .map(quoteGeneratedJavaScriptValue)
         .join(
           ', ',
-        )}], rendering: (__pageDefinition(${r.varName}).renderIntent?.mode || "static"), hasAction: (typeof ${r.varName}.action === "function" || (typeof ${r.varName}.actions === "object" && ${r.varName}.actions !== null))${
-        r.streamManifest
-          ? `, streamManifest: __streamManifests[${quoteGeneratedJavaScriptValue(r.path)}]`
-          : ''
-      }${pageKindField} },`,
+        )}], rendering: (__pageDefinition(${r.varName}).renderIntent?.mode || "static"), hasAction: (typeof ${r.varName}.action === "function" || (typeof ${r.varName}.actions === "object" && ${r.varName}.actions !== null))${pageKindField} },`,
     );
   }
   lines.push('];');

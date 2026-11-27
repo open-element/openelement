@@ -507,7 +507,6 @@ export function buildEntryDescriptor(
         // class — the compiled component function is the render, and the
         // entry registers nothing for the route.
         ...(r.functionPage === undefined ? {} : { functionPage: r.functionPage }),
-        ...(r.streamManifest ? { streamManifest: r.streamManifest } : {}),
         // Build-only page-kind fact (M11-1/M11-2): route/page generation
         // branches on this instead of a runtime module-shape check. The carrier
         // is cast-free metadata on the protocol declaration object; the public

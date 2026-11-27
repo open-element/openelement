@@ -25,8 +25,6 @@ export const englishExportOverrides: ReadonlyMap<string, string> = new Map([
   ['packages/protocol/src/module-descriptors.ts#ModuleVocabularyDescriptor', 'Describe a binding that the module scanner recognizes and the information it records for calls to that binding.'],
   ['packages/protocol/src/module-descriptors.ts#StaticSidecarDescriptor', 'Identify a colocated static policy declaration for the element compiler.'],
   ['packages/protocol/src/part-program.ts#CompiledPropertyMetadata', 'The name, type, and reflection metadata for one compiled @property declaration.'],
-  ['packages/protocol/src/policy.ts#STREAM_MAX_SEED_PROPERTIES', 'Maximum number of typed properties the browser accepts in one streamed hydration seed.'],
-  ['packages/protocol/src/policy.ts#STREAM_TIMEOUT_MS', 'Milliseconds a streamed response waits for deferred fields before failing those still pending.'],
   ['packages/protocol/src/render.ts#SsrAdmissionDecision', 'The build’s SSR verdict for a discovered tag, including its module, discovery source, render path, and reason.'],
   ['packages/protocol/src/stream-frame-policy.ts#STREAM_FRAME_URL_CONTROL_MAX', 'The highest control character code point removed before checking a URL scheme.'],
   ['packages/protocol/src/stream-frame-policy.ts#unsafeStreamFrameAttribute', 'Check whether a static attribute makes a streamed frame unsafe to install.'],

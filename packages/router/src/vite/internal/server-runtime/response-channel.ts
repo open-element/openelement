@@ -1,30 +1,4 @@
-/**
- * @openelement/router/server-runtime — response/header channel.
- *
- * The request-time runtime semantics of the loader/action response-header
- * channel, its streamed-document commitment gate, and
- * the CSP auto-nonce: header commitment, the late-mutation Proxy guard, the
- * Set-Cookie-preserving merge, protocol-header precedence, and nonce
- * creation/application.
- *
- * Generated entries import this module and call it; the codegen templates
- * keep call sites, never function bodies. Behavior is governed by this module
- * and pinned by the read-only oracles (request-time-parity, stream-manifest)
- * plus the unit tests beside it.
- *
- * Behavior contract:
- * - `mergeChannelHeaders` appends every channel entry into a copy of the
- *   response headers. `Headers.append` keeps multi-value `Set-Cookie`
- *   intact, and an empty channel returns the original `Response` untouched.
- * - Protocol headers always win when the response already carries them —
- *   the channel cannot override the protocol. A protocol header the response
- *   does NOT set is still appended from the channel.
- * - `createStreamHeaderChannel` gates `append`/`set`/`delete` after
- *   `commit()` with a warn-and-ignore diagnostic naming the route, header,
- *   and operation. Reads and `forEach` stay live; nothing ever throws.
- */
-
-import type { ResponseHeaderChannel } from './types.ts';
+/** Request-time response-header merge and CSP nonce helpers. */
 
 /**
  * Headers the loader/action channel may never override once the response
@@ -40,64 +14,6 @@ export const PROTOCOL_HEADERS: ReadonlySet<string> = new Set([
   'vary',
   'x-openelement-action',
 ]);
-
-/**
- * Creates the per-request response-header channel for a streamed route:
- * the author-facing `Headers` proxy plus its commitment switch.
- *
- * The proxy guards the mutating members (`append`, `set`, `delete`) after
- * {@linkcode ResponseHeaderChannel.commit}: a late write from a held
- * `context.responseHeaders` reference is a no-op with a structured
- * diagnostic naming the route, header, and operation (the no-op rule; it
- * never throws and never reinterprets a late
- * `Location`/`Set-Cookie` as a protocol decision). Every other member —
- * reads, `forEach` included — behaves exactly like the wrapped `Headers`,
- * and `forEach` hands the callback the proxy itself so a callback-held
- * reference is gated the same way.
- *
- * `route` only feeds the diagnostic payload.
- */
-export function createStreamHeaderChannel(route: string): ResponseHeaderChannel {
-  const headers = new Headers();
-  let committed = false;
-  const channel = new Proxy(headers, {
-    get(target, key) {
-      if (key === 'append' || key === 'set' || key === 'delete') {
-        const operation = key;
-        return (name: string, value: string) => {
-          if (committed) {
-            console.warn('[openElement] late response header write', {
-              route,
-              header: String(name),
-              operation,
-            });
-            return;
-          }
-          if (operation === 'delete') target.delete(name);
-          else target[operation](name, value);
-        };
-      }
-      if (key === 'forEach') {
-        return (
-          callback: (this: unknown, value: string, name: string, headers: Headers) => void,
-          thisArg?: unknown,
-        ) => {
-          target.forEach((value, name) => callback.call(thisArg, value, name, channel));
-        };
-      }
-      const member = Reflect.get(target, key, target) as unknown;
-      return typeof member === 'function'
-        ? (member as (this: Headers, ...args: unknown[]) => unknown).bind(target)
-        : member;
-    },
-  });
-  return {
-    channel,
-    commit: () => {
-      committed = true;
-    },
-  };
-}
 
 /**
  * Merges the loader/action response-header channel into a response.

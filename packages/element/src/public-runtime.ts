@@ -65,9 +65,7 @@ export {
   wrapInDocument,
 } from './internal/core/html-escape.ts';
 export type { DocumentStyleResources } from './internal/core/html-escape.ts';
-// Streamed-frame admission policy (#1412 companion): the single source the
-// build manifest scan, the stream executor admission, and the generated
-// browser installer all consume.
+// Shared URL sink policy used by server rendering and generated DOM writes.
 export {
   STREAM_FRAME_FORBIDDEN_TAGS,
   STREAM_FRAME_UNSAFE_URL,
@@ -75,17 +73,10 @@ export {
   STREAM_FRAME_URL_CONTROL_MAX,
   unsafeStreamFrameAttribute,
 } from '@openelement/protocol/stream-frame-policy';
-// Numeric build/runtime policy budgets (internal/protocol/policy.ts): the
-// same single-source contract for the streaming admission numbers.
 export {
   IDLE_FALLBACK_TIMEOUT_MS,
   MAX_ACTION_BODY_BYTES,
   MAX_COMPOSITION_DEPTH,
-  STREAM_MAX_FIELDS,
-  STREAM_MAX_OWNERS,
-  STREAM_MAX_PAYLOAD_LENGTH,
-  STREAM_MAX_SEED_PROPERTIES,
-  STREAM_TIMEOUT_MS,
 } from '@openelement/protocol/policy';
 export type { IslandOptions } from '@openelement/protocol/island';
 export { StyleSheet } from './internal/core/style-sheet.ts';

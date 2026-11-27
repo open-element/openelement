@@ -33,13 +33,11 @@
 export {
   applyCspNonce,
   createCspNonce,
-  createStreamHeaderChannel,
   isSsgPrerenderDispatch,
   mergeChannelHeaders,
   PROTOCOL_HEADERS,
   SSG_PRERENDER_ENV_KEY,
 } from './response-channel.ts';
-export type { ResponseHeaderChannel } from './types.ts';
 export {
   ACTION_FETCH_HEADER,
   actionErrorResponse,
@@ -94,21 +92,6 @@ export type {
 } from './renderer-runtime.ts';
 export { createLayoutRuntime, createStatusHtml, localizeLayoutHref } from './document-runtime.ts';
 export type { LayoutRuntime, LayoutRuntimeDeps, StatusHtmlRenderer } from './document-runtime.ts';
-export {
-  createStreamBody,
-  createStreamRequestScope,
-  STREAM_BROWSER_BOOTSTRAP,
-  streamFields,
-} from './stream-runtime.ts';
-export type {
-  StreamBodyConfig,
-  StreamBodyFn,
-  StreamBodyOptions,
-  StreamDocumentParts,
-  StreamExecutorView,
-  StreamFieldRecord,
-  StreamRequestScope,
-} from './stream-runtime.ts';
 // #1470 block e: the generated-app factory and the dispatch/security seams
 // the slimmed entry binds (app.ts, route-dispatch.ts, security.ts).
 export { createGeneratedApp } from './app.ts';

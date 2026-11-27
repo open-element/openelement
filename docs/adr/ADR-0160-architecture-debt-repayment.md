@@ -4,6 +4,10 @@
 - Tracking: #1467
 - Preserves: ADR-0143, ADR-0148, ADR-0152, ADR-0157, ADR-0158, ADR-0159
 
+Alpha17 retired the old page stream manifest, component stream pump and inline
+browser bootstrap. Route loaders and function pages still await their results
+before rendering, and the request-time adapter still forwards response bodies.
+
 ## Decision boundary
 
 alpha6 is a debt-repayment train: its stages restructure internal seams —

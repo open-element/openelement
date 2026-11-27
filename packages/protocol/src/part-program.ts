@@ -16,20 +16,6 @@ export type SerializableValue =
   | SerializableValue[]
   | { [key: string]: SerializableValue };
 
-/** Where a part sits relative to its anchor. */
-export interface ProgramPosition {
-  offset: number;
-  line: number;
-  column: number;
-}
-
-/** A half-open [start, end) range into the authored source text. */
-export interface ProgramSourceRange {
-  file: string;
-  start: ProgramPosition;
-  end: ProgramPosition;
-}
-
 /** Exact compiler-owned location for one dynamic sink or range anchor. */
 export interface ProgramLocation {
   id: string;

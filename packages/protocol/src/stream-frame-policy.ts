@@ -1,28 +1,6 @@
-/**
- * Streamed-frame admission policy — the canonical deny lists a deferred
- * text/Block Part frame must satisfy for the browser installer to accept it.
- *
- * This module is import-free and host-free by design (same base-of-graph
- * contract as forbidden-sinks.ts) and is the single policy source for every
- * streaming admission boundary; the public export carries it to each
- * consumer:
- *
- * - the router's compiler-side build manifest scan and the generated entry's
- *   browser installer bootstrap (the lists are injected verbatim into the
- *   runtime script),
- * - the element-side deferred executor admission
- *   (internal/compiled/server/index.ts), so the public API's hand-written
- *   manifest path cannot emit frames the browser is contractually required to
- *   discard.
- *
- * The lists must never diverge: a frame the server emits and the browser
- * rejects is silently lost content.
- */
+/** Tag and URL rules shared by the generated component compiler and renderers. */
 
-/**
- * Tags a deferred frame cannot safely install into an owned Part range: the
- * browser installer rejects any frame whose markup carries one of these.
- */
+/** Tags the generated compiler refuses in a component template. */
 export const STREAM_FRAME_FORBIDDEN_TAGS = [
   'script',
   'style',
@@ -36,7 +14,7 @@ export const STREAM_FRAME_FORBIDDEN_TAGS = [
 ] as const;
 
 /**
- * URL-carrying attributes the frame check screens for script-bearing scheme
+ * URL-carrying attributes the sink check screens for script-bearing scheme
  * obfuscation; only these attribute names are value-screened.
  */
 export const STREAM_FRAME_URL_ATTRIBUTES = [
@@ -55,7 +33,7 @@ export const STREAM_FRAME_URL_ATTRIBUTES = [
 export const STREAM_FRAME_URL_CONTROL_MAX = 32;
 
 /**
- * Schemes that make a URL attribute unsafe in a streamed frame.
+ * Schemes refused on URL-carrying attributes.
  */
 export const STREAM_FRAME_UNSAFE_URL = /^(javascript|vbscript|data):/i;
 

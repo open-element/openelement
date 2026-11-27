@@ -48,7 +48,6 @@ import {
   SsgDynamicErrorCode,
   SsgHygieneErrorCode,
   SsgRenderErrorCode,
-  StreamErrorCode,
   UNPRINTABLE_ERROR,
   WorkspaceAnchorErrorCode,
 } from '../src/internal/error-codes.ts';
@@ -60,7 +59,6 @@ import { buildPackageIslandDecls } from '../src/vite/internal/ssg/island-scanner
 import { scanRoutes } from '../src/vite/internal/ssg/index.ts';
 import { resolveDynamicRoutePath } from '../src/vite/internal/ssg/ssg-helpers.ts';
 import { mdxToCompiledPageSource } from '../src/vite/plugin-mdx-lower.ts';
-import { streamFields } from '../src/vite/internal/server-runtime/stream-runtime.ts';
 import { createNativePageRenderer } from '../src/vite/internal/server-runtime/renderer-runtime.ts';
 import {
   buildClientAssetManifest,
@@ -69,7 +67,7 @@ import {
 } from '../src/vite/client-asset-manifest.ts';
 import { islandChunkMapFromAssetManifest } from '../src/vite/internal/ssg/build-postprocess.ts';
 import type { ClientIslandDeliveryEntry } from '../src/vite/internal/ssg/delivery.ts';
-import type { SsgRenderOptions, SsrBundle, StreamRouteManifest } from '@openelement/protocol/ssg';
+import type { SsgRenderOptions, SsrBundle } from '@openelement/protocol/ssg';
 
 const TABLES = {
   AdapterErrorCode,
@@ -83,7 +81,6 @@ const TABLES = {
   ClientBuildErrorCode,
   SsgRenderErrorCode,
   DocumentErrorCode,
-  StreamErrorCode,
   RendererErrorCode,
   MdxErrorCode,
   PackageIslandErrorCode,
@@ -128,7 +125,7 @@ test('error codes: the factories carry the phase their surface implies', () => {
   // buildError preserves the wrapped cause for diagnostics.
   const cause = new Error('inner');
   expect(buildError(DeliveryErrorCode.TAGS, 'boom', { cause }).cause).toEqual(cause);
-  const serve = serveError(StreamErrorCode.DEFERRED_TIMEOUT, 'boom');
+  const serve = serveError(ServeErrorCode.MODE, 'boom');
   expect([serve.phase, serve.severity, serve.recoverable]).toEqual(['ssr', 'error', false]);
   // serveError and the optional-peer adapters preserve the wrapped cause too.
   const serveCause = new Error('serve inner');
@@ -390,31 +387,6 @@ test('error codes: the client island build reports build-phase codes', () => {
 function islandEntry(): ClientIslandDeliveryEntry {
   return { tagName: 'open-counter', modulePath: '/app/islands/counter.ts', strategy: 'idle' };
 }
-
-/** The minimal stream manifest the front-gate raiser proof needs. */
-function streamManifest(): StreamRouteManifest {
-  return {
-    program: { version: 1, tag: 'oe-unit', sha256: 'a'.repeat(64) },
-    fields: [],
-  };
-}
-
-test('error codes: the streaming pump reports ssr-phase codes', () => {
-  // The front gate rejects non-object loader data (LOADER_NOT_OBJECT)…
-  const loader = assertThrowsIncludes(
-    () => streamFields('nope', streamManifest()),
-    OpenElementError,
-    'stream loader must return one object',
-  );
-  expect(loader.code).toEqual(StreamErrorCode.LOADER_NOT_OBJECT);
-  expect(loader.phase).toEqual('ssr');
-  // …and the message text is unchanged — clients may match on it.
-  expect(loader.message).toEqual('stream loader must return one object');
-
-  // The deferred-shell gate's ROUTE_PROGRAM_MISMATCH arm retired with the
-  // class lane's Part-Program read (C10, 2026-11-24): the gate itself is gone,
-  // so there is no code path left to report it. The pump codes above stay.
-});
 
 test('error codes: the dispatch guards and the renderer seam report ssr-phase codes', () => {
   const renderer = createNativePageRenderer({

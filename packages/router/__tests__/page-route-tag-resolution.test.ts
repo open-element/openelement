@@ -96,7 +96,14 @@ test('the renderer adapter imports no program-tag resolver (C08 negative)', () =
 test('the emitted entry declares no stream machinery (C09/C10 negative)', () => {
   const code = renderEntry(buildEntryDescriptor(definePageRoutes));
 
-  expect(code).not.toContain('__assertStreamRoute');
-  expect(code).not.toContain('__streamManifests');
-  expect(code).not.toContain('__createStreamPageShell');
+  for (const binding of [
+    '__assertStreamRoute',
+    '__streamManifests',
+    '__createStreamPageShell',
+    '__streamHeaderChannel',
+    '__streamRequestScope',
+    'stream-runtime',
+  ]) {
+    expect(code).not.toContain(binding);
+  }
 });
