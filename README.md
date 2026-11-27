@@ -26,7 +26,7 @@ cd my-app
 npm run dev
 ```
 
-Open the URL printed by the dev server. Edit `app/routes/index.tsx` to change the home page. Stop the server before running `npm test` and `npm run build`.
+Open the URL printed by the dev server. Edit `app/routes/index.tsx` to change the home page. Stop the server before running `npm run build`.
 
 To select the alpha channel explicitly, run `npm create @openelement@alpha my-app` in place of the first command. Check both tags with `npm view @openelement/create dist-tags`. The [changelog](./CHANGELOG.md) lists how to install Alpha16 once it is published.
 

@@ -26,7 +26,7 @@ cd my-app
 npm run dev
 ```
 
-打开开发服务器输出的地址。编辑 `app/routes/index.tsx` 即可修改首页。停止服务器后可运行 `npm test` 和 `npm run build`。
+打开开发服务器输出的地址。编辑 `app/routes/index.tsx` 即可修改首页。停止服务器后可运行 `npm run build`。
 
 如需明确选择 alpha 渠道，将第一条命令替换为 `npm create @openelement@alpha my-app`。可用 `npm view @openelement/create dist-tags` 查看两个标签指向的版本。[更新日志](./CHANGELOG.md)提供 Alpha16 发布后的安装方法。
 
