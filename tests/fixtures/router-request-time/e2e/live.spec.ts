@@ -216,19 +216,16 @@ test.describe('revalidation continuity (0.42.0-alpha.3)', () => {
     const pageButton = page.locator('#page-increment');
     await pageButton.click();
     await expect(pageButton).toHaveText('1');
-    await page.evaluate(() => {
-      (window as Window & { originalFormPage?: Element | null }).originalFormPage =
-        document.querySelector('form-page');
-    });
+    const originalFormPage = await page.$('form-page');
+    expect(originalFormPage).not.toBeNull();
 
     await page.click('#submit');
     await expect(page.locator('#error')).toHaveText('message is required');
     expect(
-      await page.evaluate(
-        () =>
-          (window as Window & { originalFormPage?: Element | null }).originalFormPage ===
-          document.querySelector('form-page'),
-      ),
+      await page
+        .locator('form-page')
+        .evaluate((current, original) => current === original, originalFormPage!),
+      'the morph retains the original form-page host',
     ).toBe(true);
     await pageButton.click();
     await expect(pageButton).toHaveText('2');
