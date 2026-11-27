@@ -31,6 +31,7 @@ import {
 // tarballs (release qualification) — never a relative path into a package.
 const ELEMENT_URL = import.meta.resolve('@openelement/element');
 const APP_URL = import.meta.resolve('@openelement/router');
+const SERVER_URL = import.meta.resolve('@openelement/element/server');
 // The generated leaf imports its primitives from a SUBPATH (M11-3), so the
 // rewrite table needs that entry too — a bare-specifier-only rewrite leaves the
 // temp module unable to resolve it.
@@ -122,6 +123,7 @@ export async function compileFunctionPage(
     throw new Error(`${sourceUrl} is not admitted by the server-component lane`);
   }
   const rewritten = compiled.code
+    .replaceAll('@openelement/element/server', SERVER_URL)
     .replaceAll("from '@openelement/element'", `from '${ELEMENT_URL}'`)
     .replaceAll("from '@openelement/router'", `from '${APP_URL}'`)
     .replaceAll(
