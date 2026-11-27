@@ -14,7 +14,7 @@
 
 English | [简体中文](./README.zh.md)
 
-OpenElement is a framework for server-rendered HTML and interactive Custom Elements. **Compiler** turns TSX into Custom Elements and server renderers. **Element** provides the runtime. **Router** handles routes, navigation, loaders and actions.
+OpenElement is a framework for server-rendered HTML and interactive Custom Elements. **Compiler** turns JSX and TSX function components into Custom Elements and server renderers. **Element** provides the runtime. **Router** handles routes, navigation, loaders and actions.
 
 ## Start with npm
 
@@ -28,13 +28,13 @@ npm run dev
 
 Open the URL printed by the dev server. Edit `app/routes/index.tsx` to change the home page. Stop the server before running `npm run build`.
 
-To select the alpha channel explicitly, run `npm create @openelement@alpha my-app` in place of the first command. Check both tags with `npm view @openelement/create dist-tags`. The [changelog](./CHANGELOG.md) lists how to install Alpha16 once it is published.
+For Alpha16 specifically, use `npm create @openelement@1.0.0-alpha.16 my-app` as the first command. To follow the alpha channel, use `npm create @openelement@alpha my-app`. Check both tags with `npm view @openelement/create dist-tags`. [Changelog](./CHANGELOG.md)
 
 Follow the [first app tutorial](https://openelement.org/guide/tutorial/) to add a page, an interactive island, and a form action. See the [deployment guide](https://openelement.org/guide/deployment/) for static hosting, Node, and Cloudflare Workers.
 
 ## Preview the source checkout
 
-This checkout previews `1.0.0-alpha.16` with JSX and TSX function components for server-rendered pages and interactive islands. The setup task builds the packages from this checkout and installs them into a temporary starter app. [Release state](./docs/release/release-state.json)
+To test local source changes, build the packages from this checkout and install them into a temporary starter app. [Release state](./docs/release/release-state.json)
 
 ```sh
 pnpm install --frozen-lockfile
