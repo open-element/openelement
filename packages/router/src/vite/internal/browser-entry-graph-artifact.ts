@@ -162,7 +162,6 @@ export const EXECUTOR_SUPPORT_RELATIVE_MODULES = [
   'src/internal/compiled/runtime/pre-upgrade-events.ts',
   'src/internal/compiled/runtime/hydrate-recovery.ts',
   'src/internal/compiled/runtime/blocks-seam.ts',
-  'src/internal/compiled/runtime/hydrate-seam.ts',
 ] as const;
 
 /**
