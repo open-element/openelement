@@ -279,10 +279,10 @@ native 选择缝是主产物，不再作为垫片登记。）
 ### 14. signal 引擎 Preact 适配——保留为平台边缘
 
 - 所有者：element signal 模块（`packages/element/src/internal/signal/`，
-  内建 Preact adapter，`SignalEngine` 为可替换边界）。
+  内建 Preact adapter，具名函数直接接入）。
 - 方向：`@preact/signals-core` → 框架响应式原语。
 - 平台缺口：Signals 尚非平台 API（TC39 提案阶段）。
-- 退役条件：TC39 Signals 进平台（或经 `SignalEngine` 契约整体换引擎）
+- 退役条件：TC39 Signals 进平台（或替换内建引擎）
   之日，适配层随换。
 - 处置：保留为平台边缘。
 

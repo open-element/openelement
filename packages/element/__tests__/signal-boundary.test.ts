@@ -2,7 +2,7 @@
  * Signal engine boundary (#723). Product rule this file enforces:
  *
  * Element owns the framework-level signal API (signal/computed/effect) and a
- * minimal internal SignalEngine protocol. @preact/signals-core is the ONLY
+ * branded signal protocol. @preact/signals-core is the ONLY
  * engine supported and fully verified by the package; it is the built-in
  * default adapter, but Preact API is not Element public API and arbitrary
  * third-party engines are not promised.
@@ -12,7 +12,6 @@ import { expect, test } from 'vitest';
 import { readdirSync } from 'node:fs';
 import { computed, effect, signal } from '../src/index.ts';
 import { SIGNAL_BRAND } from '@openelement/protocol/signal';
-import { selectedSignalEngine } from '../src/internal/signal/selection.ts';
 
 const SIGNAL_SRC_DIR = new URL('../src/internal/signal/', import.meta.url);
 
@@ -64,6 +63,20 @@ test('public signal exports are protocol objects, never Preact objects', () => {
       'Preact Signal#brand must not leak through the public surface',
     ).toEqual(undefined);
   }
+});
+
+test('signal and computed subscriptions notify synchronously and dispose idempotently', () => {
+  const value = signal(1);
+  const doubled = computed(() => value.value * 2);
+  const seen: number[] = [];
+  const stop = doubled.subscribe((next) => seen.push(next));
+  expect(seen).toEqual([2]);
+  value.value = 2;
+  expect(seen).toEqual([2, 4]);
+  stop();
+  stop();
+  value.value = 3;
+  expect(seen).toEqual([2, 4]);
 });
 
 test('public effect runs each cleanup once without subscribing to its reads', () => {
@@ -162,23 +175,7 @@ test('the package declares exactly one shipped engine adapter', () => {
   for (const entry of readdirSync(SIGNAL_SRC_DIR, { withFileTypes: true })) {
     if (entry.isFile()) entries.push(entry.name);
   }
-  expect(entries.sort()).toEqual([
-    'framework.ts',
-    'index.ts',
-    'preact-engine.ts',
-    'selection.ts',
-    'types.ts',
-  ]);
-
-  const engine = selectedSignalEngine();
-  expect(typeof engine.signal).toBe('function');
-  expect(typeof engine.computed).toBe('function');
-  expect(typeof engine.effect).toBe('function');
-  expect(
-    typeof (engine as { batch?: unknown }).batch,
-    'the built-in Preact adapter is the default engine',
-  ).toBe('function');
-  expect(engine.signal(0)[SIGNAL_BRAND]).toBe(true);
+  expect(entries.sort()).toEqual(['framework.ts', 'index.ts', 'preact-engine.ts', 'types.ts']);
 });
 
 test('the test engine is not part of the publish surface', async () => {
