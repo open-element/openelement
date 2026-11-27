@@ -20,9 +20,9 @@
  */
 import { compileGeneratedElementIfAdmitted } from '../../packages/compiler/src/internal/compiler/semantic-ir/generated-element/compile.ts';
 import type { GeneratedElementSite } from '../../packages/compiler/src/internal/compiler/semantic-ir/generated-element/contract.ts';
-import * as leafRuntime from '../../packages/element/src/internal/compiled/leaf-runtime.ts';
 import { LifetimeScope } from '../../packages/element/src/internal/compiled/lifetime-scope.ts';
 import { FDocument, FElement, FText, type FNode } from './counting-dom.ts';
+import { loadGeneratedBenchmarkModule } from './load-generated-module.ts';
 
 /** The generated-lane keyed table: the same rows/ops the retired input drove. */
 export const GENERATED_TABLE_SOURCE = `
@@ -85,13 +85,7 @@ interface CompiledBench {
   };
 }
 
-/**
- * Compile the fixture ONCE and evaluate the emitted module with the leaf runtime
- * as its only import surface. `new Function` is the narrowest loader that keeps
- * the REAL emitted bytes (not a hand-written lookalike) while staying out of a
- * bundler: the emitted module's only import is the internal leaf runtime, whose
- * symbols are passed in as parameters.
- */
+/** Compile the fixture once and load its emitted recipe against the leaf runtime. */
 export function compileGeneratedTable(): CompiledBench {
   const compiled = compileGeneratedElementIfAdmitted(
     GENERATED_TABLE_SOURCE,
@@ -99,44 +93,12 @@ export function compileGeneratedTable(): CompiledBench {
     { site: SITE, authoredSource: GENERATED_TABLE_SOURCE },
   );
   if (compiled === null) throw new Error('the generated-lane benchmark fixture was declined');
-  const code = compiled.code;
-  const importLines = code.split('\n').filter((line) => line.startsWith('import {'));
-  if (importLines.length === 0) throw new Error('the emitted module has no runtime imports');
-  const names: string[] = [];
-  for (const importLine of importLines) {
-    names.push(
-      ...importLine
-        .slice(importLine.indexOf('{') + 1, importLine.indexOf('}'))
-        .split(',')
-        .map((name) => name.trim())
-        .filter((name) => name.length > 0),
-    );
-  }
-  const body = code
-    .replace(/^import \{[^}]*\} from "[^"]+";$/gm, '')
-    .replace(/^export default [^;]+;$/gm, '')
-    .replace(/^export \{[^}]*\};$/gm, '')
-    .replace(/^export /gm, '');
-  const factory = new Function(
-    ...names,
-    `${body}\n; return { rootInstance: __oe_rootInstance, createRecipe: createGeneratedTableRecipe };`,
-  );
-  // The leaf runtime provides the mount/claim/SSR primitives; the ONE shell
-  // symbol (the CE-tail class factory) is a marker here — the benchmark drives
-  // the emitted mount/recipe directly, never a custom element registration.
-  const values = names.map((name) =>
-    name === 'createGeneratedElementClass'
-      ? (descriptor: unknown) => descriptor
-      : (leafRuntime as unknown as Record<string, unknown>)[name],
-  );
-  for (const [index, name] of names.entries()) {
-    if (typeof values[index] === 'undefined') {
-      throw new Error(`the emitted module imports "${name}", which the benchmark does not provide`);
-    }
-  }
   return {
-    compiledBytes: code.length,
-    ...(factory(...values) as Omit<CompiledBench, 'compiledBytes'>),
+    compiledBytes: compiled.code.length,
+    ...loadGeneratedBenchmarkModule<Omit<CompiledBench, 'compiledBytes'>>(
+      compiled.code,
+      '{ rootInstance: __oe_rootInstance, createRecipe: createGeneratedTableRecipe }',
+    ),
   };
 }
 
