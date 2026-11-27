@@ -355,7 +355,10 @@ test('a uno.config.ts edit rebuilds the generator and reaches both dev sheets', 
     const after = await waitForSheets(
       handle,
       before,
-      (sheets) => importantCount(sheets.component) > beforeCounts.component,
+      (sheets) =>
+        importantCount(sheets.component) > beforeCounts.component &&
+        importantCount(sheets.document) > beforeCounts.document &&
+        sheets.documentHref !== before.documentHref,
     );
     expect(
       importantCount(after.component),
@@ -393,7 +396,9 @@ test('a uno.config.ts edit rebuilds the generator and reaches both dev sheets', 
     const final = await waitForSheets(
       handle,
       before,
-      (sheets) => importantCount(sheets.component) === beforeCounts.component,
+      (sheets) =>
+        importantCount(sheets.component) === beforeCounts.component &&
+        importantCount(sheets.document) === beforeCounts.document,
     );
     expect(importantCount(final.component), 'the second edit reached the component sheet').toBe(
       beforeCounts.component,
