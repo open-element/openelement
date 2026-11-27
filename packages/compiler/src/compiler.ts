@@ -105,4 +105,3 @@ export {
   emittedModuleTypeChecks,
   typeCheckEmittedModule,
 } from './internal/compiler/semantic-core/type-check.ts';
-export { validatePartProgram } from '@openelement/protocol/part-program';

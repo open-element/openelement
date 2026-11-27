@@ -7,7 +7,7 @@
 
 import type { CompatibilityClassification, HydrationStrategy } from './framework.ts';
 import type { RenderError, SsrAdmissionDecision } from './render.ts';
-import type { PartProgramV2 } from './part-program.ts';
+import type { ProgramSourceRange } from './part-program.ts';
 
 /** Build-only route projection bound to a specific compiled page program. */
 export interface StreamRouteManifest {
@@ -19,10 +19,7 @@ export interface StreamRouteManifest {
       kind: 'part' | 'region';
       index: number;
       location: string;
-      // The program source map's record origin, projected from the Part Program
-      // IR (protocol-owned): the compiler's CompileElementResult.program IS a
-      // PartProgramV2, so the projection reads the contract type directly.
-      source: PartProgramV2['sourceMap']['records'][number]['source'];
+      source: ProgramSourceRange;
     }>;
   }>;
 }

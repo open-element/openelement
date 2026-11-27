@@ -7,12 +7,7 @@
  * - typed property value -> reflected attribute string (`convertToAttribute`);
  * - JS assignment -> typed property value (`coercePropertyValue`).
  *
- * This is an import-free leaf on purpose. It names only the structural fields
- * the conversions read, so it has no edge to the Part Program metadata, the
- * facade host, the compiled kernel, or any executor. `facade-host.ts`
- * re-exports the two public helpers for existing compiled-runtime callers; the
- * generated-element shell imports this leaf directly, so its module graph
- * cannot acquire the old execution backend through a conversion helper.
+ * The generated element shell and descriptor share this conversion table.
  *
  * The table lives here once. Consumers must not re-derive it: attribute
  * presence still means `true` for a boolean, `Number` with `NaN` -> `0` for a
@@ -24,12 +19,7 @@
 /** The value-type tags compiled property metadata admits. */
 export type PropertyValueTypeName = 'string' | 'number' | 'boolean' | 'array' | 'object';
 
-/**
- * The structural property record this leaf reads. It is deliberately a subset
- * of the protocol's `CompiledPropertyMetadata` (that record is structurally
- * assignable to this one), so this module can stay import-free while callers
- * keep their richer records.
- */
+/** The fields needed to convert a property from or to an attribute. */
 export interface PropertyConversionRecord {
   readonly converter: PropertyValueTypeName;
   readonly type: PropertyValueTypeName;

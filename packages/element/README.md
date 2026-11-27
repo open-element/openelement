@@ -84,8 +84,8 @@ the element's retained instance and DOM ownership record.
 The compiler (`@openelement/compiler`, including the standalone `element()`
 Vite plugin at `@openelement/compiler/vite`) is a separate package since the
 #1557 split: it imports the TypeScript compiler API and must never be reached
-from browser/runtime entry points. The cross-system contracts (Part Program
-IR, error dialect, admission descriptors) live in `@openelement/protocol`.
+from browser/runtime entry points. The shared lowering types, generated host markers, error codes, and admission
+descriptors live in `@openelement/protocol`.
 
 ## Boundary
 

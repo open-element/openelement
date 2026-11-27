@@ -1,8 +1,5 @@
 /**
- * Forbidden sink names — the ONE canonical deny list for every Part Program
- * boundary: the compiler semantic core, the protocol validator
- * (internal/protocol/part-program.ts), and the compiled server/claim
- * validator (internal/compiled/server/shared.ts).
+ * Shared sink admission for the compiler, server rendering and generated DOM writes.
  *
  * This module is import-free and host-free by design (same base-of-graph
  * contract as void-tags.ts): all consumers import it, so a new
@@ -27,7 +24,7 @@
  */
 export const FORBIDDEN_ATTRIBUTE_NAMES: ReadonlySet<string> = new Set(['innerhtml', 'srcdoc']);
 
-/** Property names the compiler refuses as @property declarations. */
+/** Property names the compiler refuses as declared props. */
 export const FORBIDDEN_PROPERTY_NAMES: ReadonlySet<string> = new Set([
   '__proto__',
   'constructor',

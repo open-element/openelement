@@ -3,8 +3,7 @@
  *
  * The canonical implementation lives in internal/protocol/forbidden-sinks.ts;
  * every admitting boundary — the SSR security face (security.ts, re-exported
- * through the package root and /authoring), the Part Program wire validator
- * (part-program.ts isAttributeName), the compiler semantic core
+ * through the package root and /authoring) and the compiler semantic core
  * (analyze-module.ts) — delegates to it, so the exported faces cannot
  * diverge on which attribute names are admissible.
  *
@@ -18,7 +17,6 @@
 
 import { expect, test } from 'vitest';
 import { isSafeAttributeName as securityFace } from '../src/internal/core/security.ts';
-import { isAttributeName as wireValidatorFace } from '@openelement/protocol/part-program';
 import { isSafeAttributeName as compilerFace } from '../../../packages/compiler/src/internal/compiler/semantic-core/analyze-module.ts';
 import { isSafeAttributeName as canonical } from '@openelement/protocol/forbidden-sinks';
 // The exact binding the router head-injection path imports
@@ -29,7 +27,6 @@ import { isSafeAttributeName as authoringFace } from '../src/authoring.ts';
 const FACES: Array<[string, (name: string) => boolean]> = [
   ['canonical (forbidden-sinks)', canonical],
   ['security.ts (SSR / head-injection via /authoring)', securityFace],
-  ['part-program.ts (wire validator)', wireValidatorFace],
   ['analyze-module.ts (compiler)', compilerFace],
   ['authoring.ts re-export (router import seam)', authoringFace],
 ];
@@ -89,11 +86,5 @@ test('every attribute-name face rejects the same unsafe names (parity)', () => {
     for (const name of REJECTED) {
       expect(face(name), `${label} must reject ${JSON.stringify(name)}`).toEqual(false);
     }
-  }
-});
-
-test('the wire-validator face stays a string type guard on top of the canonical rule', () => {
-  for (const notAString of [undefined, null, 42, {}, ['href']]) {
-    expect(wireValidatorFace(notAString)).toEqual(false);
   }
 });
