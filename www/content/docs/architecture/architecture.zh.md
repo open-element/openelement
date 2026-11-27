@@ -196,7 +196,7 @@ find www/dist/pagefind -type f -exec wc -c {} + | awk '$NF != "total" { sum += $
 
 | Chunk                         | 原始字节    | gzip -9 |
 | ----------------------------- | ------- | ------- |
-| `element-runtime`             | 72,240  | 22,997  |
+| `element-runtime`             | 66,159  | 21,411  |
 | `island-open-button`          | 14,114  | 3,262   |
 | `island-open-code-block`      | 7,734   | 2,527   |
 | `island-open-copy-button`     | 11,426  | 2,758   |
@@ -209,7 +209,7 @@ find www/dist/pagefind -type f -exec wc -c {} + | awk '$NF != "total" { sum += $
 | `island-open-source-toggle`   | 6,430   | 2,188   |
 | `island-open-theme-toggle`    | 18,254  | 3,790   |
 | `open-search-combobox`        | 108,612 | 35,531  |
-| `client.js`                   | 10,306  | 2,990   |
+| `client.js`                   | 9,977   | 2,881   |
 
 ```bash
 for file in www/dist/client/islands/*.js; do
@@ -223,9 +223,9 @@ done
 
 | 路由                       | 客户端载荷（原始） | 不同 chunk 数 |
 | ------------------------ | --------- | ---------- |
-| `/guide/mdx`             | 236,233 B | 9          |
-| `/guide/getting-started` | 236,233 B | 9          |
-| `/`                      | 266,187 B | 13         |
+| `/guide/mdx`             | 230,065 B | 9          |
+| `/guide/getting-started` | 230,065 B | 9          |
+| `/`                      | 260,083 B | 13         |
 
 66 份页面 manifest 合计声明了 11 个 island 标签、318 条记录。`open-search`、`open-site-menu` 和 `open-theme-toggle` 出现在每一页，`open-page-rail` 出现在 52 页，`open-code-block` 出现在 46 页，`open-button` 出现在 8 页。`open-copy-button` 出现在两种语言的首页和贡献指南，`open-registry-lookup` 出现在两种语言的错误参考和 API 参考。`open-counter`、`open-layer-strip` 和 `open-source-toggle` 出现在两种语言的首页。
 
