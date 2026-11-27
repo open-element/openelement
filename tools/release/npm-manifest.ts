@@ -104,11 +104,12 @@ const PACKAGE_DESCRIPTIONS: Record<string, string> = {
   '@openelement/protocol':
     'Cross-system contracts and tiny pure predicates for the OpenElement framework.',
   '@openelement/compiler':
-    'Build-time compiler for OpenElement: transforms TSX with @element decorators into Part Program modules.',
+    'Build-time compiler for OpenElement function components. Generates custom elements and server rendering code from JSX and TSX.',
   '@openelement/router':
     'Routing, application runtime, and lifecycle tooling for the OpenElement framework.',
   '@openelement/create': 'Project generator for the OpenElement Web Components framework.',
-  '@openelement/element': 'Custom element base class and authoring APIs for OpenElement.',
+  '@openelement/element':
+    'Runtime and authoring APIs for OpenElement function components and custom elements.',
   '@openelement/ui':
     'Experimental reference Web Components and UI primitives built on the OpenElement runtime.',
 };
