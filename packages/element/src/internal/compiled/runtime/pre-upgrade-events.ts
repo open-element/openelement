@@ -44,6 +44,11 @@ export interface PreUpgradeEventCapture {
   stop(): void;
 }
 
+interface CapturedPreUpgradeEvent extends PreUpgradeEvent {
+  readonly event: Event;
+  readonly seq: number;
+}
+
 const SUPPORTED_PRE_UPGRADE_EVENTS = new Set([
   'change',
   'click',
@@ -246,101 +251,85 @@ function isDetachedTarget(target: EventTarget): boolean {
  * Drop records whose target left the document. Detached nodes can never
  * hydrate, so holding them only leaks memory until page end.
  */
-function pruneDetachedTargets(
-  events: PreUpgradeEvent[],
-  index: Map<EventTarget, Map<string, number>>,
-): void {
-  let removed = false;
+function pruneDetachedTargets(events: PreUpgradeEvent[]): void {
   for (let position = events.length - 1; position >= 0; position--) {
-    if (isDetachedTarget(events[position].target)) {
-      events.splice(position, 1);
-      removed = true;
-    }
-  }
-  if (removed) rebuildCaptureIndex(events, index);
-}
-
-function rebuildCaptureIndex(
-  events: PreUpgradeEvent[],
-  index: Map<EventTarget, Map<string, number>>,
-): void {
-  index.clear();
-  for (let position = 0; position < events.length; position++) {
-    const record = events[position];
-    let byType = index.get(record.target);
-    if (!byType) {
-      byType = new Map<string, number>();
-      index.set(record.target, byType);
-    }
-    byType.set(record.type, position);
+    if (isDetachedTarget(events[position].target)) events.splice(position, 1);
   }
 }
 
 /**
- * Bounded per-target retention unit — the shape every pre-upgrade record
- * container shares (a standalone capture queue, the facade's shared pending
- * pool, and one claimed root's bucket). One latest record per target/type
- * (per-target dedup), hard capped, with detached records swept under
+ * Bounded queue for a standalone capture or the facade's shared pending pool.
+ * One latest record per target/type, with detached records swept under
  * pressure and removals expressible as order-preserving takes.
  */
-interface PreUpgradeRecordStore {
+interface PreUpgradeRecordStore<Record extends PreUpgradeEvent = PreUpgradeEvent> {
   /** Retained records in capture order. */
-  readonly events: PreUpgradeEvent[];
+  readonly events: Record[];
   /** Retain one latest record per target/type; drops the newcomer at the cap. */
-  replaceFor(record: PreUpgradeEvent): void;
+  replaceFor(record: Record): void;
   /** Remove and return the matching records, order preserved. */
-  takeWhere(predicate: (record: PreUpgradeEvent) => boolean): PreUpgradeEvent[];
+  takeWhere(predicate: (record: Record) => boolean): Record[];
   /** Deterministically drop every retained record. */
   clear(): void;
 }
 
-/** Index-aware insert: one slot per target/type, positions kept current. */
-function upsertCaptureRecord(
-  events: PreUpgradeEvent[],
-  index: Map<EventTarget, Map<string, number>>,
-  record: PreUpgradeEvent,
-): void {
-  index.get(record.target)?.set(record.type, events.length) ??
-    index.set(record.target, new Map([[record.type, events.length]]));
-  events.push(record);
-}
-
-function createPreUpgradeRecordStore(): PreUpgradeRecordStore {
-  const events: PreUpgradeEvent[] = [];
-  const index = new Map<EventTarget, Map<string, number>>();
+function createPreUpgradeRecordStore<
+  Record extends PreUpgradeEvent,
+>(): PreUpgradeRecordStore<Record> {
+  const events: Record[] = [];
   return {
     events,
-    replaceFor(record: PreUpgradeEvent): void {
-      const position = index.get(record.target)?.get(record.type);
-      if (position !== undefined && events[position]?.target === record.target) {
+    replaceFor(record: Record): void {
+      // This lookup examines at most 64 slots and honors removals made by
+      // releasePreUpgradeEvents through the same array.
+      const position = events.findIndex(
+        (pending) => pending.target === record.target && pending.type === record.type,
+      );
+      if (position !== -1) {
         events[position] = record;
         return;
       }
       if (events.length >= MAX_PRE_UPGRADE_CAPTURED_EVENTS) {
         // One detached sweep before failing closed: a burst of removals
         // (navigation / morph) must free budget for genuinely pending islands.
-        pruneDetachedTargets(events, index);
+        pruneDetachedTargets(events);
         if (events.length >= MAX_PRE_UPGRADE_CAPTURED_EVENTS) return;
       }
-      upsertCaptureRecord(events, index, record);
+      events.push(record);
     },
-    takeWhere(predicate: (record: PreUpgradeEvent) => boolean): PreUpgradeEvent[] {
-      const taken: PreUpgradeEvent[] = [];
-      const kept: PreUpgradeEvent[] = [];
+    takeWhere(predicate: (record: Record) => boolean): Record[] {
+      const taken: Record[] = [];
+      const kept: Record[] = [];
       for (const record of events) {
         (predicate(record) ? taken : kept).push(record);
       }
-      if (taken.length === 0) return taken;
-      events.length = 0;
-      for (const record of kept) events.push(record);
-      rebuildCaptureIndex(events, index);
+      // Classify before mutating the pool: composed ownership can throw.
+      if (taken.length > 0) events.splice(0, events.length, ...kept);
       return taken;
     },
     clear(): void {
       events.length = 0;
-      index.clear();
     },
   };
+}
+
+/**
+ * One listener records the real interaction at either entry point. Closed
+ * shadow roots expose only the platform's retargeted path to document capture.
+ */
+function listenForPreUpgradeEvent(
+  root: EventTarget,
+  type: string,
+  store: Pick<PreUpgradeRecordStore<CapturedPreUpgradeEvent>, 'replaceFor'>,
+  accept: (event: Event, target: EventTarget) => boolean,
+): EventListener {
+  const listener: EventListener = (event) => {
+    const target = resolveCaptureTarget(event);
+    if (!target || !accept(event, target)) return;
+    store.replaceFor({ target, type, event, seq: ++preUpgradeCaptureSequence });
+  };
+  root.addEventListener(type, listener, { capture: true });
+  return listener;
 }
 
 /**
@@ -369,29 +358,16 @@ export function capturePreUpgradeEvents(
     store?: PreUpgradeRecordStore;
   } = {},
 ): PreUpgradeEventCapture {
-  const store = options.store ?? createPreUpgradeRecordStore();
+  const store = options.store ?? createPreUpgradeRecordStore<PreUpgradeEvent>();
   const listeners: Array<{ type: string; listener: EventListener }> = [];
   for (const type of eventTypes) {
     if (!SUPPORTED_PRE_UPGRADE_EVENTS.has(type)) continue;
-    const listener: EventListener = (event) => {
-      // Shadow-aware target resolution (#942): a document-level capture
-      // listener observes a retargeted event.target (the outer host) when the
-      // interaction originates inside an open shadow root. composedPath()[0]
-      // is the original interaction target, which is what the claiming
-      // island's isInsideRoot check must see. Closed shadow roots hide their
-      // internals from outside composedPath() by platform design; those
-      // records fail closed at replay (never misdelivered, never crashed).
-      const target = resolveCaptureTarget(event);
-      if (!target) return;
-      // No connected check here: harness and parser flows dispatch before
-      // the nodes connect (they still hydrate later). Detached fate is
-      // decided at replay (fail closed, never dispatched) and at release
-      // (swept, never held to page end).
-      // Opt-in pending-owner filter (facade document capture only).
-      if (options.accept && !options.accept(event as Event, target)) return;
-      store.replaceFor({ target, type, event, seq: ++preUpgradeCaptureSequence });
-    };
-    root.addEventListener(type, listener, { capture: true });
+    const listener = listenForPreUpgradeEvent(
+      root,
+      type,
+      store,
+      (event, target) => !options.accept || options.accept(event, target),
+    );
     listeners.push({ type, listener });
   }
   let stopped = false;
@@ -469,6 +445,29 @@ export function preUpgradeEventList(
  * later pass for the same root (morph reconnect) must not re-handle them.
  */
 export function replayPreUpgradeEvents(root: Node, captured: readonly PreUpgradeEvent[]): number {
+  return replayOwnedPreUpgradeEvents(
+    root,
+    captured,
+    (record) =>
+      record.event ??
+      (typeof globalThis.Event === 'function'
+        ? new Event(record.type, {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            ...record.init,
+          })
+        : undefined),
+    (type) => SUPPORTED_PRE_UPGRADE_EVENTS.has(type),
+  );
+}
+
+function replayOwnedPreUpgradeEvents<Record extends PreUpgradeEvent>(
+  root: Node,
+  captured: readonly Record[],
+  materialize: (record: Record) => Event | undefined,
+  acceptsType?: (type: string) => boolean,
+): number {
   // Pin this root's first-activation cutoff. Records captured after the pin
   // are interactions a live island already handled: replaying them on a
   // later pass for the same root (morph reconnect) would double-handle one
@@ -482,7 +481,7 @@ export function replayPreUpgradeEvents(root: Node, captured: readonly PreUpgrade
   for (const record of captured) {
     if ((record.seq ?? 0) > cutoff) continue;
     if (consumedEventRecords.has(record)) continue;
-    if (!SUPPORTED_PRE_UPGRADE_EVENTS.has(record.type)) {
+    if (acceptsType !== undefined && !acceptsType(record.type)) {
       consumedEventRecords.add(record);
       continue;
     }
@@ -507,16 +506,7 @@ export function replayPreUpgradeEvents(root: Node, captured: readonly PreUpgrade
       continue;
     }
     if (typeof target.dispatchEvent !== 'function') continue;
-    const event =
-      record.event ??
-      (typeof globalThis.Event === 'function'
-        ? new Event(record.type, {
-            bubbles: true,
-            cancelable: true,
-            composed: true,
-            ...record.init,
-          })
-        : undefined);
+    const event = materialize(record);
     if (!event) continue;
     target.dispatchEvent(event);
     replayed++;
@@ -541,9 +531,7 @@ export function releasePreUpgradeEvents(root: Node, captured: readonly PreUpgrad
   // Removal / navigation / morph replacement detaches pending targets that
   // no activation will ever own: sweep them with every release so they never
   // survive to page end waiting for an island that is already gone.
-  for (let index = events.length - 1; index >= 0; index--) {
-    if (isDetachedTarget(events[index].target)) events.splice(index, 1);
-  }
+  pruneDetachedTargets(events);
 }
 
 // ─── Facade capture registry (claim replay seam) ─────────────────────
@@ -557,7 +545,7 @@ export function releasePreUpgradeEvents(root: Node, captured: readonly PreUpgrad
  * detached sweep; nothing here is keyed by target, so there is no
  * page-lifetime entry table to grow.
  */
-const preUpgradePendingRecords = createPreUpgradeRecordStore();
+const preUpgradePendingRecords = createPreUpgradeRecordStore<CapturedPreUpgradeEvent>();
 
 /**
  * Listener sets for the facade captures, keyed by the capture root the
@@ -568,10 +556,7 @@ const preUpgradePendingRecords = createPreUpgradeRecordStore();
  * was never the leak; the retained records live in the bounded pool above
  * and the per-root buckets below, never here.
  */
-const preUpgradeCaptureRoots = new WeakMap<
-  EventTarget,
-  { capture: PreUpgradeEventCapture; declared: Set<string> }
->();
+const preUpgradeCaptureRoots = new WeakMap<EventTarget, Set<string>>();
 
 /**
  * Per-claim-root record ownership (the M1 data model). A claimed root adopts
@@ -582,12 +567,7 @@ const preUpgradeCaptureRoots = new WeakMap<
  * and dies with its root by construction. That keying is the memory
  * guarantee; JS cannot observe GC, so nothing asserts collection behavior.
  */
-interface PreUpgradeRootBucket {
-  readonly store: PreUpgradeRecordStore;
-  /** True once the root has claimed its share of the shared pool. */
-  adopted: boolean;
-}
-const preUpgradeRootBuckets = new WeakMap<object, PreUpgradeRootBucket>();
+const preUpgradeRootBuckets = new WeakMap<Node, CapturedPreUpgradeEvent[]>();
 
 /**
  * The nearest still-pending DECLARED island host strictly between a captured
@@ -611,7 +591,7 @@ const preUpgradeRootBuckets = new WeakMap<object, PreUpgradeRootBucket>();
 function pendingDeclaredIslandBetween(root: Node, target: EventTarget): boolean {
   if (!isNodeValue(target)) return false;
   const doc = (root as Node).ownerDocument ?? (target as Node).ownerDocument;
-  const declared = doc ? preUpgradeCaptureRoots.get(doc)?.declared : undefined;
+  const declared = doc ? preUpgradeCaptureRoots.get(doc) : undefined;
   if (!declared || declared.size === 0) return false;
   let current: Node | null = target;
   while (current) {
@@ -635,24 +615,22 @@ function pendingDeclaredIslandBetween(root: Node, target: EventTarget): boolean 
  * Afterwards the pool holds only records owned by still-pending roots, which
  * adopt them at their own activation.
  */
-function adoptRootBucket(root: Node): PreUpgradeRecordStore {
-  let bucket = preUpgradeRootBuckets.get(root as object);
-  if (!bucket) {
-    bucket = { store: createPreUpgradeRecordStore(), adopted: false };
-    preUpgradeRootBuckets.set(root as object, bucket);
-  }
-  if (bucket.adopted) return bucket.store;
-  bucket.adopted = true;
+function adoptRootBucket(root: Node): CapturedPreUpgradeEvent[] {
+  const existing = preUpgradeRootBuckets.get(root);
+  if (existing) return existing;
+  const bucket: CapturedPreUpgradeEvent[] = [];
+  preUpgradeRootBuckets.set(root, bucket);
   // Detached records can never hydrate: sweep them first so removals free
   // their slot for genuinely pending islands.
-  preUpgradePendingRecords.takeWhere((record) => isDetachedTarget(record.target));
-  for (const record of preUpgradePendingRecords.takeWhere(
-    (candidate) =>
-      isInsideRoot(root, candidate.target) && !pendingDeclaredIslandBetween(root, candidate.target),
-  )) {
-    bucket.store.replaceFor(record);
-  }
-  return bucket.store;
+  pruneDetachedTargets(preUpgradePendingRecords.events);
+  bucket.push(
+    ...preUpgradePendingRecords.takeWhere(
+      (candidate) =>
+        isInsideRoot(root, candidate.target) &&
+        !pendingDeclaredIslandBetween(root, candidate.target),
+    ),
+  );
+  return bucket;
 }
 
 /**
@@ -689,31 +667,21 @@ export function ensurePreHydrationClickCapture(
     root ?? (typeof document !== 'undefined' ? (document as unknown as EventTarget) : undefined);
   if (!target || typeof target.addEventListener !== 'function') return;
   const existing = preUpgradeCaptureRoots.get(target);
-  if (existing) {
-    if (pendingTags) {
-      for (const tag of pendingTags) {
-        if (typeof tag === 'string' && tag) existing.declared.add(tag.toLowerCase());
-      }
-    }
-    return;
-  }
-  const declared = new Set<string>();
+  const declared = existing ?? new Set<string>();
   if (pendingTags) {
     for (const tag of pendingTags) {
       if (typeof tag === 'string' && tag) declared.add(tag.toLowerCase());
     }
   }
+  if (existing) return;
   // The accept closure holds the LIVE declared set: later merges into the
   // same Set are visible to the filter without reinstalling listeners.
   const accept = (event: Event, eventTarget: EventTarget): boolean =>
     acceptPendingIslandEvent(event, eventTarget, declared);
-  preUpgradeCaptureRoots.set(target, {
-    capture: capturePreUpgradeEvents(target, undefined, {
-      accept,
-      store: preUpgradePendingRecords,
-    }),
-    declared,
-  });
+  for (const type of SUPPORTED_PRE_UPGRADE_EVENTS) {
+    listenForPreUpgradeEvent(target, type, preUpgradePendingRecords, accept);
+  }
+  preUpgradeCaptureRoots.set(target, declared);
   // Publish the per-root replay pair to the generated shell's neutral hook
   // (2026-11-21): the shell may not import THIS module, so the capture install is
   // the one moment the implementation becomes reachable from the shell's side.
@@ -727,7 +695,7 @@ export function ensurePreHydrationClickCapture(
 
 /** Replay captured pre-upgrade events owned by a successfully claimed root. */
 export function replayPreUpgradeCaptures(root: Node): void {
-  replayPreUpgradeEvents(root, adoptRootBucket(root).events);
+  replayOwnedPreUpgradeEvents(root, adoptRootBucket(root), (record) => record.event);
 }
 
 /**
@@ -738,7 +706,7 @@ export function replayPreUpgradeCaptures(root: Node): void {
  * set stays installed for elements that have not yet activated.
  */
 export function releasePreUpgradeCapturesFor(root: Node): void {
-  adoptRootBucket(root).clear();
+  adoptRootBucket(root).length = 0;
 }
 
 /**
@@ -748,5 +716,5 @@ export function releasePreUpgradeCapturesFor(root: Node): void {
  * keying above is the memory guarantee itself.
  */
 export function preUpgradeRetainedRecordCount(root: Node): number {
-  return preUpgradeRootBuckets.get(root as object)?.store.events.length ?? 0;
+  return preUpgradeRootBuckets.get(root)?.length ?? 0;
 }

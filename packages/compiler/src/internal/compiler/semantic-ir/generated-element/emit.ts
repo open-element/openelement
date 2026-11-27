@@ -58,8 +58,12 @@
 import ts from 'typescript';
 import type { RootMode } from '@openelement/protocol/part-program';
 import { generateLeafModule, type GeneratedLeafModule } from '../generated-leaf/generate.ts';
+import { CLAIM_SUFFIX, MOUNT_SUFFIX } from '../generated-leaf/emission.ts';
 import { quoteGeneratedJavaScriptValue } from '../generated-leaf/codegen-literals.ts';
-import type { FunctionModelModule } from '../../semantic-core/function-frontend.ts';
+import type {
+  FunctionModelModule,
+  FunctionModelNode,
+} from '../../semantic-core/function-frontend.ts';
 import type { IrDiagnostic } from '../types.ts';
 import {
   GENERATED_ELEMENT_DIAGNOSTIC,
@@ -106,6 +110,9 @@ const HOST_ATTRIBUTES_KEY = '__oeHostAttributes';
 const HOST_ATTRIBUTES_VAR = '__oeHostAttrs';
 
 export interface GenerateElementModuleOptions {
+  /** Real site admission proved that the authored root has no parameter. */
+  readonly allowDirectShadowDriver?: boolean;
+
   /**
    * The default-exported root component's local name. Required when a site is
    * present; the lane always passes the fact from site admission. A single
@@ -259,6 +266,7 @@ function emptyResult(
     // A refusal returns no module: keep the "non-null exactly when an emitted
     // module carries the factory" invariant rather than echoing leaf metadata.
     rootInstanceFactory: null,
+    hostFeatures: null,
     requiredBindings: leaf.requiredBindings,
     requiredProps: leaf.requiredProps,
     requiresPropsChanged: leaf.requiresPropsChanged,
@@ -412,6 +420,59 @@ function buildPropertyEmission(
  */
 const NESTED_HOST_RECORD_ARG = `nestedHost === undefined ? undefined : { "${NESTED_HOST_EXPANDER}": nestedHost }`;
 
+function isDirectShadowNode(node: FunctionModelNode): boolean {
+  switch (node.kind) {
+    case 'text':
+    case 'dynamic-text':
+      return true;
+    case 'fragment':
+      return node.children.every(isDirectShadowNode);
+    case 'element':
+      return (
+        !node.tag.includes('-') &&
+        node.tag !== 'slot' &&
+        node.attributes.every(
+          (attribute) =>
+            attribute.kind === 'static' ||
+            (attribute.channel !== 'ref' && attribute.channel !== 'html'),
+        ) &&
+        node.children.every(isDirectShadowNode)
+      );
+    default:
+      return false;
+  }
+}
+
+function admitsDirectShadowDriver(
+  module: FunctionModelModule,
+  leaf: GeneratedLeafModule,
+  options: GenerateElementModuleOptions,
+): boolean {
+  if (
+    options.allowDirectShadowDriver !== true ||
+    options.root !== 'shadow-open' ||
+    options.formAssociated === true ||
+    (options.properties?.length ?? 0) !== 0 ||
+    module.components.length !== 1 ||
+    leaf.hostFeatures?.rootClaim !== true ||
+    leaf.hostFeatures.context ||
+    leaf.hostFeatures.ledger ||
+    leaf.requiresPropsChanged ||
+    leaf.requiredProps.length !== 0
+  ) {
+    return false;
+  }
+  const component = module.components[0]!;
+  return (
+    component.propsParam === null &&
+    component.recipes.length === 0 &&
+    component.contextProviders.length === 0 &&
+    component.resources.every(({ kind }) => kind === 'signal' || kind === 'local') &&
+    component.lifecycle.every((hook) => hook.kind === 'connect' && !hook.receivesEnv) &&
+    component.roots.every(isDirectShadowNode)
+  );
+}
+
 export function generateElementModule(
   module: FunctionModelModule,
   site: GeneratedElementSite | null,
@@ -498,6 +559,7 @@ export function generateElementModule(
       sourceMap: leaf.sourceMap,
       placements: leaf.placements,
       rootInstanceFactory: leaf.rootInstanceFactory,
+      hostFeatures: leaf.hostFeatures,
       requiredBindings: leaf.requiredBindings,
       requiredProps: leaf.requiredProps,
       requiresPropsChanged: leaf.requiresPropsChanged,
@@ -553,7 +615,7 @@ export function generateElementModule(
     element: `__oe${rootName}Element`,
     alias: `${rootName}Element`,
     tag: '__oeElementTag',
-    shellImport: 'createGeneratedElementClass',
+    shellImport: '__oe_createElementClass',
     ssrHostImport: 'serializeGeneratedElementHtml',
     // M11 complete vertical: the emitted host producer seeds its content props
     // from the host's canonical attribute pairs through the shell's ONE
@@ -579,6 +641,41 @@ export function generateElementModule(
   // M09-1a light tail keeps its exact bytes.
   const delegatesFocus = options.delegatesFocus === true;
   const formAssociated = options.formAssociated === true;
+  const supports = leaf.hostFeatures;
+  const direct = admitsDirectShadowDriver(module, leaf, options);
+  const hasDeclaredProperties = (options.properties?.length ?? 0) !== 0;
+  const rowless = supports !== null && !hasDeclaredProperties;
+  const hostPropsSeedImport = rowless
+    ? `seedGeneratedElementHostPropertiesWithoutRows as ${names.hostPropsSeed}`
+    : names.hostPropsSeed;
+  const hostPropsSeedArguments = rowless
+    ? 'props, attributes'
+    : `${names.descriptor}.properties, props, attributes`;
+  const hostFeatures: readonly (readonly [field: string, exported: string, local: string])[] =
+    supports === null
+      ? []
+      : [
+          ...(formAssociated
+            ? [['form', 'GeneratedElementForm', '__oe_formFeature'] as const]
+            : []),
+          ...(supports.context
+            ? [['context', 'createGeneratedElementContext', '__oe_contextFeature'] as const]
+            : []),
+          ...(supports.ledger
+            ? [['ledger', 'generatedElementLedger', '__oe_ledgerFeature'] as const]
+            : []),
+          ...(hasDeclaredProperties
+            ? [['properties', 'generatedElementProperties', '__oe_propertiesFeature'] as const]
+            : []),
+        ];
+  const fields = hostFeatures.map(([key, , local]) => `${key}: ${local}`).join(', ');
+  const featureArgument =
+    supports === null || direct ? '' : fields === '' ? ', {}' : `, { ${fields} }`;
+  const shellFactory = direct
+    ? 'createDirectShadowElementClassWithProjection'
+    : supports === null
+      ? 'createGeneratedElementClass'
+      : 'createGeneratedElementClassWithFeatures';
   if (delegatesFocus && templateRoot === null) {
     return emptyResult(leaf, [
       moduleDiagnostic(
@@ -612,6 +709,7 @@ export function generateElementModule(
     names.alias,
     names.tag,
     names.shellImport,
+    ...hostFeatures.map(([, , local]) => local),
     ...clientStyles.map((_, index) => names.styleImport(index)),
     ...propertyEmission.identifiers,
     ...(propertyEmission.usesPropsResolver && hostWrapper !== null ? [names.propsResolver] : []),
@@ -649,9 +747,10 @@ export function generateElementModule(
     '',
     '// ---- generated native element (M09-1) ----',
     `import { ${[
-      names.shellImport,
+      `${shellFactory} as ${names.shellImport}`,
+      ...hostFeatures.map(([, exported, local]) => `${exported} as ${local}`),
       ...(propertyEmission.usesPropsResolver && hostWrapper !== null ? [names.propsResolver] : []),
-      ...(hostWrapper === null ? [] : [names.ssrHostImport, names.hostPropsSeed]),
+      ...(hostWrapper === null ? [] : [names.ssrHostImport, hostPropsSeedImport]),
     ].join(', ')} } from ${JSON.stringify(GENERATED_ELEMENT_SHELL_SPECIFIER)};`,
     // 2026-11-20 client style adoption: a client-only island's declared sheets
     // ride REAL module-graph edges. The router build's style-asset intercept
@@ -669,17 +768,23 @@ export function generateElementModule(
     `  tag: ${JSON.stringify(site.tag)},`,
     // No authored root → no descriptor property: the shell's own
     // `descriptor.root ?? 'light'` default is the single default owner.
-    ...(root === undefined ? [] : [`  root: ${JSON.stringify(root)},`]),
+    ...(root === undefined || direct ? [] : [`  root: ${JSON.stringify(root)},`]),
     ...(delegatesFocus ? ['  delegatesFocus: true,'] : []),
     ...(formAssociated ? ['  formAssociated: true,'] : []),
-    ...propertyEmission.rowLines,
+    ...(direct ? [] : propertyEmission.rowLines),
     // A client-only island's sheets are carried to the shell as imported sheet
     // objects; every other lane keeps its pre-slice descriptor bytes (the SSR
     // lane's sheet is the marked `<link>` inside the DSD template).
     ...(clientStyles.length === 0
       ? []
       : [`  styles: [${clientStyles.map((_, index) => names.styleImport(index)).join(', ')}],`]),
-    `  createRecipe: create${rootName}Recipe,`,
+    ...(direct
+      ? [
+          `  source: ${JSON.stringify(`${module.file}#${rootName}`)},`,
+          `  mount: ${rootName}${MOUNT_SUFFIX},`,
+          `  claim: ${rootName}${CLAIM_SUFFIX},`,
+        ]
+      : [`  createRecipe: create${rootName}Recipe,`]),
     // T3 / 16b-LC-1: the root setup factory is the descriptor's call-once
     // retained setup site (compiler-private member the shell already owns from
     // LC-0). Emitted only when the leaf declared it; `createBindings` remains
@@ -693,7 +798,7 @@ export function generateElementModule(
     ...(lightSsr ? [`  ssrProducer: ${names.ssrProducer},`] : []),
     '};',
     '',
-    `const ${names.element} = createGeneratedElementClass(${names.descriptor});`,
+    `const ${names.element} = ${names.shellImport}(${names.descriptor}${featureArgument});`,
     '',
     `export default ${names.element};`,
     `export { ${names.element} as ${names.alias} };`,
@@ -751,7 +856,7 @@ export function generateElementModule(
             : []),
           ...(propertyEmission.emitsHostAttributeSeed
             ? [
-                `  const ${names.hostPropsVar} = ${names.hostPropsSeed}(${names.descriptor}.properties, props, attributes);`,
+                `  const ${names.hostPropsVar} = ${names.hostPropsSeed}(${hostPropsSeedArguments});`,
                 `  const ${HOST_ATTRIBUTES_VAR} = ${names.hostPropsVar}.${HOST_ATTRIBUTES_KEY};`,
                 `  return ${names.ssrHostImport}({`,
                 `    tag: ${JSON.stringify(site.tag)},`,
@@ -769,7 +874,7 @@ export function generateElementModule(
                 '}',
               ]
             : [
-                `  const ${names.hostPropsVar} = ${names.hostPropsSeed}(${names.descriptor}.properties, props, attributes);`,
+                `  const ${names.hostPropsVar} = ${names.hostPropsSeed}(${hostPropsSeedArguments});`,
                 `  return ${names.ssrHostImport}({`,
                 `    tag: ${JSON.stringify(site.tag)},`,
                 `    root: ${JSON.stringify(hostWrapper.root)},`,
@@ -806,6 +911,7 @@ export function generateElementModule(
     sourceMap: leaf.sourceMap,
     placements: leaf.placements,
     rootInstanceFactory: leaf.rootInstanceFactory,
+    hostFeatures: leaf.hostFeatures,
     requiredBindings: leaf.requiredBindings,
     requiredProps: leaf.requiredProps,
     requiresPropsChanged: leaf.requiresPropsChanged,

@@ -89,6 +89,8 @@ interface EmittedComponent {
   readonly usesStaticSiblingDirectoryConsumer?: boolean;
   /** True when this component's generated claim calls `claimRecipe`. */
   readonly usesClaimRecipe?: boolean;
+  /** True when the emitted recipe carries the captured claim body. */
+  readonly hasClaim?: boolean;
   /** True when the emitted claim throws the leaf mismatch. */
   readonly usesLeafClaimMismatch?: boolean;
 }
@@ -1240,6 +1242,7 @@ export function emitComponent(
     rootInstanceFactory: rootSetup ? GENERATED_ROOT_INSTANCE_NAME : null,
     usesStaticSiblingDirectoryConsumer: claim?.usesStaticSiblingDirectoryConsumer === true,
     usesClaimRecipe: claim?.usesClaimRecipe === true,
+    hasClaim: claim !== null,
     usesLeafClaimMismatch: claim?.usesLeafClaimMismatch === true,
     segments: [
       ...setupSegments,

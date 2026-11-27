@@ -5,7 +5,10 @@
  * shadow-root-aware visible scheduling.
  */
 import { expect, test } from 'vitest';
-import { createIslandScheduler } from '../src/vite/internal/ssg/island-scheduler.ts';
+import {
+  createIslandScheduler,
+  createIslandSchedulerWithStrategies,
+} from '../src/vite/internal/ssg/island-scheduler.ts';
 
 type Win = Window & typeof globalThis;
 
@@ -795,7 +798,7 @@ test('#F01 five-strategy symmetry: a host arriving after the spent opportunity a
   }
 });
 
-test('#F01 idle: a spent construction attempt is re-armed after a morph (same idle selection) and activates once', () => {
+test('#F01 specialized idle: a spent construction attempt re-arms after a morph and activates once', () => {
   const readyEvents: ReadyEvent[] = [];
   const body = new FakeElement('body');
   const idleCallbacks: (() => void)[] = [];
@@ -806,15 +809,18 @@ test('#F01 idle: a spent construction attempt is re-armed after a morph (same id
       return Promise.resolve();
     },
   };
-  const scheduler = createIslandScheduler({
-    log: { warn: () => {} },
-    idleFallbackTimeoutMs: 25,
-    win: makeWin({ requestIdleCallback: (fn: () => void) => idleCallbacks.push(fn) }),
-    doc: makeDoc(body, readyEvents),
-    map,
-    strategies: STRATEGIES({ idle: ['x-idle'] }),
-    onIslandLoaded: null,
-  });
+  const scheduler = createIslandSchedulerWithStrategies(
+    {
+      log: { warn: () => {} },
+      idleFallbackTimeoutMs: 25,
+      win: makeWin({ requestIdleCallback: (fn: () => void) => idleCallbacks.push(fn) }),
+      doc: makeDoc(body, readyEvents),
+      map,
+      strategies: STRATEGIES({ idle: ['x-idle'] }),
+      onIslandLoaded: null,
+    },
+    {},
+  );
   // The construction-time attempt runs with no host and is then spent.
   expect(idleCallbacks.length).toEqual(1);
   idleCallbacks[0]();

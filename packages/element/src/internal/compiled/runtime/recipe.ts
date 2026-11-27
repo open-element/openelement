@@ -72,7 +72,7 @@ import {
   RuntimeErrorCode,
 } from '@openelement/protocol/errors';
 import type { LifetimeScope } from '../lifetime-scope.ts';
-import { assertProjectionAllowed } from './lineage.ts';
+import { assertOwnProjectionAllowed, assertProjectionAllowed } from './lineage.ts';
 import {
   recordOwnerCreated,
   recordProjection,
@@ -176,67 +176,56 @@ export interface Projection<P = unknown> {
 let nextRegionId = 1;
 
 /**
- * Roll a failed projection's scope back: full disposal plus partial-range
- * removal, suppressing cleanup errors so the construction error survives.
+ * Release the failed projection's resources while keeping its original error.
+ * Mount rollback also removes partial ranges. Claim rollback keeps borrowed
+ * nodes and any bytes an already-run activation wrote.
  */
-function rollbackProjection(owner: LifetimeScope): void {
+function rollbackProjection(owner: LifetimeScope, detachOwnedNodes: boolean): void {
   try {
-    owner.dispose(true);
+    owner.dispose(detachOwnedNodes);
   } catch {
     // Every cleanup was still attempted; the construction error is what surfaces.
   }
 }
 
-/** Insert the mounted nodes at the projection site, preserving their order. */
-function insertRegion(parent: Node, nodes: readonly Node[], before: Node | null): void {
-  for (const node of nodes) parent.insertBefore(node, before);
-}
-
 /**
- * Insert one recipe at a projection site: lineage check, one child owner, one
- * props record, one DOM region, one range cleanup.
- *
- * @param insertingOwner - the owner of the site projecting the recipe.
- * @param recipe - the mount recipe being inserted (may be inserted repeatedly).
- * @param parent - the node the region is inserted into.
- * @param before - insert before this child, or append when `null`.
+ * The common projection operation once the caller has validated ownership.
+ * Mount inserts the produced nodes. Claim adopts an existing region.
  */
-export function insertRecipe<P>(
+function project<P>(
   insertingOwner: LifetimeScope,
-  recipe: Recipe<P>,
+  createProps: () => P,
+  createNodes: (owner: LifetimeScope, props: P) => Node[],
   parent: Node,
-  before: Node | null = null,
+  before: Node | null,
+  insert: boolean,
 ): Projection<P> {
-  // Fail closed before any owner or DOM exists: a rejected projection leaves
-  // the parent untouched (TSX-25/TSX-26 negatives).
-  assertProjectionAllowed(recipe.definitionOwner, insertingOwner, recipe.source);
-
   const owner = insertingOwner.child();
   recordOwnerCreated();
   const region = nextRegionId++;
   recordRegionAllocated();
 
-  let props!: P;
+  let props: P;
   let nodes: Node[];
   try {
-    props = recipe.createProps();
-    nodes = recipe.mount(owner, props);
+    props = createProps();
+    nodes = createNodes(owner, props);
   } catch (error) {
-    rollbackProjection(owner);
+    rollbackProjection(owner, insert);
     throw error;
   }
 
-  // Register the region's removal BEFORE the first node enters the parent: a
-  // throw during insertion then rolls the partial range back too (§4.1b rows
-  // 3–5). The mount's own per-resource registrations run first (LIFO), so a
-  // range node is never left behind by a throwing resource cleanup.
+  // Register removal before a mount can place any part of the region, or
+  // only after a claim has successfully adopted its existing nodes.
   owner.addRangeCleanup(() => removeNodes(nodes));
   recordRangeCleanup();
-  try {
-    insertRegion(parent, nodes, before);
-  } catch (error) {
-    rollbackProjection(owner);
-    throw error;
+  if (insert) {
+    try {
+      for (const node of nodes) parent.insertBefore(node, before);
+    } catch (error) {
+      rollbackProjection(owner, true);
+      throw error;
+    }
   }
 
   recordProjection(nodes.length);
@@ -256,34 +245,25 @@ export function insertRecipe<P>(
   return Object.freeze(projection);
 }
 
-/**
- * Release resources from a failed claim without deleting borrowed DOM and
- * without restoring bytes already written. Range cleanups are not run.
- * Validation that throws before a write therefore leaves the parent unchanged.
- * Activation that throws after a dynamic write may leave that write in place
- * while non-range cleanups still run. Whole-region byte rollback is not this
- * function; that would be a separate design.
- */
-function rollbackClaim(owner: LifetimeScope): void {
-  try {
-    owner.dispose(false);
-  } catch {
-    // The claim error is what surfaces; every non-range cleanup was still attempted.
-  }
+/** Insert a recipe within a live definition owner's subtree. */
+export function insertRecipe<P>(
+  insertingOwner: LifetimeScope,
+  recipe: Recipe<P>,
+  parent: Node,
+  before: Node | null = null,
+): Projection<P> {
+  assertProjectionAllowed(recipe.definitionOwner, insertingOwner, recipe.source);
+  return project(
+    insertingOwner,
+    () => recipe.createProps(),
+    (owner, props) => recipe.mount(owner, props),
+    parent,
+    before,
+    true,
+  );
 }
 
-/**
- * Claim one recipe onto an existing parent: lineage check, one child owner,
- * one props record, and the nodes the generated claim adopts in place.
- *
- * Unlike {@link insertRecipe}, this does not create or move DOM, and it does
- * not use §4.1b's detach rollback. A recipe without a claim function fails
- * before any owner exists. A claim that throws disposes the child owner with
- * `dispose(false)`: resources are released, borrowed nodes stay, and bytes
- * written before the throw are not restored. A structural check that throws
- * before writing leaves zero writes. A later throw may preserve an earlier
- * dynamic write. This is not an entire-claim byte transaction.
- */
+/** Claim existing nodes with a recipe whose definition owner is still live. */
 export function claimRecipe<P>(
   insertingOwner: LifetimeScope,
   recipe: Recipe<P>,
@@ -300,39 +280,28 @@ export function claimRecipe<P>(
         : `${where}: ${RuntimeErrorCode.LEAF_CLAIM_UNAVAILABLE}`,
     );
   }
+  return project(
+    insertingOwner,
+    () => recipe.createProps(),
+    (owner, props) => recipe.claim!(owner, props, parent),
+    parent,
+    null,
+    false,
+  );
+}
 
-  const owner = insertingOwner.child();
-  recordOwnerCreated();
-  const region = nextRegionId++;
-  recordRegionAllocated();
+function createEmptyProjectionProps(): Record<string, never> {
+  return {};
+}
 
-  let props!: P;
-  let nodes: Node[];
-  try {
-    props = recipe.createProps();
-    nodes = recipe.claim(owner, props, parent);
-  } catch (error) {
-    rollbackClaim(owner);
-    throw error;
-  }
-
-  // The nodes are already in `parent`. Register removal only after claim
-  // succeeds, so a throwing claim cannot delete them.
-  owner.addRangeCleanup(() => removeNodes(nodes));
-  recordRangeCleanup();
-  recordProjection(nodes.length);
-  let disposed = false;
-  const projection: Projection<P> = {
-    region,
-    owner,
-    nodes,
-    props,
-    dispose(detachOwnedNodes = false): void {
-      if (disposed) return;
-      disposed = true;
-      recordProjectionDisposed();
-      owner.dispose(detachOwnedNodes);
-    },
-  };
-  return Object.freeze(projection);
+/** Project a compiled leaf whose definition belongs to this insertion owner. */
+export function projectOwnGeneratedLeaf(
+  owner: LifetimeScope,
+  source: string,
+  createNodes: (owner: LifetimeScope) => Node[],
+  parent: Node,
+  insert: boolean,
+): Projection<Record<string, never>> {
+  assertOwnProjectionAllowed(owner, source);
+  return project(owner, createEmptyProjectionProps, createNodes, parent, null, insert);
 }

@@ -184,7 +184,9 @@ describe('M09-2a sidecar root source (D-root-source)', () => {
     const shadow = compileGeneratedElementIfAdmitted(island("root: 'shadow'"), FILE, {
       site: SITE,
     });
-    expect(shadow!.code).toContain('root: "shadow-open"');
+    expect(shadow!.code).toContain(
+      'createDirectShadowElementClassWithProjection as __oe_createElementClass',
+    );
   });
 
   test('an absent root omits the descriptor property so the shell defaults it', () => {

@@ -250,6 +250,7 @@ export function devIslandClientPlugin(
       const devLiveStyleSheets = devLiveStyleSheetGroups();
       return generateClientEntry(islandEntries, {
         enhancedForms,
+        specializeScheduler: true,
         // alpha15 S lane (S5-A), provider-generalized by the closeout: the
         // dev entry registers the shared component stylesheet through the
         // same adapter protocol the built entry uses, resolved from the

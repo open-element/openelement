@@ -286,9 +286,11 @@ describe('M09-2a sidecar delegatesFocus source (D-delegatesFocus)', () => {
       FILE,
       { site: SITE },
     );
-    expect(declared!.code).toContain('root: "shadow-open"');
+    expect(declared!.code).toContain(
+      'createDirectShadowElementClassWithProjection as __oe_createElementClass',
+    );
     expect(declared!.code).toContain('delegatesFocus: true');
-    expect(declared!.code).toContain('properties: []');
+    expect(declared!.code).not.toContain('properties:');
 
     const absent = compileGeneratedElementIfAdmitted(island("root: 'shadow'"), FILE, {
       site: SITE,

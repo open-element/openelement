@@ -118,22 +118,6 @@ export function leafRuntimeError(
   return frameworkError(code, locatedDetail(detail, origin), { phase: 'csr' });
 }
 
-/** Internal identity for caller-owned content projected through a light root. */
-const LIGHT_SLOT_PROJECTION_UNSUPPORTED = 'OEIR_LEAF_UNSUPPORTED_LIGHT_SLOT_PROJECTION';
-
-/**
- * The current generated-light contract gives the child's template and the
- * caller's authored children different owners. The SSR renderer can place the
- * bytes correctly, but neither claim path can safely adopt the shared region.
- */
-function unsupportedLightSlotProjectionClaim(origin?: ClaimOrigin): OpenElementError {
-  return leafRuntimeError(
-    LIGHT_SLOT_PROJECTION_UNSUPPORTED,
-    'caller content under a generated light root cannot be claimed interactively because the projected nodes cross parent and child ownership; use a shadow-root child with native slots or keep this composition non-interactive',
-    origin,
-  );
-}
-
 export function leafClaimMismatch(detail: string, origin?: ClaimOrigin): OpenElementError {
   return new OpenElementError(`${LEAF_CLAIM_MISMATCH}: ${locatedDetail(detail, origin)}`, {
     code: LEAF_CLAIM_MISMATCH,
@@ -259,7 +243,10 @@ export function assertNestedHostStaticAttributeSeed(
  */
 export function isExpandedLightRootHost(element: Element): boolean {
   if (element.hasAttribute(DATA_OE_LIGHT_PROJECTION)) {
-    throw unsupportedLightSlotProjectionClaim();
+    throw leafRuntimeError(
+      'OEIR_LEAF_UNSUPPORTED_LIGHT_SLOT_PROJECTION',
+      'caller content under a generated light root cannot be claimed interactively because the projected nodes cross parent and child ownership; use a shadow-root child with native slots or keep this composition non-interactive',
+    );
   }
   return element.hasAttribute(DATA_OE_LIGHT);
 }
@@ -589,34 +576,15 @@ export function assertElementInHtmlNamespace(
   where: string,
   origin?: ClaimOrigin,
 ): void {
-  if (isClaimParentShadowRoot(node)) {
-    const host = node.host;
-    const hostReason = elementHtmlNamespaceViolation(host);
-    if (hostReason !== null) {
-      throw leafClaimMismatch(`non-HTML namespace at ${where} (${hostReason})`, origin);
-    }
-    for (let current = composedParent(host); current !== null; current = composedParent(current)) {
-      if (current.nodeType !== 1) continue;
-      const reason = elementHtmlNamespaceViolation(current);
-      if (reason !== null) {
-        throw leafClaimMismatch(`non-HTML namespace at ${where} (${reason})`, origin);
-      }
-    }
-    return;
+  // A real shadow root starts at its owning element. Other claim targets
+  // must themselves be elements. Above the target, only elements are checked.
+  let current = isClaimParentShadowRoot(node) ? node.host : node;
+  let reason = elementHtmlNamespaceViolation(current);
+  while (current !== null && reason === null) {
+    current = composedParent(current);
+    if (current?.nodeType === 1) reason = elementHtmlNamespaceViolation(current);
   }
-  // The claim target itself must be an HTML element (a text or comment node is
-  // not a claim target at all). Element ancestors are checked above it.
-  const own = elementHtmlNamespaceViolation(node);
-  if (own !== null) throw leafClaimMismatch(`non-HTML namespace at ${where} (${own})`, origin);
-  for (
-    let current = node === null ? null : composedParent(node);
-    current !== null;
-    current = composedParent(current)
-  ) {
-    if (current.nodeType !== 1) continue;
-    const reason = elementHtmlNamespaceViolation(current);
-    if (reason !== null) {
-      throw leafClaimMismatch(`non-HTML namespace at ${where} (${reason})`, origin);
-    }
+  if (reason !== null) {
+    throw leafClaimMismatch(`non-HTML namespace at ${where} (${reason})`, origin);
   }
 }

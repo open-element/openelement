@@ -39,6 +39,7 @@ import { compileGeneratedElementIfAdmitted } from '../../src/internal/compiler/s
 import { GENERATED_ELEMENT_SHELL_SPECIFIER } from '../../src/internal/compiler/semantic-ir/generated-element/contract.ts';
 import { createGeneratedElementSiteResolver } from '../../../router/src/vite/generated-element-site.ts';
 import { REPO_ROOT } from './testlib/element-classifier.ts';
+import { legacyGeneratedElementOutput } from './testlib/generated-element-baseline.ts';
 
 const ISLANDS_DIR = 'app/islands';
 const siteFor = createGeneratedElementSiteResolver(ISLANDS_DIR);
@@ -169,6 +170,19 @@ const SSR_SOURCE =
   '}\n' +
   'export default Root;\n';
 
+const SHADOW_BRIDGE_SOURCE =
+  sidecar('').replace("root: 'light'", "root: 'shadow'") +
+  'export default function Bridge() { return <div id="outlet"></div>; }';
+
+const READER_SOURCE =
+  sidecar('') +
+  "import { useContext } from '@openelement/element';\n" +
+  "import { Theme } from '../ctx-tokens.ts';\n" +
+  'export default function Reader() {\n' +
+  '  const theme = useContext(Theme);\n' +
+  '  return <p>{theme.value}</p>;\n' +
+  '}\n';
+
 interface PageRuntime {
   GeneratedElement: CustomElementConstructor;
   __oeElementTag: string;
@@ -178,6 +192,12 @@ declare global {
   interface Window {
     __oeCtxMain: PageRuntime;
     __oeCtxLifecycle: PageRuntime;
+    __oeCtxBridge: {
+      GeneratedElement: CustomElementConstructor;
+      LegacyProvider: CustomElementConstructor;
+      Bridge: CustomElementConstructor;
+      Reader: CustomElementConstructor;
+    };
     /** The SSR fixture: the class plus its own generated producer. */
     __oeCtxSsr: PageRuntime & {
       Root__ssr: (props: unknown, host?: unknown) => string;
@@ -265,6 +285,7 @@ async function buildBundle(
   name: string,
   globalName: string,
   extraExports = '',
+  additionalEntry = '',
 ): Promise<string> {
   const element = join(REPO_ROOT, 'packages/element/src/internal');
   const island = join(dir, `${name}-island.js`);
@@ -274,7 +295,7 @@ async function buildBundle(
   writeFileSync(shim, runtimeShimSource());
   writeFileSync(
     entry,
-    `export { default as GeneratedElement${extraExports} } from './${name}-island.js';\n`,
+    `export { default as GeneratedElement${extraExports} } from './${name}-island.js';\n${additionalEntry}`,
   );
   const result = await build({
     configFile: false,
@@ -321,6 +342,7 @@ let tempDir = '';
 let mainBundle = '';
 let lifecycleBundle = '';
 let ssrBundle = '';
+let bridgeBundle = '';
 let mainTag = '';
 let lifecycleTag = '';
 let ssrTag = '';
@@ -339,6 +361,31 @@ beforeAll(async () => {
   const lifecycle = compileIsland('ctx-lifecycle', LIFECYCLE_SOURCE);
   lifecycleTag = siteFor(`${ISLANDS_DIR}/ctx-lifecycle.tsx`)!.tag;
   lifecycleBundle = await buildBundle(tempDir, lifecycle, 'lifecycle', '__oeCtxLifecycle');
+
+  const bridge = compileIsland('ctx-shadow-bridge', SHADOW_BRIDGE_SOURCE);
+  const reader = compileIsland('ctx-bridge-reader', READER_SOURCE);
+  expect(lifecycle).toContain(
+    '{ context: __oe_contextFeature, properties: __oe_propertiesFeature }',
+  );
+  expect(reader).toContain('{ context: __oe_contextFeature }');
+  expect(bridge).toContain(
+    'createDirectShadowElementClassWithProjection as __oe_createElementClass',
+  );
+  writeFileSync(join(tempDir, 'bridge-host.js'), bridge);
+  writeFileSync(join(tempDir, 'reader.js'), reader);
+  writeFileSync(join(tempDir, 'legacy-provider.js'), legacyGeneratedElementOutput(lifecycle));
+  bridgeBundle = await buildBundle(
+    tempDir,
+    lifecycle,
+    'bridge',
+    '__oeCtxBridge',
+    '',
+    [
+      "export { default as Bridge } from './bridge-host.js';",
+      "export { default as Reader } from './reader.js';",
+      "export { default as LegacyProvider } from './legacy-provider.js';",
+    ].join('\n'),
+  );
 
   const ssrSource = compileIsland('ctx-ssr-claim', SSR_SOURCE);
   // The SSR fixture must be BOTH renderable and claimable — the capability this
@@ -577,6 +624,43 @@ describe('16b-CTX provider/consumer context (Chromium)', () => {
       await page.close();
     }
   });
+
+  test.each(['GeneratedElement', 'LegacyProvider'] as const)(
+    'a %s provider crosses a generated shadow host that has no context features',
+    async (providerExport) => {
+      const page = await openPage(bridgeBundle);
+      try {
+        const result = await page.evaluate(async (exportName) => {
+          const { Reader, Bridge, ...providers } = window.__oeCtxBridge;
+          customElements.define('x-context-provider', providers[exportName]);
+          customElements.define('x-context-bridge', Bridge);
+          customElements.define('x-context-reader', Reader);
+          const provider = document.createElement('x-context-provider') as HTMLElement & {
+            seed: number;
+          };
+          const bridge = document.createElement('x-context-bridge');
+          const reader = document.createElement('x-context-reader');
+          provider.seed = 1;
+          document.body.append(provider);
+          provider.append(bridge);
+          const outlet = bridge.shadowRoot!.querySelector('#outlet')!;
+          outlet.append(reader);
+          await window.__oeTick();
+          const initial = reader.textContent;
+          provider.seed = 2;
+          await window.__oeTick();
+          const updated = reader.textContent;
+          reader.remove();
+          provider.seed = 3;
+          await window.__oeTick();
+          return { initial, updated, detached: reader.textContent };
+        }, providerExport);
+        expect(result).toEqual({ initial: 'v1', updated: 'v2', detached: 'v2' });
+      } finally {
+        await page.close();
+      }
+    },
+  );
 
   test('X5 SSR carries the PROVIDED value, and the claim adopts it with ZERO mutations', async () => {
     // The capability this slice restores: a consumer-reading element renders on

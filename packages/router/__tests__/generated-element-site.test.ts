@@ -190,7 +190,7 @@ describe('M09-1b router dev host', () => {
     expect(result!.code).not.toContain('root: "light"');
   });
 
-  test('an authored shadow sidecar still reaches the emitted descriptor root', async () => {
+  test('an authored shadow sidecar selects the direct open-shadow driver', async () => {
     const { hooks } = devHost({ viteRoot: '/proj' });
     const { result } = await transformCapturing(
       hooks,
@@ -198,11 +198,28 @@ describe('M09-1b router dev host', () => {
       '/proj/app/islands/dev-card.tsx',
     );
     expect(result).not.toBeNull();
-    expect(result!.code).toContain('createGeneratedElementClass');
-    // The resolver supplies the tag only; the root is the authored sidecar's
-    // fact (D-root-source), so dropping the stale host-side root must not drop
-    // this channel. `'shadow'` is the DSD default and maps to `shadow-open`.
-    expect(result!.code).toContain('root: "shadow-open"');
+    expect(result!.code).toContain(
+      'createDirectShadowElementClassWithProjection as __oe_createElementClass',
+    );
+    expect(result!.code).toContain('export default __oeDevCardElement;');
+    expect(result!.code).toContain('__oeElementTag = "dev-card"');
+    // The resolver supplies just the tag. The client-only shadow sidecar selects
+    // the open-shadow projection adapter with the same claim body on reconnect.
+    expect(result!.code).toContain(
+      [
+        'const __oeElementDescriptor = {',
+        '  tag: "dev-card",',
+        '  source: "app/islands/dev-card.tsx#DevCard",',
+        '  mount: DevCard__mount,',
+        '  claim: DevCard__claim,',
+        '};',
+        '',
+        'const __oeDevCardElement = __oe_createElementClass(__oeElementDescriptor);',
+      ].join('\n'),
+    );
+    expect(result!.code).toContain('export function createDevCardRecipe(');
+    expect(result!.code).toContain('function DevCard__claim(');
+    expect(result!.code).not.toContain('export function DevCard__ssrHost(');
   });
 
   test('a hostless module never acquires the generated class', async () => {

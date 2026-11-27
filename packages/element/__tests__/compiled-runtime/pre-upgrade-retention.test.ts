@@ -24,6 +24,7 @@ const dom: FacadeDom = installFacadeDom();
 
 const {
   ensurePreHydrationClickCapture,
+  markPreUpgradeIslandSettled,
   preUpgradeRetainedRecordCount,
   releasePreUpgradeCapturesFor,
   replayPreUpgradeCaptures,
@@ -60,6 +61,32 @@ test('retention: release empties the root bucket and replay is a no-op', () => {
   expect(preUpgradeRetainedRecordCount(asNode(host))).toEqual(0);
 
   cleanup(host);
+});
+
+test('retention: reentrant replay and reconnect keep the adopted order without double replay', () => {
+  ensurePreHydrationClickCapture();
+  const { host, button } = pendingHost(dom, 'oe-retention-reentrant');
+  const second = new FacadeElement('button', dom.document);
+  host.appendChild(second);
+  button.dispatchEvent(click());
+  second.dispatchEvent(click());
+  markPreUpgradeIslandSettled(host);
+
+  const fired: string[] = [];
+  button.addEventListener('click', () => {
+    fired.push('first');
+    replayPreUpgradeCaptures(asNode(host));
+  });
+  second.addEventListener('click', () => fired.push('second'));
+  try {
+    replayPreUpgradeCaptures(asNode(host));
+    releasePreUpgradeCapturesFor(asNode(host));
+    replayPreUpgradeCaptures(asNode(host));
+    expect(fired).toEqual(['first', 'second']);
+    expect(preUpgradeRetainedRecordCount(asNode(host))).toBe(0);
+  } finally {
+    cleanup(host);
+  }
 });
 
 test('retention: release without replay drops the unconsumed record (replay is a no-op)', () => {
@@ -141,4 +168,32 @@ test('the shell hook is published by the capture install and chains the ONE regi
   ).toBe(1);
   hook.releasePreUpgradeCapturesFor(asNode(host));
   expect(preUpgradeRetainedRecordCount(asNode(host)), 'the hook released it').toBe(0);
+});
+
+test('retention: outer shadow claim leaves a nested declared island pending', () => {
+  ensurePreHydrationClickCapture(undefined, ['oe-adopt-outer', 'oe-adopt-inner']);
+  const outer = pendingHost(dom, 'oe-adopt-outer');
+  const inner = pendingHost(dom, 'oe-adopt-inner');
+  const shadow = outer.host.attachShadow({ mode: 'open' });
+  shadow.appendChild(outer.button);
+  shadow.appendChild(inner.host);
+  outer.button.dispatchEvent(click());
+  inner.button.dispatchEvent(click());
+
+  const fired: string[] = [];
+  outer.button.addEventListener('click', () => fired.push('outer'));
+  inner.button.addEventListener('click', () => fired.push('inner'));
+  try {
+    markPreUpgradeIslandSettled(outer.host);
+    replayPreUpgradeCaptures(asNode(outer.host));
+    releasePreUpgradeCapturesFor(asNode(outer.host));
+    expect(fired).toEqual(['outer']);
+
+    markPreUpgradeIslandSettled(inner.host);
+    replayPreUpgradeCaptures(asNode(inner.host));
+    releasePreUpgradeCapturesFor(asNode(inner.host));
+    expect(fired).toEqual(['outer', 'inner']);
+  } finally {
+    cleanup(outer.host, inner.host);
+  }
 });

@@ -48,6 +48,7 @@ import {
 import { generateElementModule } from '../../src/internal/compiler/semantic-ir/generated-element/emit.ts';
 import { serializeShadowTemplate } from '../../../element/src/internal/compiled/dsd.ts';
 import { REPO_ROOT } from './testlib/element-classifier.ts';
+import { legacyGeneratedElementOutput } from './testlib/generated-element-baseline.ts';
 
 const FILE = '/proj/src/islands/profile.tsx';
 const SIDECAR =
@@ -217,7 +218,10 @@ async function openPage(bundle: BundleResult): Promise<Page> {
 }
 
 let lightBundle: BundleResult;
+let formBundle: BundleResult;
 let shadowBundle: BundleResult;
+let legacyLightBundle: BundleResult;
+let legacyShadowBundle: BundleResult;
 let hostlessBundle: BundleResult;
 
 beforeAll(async () => {
@@ -237,7 +241,27 @@ beforeAll(async () => {
     "export { default as GeneratedElement } from './leaf.js';",
     "export { Profile__ssr } from './leaf.js';",
   ]);
-  shadowBundle = await buildBundle(shadow!.code, 'shadow', [
+  const form = compileGeneratedElementIfAdmitted(
+    SOURCE.replace("root: 'light'", "root: 'light', formAssociated: true"),
+    FILE,
+    { site: { tag: 'x-profile' } },
+  );
+  expect(form).not.toBeNull();
+  formBundle = await buildBundle(form!.code, 'form', [
+    "export { default as GeneratedElement } from './leaf.js';",
+    "export { Profile__ssr } from './leaf.js';",
+  ]);
+  const shadowExports = [
+    "export { default as GeneratedElement } from './leaf.js';",
+    "export { Profile__ssr, Profile__ssrHost } from './leaf.js';",
+  ];
+  shadowBundle = await buildBundle(shadow!.code, 'shadow', shadowExports);
+  legacyShadowBundle = await buildBundle(
+    legacyGeneratedElementOutput(shadow!.code),
+    'legacy-shadow',
+    shadowExports,
+  );
+  legacyLightBundle = await buildBundle(legacyGeneratedElementOutput(light!.code), 'legacy-light', [
     "export { default as GeneratedElement } from './leaf.js';",
     "export { Profile__ssr } from './leaf.js';",
   ]);
@@ -281,6 +305,131 @@ describe('M09-1a generated element class (Chromium)', () => {
       true,
     );
   });
+
+  test('the same generated island ships the form runtime only with an opted-in sidecar', () => {
+    for (const suffix of ['/generated-element/form.ts', '/open-element-form.ts']) {
+      expect(
+        lightBundle.moduleIds.some((id) => id.endsWith(suffix)),
+        suffix,
+      ).toBe(false);
+      expect(
+        shadowBundle.moduleIds.some((id) => id.endsWith(suffix)),
+        suffix,
+      ).toBe(false);
+      expect(
+        formBundle.moduleIds.some((id) => id.endsWith(suffix)),
+        suffix,
+      ).toBe(true);
+    }
+  });
+
+  test('form-only and feature-free islands omit the context engine and instance ledger', () => {
+    for (const bundle of [lightBundle, shadowBundle, formBundle]) {
+      for (const suffix of [
+        '/generated-element/context.ts',
+        '/runtime/context.ts',
+        '/runtime/instance-ledger.ts',
+      ]) {
+        expect(
+          bundle.moduleIds.some((id) => id.endsWith(suffix)),
+          suffix,
+        ).toBe(false);
+      }
+    }
+  });
+
+  test('rowless bundles omit conversion and the legacy factory keeps it', () => {
+    const containsConversion = (bundle: BundleResult): boolean =>
+      bundle.moduleIds.some((id) => id.endsWith('/core/property-conversion.ts'));
+    expect([lightBundle, shadowBundle, formBundle].map(containsConversion)).toEqual([
+      false,
+      false,
+      false,
+    ]);
+    expect([legacyLightBundle, legacyShadowBundle].map(containsConversion)).toEqual([true, true]);
+  });
+
+  test.each(['light', 'shadow'] as const)(
+    'rowless %s hosts preserve server attributes and ignore incoming prop-seed markup across claim',
+    async (root) => {
+      const bundles =
+        root === 'shadow' ? [shadowBundle, legacyShadowBundle] : [lightBundle, legacyLightBundle];
+      const observations = [];
+      for (const bundle of bundles) {
+        const page = await openPage(bundle);
+        try {
+          const errors: string[] = [];
+          page.on('pageerror', (error) => errors.push(error.message));
+          const result = await page.evaluate((mode) => {
+            const module = window.__oeM09;
+            const tag = mode === 'shadow' ? 'x-shadow-profile' : 'x-profile';
+            customElements.define(tag, module.GeneratedElement);
+            return ['{}', 'not JSON', '{"unknown":"transferred"}'].map((seed) => {
+              const attributes = [
+                ['title', 'author supplied'],
+                ['data-oe-prop-seed', seed],
+              ] as const;
+              const frame = document.createElement('div');
+              let lightSeedRows: unknown;
+              if (mode === 'shadow') {
+                frame.setHTMLUnsafe(module.Profile__ssrHost(undefined, undefined, attributes));
+              } else {
+                const host = document.createElement(tag);
+                const lightSsr = (
+                  module.GeneratedElement as unknown as {
+                    __ssr: (
+                      props: object,
+                      attrs: typeof attributes,
+                    ) => {
+                      content: string;
+                      hostAttributes: readonly (readonly [string, string])[];
+                      seedRows: readonly string[];
+                    };
+                  }
+                ).__ssr({}, attributes);
+                for (const [name, value] of lightSsr.hostAttributes) host.setAttribute(name, value);
+                lightSeedRows = lightSsr.seedRows;
+                host.innerHTML = lightSsr.content;
+                frame.append(host);
+              }
+              const host = frame.firstElementChild!;
+              const target = host.shadowRoot ?? host;
+              const before = target.querySelector('#profile')!;
+              document.body.append(frame);
+              const claimed = target.querySelector('#profile') === before;
+              frame.remove();
+              document.body.append(frame);
+              const reconnected = target.querySelector('#profile') === before;
+              frame.remove();
+              return {
+                seed: host.getAttribute('data-oe-prop-seed'),
+                title: host.getAttribute('title'),
+                text: before.textContent,
+                claimed,
+                reconnected,
+                lightSeedRows,
+              };
+            });
+          }, root);
+          expect(errors).toEqual([]);
+          expect(result).toEqual(
+            ['{}', 'not JSON', '{"unknown":"transferred"}'].map((seed) => ({
+              seed,
+              title: 'author supplied',
+              text: 'hello',
+              claimed: true,
+              reconnected: true,
+              lightSeedRows: root === 'light' ? [] : undefined,
+            })),
+          );
+          observations.push(result);
+        } finally {
+          await page.close();
+        }
+      }
+      expect(observations[0]).toEqual(observations[1]);
+    },
+  );
 
   test('a hostless module bundle never reaches the shell', () => {
     for (const graph of [hostlessBundle.parsedModuleIds, hostlessBundle.moduleIds]) {
@@ -521,6 +670,11 @@ declare global {
     __oeM09: {
       GeneratedElement: CustomElementConstructor;
       Profile__ssr: () => string;
+      Profile__ssrHost: (
+        props: undefined,
+        lightChildren: undefined,
+        attrs: readonly (readonly [string, string])[],
+      ) => string;
     };
   }
 }

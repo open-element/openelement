@@ -56,13 +56,12 @@ const LIGHT = `${SIDECAR_LIGHT}${BODY}`;
 const SHADOW = `${SIDECAR_SHADOW}${BODY}`;
 
 /**
- * The M09-1a light tail, byte-for-byte. A light root must keep exactly these
- * bytes: this slice never alters the light path.
+ * The M09-1a light tail with the form-free factory import.
  */
 const M09_1A_LIGHT_TAIL = [
   '',
   '// ---- generated native element (M09-1) ----',
-  `import { createGeneratedElementClass } from ${JSON.stringify(GENERATED_ELEMENT_SHELL_SPECIFIER)};`,
+  `import { createGeneratedElementClassWithFeatures as __oe_createElementClass } from ${JSON.stringify(GENERATED_ELEMENT_SHELL_SPECIFIER)};`,
   '',
   'const __oeElementDescriptor = {',
   '  tag: "profile-card",',
@@ -76,7 +75,7 @@ const M09_1A_LIGHT_TAIL = [
   '  ssrProducer: Profile__ssr,',
   '};',
   '',
-  'const __oeProfileElement = createGeneratedElementClass(__oeElementDescriptor);',
+  'const __oeProfileElement = __oe_createElementClass(__oeElementDescriptor, {});',
   '',
   'export default __oeProfileElement;',
   'export { __oeProfileElement as ProfileElement };',
@@ -140,7 +139,7 @@ describe('M09-2a generated shadow host producer', () => {
     expect(tail.match(/__ssrHost/g)?.length).toBe(1);
     expect(tail.match(/export function Profile__ssrHost\(/g)?.length).toBe(1);
     expect(tail).toContain(
-      `import { createGeneratedElementClass, serializeGeneratedElementHtml, seedGeneratedElementHostProperties } from ${JSON.stringify(GENERATED_ELEMENT_SHELL_SPECIFIER)};`,
+      `import { createGeneratedElementClassWithFeatures as __oe_createElementClass, serializeGeneratedElementHtml, seedGeneratedElementHostPropertiesWithoutRows as seedGeneratedElementHostProperties } from ${JSON.stringify(GENERATED_ELEMENT_SHELL_SPECIFIER)};`,
     );
     expect(tail).toContain('root: "shadow-open"');
     expect(tail).toContain(
@@ -149,7 +148,7 @@ describe('M09-2a generated shadow host producer', () => {
     // M11: the host producer seeds its content props from the canonical host
     // attribute pairs through the shell's ONE conversion surface.
     expect(tail).toContain(
-      '  const __oeHostProps = seedGeneratedElementHostProperties(__oeElementDescriptor.properties, props, attributes);',
+      '  const __oeHostProps = seedGeneratedElementHostProperties(props, attributes);',
     );
     expect(tail).toContain('    root: "open",');
     expect(tail).toContain(
@@ -323,7 +322,9 @@ export default Profile;
     expect(shadow!.code).toContain(
       'export function Profile__ssrHost(props, lightChildren, attributes, styleLinks, nestedHost) {',
     );
-    expect(shadow!.code).toContain('root: "shadow-open"');
+    expect(shadow!.code).toContain(
+      'createDirectShadowElementClassWithProjection as __oe_createElementClass',
+    );
     expect(shadow!.code).toContain('    root: "open",');
 
     const light = compileGeneratedElementIfAdmitted(LIGHT, FILE, { site: SITE });

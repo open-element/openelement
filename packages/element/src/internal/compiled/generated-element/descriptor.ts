@@ -567,13 +567,79 @@ const normalizedByDescriptor = new WeakMap<GeneratedElementDescriptor, Normalize
 export function normalizeDescriptor(descriptor: GeneratedElementDescriptor): NormalizedDescriptor {
   const cached = normalizedByDescriptor.get(descriptor);
   if (cached !== undefined) return cached;
-  if (typeof descriptor.tag !== 'string' || !descriptor.tag.includes('-')) {
+  const normalized = normalizeDescriptorWithRows(descriptor, normalizeDeclaredProperties);
+  normalizedByDescriptor.set(descriptor, normalized);
+  return normalized;
+}
+
+type NormalizedRows = Pick<NormalizedDescriptor, 'properties' | 'byAttribute' | 'form'>;
+
+export function normalizeRowlessDescriptor(
+  descriptor: GeneratedElementDescriptor,
+): NormalizedDescriptor {
+  return normalizeDescriptorWithRows(descriptor, (rows, formAssociated) => {
+    if (rows !== undefined && (!Array.isArray(rows) || rows.length !== 0)) {
+      descriptorError('declared properties require the generated property runtime');
+    }
+    return {
+      properties: [],
+      byAttribute: new Map(),
+      form: formAssociated ? { value: null } : null,
+    };
+  });
+}
+
+export function assertGeneratedElementTag(tag: string): void {
+  if (typeof tag !== 'string' || !tag.includes('-')) {
     descriptorError(
       'tag must be a hyphenated custom-element name',
       AuthoringErrorCode.INVALID_TAG_NAME,
       'validation',
     );
   }
+}
+
+export function normalizeGeneratedStyles(
+  declaredStyles: readonly StyleSheetLike[] | undefined,
+): readonly StyleSheetLike[] {
+  // A client-only island's sheets arrive as EMITTED MODULE IMPORTS (2026-11-20).
+  // Validate the OBJECT here, before any DOM work: a build that failed to
+  // intercept the `.css` import hands over a string (or nothing), and adopting
+  // that would render the element silently unstyled. One coded descriptor error
+  // is the fail-closed half of that contract; the compiler's
+  // CLIENT_STYLES_UNWIRED refusal is the build-time half.
+  //
+  // Never read `cssRules`: a sheet whose `replace()` is still in flight throws
+  // on that read in Firefox (the class lane's KR-2/Q1-B race), and adoption
+  // needs no rule read at all.
+  if (declaredStyles !== undefined && !Array.isArray(declaredStyles)) {
+    descriptorError('styles must be an array of stylesheet objects when present');
+  }
+  const styles: readonly StyleSheetLike[] = declaredStyles ?? [];
+  for (const [index, sheet] of styles.entries()) {
+    if (
+      typeof sheet !== 'object' ||
+      sheet === null ||
+      typeof (sheet as { replaceSync?: unknown }).replaceSync !== 'function'
+    ) {
+      descriptorError(
+        `styles[${index}] is not a stylesheet object: a client-only island's declared sheet must ` +
+          'arrive as the module-graph import the build intercepts, never as a string or a missing ' +
+          'binding (refusing instead of rendering the element unstyled)',
+      );
+    }
+  }
+  return styles;
+}
+
+function normalizeDescriptorWithRows(
+  descriptor: GeneratedElementDescriptor,
+  normalizeRows: (
+    rows: GeneratedElementDescriptor['properties'],
+    formAssociated: boolean,
+  ) => NormalizedRows,
+): NormalizedDescriptor {
+  assertGeneratedElementTag(descriptor.tag);
   if (typeof descriptor.createRecipe !== 'function') {
     descriptorError('createRecipe must be the generated recipe factory');
   }
@@ -603,37 +669,32 @@ export function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Nor
   if (descriptor.formAssociated !== undefined && typeof descriptor.formAssociated !== 'boolean') {
     descriptorError('formAssociated must be a boolean when present');
   }
-  // A client-only island's sheets arrive as EMITTED MODULE IMPORTS (2026-11-20).
-  // Validate the OBJECT here, before any DOM work: a build that failed to
-  // intercept the `.css` import hands over a string (or nothing), and adopting
-  // that would render the element silently unstyled. One coded descriptor error
-  // is the fail-closed half of that contract; the compiler's
-  // CLIENT_STYLES_UNWIRED refusal is the build-time half.
-  //
-  // Never read `cssRules`: a sheet whose `replace()` is still in flight throws
-  // on that read in Firefox (the class lane's KR-2/Q1-B race), and adoption
-  // needs no rule read at all.
-  const declaredStyles = descriptor.styles;
-  if (declaredStyles !== undefined && !Array.isArray(declaredStyles)) {
-    descriptorError('styles must be an array of stylesheet objects when present');
-  }
-  const styles: readonly StyleSheetLike[] = declaredStyles ?? [];
-  for (const [index, sheet] of styles.entries()) {
-    if (
-      typeof sheet !== 'object' ||
-      sheet === null ||
-      typeof (sheet as { replaceSync?: unknown }).replaceSync !== 'function'
-    ) {
-      descriptorError(
-        `styles[${index}] is not a stylesheet object: a client-only island's declared sheet must ` +
-          'arrive as the module-graph import the build intercepts, never as a string or a missing ' +
-          'binding (refusing instead of rendering the element unstyled)',
-      );
-    }
-  }
+  const styles = normalizeGeneratedStyles(descriptor.styles);
   const formAssociated = descriptor.formAssociated === true;
 
-  const properties = (descriptor.properties ?? []).map(normalizeProperty);
+  return {
+    rootMode,
+    delegatesFocus,
+    formAssociated,
+    ...normalizeRows(descriptor.properties, formAssociated),
+    styles,
+    ...(descriptor.devLiveStyles === undefined ? {} : { devLiveStyles: descriptor.devLiveStyles }),
+    createRecipe: descriptor.createRecipe as NormalizedDescriptor['createRecipe'],
+    ...(descriptor.ssrProducer === undefined ? {} : { ssrProducer: descriptor.ssrProducer }),
+    ...(descriptor.createInstance === undefined
+      ? {}
+      : { createInstance: descriptor.createInstance as NormalizedDescriptor['createInstance'] }),
+    ...(descriptor.createBindings === undefined
+      ? {}
+      : { createBindings: descriptor.createBindings }),
+  };
+}
+
+function normalizeDeclaredProperties(
+  rows: GeneratedElementDescriptor['properties'],
+  formAssociated: boolean,
+): NormalizedRows {
+  const properties = (rows ?? []).map(normalizeProperty);
   const names = new Set<string>();
   const byAttribute = new Map<string, NormalizedProperty>();
   for (const property of properties) {
@@ -698,28 +759,8 @@ export function normalizeDescriptor(descriptor: GeneratedElementDescriptor): Nor
     };
   }
 
-  const normalized: NormalizedDescriptor = {
-    rootMode,
-    delegatesFocus,
-    formAssociated,
-    form,
-    properties,
-    byAttribute,
-    styles,
-    ...(descriptor.devLiveStyles === undefined ? {} : { devLiveStyles: descriptor.devLiveStyles }),
-    createRecipe: descriptor.createRecipe as NormalizedDescriptor['createRecipe'],
-    ...(descriptor.ssrProducer === undefined ? {} : { ssrProducer: descriptor.ssrProducer }),
-    ...(descriptor.createInstance === undefined
-      ? {}
-      : { createInstance: descriptor.createInstance as NormalizedDescriptor['createInstance'] }),
-    ...(descriptor.createBindings === undefined
-      ? {}
-      : { createBindings: descriptor.createBindings }),
-  };
-  normalizedByDescriptor.set(descriptor, normalized);
-  return normalized;
+  return { properties, byAttribute, form };
 }
-
 /**
  * One lazy, memoised default for one declared row of one SSR render. The
  * factory/brand runs at most once, and only when the leaf actually reads the

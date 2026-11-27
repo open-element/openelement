@@ -356,6 +356,20 @@ describe('dynamic text, condition and list origins', () => {
 });
 
 describe('HTML namespace origin', () => {
+  test('rejects a foreign target before reading its ancestor', () => {
+    const foreign = element({ localName: 'svg', namespaceURI: SVG_NAMESPACE });
+    Object.defineProperty(foreign, 'parentNode', {
+      get() {
+        throw new Error('a foreign claim target must fail before walking its parent');
+      },
+    });
+    expectThrown(
+      () => assertElementInHtmlNamespace(foreign, '/0', ORIGIN),
+      `non-HTML namespace at /0 (non-HTML namespace "${SVG_NAMESPACE}" on "svg")`,
+      ORIGIN,
+    );
+  });
+
   test('reports the component/recipe origin on null, foreign and ancestor failures', () => {
     expectThrown(
       () => assertElementInHtmlNamespace(null, '/', ORIGIN),

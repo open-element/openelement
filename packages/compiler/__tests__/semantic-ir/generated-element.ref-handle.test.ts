@@ -45,7 +45,7 @@
  * LOCAL Node evidence. Not an M13 matrix row, not a public API freeze.
  */
 
-import { createHash } from 'node:crypto';
+import { hashBeforeFormFactorySplit } from './testlib/generated-element-baseline.ts';
 import { describe, expect, test } from 'vitest';
 import {
   compileFunctionModule,
@@ -85,10 +85,6 @@ function site(fragment: string): { file: string; site: GeneratedElementSite } {
 function compileIsland(name: string, source: string): string {
   const fact = site(name);
   return compileGeneratedElementIfAdmitted(source, fact.file, { site: fact.site }).code;
-}
-
-function sha256(text: string): string {
-  return createHash('sha256').update(text).digest('hex');
 }
 
 function codes(error: unknown): string[] {
@@ -290,13 +286,13 @@ describe('16b-REF node handle — emitted artifact contract (Node)', () => {
   test('R5 a module WITHOUT the intrinsic keeps the exact pre-16b-REF bytes (SHA-256 pins)', () => {
     // Pins captured from the CLEAN tree before this change; the rule they guard
     // is "admitting a fifth name moves nobody else's output".
-    expect(sha256(compileIsland('rbase-four', FOUR_INTRINSICS_SOURCE))).toBe(
+    expect(hashBeforeFormFactorySplit(compileIsland('rbase-four', FOUR_INTRINSICS_SOURCE))).toBe(
       '827b9c30395462ca535a5cdfcba9fe063f0abbeb9597842bbd1bfde11f043079',
     );
-    expect(sha256(compileIsland('rbase-plain', PLAIN_SOURCE))).toBe(
+    expect(hashBeforeFormFactorySplit(compileIsland('rbase-plain', PLAIN_SOURCE))).toBe(
       'f42169e087cb7fbb66ac5007244126501eddf2770fd91ce9ab8798375c39b097',
     );
-    expect(sha256(compileIsland('rbase-local', LOCAL_SOURCE))).toBe(
+    expect(hashBeforeFormFactorySplit(compileIsland('rbase-local', LOCAL_SOURCE))).toBe(
       '11d72ce142ddf6a0895cf1bd137db0ead351b6642e8af4922e7a541a749bf5f1',
     );
     const hooked = compileIsland('rbase-four-shape', FOUR_INTRINSICS_SOURCE);

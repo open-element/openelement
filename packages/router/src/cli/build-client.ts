@@ -775,6 +775,7 @@ async function buildClient(
     const utilitySheet = componentSheetSpecifier();
     return generateClientEntry(islandEntries, {
       enhancedForms,
+      specializeScheduler: true,
       // The document stylesheet's module: for a `graph-entry` provider the
       // generated entry imports the CSS entry so the engine's pipeline
       // compiles it inside this build's CSS graph and Vite emits the

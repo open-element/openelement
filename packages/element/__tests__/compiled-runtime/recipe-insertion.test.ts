@@ -18,7 +18,11 @@ import { effect, signal } from '../../src/internal/signal/framework.ts';
 import { LifetimeScope } from '../../src/internal/compiled/lifetime-scope.ts';
 import { bindSignalWrites } from '../../src/internal/compiled/runtime/bindings.ts';
 import { createTrackedProps } from '../../src/internal/compiled/runtime/props.ts';
-import { createRecipe, insertRecipe } from '../../src/internal/compiled/runtime/recipe.ts';
+import {
+  createRecipe,
+  insertRecipe,
+  projectOwnGeneratedLeaf,
+} from '../../src/internal/compiled/runtime/recipe.ts';
 import { runtimeProbe } from '../../src/internal/compiled/runtime/observability.ts';
 import { removeNodes } from '../../src/internal/compiled/runtime/values.ts';
 import type { WritableSignal } from '../../src/internal/signal/types.ts';
@@ -103,6 +107,105 @@ test('G2(a): one recipe inserted twice → two owners, regions, instances and cl
   // Each mount opened one write subscription on its own instance; both released.
   expect(probe.subscriptions).toBe(2);
   expect(probe.unsubscribed).toBe(2);
+});
+
+test('recipe and same-owner leaf projections share region IDs, accounting and disposal', () => {
+  const doc = new TestDocument();
+  const parent = doc.createElement('div');
+  const definition = new LifetimeScope();
+  const recipeNode = doc.createElement('span');
+  const directNode = doc.createElement('i');
+  const recipe = createRecipe({ definitionOwner: definition, mount: () => [asNode(recipeNode)] });
+  const first = insertRecipe(definition, recipe, asNode(parent));
+  let scope: LifetimeScope | undefined;
+  const second = projectOwnGeneratedLeaf(
+    definition,
+    'fixtures/Direct.tsx',
+    (owner) => {
+      scope = owner;
+      return [asNode(directNode)];
+    },
+    asNode(parent),
+    true,
+  );
+  expect(second.owner).toBe(scope);
+  expect(second.owner).not.toBe(definition);
+  expect(second.region).toBe(first.region + 1);
+  expect(second.props).toEqual({});
+  expect(second.props).not.toBe(first.props);
+  expect(parent.childNodes).toEqual([recipeNode, directNode]);
+  second.dispose(false);
+  second.dispose(true);
+  first.dispose(true);
+  expect(parent.childNodes).toEqual([directNode]);
+  expect(runtimeProbe.snapshot()).toMatchObject({
+    owners: 2,
+    regions: 2,
+    nodes: 2,
+    projections: 2,
+    rangeCleanups: 2,
+    disposed: 2,
+    lineageAccepted: 2,
+    lineageRejected: 0,
+  });
+});
+
+test('generic insertion into a null JS parent still throws and detaches its attempted region', () => {
+  const doc = new TestDocument();
+  const definition = new LifetimeScope();
+  const cleanup: string[] = [];
+  const recipe = createRecipe({
+    definitionOwner: definition,
+    mount(owner) {
+      owner.add(() => cleanup.push('resource'));
+      owner.addRangeCleanup(() => cleanup.push('range'));
+      return [asNode(doc.createElement('span'))];
+    },
+  });
+  expect(() => insertRecipe(definition, recipe, null as unknown as Node)).toThrow(TypeError);
+  expect(cleanup).toEqual(['resource', 'range']);
+  expect(runtimeProbe.snapshot()).toMatchObject({
+    owners: 1,
+    regions: 1,
+    projections: 0,
+    rangeCleanups: 1,
+    lineageAccepted: 1,
+  });
+});
+
+test('a disposed same owner fails with the generic code before projecting or allocating', () => {
+  const definition = new LifetimeScope();
+  const parent = asNode(new TestDocument().createElement('div'));
+  const source = 'fixtures/Disposed.tsx';
+  definition.dispose();
+  const recipe = createRecipe({
+    definitionOwner: definition,
+    source,
+    mount: () => {
+      throw new Error('unexpected mount');
+    },
+  });
+  const errorFrom = (create: () => unknown) => {
+    try {
+      create();
+      throw new Error('expected a disposed owner error');
+    } catch (error) {
+      return error;
+    }
+  };
+  const baseline = errorFrom(() => insertRecipe(definition, recipe, parent));
+  const direct = errorFrom(() =>
+    projectOwnGeneratedLeaf(definition, source, recipe.mount, parent, true),
+  );
+  expect(baseline).toMatchObject({ code: 'OE_KERNEL_DISPOSED', phase: 'csr' });
+  expect(direct).toEqual(baseline);
+  expect(runtimeProbe.snapshot()).toMatchObject({
+    owners: 0,
+    regions: 0,
+    projections: 0,
+    rangeCleanups: 0,
+    lineageRejected: 2,
+  });
 });
 
 test('G2(a): an empty-output recipe still owns an empty region and disposes cleanly', () => {

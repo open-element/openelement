@@ -147,10 +147,10 @@ describe('M09-1a generated element emitter', () => {
       root: 'light',
     });
     const tail = emitted.tail!;
-    expect(tail.match(/createGeneratedElementClass\(/g)?.length).toBe(1);
+    expect(tail.match(/__oe_createElementClass\(/g)?.length).toBe(1);
     expect(tail.match(/export default /g)?.length).toBe(1);
     expect(tail).toContain(
-      `import { createGeneratedElementClass } from ${JSON.stringify(GENERATED_ELEMENT_SHELL_SPECIFIER)};`,
+      `import { createGeneratedElementClassWithFeatures as __oe_createElementClass } from ${JSON.stringify(GENERATED_ELEMENT_SHELL_SPECIFIER)};`,
     );
     expect(tail).toContain('tag: "x-profile"');
     expect(tail).toContain('root: "light"');

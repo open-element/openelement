@@ -13,7 +13,6 @@
  */
 import { camelToKebab } from '@openelement/protocol/forbidden-sinks';
 import { frameworkError } from '@openelement/protocol/errors';
-import type { StyleSheetLike } from '@openelement/protocol/style-sheet';
 import { OpenElementBase } from '../../../open-element-base.ts';
 // The class lane's theme broadcaster: it mirrors the document's `data-theme`
 // onto every connected host (and keeps it in sync), which is what makes the
@@ -27,26 +26,27 @@ import { CompiledStyleScope, themeManager } from '../../../open-element-styles.t
 // ONE DOM-free leaf so the hydration executor can derive its exemption from the
 // same source without importing this shell module. See that leaf for the why.
 import { GENERATED_PROP_SEED } from './runtime-only-host-attributes.ts';
-import { ElementFormController } from '../../../open-element-form.ts';
+import { GeneratedElementForm } from './form.ts';
 import { convertFromAttribute, convertToAttribute } from '../../core/property-conversion.ts';
 import { NESTED_HOST_PROPERTY } from '../runtime/nested-host.ts';
-import { LifetimeScope } from '../lifetime-scope.ts';
+import type { LifetimeScope } from '../lifetime-scope.ts';
 import { bindSignalWrites } from '../runtime/bindings.ts';
 import { abortInstancePass, releaseRetainedChildren } from '../runtime/instance-ledger.ts';
-import { claimRecipe, insertRecipe, type Projection } from '../runtime/recipe.ts';
-// The pre-upgrade replay HOOK (2026-11-21 closeout): the generated lane captured a
-// pre-hydration click through `document-services` but never replayed it — the replay
-// pair lived in `pre-upgrade-events.ts`, which this shell's P1 closure forbids. The
-// hook module reaches nothing; the capture module publishes its implementation when
-// the entry installs the capture, so both halves stay one registry and one capture.
+import type { Projection } from '../runtime/recipe.ts';
 import {
-  releasePreUpgradeCapturesFor,
-  replayPreUpgradeCaptures,
-} from '../runtime/pre-upgrade-replay-hook.ts';
+  adoptGeneratedClientStyles,
+  captureCleanupFailures,
+  finishGeneratedConnection,
+  observeGeneratedRegion,
+  projectGeneratedRegion,
+  releaseIgnoringErrors,
+  replayFirstGeneratedConnection,
+  retainGeneratedInstance,
+} from './driver-ownership.ts';
 import { createTrackedProps, type TrackedProps } from '../runtime/props.ts';
 import { CompiledProgramValidationError, removeNodes } from '../runtime/values.ts';
 import { isExpandedLightRootHost } from '../runtime/claim-invariants.ts';
-import { CompiledContextService, contextChannelFor } from '../runtime/context.ts';
+import { createGeneratedElementContext } from './context.ts';
 import type { WritableSignal } from '../../signal/types.ts';
 import {
   assertGeneratedRootOptions,
@@ -62,7 +62,7 @@ import {
   isPrimitivePropertyType,
   materialiseDefault,
   normalizeDescriptor,
-  type FormMapping,
+  normalizeRowlessDescriptor,
   type GeneratedElementDescriptor,
   type GeneratedElementHost,
   type GeneratedElementInstanceHost,
@@ -70,6 +70,13 @@ import {
   type NormalizedDescriptor,
   type NormalizedProperty,
 } from './descriptor.ts';
+
+export { createGeneratedElementContext, GeneratedElementForm };
+export {
+  createDirectShadowElementClass,
+  createDirectShadowElementClassWithProjection,
+} from './direct-shadow.ts';
+export const generatedElementLedger = { abortInstancePass, releaseRetainedChildren };
 
 export { resolveGeneratedElementProps } from './descriptor.ts';
 export type {
@@ -326,17 +333,7 @@ export function seedGeneratedElementHostProperties<P extends object = Record<str
     // content must start from the same value.
     if (property.default !== undefined) seeded[property.name] = property.default;
   }
-  // A property the descriptor does not declare is not a content input; keep the
-  // historical pass-through so a supplied extra value is still readable by the
-  // leaf exactly as before, again without executing its getter eagerly.
-  for (const name of Object.keys(supplied)) {
-    if (Object.prototype.hasOwnProperty.call(seeded, name)) continue;
-    Object.defineProperty(seeded, name, {
-      enumerable: true,
-      configurable: false,
-      get: () => supplied[name],
-    });
-  }
+  copySuppliedProperties(supplied, seeded);
 
   // M11-2 parity: project the SAME seeded record into the canonical host
   // attribute pairs the client claim re-reads. The conversion is the canonical
@@ -492,6 +489,68 @@ export function seedGeneratedElementHostProperties<P extends object = Record<str
   return seeded;
 }
 
+function copySuppliedProperties(
+  supplied: Record<string, unknown>,
+  seeded: Record<string, unknown>,
+): void {
+  // A property the descriptor does not declare is not a content input; keep the
+  // historical pass-through so a supplied extra value is still readable by the
+  // leaf exactly as before, again without executing its getter eagerly.
+  for (const name of Object.keys(supplied)) {
+    if (Object.prototype.hasOwnProperty.call(seeded, name)) continue;
+    Object.defineProperty(seeded, name, {
+      enumerable: true,
+      configurable: false,
+      get: () => supplied[name],
+    });
+  }
+}
+
+/** Seed a rowless shadow producer with the same lazy pass-through props. */
+export function seedGeneratedElementHostPropertiesWithoutRows<
+  P extends object = Record<string, unknown>,
+>(
+  props: P | undefined,
+  attributes: readonly (readonly [string, string])[] | undefined,
+): Record<string, unknown> {
+  const seeded = {};
+  copySuppliedProperties((props ?? {}) as Record<string, unknown>, seeded);
+  const merged: Array<readonly [string, string]> = [];
+  for (const [name, value] of attributes ?? []) {
+    if (typeof name === 'string' && typeof value === 'string') merged.push([name, value]);
+  }
+  Object.defineProperty(seeded, GENERATED_HOST_ATTRIBUTES, {
+    value: merged.length === 0 ? undefined : merged,
+  });
+  Object.defineProperty(seeded, GENERATED_PROP_SEED_ROWS, { value: [] });
+  return seeded;
+}
+
+function produceLightContent(
+  producer: () => unknown,
+  props: Record<string, unknown>,
+  nestedHost: unknown,
+): unknown {
+  return (producer as (props: unknown, host: unknown) => unknown).call(
+    undefined,
+    props,
+    nestedHost === undefined ? undefined : { [NESTED_HOST_PROPERTY]: nestedHost },
+  );
+}
+
+function lightSsrProducerWithoutRows(producer: () => unknown): ReturnType<typeof lightSsrProducer> {
+  return (input, attributes, nestedHost) => {
+    const supplied =
+      input !== null && typeof input === 'object' ? (input as Record<string, unknown>) : undefined;
+    const seeded = seedGeneratedElementHostPropertiesWithoutRows(supplied, attributes);
+    return {
+      content: produceLightContent(producer, Object.create(null), nestedHost),
+      hostAttributes: seeded[GENERATED_HOST_ATTRIBUTES],
+      seedRows: seeded[GENERATED_PROP_SEED_ROWS],
+    };
+  };
+}
+
 /**
  * Wrap a light-root producer so it receives the same seeded, resolved props a
  * shadow root's `__ssrHost` gives its template.
@@ -567,14 +626,7 @@ function lightSsrProducer(
     // itself, so the pairs must ride back to that caller. Exposed as a second
     // property on the result rather than a changed return type, so the content
     // string the shadow path and every existing caller expect is unchanged.
-    const content = (producer as (props: unknown, host: unknown) => unknown).call(
-      undefined,
-      resolved,
-      // The producer's host record: today it carries only the nested-host
-      // expander (the light lane has no bindings channel). Absent expander →
-      // `nestedHost` returns the caller's literal bytes.
-      nestedHost === undefined ? undefined : { [NESTED_HOST_PROPERTY]: nestedHost },
-    );
+    const content = produceLightContent(producer, resolved, nestedHost);
     const hostAttributes = (seeded as Record<string, unknown>)[GENERATED_HOST_ATTRIBUTES] as
       | readonly (readonly [string, string])[]
       | undefined;
@@ -614,14 +666,6 @@ export interface GeneratedElement extends HTMLElement {
 
 /** Constructor type returned by {@linkcode createGeneratedElementClass}. */
 export type GeneratedElementConstructor = new () => GeneratedElement;
-
-interface FormRuntime {
-  readonly controller: ElementFormController;
-  readonly mapping: FormMapping;
-  /** Platform/ancestor-fieldset effective disabled, separate from the author property. */
-  effectiveDisabled: boolean;
-  emailValidator?: HTMLInputElement;
-}
 
 interface ElementState {
   readonly descriptor: NormalizedDescriptor;
@@ -695,7 +739,7 @@ interface ElementState {
    */
   readonly internalsRecord: ElementInternalsRecord;
   /** Present only for a form-associated descriptor. */
-  readonly form: FormRuntime | null;
+  form: GeneratedElementForm | null;
   /**
    * Whether a generated region is known to exist at the resolved parent.
    *
@@ -749,7 +793,8 @@ interface ElementState {
    * consumer bridges all live there, and the shell drives its connection
    * lifecycle beside the instance/connection scopes.
    */
-  context: CompiledContextService | null;
+  context: ReturnType<typeof createGeneratedElementContext> | null;
+  readonly features: GeneratedElementFeatures;
 }
 
 const states = new WeakMap<HTMLElement, ElementState>();
@@ -768,11 +813,13 @@ const PRE_UPGRADE_PROPERTY_LOCKED = 'OEIR_SHELL_PRE_UPGRADE_PROPERTY_LOCKED';
  */
 const FORM_INTERNALS_UNAVAILABLE = 'OEIR_SHELL_FORM_INTERNALS_UNAVAILABLE';
 
-function createState(descriptor: NormalizedDescriptor): ElementState {
+function createState(
+  descriptor: NormalizedDescriptor,
+  features: GeneratedElementFeatures,
+  properties: typeof propertyRuntime | undefined,
+): ElementState {
   const initial: Record<string, unknown> = Object.create(null);
-  for (const property of descriptor.properties) {
-    initial[property.name] = materialiseDefault(property);
-  }
+  const propSeedOverrides = properties?.initialize(descriptor, initial) ?? null;
   const tracked = createTrackedProps(initial);
   return {
     descriptor,
@@ -790,23 +837,17 @@ function createState(descriptor: NormalizedDescriptor): ElementState {
     rootCreatedByShell: false,
     styleScope: new CompiledStyleScope(),
     internalsRecord: { internals: null },
-    form:
-      descriptor.form === null
-        ? null
-        : {
-            controller: new ElementFormController(),
-            mapping: descriptor.form,
-            effectiveDisabled: false,
-          },
+    form: null,
     regionState: 'unobserved',
     connecting: false,
     reflecting: false,
     ownPropertiesReconciled: false,
-    propSeedOverrides: descriptor.properties.some(isJsonPropertySeedRow) ? new Set() : null,
+    propSeedOverrides,
     propertyChangeCallbacks: [],
     errorHandlers: [],
     errorReporter: null,
     context: null,
+    features,
   };
 }
 
@@ -833,7 +874,7 @@ function reflectProperty(
   property: NormalizedProperty,
   value: unknown,
 ): void {
-  if (!property.reflect || property.attribute === null || property.conversion === undefined) return;
+  if (property.attribute === null || property.conversion === undefined) return;
   const serialized = convertToAttribute(property.conversion, value);
   state.reflecting = true;
   try {
@@ -852,15 +893,15 @@ function setProperty(
   reflect: boolean,
 ): void {
   if (!writeValue(state, property, next)) return;
-  if (reflect) reflectProperty(element, state, property, next);
-  syncFormProperty(element, state, property);
+  if (reflect && property.reflect) reflectProperty(element, state, property, next);
+  state.form?.syncProperty(property);
   notifyPropertyChange(element, state, property.name);
   // `16b-CTX`: a declared-row commit is this runtime's ONE provider-change
   // event. The providers re-read their value thunks and republish only what
   // actually changed, so a subscribed consumer observes the new value exactly
   // once and an unchanged write notifies nobody. No author `computed` and no
   // extra subscription channel is introduced.
-  state.context?.refreshProviders();
+  state.context?.scope.refreshProviders();
 }
 
 /**
@@ -883,7 +924,7 @@ function notifyPropertyChange(element: HTMLElement, state: ElementState, name: s
     name,
     value: state.tracked.read(name),
     get states(): CustomStateSet {
-      return ensureFormInternals(element, state).states;
+      return ensureElementInternals(element, state).states;
     },
   };
   let firstError: unknown;
@@ -891,27 +932,6 @@ function notifyPropertyChange(element: HTMLElement, state: ElementState, name: s
   for (const listener of [...listeners]) {
     try {
       listener(event);
-    } catch (error) {
-      if (!failed) {
-        firstError = error;
-        failed = true;
-      }
-    }
-  }
-  if (failed) throw firstError;
-}
-
-/**
- * Run every cleanup even when one throws; surface the FIRST error only. This is
- * how teardown preserves the original resource/range error instead of letting a
- * later root-scope cleanup replace it.
- */
-function captureCleanupFailures(cleanups: readonly (() => void)[]): void {
-  let firstError: unknown;
-  let failed = false;
-  for (const cleanup of cleanups) {
-    try {
-      cleanup();
     } catch (error) {
       if (!failed) {
         firstError = error;
@@ -1215,73 +1235,24 @@ type ErrorHandler = (env: {
  */
 const CONTEXT_SCOPE_PROPERTY = '__oe_context';
 
-/**
- * One memoised adapter per `CompiledContextService`, so identity is stable.
- *
- * The adapter itself lives in the context engine (`contextChannelFor`), because
- * the SAME three-call shape backs the CLIENT anchor and the SERVER render scope:
- * one spelling in emitted code, one adapter type, and the phase decides which
- * scope is behind it. The shell only memoises nothing here — it reads the engine
- * function directly — so there cannot be two adapter definitions to drift.
- */
-
-/**
- * Attach the `16b-CTX` context-scope channel to a host record.
- *
- * Both host records carry it (the instance record the setup factory receives and
- * the connection record the recipe receives), exactly like the change and error
- * channels, so a depth-1 retained child's generated setup host forwards the SAME
- * channel as a plain property and its `owner()` lands on the element's anchor.
- */
+/** Give both host records the same lazy adapter over the element's anchor. */
 function withContextChannel<T extends object>(
   record: T,
   element: HTMLElement,
   state: ElementState,
 ): T {
   Object.defineProperty(record, CONTEXT_SCOPE_PROPERTY, {
-    get: () => contextChannelFor(contextScopeFor(element, state)),
+    get: () => {
+      const createContext = state.features.context;
+      if (createContext === undefined) {
+        descriptorError('the generated context channel requires context support');
+      }
+      return (state.context ??= createContext(element)).channel;
+    },
     enumerable: false,
     configurable: false,
   });
   return record;
-}
-
-/**
- * The ONE context scope of this element, created on first use.
- *
- * Its parent resolver walks the generated ANCESTOR element chain, so a nested
- * generated element's consumers resolve through its ancestors' scopes as well as
- * its own. The resolver is consulted on every connect, so a reconnect after a
- * DOM move joins the right tree and a reconnect in place re-joins the same one.
- */
-function contextScopeFor(element: HTMLElement, state: ElementState): CompiledContextService {
-  if (state.context !== null) return state.context;
-  const scope = new CompiledContextService(element, () => nearestGeneratedContextScope(element));
-  state.context = scope;
-  return scope;
-}
-
-/**
- * The nearest generated ANCESTOR element's context scope, or null.
- *
- * Crosses shadow roots through `host` (a shadow root's host is a legitimately
- * generated element ancestor), skips the element itself, and stops at the
- * outermost generated element — a class-lane or foreign ancestor contributes
- * nothing, exactly like the protocol path where a non-providing ancestor is
- * silent.
- */
-function nearestGeneratedContextScope(element: HTMLElement): CompiledContextService | null {
-  let node: Node | null = element.parentNode;
-  while (node !== null) {
-    if (node instanceof HTMLElement) {
-      const candidate = states.get(node);
-      if (candidate?.context != null) return candidate.context;
-      node = node.parentNode;
-      continue;
-    }
-    node = node instanceof ShadowRoot ? node.host : node.parentNode;
-  }
-  return null;
 }
 
 /** Attach the owning element to a host record without changing its shape. */
@@ -1307,7 +1278,7 @@ function withInternalsStates<T extends object>(
   state: ElementState,
 ): T {
   Object.defineProperty(record, INTERNALS_STATES_PROPERTY, {
-    get: () => ensureFormInternals(element, state).states,
+    get: () => ensureElementInternals(element, state).states,
     enumerable: false,
     configurable: false,
   });
@@ -1405,7 +1376,7 @@ function runErrorHandlers(
     signal,
     error,
     get states(): CustomStateSet {
-      return ensureFormInternals(element, state).states;
+      return ensureElementInternals(element, state).states;
     },
   };
   // Snapshot: a handler that registers another handler must not run it for the
@@ -1541,52 +1512,12 @@ function instanceHostFor(
   );
 }
 
-/**
- * Create and retain the element/island-lifetime instance scope and its setup
- * record (LC-0). Called from the first connect's call-once/retain site.
- *
- * The setup factory receives a real owner: setup-owned resources register on it
- * and are released only by explicit teardown. A throw is rolled back HERE with
- * every setup cleanup attempted (detach mode, because a failed setup never
- * attaches a region) and the ORIGINAL setup error rethrown; the fields are
- * cleared so the next connect retries setup on a fresh instance.
- */
 function ensureInstance(state: ElementState, element: HTMLElement): LifetimeScope {
-  const existing = state.instance;
-  if (existing !== null) return existing;
-  const instance = new LifetimeScope();
-  try {
-    const record =
-      state.descriptor.createInstance !== undefined
-        ? state.descriptor.createInstance(instance, instanceHostFor(state, element))
-        : (state.descriptor.createBindings?.() ?? {});
-    state.instance = instance;
-    state.bindings = record;
-    return instance;
-  } catch (error) {
-    try {
-      instance.dispose(true);
-    } catch {
-      // Keep the original setup error; every cleanup was still attempted.
-    }
-    state.instance = null;
-    state.bindings = null;
-    throw error;
-  }
-}
-
-/**
- * Release a FAILED connect's own state without letting a cleanup error replace
- * the original connect/claim error: every step runs, in order, errors dropped.
- */
-function releaseIgnoringErrors(steps: readonly (() => void)[]): void {
-  for (const step of steps) {
-    try {
-      step();
-    } catch {
-      // The original connect/claim error is what surfaces.
-    }
-  }
+  return retainGeneratedInstance(state, (instance) =>
+    state.descriptor.createInstance !== undefined
+      ? state.descriptor.createInstance(instance, instanceHostFor(state, element))
+      : (state.descriptor.createBindings?.() ?? {}),
+  );
 }
 
 /**
@@ -1596,7 +1527,7 @@ function releaseIgnoringErrors(steps: readonly (() => void)[]): void {
  * construction (the record is checked first and the controller caches its
  * injected result).
  */
-function ensureFormInternals(element: HTMLElement, state: ElementState): ElementInternals {
+function ensureElementInternals(element: HTMLElement, state: ElementState): ElementInternals {
   const existing = state.internalsRecord.internals;
   if (existing !== null) return existing;
   const attachInternals = (element as { attachInternals?: () => ElementInternals }).attachInternals;
@@ -1624,156 +1555,6 @@ function ensureFormInternals(element: HTMLElement, state: ElementState): Element
   }
   state.internalsRecord.internals = internals;
   return internals;
-}
-
-function attachForm(element: HTMLElement, state: ElementState): void {
-  state.form?.controller.attachWith(() => ensureFormInternals(element, state));
-}
-
-function formValueOf(state: ElementState): string {
-  const form = state.form;
-  if (form === null || form.mapping.value === null) return '';
-  const value = state.tracked.read(form.mapping.value.name);
-  return typeof value === 'string' ? value : '';
-}
-
-function formRequiredOf(state: ElementState): boolean {
-  const required = state.form?.mapping.required;
-  return required === undefined ? false : state.tracked.read(required.name) === true;
-}
-
-function formAuthorDisabledOf(state: ElementState): boolean {
-  const disabled = state.form?.mapping.disabled;
-  return disabled === undefined ? false : state.tracked.read(disabled.name) === true;
-}
-
-function syncFormValue(state: ElementState): void {
-  const form = state.form;
-  // The button shape publishes no form value: a form-associated element that
-  // never calls setFormValue contributes no FormData entry.
-  if (form === null || form.mapping.value === null) return;
-  form.controller.setFormValue(formValueOf(state));
-}
-
-function syncFormValidity(element: HTMLElement, state: ElementState): void {
-  const form = state.form;
-  // The button shape makes no validity claim; its form.checkValidity() is the
-  // platform default (valid).
-  if (form === null || form.mapping.value === null) return;
-  const internals = form.controller.internals;
-  if (internals === undefined) return;
-  const value = formValueOf(state);
-  const required = formRequiredOf(state);
-  const type = form.mapping.type === undefined ? '' : state.tracked.read(form.mapping.type.name);
-  let valueMissing = required && value === '';
-  let typeMismatch = false;
-  let message = valueMissing ? 'Please fill out this field.' : '';
-  if (
-    typeof type === 'string' &&
-    type.toLowerCase() === 'email' &&
-    state.rootKind !== 'light' &&
-    state.root?.querySelector('input[data-form-validation="email"]')
-  ) {
-    // Use the platform's email grammar, sanitization, and localized message.
-    // This control stays outside the rendered tree and the outer form.
-    const input = (form.emailValidator ??= element.ownerDocument.createElement('input'));
-    input.type = 'email';
-    input.required = required;
-    input.value = value;
-    valueMissing = input.validity.valueMissing;
-    typeMismatch = input.validity.typeMismatch;
-    message = input.validationMessage;
-  }
-  internals.setValidity({ valueMissing, typeMismatch }, message);
-  if (valueMissing || typeMismatch) internals.states?.add('invalid');
-  else internals.states?.delete('invalid');
-}
-
-function syncFormStates(state: ElementState): void {
-  const form = state.form;
-  if (form === null) return;
-  const states = form.controller.internals?.states;
-  if (states === undefined) return;
-  if (formAuthorDisabledOf(state) || form.effectiveDisabled) {
-    states.delete('enabled');
-    states.add('disabled');
-  } else {
-    states.delete('disabled');
-    states.add('enabled');
-  }
-}
-
-function syncFormAll(element: HTMLElement, state: ElementState): void {
-  if (state.form === null) return;
-  syncFormValue(state);
-  syncFormValidity(element, state);
-  syncFormStates(state);
-}
-
-/** Keep the form contract in step with one accepted declared-property write. */
-function syncFormProperty(
-  element: HTMLElement,
-  state: ElementState,
-  property: NormalizedProperty,
-): void {
-  const form = state.form;
-  if (form === null || form.controller.internals === undefined) return;
-  const value = form.mapping.value;
-  if (value !== null && property.name === value.name) {
-    syncFormAll(element, state);
-    return;
-  }
-  if (property === form.mapping.required || property === form.mapping.type) {
-    syncFormValidity(element, state);
-    return;
-  }
-  if (property.name === form.mapping.disabled?.name) {
-    syncFormStates(state);
-    return;
-  }
-}
-
-/** Write the form value through the declared property and keep its attribute seed. */
-function writeFormValue(element: HTMLElement, state: ElementState, next: string): void {
-  const form = state.form;
-  if (form === null || form.mapping.value === null) return;
-  const property = form.mapping.value;
-  setProperty(element, state, property, next, false);
-  if (property.attribute !== null) {
-    const serialized = convertToAttribute(property.conversion!, next);
-    state.reflecting = true;
-    try {
-      if (serialized === null) element.removeAttribute(property.attribute);
-      else element.setAttribute(property.attribute, serialized);
-    } finally {
-      state.reflecting = false;
-    }
-  }
-}
-
-/** `form.reset()` restores only the declared value source (never every property). */
-function resetFormValue(element: HTMLElement, state: ElementState): void {
-  const form = state.form;
-  if (form === null || form.mapping.value === null) return;
-  writeFormValue(element, state, String(form.mapping.value.defaultValue));
-  syncFormAll(element, state);
-}
-
-function restoreFormValue(
-  element: HTMLElement,
-  state: ElementState,
-  restored: File | string | FormData | null,
-): void {
-  if (typeof restored !== 'string') return;
-  writeFormValue(element, state, restored);
-  syncFormAll(element, state);
-}
-
-function setFormDisabled(state: ElementState, disabled: boolean): void {
-  const form = state.form;
-  if (form === null || form.effectiveDisabled === disabled) return;
-  form.effectiveDisabled = disabled;
-  syncFormStates(state);
 }
 
 /**
@@ -1825,46 +1606,80 @@ function rootFor(element: HTMLElement, state: ElementState): HTMLElement | Shado
   return resolved.root;
 }
 
-/**
- * Adopt a CLIENT-ONLY island's declared sheets into the root this element owns
- * (2026-11-20 client style-adoption slice).
- *
- * Only a shell-created shadow root or a light root is a target here. An adopted
- * DSD root already carries the compiler's canonical marked `<link>` INSIDE its
- * template — that template is the sheet's delivery, and `sheetDeliveredByLink`
- * exists to keep a second constructable copy off it. The compiler never emits a
- * descriptor `styles` row for an SSR/DSD island, so this gate is the shell's own
- * statement of the same one-delivery rule, not a second policy.
- *
- * The scope is the class lane's `CompiledStyleScope`; `connect` is idempotent
- * (a sheet the root already adopted is not added twice), so a reconnect re-arms
- * the same root without a bookkeeping copy. Disconnect removes a shadow root's
- * adopted sheets only — a document's are shared per component type and stay.
- */
-function adoptClientStyles(
-  state: ElementState,
-  root: HTMLElement | ShadowRoot,
-  constructor: unknown,
-): void {
-  // A dev live sheet is adopted even into an ADOPTED (DSD) root: that is the whole
-  // point of the field — dev must re-fill the same sheet object in place for HMR,
-  // which a `<link>` delivered sheet cannot do. Build never sets it, so the
-  // link-only rule is unchanged there.
-  //
-  // It is read off the CONSTRUCTOR, not the descriptor: the descriptor is a
-  // module-local constant the dev entry cannot reach, while the class it defines is
-  // a global the entry can annotate right after `customElements.define`.
-  const devLive = (constructor as { __oeDevLiveStyles?: readonly StyleSheetLike[] } | undefined)
-    ?.__oeDevLiveStyles;
-  if (devLive !== undefined && devLive.length > 0) {
-    state.styleScope.connect(root, [...devLive]);
-    return;
+function initializeDeclaredProperties(
+  descriptor: NormalizedDescriptor,
+  initial: Record<string, unknown>,
+): Set<string> | null {
+  for (const property of descriptor.properties) {
+    initial[property.name] = materialiseDefault(property);
   }
-  const styles = state.descriptor.styles;
-  if (styles.length === 0) return;
-  if (state.rootKind !== 'light' && !state.rootCreatedByShell) return;
-  state.styleScope.connect(root, [...styles]);
+  return descriptor.properties.some(isJsonPropertySeedRow) ? new Set() : null;
 }
+
+function installDeclaredAccessors(
+  prototype: HTMLElement,
+  properties: readonly NormalizedProperty[],
+): void {
+  for (const property of properties) {
+    Object.defineProperty(prototype, property.name, {
+      configurable: true,
+      enumerable: false,
+      get(this: HTMLElement): unknown {
+        return stateOf(this).tracked.read(property.name);
+      },
+      set(this: HTMLElement, value: unknown): void {
+        const state = stateOf(this);
+        const next = coercePropertyWrite(property, value);
+        rememberPropSeedOverride(state, property);
+        setProperty(this, state, property, next, true);
+      },
+    });
+  }
+}
+
+function applyDeclaredAttribute(
+  element: HTMLElement,
+  state: ElementState,
+  name: string,
+  value: string | null,
+): void {
+  if (state.reflecting) return;
+  const property = state.descriptor.byAttribute.get(name.toLowerCase());
+  if (property === undefined) return;
+  applyAttribute(element, state, property, value);
+}
+
+function writeDeclaredFormValue(
+  element: HTMLElement,
+  state: ElementState,
+  property: NormalizedProperty,
+  next: string,
+): void {
+  setProperty(element, state, property, next, false);
+  reflectProperty(element, state, property, next);
+}
+
+const propertyRuntime = {
+  normalize: normalizeDescriptor,
+  initialize: initializeDeclaredProperties,
+  reconcile: reconcilePreUpgradeProperties,
+  applySeed: applyGeneratedPropSeed,
+  applyAttribute: applyDeclaredAttribute,
+  install: installDeclaredAccessors,
+  writeFormValue: writeDeclaredFormValue,
+  lightSsr: lightSsrProducer,
+};
+
+// The emitted module forwards this token without observing the shell state
+// or the adapters behind it.
+declare const propertyFeatureBrand: unique symbol;
+interface GeneratedElementPropertyFeature {
+  readonly [propertyFeatureBrand]: true;
+}
+
+/** Runtime feature token for generated elements with declared properties. */
+export const generatedElementProperties: GeneratedElementPropertyFeature =
+  propertyRuntime as typeof propertyRuntime & GeneratedElementPropertyFeature;
 
 /**
  * Build the element class for one descriptor without registering it. Exposed so
@@ -1874,7 +1689,34 @@ function adoptClientStyles(
 export function createGeneratedElementClass<P extends object = Record<string, unknown>>(
   descriptor: GeneratedElementDescriptor<P>,
 ): GeneratedElementConstructor {
-  const normalized = normalizeDescriptor(descriptor as GeneratedElementDescriptor);
+  return createGeneratedElementClassWithFeatures(descriptor, {
+    form: GeneratedElementForm,
+    context: createGeneratedElementContext,
+    ledger: generatedElementLedger,
+    properties: generatedElementProperties,
+  });
+}
+
+interface GeneratedElementFeatures {
+  readonly form?: typeof GeneratedElementForm;
+  readonly context?: typeof createGeneratedElementContext;
+  readonly ledger?: typeof generatedElementLedger;
+  readonly properties?: GeneratedElementPropertyFeature;
+}
+
+/** The compiler supplies the features its emitted module needs. */
+export function createGeneratedElementClassWithFeatures<P extends object = Record<string, unknown>>(
+  descriptor: GeneratedElementDescriptor<P>,
+  features: GeneratedElementFeatures,
+): GeneratedElementConstructor {
+  const Form = features.form;
+  const properties = features.properties as typeof propertyRuntime | undefined;
+  const normalize = properties?.normalize ?? normalizeRowlessDescriptor;
+  const normalized = normalize(descriptor as GeneratedElementDescriptor);
+  const formMapping = normalized.form;
+  if (formMapping !== null && Form === undefined) {
+    descriptorError('formAssociated requires the form-enabled class factory');
+  }
   const observedAttributes = Object.freeze(
     normalized.properties
       .map((property) => property.attribute)
@@ -1884,8 +1726,20 @@ export function createGeneratedElementClass<P extends object = Record<string, un
   class GeneratedElementShell extends OpenElementBase implements GeneratedElement {
     constructor() {
       super();
-      const state = createState(normalized);
+      const state = createState(normalized, features, properties);
       states.set(this, state);
+      if (formMapping !== null && Form !== undefined) {
+        state.form = new Form(this, formMapping, {
+          getInternals: () => ensureElementInternals(this, state),
+          getValidationRoot: () => (state.rootKind === 'light' ? null : state.root),
+          readProperty: (name) => state.tracked.read(name),
+          writeValue: (next) => {
+            const property = formMapping.value;
+            if (property === null) return;
+            properties?.writeFormValue(this, state, property, next);
+          },
+        });
+      }
       // No attribute or child inspection here (custom-element conformance).
       // Parser-created markup is seeded by the platform's observed-attribute
       // replay, which runs attributeChangedCallback before connectedCallback.
@@ -1908,9 +1762,9 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       // discovery; attach it before any property reconciliation so a form value
       // write during reconciliation can publish immediately. A coded failure
       // leaves no projection/DOM write.
-      if (state.form !== null) attachForm(this, state);
+      state.form?.attach();
       // Must precede createRecipe: the recipe reads host.props on creation.
-      reconcilePreUpgradeProperties(this, state);
+      properties?.reconcile(this, state);
       // D-18c / M11-3 (extended 2026-11-23, ADR-0181 A5 amendment): restore the
       // rows only the server's JSON seed carries — the non-primitive rows, and
       // now the property-only primitives too. This runs BEFORE the recipe so
@@ -1934,7 +1788,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       // The failure therefore stays fail-closed and loud (an uncaught error
       // carrying `OEIR_SHELL_PROP_SEED_MISMATCH`), the same pre-try input-
       // validation posture as pre-upgrade reconciliation above.
-      applyGeneratedPropSeed(this, state);
+      properties?.applySeed(this, state);
       state.propSeedOverrides = null;
       state.connecting = true;
       // A retained instance is what makes reconnect a re-arm rather than a
@@ -1953,22 +1807,26 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         // declared sheets have a target. The scope is element-lifetime and
         // idempotent; the catch below releases it on a failed connect and
         // `disconnectedCallback` removes a shadow root's adoption.
-        adoptClientStyles(state, parent, this.constructor);
+        adoptGeneratedClientStyles(
+          state.styleScope,
+          parent,
+          this.constructor,
+          state.descriptor.styles,
+          state.rootKind === 'light' || state.rootCreatedByShell,
+        );
         // Publish the reconciled initial value/validity/state once the root (and
         // the shared internals record used by closed discovery) is resolved.
-        syncFormAll(this, state);
+        state.form?.syncAll();
         // Observe the first-connect DOM once, then keep the fact on the state.
         // A shell-created root starts empty (mount); an adopted root may carry
         // SSR/DSD content (claim); a light host's children are its generated
         // region. A shadow parent's light children are slotted content, so
         // they are never inspected here.
-        if (state.regionState === 'unobserved') {
-          const preexisting =
-            state.rootKind === 'light'
-              ? this.childNodes.length > 0
-              : !state.rootCreatedByShell && parent.childNodes.length > 0;
-          state.regionState = preexisting ? 'present' : 'absent';
-        }
+        observeGeneratedRegion(
+          state,
+          parent,
+          state.rootKind === 'light' || !state.rootCreatedByShell,
+        );
         const instance = ensureInstance(state, this);
         // The connection scope is created per successful connect and disposed
         // plain on disconnect; the instance above is retained across it.
@@ -1980,7 +1838,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         // `connect()` publishes those intents and bridges the consumers, which is
         // exactly the engine's own "registration then connect" order. A
         // descriptor that never touches the channel never created a scope.
-        state.context?.connect();
+        state.context?.scope.connect();
         // Re-arm against the props that produced the retained DOM. The setup
         // instance and the platform accessors continue to read live props.
         const claimProps = retainedProps === null ? undefined : Object.create(null);
@@ -1996,10 +1854,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         // Reconnect and dispose(false) retain the region; dispose(true) marks it
         // absent and the next connect mounts even when foreign nodes remain in
         // the root. The decision is never re-derived from current childNodes.
-        const projection =
-          state.regionState === 'present'
-            ? claimRecipe(connection, recipe, parent)
-            : insertRecipe(connection, recipe, parent);
+        const projection = projectGeneratedRegion(state, connection, recipe, parent);
         if (normalized.properties.length > 0) {
           // Capture delivered updates after the projection's subscriptions.
           bindSignalWrites(connection, state.propsChanged, 'generated host props', () => {
@@ -2018,7 +1873,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         state.regionState = 'present';
         // On a fresh mount the native email opt-in cannot exist before the
         // projection. Revalidate now, before replay can submit the form.
-        if (state.form?.mapping.type !== undefined) syncFormValidity(this, state);
+        state.form?.revalidateAfterProjection();
         // Pre-hydration replay at the SAME point the class facade does it: after
         // the region exists and its handlers are installed. A click that landed
         // before an idle generated island hydrated was captured by the
@@ -2036,7 +1891,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         // by the live handler is then delivered a second time (measured: a 422
         // morph's moved island incremented one extra time). A first connect is
         // the only pass whose capture bucket is still undelivered.
-        if (!hadInstance) replayPreUpgradeCaptures(this);
+        replayFirstGeneratedConnection(this, hadInstance);
       } catch (error) {
         state.connection = null;
         state.projection = null;
@@ -2061,7 +1916,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         // a retry. This runs before any release/disposal below; a disposal that
         // follows must not observe an open pass. Cleanup errors are dropped —
         // the original connect/claim error is what surfaces.
-        if (state.instance !== null) abortInstancePass(state.instance);
+        if (state.instance !== null) features.ledger?.abortInstancePass(state.instance);
         // Keep any ownership recorded by an earlier successful mount/claim: a
         // failed re-claim borrowed no new DOM and must not adopt the host's
         // children. The recipe/projection rolled back its own child scope.
@@ -2073,7 +1928,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
           // `16b-CTX`: a failed attempt leaves no published provider and no
           // consumer bridge behind. Disconnect (not dispose) keeps the scope and
           // its intents, so a retry republishes them on the next connect.
-          () => state.context?.disconnect(),
+          () => state.context?.scope.disconnect(),
           () => connection?.dispose(false),
         ];
         if (!hadInstance && state.instance !== null) {
@@ -2093,7 +1948,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
           // owner-teardown release must run while the owner is still live (a
           // cleanup observing `instance.disposed` sees false). Its errors never
           // replace the original connect/claim error.
-          release.push(() => releaseRetainedChildren(instance));
+          release.push(() => features.ledger?.releaseRetainedChildren(instance));
           release.push(() => instance.dispose(true));
         }
         releaseIgnoringErrors(release);
@@ -2108,11 +1963,10 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         throw error;
       } finally {
         retainedProps = null;
-        state.connecting = false;
         // Activation decision — success OR failure, the class facade's rule: this
         // element's captured records never outlive its decision. Records owned by
         // still-pending islands stay in the shared pool for their own upgrade.
-        releasePreUpgradeCapturesFor(this);
+        finishGeneratedConnection(this, state);
       }
       if (refreshProps && state.connection === connection)
         state.tracked.replace(snapshotProps(state));
@@ -2142,7 +1996,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         // scope removes them here and the reconnect adopts them again, so no
         // second copy accumulates.
         () => state.styleScope.disconnect(),
-        () => state.context?.disconnect(),
+        () => state.context?.scope.disconnect(),
         () => projection?.dispose(false),
         () => connection?.dispose(false),
       ]);
@@ -2154,10 +2008,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       newValue: string | null,
     ): void {
       const state = stateOf(this);
-      if (state.reflecting) return;
-      const property = state.descriptor.byAttribute.get(name.toLowerCase());
-      if (property === undefined) return;
-      applyAttribute(this, state, property, newValue);
+      properties?.applyAttribute(this, state, name, newValue);
     }
 
     /** Platform form hook: class parity no-op. */
@@ -2165,26 +2016,17 @@ export function createGeneratedElementClass<P extends object = Record<string, un
 
     /** Platform form reset hook: reset the declared value source only. */
     formResetCallback(): void {
-      const state = stateOf(this);
-      if (state.form === null) return;
-      attachForm(this, state);
-      resetFormValue(this, state);
+      stateOf(this).form?.reset();
     }
 
     /** Platform form restore hook: only a string state is mapped onto `value`. */
     formStateRestoreCallback(restored: File | string | FormData | null, _mode: string): void {
-      const state = stateOf(this);
-      if (state.form === null) return;
-      attachForm(this, state);
-      restoreFormValue(this, state, restored);
+      stateOf(this).form?.restore(restored);
     }
 
     /** Platform fieldset-disabled hook: effective state, separate from the author property. */
     formDisabledCallback(disabled: boolean): void {
-      const state = stateOf(this);
-      if (state.form === null) return;
-      attachForm(this, state);
-      setFormDisabled(state, disabled);
+      stateOf(this).form?.setDisabled(disabled);
     }
 
     /** Explicit teardown; internal escape hatch, not author API. */
@@ -2228,14 +2070,14 @@ export function createGeneratedElementClass<P extends object = Record<string, un
           () => projection?.dispose(false),
           () => connection?.dispose(false),
           () => {
-            if (instance !== null) releaseRetainedChildren(instance);
+            if (instance !== null) features.ledger?.releaseRetainedChildren(instance);
           },
           () => instance?.dispose(false),
           // `16b-CTX`: the context scope dies with the instance. Disposing it
           // drops the owner tree, the provider records and the consumer
           // bridges; a later connect creates a NEW scope, which is what
           // "dispose is not disconnect" means for context too.
-          () => state.context?.dispose(),
+          () => state.context?.scope.dispose(),
         ]);
         return;
       }
@@ -2248,7 +2090,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       captureCleanupFailures([
         () => state.styleScope.disconnect(),
         () => projection?.dispose(true),
-        () => state.context?.dispose(),
+        () => state.context?.scope.dispose(),
         // The projection's range cleanup normally removes the region; remove
         // the recorded owned range explicitly as well so a throwing cleanup
         // cannot leave it behind. This is still only the owned range: never
@@ -2264,7 +2106,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
         // the `captureCleanupFailures` order above: earlier teardown errors
         // win, a release error wins only over `instance.dispose`.
         () => {
-          if (instance !== null) releaseRetainedChildren(instance);
+          if (instance !== null) features.ledger?.releaseRetainedChildren(instance);
         },
         // Detach mode matches the owned-range handling above: the instance
         // itself owns setup resources, and only explicit detach teardown asks
@@ -2307,21 +2149,7 @@ export function createGeneratedElementClass<P extends object = Record<string, un
     });
   }
 
-  for (const property of normalized.properties) {
-    Object.defineProperty(GeneratedElementShell.prototype, property.name, {
-      configurable: true,
-      enumerable: false,
-      get(this: HTMLElement): unknown {
-        return stateOf(this).tracked.read(property.name);
-      },
-      set(this: HTMLElement, value: unknown): void {
-        const state = stateOf(this);
-        const next = coercePropertyWrite(property, value);
-        rememberPropSeedOverride(state, property);
-        setProperty(this, state, property, next, true);
-      },
-    });
-  }
+  properties?.install(GeneratedElementShell.prototype, normalized.properties);
 
   if (normalized.ssrProducer !== undefined) {
     // The light-root SSR producer rides the class the serializer already
@@ -2341,7 +2169,10 @@ export function createGeneratedElementClass<P extends object = Record<string, un
       // a declared row threw on `props.x` while a rowless one worked. Do the
       // seeding HERE, inside the class static, so both light call sites (root and
       // nested) get it without each having to know the mechanism.
-      value: lightSsrProducer(normalized, normalized.ssrProducer),
+      value:
+        properties === undefined
+          ? lightSsrProducerWithoutRows(normalized.ssrProducer)
+          : properties.lightSsr(normalized, normalized.ssrProducer),
     });
   }
 

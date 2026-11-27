@@ -7,6 +7,10 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
+import {
+  BROWSER_ENTRY_GRAPH_ARTIFACT_FILE,
+  type BrowserEntryGraphArtifact,
+} from '../../../../packages/router/src/vite/internal/browser-entry-graph-artifact.ts';
 
 /**
  * Wait until a page root has finished its claim.
@@ -964,7 +968,29 @@ test.describe('morph/enhance robustness (0.42.0-alpha.13, #603-#606)', () => {
         );
       });
     });
+    const graph = JSON.parse(
+      await readFile(
+        new URL(`../dist/client/${BROWSER_ENTRY_GRAPH_ARTIFACT_FILE}`, import.meta.url),
+        'utf8',
+      ),
+    ) as BrowserEntryGraphArtifact;
+    const visibleChunk = graph.islands.find(({ tag }) => tag === 'visible-probe');
+    expect(visibleChunk?.strategy).toBe('visible');
+    const clientEntry = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === `/client/${graph.entry.chunkFile}`,
+    );
+    const visibleChunkRequests: string[] = [];
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname === `/client/${visibleChunk?.chunkFile}`) {
+        visibleChunkRequests.push(request.url());
+      }
+    });
     await page.goto('/visible-probe');
+    // This host exists only at request time. The app-wide admitted inventory
+    // must retain visible handling even though prerendered HTML has no host.
+    const clientSource = await (await clientEntry).text();
+    expect(clientSource).toContain('IntersectionObserver');
+    expect(clientSource).not.toContain('has no supported matchMedia result');
     const probe = page.locator('visible-probe');
     await expect(probe).toBeAttached();
     // The island lives inside the page host's DSD shadow root — a light-DOM
@@ -984,10 +1010,12 @@ test.describe('morph/enhance robustness (0.42.0-alpha.13, #603-#606)', () => {
     expect(beforeScroll.inDocument).toEqual(false);
     expect(beforeScroll.hydrated).toBeNull();
     expect(beforeScroll.ready).not.toContain('visible');
+    expect(visibleChunkRequests).toEqual([]);
 
     // Scrolling the host into view is what starts the visible-strategy load.
     await page.evaluate(() => globalThis.scrollTo(0, document.body.scrollHeight));
     await expect(probe).toHaveAttribute('data-hydrated', '1');
+    expect(visibleChunkRequests).toHaveLength(1);
     await expect
       .poll(() => page.evaluate(() => (window as never as { __ready: string[] }).__ready))
       .toContain('visible');

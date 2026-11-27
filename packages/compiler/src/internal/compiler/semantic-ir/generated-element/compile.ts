@@ -211,6 +211,8 @@ export function compileGeneratedElementIfAdmitted(
 
   const emitted = generateElementModule(frontend.module, options.site, {
     rootComponent: root.name,
+    // Unlike the lowered props name, this AST fact also detects destructuring.
+    allowDirectShadowDriver: admission.propsParameter === null,
     // D-root-source (2026-11-13): the descriptor root is the value the lane
     // read from the authored sidecar, not a host fact; absent stays absent so
     // the shell applies `light`.

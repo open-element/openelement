@@ -17,7 +17,7 @@ import {
   importContexts,
   fragmentLineCount,
 } from './emission.ts';
-import { findMountCycle, planRetention } from './instance-emission.ts';
+import { findMountCycle, moduleUsesContext, planRetention } from './instance-emission.ts';
 import { moduleUsesSharedClaimCursor, collectStaticClassCandidates } from './structure.ts';
 import { emitComponent } from './component-emission.ts';
 import { CLAIM_ACTIVATION } from './claim-emission.ts';
@@ -241,6 +241,12 @@ export interface GeneratedLeafModule {
    * changes the module bytes, and a hostless leaf always reports null.
    */
   readonly rootInstanceFactory: string | null;
+  /** Host runtime support required by the emitted recipes and their setup. */
+  readonly hostFeatures: {
+    readonly context: boolean;
+    readonly ledger: boolean;
+    readonly rootClaim: boolean;
+  } | null;
   /** Host `bindings` names the module reads (signals/computeds/functions). */
   readonly requiredBindings: readonly string[];
   /** Host `props` names the module reads. */
@@ -348,6 +354,7 @@ export function generateLeafModule(
       sourceMap: null,
       placements: [],
       rootInstanceFactory: null,
+      hostFeatures: null,
       requiredBindings: [],
       requiredProps: [],
       requiresPropsChanged: false,
@@ -378,6 +385,7 @@ export function generateLeafModule(
       sourceMap: null,
       placements: [],
       rootInstanceFactory: null,
+      hostFeatures: null,
       requiredBindings: [],
       requiredProps: [],
       requiresPropsChanged: false,
@@ -395,6 +403,7 @@ export function generateLeafModule(
   let usesStaticSiblingDirectoryConsumer = false;
   let usesClaimRecipe = false;
   let usesLeafClaimMismatch = false;
+  let rootClaim = false;
   // T3 / 16b-LC-1: the root setup factory emitted by the component chunk (at
   // most one component is the root), reported from the SAME decision that
   // wrote the declaration. Null on every failure path and without the option.
@@ -425,6 +434,7 @@ export function generateLeafModule(
     diagnostics.push(...emitted.diagnostics);
     if (emitted.diagnostics.length > 0) continue;
     rootInstanceFactory ??= emitted.rootInstanceFactory;
+    if (component.name === options.rootInstance) rootClaim = emitted.hasClaim === true;
     for (const name of emitted.requiredBindings) requiredBindings.add(name);
     for (const name of emitted.requiredProps) requiredProps.add(name);
     requiresPropsChanged ||= emitted.requiresPropsChanged;
@@ -456,6 +466,7 @@ export function generateLeafModule(
       // No module exists, so no declaration exists: keep the invariant
       // "non-null exactly when the factory was emitted".
       rootInstanceFactory: null,
+      hostFeatures: null,
       // A refused module contributes no candidates (nothing shipped to style).
       classCandidates: [],
       requiredBindings: [...requiredBindings].sort(),
@@ -501,6 +512,7 @@ export function generateLeafModule(
       sourceMap: null,
       placements: [...placements],
       rootInstanceFactory: null,
+      hostFeatures: null,
       classCandidates: [],
       requiredBindings: [...requiredBindings].sort(),
       requiredProps: [...requiredProps].sort(),
@@ -536,6 +548,11 @@ export function generateLeafModule(
     sourceMap,
     placements: modulePlacements,
     rootInstanceFactory,
+    hostFeatures: {
+      context: moduleUsesContext({ componentByName }),
+      ledger: runtimeImports.includes('beginInstancePass'),
+      rootClaim,
+    },
     requiredBindings: [...requiredBindings].sort(),
     requiredProps: [...requiredProps].sort(),
     requiresPropsChanged,

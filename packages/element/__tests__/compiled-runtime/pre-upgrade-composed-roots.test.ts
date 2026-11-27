@@ -24,6 +24,7 @@ import { expect, test } from 'vitest';
 import {
   type FacadeDom,
   FacadeElement,
+  FacadeEvent,
   type FacadeShadowRoot,
   installFacadeDom,
 } from './facade-dom.ts';
@@ -31,6 +32,7 @@ import { cleanup, click } from './pre-upgrade-helpers.ts';
 
 // The facade captures its HTMLElement base at module evaluation time.
 const dom: FacadeDom = installFacadeDom();
+const { MAX_PRE_UPGRADE_CAPTURED_EVENTS } = await import('../../src/internal/compiled/runtime.ts');
 
 const { capturePreUpgradeEvents, releasePreUpgradeEvents, replayPreUpgradeEvents } =
   (await import('../../src/internal/compiled/runtime.ts')) as unknown as {
@@ -107,6 +109,88 @@ test('composed release: a pending sibling keeps its record and replays once', ()
   } finally {
     capture.stop();
     cleanup(clicked, pending);
+  }
+});
+
+test('capturing after a sibling release replaces the same type in its original slot', () => {
+  const released = new FacadeElement('oe-retired', dom.document);
+  const pending = new FacadeElement('oe-pending', dom.document);
+  const a = shadowButton(released.attachShadow({ mode: 'open' }));
+  const b = shadowButton(pending.attachShadow({ mode: 'open' }));
+  dom.document.body.appendChild(released);
+  dom.document.body.appendChild(pending);
+  const capture = capturePreUpgradeEvents(dom.document as unknown as EventTarget);
+  const input = () => new FacadeEvent('input', { bubbles: true, composed: true });
+  try {
+    a.dispatchEvent(click());
+    b.dispatchEvent(input());
+    const retainedClick = click();
+    b.dispatchEvent(retainedClick);
+
+    releasePreUpgradeEvents(released as unknown as Node, capture.events);
+    const latestInput = input();
+    b.dispatchEvent(latestInput);
+
+    expect(capture.events).toMatchObject([
+      { target: b, type: 'input', event: latestInput },
+      { target: b, type: 'click', event: retainedClick },
+    ]);
+    const replayed: unknown[] = [];
+    for (const type of ['input', 'click'])
+      b.addEventListener(type, (event) => replayed.push(event));
+    expect(replayPreUpgradeEvents(pending as unknown as Node, capture.events)).toBe(2);
+    expect(replayed[0]).toBe(latestInput);
+    expect(replayed[1]).toBe(retainedClick);
+  } finally {
+    capture.stop();
+    cleanup(released, pending);
+  }
+});
+
+test('capture retains all eight kinds, protects the cap, and sweeps detached targets on pressure', () => {
+  const host = new FacadeElement('oe-capacity', dom.document);
+  const shadow = host.attachShadow({ mode: 'open' });
+  dom.document.body.appendChild(host);
+  const capture = capturePreUpgradeEvents(dom.document as unknown as EventTarget);
+  const kinds = [
+    'change',
+    'click',
+    'input',
+    'keydown',
+    'keyup',
+    'pointerdown',
+    'pointerup',
+    'submit',
+  ];
+  const send = (button: FacadeElement, type: string) =>
+    button.dispatchEvent(new FacadeEvent(type, { bubbles: true, composed: true }));
+  try {
+    const buttons = Array.from({ length: MAX_PRE_UPGRADE_CAPTURED_EVENTS }, (_, i) => {
+      const button = shadowButton(shadow);
+      send(button, kinds[i % kinds.length]);
+      return button;
+    });
+    const retained = capture.events.slice();
+    expect(retained.slice(0, kinds.length)).toMatchObject(kinds.map((type) => ({ type })));
+    expect(retained).toHaveLength(64);
+    const overflow = shadowButton(shadow);
+    send(overflow, 'click');
+    expect(capture.events).toEqual(retained);
+
+    shadow.removeChild(buttons[0]);
+    const lastKind = kinds[(buttons.length - 1) % kinds.length];
+    send(buttons.at(-1)!, lastKind);
+    expect(capture.events).toHaveLength(64);
+    expect(capture.events[0]).toBe(retained[0]);
+    expect(capture.events.at(-1)).not.toBe(retained.at(-1));
+
+    send(overflow, 'click');
+    expect(capture.events).toHaveLength(64);
+    expect(capture.events[0]).toBe(retained[1]);
+    expect(capture.events.at(-1)?.target).toBe(overflow);
+  } finally {
+    capture.stop();
+    cleanup(host);
   }
 });
 
