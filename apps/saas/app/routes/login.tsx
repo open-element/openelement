@@ -47,12 +47,21 @@ export function LoginPage(props: {
       <form method='post'>
         <p>
           <label>
-            Email <input type='email' name='email' value={props.email} required />
+            Email{' '}
+            <input
+              type='email'
+              name='email'
+              autocomplete='username'
+              spellcheck='false'
+              value={props.email}
+              required
+            />
           </label>
         </p>
         <p>
           <label>
-            Password <input type='password' name='password' required />
+            Password{' '}
+            <input type='password' name='password' autocomplete='current-password' required />
           </label>
         </p>
         <button type='submit'>Sign in</button>

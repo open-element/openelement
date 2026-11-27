@@ -25,7 +25,14 @@ export function ResetPasswordPage(props: { errorText: string }) {
       <p id='error'>{props.errorText}</p>
       <form method='post'>
         <label>
-          New password <input type='password' name='password' minlength={8} required />
+          New password{' '}
+          <input
+            type='password'
+            name='password'
+            autocomplete='new-password'
+            minlength={8}
+            required
+          />
         </label>
         <button type='submit'>Set password</button>
       </form>

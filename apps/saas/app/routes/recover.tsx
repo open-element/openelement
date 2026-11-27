@@ -36,7 +36,7 @@ export function RecoverPage(props: { errorText: string; sent: number }) {
       )}
       <form method='post'>
         <label>
-          Email <input type='email' name='email' required />
+          Email <input type='email' name='email' autocomplete='email' spellcheck='false' required />
         </label>
         <button type='submit'>Send recovery email</button>
       </form>

@@ -31,10 +31,25 @@ export function SignupPage(props: { errorText: string; email: string; sent: numb
       <p id='error'>{props.errorText}</p>
       <form method='post'>
         <label>
-          Email <input type='email' name='email' value={props.email} required />
+          Email{' '}
+          <input
+            type='email'
+            name='email'
+            autocomplete='username'
+            spellcheck='false'
+            value={props.email}
+            required
+          />
         </label>
         <label>
-          Password <input type='password' name='password' minlength={8} required />
+          Password{' '}
+          <input
+            type='password'
+            name='password'
+            autocomplete='new-password'
+            minlength={8}
+            required
+          />
         </label>
         <input type='hidden' name='next' value='/notes' />
         <button type='submit'>Create account</button>

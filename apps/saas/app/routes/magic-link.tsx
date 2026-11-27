@@ -35,7 +35,15 @@ export function MagicLinkPage(props: { errorText: string; email: string; sent: n
       <p id='error'>{props.errorText}</p>
       <form method='post'>
         <label>
-          Email <input type='email' name='email' value={props.email} required />
+          Email{' '}
+          <input
+            type='email'
+            name='email'
+            autocomplete='email'
+            spellcheck='false'
+            value={props.email}
+            required
+          />
         </label>
         <button type='submit'>Send link</button>
       </form>
