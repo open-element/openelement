@@ -38,7 +38,8 @@ import { chromium, type Browser, type Page } from 'playwright';
 import { build } from 'vite';
 import { compileFunctionModule } from '../../src/internal/compiler/semantic-core/function-frontend.ts';
 import { generateLeafModule } from '../../src/internal/compiler/semantic-ir/generated-leaf/generate.ts';
-import * as compiledRuntime from '../../../element/src/internal/compiled/runtime.ts';
+import * as compiledRuntime from '../../../element/src/internal/compiled/leaf-runtime.ts';
+import { runtimeProbe } from '../../../element/src/internal/compiled/runtime/observability.ts';
 import { signal as nodeSignal } from '../../../element/src/internal/signal/framework.ts';
 import { LifetimeScope } from '../../../element/src/internal/compiled/lifetime-scope.ts';
 import { ELEMENT_CLASSIFIER as CLASSIFIER, REPO_ROOT } from './testlib/element-classifier.ts';
@@ -87,7 +88,7 @@ function UnsupportedObject(props) {
 }
 `;
 
-const RUNTIME = { ...compiledRuntime };
+const RUNTIME = { ...compiledRuntime, runtimeProbe };
 const SSR_EXPORT = /^export function ([\w$]+)\(/gm;
 const RUNTIME_IMPORT = /^import \{([^}]+)\} from [^;]+;$/m;
 

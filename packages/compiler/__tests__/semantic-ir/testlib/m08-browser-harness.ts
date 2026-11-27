@@ -22,7 +22,7 @@ import { type Browser, type Page } from 'playwright';
 import { build } from 'vite';
 import { compileFunctionModule } from '../../../src/internal/compiler/semantic-core/function-frontend.ts';
 import { generateLeafModule } from '../../../src/internal/compiler/semantic-ir/generated-leaf/generate.ts';
-import * as compiledRuntime from '../../../../element/src/internal/compiled/runtime.ts';
+import * as compiledRuntime from '../../../../element/src/internal/compiled/leaf-runtime.ts';
 // ADR-0183 D-4: a generated module creates its root `signal`/`computed`
 // resources through the same narrow entry the emitted import names, so the
 // injected runtime must carry the two factories.

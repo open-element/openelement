@@ -17,7 +17,7 @@ import { describe, expect, test } from 'vitest';
 import { originalPositionFor, TraceMap } from '@jridgewell/trace-mapping';
 import { compileFunctionModule } from '../../src/internal/compiler/semantic-core/function-frontend.ts';
 import { generateLeafModule } from '../../src/internal/compiler/semantic-ir/generated-leaf/generate.ts';
-import * as compiledRuntime from '../../../element/src/internal/compiled/runtime.ts';
+import * as compiledRuntime from '../../../element/src/internal/compiled/leaf-runtime.ts';
 import { ELEMENT_CLASSIFIER as CLASSIFIER } from './testlib/element-classifier.ts';
 
 const FILE = '/proj/src/claim-condition.tsx';

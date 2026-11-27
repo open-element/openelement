@@ -38,7 +38,6 @@ const SERVER_URL = import.meta.resolve('@openelement/element/server');
 const LEAF_RUNTIME_URL = import.meta.resolve('@openelement/element/internal/compiled/leaf-runtime');
 const SHELL_URL = import.meta
   .resolve('@openelement/element/internal/compiled/generated-element/shell');
-const COMPILED_RUNTIME_URL = import.meta.resolve('@openelement/element/internal/compiled/runtime');
 
 /**
  * Compile + import a GENERATED-lane island component (function component plus
@@ -72,7 +71,6 @@ export async function compileGeneratedIsland(
     // can name is listed: a missed one surfaces as an unresolvable import.
     .replaceAll('@openelement/element/internal/compiled/leaf-runtime', LEAF_RUNTIME_URL)
     .replaceAll('@openelement/element/internal/compiled/generated-element/shell', SHELL_URL)
-    .replaceAll('@openelement/element/internal/compiled/runtime', COMPILED_RUNTIME_URL)
     .replaceAll("from '@openelement/element'", `from '${ELEMENT_URL}'`)
     .replaceAll("from '@openelement/router'", `from '${APP_URL}'`)
     // Relative imports arrive with EITHER quote style (the emitted tail is

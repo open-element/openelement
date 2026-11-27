@@ -30,7 +30,7 @@ import { chromium, type Browser, type Page } from 'playwright';
 import { build } from 'vite';
 import { compileFunctionModule } from '../../src/internal/compiler/semantic-core/function-frontend.ts';
 import { generateLeafModule } from '../../src/internal/compiler/semantic-ir/generated-leaf/generate.ts';
-import * as compiledRuntime from '../../../element/src/internal/compiled/runtime.ts';
+import * as compiledRuntime from '../../../element/src/internal/compiled/leaf-runtime.ts';
 import { ELEMENT_CLASSIFIER as CLASSIFIER, REPO_ROOT } from './testlib/element-classifier.ts';
 
 const FILE = '/proj/src/claim-condition-review.tsx';

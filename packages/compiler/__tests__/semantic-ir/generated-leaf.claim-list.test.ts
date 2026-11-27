@@ -23,7 +23,8 @@ import { describe, expect, test } from 'vitest';
 import { originalPositionFor, TraceMap } from '@jridgewell/trace-mapping';
 import { compileFunctionModule } from '../../src/internal/compiler/semantic-core/function-frontend.ts';
 import { generateLeafModule } from '../../src/internal/compiler/semantic-ir/generated-leaf/generate.ts';
-import * as compiledRuntime from '../../../element/src/internal/compiled/runtime.ts';
+import * as compiledRuntime from '../../../element/src/internal/compiled/leaf-runtime.ts';
+import { LEAF_UNSUPPORTED_KEY } from '../../../element/src/internal/compiled/runtime/list-key.ts';
 import { ELEMENT_CLASSIFIER as CLASSIFIER } from './testlib/element-classifier.ts';
 
 const FILE = '/proj/src/claim-list.tsx';
@@ -260,9 +261,9 @@ function Objects(props) {
     const object = { id: 'a', label: 'A' };
     expect(
       codeOf(() => ssr(api, 'Objects')({}, { bindings: { items: { value: [object] } } })),
-    ).toBe(compiledRuntime.LEAF_UNSUPPORTED_KEY);
+    ).toBe(LEAF_UNSUPPORTED_KEY);
     expect(codeOf(() => ssr(api, 'Objects')({}, { bindings: { items: { value: [null] } } }))).toBe(
-      compiledRuntime.LEAF_UNSUPPORTED_KEY,
+      LEAF_UNSUPPORTED_KEY,
     );
     // The error is coded and the caller received no partial string.
   });

@@ -27,7 +27,7 @@ import { describe, expect, test } from 'vitest';
 import { VOID_TAGS } from '@openelement/protocol/void-tags';
 import { compileFunctionModule } from '../../src/internal/compiler/semantic-core/function-frontend.ts';
 import { generateLeafModule } from '../../src/internal/compiler/semantic-ir/generated-leaf/generate.ts';
-import * as compiledRuntime from '../../../element/src/internal/compiled/runtime.ts';
+import * as compiledRuntime from '../../../element/src/internal/compiled/leaf-runtime.ts';
 import { signal as nodeSignal } from '../../../element/src/internal/signal/framework.ts';
 import { ELEMENT_CLASSIFIER as CLASSIFIER } from './testlib/element-classifier.ts';
 

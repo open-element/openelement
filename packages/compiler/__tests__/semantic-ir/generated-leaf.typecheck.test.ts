@@ -59,11 +59,11 @@ async function resolutionPaths(): Promise<Record<string, string[]>> {
       paths[specifier] = [resolve(pkg.dir, String(source).replace(/^\.\//, ''))];
     }
   }
-  // The generated module's runtime import is an internal (non-exported) path:
+  // The generated module's runtime import is an internal generated-leaf export:
   // map it to this checkout's module so the emitted text is checked against
   // the real contract surface rather than a declaration stub.
   paths[GENERATED_LEAF_RUNTIME_SPECIFIER] = [
-    resolve(REPO_ROOT, 'packages/element/src/internal/compiled/runtime.ts'),
+    resolve(REPO_ROOT, 'packages/element/src/internal/compiled/leaf-runtime.ts'),
   ];
   return paths;
 }
