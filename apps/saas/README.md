@@ -23,6 +23,10 @@ qualification is external pending; see
       response-header channel (`lib/supabase-server.ts`)
 - [x] /notes loader: getUser + RLS-scoped query; anonymous renders the denied
       branch over a hard database-level RLS floor
+- [x] /workspaces: signed-in users create a workspace and become its admin in
+      one transaction. Admins generate single-use invitation codes that expire
+      after 24 hours. Redeeming a code grants member access to that workspace.
+      PostgreSQL stores the SHA-256 digest of each code.
 - [x] explicit `middleware.corsOrigin` allowlist (deployed worker + localhost)
 - [x] /upload: no-JS multipart upload/list/delete in the private
       `notes-attachments` bucket; unpredictable object ids, MIME/size guards,
@@ -72,17 +76,23 @@ qualification is external pending; see
 ```sh
 vp run saas:verify   # local typecheck and stubbed unit tests
 vp run saas:workers  # local application and Workers builds + boundary check
-vp run --no-cache --fail-if-no-match --filter @openelement/saas test:workspace-rls  # disposable local Postgres
+vp run --no-cache --fail-if-no-match --filter @openelement/saas test:workspace-rls
+vp run --no-cache --fail-if-no-match --filter @openelement/saas test:workspace-onboarding:browser
 ```
 
-Run both from the repository root after the frozen-lockfile install described in
-[the agent contract](../../docs/agent-contract.md). The RLS proof requires `initdb`, `pg_ctl`, and `psql` on PATH; it creates and removes a disposable cluster. It tests the actual workspace migration, not hosted Realtime. These local checks exercise
-code and build boundaries; they do not prove hosted Auth, RLS, Realtime, email,
-Queues or scanner delivery. Record hosted results separately using the
-[staging checklist](STAGING-CHECKLIST.md). The app already provides sign-in,
-recovery, notes, uploads, checkout and admin routes; the payment runbook covers
-operator replay and recovery. Workspace membership is operator-provisioned in
-this qualification fixture, not managed by an application UI.
+Run these tasks from the repository root after the frozen-lockfile install
+described in [the agent contract](../../docs/agent-contract.md). The RLS proof
+requires `initdb`, `pg_ctl`, and `psql` on PATH and verifies the workspace
+migrations, including concurrent invitation redemption, in a disposable
+Postgres cluster. Build the SaaS app before running the browser proof. The
+browser proof uses Chromium and a loopback Auth and Data API fixture. Use the
+[staging checklist](STAGING-CHECKLIST.md) to record hosted provider evidence.
+
+Open **Workspaces** from Notes after sign-in to create or join a workspace.
+A workspace admin can generate a code in **Workspace invitations** and share
+it with the intended recipient. Generation requires JavaScript because the
+issuing response delivers the code once. The recipient pastes the code into
+**Join a workspace** while signed in.
 
 ## Migrations
 

@@ -4,7 +4,7 @@ This is an operator checklist, not evidence that staging has passed. Run it
 against the exact candidate commit and record the commit, deployment revision,
 project identifier, date, operator, and pass/fail/blocked result for each item.
 Store logs and screenshots without tokens, secrets, signed URLs, payment data,
-or email contents. Use isolated test accounts and test-mode payments. Follow
+invitation codes, or email contents. Use isolated test accounts and test-mode payments. Follow
 [the migration runbook](../../docs/runbooks/supabase-migrations.md) and
 [payment runbook](../../docs/runbooks/payment-events.md) for provisioning,
 recovery and rollback. Do not use production customer data.
@@ -19,10 +19,8 @@ recovery and rollback. Do not use production customer data.
 - [ ] Configure server-only bindings from `.env.example`, the scanner's
       provider bindings, Queue/DLQ/Cron bindings and the Cloudflare auth rate
       limiter. Record binding names and deployment revision, never values.
-- [ ] Provision two workspaces A and B with distinct users. Include an A
-      member, a second A member who owns a record, an A admin, and a B member.
-      Provision membership through an authorized operator: this fixture has no
-      workspace creation, invitation or membership-management UI.
+- [ ] Prepare distinct test accounts for two workspace admins and at least
+      two invitees, including a member who will own an A record.
 
 ## Auth, isolation and Realtime
 
@@ -30,6 +28,15 @@ recovery and rollback. Do not use production customer data.
       in, sign out, and verify a protected route redirects when signed out.
       Request password recovery, follow the real callback, reset the password,
       and verify the new password works. Test configured OAuth separately.
+- [ ] Use `/workspaces` to create A and B from separate signed-in sessions.
+      Verify each creator appears as that workspace's admin. Generate
+      separate A and B codes and redeem them as different signed-in users.
+      Confirm each invitee receives member access to the intended workspace.
+      Verify members and admins of unrelated workspaces cannot issue codes
+      for A. Verify a redeemed code cannot be reused, expired codes are
+      rejected, and simultaneous redemption by two accounts permits one join.
+      Check the issuing response is private and uncached and that reloading
+      the page cannot reveal the code again. Record outcomes without codes.
 - [ ] With each user session, query workspace records through the application
       and Data API. A members see A, B sees B, and neither sees the other
       workspace, including when directly requesting its ID. Anonymous access

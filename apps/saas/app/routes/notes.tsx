@@ -93,7 +93,7 @@ export function NotesPage(props: {
         <button type='submit'>Sign out</button>
       </form>
       <p>
-        <a href='/upload'>Upload a file</a>
+        <a href='/upload'>Upload a file</a> · <a href='/workspaces'>Workspaces</a>
       </p>
     </main>
   );
