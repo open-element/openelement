@@ -28,11 +28,9 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { starterSmokeAppDir } from './paths.ts';
 
-// v0.44: the route module is a thin definePage wrapper; the page markup lives
-// in the compiled page element it imports, so the edit target is the page
-// component (the #952 invalidation chain is the same: watcher → module
-// re-evaluation → next request renders the edited module).
-const PAGE_FILE = join(starterSmokeAppDir(), 'app/components/page-home.tsx');
+// The starter's home route owns its markup. Editing that module exercises
+// the watcher and SSR re-evaluation on the next request (#952).
+const PAGE_FILE = join(starterSmokeAppDir(), 'app/routes/index.tsx');
 const H1_ORIGINAL = 'Rendered before JavaScript arrives';
 const H1_EDITED = 'Edited in dev mode';
 
@@ -98,7 +96,7 @@ test('route edit invalidates dev SSR output (#952)', async ({ request }) => {
   const original = await readFile(PAGE_FILE, 'utf-8');
   if (!original.includes(H1_ORIGINAL)) {
     throw new Error(
-      `fixture page component does not contain the expected H1 — was setup.ts changed? ` +
+      `fixture home route does not contain the expected H1 — was setup.ts changed? ` +
         `Looking for: ${H1_ORIGINAL}`,
     );
   }
