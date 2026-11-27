@@ -23,12 +23,10 @@
     "./lifecycle": "./src/lifecycle.ts",
     "./document-services": "./src/document-services.ts"
   },
-  "//sideEffects": "The paths name three install edges (#1425 class): the default entry is flagged as the importer — a side-effect-free module loses its bare `import './internal/compiled/runtime/hydrate-install.ts'` and `blocks-install.ts` — together with the installers hydrate-install.ts (`installHydrationExecutor(...)`) and blocks-install.ts (`installBlockBuilders(...)`), both module-scope calls; `./client-only` imports the blocks install, `./no-blocks` the hydration install, so those importers are flagged too. A tree-shaking bundler therefore cannot drop server-DOM hydration or when/each Block execution. Everything else in src/ evaluates pure and stays tree-shakeable. The packed artifact mirrors these paths with compiled .js names in the release manifest (tools/release/npm-manifest.ts SIDE_EFFECTS) — change the two together; the guard is packages/element/__tests__/side-effects-declaration.test.ts.",
+  "//sideEffects": "The default and client-only entries import blocks-install.ts, whose module-scope call installs the Part Program Block builders. Bundlers must retain both entries and the installer. The packed manifest mirrors the source list with .js paths (tools/release/npm-manifest.ts).",
   "sideEffects": [
     "./src/index.ts",
     "./src/client-only.ts",
-    "./src/no-blocks.ts",
-    "./src/internal/compiled/runtime/hydrate-install.ts",
     "./src/internal/compiled/runtime/blocks-install.ts"
   ],
   "files": [

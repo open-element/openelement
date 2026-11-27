@@ -58,7 +58,6 @@ const OLD_BACKEND_MODULE_SUFFIXES = [
   '/internal/compiled/runtime/pre-upgrade-events.ts',
   '/internal/compiled/runtime/hydrate-recovery.ts',
   '/internal/compiled/runtime/blocks-seam.ts',
-  '/internal/compiled/runtime/hydrate-seam.ts',
 ] as const;
 
 /**

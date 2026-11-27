@@ -6,7 +6,7 @@
  * tree/Part/Block semantics. Each now lives in its own single-duty module
  * under `runtime/` (program-kernel, fresh-dom, blocks, parts, hydration,
  * hydration-recovery, pre-upgrade-events); this module stays the stable import
- * surface for the kernel, the hydration seam, the facade, and the tests, and
+ * surface for explicit Part Program callers and tests, and
  * hosts the seed serializer's seams over the shared tree-walking kernel.
  * The browser path never performs selector or marker discovery: markers are
  * emitted and hydrated only at compiler-owned dynamic anchors, while fixed

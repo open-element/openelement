@@ -1,26 +1,7 @@
 /**
- * The Block builders seam (#1548).
- *
- * Four entries of this package expose the same public surface and differ in
- * which optional runtime installs they perform: `.` (claim + blocks),
- * `./client-only` (blocks only), `./no-blocks` (claim only, #1548), and
- * `./base` (neither, #1548). Like the claim seam (#1416), the split is
- * invisible to a single-process test — the installs are module side effects,
- * so once ANY installing entry has been evaluated, the capability is
- * globally present. Each case therefore runs in its own subprocess, which is
- * also how a real page loads exactly one of the entries.
- *
- * What is pinned:
- *
- * 1. `./base` fails closed when a program with a when Block builds fresh —
- *    `OE_RUNTIME_BLOCK_BUILDERS_MISSING`, naming the entries that install.
- * 2. `./no-blocks` fails closed the same way (claim presence says nothing
- *    about blocks).
- * 3. The default entry builds the same program's Block.
- * 4. `./client-only` builds it too — a client-only island still builds fresh
- *    Blocks from client state, so the blocks axis is independent of the
- *    claim axis.
- * 5. All four entries export the same names (the surface cannot drift).
+ * The four authoring entries share an export surface. The default and
+ * client-only entries also install the Part Program Block builders.
+ * Each subprocess isolates its module-scope install from the other entries.
  */
 import { expect, test } from 'vitest';
 import { runEsmSubprocess } from './esm-subprocess.ts';
@@ -123,7 +104,7 @@ test('#1548: the base entry fails closed on a when Block (no builders installed)
   expect(out).toContain("'@openelement/element'");
 });
 
-test('#1548: the no-blocks entry fails closed on a when Block (claim without blocks)', async () => {
+test('#1548: the no-blocks entry fails closed on a when Block (no builders installed)', async () => {
   const { code, out, err } = await runEsmSubprocess(probe(NO_REGIONS_ENTRY_URL));
   expect(code, `probe should complete. stderr: ${err}`).toEqual(0);
   expect(out).toContain('ERR');
@@ -136,7 +117,7 @@ test('#1548: the default entry builds the same when Block', async () => {
   expect(out.trim(), 'anchor comment, branch element, end comment').toEqual('OK 8 1 8');
 });
 
-test('#1548: the client-only entry builds the same when Block (fresh blocks without claim)', async () => {
+test('#1548: the client-only entry builds the same when Block', async () => {
   const { code, out, err } = await runEsmSubprocess(probe(CLIENT_ONLY_ENTRY_URL));
   expect(code, `probe should complete. stderr: ${err}`).toEqual(0);
   expect(out.trim(), 'the blocks axis is independent of the claim axis').toEqual('OK 8 1 8');
