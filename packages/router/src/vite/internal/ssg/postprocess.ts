@@ -349,7 +349,7 @@ export function buildElementRuntimePreloadLink(runtimeUrl: string): string {
   )}" ${ELEMENT_RUNTIME_PRELOAD_ATTRIBUTE}>`;
 }
 
-/** Preload the static runtime dependencies of this page's client islands. */
+/** Preload runtime dependencies of islands due at page load or the first idle turn. */
 export function injectElementRuntimePreload(
   dir: string,
   pageManifests: readonly PageIslandManifest[],
@@ -359,7 +359,14 @@ export function injectElementRuntimePreload(
   for (const manifest of pageManifests) {
     const urls = new Set<string>();
     for (const island of manifest.islands) {
-      if (island.strategy === 'none') continue;
+      // The scheduler owns media and viewport activation. A preload would
+      // download their runtime before those predicates have matched.
+      if (
+        island.strategy === 'none' ||
+        island.strategy === 'visible' ||
+        island.strategy === 'media'
+      )
+        continue;
       for (const url of runtimePreloads.get(island.chunkUrl) ?? []) urls.add(url);
     }
     if (urls.size > 0) {

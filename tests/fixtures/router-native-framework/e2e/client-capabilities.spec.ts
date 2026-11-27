@@ -22,6 +22,20 @@ function requestedScripts(page: Page): string[] {
   return scripts;
 }
 
+function staticFiles(graph: BrowserEntryGraphArtifact, roots: readonly string[]): Set<string> {
+  const chunks = new Map(graph.chunks.map((chunk) => [chunk.file, chunk]));
+  const pending = [...roots];
+  const visited = new Set<string>();
+  for (const file of pending) {
+    if (visited.has(file)) continue;
+    visited.add(file);
+    const chunk = chunks.get(file);
+    expect(chunk, file).toBeDefined();
+    pending.push(...chunk!.imports);
+  }
+  return visited;
+}
+
 test('a dynamic document with no client capability loads no JavaScript', async ({ page }) => {
   const scripts = requestedScripts(page);
   const staticResponse = await page.goto('/client-capabilities');
@@ -109,7 +123,6 @@ test('Counter omits optional context and keyed-list code used by separate island
 }) => {
   const graph: BrowserEntryGraphArtifact = JSON.parse(await readFile(graphPath, 'utf8'));
   expect(graph.status).toBe('complete');
-  const chunks = new Map(graph.chunks.map((chunk) => [chunk.file, chunk]));
   const markers = [
     /\/generated-element\/context\.[jt]s$/,
     /\/runtime\/context\.[jt]s$/,
@@ -126,15 +139,8 @@ test('Counter omits optional context and keyed-list code used by separate island
 
   const counter = graph.islands.find((island) => island.tag === 'note-counter');
   expect(counter).toBeDefined();
-  const pending = [graph.entry.chunkFile, counter!.chunkFile];
-  const seen = new Set<string>();
-  for (const file of pending) {
-    if (seen.has(file)) continue;
-    seen.add(file);
+  for (const file of staticFiles(graph, [graph.entry.chunkFile, counter!.chunkFile])) {
     expect(optionalFiles.has(file), file).toBe(false);
-    const chunk = chunks.get(file);
-    expect(chunk).toBeDefined();
-    pending.push(...chunk!.imports);
   }
 
   const scripts = requestedScripts(page);
@@ -155,4 +161,32 @@ test('Counter omits optional context and keyed-list code used by separate island
   await expect(list).toHaveText(['Second item', 'First item']);
   await expect(list.last()).toHaveAttribute('data-before-reorder', '');
   for (const file of optionalFiles) expect(scripts).toContain('/client/' + file);
+});
+
+test('an offscreen SSG island waits to fetch its runtime until it enters the viewport', async ({
+  page,
+}) => {
+  const scripts = requestedScripts(page);
+  const graph: BrowserEntryGraphArtifact = JSON.parse(await readFile(graphPath, 'utf8'));
+  const island = graph.islands.find((entry) => entry.tag === 'deferred-counter');
+  expect(island?.strategy).toBe('visible');
+  const eager = staticFiles(graph, [graph.entry.chunkFile]);
+  const deferred = [...staticFiles(graph, [island!.chunkFile])].filter((file) => !eager.has(file));
+  expect(deferred.length).toBeGreaterThan(1);
+
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const response = await page.goto('/deferred-capability');
+  expect(response?.status()).toBe(200);
+  expect(await response!.text()).not.toContain('data-open-element-runtime-preload');
+  const host = page.locator('deferred-counter');
+  expect((await host.boundingBox())?.y).toBeGreaterThan(720);
+  await page.waitForLoadState('networkidle');
+  for (const file of deferred) expect(scripts).not.toContain('/client/' + file);
+
+  await host.scrollIntoViewIfNeeded();
+  await page.waitForFunction(() => customElements.get('deferred-counter') !== undefined);
+  const button = host.getByRole('button');
+  await button.click();
+  await expect(button).toHaveText('Deferred count: 1');
+  for (const file of deferred) expect(scripts).toContain('/client/' + file);
 });

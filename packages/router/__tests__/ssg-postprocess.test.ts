@@ -430,6 +430,31 @@ test('#1544/B2: the runtime modulepreload lands on the island-bearing page only,
   }
 });
 
+test.each(['visible', 'media'] as const)(
+  '#1544/B2: %s waits for the browser scheduler before fetching the runtime',
+  async (strategy) => {
+    const root = makeTempDir();
+    try {
+      const dist = join(root, 'dist');
+      writeProjectionPages(dist);
+      const context = ctxView(PROJECTION_MANIFEST, root);
+      await postProcessClientIslandBuild(
+        {
+          ...context,
+          phase1: {
+            ...context.phase1,
+            islandMeta: { 'open-counter': { hydrate: strategy } },
+          },
+        },
+        PROJECTION_RUNTIME_PRELOADS,
+      );
+      expect(readFileSync(join(dist, 'index.html'), 'utf8')).not.toContain('modulepreload');
+    } finally {
+      cleanup(root);
+    }
+  },
+);
+
 test('#1544/B2: a zero-island build needs no runtime chunk and therefore injects nothing', async () => {
   // The `shared` set is empty because no island ships: the pass must not fail
   // closed for a runtime chunk nothing would preload.
