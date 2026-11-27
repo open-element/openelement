@@ -55,7 +55,7 @@ test('no www site-ui module remains on the class lane', async () => {
   ).toEqual([]);
 });
 
-test('app/layout.tsx is the generated site shell with all 45 derived nodes', async () => {
+test('app/layout.tsx compiles as the generated site shell', async () => {
   const url = new URL('../app/layout.tsx', import.meta.url);
   const source = await readFile(url, 'utf8');
   // Generated lane (2026-11-20 migration): the class became a function component

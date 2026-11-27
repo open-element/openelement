@@ -1,20 +1,6 @@
 /**
- * non-interactive-permissions.test.ts — packed gates never prompt (unit half).
- *
- * A packed Element/Playwright consumer once stalled on an FFI prompt
- * (`Deno requests ffi access to ".../fsevents/fsevents.node" / Allow?
- * [y/n/A]`), which a human had to refuse by hand. The deno-era fix carried
- * `--deny-ffi --no-prompt` on every release-lane entry; the S2 exit (owner
- * ruling 2026-10-03) removed the deno host entirely, and the
- * permission-prompt mechanism with it — on the node host non-interactivity is
- * structural, so no flag-level audit remains (the former
- * "tools/release/package.json carries no deno-run entry" pin retired with
- * the Deno residue sweep). What this file still proves: the real launcher
- * chain (gate.ts -> vp -> task) completes with the gate's stdin closed — a
- * step that read input would hang and hit the timeout instead of finishing.
- * The full dynamic proof (gate:packed with stdin closed, zero prompt text)
- * runs in candidate evidence, not here — re-running whole packed consumers
- * inside a unit test would double CI time for no extra signal.
+ * Verify the gate launcher completes with stdin closed. The full packed
+ * consumer proof runs in candidate evidence, not in this unit suite.
  */
 
 import { expect, test } from 'vitest';
