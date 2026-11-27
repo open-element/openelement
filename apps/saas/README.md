@@ -100,10 +100,11 @@ OPEN_ELEMENT_HOST=localhost OPEN_ELEMENT_PORT=4173 \
 ```
 
 `start:local` loads `apps/saas/.env` and serves the built app. Open
-`http://localhost:4173/login` and choose **Create account**. Follow the
-confirmation link from the local Mailpit inbox in the same browser. The inbox
-URL appears in `supabase status`. Keep the app URL on `localhost` for its
-configured Auth callback. Open **Workspaces** from Notes after signing in.
+`http://localhost:4173/login` and choose **Create account**. The default local
+configuration takes you directly to Notes. If the app asks you to check your
+email, open the local Mailpit inbox listed by `supabase status` and follow the
+confirmation link in the same browser. Keep the app URL on `localhost` for
+its configured Auth callback. Open **Workspaces** from Notes after signing in.
 
 A workspace admin can generate a code in **Workspace invitations** and share
 it with the intended recipient. Generation requires JavaScript because the
