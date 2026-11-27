@@ -21,6 +21,7 @@
   },
   "include": [
     "app",
+    "check-zero-island.ts",
     "vite.config.ts"
   ]
 }
