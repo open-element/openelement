@@ -9,7 +9,7 @@ cleanup() {
   rm -rf "$tmp"
 }
 trap cleanup EXIT HUP INT TERM
-initdb -D "$tmp/data" -A trust -U postgres --no-locale >/dev/null
+initdb -D "$tmp/data" --auth=trust -U postgres --no-locale >/dev/null
 pg_ctl -D "$tmp/data" -o "-c wal_level=logical -c listen_addresses='' -c unix_socket_directories='$tmp'" -w start >/dev/null
 query() { psql -Xq -v ON_ERROR_STOP=1 -h "$tmp" -U postgres -d postgres "$@"; }
 query <<'SQL'
