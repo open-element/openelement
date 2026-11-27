@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { cpus, loadavg, platform, release, tmpdir, totalmem, version } from 'node:os';
-import { join, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -40,15 +40,67 @@ function macPowerState(option: 'batt' | 'therm'): string | undefined {
   }
 }
 
+async function resolveBuildInput(
+  buildRoot: string,
+  from: ReturnType<typeof createRequire>,
+  packageName: 'compiler' | 'element' | 'protocol',
+  specifier: string,
+): Promise<string> {
+  const packageDir = join(buildRoot, 'packages', packageName);
+  const resolved = await realpath(from.resolve(specifier));
+  const pathInPackage = relative(packageDir, resolved);
+  if (!pathInPackage || isAbsolute(pathInPackage) || pathInPackage.split(sep)[0] === '..') {
+    throw new Error(`${specifier} resolved to ${resolved} outside ${packageDir}`);
+  }
+  return resolved;
+}
+
 async function bundleFixture(
   buildRoot: string,
   directory: string,
   source: string,
 ): Promise<string> {
-  const require = createRequire(join(buildRoot, 'package.json'));
-  const compiler = (await import(
-    pathToFileURL(require.resolve('@openelement/compiler')).href
-  )) as typeof Compiler;
+  const fromRoot = createRequire(join(buildRoot, 'package.json'));
+  const compilerPath = await resolveBuildInput(
+    buildRoot,
+    fromRoot,
+    'compiler',
+    '@openelement/compiler',
+  );
+  const elementEntries = [
+    '@openelement/element/internal/compiled/leaf-runtime',
+    '@openelement/element/internal/compiled/generated-element/shell',
+    '@openelement/element',
+  ];
+  const aliases = await Promise.all(
+    elementEntries.map(async (specifier) => ({
+      find: specifier,
+      replacement: await resolveBuildInput(buildRoot, fromRoot, 'element', specifier),
+    })),
+  );
+
+  // Compiler and Element resolve their own Protocol dependencies through
+  // package-local links. A root-level resolve would miss swapped links there.
+  const protocol = JSON.parse(
+    await readFile(join(buildRoot, 'packages/protocol/package.json'), 'utf8'),
+  ) as {
+    exports: Record<string, string>;
+  };
+  for (const importer of [compilerPath, ...aliases.map(({ replacement }) => replacement)]) {
+    const fromImporter = createRequire(importer);
+    await Promise.all(
+      Object.keys(protocol.exports).map((entry) =>
+        resolveBuildInput(
+          buildRoot,
+          fromImporter,
+          'protocol',
+          entry === '.' ? '@openelement/protocol' : `@openelement/protocol/${entry.slice(2)}`,
+        ),
+      ),
+    );
+  }
+
+  const compiler = (await import(pathToFileURL(compilerPath).href)) as typeof Compiler;
   const compiled = compiler.compileGeneratedElementIfAdmitted(
     source,
     '/benchmarks/keyed/table.tsx',
@@ -73,13 +125,7 @@ installBenchmark(Table, ${JSON.stringify({ tag, ...workload })});\n`,
     configFile: false,
     mode: 'production',
     logLevel: 'error',
-    resolve: {
-      alias: [
-        '@openelement/element/internal/compiled/leaf-runtime',
-        '@openelement/element/internal/compiled/generated-element/shell',
-        '@openelement/element',
-      ].map((specifier) => ({ find: specifier, replacement: require.resolve(specifier) })),
-    },
+    resolve: { alias: aliases },
     build: {
       write: false,
       lib: { entry, formats: ['iife'], name: 'KeyedBenchmark' },
@@ -145,23 +191,34 @@ async function main() {
   const count = positiveInteger(values.runs);
   const sampleCount = positiveInteger(values.samples);
   const buildRoot = await realpath(values['build-root']);
+  const gitRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+    cwd: buildRoot,
+    encoding: 'utf8',
+  }).trim();
+  if ((await realpath(gitRoot)) !== buildRoot)
+    throw new Error('The build root must be a Git checkout root');
+  const buildSha = revision(buildRoot);
   const buildDirty = execFileSync(
     'git',
     [
       'status',
       '--porcelain',
-      '--untracked-files=no',
+      '--untracked-files=normal',
       '--',
       'packages/compiler',
       'packages/element',
+      'packages/protocol',
+      'package.json',
+      'pnpm-workspace.yaml',
       'pnpm-lock.yaml',
     ],
-    {
-      cwd: buildRoot,
-      encoding: 'utf8',
-    },
+    { cwd: buildRoot, encoding: 'utf8' },
   ).trim();
-  if (buildDirty) throw new Error('The compared compiler, Element and lockfile must be clean');
+  if (buildDirty) {
+    throw new Error(
+      `Compared Compiler, Element, Protocol and workspace inputs must be clean:\n${buildDirty}`,
+    );
+  }
 
   const directory = await mkdtemp(join(tmpdir(), 'oe-keyed-bench-'));
   try {
@@ -185,7 +242,7 @@ async function main() {
       schemaVersion: 1,
       workload: { ...workload, sampleCount },
       recordedAt,
-      buildSha: revision(buildRoot),
+      buildSha,
       bundleSha256: sha256(bundle),
       harnessSha: revision(repo),
       harnessSha256: sha256(JSON.stringify(harnessSources)),

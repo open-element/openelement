@@ -15,7 +15,7 @@ vp run --no-cache bench:keyed --note 'AC power, no competing build' --out /tmp/k
 vp run --no-cache bench:keyed:compare noise /tmp/keyed-candidate.json
 ```
 
-For an A/B comparison, install dependencies in a separate checkout with a compatible generated-element compiler. Run the same harness from the candidate checkout and pass the comparison checkout as the build root:
+For an A/B comparison, install dependencies in a separate checkout with a compatible generated-element compiler. Run the same harness from the candidate checkout and pass the comparison checkout as the build root. The runner verifies that the resolved compiler, Element, and Protocol modules belong to that checkout and that those packages and workspace manifests are clean:
 
 ```sh
 vp run --no-cache bench:keyed --build-root /path/to/baseline --note 'AC power, no competing build' --out /tmp/keyed-baseline.json
@@ -23,6 +23,25 @@ vp run --no-cache bench:keyed:compare ab /tmp/keyed-baseline.json /tmp/keyed-can
 ```
 
 Use `--runs` and `--samples` to override the defaults for a harness check. For evidence, keep at least five launches per build and 15 samples per launch. The A/B command requires the same machine, browser, DPR, harness, and workload. Review the recorded load and power conditions alongside the comparison.
+
+## Verify provenance refusals
+
+In a disposable checkout with dependencies installed, run the command below.
+Then change one input at a time and rerun it.
+
+```sh
+vp run --no-cache bench:keyed --build-root /path/to/disposable-checkout --runs 1 --samples 1
+```
+
+- Use a subdirectory of the checkout as `--build-root`.
+- Point the checkout’s `node_modules/@openelement/compiler` or
+  `node_modules/@openelement/element` symlink at another checkout.
+- Point `packages/compiler/node_modules/@openelement/protocol` inside the
+  disposable checkout at another checkout.
+- Edit the disposable checkout’s `packages/protocol/src/index.ts`.
+
+Each change must be refused before Chromium launches. Restore each input
+before testing the next.
 
 ## Statistics
 
@@ -33,7 +52,7 @@ For each run, quartiles use linear interpolation at index `(n - 1) × q` in the 
 The [baseline receipt](results/2026-11-27-baseline.json) and
 [candidate receipt](results/2026-11-27-candidate.json) contain all 150 samples.
 The baseline uses `8d5058891`. The candidate uses the compiler and Element
-sources at `35b196837` with the harness commit `c9c92ee67`. An earlier checkout
+sources at `35b196837` with harness commit `c9c92ee67`. These receipts were captured from isolated workspace installs before the runner added checkout validation, so they retain the original harness digest. An earlier checkout
 did not compile the same fixture, so no timings from that checkout enter the
 comparison.
 
