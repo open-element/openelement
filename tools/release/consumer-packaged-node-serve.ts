@@ -24,6 +24,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 
 import { join, resolve } from 'node:path';
 import { formatJson } from '@openelement/element/build-utils';
+import { DEV_SERVER_STARTER_PIN } from '../../packages/create/src/version.ts';
 import { PACKAGE_VERSION } from '../repo/project-constants.ts';
 import { VITE_DEV_PIN } from '../repo/deps-vite-check.ts';
 import { NITRO_VERSION } from './nitro-compatibility.ts';
@@ -49,7 +50,7 @@ function run(
   cwd: string,
   env: Record<string, string>,
   timeoutMs?: number,
-): Promise<{ success: boolean; output: string }> {
+) {
   return runProcess(command, args, cwd, { timeoutMs, env });
 }
 
@@ -89,6 +90,10 @@ await assertPackedTarballsFresh([routerTarball, elementTarball, protocolTarball,
 const tmp = await mkdtemp(join(tmpdir(), `openelement-packed-serve-${runtime}-`));
 let server: import('node:child_process').ChildProcess | undefined;
 try {
+  // The Node leg also runs Vite dev. npm leaves the router's optional peer
+  // absent unless the scratch app declares it, as the generated starter does.
+  const devDependencies =
+    runtime === 'node' ? { '@hono/vite-dev-server': DEV_SERVER_STARTER_PIN } : {};
   // The unpublished @openelement/* file: pins resolve into the installed
   // node_modules tree instead of the registry. Since #1557 the packed
   // element/router tarballs carry transitive workspace pins (protocol,
@@ -110,6 +115,7 @@ try {
         hono: '4.12.0',
         nitro: NITRO_VERSION,
       },
+      devDependencies,
       // npm otherwise queries the registry for the packed packages' exact
       // cross-workspace version edges even though those packages are direct
       // file: dependencies. Each `$name` reuses that root file: specifier, so
@@ -136,7 +142,13 @@ try {
   if (!install.success) throw new Error(`Packed serve installation failed:\n${install.output}`);
   console.log(`PASS packed-serve-${runtime} install — tarballs installed under an empty npm cache`);
 
-  for (const name of ['@openelement/router', '@openelement/element', 'vite', 'hono']) {
+  for (const name of [
+    '@openelement/router',
+    '@openelement/element',
+    'vite',
+    'hono',
+    ...Object.keys(devDependencies),
+  ]) {
     const resolved = await realpath(join(tmp, 'node_modules', ...name.split('/')));
     if (resolved === repoRoot || resolved.startsWith(`${repoRoot}/`)) {
       throw new Error(`Packed serve consumer resolved ${name} into the repository: ${resolved}`);
@@ -405,13 +417,32 @@ export default function PackedLive(props: { xText: string }) {
       import { createServer } from 'vite';
       const dev = await createServer({ configLoader: 'native', server: { middlewareMode: true } });
       try {
-        for (const path of process.argv.slice(1)) await dev.transformRequest(path);
+        const live = await dev.ssrLoadModule('/app/routes/live.tsx');
+        const { x } = live.loader({ request: new Request('http://localhost/live?x=/dev/ssr-marker') });
+        if (x !== 'ssr-marker') throw new Error('Packed dev SSR loader returned the wrong marker');
+        for (const path of process.argv.slice(1)) {
+          if (!(await dev.transformRequest(path))?.code) {
+            throw new Error('Packed dev returned no browser module for ' + path);
+          }
+        }
       } finally {
         await dev.close();
       }
     `;
     const islandUrl = '/app/islands/packed-counter.tsx';
     const helperUrl = '/app/lib/server-label.ts';
+    const devReady = await run(
+      process.execPath,
+      ['--input-type=module', '-e', devProbe, islandUrl],
+      tmp,
+      {},
+      BUILD_TIMEOUT_MS,
+    );
+    if (!devReady.success) {
+      throw new Error(
+        `Packed dev failed with a valid server loader and browser island:\n${devReady.output}`,
+      );
+    }
     for (const { source, browserRequests } of [
       {
         source: "import '@openelement/protocol/server-only';\n" + islandSource,
@@ -426,8 +457,8 @@ export default function PackedLive(props: { xText: string }) {
     ]) {
       writeFileSync(islandPath, source);
       const refused = await run(process.execPath, ['build.mjs'], tmp, {}, BUILD_TIMEOUT_MS);
-      if (refused.success || !refused.output.includes(diagnostic)) {
-        throw new Error(`Packed build accepted a server-only island import:\n${refused.output}`);
+      if (refused.timedOut || refused.success || !refused.output.includes(diagnostic)) {
+        throw new Error(`Packed build failed to report ${diagnostic}:\n${refused.output}`);
       }
       const devRefused = await run(
         process.execPath,
@@ -436,8 +467,8 @@ export default function PackedLive(props: { xText: string }) {
         {},
         BUILD_TIMEOUT_MS,
       );
-      if (devRefused.success || !devRefused.output.includes(diagnostic)) {
-        throw new Error(`Packed dev accepted a server-only island import:\n${devRefused.output}`);
+      if (devRefused.timedOut || devRefused.success || !devRefused.output.includes(diagnostic)) {
+        throw new Error(`Packed dev failed to report ${diagnostic}:\n${devRefused.output}`);
       }
     }
     console.log(
