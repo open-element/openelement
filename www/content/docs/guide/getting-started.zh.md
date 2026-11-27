@@ -72,6 +72,15 @@ my-app/
 
 一个 URL 就是一个文件：`app/routes/hello.tsx` 回答 `/hello`。以静态文本为主的页面，由路由模块自己声明组件并包进 `definePage`；标记属于 `app/components/` 下自己那份组件模块的页面，则改为导入那个组件。共享外框只在 `app/layout.tsx` 里定义一次，只有 `app/islands/` 会把自己的代码选择进客户端投递。这些文件背后的模型见[核心概念](/zh/guide/core-concepts)；路由契约见[路由与数据](/zh/guide/routing-and-data)。
 
+使用源码预览创建的 starter 可以在同一个应用中混用以下文件类型。
+
+| 扩展名 | 用途 |
+| --- | --- |
+| `.js` | JavaScript 工具函数和 loader、API 处理函数等服务端模块。使用常规 ESM 导入和再导出。 |
+| `.ts` | TypeScript 工具函数和服务端模块。仅用于类型的绑定使用 `import type` 和 `export type`。 |
+| `.jsx` | JavaScript 函数页面和 island。用行内 JSDoc `@param` 对象类型声明 props，见下方的 island 示例。 |
+| `.tsx` | TypeScript 函数页面和 island。用 TypeScript 类型注解声明 props，见下方的页面和徽章示例。 |
+
 ## 写一个页面
 
 新增一个 URL 就是一个文件。渲染静态文本、不带任何客户端行为的页面是一个**服务端函数页**：路由模块自己导出组件，并用 `definePage` 把它包起来。
@@ -157,6 +166,32 @@ export default definePage(HelloPage, { head: { title: 'Hello — my-app' } });
 
 预期结果：`/hello` 现在包含 badge 的服务端渲染标记——`<my-badge>` 里是 `<span class="badge">hello</span>`。因为 badge 声明了 `hydrate: 'none'`，它不携带客户端模块：浏览器永远不会 upgrade 它，标记本身就是产物。任何必须在浏览器中响应的东西都改用 island 投递策略——见 [Islands 与 SSR](/zh/guide/islands-and-ssr)。
 
+**试用可交互的 JSX island。** 将以下代码保存为 `app/islands/hello-counter.jsx`。
+
+```jsx
+import { signal } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
+
+export const openElement = defineIslandConfig({
+  root: 'shadow',
+  hydrate: 'load',
+  ssr: true,
+  properties: { label: { default: 'Clicks' } },
+});
+
+/** @param {{ label: string }} props */
+export default function HelloCounter(props) {
+  const count = signal(0);
+  return (
+    <button type='button' onClick={() => count.value++}>
+      {props.label}: {count.value}
+    </button>
+  );
+}
+```
+
+在 `/hello` 页面已有的 `<main>` 中添加 `<hello-counter label='Clicks'></hello-counter>`。标签名来自 island 文件名。先检查首次响应中的 Shadow DOM 标记，再点击已升级的按钮，确认计数递增。每个元素在挂载期间各自保留状态。同一套 JSX 文法也支持条件渲染、带键的列表以及通过同文件函数组件投影的子节点。动态选择组件和导入其他模块的无宿主组件配方超出当前文法范围。[编译模块文法](/zh/guide/compiled-grammar)
+
 ## 构建与部署
 
 ```bash
@@ -173,6 +208,8 @@ npm start      # 起真实构建产物，包含请求时路由
 - `dist/server/`——请求时入口，因为 starter 的样式化 404 路由声明了 `renderIntent: { mode: 'dynamic' }`。
 
 校验改动应该用 `npm start`：它起的是与生产一致的输出，并把动态路由与表单 POST 分派给生成的服务端入口。端口取自 `OPEN_ELEMENT_PORT`（回退到 `PORT`，默认 4173），host 取自 `OPEN_ELEMENT_HOST`。若构建产物没有请求时路由，router 命令还带一个纯静态模式——`openelement start --mode=preview`——它拒绝带服务端的构建，而不是悄悄把它藏起来。
+
+在本地对 starter 做冒烟测试时，运行 `npm test` 检查 `/api/ping`。再通过 `npm start` 打开构建后的 `/hello`，点击计数器，一并检查预渲染和元素升级。这些测试覆盖本地 starter 及其构建产物。部署后，在所选宿主上重新检查请求时路由和静态资源。
 
 上传 `dist-public/` 前，先运行 `npx oe publish --check`。构建产出 `dist/server/` 时，还需为 `dist/server/index.js` 部署 Node 或 Workers 运行时。完整的输出契约——构建写了哪些文件、每个文件回答什么——见[部署](/zh/guide/deployment)。上线前，`npm run typecheck` 对应用做类型检查，`npm test` 运行 starter 的 `node --test` 测试——源码预览包含用于检查 `/api/ping` 响应的测试。可在 `tests/` 下添加更多 `*.test.ts` 文件。两条命令都已在 starter 的脚本中配置好。
 

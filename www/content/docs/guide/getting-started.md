@@ -72,6 +72,15 @@ The site also writes `README.md`, an `AGENTS.md` agent pointer and `.gitignore`,
 
 One URL is one file: `app/routes/hello.tsx` answers `/hello`. For a page that is mostly static text, the route module declares the component itself and wraps it in `definePage`; a page whose markup belongs in its own component module under `app/components/` imports that component instead. The shared chrome lives once in `app/layout.tsx`, and only `app/islands/` opts code into client delivery. [Core Concepts](/guide/core-concepts) explains the model behind those files; [Routing and Data](/guide/routing-and-data) covers the route contract.
 
+The source-preview starter can mix these file types in the same app.
+
+| Extension | What to write in it |
+| --- | --- |
+| `.js` | JavaScript helpers and server modules such as loaders or API handlers. Use ordinary ESM imports and re-exports. |
+| `.ts` | TypeScript helpers and server modules. Use `import type` and `export type` for type-only bindings. |
+| `.jsx` | JavaScript function pages and islands. Describe their props with an inline JSDoc `@param` object type, as in the island below. |
+| `.tsx` | TypeScript function pages and islands. Declare props with TypeScript annotations, as in the page and badge below. |
+
 ## Build a page
 
 A new URL is one file. A page that renders static text with no client behavior is a **server function page**: the route module exports the component itself and wraps it with `definePage`.
@@ -157,6 +166,32 @@ Two rules make that work: the page module imports the badge module (`import '../
 
 Expected result: `/hello` now contains the badge's server-rendered markup — `<my-badge>` with a `<span class="badge">hello</span>` inside. Because the badge declares `hydrate: 'none'`, no client module for it ships: the browser never upgrades it, and the markup is the artifact. Anything that must react in the browser takes an island delivery strategy instead — see [Islands and SSR](/guide/islands-and-ssr).
 
+**Try an interactive JSX island.** Save the following as `app/islands/hello-counter.jsx`.
+
+```jsx
+import { signal } from '@openelement/element';
+import { defineIslandConfig } from '@openelement/router';
+
+export const openElement = defineIslandConfig({
+  root: 'shadow',
+  hydrate: 'load',
+  ssr: true,
+  properties: { label: { default: 'Clicks' } },
+});
+
+/** @param {{ label: string }} props */
+export default function HelloCounter(props) {
+  const count = signal(0);
+  return (
+    <button type='button' onClick={() => count.value++}>
+      {props.label}: {count.value}
+    </button>
+  );
+}
+```
+
+Add `<hello-counter label='Clicks'></hello-counter>` inside the `/hello` page's `<main>`. The island filename supplies the tag. Verify that the first response contains the shadow markup and that clicking the upgraded button increments the count. Each element keeps its own state while it is mounted. The same JSX grammar supports conditional markup, keyed lists and children projected through a same-file function component. Dynamic component selection and imported hostless component recipes are outside this grammar. [Compiled Module Grammar](/guide/compiled-grammar)
+
 ## Build and deploy
 
 ```bash
@@ -173,6 +208,8 @@ npm start      # serve the real build, including request-time routes
 - `dist/server/` — the request-time entry, emitted because the starter's styled 404 route declares `renderIntent: { mode: 'dynamic' }`.
 
 `npm start` is the one to check a change against, because it serves the same output production does and dispatches dynamic routes and form posts to the generated server entry. Port comes from `OPEN_ELEMENT_PORT` (falling back to `PORT`, default 4173) and host from `OPEN_ELEMENT_HOST`. For a project whose build has no request-time route, the router command also carries a static-only mode — `openelement start --mode=preview` — which refuses a build that has a server side rather than silently hiding it.
+
+For a local starter smoke test, run `npm test` to exercise `/api/ping`. Open `/hello` in the build served by `npm start` and click the counter to check the prerender and upgrade together. These checks cover the local starter and its build output. Verify request-time routes and assets again on your chosen host after deploying.
 
 Run `npx oe publish --check` before uploading `dist-public/`. If the build emitted `dist/server/`, also deploy a Node or Workers runtime for `dist/server/index.js`. The full output contract — which files the build writes and what each one answers — is documented under [Deployment](/guide/deployment). Before shipping, `npm run typecheck` type-checks the app and `npm test` runs the starter's `node --test` suite — the source preview includes a test for the `/api/ping` response. Add more `*.test.ts` files under `tests/`. Both scripts need no extra setup.
 
