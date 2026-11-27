@@ -119,17 +119,20 @@ test.describe('Theme Toggle', () => {
           canvas: getComputedStyle(document.body).backgroundColor,
           ground: getComputedStyle(home).backgroundColor,
           ink: getComputedStyle(home.querySelector('h1') as HTMLElement).color,
-          header: getComputedStyle(document.querySelector('header') as HTMLElement).backgroundColor,
+          header: getComputedStyle(document.querySelector('.oe-site-header')!).backgroundColor,
           footer: getComputedStyle(document.querySelector('footer') as HTMLElement).backgroundColor,
           code: getComputedStyle(pre).backgroundColor,
         };
       });
     const before = await readSurfaces();
     await clickThemeToggle(page);
-    await page.waitForFunction(
-      (prev) => document.documentElement.getAttribute('data-theme') !== prev.theme,
-      before,
-    );
+    await waitForThemeChange(page, before.theme);
+    const expectedHeader = (await readSurfaces()).ground;
+    await expect
+      .poll(async () => (await readSurfaces()).header, {
+        message: 'the site header settles to the new opaque canvas color',
+      })
+      .toBe(expectedHeader);
     const after = await readSurfaces();
     expect(after.theme).not.toBe(before.theme);
     for (const key of ['canvas', 'ground', 'ink', 'header', 'footer', 'code'] as const) {
