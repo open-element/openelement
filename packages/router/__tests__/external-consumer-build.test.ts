@@ -42,6 +42,7 @@ import process from 'node:process';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 import { serveFetch } from '../src/internal/node-http.ts';
 import { createFetchHandler } from '../src/vite/internal/static-serve.ts';
+import type { BrowserEntryGraphArtifact } from '../src/vite/internal/browser-entry-graph-artifact.ts';
 
 const REPO_ROOT = join(import.meta.dirname!, '..', '..', '..');
 const ROUTER_BUILD_CLI = join(REPO_ROOT, 'packages', 'router', 'src', 'cli', 'build.ts');
@@ -611,33 +612,6 @@ test('external consumer: the SSR bundle and prerendered HTML carry the import co
   expect(homeHtml).not.toContain('condition-browser-target');
 });
 
-/**
- * Every JS file reachable from `entry` through STATIC module edges
- * (`import … from '…'`, `import '…'`, `export … from '…'`), resolved
- * relatively inside the emitted client islands directory.
- *
- * Dynamic `import()` edges are deliberately NOT followed: B2's whole contract
- * is that the element runtime is reached only through them, so folding them
- * in would make the assertion vacuous.
- */
-async function staticImportGraph(islandsDir: string, entry: string): Promise<Set<string>> {
-  const staticEdge = /(?:^|[;\n])\s*(?:import\s*(?!\()|export\s+[^'"]*?\sfrom\s*)["']([^"']+)["']/g;
-  const seen = new Set<string>();
-  const queue = [entry];
-  while (queue.length > 0) {
-    const file = queue.pop()!;
-    if (seen.has(file)) continue;
-    seen.add(file);
-    const code = await readFile(join(islandsDir, file), 'utf8');
-    for (const match of code.matchAll(staticEdge)) {
-      const specifier = match[1]!;
-      if (!specifier.startsWith('.')) continue;
-      queue.push(specifier.replace(/^\.\//, ''));
-    }
-  }
-  return seen;
-}
-
 test('external consumer (#1544/B2): the runtime preload is a per-page projection and the runtime leaves the entry static graph', async () => {
   const distDir = join(fixture.appDir, 'dist');
   const islandsDir = join(distDir, 'client', 'islands');
@@ -653,19 +627,25 @@ test('external consumer (#1544/B2): the runtime preload is a per-page projection
     `<link rel="modulepreload" href="/client/islands/${runtimeFile}" data-open-element-runtime-preload>`,
   ]);
 
-  // Zero-island prerendered page: the projection gives it NO runtime preload.
   const staticHtml = await readFile(join(distDir, 'proof-static', 'index.html'), 'utf8');
-  expect(staticHtml.includes('modulepreload')).toEqual(false);
-  // It still carries the client entry (the projection removes a resource
-  // hint, never the entry).
-  expect(staticHtml).toContain('<script type="module" src="/client/islands/client.js">');
+  expect(staticHtml).not.toMatch(/modulepreload|client\.js|data-open-island-prefetch/);
 
-  // The preload is a warm START, not the graph edge: the entry the zero-island
-  // page loads must not reach the runtime chunk statically either — only the
-  // dynamic `__loadElementRuntime()` import may. This is the property the
-  // modulepreload link above cannot prove on its own.
-  const staticGraph = await staticImportGraph(islandsDir, 'client.js');
-  expect([...staticGraph]).not.toContain(runtimeFile);
+  const graph = JSON.parse(
+    await readFile(join(distDir, 'client', '.vite', 'oe-browser-entry-graph.json'), 'utf8'),
+  ) as BrowserEntryGraphArtifact;
+  expect(graph.status).toBe('complete');
+  const chunks = new Map(graph.chunks.map((chunk) => [chunk.file, chunk]));
+  const seen = new Set<string>();
+  const queue = ['islands/client.js'];
+  for (const file of queue) {
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const chunk = chunks.get(file);
+    expect(chunk, file).toBeDefined();
+    queue.push(...chunk!.imports);
+  }
+  expect(seen.size).toBeGreaterThan(1);
+  expect(seen).not.toContain(`islands/${runtimeFile}`);
   // Guard against a vacuous pass: the same entry does carry the island wiring
   // and its dynamic island imports.
   const entryCode = await readFile(join(islandsDir, 'client.js'), 'utf8');

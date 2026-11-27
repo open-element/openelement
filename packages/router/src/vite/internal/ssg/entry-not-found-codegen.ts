@@ -99,6 +99,7 @@ export function renderNotFoundRoute(
   );
   lines.push(`    return c.html(wrapInDocument(content, {`);
   for (const optionLine of documentWrapOptionsLines({
+    contentExpr: 'content',
     titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
     langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
     headExtrasExpr,
@@ -116,7 +117,7 @@ export function renderNotFoundRoute(
       docConfig.lang,
     )}, headExtras: ${headExtrasExpr}, allowHeadExtrasScripts: ${JSON.stringify(
       docConfig.allowHeadExtrasScripts,
-    )}, cspNonce: c.get('cspNonce'), scripts: __clientScriptDescriptors() }), 404);`,
+    )}, cspNonce: c.get('cspNonce')${docConfig.allowHeadExtrasScripts ? `, scripts: __clientScriptDescriptors('', ${headExtrasExpr})` : ''} }), 404);`,
   );
   lines.push(`  }`);
   // close the IIFE and merge the 404-page loader's channel too.

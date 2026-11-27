@@ -308,7 +308,7 @@ function sameOriginLinkRoutes(html: string, pageRoute: string): string[] {
 /**
  * Inject per-page island-chunk prefetch links (#1561): a group of
  * `<link rel="prefetch" as="fetch" href="...">` tags listing the island
- * chunks of the pages each page links to. `pageChunks` maps a site route to
+ * chunks of the pages an island-bearing page links to. `pageChunks` maps a site route to
  * the island chunk URLs that route's page loads — derived from the per-page
  * island manifests, the single owner of the page→chunk facts. A page's own
  * chunks are never listed (the page fetches them itself); the remaining
@@ -326,6 +326,7 @@ export function injectIslandPrefetchRules(
     if (content.includes('data-open-island-prefetch')) continue;
     const route = routeFromRelativePath(entry.relativePath);
     const ownChunks = new Set(pageChunks.get(route) ?? []);
+    if (ownChunks.size === 0) continue;
     const chunks = new Set<string>();
     for (const linkRoute of sameOriginLinkRoutes(content, route)) {
       for (const chunk of pageChunks.get(linkRoute) ?? []) {

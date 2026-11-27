@@ -114,11 +114,8 @@ export function renderMatchingRenderersFn(lines: string[], renderers: RendererDe
  * Emit the per-render resolved-Document setup (#1326): the descriptor head
  * (static object or resolver function) is resolved exactly once against the
  * same context object the props projector consumes, before wrapInDocument
- * serializes the page. The render wiring hands the factory's client-script
- * descriptors (#951 — the dev URL, or the request-time/SSG src handed in
- * through the setter seam) to the resolver, so the resolved document carries
- * them and `documentWrapOptionsLines` reads only `__doc` (#1471: the SSG
- * render pass embeds the final script tag through the same seam).
+ * serializes the page. The script decision waits until the body and layout
+ * have rendered, while the head resolver keeps its request-time order.
  *
  * `__documentStyles` is emitted beside it (alpha15 S lane, S-C1.2) because the
  * two are the same lifespan: both are per-render products of the resolved
@@ -134,7 +131,7 @@ export function documentResolutionSetupLines(
   routePathExpr?: string,
 ): string[] {
   const lines = [
-    `${indent}const __doc = __resolvePageDocument(${pageExpr}.head, ${contextExpr}, __clientScriptDescriptors());`,
+    `${indent}const __doc = __resolvePageDocument(${pageExpr}.head, ${contextExpr});`,
     `${indent}const __documentStyles = createDocumentStyleResources();`,
   ];
   if (routePathExpr !== undefined) {
@@ -194,6 +191,8 @@ export function requestTimePageContextLines(
 
 /** wrapInDocument() options object shared by page handlers and the SSG renderRoute. */
 export function documentWrapOptionsLines(options: {
+  /** The rendered body after renderer and layout wrapping. */
+  contentExpr: string;
   /** Expression yielding the title, reading the resolved document, e.g. `title || __doc.title || "Default"`. */
   titleExpr: string;
   /**
@@ -220,10 +219,7 @@ export function documentWrapOptionsLines(options: {
     `headExtras: ${options.headExtrasExpr},`,
     `dangerouslyHeadFragments: __doc.dangerouslyHeadFragments || [],`,
     `allowHeadExtrasScripts: ${JSON.stringify(options.allowHeadExtrasScripts)},`,
-    // #1471: the client scripts ride the resolved document — every channel
-    // (request-time handlers AND the SSG render pass) serializes the final
-    // script tags from the same resolved field.
-    `scripts: __doc.clientScripts || [],`,
+    `scripts: __clientScriptDescriptors(${options.contentExpr}${options.allowHeadExtrasScripts ? `, ${options.headExtrasExpr}` : ''}),`,
     // alpha15 S lane (S-C1.2): the light-root component stylesheets this
     // render discovered, declared in the document head beside the site's own
     // document stylesheet.

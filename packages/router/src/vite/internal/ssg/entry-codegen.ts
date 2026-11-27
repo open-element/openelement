@@ -247,12 +247,11 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
     // no-store baseline.
     lines.push(`    c.header('Cache-Control', 'private, no-cache');`);
   }
-  // #951/#1471: the island client script rides the resolved document's
-  // clientScripts descriptors (the dev URL, or the request-time/SSG src
-  // handed in through the setter seam), so a CSP nonce reaches it and the
-  // static render pass embeds the same tag at document time.
+  // #951/#1471: the selected descriptor reaches the document serializer,
+  // which adds the CSP nonce in request-time renders.
   lines.push(`    return c.html(wrapInDocument(content, {`);
   for (const optionLine of documentWrapOptionsLines({
+    contentExpr: 'content',
     titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
     langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
     headExtrasExpr: '__routeHeadExtras',
@@ -287,9 +286,9 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
     `        allowHeadExtrasScripts: ${JSON.stringify(docConfig.allowHeadExtrasScripts)},`,
   );
   lines.push(`        cspNonce: c.get('cspNonce'),`);
-  // Status fallback: no resolved document exists here (the throw may precede
-  // resolution), so the descriptors pass directly — same list, same tags.
-  lines.push(`        scripts: __clientScriptDescriptors(),`);
+  if (docConfig.allowHeadExtrasScripts) {
+    lines.push(`        scripts: __clientScriptDescriptors('', ${headExtrasExpr}),`);
+  }
   lines.push(`      }), 404)`);
   lines.push(`    }`);
 
@@ -339,6 +338,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
     );
     lines.push(`        return c.html(wrapInDocument(errorContent, {`);
     for (const optionLine of documentWrapOptionsLines({
+      contentExpr: 'errorContent',
       titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
       langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
       headExtrasExpr: '__routeHeadExtras',

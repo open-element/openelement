@@ -62,9 +62,38 @@ test('counter island hydrates and responds to clicks', async ({ page }) => {
   await expect(counter.locator('#count')).toHaveText('1');
 });
 
-test('about page renders exactly one H1', async ({ page }) => {
-  await page.goto('/about');
+test('cold About loads no JavaScript and plain navigation reaches both Home islands', async ({
+  page,
+}) => {
+  const requestedScripts: string[] = [];
+  page.on('request', (request) => {
+    if (request.resourceType() === 'script' || /\.[cm]?js$/.test(new URL(request.url()).pathname)) {
+      requestedScripts.push(request.url());
+    }
+  });
+  const response = await page.goto('/about');
+  expect(response?.status()).toBe(200);
+  const aboutHtml = await response!.text();
+  expect(aboutHtml).not.toMatch(/<script\b|rel=["']modulepreload["']|data-open-island-prefetch/i);
   await expect(page.locator('h1')).toHaveCount(1);
+  await expect(page.locator('body')).toHaveCSS('background-color', PAPER);
+  expect(requestedScripts).toEqual([]);
+
+  const [homeResponse] = await Promise.all([
+    page.waitForResponse((response) => response.request().isNavigationRequest()),
+    page.getByRole('link', { name: 'home page', exact: true }).click(),
+  ]);
+  expect(await homeResponse.text()).toContain('id="count"');
+  const counter = page.locator('my-counter');
+  await expect(counter.locator('#count')).toHaveText('0');
+  await page.evaluate(() => customElements.whenDefined('my-counter'));
+  await counter.getByRole('button', { name: '+' }).click();
+  await expect(counter.locator('#count')).toHaveText('1');
+  await counter.getByRole('button', { name: '-' }).click();
+  await expect(counter.locator('#count')).toHaveText('0');
+  const timer = page.locator('live-timer #elapsed');
+  const first = await timer.innerText();
+  await expect(timer).not.toHaveText(first, { timeout: 5_000 });
 });
 
 test('unknown route is a 404 status, not a 200 fallback (#922)', async ({ page }) => {

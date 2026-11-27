@@ -679,31 +679,16 @@ var __oeAttachDevLiveStyles = function (Ctor, tag) {
 // real modules bundled via the virtual:open-client-runtime specifiers — the
 // entry only wires them, there is no inline string copy.`;
 
-  // The entry's logger is INLINE, not `createLogger` from
-  // `@openelement/element/logger` (B2/#1544). The logger leaf carries no
-  // runtime kernel, but it is a module under the element package root — the
-  // exact root the #1544 grouping rule homes in `element-runtime-<hash>.js` —
-  // so a static import of it put the ENTIRE shared runtime chunk back into
-  // every page's static graph, zero-island pages included (measured: the
-  // zero-island entry statically imported element-runtime-<hash>.js and
-  // downloaded its 86 KB raw / 27 KB gzip). Nothing in the entry may
-  // statically import from the element package.
+  // The scheduler and form enhancer share one warning sink. Keeping it
+  // inline avoids introducing an import from the island runtime.
   const loggerBlock = `var log = {
-  info: function () { if (typeof console !== 'undefined') console.info.apply(console, ['[openElement]'].concat([].slice.call(arguments))); },
   warn: function () { if (typeof console !== 'undefined') console.warn.apply(console, ['[openElement]'].concat([].slice.call(arguments))); },
-  error: function () { if (typeof console !== 'undefined') console.error.apply(console, ['[openElement]'].concat([].slice.call(arguments))); },
-  debug: function () {},
 };`;
 
   // #1544/B2: the element runtime is NOT in the entry's static import
   // graph. A page whose island manifest is empty must not download the
-  // runtime it never uses; the runtime — and the document-level services it
-  // owns (pre-upgrade click capture, deep fragment navigation, the framework
-  // component stylesheet's registration) — arrives through the dynamic import
-  // below when the first island actually starts hydrating. Island activation
-  // chains on this promise (see the island factories), so the capture is
-  // installed BEFORE any island module defines its element and upgrades an
-  // existing host, while island chunks still download in parallel.
+  // runtime it never uses. The first legacy island activation loads it lazily
+  // (see the island factories), in parallel with that island's module.
   // Island-bearing pages keep their warm start through the build's per-page
   // `<link rel="modulepreload">` projection of the island manifest.
   const needsElementRuntime = clientEntryNeedsElementRuntime(islands);
@@ -715,8 +700,7 @@ var __loadElementRuntime = function () {
       canHydrateServerDom,
       includeBlocksRuntime,
     )}').then(function (__runtime) {
-      __runtime.ensureDeepFragmentNavigation();
-      __runtime.ensurePreHydrationClickCapture(document, __tags);${
+      ${
         utilitySheetSpecifier === ''
           ? ''
           : `
@@ -754,48 +738,10 @@ var __loadElementRuntime = function () {
     ? `, {${optionalStrategies.map(([kind, name]) => ` ${kind}: ${name}`).join(',')}}`
     : '';
   const schedulerImport = `import { ${schedulerBindings.join(', ')} } from '${VIRTUAL_RUNTIME_SPECIFIERS.scheduler}';`;
-  // ── Document services: one installer per emission shape ──────────────────
-  //
-  // The two document-level services (deep fragment navigation, pre-hydration
-  // click capture) must be installed on EVERY client-JS page, and the installer
-  // is chosen by whether the entry already fetches the element-runtime chunk:
-  //
-  //   - `needsElementRuntime` FALSE (every island is generated-lane, M11-3):
-  //     no `__loadElementRuntime` exists, so nothing else would ever install
-  //     them — that was the measured regression (`#start` never got
-  //     `data-open-target`). This shape installs them STATICALLY from the
-  //     executor-free `document-services` surface, at entry evaluation, because
-  //     a direct load with a `#hash` must scroll into a DSD subtree before any
-  //     island activates.
-  //   - `needsElementRuntime` TRUE: the lazy `element-services` import below is
-  //     the installer, and its `.then()` keeps both calls. It is deliberately
-  //     NOT made static here: this shape's emitted bytes are pinned by the ABI
-  //     hash in entry-client-codegen/generated-lane.test.ts, and more
-  //     importantly `requireEntryStaticGraphFreeOfRuntime` fails the build when
-  //     the entry statically reaches the shared runtime chunk — which a static
-  //     import from the element package always does, since #1544 groups every
-  //     module under that package root into `element-runtime-<hash>.js`. On
-  //     this shape the chunk is fetched anyway, so the lazy install costs no
-  //     extra bytes and stays the single owner.
-  //
-  // The condition is exactly the generator's own executor-lane fact, so the
-  // two shapes cannot disagree about who installs the services.
-  const staticDocumentServices = !needsElementRuntime;
-  const documentServicesImport = staticDocumentServices
-    ? `import { ensureDeepFragmentNavigation as __installDeepFragments, ensurePreHydrationClickCapture as __installPreHydrationCapture } from '${ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER}';\n`
-    : '';
-  const documentServicesInstall = staticDocumentServices
-    ? `// Generated-lane page floor: install the document-level services here, once,
-// at entry evaluation. Neither is reachable from the compiler-emitted shell, and
-// this entry carries no element-runtime loader — without these two calls
-// fragment navigation inside nested shadow roots and the pre-upgrade capture
-// simply do not exist on the page. Both installers are idempotent per document
-// (an \`installed\` / registry-entry check), so a later module repeating the call
-// is a no-op rather than a second listener set.
-__installDeepFragments();
-__installPreHydrationCapture(document, __tags);
-`
-    : '';
+  // Install the narrow document services before the scheduler starts. Capture
+  // sees events before an island upgrades, and DSD fragments resolve even on
+  // a document with only server markup or form enhancement.
+  const documentServicesImport = `import { ensureDeepFragmentNavigation as __installDeepFragments, ensurePreHydrationClickCapture as __installPreHydrationCapture } from '${ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER}';\n`;
   const enhanceImport =
     options.enhancedForms === true
       ? `import { createEnhanceClient } from '${VIRTUAL_RUNTIME_SPECIFIERS.enhance}';\n`
@@ -819,17 +765,8 @@ var __map = {
 ${islandMap}
 };
 var __tags = [${tags}];
-${devLiveMapAndHelper}${documentServicesInstall}${
-    // The call below is safe only because `runtimeLoader` — the definition of
-    // `__loadElementRuntime` — is emitted above in importsBlock. The 88bda88bf
-    // regression class was a shared block calling a binding that one emission
-    // shape did not define; generated-entry-gate.test.ts pins that shape check.
-    options.enhancedForms === true && needsElementRuntime
-      ? `// Install document services before enhancing forms in this entry.
-__loadElementRuntime();
-`
-      : ''
-  }
+${devLiveMapAndHelper}__installDeepFragments();
+__installPreHydrationCapture(document, __tags);
 ${activationLines.length > 0 ? `\n${activationLines.join('\n\n')}\n` : ''}
 
 var __scheduler = __schedule({

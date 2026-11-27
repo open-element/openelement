@@ -9,10 +9,13 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'pathe';
 import type { ComponentLayer } from '../../framework.ts';
 import { formatJson, normalizeSeparators } from '@openelement/element/build-utils';
-import { isValidTagName } from '@openelement/element';
+import { isValidTagName } from '@openelement/element/authoring';
 import { stableHash } from './ssg-helpers.ts';
 import { walkHtmlFileEntries } from '../html-files.ts';
 import type { IslandDeliveryStrategy } from './delivery.ts';
+import { visitRenderedTags } from './rendered-html.ts';
+
+export { readTagName, skipThroughClosingTag } from './rendered-html.ts';
 
 /** Stable artifact timestamp; manifests must be byte-identical across builds. */
 export const DETERMINISTIC_MANIFEST_TIMESTAMP = '1970-01-01T00:00:00.000Z';
@@ -45,77 +48,12 @@ export type IslandStrategyMap = Record<string, IslandDeliveryStrategy>;
 /** Layer map type: tagName -> layer */
 export type IslandLayerMap = Record<string, ComponentLayer>;
 
-/** Read one tag-open name; shared by every HTML token walk (#1561). */
-export function readTagName(
-  html: string,
-  start: number,
-): { name: string; end: number } | undefined {
-  let end = start;
-  while (end < html.length && /[A-Za-z0-9:._-]/.test(html[end])) end++;
-  if (end === start) return undefined;
-  return { name: html.slice(start, end).toLowerCase(), end };
-}
-
-/** Skip to just past the closing tag of `tagName`, starting inside its open tag. */
-export function skipThroughClosingTag(html: string, from: number, tagName: string): number {
-  const lower = html.toLowerCase();
-  const close = lower.indexOf(`</${tagName}`, from);
-  if (close === -1) return html.length;
-  const closeEnd = lower.indexOf('>', close);
-  return closeEnd === -1 ? html.length : closeEnd + 1;
-}
-
-/**
- * Extract custom element tag names from HTML content.
- * Matches actual tag-open tokens for custom elements, which must contain a hyphen.
- * Tags inside comments, script blocks, style blocks, and declarations are ignored.
- */
+/** Extract actual custom-element opening tags from the rendered markup. */
 export function extractCustomElementTags(html: string): string[] {
   const tags = new Set<string>();
-  let index = 0;
-
-  while (index < html.length) {
-    const tagStart = html.indexOf('<', index);
-    if (tagStart === -1) break;
-
-    const next = html[tagStart + 1];
-    if (next === undefined) break;
-
-    if (next === '!') {
-      if (html.startsWith('<!--', tagStart)) {
-        const commentEnd = html.indexOf('-->', tagStart + 4);
-        index = commentEnd === -1 ? html.length : commentEnd + 3;
-      } else {
-        const declarationEnd = html.indexOf('>', tagStart + 2);
-        index = declarationEnd === -1 ? html.length : declarationEnd + 1;
-      }
-      continue;
-    }
-
-    if (next === '/' || next === '?' || /\s/.test(next)) {
-      index = tagStart + 2;
-      continue;
-    }
-
-    const tag = readTagName(html, tagStart + 1);
-    if (!tag) {
-      index = tagStart + 1;
-      continue;
-    }
-
-    if (tag.name === 'script' || tag.name === 'style') {
-      index = skipThroughClosingTag(html, tag.end, tag.name);
-      continue;
-    }
-
-    if (isValidTagName(tag.name)) {
-      tags.add(tag.name);
-    }
-
-    const tagEnd = html.indexOf('>', tag.end);
-    index = tagEnd === -1 ? html.length : tagEnd + 1;
-  }
-
+  visitRenderedTags(html, ({ name }) => {
+    if (isValidTagName(name)) tags.add(name);
+  });
   return [...tags];
 }
 
@@ -139,7 +77,13 @@ export function pageChunkMap(manifests: readonly PageIslandManifest[]): Map<stri
   return new Map(
     manifests.map((manifest) => [
       manifest.route,
-      [...new Set(manifest.islands.map((island) => island.chunkUrl))].sort(),
+      [
+        ...new Set(
+          manifest.islands
+            .filter((island) => island.strategy !== 'none')
+            .map((island) => island.chunkUrl),
+        ),
+      ].sort(),
     ]),
   );
 }

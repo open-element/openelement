@@ -48,7 +48,9 @@ test('request-time client script rides the entry setter — no response splicing
     "import { openElementHandler, __setRequestTimeClientScript } from './entry.js';",
   );
   expect(code).toContain("import { clientAssets } from './client-assets.js';");
-  expect(code).toContain('__setRequestTimeClientScript(clientAssets.entry);');
+  expect(code).toContain(
+    '__setRequestTimeClientScript(clientAssets.entry, Object.keys(clientAssets.islands));',
+  );
   expect(code.includes('clientScriptSrc')).toEqual(false);
   expect(code.includes('insertBeforeBodyClose')).toEqual(false);
   expect(code.includes('withClientScript')).toEqual(false);

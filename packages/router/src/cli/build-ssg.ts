@@ -835,10 +835,16 @@ async function buildSSG(
     // (no client bundle shipped) embeds nothing.
     const setRequestTimeClientScript = (
       module as {
-        __setRequestTimeClientScript?: (src: string | null | undefined) => void;
+        __setRequestTimeClientScript?: (
+          src: string | null | undefined,
+          islandTags?: readonly string[],
+        ) => void;
       }
     ).__setRequestTimeClientScript;
-    setRequestTimeClientScript?.(ctx.clientAssetManifest?.entry ?? null);
+    setRequestTimeClientScript?.(
+      ctx.clientAssetManifest?.entry ?? null,
+      Object.keys(ctx.clientAssetManifest?.islands ?? {}),
+    );
     if (ctx.clientAssetManifest?.entry) {
       log.info(`Client scripts embedded at render time from: ${ctx.clientAssetManifest.entry}`);
     }

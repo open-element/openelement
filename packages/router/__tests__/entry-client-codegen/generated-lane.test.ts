@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -25,8 +24,6 @@ import {
   classifyPageModule,
   type PageModuleFacts,
 } from '../../src/vite/internal/ssg/page-classification.ts';
-
-const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
 
 /** One scan-shaped local-island metadata record carrying a generated-lane fact. */
 function islandMeta(generatedElementHost?: {
@@ -198,10 +195,7 @@ test('Vite ships the registered default and named constructors without generated
   }
 });
 
-test('class-only entry keeps the executor-runtime factory and its measured ABI bytes', () => {
-  // The ABI pin below is the class-only entry emitted before the lane fact
-  // landed; it is one guardrail, not the whole assertion (structural checks
-  // below catch an intentional shape change that would make the hash stale).
+test('class-only entry keeps the executor-runtime factory behind island activation', () => {
   const baselineInput = [
     {
       tagName: 'class-card',
@@ -210,7 +204,6 @@ test('class-only entry keeps the executor-runtime factory and its measured ABI b
     },
   ];
   const code = generateClientEntry(baselineInput);
-  expect(sha256(code)).toBe('929dbd80514dd613ebbf453f740cae12fa4762ada3d38c0270b377cf49485c92');
   expect(code).toContain('var __elementRuntimePromise = null;');
   expect(code).toContain('__loadElementRuntime');
   expect(code).toContain('var __island = import("/abs/app/islands/class-card.tsx");');

@@ -28,6 +28,7 @@
 import { MAX_ACTION_BODY_BYTES } from '@openelement/element/authoring';
 import { composeFetchMiddleware, createRuntimeAdapter } from '@openelement/element/build-utils';
 import type { LayoutPlan } from '@openelement/protocol/ssg';
+import { visitRenderedTags, type RenderedTag } from '../ssg/rendered-html.ts';
 import { createActionBodyLimit } from './action-runtime.ts';
 import { createLayoutRuntime, createStatusHtml } from './document-runtime.ts';
 import type { LayoutRuntime, StatusHtmlRenderer } from './document-runtime.ts';
@@ -67,6 +68,8 @@ export interface GeneratedPageRuntime {
 export interface GeneratedAppConfig {
   /** Build-time island map: tag -> client module path (#951 upgrade URLs). */
   islands: Record<string, string>;
+  /** Dev delivery tags with a client upgrade strategy. */
+  clientIslandTags?: readonly string[];
   /** The build's layout plan (serialized generated data). */
   layoutPlan: LayoutPlan;
   /** Declared project locales (serialized generated data). */
@@ -128,9 +131,12 @@ export interface GeneratedApp {
    */
   registerSsrIsland(tag: string, ctor: unknown, hostRenderer: unknown): void;
   /** Request-time client-script src setter (`dist/server/index.js` startup). */
-  setRequestTimeClientScript(src: string | null | undefined): void;
-  /** wrapInDocument `scripts` descriptors for the current runtime mode (#951). */
-  clientScriptDescriptors(): Array<{ type: 'module'; src: string }>;
+  setRequestTimeClientScript(src: string | null | undefined, islandTags?: readonly string[]): void;
+  /** wrapInDocument `scripts` descriptors for the rendered document (#951). */
+  clientScriptDescriptors(
+    html?: string,
+    executableHead?: string,
+  ): Array<{ type: 'module'; src: string }>;
   locales: readonly string[];
   getDefaultLocale(): string;
   /** Page-render bindings — present only when the config carried `pageRuntime`. */
@@ -140,6 +146,50 @@ export interface GeneratedApp {
   statusHtml?: StatusHtmlRenderer;
   resolveLayout?: LayoutRuntime['resolveLayout'];
   renderLayout?: LayoutRuntime['renderLayout'];
+}
+
+const DATA_SCRIPT_TYPES = new Set([
+  'application/json',
+  'application/ld+json',
+  'importmap',
+  'speculationrules',
+]);
+
+function canRunAuthoredScript({ name, attributes }: RenderedTag): boolean {
+  if (
+    name === 'script' &&
+    !DATA_SCRIPT_TYPES.has(attributes.get('type')?.trim().toLowerCase() ?? '')
+  ) {
+    return true;
+  }
+  for (const attribute of attributes.keys()) {
+    if (attribute.startsWith('on')) return true;
+  }
+  return false;
+}
+
+function documentNeedsClient(
+  html: string,
+  islands: ReadonlySet<string>,
+  executableHead: string | undefined,
+): boolean {
+  let needed = false;
+  const complete = visitRenderedTags(html, (tag) => {
+    const { name, attributes, inOpenShadow } = tag;
+    needed =
+      islands.has(name) ||
+      (name === 'form' && attributes.has('data-open-enhance')) ||
+      (inOpenShadow && !!attributes.get('id')) ||
+      canRunAuthoredScript(tag);
+    return !needed;
+  });
+  if (!complete || needed) return true;
+  if (!executableHead) return false;
+  const headComplete = visitRenderedTags(executableHead, (tag) => {
+    needed = canRunAuthoredScript(tag);
+    return !needed;
+  });
+  return !headComplete || needed;
 }
 
 /**
@@ -156,12 +206,25 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
   // the prod src arrives from whoever knows the final asset addresses — the
   // generated dist/server/index.js at request-time startup, and the SSG
   // build before prerendering (both hand in the Phase 2 client asset
-  // manifest's entry URL, #1471). The descriptors ride the resolved
-  // document, so every render channel serializes the same tag.
+  // manifest's entry URL and delivery tags, #1471). A caller that has
+  // rendered the body can select the descriptor from the actual document.
   let requestTimeClientScriptSrc: string | null = null;
-  const clientScriptDescriptors = () => {
+  const devIslandTags = new Set(config.clientIslandTags ?? Object.keys(config.islands));
+  let requestTimeIslandTags = devIslandTags;
+  const fetchMiddleware = config.fetchMiddleware ?? [];
+  const clientScriptDescriptors = (html?: string, executableHead?: string) => {
     const src = config.devClientScriptSrc || requestTimeClientScriptSrc;
-    return src ? [{ type: 'module' as const, src }] : [];
+    if (!src) return [];
+    const islands = config.devClientScriptSrc ? devIslandTags : requestTimeIslandTags;
+    // Author fetch middleware can replace the body after route rendering.
+    if (
+      html !== undefined &&
+      fetchMiddleware.length === 0 &&
+      !documentNeedsClient(html, islands, executableHead)
+    ) {
+      return [];
+    }
+    return [{ type: 'module' as const, src }];
   };
 
   // The composed handler contract (#858): fetch middleware
@@ -172,7 +235,6 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
   type HandlerContext = { env?: unknown; platform?: unknown };
   const dispatchApp = (request: Request, context: HandlerContext = {}): Promise<Response> =>
     app.fetch(request, (context.env || {}) as Record<string, unknown>, context.platform);
-  const fetchMiddleware = config.fetchMiddleware ?? [];
   const handler =
     fetchMiddleware.length > 0
       ? composeFetchMiddleware([...fetchMiddleware], dispatchApp)
@@ -203,8 +265,9 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
     actionBodyLimit: createActionBodyLimit(MAX_ACTION_BODY_BYTES),
     registerSsrComponent: (tag, ctor) => guard.register(tag, ctor),
     registerSsrIsland: (tag, ctor, hostRenderer) => guard.registerIsland(tag, ctor, hostRenderer),
-    setRequestTimeClientScript: (src) => {
+    setRequestTimeClientScript: (src, islandTags) => {
       requestTimeClientScriptSrc = src || null;
+      requestTimeIslandTags = islandTags === undefined ? devIslandTags : new Set(islandTags);
     },
     clientScriptDescriptors,
     locales: config.locales,

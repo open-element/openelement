@@ -613,9 +613,7 @@ test('renderEntry: definePage descriptor feeds load and metadata wiring', () => 
   expect(code).toContain(
     'const __pageContext = { data: __data, actionData: undefined, params: __params, request: c.req.raw, locale: __locales.length > 0 ? __localeFromPath(__locales, c.req.path, __getDefaultLocale()) : undefined, route: __routeContext, meta: __routeMetaValue };',
   );
-  expect(code).toContain(
-    'const __doc = __resolvePageDocument(__page.head, __pageContext, __clientScriptDescriptors());',
-  );
+  expect(code).toContain('const __doc = __resolvePageDocument(__page.head, __pageContext);');
   expect(code).toContain(
     "import { resolvePageDocument as __resolvePageDocument } from '@openelement/router/document'",
   );
@@ -650,9 +648,7 @@ test('renderEntry: definePage descriptor feeds load and metadata wiring', () => 
     'data = typeof info.module.loader === "function" ? await info.module.loader(loadContext) : undefined;',
   );
   expect(code).toContain('__pageProps(info.module, __pageContext)');
-  expect(code).toContain(
-    'const __doc = __resolvePageDocument(page.head, __pageContext, __clientScriptDescriptors());',
-  );
+  expect(code).toContain('const __doc = __resolvePageDocument(page.head, __pageContext);');
   expect(code).toContain('filePath: "index.ts"');
   expect(code).toContain(
     'rendering: (__pageDefinition($pageIndex).renderIntent?.mode || "static")',
@@ -1173,19 +1169,13 @@ test('renderEntry: private,no-cache is emitted only after a successful render (#
   expect(returnIndex > relaxIndex, 'private,no-cache must precede the 200 return').toEqual(true);
 });
 
-test('renderEntry: island client script descriptors also cover notFound/error HTML responses (#1067)', () => {
+test('renderEntry: client script selection follows the wrapped 404 and error content (#1067)', () => {
   const routes: RouteEntry[] = [
     ...basicRoutes,
     { path: '/404', filePath: '404.ts', type: 'page', varName: 'page404' },
   ];
   const code = renderEntry(buildEntryDescriptor(routes, {}));
 
-  // #951 parity: prod embeds the island client entry into every HTML
-  // response (post-build injectClientScript on static pages, render-time
-  // script descriptors on request-time pages), so the 404/error channels
-  // must pass the same descriptors as the successful GET page — one
-  // serialization point (wrapInDocument) attaches the CSP nonce to all of
-  // them.
   expect(code).toContain(
     'return c.html(wrapInDocument(__statusHtml("404 Not Found", err.message || "Not Found"), {',
   );
@@ -1196,19 +1186,10 @@ test('renderEntry: island client script descriptors also cover notFound/error HT
     'return c.html(wrapInDocument(__statusHtml("404 Not Found", "Not Found"), {',
   );
   expect(code.includes('__withDevClientScript')).toEqual(false);
-  // #951/#1471: the document wraps read the resolved document's clientScripts
-  // (`scripts: __doc.clientScripts || []` — GET+POST success and error
-  // boundary per page route, plus the app.notFound success wrap). The direct
-  // descriptor call remains only where no resolved document exists: the
-  // 404 catch per page route (GET + POST) and the app.notFound catch — same
-  // list, same tags, one serialization point.
-  const pageRouteCount = routes.filter((r) => r.type === 'page').length;
-  expect(code.match(/scripts: __clientScriptDescriptors\(\)/g)?.length).toEqual(
-    pageRouteCount * 2 + 1,
-  );
-  expect(code.match(/scripts: __doc\.clientScripts \|\| \[\]/g)?.length).toEqual(
-    pageRouteCount * 4 + 1,
-  );
+  expect(code).toContain('scripts: __clientScriptDescriptors(content),');
+  expect(code).toContain('scripts: __clientScriptDescriptors(errorContent),');
+  expect(notFoundBody).toContain('scripts: __clientScriptDescriptors(content),');
+  expect(code).not.toContain('scripts: __clientScriptDescriptors(),');
 });
 
 test('renderEntry: hasAction codegen covers named `actions` exports (#539)', () => {

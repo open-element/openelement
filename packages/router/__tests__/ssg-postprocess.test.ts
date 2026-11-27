@@ -1037,6 +1037,7 @@ test('pageChunkMap dedupes and sorts each route’s chunk URLs', () => {
         { tagName: 'x-b', chunkUrl: '/c/b.js', strategy: 'idle', layer: 'dsd-static' },
         { tagName: 'x-a', chunkUrl: '/c/shared.js', strategy: 'idle', layer: 'dsd-static' },
         { tagName: 'x-c', chunkUrl: '/c/b.js', strategy: 'idle', layer: 'pure-island' },
+        { tagName: 'x-static', chunkUrl: '/c/static.js', strategy: 'none', layer: 'dsd-static' },
       ],
       builtAt: '1970-01-01T00:00:00.000Z',
     },
@@ -1065,6 +1066,9 @@ test('injectIslandPrefetchRules writes each page the chunks of the pages it link
       join(tmp, 'blog', 'x.html'),
       '<html><head></head><body><a href="/">home</a><a href="/about/">about</a></body></html>',
     );
+    const staticPath = join(tmp, 'plain.html');
+    const staticHtml = '<html><head></head><body><a href="/">home</a></body></html>';
+    writeFileSync(staticPath, staticHtml);
 
     // The chunk facts come from the island manifests (pageChunkMap form) —
     // the consumer shape the build lane feeds the injector.
@@ -1113,6 +1117,7 @@ test('injectIslandPrefetchRules writes each page the chunks of the pages it link
       },
     ]);
     injectIslandPrefetchRules(tmp, pageChunks);
+    expect(readFileSync(staticPath, 'utf8')).toEqual(staticHtml);
 
     const index = readFileSync(join(tmp, 'index.html'), 'utf8');
     // /about + /blog/x chunks; external and anchor links contribute nothing;

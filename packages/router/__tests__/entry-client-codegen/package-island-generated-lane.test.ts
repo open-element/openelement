@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { expect, test } from 'vitest';
 import type { IslandDecl } from '@openelement/protocol/ssg';
 import {
@@ -75,16 +74,8 @@ test('the package-island lane fact changes the factory shape, not the class byte
   expect(generateClientEntry(classLane)).toContain('__loadElementRuntime');
 });
 
-test('a class-lane package island keeps its emitted bytes (no lane fact, pinned)', () => {
-  // The fix must not touch the class lane. This is the exact entry emitted for
-  // a carrierless package island; the hash pins the byte path the fix leaves
-  // alone (a lane-fact leak into this branch would change it).
+test('a carrierless package island defers its runtime until activation', () => {
   const code = generateClientEntry(packageEntries());
-  expect(createHash('sha256').update(code).digest('hex')).toBe(
-    '32cfb5a4bb8f51a9448758f509290fcb82aee272c8308f2a1483732c2b93db1e',
-  );
-  // And the generated package island is a different byte path, by design.
-  expect(
-    generateClientEntry(packageEntries({ kind: 'producer', component: 'OpenButton' })),
-  ).not.toBe(code);
+  expect(code).toContain('Promise.all([__island, __loadElementRuntime()])');
+  expect(code).not.toMatch(/^__loadElementRuntime\(\);/m);
 });

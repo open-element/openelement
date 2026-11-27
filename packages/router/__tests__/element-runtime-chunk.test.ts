@@ -20,6 +20,8 @@ import { OpenElementError } from '@openelement/element';
 import {
   ELEMENT_RUNTIME_CHUNK_NAME,
   type ElementRuntimeIdentity,
+  documentServiceModuleIds,
+  isDocumentServiceModule,
   elementRuntimeChunkName,
   findElementRuntimeChunkFile,
   requireElementRuntimeChunk,
@@ -28,6 +30,39 @@ import {
 } from '../src/vite/internal/element-runtime-chunk.ts';
 import type { ClientBuildChunk } from '../src/vite/client-asset-manifest.ts';
 import { ClientBuildErrorCode } from '../src/internal/error-codes.ts';
+
+test('static entry guard permits the resolved document-services closure and refuses inlined generated runtime', () => {
+  const packageRoot = '/app/node_modules/@openelement/element';
+  const wrapper = '/router/src/element-document-services.js';
+  const services = `${packageRoot}/src/document-services.js`;
+  const capture = `${packageRoot}/src/internal/compiled/runtime/pre-upgrade-events.js`;
+  const errors = '/app/node_modules/@openelement/protocol/src/errors.js';
+  const generated = `${packageRoot}/src/internal/compiled/generated-element/direct-shadow.js`;
+  const graph = new Map([
+    [wrapper, [services]],
+    [services, [capture]],
+    [capture, [errors]],
+  ]);
+  const identity = {
+    packageRoot,
+    documentServices: documentServiceModuleIds(wrapper, (id) => ({
+      importedIds: graph.get(id) ?? [],
+    })),
+  };
+  expect(isDocumentServiceModule(`${errors}?resolved`, identity)).toBe(true);
+  const entry: ClientBuildChunk = {
+    fileName: 'islands/client.js',
+    isEntry: true,
+    modules: { [capture]: {} },
+  };
+  expect(() => requireEntryStaticGraphFreeOfRuntime([entry], identity)).not.toThrow();
+  expect(() =>
+    requireEntryStaticGraphFreeOfRuntime(
+      [{ ...entry, modules: { ...entry.modules, [generated]: {} } }],
+      identity,
+    ),
+  ).toThrow(/statically reaches the shared element runtime: islands\/client\.js/);
+});
 
 const tempRoots: string[] = [];
 

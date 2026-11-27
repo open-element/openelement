@@ -237,14 +237,8 @@ export function buildPlugin(
             islandManifestFiles = files;
             await writeRequestTimeClientAssets(ctx, manifest);
             log.info(`Client scripts rendered from the asset manifest: ${manifest.entry}`);
-            // -- Per-page island-chunk prefetch (#1561) --
-            // A separate lane from the manifest pass, which stays read-only
-            // on the rendered HTML (#1471 pin): the chunk facts derive from
-            // the manifests just written (single owner of the page→chunk
-            // mapping), and this lane owns the only HTML write they feed —
-            // one <script type="speculationrules"> per page, listing the
-            // linked pages' island chunks. Unsupported browsers ignore the
-            // tag (zero JS, zero cost).
+            // Island-bearing documents can warm the chunks of linked pages.
+            // An empty source-page manifest leaves normal navigation alone.
             injectIslandPrefetchRules(
               join(ctx.phase3.root || process.cwd(), ctx.phase3.outDir || DEFAULT_OUT_DIR),
               pageChunkMap(pageManifests),

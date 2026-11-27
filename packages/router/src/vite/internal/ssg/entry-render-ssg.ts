@@ -188,6 +188,7 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   );
   lines.push('    const fullHtml = wrapInDocument(content, {');
   for (const optionLine of documentWrapOptionsLines({
+    contentExpr: 'content',
     titleExpr: `title || __doc.title || ${quoteGeneratedJavaScriptValue(desc.document.title)}`,
     langExpr: `lang || __doc.lang || ${quoteGeneratedJavaScriptValue(desc.document.lang)}`,
     headExtrasExpr: '__routeHeadExtras',
@@ -299,6 +300,7 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   );
   lines.push('        const errorHtml = wrapInDocument(errorContent, {');
   for (const optionLine of documentWrapOptionsLines({
+    contentExpr: 'errorContent',
     titleExpr: `title || __doc.title || ${quoteGeneratedJavaScriptValue(desc.document.title)}`,
     langExpr: `lang || __doc.lang || ${quoteGeneratedJavaScriptValue(desc.document.lang)}`,
     headExtrasExpr: '__routeHeadExtras',

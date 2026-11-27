@@ -33,7 +33,10 @@ import {
   createGeneratedElementSiteResolver,
 } from '../vite/generated-element-site.ts';
 import { buildClientIslandEntries } from '../vite/internal/ssg/client-island-entries.ts';
-import { resolveElementServicesRuntimeModule } from '../vite/internal/ssg/entry-client-codegen.ts';
+import {
+  ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER,
+  resolveElementServicesRuntimeModule,
+} from '../vite/internal/ssg/entry-client-codegen.ts';
 import {
   type ClientIslandDeliveryEntry,
   type IslandDeliveryMeta,
@@ -58,12 +61,18 @@ import { createStyleBuildIntegration } from '../vite/internal/style-provider.ts'
 import {
   ELEMENT_RUNTIME_ENTRY_SPECIFIER,
   type ElementRuntimeIdentity,
+  documentServiceModuleIds,
+  isDocumentServiceModule,
   elementRuntimeChunkName,
   requireElementRuntimeChunk,
   requireEntryStaticGraphFreeOfRuntime,
   resolveElementRuntimeIdentity,
 } from '../vite/internal/element-runtime-chunk.ts';
-import { requireViteHelperChunk, viteHelperChunkName } from '../vite/internal/vite-helper-chunk.ts';
+import {
+  requireViteHelperChunk,
+  VITE_HELPER_CHUNK_NAME,
+  viteHelperChunkName,
+} from '../vite/internal/vite-helper-chunk.ts';
 import { realpathSync } from 'node:fs';
 import { realPathKey } from '../vite/internal/real-path-key.ts';
 import { islandStyleDeclarations } from '../vite/internal/island-style-declarations.ts';
@@ -687,6 +696,7 @@ async function buildClient(
   // only islands are generated-lane islands keeps its island entry (and JS) but
   // must not be held to the executor runtime's chunk contract.
   const entryHasClientJs = clientEntryHasClientJs(islandEntries, { enhancedForms });
+  const hasClientIslands = clientEntryHasClientJs(islandEntries);
   const styleOnlyEmission = !entryHasClientJs;
   if (styleOnlyEmission) {
     log.info('Island-free client entry - style-only client build, zero client JS');
@@ -715,6 +725,7 @@ async function buildClient(
   // entry's runtime import resolves through). Filled in buildStart, before
   // chunk grouping runs; an unresolvable specifier fails the build.
   let elementRuntimeIdentity: ElementRuntimeIdentity | null = null;
+  let documentServicesId: string | undefined;
 
   const clientAssetIslands: ClientAssetIslandInput[] = [
     ...selectedLocalTags.map((tagName, index) => ({
@@ -891,31 +902,22 @@ async function buildClient(
           // the one decision into the surface that can express all of
           // it, never an addition beside the old one.
           //
-          // Two groups, not one, and the split is load-bearing. A
-          // dedicated group whose `name` answers ONLY for the injected
-          // helper ids re-homes the helper; folding the same answer into
-          // the general decision group does not (measured on the repro:
-          // the helper stays in the island chunk). The dedicated group
-          // must also outrank every other group in the build — with a
-          // group of higher priority present, the helper follows THAT
-          // group's chunk again. Hence one helper-only group at a
-          // priority above every rule the build declares, and the
-          // pre-existing decision kept verbatim as its own group.
+          // Keep the eager helper group above the package-wide rules. It
+          // claims the resolved document-services closure too, including
+          // the dependencies those services share with the island runtime.
           codeSplitting: {
             groups: [
               {
                 name(id: string) {
-                  return viteHelperChunkName(id) ?? null;
+                  const helperChunk = viteHelperChunkName(id);
+                  if (helperChunk) return helperChunk;
+                  if (isDocumentServiceModule(id, elementRuntimeIdentity)) {
+                    return hasClientIslands ? VITE_HELPER_CHUNK_NAME : 'element-document-services';
+                  }
+                  return null;
                 },
-                // Declared above every other group this build declares.
-                // The priority is load-bearing, not decoration: measured
-                // on the repro, a competing group of HIGHER priority in
-                // the same build re-claims the helper and the island
-                // edge returns.
-                // Keeping this group strictly highest is what makes the
-                // claim unconditional; the emitted-chunk guard below is
-                // what makes a future violation fatal instead of silent.
                 priority: 100,
+                includeDependenciesRecursively: false,
               },
               {
                 name(id: string) {
@@ -1186,7 +1188,24 @@ async function buildClient(
                   `statically imports it, so the shared element-runtime chunk cannot be grouped`,
               );
             }
+            if (entryHasClientJs) {
+              const services = await this.resolve(
+                ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER,
+                RESOLVED_CLIENT_ENTRY_ID,
+              );
+              if (!services) this.error('The document-services runtime entry does not resolve.');
+              documentServicesId = services.id;
+            }
           },
+        },
+        buildEnd(error) {
+          if (error || elementRuntimeIdentity === null || documentServicesId === undefined) return;
+          elementRuntimeIdentity = {
+            ...elementRuntimeIdentity,
+            documentServices: documentServiceModuleIds(documentServicesId, (id) =>
+              this.getModuleInfo(id),
+            ),
+          };
         },
       },
       // The browser-entry module-graph observer (M10-P1 evidence, REPORT-ONLY):
@@ -1230,35 +1249,15 @@ async function buildClient(
     );
     log.info('Client bundle built -> ' + clientOutDir);
 
-    // #1544, fail closed: the generated entry statically imports the element
-    // runtime, so the emitted graph must group runtime modules into the shared
-    // chunk — zero matches is a structural failure (per-island runtime copies
-    // would ship silently), not a degraded chunk layout. An island-free entry
-    // (style-only / CSS-only, S-C2/S-12 and defect D) imports the document
-    // stylesheet and nothing else, so there is no runtime to group — the
-    // requirement is the generated entry's own fact, never a property of the
-    // emission shape.
-    if (entryNeedsElementRuntime) {
-      requireElementRuntimeChunk(collectClientBuildChunks(outputs), elementRuntimeIdentity);
-    }
-
-    // B2 gap (a), fail closed, both halves:
-    //
-    //  1. Vite's injected preload helper modules, when the graph carries any,
-    //     must be homed in the one dedicated `vite-helper` chunk. Anywhere
-    //     else — in practice a lazily-loaded island chunk — is the layout that
-    //     gives the entry a static edge to that island.
-    //  2. The property itself: the emitted entry must not STATICALLY reach the
-    //     shared element-runtime chunk. This is the one that survives Vite
-    //     renaming its helper id: guard 1 would then match nothing and pass
-    //     vacuously, while guard 2 still fails the build the moment the
-    //     runtime reappears in the entry's static closure.
-    //
-    // Guard 2 matches requireElementRuntimeChunk's posture; the B2 promise is
-    // the generated entry's own, and www is the acceptance case.
     const emittedChunks = collectClientBuildChunks(outputs);
+    const shipsGeneratedIsland = islandEntries.some(
+      (entry) => entry.generatedLane === true && entry.strategy !== 'none',
+    );
+    if (entryNeedsElementRuntime || shipsGeneratedIsland) {
+      requireElementRuntimeChunk(emittedChunks, elementRuntimeIdentity);
+    }
     requireViteHelperChunk(emittedChunks);
-    if (entryNeedsElementRuntime) {
+    if (entryHasClientJs) {
       requireEntryStaticGraphFreeOfRuntime(emittedChunks, elementRuntimeIdentity);
     }
 

@@ -24,21 +24,11 @@
  * injected helper id is grouped into ONE dedicated, eagerly-reachable
  * `vite-helper` chunk:
  *
- *   - the entry imports the helper chunk directly, so its static graph is
- *     `{client.js, vite-helper-<hash>.js}` and no island chunk;
- *   - every island chunk imports that same helper chunk, so the helper stays
- *     a single instance (the `seen` map is only correct while it is one) and
- *     the island chunks keep sharing one `element-runtime` chunk;
- *   - the helper chunk imports nothing, so it cannot re-enter the runtime.
- *
- * This is the same rule #1544 already applies to the element runtime — shared
- * infrastructure that many chunks need must not be homed inside one
- * lazily-loaded island chunk — applied to the same class of module. It is a
- * bundler contract, not a coincidence: `codeSplitting.groups` is the
- * documented per-module to per-chunk assignment surface, and the match key is
- * Vite's own declared id. Nothing here depends on a group name colliding with
- * an entry chunk's name, which is the variant this module deliberately does
- * NOT use.
+ * The entry and any nested dynamic import share that eager chunk. The
+ * resolved document-services closure may share it, giving the helper and
+ * document code one response while keeping the island runtime out of the
+ * entry's static graph. A dedicated high-priority codeSplitting group gives
+ * these module IDs one emitted home.
  *
  * WHY IT FAILS CLOSED. The grouping above is only as durable as Vite's id. If
  * a future Vite renames it, the group stops matching and the pre-B2 graph

@@ -42,6 +42,35 @@ export const ELEMENT_RUNTIME_ENTRY_SPECIFIER = '@openelement/element';
 export interface ElementRuntimeIdentity {
   /** Absolute, separator-normalized @openelement/element package root. */
   packageRoot: string;
+  /** Resolved static graph of the narrow document-services entry. */
+  documentServices?: ReadonlySet<string>;
+}
+
+/** Resolve the document-services closure using the bundler's own module graph. */
+export function documentServiceModuleIds(
+  root: string,
+  getModuleInfo: (id: string) => { importedIds: readonly string[] } | null,
+): ReadonlySet<string> {
+  const seen = new Set<string>();
+  const ids = [root];
+  for (const id of ids) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    ids.push(...(getModuleInfo(id)?.importedIds ?? []));
+  }
+  return new Set([...seen].map(normalizeModuleId));
+}
+
+function normalizeModuleId(id: string): string {
+  return normalizeSeparators(id.split('?', 1)[0]);
+}
+
+/** Claim shared dependencies before the broader island-runtime group captures them. */
+export function isDocumentServiceModule(
+  id: string,
+  identity: ElementRuntimeIdentity | null,
+): boolean {
+  return identity?.documentServices?.has(normalizeModuleId(id)) === true;
 }
 
 /**
@@ -94,8 +123,9 @@ export function elementRuntimeChunkName(
   identity: ElementRuntimeIdentity | null,
 ): string | undefined {
   if (!identity) return undefined;
-  const id = normalizeSeparators(moduleId.split('?', 1)[0]);
+  const id = normalizeModuleId(moduleId);
   if (!id.startsWith(`${identity.packageRoot}/`)) return undefined;
+  if (identity.documentServices?.has(id)) return undefined;
   return ELEMENT_RUNTIME_CHUNK_NAME;
 }
 
@@ -240,7 +270,6 @@ export function requireEntryStaticGraphFreeOfRuntime(
   );
   if (runtimeFiles.size === 0) return;
   const byFile = new Map(chunks.map((chunk) => [chunk.fileName, chunk]));
-  const seen = new Set<string>();
   const queue = entries.map((chunk) => chunk.fileName);
   // Breadth-first parent links, so a failure can name the whole hop sequence
   // that carried the edge instead of only its last hop.
@@ -250,24 +279,18 @@ export function requireEntryStaticGraphFreeOfRuntime(
     for (let at: string | null = file; at !== null; at = parent.get(at) ?? null) path.unshift(at);
     return path;
   };
-  while (queue.length > 0) {
-    const file = queue.shift() as string;
-    if (seen.has(file)) continue;
-    seen.add(file);
-    // The entry chunk itself cannot carry the runtime as a *reached* chunk
-    // (that is the same-file case the literal `imports` list never contains),
-    // so the comparison starts at the imports.
+  for (const file of queue) {
+    if (runtimeFiles.has(file)) {
+      throw buildError(
+        ClientBuildErrorCode.ENTRY_STATIC_GRAPH_REACHES_RUNTIME,
+        `The emitted client entry statically reaches the shared element runtime: ` +
+          `${pathTo(file).join(' -> ')}. ` +
+          `A page whose island manifest is empty would download the runtime anyway (B2), so ` +
+          `the build fails instead of shipping the pre-B2 floor`,
+      );
+    }
     for (const imported of byFile.get(file)?.imports ?? []) {
-      if (!byFile.has(imported) || seen.has(imported)) continue;
-      if (runtimeFiles.has(imported)) {
-        throw buildError(
-          ClientBuildErrorCode.ENTRY_STATIC_GRAPH_REACHES_RUNTIME,
-          `The emitted client entry statically reaches the shared element runtime: ` +
-            `${[...pathTo(file), imported].join(' -> ')}. ` +
-            `A page whose island manifest is empty would download the runtime anyway (B2), so ` +
-            `the build fails instead of shipping the pre-B2 floor`,
-        );
-      }
+      if (!byFile.has(imported) || parent.has(imported)) continue;
       parent.set(imported, file);
       queue.push(imported);
     }

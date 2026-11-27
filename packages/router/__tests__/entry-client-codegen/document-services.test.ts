@@ -1,34 +1,7 @@
 /**
- * The generated entry's document-services installer (generated-lane page floor).
- *
- * The two document-level services the entry installs — deep fragment navigation
- * (#1090) and the bounded pre-hydration click capture — used to arrive ONLY as
- * a side effect of the entry's lazy element-runtime `import()`. On a page whose
- * islands are all generated-lane that import is not emitted at all
- * (`clientEntryNeedsElementRuntime()` false, M11-3 — the P1 win, deliberately
- * kept), so both services stopped being installed and
- * `page-structure.spec.ts`'s deep-fragment case regressed with no
- * `data-open-target` on `#start`.
- *
- * This file pins the consumer side of the fix, all fail-closed:
- *
- * 1. The generated-lane-only shape carries a STATIC import of the
- *    document-services virtual specifier and CALLS both installers at entry
- *    evaluation (before any island factory can run, because a direct load with
- *    a `#hash` must scroll into a DSD subtree before activation).
- * 2. That shape carries NO `__loadElementRuntime` — restoring the lazy loader
- *    to re-install the services would undo the P1 win this fix exists to keep.
- * 3. The class-lane shape is byte-identical to its pinned ABI hash: its lazy
- *    `element-services` import is still the one installer there (the shared
- *    runtime chunk is fetched anyway, so a static import would add a real
- *    static edge to it for no benefit).
- * 4. The specifier resolves to a real module, and that module's own closure
- *    contains no P1 executor entry — the property that makes a static import
- *    from the page floor legal at all.
- * 5. Gate: the entry never calls a `__` binding it does not define (the
- *    88bda88bf regression class, re-asserted for the new call).
+ * These tests pin the document bootstrap's own import and installation order.
+ * The emitted-chunk guard separately checks the entry's static graph.
  */
-import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -107,18 +80,17 @@ test.each([false, true])(
   },
 );
 
-test('the class-lane entry is byte-identical to its pinned ABI hash', () => {
-  // Its lazy `element-services` import remains the single installer there. The
-  // hash is the guardrail: any accidental static document-services import on
-  // this shape would add a static edge to the shared runtime chunk (which #1544
-  // groups by package root) for a chunk that is already fetched.
-  const code = generateClientEntry([
-    { tagName: 'class-card', modulePath: '/abs/app/islands/class-card.tsx', strategy: 'load' },
-  ]);
-  expect(createHash('sha256').update(code).digest('hex')).toBe(
-    '929dbd80514dd613ebbf453f740cae12fa4762ada3d38c0270b377cf49485c92',
+test('a legacy island does not start its runtime when form enhancement installs', () => {
+  const code = generateClientEntry(
+    [{ tagName: 'class-card', modulePath: '/abs/app/islands/class-card.tsx', strategy: 'load' }],
+    { enhancedForms: true },
   );
-  expect(code).not.toContain('element-document-services');
+  expect(code).toContain(ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER);
+  expect(code).toContain('Promise.all([__island, __loadElementRuntime()])');
+  expect(code).not.toMatch(/^__loadElementRuntime\(\);/m);
+  expect(code.match(/__installDeepFragments\(\);/g)).toHaveLength(1);
+  expect(code.match(/__installPreHydrationCapture\(document, __tags\);/g)).toHaveLength(1);
+  expect(code.indexOf('__installDeepFragments();')).toBeLessThan(code.indexOf('var __scheduler'));
 });
 
 test('the specifier resolves to the wrapper, and the wrapper reaches no executor entry', () => {
