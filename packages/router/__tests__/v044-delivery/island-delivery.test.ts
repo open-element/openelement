@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { expect, test } from 'vitest';
 import { assertThrowsIncludes } from '../../../../tests/lib/vitest-asserts.ts';
@@ -340,8 +340,8 @@ test('v0.44 client delivery follows islands imported through a route component',
   }
 });
 
-test('v0.44 client delivery keeps an explicitly imported island capability', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'open-element-alpha9-capability-'));
+test('client delivery keeps an explicitly imported generated island capability', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'open-element-late-island-'));
   try {
     const routesDir = join(root, 'app', 'routes');
     const componentsDir = join(root, 'app', 'components');
@@ -355,29 +355,31 @@ test('v0.44 client delivery keeps an explicitly imported island capability', asy
     );
     await writeFile(
       join(componentsDir, 'content.tsx'),
-      "import '../islands/late-child.tsx';\n" +
+      "import './linked-child.tsx?capability';\n" +
         'export default function Content() { return <opaque-third-party />; }',
     );
-    await writeFile(
-      join(islandsDir, 'late-child.tsx'),
-      "import { element, OpenElement, property } from '@openelement/element';\n" +
-        "@element('oe-late-child')\n" +
-        'export default class LateChild extends OpenElement { render() { return <span />; } }',
-    );
+    const islandSource =
+      "import { defineIslandConfig } from '@openelement/router';\n" +
+      "export const openElement = defineIslandConfig({ hydrate: 'load', ssr: false });\n" +
+      'export default function Child() { return <span />; }';
+    await writeFile(join(islandsDir, 'late-child.tsx'), islandSource);
+    await writeFile(join(islandsDir, 'unreferenced.tsx'), islandSource);
+    await symlink('../islands/late-child.tsx', join(componentsDir, 'linked-child.tsx'), 'file');
 
     const ctx = new OpenElementBuildContext({});
     ctx.phase3.routesDir = 'app/routes';
+    ctx.phase3.islandsDir = 'app/islands';
+    ctx.phase1.islandTagNames = ['oe-late-child', 'oe-unreferenced'];
+    ctx.phase1.islandFiles = ['late-child.tsx', 'unreferenced.tsx'];
     ctx.phase1.cachedRoutes = [
-      {
-        path: '/',
-        filePath: 'index.tsx',
-        type: 'page',
-        varName: 'route_index',
-      },
+      { path: '/', filePath: 'index.tsx', type: 'page', varName: 'route_index' },
     ];
 
-    const reachable = findReachableIslandTags(ctx, root, 'dist', ['oe-late-child']).tags;
-    expect([...reachable]).toEqual(['oe-late-child']);
+    const candidates = ['oe-late-child', 'oe-unreferenced', 'linked-child', 'late-child'];
+    expect([...findReachableIslandTags(ctx, root, 'dist', candidates).tags]).toEqual([
+      'oe-late-child',
+    ]);
+    expect([...findReachableIslandTags(ctx, root, 'dist', ['oe-unreferenced']).tags]).toEqual([]);
   } finally {
     await rm(root, { recursive: true });
   }

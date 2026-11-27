@@ -65,6 +65,7 @@ import {
 } from '../vite/internal/element-runtime-chunk.ts';
 import { requireViteHelperChunk, viteHelperChunkName } from '../vite/internal/vite-helper-chunk.ts';
 import { realpathSync } from 'node:fs';
+import { realPathKey } from '../vite/internal/real-path-key.ts';
 import { islandStyleDeclarations } from '../vite/internal/island-style-declarations.ts';
 import {
   setClientIslandStyleAssets,
@@ -327,6 +328,20 @@ export function findReachableIslandTags(
     }
   };
 
+  // Generated islands need not contain a registration call or an authored
+  // tag string. Join the import walk to the scanner's admitted file identity.
+  const islandsDir = ctx.phase3.islandsDir || DEFAULT_ISLANDS_DIR;
+  const deliveryByFile = new Map<string, string[]>();
+  ctx.phase1.islandTagNames.forEach((tag, index) => {
+    const islandFile = ctx.phase1.islandFiles[index];
+    if (islandFile === undefined) return;
+    const key = realPathKey(resolve(root, islandsDir, islandFile));
+    deliveryByFile.set(key, [
+      ...(deliveryByFile.get(key) ?? []),
+      ...deliveryTagsForLocal(tag, ctx.phase1.islandMeta[tag]),
+    ]);
+  });
+
   const visitedSourceFiles = new Set<string>();
   const recordSourceFile = (filePath: string): void => {
     const normalizedPath = resolve(filePath);
@@ -345,7 +360,10 @@ export function findReachableIslandTags(
     // Importing a local island module is an explicit registration-capability
     // edge even when its tag is created later by opaque third-party code.
     // The declaration itself is therefore observable reachability evidence.
-    for (const tag of semantics.definedCustomElementTags) {
+    for (const tag of [
+      ...semantics.definedCustomElementTags,
+      ...(deliveryByFile.get(realPathKey(normalizedPath)) ?? []),
+    ]) {
       if (candidateSet.has(tag)) reachable.add(tag);
     }
     for (const specifier of semantics.relativeImports) {
