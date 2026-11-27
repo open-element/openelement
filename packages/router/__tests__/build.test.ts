@@ -138,8 +138,8 @@ describe('build - generateClientEntry', () => {
     // either kind of island activation.
     const captureIndex = code.indexOf(captureCall);
     expect(code.indexOf('var __scheduler')).toBeGreaterThan(captureIndex);
-    expect(code).toContain('var __island = import(');
-    expect(code).toContain('Promise.all([__island, __loadElementRuntime()])');
+    expect(code).toContain('return import("/app/islands/my-counter.ts")');
+    expect(code).not.toContain('__loadElementRuntime');
     // The declared list is assigned before the island module can define, and
     // the scheduler that starts activations comes after both.
     expect(code.indexOf('var __tags =') < code.indexOf('var __scheduler')).toEqual(true);

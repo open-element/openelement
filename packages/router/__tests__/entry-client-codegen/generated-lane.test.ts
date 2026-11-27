@@ -9,7 +9,6 @@ import type { IslandDecl } from '@openelement/protocol/ssg';
 import {
   ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER,
   clientEntryHasClientJs,
-  clientEntryNeedsElementRuntime,
   generateClientEntry,
 } from '../../src/vite/internal/ssg/entry-client-codegen.ts';
 import { VIRTUAL_RUNTIME_SPECIFIERS } from '../../src/vite/internal/ssg/entry-generators.ts';
@@ -80,7 +79,6 @@ test('buildClientIslandEntries propagates the generated lane fact from the scan 
 test('generated-only entry keeps its factories but never waits for the executor runtime', () => {
   const entries = generatedEntries();
   const entry = generateClientEntry(entries);
-  expect(clientEntryNeedsElementRuntime(entries)).toBe(false);
   expect(clientEntryHasClientJs(entries)).toBe(true);
   // The entry is not the island-free/style-only placeholder.
   expect(entry).not.toContain('no client islands');
@@ -195,37 +193,17 @@ test('Vite ships the registered default and named constructors without generated
   }
 });
 
-test('class-only entry keeps the executor-runtime factory behind island activation', () => {
-  const baselineInput = [
-    {
-      tagName: 'class-card',
-      modulePath: '/abs/app/islands/class-card.tsx',
-      strategy: 'load' as const,
-    },
-  ];
-  const code = generateClientEntry(baselineInput);
-  expect(code).toContain('var __elementRuntimePromise = null;');
-  expect(code).toContain('__loadElementRuntime');
-  expect(code).toContain('var __island = import("/abs/app/islands/class-card.tsx");');
-  expect(code).toContain('Promise.all([__island, __loadElementRuntime()])');
-});
-
-test('a mixed page waits for the runtime only in its class-lane factories', () => {
-  const classIsland: ClientIslandDeliveryEntry = {
-    tagName: 'class-card',
-    modulePath: '/abs/app/islands/class-card.tsx',
+test('native and generated islands use the same constructor activation path', () => {
+  const island: ClientIslandDeliveryEntry = {
+    tagName: 'native-card',
+    modulePath: '/abs/app/islands/native-card.js',
     strategy: 'load',
   };
   const generated = generatedEntries()[0]!;
-  const mixed = [classIsland, ...generatedEntries()];
-  const entry = generateClientEntry(mixed);
-  expect(clientEntryNeedsElementRuntime(mixed)).toBe(true);
-  expect(entry).toContain('__loadElementRuntime');
-  expect(entry).toContain('var __island = import("/abs/app/islands/class-card.tsx");');
-  expect(entry).toContain('Promise.all([__island, __loadElementRuntime()])');
-  expect(entry).toContain(
-    `return import(${JSON.stringify(generated.modulePath)}).then(function (mod) {`,
-  );
+  const code = generateClientEntry([island, generated]);
+  expect(code).not.toContain('__loadElementRuntime');
+  expect(code).toContain('return import("/abs/app/islands/native-card.js")');
+  expect(code).toContain(`return import(${JSON.stringify(generated.modulePath)})`);
 });
 
 test('a generated island with hydrate:none stays zero-client-JS', () => {
@@ -467,55 +445,16 @@ test('M-4a: both consumers resolve every identity kind exactly as the ONE verdic
 
 // ─── M-4b: island declaration dedup includes the lane fact ──────────────────
 
-test('M-4b: same tag and module on different lanes fails closed and names both sources', () => {
-  // Only the lane differs: the lane fact decides whether the activation factory
-  // waits for (and loads) the executor runtime, so these two declarations are
-  // NOT interchangeable.
-  const classLane: ClientIslandDeliveryEntry = {
+test('duplicate declarations with one native constructor identity deduplicate', () => {
+  const same: ClientIslandDeliveryEntry = {
     tagName: 'shared-card',
-    modulePath: '/abs/app/islands/shared-card.tsx',
+    modulePath: '/app/shared-card.js',
     strategy: 'idle',
   };
-  const generatedLane: ClientIslandDeliveryEntry = {
-    tagName: 'shared-card',
-    modulePath: '/abs/app/islands/shared-card.tsx',
-    strategy: 'idle',
-    generatedLane: true,
-  };
-
-  // Order must not matter: neither declaration may win silently.
-  for (const declarations of [
-    [generatedLane, classLane],
-    [classLane, generatedLane],
-  ]) {
-    let message = '';
-    expect(() => {
-      try {
-        generateClientEntry(declarations);
-      } catch (error) {
-        message = (error as Error).message;
-        throw error;
-      }
-    }, 'the conflict must fail the entry generation').toThrow(
-      /Conflicting island capability declarations for shared-card/,
-    );
-    // Both sources are named with their lane and module identity — not just
-    // the tag. A first-wins dedup would have produced an entry here.
-    expect(message).toContain('generated-lane declaration');
-    expect(message).toContain('class-lane declaration');
-    expect(message).toContain('/abs/app/islands/shared-card.tsx');
-    expect(message.split(' vs ')).toHaveLength(2);
-  }
-
-  // The runtime-lane question is fail-closed too: it is answered from the same
-  // normalized declarations, so it cannot silently pick the first lane.
-  expect(() => clientEntryNeedsElementRuntime([generatedLane, classLane])).toThrow(
+  expect(generateClientEntry([same, { ...same, generatedLane: true }])).toBe(
+    generateClientEntry([same]),
+  );
+  expect(() => generateClientEntry([same, { ...same, exportName: 'Other' }])).toThrow(
     /Conflicting island capability declarations for shared-card/,
   );
-
-  // Positive controls: declarations that AGREE on the lane still dedupe (the
-  // guard is about disagreement, not a ban on repeated declarations).
-  expect(() => generateClientEntry([classLane, classLane])).not.toThrow();
-  expect(() => generateClientEntry([generatedLane, generatedLane])).not.toThrow();
-  expect(clientEntryNeedsElementRuntime([generatedLane, generatedLane])).toBe(false);
 });

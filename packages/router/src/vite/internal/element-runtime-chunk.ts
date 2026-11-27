@@ -178,6 +178,7 @@ export function findElementRuntimeChunkFile(files: readonly string[]): string | 
 export function requireElementRuntimeChunk(
   chunks: readonly ClientBuildChunk[],
   identity: ElementRuntimeIdentity | null,
+  required = true,
 ): void {
   if (!identity) {
     throw buildError(
@@ -193,6 +194,7 @@ export function requireElementRuntimeChunk(
     ),
   );
   if (carrying.length === 0) {
+    if (!required) return;
     throw buildError(
       ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING,
       `The native client graph requires ${ELEMENT_RUNTIME_ENTRY_SPECIFIER}, but the emitted ` +
@@ -234,11 +236,8 @@ export function requireElementRuntimeChunk(
  * runtime is still dragged in when the entry acquires a static edge to any
  * chunk that imports it.
  *
- * Static only, by construction: the walk follows `OutputChunk.imports` and
- * never `dynamicImports`, so the entry's own lazy `import()` of the selected
- * `element-services-*` surface — and every island chunk behind it — is
- * invisible here, which is the point. A closure that reaches the runtime
- * statically is a page floor, and fails.
+ * The walk follows `OutputChunk.imports`. The lazy imports triggered by
+ * island activation do not enter that static closure.
  *
  * Fail-closed on the guard's own inputs: a build whose entry chunk cannot be
  * identified fails rather than passing vacuously, because "no entry found" and

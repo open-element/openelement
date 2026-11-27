@@ -27,6 +27,7 @@ import {
   ClientBuildErrorCode,
   SsgHygieneErrorCode,
 } from '../../../internal/error-codes.ts';
+import { readViteClientManifest } from '../../client-asset-manifest.ts';
 import type { PageIslandManifest } from './island-manifest.ts';
 import {
   generateIslandManifests,
@@ -47,6 +48,46 @@ import { safeReadDir } from './route-scanner-fs.ts';
 export { buildIslandPrefetchLinks } from './speculation-rules.ts';
 
 const log = createLogger('build-postprocess');
+
+/** Find the island chunks that reach the runtime through static imports. */
+async function runtimePreloadPages(
+  outputDir: string,
+  base: string,
+  pages: readonly PageIslandManifest[],
+  runtimeUrl: string,
+): Promise<PageIslandManifest[]> {
+  const manifest = await readViteClientManifest(
+    join(outputDir, 'client', '.vite', 'manifest.json'),
+  );
+  const urlPrefix = `${base || '/'}client/`;
+  const importedBy = new Map<string, string[]>();
+  const pending: string[] = [];
+  for (const [key, chunk] of Object.entries(manifest)) {
+    if (`${urlPrefix}${chunk.file}` === runtimeUrl) pending.push(key);
+    for (const dependency of chunk.imports ?? []) {
+      const importers = importedBy.get(dependency);
+      if (importers) importers.push(key);
+      else importedBy.set(dependency, [key]);
+    }
+  }
+  if (pending.length === 0) {
+    throw buildError(
+      ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING,
+      `The client import graph does not name the shared element runtime at ${runtimeUrl}`,
+    );
+  }
+  const seen = new Set<string>();
+  const dependentUrls = new Set<string>();
+  for (const key of pending) {
+    if (seen.has(key)) continue;
+    seen.add(key);
+    dependentUrls.add(`${urlPrefix}${manifest[key].file}`);
+    pending.push(...(importedBy.get(key) ?? []));
+  }
+  return pages.filter((page) =>
+    page.islands.some((island) => island.strategy !== 'none' && dependentUrls.has(island.chunkUrl)),
+  );
+}
 
 /** Narrow view of OpenElementBuildContext used by the SSG post-processor. */
 export interface BuildContextView {
@@ -120,16 +161,14 @@ export function islandChunkMapFromAssetManifest(
  * client script tags themselves were already embedded at render time
  * (#1471) — this pass records the identity-driven chunk/strategy/layer
  * manifests and then feeds the one HTML write derived from them (B2/#1544):
- * the shared element-runtime chunk's `<link rel="modulepreload">` on exactly
- * the pages whose manifest carries a client-activatable island. The
+ * the shared element-runtime chunk's `<link rel="modulepreload">` on the
+ * pages with an island whose emitted chunk imports that runtime. The
  * per-page speculation-rules injection (#1561) is a separate lane fed by
  * the manifests this function returns. Fail-closed: the chunk map is
  * resolved — and any missing island asset thrown — before a single page
  * manifest is generated or written, so the pass either writes the complete
  * manifest set or none of it, never a partial record that silently omits an
- * admitted island; and an island-bearing native build whose emitted runtime
- * chunk cannot be named fails the head projection instead of shipping pages
- * with a cold runtime fetch.
+ * admitted island. Native-only apps can ship no Element runtime.
  */
 export async function postProcessClientIslandBuild(
   ctx: BuildContextView,
@@ -190,25 +229,17 @@ export async function postProcessClientIslandBuild(
   const pageManifests = generateIslandManifests(outputDir, chunkMap, strategyMap, layerMap);
   const files = await writeIslandManifests(outputDir, pageManifests);
 
-  // B2/#1544: project the same per-page facts onto the document head. The
-  // runtime chunk's address is the build's own emitted artifact (the client
-  // asset manifest's shared set); no second source of page→island knowledge
-  // exists here.
   const bearingPages = pageManifests.filter((manifest) => pageHasClientIslands(manifest));
-  if (bearingPages.length > 0) {
-    const runtimeUrl = findElementRuntimeChunkFile(ctx.clientAssetManifest?.shared ?? []);
-    if (runtimeUrl === undefined) {
-      throw buildError(
-        ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING,
-        `Island-bearing pages (${bearingPages
-          .map((manifest) => manifest.route)
-          .join(', ')}) need the shared element-runtime chunk preloaded, but the emitted client ` +
-          `assets carry no element-runtime-<hash>.js chunk to name — the client build ` +
-          `must ship the #1544 chunk before the per-page projection can point a modulepreload at it`,
-      );
-    } else {
-      injectElementRuntimePreload(outputDir, pageManifests, runtimeUrl);
-    }
+  const assets = ctx.clientAssetManifest;
+  const runtimeUrl = findElementRuntimeChunkFile([
+    ...new Set([
+      ...(assets?.shared ?? []),
+      ...Object.values(assets?.islands ?? {}).map((asset) => asset.file),
+    ]),
+  ]);
+  if (bearingPages.length > 0 && runtimeUrl !== undefined) {
+    const pages = await runtimePreloadPages(outputDir, ctx.phase3.base, bearingPages, runtimeUrl);
+    injectElementRuntimePreload(outputDir, pages, runtimeUrl);
   }
   return { pageManifests, files };
 }

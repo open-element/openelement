@@ -626,16 +626,16 @@ test('the guard fails an entry no seed file consumes (negative)', async () => {
     );
     writeFileSync(
       join(ssg, 'entry-client-codegen.ts'),
-      "export const surface = runtimeModulePath('./ssg/element-services-full.ts');\n",
+      "export const surface = runtimeModulePath('./ssg/element-document-services.ts');\n",
     );
     writeFileSync(join(ssg, 'island-scheduler.ts'), 'export const schedule = 1;\n');
-    writeFileSync(join(ssg, 'element-services-full.ts'), 'export const surface = 1;\n');
+    writeFileSync(join(ssg, 'element-document-services.ts'), 'export const surface = 1;\n');
 
     const { modules, problems } = consumerPathConsumedModules(root);
     expect(problems).toEqual([]);
     const drift = packEntryDrift(modules, [
       'src/vite/internal/ssg/island-scheduler.ts',
-      'src/vite/internal/ssg/element-services-full.ts',
+      'src/vite/internal/ssg/element-document-services.ts',
       'src/vite/internal/ssg/element-services-retired.ts',
     ]);
     expect(drift.missing).toEqual([]);

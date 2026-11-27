@@ -182,189 +182,15 @@ test('client:only islands are scheduled with immediate load (not idle)', () => {
 // client-only hydrates nothing, so its bundle imports the claim-free entry;
 // everything else keeps the full one.
 
-test('#1416: a page with only client-only islands imports the client-only entry', () => {
+test('client-only and server-rendered hosts import their own constructors', () => {
   const code = generateClientEntry([
-    {
-      tagName: 'client-only-widget',
-      modulePath: './client-only-widget.ts',
-      strategy: 'only',
-      ssr: false,
-      dsd: false,
-    },
-    {
-      tagName: 'another-widget',
-      modulePath: './another-widget.ts',
-      strategy: 'only',
-      ssr: false,
-      dsd: false,
-    },
+    { tagName: 'only-widget', modulePath: './only.ts', strategy: 'only', ssr: false, dsd: false },
+    { tagName: 'dsd-widget', modulePath: './dsd.ts', strategy: 'idle', ssr: true, dsd: true },
   ]);
-
-  expect(
-    elementServicesImport(code).endsWith('element-services-client-only.ts'),
-    'client-only surface is loaded when no island can hydrate server DOM',
-  ).toBeTruthy();
-  expect(
-    importLines(code).some((line) => line.includes('@openelement/element')),
-    'and the entry still carries no static element import of its own',
-  ).toEqual(false);
+  expect(code).toContain('return import("./only.ts")');
+  expect(code).toContain('return import("./dsd.ts")');
+  expect(code).not.toContain('element-services');
   assertEntrySyntax(code);
-});
-
-test('#1416: a page with any dsd island never takes the client-only entry', () => {
-  // The ruling's reverse case, and the direction that matters: a wrong guess
-  // here breaks hydration instead of costing bytes. An island that hydrates
-  // is enough, even next to client-only ones.
-  const code = generateClientEntry([
-    {
-      tagName: 'client-only-widget',
-      modulePath: './client-only-widget.ts',
-      strategy: 'only',
-      ssr: false,
-      dsd: false,
-    },
-    {
-      tagName: 'hydrating-widget',
-      modulePath: './hydrating-widget.ts',
-      strategy: 'idle',
-      ssr: true,
-      dsd: true,
-    },
-  ]);
-
-  expect(
-    elementServicesImport(code).endsWith('element-services-full.ts'),
-    'full surface for a hydrating page',
-  ).toBeTruthy();
-  expect(
-    elementServicesImport(code).includes('client-only'),
-    'the claim-free surface must never be selected on a page that can hydrate',
-  ).toEqual(false);
-});
-
-/** Import prologue lines only: the header comments mention module names. */
-function importLines(code: string): string[] {
-  return code.split('\n').filter((line) => line.startsWith('import'));
-}
-
-/**
- * The element-runtime surface module the entry loads LAZILY (B2/#1544): the
- * stable virtual id of the selected `element-services-*` wrapper, read out of
- * the emitted dynamic import. The two-axis choice lives here now — the entry
- * carries no static element import at all, so `importLines` can no longer
- * witness it. The id keeps the wrapper's file name (the `.ts` tail included)
- * and is resolved to the real module by the two client-entry hosts, so the
- * assertions below read like the pre-virtual path form while the emitted bytes
- * stay machine-independent (red A).
- */
-function elementServicesImport(code: string): string {
-  const match = code.match(/import\('([^']*element-services-[^']*)'\)/);
-  if (!match) throw new Error('generated entry carries no element-services dynamic import');
-  return match[1];
-}
-
-test('#1416: an island that declares nothing keeps the full entry (conservative)', () => {
-  // Silence is not a client-only claim: ssr/dsd absent means "not known to be
-  // client-only", so the full entry stands. Same for one flag set and the
-  // other absent, and for ssr:true/dsd:false — every partial declaration
-  // resolves to the full entry.
-  const silent = generateClientEntry([
-    { tagName: 'x-silent', modulePath: './silent.ts', strategy: 'idle' },
-  ]);
-  expect(elementServicesImport(silent).endsWith('element-services-full.ts')).toBeTruthy();
-  expect(elementServicesImport(silent).includes('client-only')).toEqual(false);
-
-  const halfDeclared = generateClientEntry([
-    { tagName: 'x-half', modulePath: './half.ts', strategy: 'idle', ssr: false },
-  ]);
-  expect(elementServicesImport(halfDeclared).endsWith('element-services-full.ts')).toBeTruthy();
-
-  const dsdOnly = generateClientEntry([
-    { tagName: 'x-dsd-only', modulePath: './dsd-only.ts', strategy: 'idle', ssr: false, dsd: true },
-  ]);
-  expect(
-    elementServicesImport(dsdOnly).endsWith('element-services-full.ts'),
-    'dsd alone keeps the claim: only both flags false prove client-only',
-  ).toBeTruthy();
-});
-
-test('#1416: both ssr and dsd false is client-only even off the "only" strategy', () => {
-  // The predicate agrees with the build's own client-only determination
-  // (build-ssg.ts: `meta.ssr !== false` decides the client-only stub), and it
-  // is the same declaration: `ssr: false, dsd: false` means no server output
-  // for this island, so there is nothing to claim. `strategy: 'only'` carries
-  // the same meaning by definition (island.ts: "client-only render, no DSD/SSR
-  // output"), which is why it is admitted without the explicit flags.
-  const explicit = generateClientEntry([
-    { tagName: 'x-load', modulePath: './load.ts', strategy: 'load', ssr: false, dsd: false },
-  ]);
-  expect(elementServicesImport(explicit)).toContain('element-services-client-only');
-
-  const onlyWithoutFlags = generateClientEntry([
-    { tagName: 'x-only', modulePath: './only.ts', strategy: 'only' },
-  ]);
-  expect(elementServicesImport(onlyWithoutFlags)).toContain('element-services-client-only');
-});
-
-// #1548: the blocks axis. The entry carries the when/each Block builders
-// unless the island blocks scan proved no island module lowers one — the
-// codegen only translates that proof into the subpath choice.
-
-test('#1548: includeBlocksRuntime:false picks the no-blocks entry for a hydrating page', () => {
-  const code = generateClientEntry(
-    [{ tagName: 'x-counter', modulePath: './counter.ts', strategy: 'idle', ssr: true, dsd: true }],
-    { includeBlocksRuntime: false },
-  );
-  // The blocks-free row rides the full wrapper: elementRuntimeBlocksAlias
-  // rewrites the wrapper's bare '@openelement/element' specifier to the
-  // blocks-free entry for the whole client graph (#1548's emission half), so
-  // the entry's dynamic specifier does not name it. What the entry must NOT
-  // do is pick the claim-free surface.
-  expect(elementServicesImport(code).endsWith('element-services-full.ts')).toBeTruthy();
-  expect(elementServicesImport(code).includes('client-only')).toEqual(false);
-  expect(elementServicesImport(code).includes('base')).toEqual(false);
-  expect(
-    importLines(code).some((line) => line.includes('@openelement/element')),
-    'no static element import either way',
-  ).toEqual(false);
-  assertEntrySyntax(code);
-});
-
-test('#1548: includeBlocksRuntime:false picks the base entry for a client-only page', () => {
-  const code = generateClientEntry(
-    [
-      {
-        tagName: 'x-only',
-        modulePath: './only.ts',
-        strategy: 'only',
-        ssr: false,
-        dsd: false,
-      },
-    ],
-    { includeBlocksRuntime: false },
-  );
-  expect(
-    elementServicesImport(code).endsWith('element-services-base.ts'),
-    'neither claim nor blocks on a page that can hydrate nothing and use no Blocks',
-  ).toBeTruthy();
-  assertEntrySyntax(code);
-});
-
-test('#1548: the blocks default keeps the full entry (conservative)', () => {
-  // No option = the scan did not run or proved nothing: the default entry
-  // stands, exactly like the #1416 claim default.
-  const code = generateClientEntry([
-    { tagName: 'x-counter', modulePath: './counter.ts', strategy: 'idle' },
-  ]);
-  expect(elementServicesImport(code).endsWith('element-services-full.ts')).toBe(true);
-});
-
-test('#1548: includeBlocksRuntime:true is explicit and equivalent to the default', () => {
-  const code = generateClientEntry(
-    [{ tagName: 'x-counter', modulePath: './counter.ts', strategy: 'idle' }],
-    { includeBlocksRuntime: true },
-  );
-  expect(elementServicesImport(code).endsWith('element-services-full.ts')).toBe(true);
 });
 
 test('legacy eager/lazy strategies are not emitted by v0.21 runtime', () => {
@@ -414,7 +240,7 @@ test('client entry safely escapes tag names and module paths', () => {
     },
   ]);
 
-  expect(code.includes('var __island = import("./safe-module.ts")')).toBeTruthy();
+  expect(code).toContain('return import("./safe-module.ts")');
   assertEntrySyntax(code);
 });
 

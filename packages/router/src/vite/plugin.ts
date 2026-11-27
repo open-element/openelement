@@ -144,7 +144,7 @@ export function createOpenPlugin(
     buildPlugin(state.resolvedOptions, state.ctx),
     // #951: dev-only serving of the island client entry at the same public
     // URL the production build emits (<base>client/islands/client.js).
-    devIslandClientPlugin(state.resolvedOptions, state.ctx, styleSession),
+    devIslandClientPlugin(state.resolvedOptions, state.ctx),
   );
 
   return plugins;

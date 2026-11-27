@@ -3,7 +3,7 @@ import { assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import type { RouteEntry } from '@openelement/protocol/framework';
 import {
   generateClientEntry,
-  ELEMENT_SERVICES_RUNTIME_SPECIFIERS,
+  ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER,
 } from '../src/vite/internal/ssg/entry-client-codegen.ts';
 import { buildEntryDescriptor } from '../src/vite/internal/ssg/entry-descriptor.ts';
 import { renderEntry } from '../src/vite/internal/ssg/entry-orchestrator.ts';
@@ -41,7 +41,8 @@ test('native selection keeps the document and island wiring on their runtime bou
   expect(server).toContain('scripts: __clientScriptDescriptors(content)');
   expect(server).toContain('__locales.length > 0 ? __localeFromPath');
   expect(client).toContain('__installPreHydrationCapture(document, __tags);');
-  expect(client).toContain(`import('${ELEMENT_SERVICES_RUNTIME_SPECIFIERS.full}')`);
+  expect(client).toContain(ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER);
+  expect(client).toContain('return import("/app/islands/x.ts")');
   expect(client).not.toContain(process.cwd());
   expect(descriptor.imports.some((entry) => entry.from === '@openelement/element')).toEqual(true);
   expect(selectRendererAdapter(undefined).mode).toEqual('native');

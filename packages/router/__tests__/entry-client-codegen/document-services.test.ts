@@ -9,7 +9,7 @@ import { expect, test } from 'vitest';
 import {
   ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER,
   generateClientEntry,
-  resolveElementServicesRuntimeModule,
+  resolveElementDocumentServicesModule,
 } from '../../src/vite/internal/ssg/entry-client-codegen.ts';
 import { buildClientIslandEntries } from '../../src/vite/internal/ssg/client-island-entries.ts';
 
@@ -80,13 +80,13 @@ test.each([false, true])(
   },
 );
 
-test('a legacy island does not start its runtime when form enhancement installs', () => {
+test('a native island keeps document services available before form enhancement installs', () => {
   const code = generateClientEntry(
-    [{ tagName: 'class-card', modulePath: '/abs/app/islands/class-card.tsx', strategy: 'load' }],
+    [{ tagName: 'native-card', modulePath: '/abs/app/islands/native-card.tsx', strategy: 'load' }],
     { enhancedForms: true },
   );
   expect(code).toContain(ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER);
-  expect(code).toContain('Promise.all([__island, __loadElementRuntime()])');
+  expect(code).toContain('return import("/abs/app/islands/native-card.tsx")');
   expect(code).not.toMatch(/^__loadElementRuntime\(\);/m);
   expect(code.match(/__installDeepFragments\(\);/g)).toHaveLength(1);
   expect(code.match(/__installPreHydrationCapture\(document, __tags\);/g)).toHaveLength(1);
@@ -94,7 +94,7 @@ test('a legacy island does not start its runtime when form enhancement installs'
 });
 
 test('the specifier resolves to the wrapper, and the wrapper reaches no executor entry', () => {
-  const wrapperPath = resolveElementServicesRuntimeModule(
+  const wrapperPath = resolveElementDocumentServicesModule(
     ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER,
   );
   expect(wrapperPath, 'the document-services virtual id has no resolution rule').not.toBeNull();

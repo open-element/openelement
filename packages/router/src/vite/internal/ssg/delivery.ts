@@ -29,13 +29,7 @@ export interface ClientIslandDeliveryEntry extends ClientIslandEntry {
   tagNames?: readonly string[];
   /** Named constructor exports keyed by custom-element tag. */
   exportNames?: Readonly<Record<string, string>>;
-  /**
-   * Build-only lane fact (M11-3): the island module is owned by the generated
-   * Native Custom Element lane, so its client factory must not wait for (or
-   * mount) the legacy compiled executor runtime. Internal delivery metadata:
-   * the protocol `ClientIslandEntry` shape and the interface snapshot are
-   * unchanged.
-   */
+  /** A compiler-generated island must have a runtime group in the emitted graph. */
   generatedLane?: true;
 }
 

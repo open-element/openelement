@@ -652,3 +652,115 @@ test('external consumer (#1544/B2): the runtime preload is a per-page projection
   expect(entryCode).toContain('oe-proof-counter');
   expect(entryCode).toMatch(/import\(`?["']?\.\//);
 });
+
+test('a native-only package registers both delivery tags without requesting the Element runtime', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-consumer-native-islands-'));
+  fixtureRoots.push(root);
+  const appDir = join(root, 'app');
+  const foreign = join(appDir, 'node_modules', '@acme', 'foreign');
+  await write(join(appDir, 'package.json'), '{"name":"native-island-proof","type":"module"}');
+  await write(
+    join(appDir, 'vite.config.ts'),
+    `
+import { openElement } from '@openelement/router/vite';
+export default { plugins: [openElement({ packageIslands: ['@acme/foreign'], layout: false })] };
+`,
+  );
+  await write(
+    join(appDir, 'app/routes/index.tsx'),
+    `
+import { definePage } from '@openelement/router';
+export function Page() {
+  return <main><foreign-button></foreign-button><foreign-badge></foreign-badge></main>;
+}
+export default definePage(Page);
+`,
+  );
+  await write(
+    join(foreign, 'package.json'),
+    JSON.stringify({
+      name: '@acme/foreign',
+      type: 'module',
+      exports: { './manifest': './manifest.js', './cards': './cards.js' },
+    }),
+  );
+  await write(
+    join(foreign, 'manifest.js'),
+    `export const manifest = ${JSON.stringify({
+      schemaVersion: 1,
+      packageName: '@acme/foreign',
+      version: '1.0.0',
+      declarations: ['foreign-button', 'foreign-badge'].map((tagName, index) => ({
+        tagName,
+        className: index === 0 ? 'ForeignButton' : 'ForeignBadge',
+        openElement: {
+          ssr: false,
+          dsd: false,
+          hydrate: 'only',
+          module: '@acme/foreign/cards',
+          export: index === 0 ? 'ForeignButton' : 'ForeignBadge',
+        },
+      })),
+    })};`,
+  );
+  await write(
+    join(foreign, 'cards.js'),
+    `
+export class ForeignButton extends HTMLElement {
+  connectedCallback() {
+    this.innerHTML = '<button type="button">Activate native control</button>';
+    this.querySelector('button').addEventListener('click', () => { this.dataset.active = 'true'; });
+  }
+}
+customElements.define('foreign-badge', class extends HTMLElement {
+  connectedCallback() { this.textContent = 'Registered by its own module'; }
+});
+`,
+  );
+  await symlink(
+    join(fixture.appDir, 'node_modules', '@openelement'),
+    join(appDir, 'node_modules', '@openelement'),
+  );
+  await symlink(join(REPO_ROOT, 'node_modules', 'vite'), join(appDir, 'node_modules', 'vite'));
+
+  let logs = '';
+  const build = spawn(process.execPath, [ROUTER_BUILD_CLI], { cwd: appDir });
+  build.stdout.on('data', (chunk) => (logs += chunk));
+  build.stderr.on('data', (chunk) => (logs += chunk));
+  const [code] = await once(build, 'exit');
+  expect(code, logs).toBe(0);
+  const distDir = join(appDir, 'dist');
+  const html = await readFile(join(distDir, 'index.html'), 'utf8');
+  expect(html).toContain('/client/islands/client.js');
+  expect(html).not.toContain('data-open-element-runtime-preload');
+  expect(await readdir(join(distDir, 'client', 'islands'))).not.toEqual(
+    expect.arrayContaining([expect.stringMatching(/^element-runtime-/)]),
+  );
+
+  const { chromium } = await import('@playwright/test');
+  const browser = await chromium.launch();
+  const server = serveFetch({
+    hostname: '127.0.0.1',
+    port: 0,
+    handler: createFetchHandler({ distDir }),
+  });
+  try {
+    await once(server, 'listening');
+    const address = server.address();
+    if (address === null || typeof address === 'string') throw new Error('No loopback address');
+    const page = await browser.newPage();
+    const scripts = new Set<string>();
+    page.on('request', (request) => {
+      if (request.resourceType() === 'script') scripts.add(new URL(request.url()).pathname);
+    });
+    await page.goto(`http://127.0.0.1:${address.port}/`);
+    await page.getByRole('button', { name: 'Activate native control' }).click();
+    expect(await page.locator('foreign-button').getAttribute('data-active')).toBe('true');
+    expect(await page.locator('foreign-badge').textContent()).toBe('Registered by its own module');
+    expect([...scripts].filter((url) => /\/island-/.test(url))).toHaveLength(1);
+    expect([...scripts].some((url) => /\/element-runtime-/.test(url))).toBe(false);
+  } finally {
+    await browser.close();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});

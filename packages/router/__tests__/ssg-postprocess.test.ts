@@ -148,6 +148,23 @@ test('islandChunkMapFromAssetManifest fails closed for every island when no mani
 
 // ─── postProcessClientIslandBuild (manifest-driven, no HTML surgery) ────
 
+function writeImportManifest(dist: string) {
+  const vite = join(dist, 'client', '.vite');
+  mkdirSync(vite, { recursive: true });
+  writeFileSync(
+    join(vite, 'manifest.json'),
+    JSON.stringify({
+      'app/islands/counter.ts': { file: 'islands/island-counter-Ab12.js', imports: ['_middle.js'] },
+      'app/islands/native.ts': {
+        file: 'islands/island-native-Cd34.js',
+        dynamicImports: ['_runtime.js'],
+      },
+      '_middle.js': { file: 'islands/middle-Ef56.js', imports: ['_runtime.js'] },
+      '_runtime.js': { file: 'islands/element-runtime-Bh4sh.js' },
+    }),
+  );
+}
+
 /** Minimal BuildContextView for the island-manifest pass. */
 function ctxView(manifest: ClientAssetManifest | null, root: string) {
   return {
@@ -185,6 +202,7 @@ test('postProcessClientIslandBuild writes per-page manifests with manifest-keyed
       shared: ['/client/islands/element-runtime-Bh4sh.js'],
       styles: [],
     };
+    writeImportManifest(dist);
     await postProcessClientIslandBuild(ctxView(manifest, tmp));
 
     // The island identity resolves through the manifest, chunk URL intact.
@@ -335,6 +353,7 @@ test('postProcessClientIslandBuild validates only the local metadata Phase 2 sel
       shared: ['/client/islands/element-runtime-Bh4sh.js'],
       styles: [],
     };
+    writeImportManifest(dist);
     await postProcessClientIslandBuild({
       phase3: { root: tmp, outDir: 'dist', base: '/', upgradeStrategy: 'idle' as const },
       phase1: {
@@ -406,6 +425,7 @@ test('#1544/B2: the runtime modulepreload lands on the island-bearing page only,
   try {
     const dist = join(tmp, 'dist');
     writeProjectionPages(dist);
+    writeImportManifest(dist);
     await postProcessClientIslandBuild(ctxView(PROJECTION_MANIFEST, tmp));
     await postProcessClientIslandBuild(ctxView(PROJECTION_MANIFEST, tmp));
     const homeHtml = readFileSync(join(dist, 'index.html'), 'utf8');
@@ -450,16 +470,32 @@ test('#1544/B2: a zero-island build needs no runtime chunk and therefore injects
   }
 });
 
-test('#1544/B2: an island-bearing native build whose runtime chunk cannot be named fails closed', async () => {
+test('#1544/B2: in a mixed app a native-only page receives no Element runtime preload', async () => {
   const tmp = makeTempDir();
   try {
     const dist = join(tmp, 'dist');
     writeProjectionPages(dist);
-    await assertRejectsIncludes(
-      () => postProcessClientIslandBuild(ctxView({ ...PROJECTION_MANIFEST, shared: [] }, tmp)),
-      OpenElementError,
-      'need the shared element-runtime chunk preloaded',
+    writeImportManifest(dist);
+    writeFileSync(
+      join(dist, 'foreign.html'),
+      '<html><head></head><foreign-card></foreign-card></html>',
     );
+    const context = ctxView(
+      {
+        ...PROJECTION_MANIFEST,
+        islands: {
+          ...PROJECTION_MANIFEST.islands,
+          'foreign-card': { file: '/client/islands/island-native-Cd34.js', strategy: 'idle' },
+        },
+      },
+      tmp,
+    );
+    context.phase1.islandTagNames.push('foreign-card');
+    await postProcessClientIslandBuild(context);
+    expect(readFileSync(join(dist, 'index.html'), 'utf8')).toContain(
+      'data-open-element-runtime-preload',
+    );
+    expect(readFileSync(join(dist, 'foreign.html'), 'utf8')).not.toContain('modulepreload');
   } finally {
     cleanup(tmp);
   }

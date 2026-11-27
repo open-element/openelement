@@ -131,17 +131,7 @@ export type {
   PageIslandManifest,
 } from './island-manifest.ts';
 
-export {
-  clientEntryHasClientJs,
-  clientEntryNeedsElementRuntime,
-  elementServicesSpecifier,
-  generateClientEntry,
-} from './entry-client-codegen.ts';
-export {
-  islandsMightUseBlocks,
-  elementRuntimeBlocksAlias,
-  type IslandsBlocksScanInput,
-} from './island-blocks-scan.ts';
+export { clientEntryHasClientJs, generateClientEntry } from './entry-client-codegen.ts';
 export { validateClientIslandEntry } from './entry-generators.ts';
 export {
   isIslandDeliveryStrategy,

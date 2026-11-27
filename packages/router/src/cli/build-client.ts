@@ -20,11 +20,8 @@ import { build as viteBuild, type InlineConfig } from 'vite';
 import { dirname, isAbsolute, join, relative, resolve } from 'pathe';
 import {
   clientEntryHasClientJs,
-  clientEntryNeedsElementRuntime,
   extractCustomElementTags,
   generateClientEntry,
-  islandsMightUseBlocks,
-  elementRuntimeBlocksAlias,
 } from '../vite/internal/ssg/index.ts';
 import { runtimeModulePath } from '../vite/internal/runtime-module-path.ts';
 import { findBuildWorkspaceRootOrUndefined } from '../vite/workspace-alias.ts';
@@ -35,7 +32,7 @@ import {
 import { buildClientIslandEntries } from '../vite/internal/ssg/client-island-entries.ts';
 import {
   ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER,
-  resolveElementServicesRuntimeModule,
+  resolveElementDocumentServicesModule,
 } from '../vite/internal/ssg/entry-client-codegen.ts';
 import {
   type ClientIslandDeliveryEntry,
@@ -552,17 +549,6 @@ async function buildClient(
           sources: () => walkedSources,
         });
   /**
-   * The component stylesheet's graph specifier, decided from the CURRENT
-   * registry: the generated entry imports the adapter when (and only when) the
-   * build discovered shadow candidates, so the client adopts the one shared
-   * sheet. Asked lazily — the entry module's `load` runs after the discovery
-   * pass registered its facts.
-   */
-  const componentSheetSpecifier = (): string | undefined =>
-    componentSheetCandidates().length > 0
-      ? styleIntegration?.provider.componentSheetSpecifier
-      : undefined;
-  /**
    * Whether the selected engine reads its candidates from source. The module
    * texts the discovery walk reads are republished only for such an engine.
    */
@@ -687,21 +673,11 @@ async function buildClient(
     upgradeStrategy: ctx.phase3.upgradeStrategy,
   });
 
-  // The generated entry's own runtime requirement — the one fact the guard and
-  // the JS drop below consume, asked of the generator with the exact inputs it
-  // will be called with (defect D: an entry that imports only the document
-  // stylesheet must not be held to the island entry's runtime contract).
-  const entryNeedsElementRuntime = clientEntryNeedsElementRuntime(islandEntries);
-  // M11-3: client JS and the legacy executor runtime are two facts. A page whose
-  // only islands are generated-lane islands keeps its island entry (and JS) but
-  // must not be held to the executor runtime's chunk contract.
   const entryHasClientJs = clientEntryHasClientJs(islandEntries, { enhancedForms });
   const hasClientIslands = clientEntryHasClientJs(islandEntries);
   const styleOnlyEmission = !entryHasClientJs;
   if (styleOnlyEmission) {
     log.info('Island-free client entry - style-only client build, zero client JS');
-  } else if (!entryNeedsElementRuntime) {
-    log.info('Generated-element islands only - client entry without the executor runtime');
   }
 
   // #1471: island identity comes from this build's own resolver. Each
@@ -720,10 +696,9 @@ async function buildClient(
   const declaredIslandSpecifiers = [...new Set(islandEntries.map((entry) => entry.modulePath))];
 
   // #1544: the shared element-runtime chunk's grouping identity — the
-  // element package root, derived from a module id this build's own resolver
-  // answers (same identity pass, same virtual-entry importer the generated
-  // entry's runtime import resolves through). Filled in buildStart, before
-  // chunk grouping runs; an unresolvable specifier fails the build.
+  // element package root, resolved from the same virtual entry as island
+  // modules. Resolve before chunk grouping so actual runtime dependencies
+  // can be identified whether an island imports them directly or indirectly.
   let elementRuntimeIdentity: ElementRuntimeIdentity | null = null;
   let documentServicesId: string | undefined;
 
@@ -755,60 +730,14 @@ async function buildClient(
   const packageDeclIdentities = () =>
     selectedPackageDecls.map((island) => packageIslandIdentity(island, islandModuleIds));
 
-  // #1548: the blocks axis of the element entry selection. The scan asks the
-  // compiler (the single owner of the fact) whether any admitted island
-  // module lowers when/each Block Parts; only its proof of absence drops
-  // the Block builders from the page's element entry. The sidecar
-  // descriptors match the compiledElementPlugin call below, so the scan
-  // admits exactly the modules the build's own transform admits.
-  const mightUseBlocks = islandsMightUseBlocks({
-    root,
-    islandsDir,
-    islandTagNames: selectedLocalTags,
-    islandFiles: selectedLocalFiles,
-    packageIslandDecls: selectedPackageDecls,
-    compilerBehaviorDecls: selectedCompilerBehaviorDecls,
-  });
-  // The emission half of the same axis: resolve the bare element specifier to
-  // the blocks-free entry for the whole client graph.
-  const elementRuntimeBlocksAliasValue = !mightUseBlocks
-    ? elementRuntimeBlocksAlias(root, serializedAlias)
-    : undefined;
-
-  /**
-   * The generated entry's text, built when the module graph asks for the entry
-   * (a `load` hook) rather than when the plugin list is assembled: the
-   * component stylesheet's adapter import depends on the shadow candidates this
-   * build DISCOVERS, and the discovery pass registers them in its own
-   * `buildStart` — before any module loads, but after this closure is created.
-   */
-  const buildClientEntryCode = (): string => {
-    const utilitySheet = componentSheetSpecifier();
-    return generateClientEntry(islandEntries, {
+  const buildClientEntryCode = (): string =>
+    generateClientEntry(islandEntries, {
       enhancedForms,
       specializeScheduler: true,
-      // The document stylesheet's module: for a `graph-entry` provider the
-      // generated entry imports the CSS entry so the engine's pipeline
-      // compiles it inside this build's CSS graph and Vite emits the
-      // content-hashed `.css` asset (plus every `url()` asset the sources
-      // reference) into dist/client. No other module imports it, so the entry
-      // chunk's CSS is exactly the document stylesheet. A `generated` provider
-      // emits its document sheet as its own asset and the head links it, so
-      // nothing is imported here.
-      ...(stylePlan !== undefined && styleIntegration?.provider.documentDelivery === 'graph-entry'
+      ...(styleIntegration?.provider.documentDelivery === 'graph-entry'
         ? { styleEntry: styleIntegration.provider.documentSheetModule }
         : {}),
-      // The component stylesheet's adapter: imported and registered by the entry
-      // when the compiler admitted shadow-root candidates.
-      ...(utilitySheet === undefined ? {} : { utilitySheet }),
-      // Omitted on any doubt: the flag's default (builders installed) is the
-      // entry codegen's own conservative default, not a second copy of it. The
-      // alias bailing out does not flip this flag: the entry subpath resolves
-      // through the package exports regardless of the alias, and keeping the
-      // builders in the entry graph is the safe direction.
-      ...(mightUseBlocks ? {} : { includeBlocksRuntime: false }),
     });
-  };
 
   // Restore RegExp from serialized noExternal patterns
   const noExternalPatterns = (ctx.phase3.ssrNoExternal || []).map((item) => {
@@ -966,7 +895,6 @@ async function buildClient(
         // base class and the package's sideEffects declaration (#1425) keeps
         // the default entry's installs alive in every graph that touches it.
         // Undefined keeps the default resolution.
-        ...(elementRuntimeBlocksAliasValue !== undefined ? [elementRuntimeBlocksAliasValue] : []),
         ...serializedAlias,
       ],
       // The browser-client resolve policy the outer resolved config carries
@@ -1133,12 +1061,12 @@ async function buildClient(
           if (id === VIRTUAL_RUNTIME_SPECIFIERS.enhance) {
             return runtimeModulePath('./ssg/enhance-client.ts');
           }
-          // B2: the generated entry reaches the element-services surface
+          // The generated entry reaches document services
           // through a stable virtual id (so the emitted entry text is
           // machine-independent); the selector and its one resolution rule
           // live together in entry-client-codegen.ts.
-          const elementServices = resolveElementServicesRuntimeModule(id);
-          if (elementServices !== null) return elementServices;
+          const documentServices = resolveElementDocumentServicesModule(id);
+          if (documentServices !== null) return documentServices;
           return null;
         },
         load(id) {
@@ -1168,13 +1096,9 @@ async function buildClient(
               }
               islandModuleIds.set(specifier, resolved.id);
             }
-            // #1544: anchor the shared element-runtime chunk's identity the
-            // same way — through this build's own resolver, from the virtual
-            // entry the generated code imports the runtime through. The
-            // generated entry statically imports the runtime, so an
-            // unresolvable specifier (or a package layout the root walk
-            // cannot anchor) fails here instead of letting chunk grouping
-            // guess.
+            // #1544: resolve the Element package identity before chunk grouping.
+            // Resolving the entry locates the package without adding a bundle
+            // dependency. Emitted module IDs determine whether a chunk ships.
             const runtimeResolved = await this.resolve(
               ELEMENT_RUNTIME_ENTRY_SPECIFIER,
               RESOLVED_CLIENT_ENTRY_ID,
@@ -1184,8 +1108,8 @@ async function buildClient(
             } else {
               this.error(
                 `The element runtime "${ELEMENT_RUNTIME_ENTRY_SPECIFIER}" does not resolve in the ` +
-                  `client build (importer: ${VIRTUAL_CLIENT_ENTRY_ID}) — the generated entry ` +
-                  `statically imports it, so the shared element-runtime chunk cannot be grouped`,
+                  `client build (importer: ${VIRTUAL_CLIENT_ENTRY_ID}) — the shared ` +
+                  `element-runtime chunk cannot be grouped`,
               );
             }
             if (entryHasClientJs) {
@@ -1223,8 +1147,7 @@ async function buildClient(
         // Only the islands that actually enter the client bundle. A
         // `hydrate: 'none'` island is SSR-only by design — the generated entry
         // emits no import for it, so its module is absent from the emitted
-        // chunks by construction (the same `strategy !== 'none'` fact
-        // `clientEntryNeedsElementRuntime` consumes). Handing it to the
+        // chunks by construction. Handing it to the
         // island-attribution pass would be a category error, not a missing
         // module: the writer's `island-chunk-unresolved` contract stays
         // fail-closed for islands that SHOULD be there.
@@ -1253,9 +1176,7 @@ async function buildClient(
     const shipsGeneratedIsland = islandEntries.some(
       (entry) => entry.generatedLane === true && entry.strategy !== 'none',
     );
-    if (entryNeedsElementRuntime || shipsGeneratedIsland) {
-      requireElementRuntimeChunk(emittedChunks, elementRuntimeIdentity);
-    }
+    requireElementRuntimeChunk(emittedChunks, elementRuntimeIdentity, shipsGeneratedIsland);
     requireViteHelperChunk(emittedChunks);
     if (entryHasClientJs) {
       requireEntryStaticGraphFreeOfRuntime(emittedChunks, elementRuntimeIdentity);

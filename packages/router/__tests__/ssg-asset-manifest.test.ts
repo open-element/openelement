@@ -448,6 +448,15 @@ test('matrix — postProcessClientIslandBuild honors the manifest on a real temp
       shared: ['/client/islands/element-runtime-3c1d.js'],
       styles: [],
     };
+    const vite = join(dist, 'client', '.vite');
+    mkdirSync(vite, { recursive: true });
+    writeFileSync(
+      join(vite, 'manifest.json'),
+      JSON.stringify({
+        'app/islands/counter.ts': { file: 'islands/chunk-9f3e2a.js', imports: ['_runtime.js'] },
+        '_runtime.js': { file: 'islands/element-runtime-3c1d.js' },
+      }),
+    );
     await postProcessClientIslandBuild({
       phase3: { root: tmp, outDir: 'dist', base: '/', upgradeStrategy: 'idle' },
       phase1: {
