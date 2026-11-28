@@ -158,14 +158,11 @@ function eventPathNodes(event: Event, target: EventTarget): readonly unknown[] {
  * Facade document-capture filter: only interactions that could belong to a
  * still-pending DECLARED OpenElement island enter the queue.
  *
- * The entry's `__tags` (the generated client entry's island list) is the
- * owner: a path node counts only when its tag is in the root's declared set
- * and its host is not settled. Undeclared third-party custom elements
- * (sl-*, md-*, ion-*, ...) never enter the queue no matter how many distinct
- * targets they produce — otherwise 64 foreign targets exhaust the bounded
- * queue and a real delayed island loses its replay. Nested pending declared
- * islands still capture through a settled outer (any pending declared host
- * on the path keeps the record).
+ * The closest host on the composed path whose tag is in the entry's declared
+ * set owns the event. A live inner island already received the interaction,
+ * so a pending ancestor must never capture it for redispatch. A pending inner
+ * island can still capture through a settled ancestor. Undeclared custom
+ * elements never claim a queue slot on their own.
  *
  * Legacy: with no declared set (empty/omitted — direct kernel callers and
  * older ensure() calls without tags), falls back to the dash heuristic so
@@ -194,8 +191,7 @@ export function acceptPendingIslandEvent(
         : (declaredTags as ReadonlySet<string>);
       for (const node of path) {
         const tag = tagNameOf(node);
-        if (!tag || !lookup.has(tag)) continue;
-        if (!isPreUpgradeIslandSettled(node as object)) return true;
+        if (tag && lookup.has(tag)) return !isPreUpgradeIslandSettled(node as object);
       }
       return false;
     }

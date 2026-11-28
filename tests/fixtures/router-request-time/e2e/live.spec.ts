@@ -208,6 +208,35 @@ test.describe('fetch middleware module contract (ADR-0123, #858, Alpha.1)', () =
 });
 
 test.describe('revalidation continuity (0.42.0-alpha.3)', () => {
+  test('idle page claim does not replay a click already handled by its live child', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const idle: IdleRequestCallback[] = [];
+      window.requestIdleCallback = (callback) => idle.push(callback);
+      document.addEventListener('oe-test-release-page-idle', () => {
+        for (const callback of idle.splice(0)) {
+          callback({ didTimeout: false, timeRemaining: () => 0 });
+        }
+      });
+    });
+    await page.goto('/form');
+    await expect
+      .poll(() => page.evaluate(() => customElements.get('live-counter') !== undefined))
+      .toBe(true);
+    expect(await page.evaluate(() => customElements.get('form-page') === undefined)).toBe(true);
+
+    const count = page.locator('live-counter #count');
+    await page.locator('live-counter #increment').click();
+    await expect(count).toHaveText('1');
+    await page.evaluate(() => document.dispatchEvent(new Event('oe-test-release-page-idle')));
+    await waitForPageClaim(page, 'form-page');
+    const pageButton = page.locator('#page-increment');
+    await pageButton.click();
+    await expect(pageButton).toHaveText('1');
+    await expect(count).toHaveText('1');
+  });
+
   test('422 morph preserves the interactive page root and nested island', async ({ page }) => {
     await page.goto('/form');
     const button = page.locator('live-counter #increment');
