@@ -1028,30 +1028,54 @@ function emitClaimListSync(
   push(state, 'entry.owner.dispose(true);');
   state.indent -= 1;
   push(state, '}');
+  emitClaimListPlacement(state, endVar);
+  push(state, 'return next;');
+  state.indent -= 1;
+  push(state, '}');
+}
+
+/**
+ * A claimed list may already have been edited outside the runtime. Only trust
+ * the previous entry order for minimal placement after checking its live node
+ * runs. An intact list with the same order and no insertions needs no placement.
+ * Passing an empty previous order lets the shared reconciler repair drift.
+ */
+function emitClaimListPlacement(state: EmitState, endVar: string): void {
   push(state, `const parent = ${endVar}.parentNode;`);
-  push(state, 'if (parent !== null) {');
-  state.indent += 1;
+  push(state, 'if (parent === null) return next;');
   push(state, `let reference = ${endVar};`);
-  push(state, 'for (let entryIndex = next.length - 1; entryIndex >= 0; entryIndex--) {');
-  state.indent += 1;
-  push(state, 'const nodes = next[entryIndex].nodes;');
-  push(state, 'for (let nodeIndex = nodes.length - 1; nodeIndex >= 0; nodeIndex--) {');
-  state.indent += 1;
-  push(state, 'const node = nodes[nodeIndex];');
+  push(state, 'let nextIndex = next.length - 1;');
+  push(state, 'const hasInsertions = next.length > used.size;');
+  push(state, 'let reordered = false;');
+  push(state, 'let intact = true;');
   push(
     state,
-    'if (node.parentNode !== parent || node.nextSibling !== reference) parent.insertBefore(node, reference);',
+    'verifyOrder: for (let entryIndex = previous.length - 1; entryIndex >= 0; entryIndex--) {',
   );
+  state.indent += 1;
+  push(state, 'const entry = previous[entryIndex];');
+  push(state, 'if (!used.has(entry)) continue;');
+  push(state, 'while (hasInsertions && !used.has(next[nextIndex])) nextIndex--;');
+  push(state, 'if (entry !== next[nextIndex]) reordered = true;');
+  push(state, 'nextIndex--;');
+  push(state, 'for (let nodeIndex = entry.nodes.length - 1; nodeIndex >= 0; nodeIndex--) {');
+  state.indent += 1;
+  push(state, 'const node = entry.nodes[nodeIndex];');
+  push(state, 'if (node.parentNode !== parent || node.nextSibling !== reference) {');
+  state.indent += 1;
+  push(state, 'intact = false;');
+  push(state, 'break verifyOrder;');
+  state.indent -= 1;
+  push(state, '}');
   push(state, 'reference = node;');
   state.indent -= 1;
   push(state, '}');
   state.indent -= 1;
   push(state, '}');
-  state.indent -= 1;
-  push(state, '}');
-  push(state, 'return next;');
-  state.indent -= 1;
-  push(state, '}');
+  push(
+    state,
+    `if (!intact || reordered || hasInsertions) reconcileEachEntries(next, parent, ${endVar}, intact && reordered ? previous : []);`,
+  );
 }
 
 /**

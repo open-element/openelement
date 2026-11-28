@@ -248,6 +248,82 @@ interface Probe {
 }
 
 describe('M08 list — Chromium claim, update and dispose', () => {
+  test('claimed distant swap moves two entries and later repairs outside row movement', async () => {
+    const generated = await prepare();
+    const original = Array.from({ length: 1000 }, (_, id) => ({ id, label: `Row ${id}` }));
+    const html = ssr(generated.loaded, 'Keyed')({}, { bindings: { items: { value: original } } });
+    const result = await page.evaluate(
+      ({ html, original }) => {
+        const runtime = (window as unknown as { __oeRuntime: RuntimePage }).__oeRuntime;
+        const factories = (window as unknown as { __oeModule: PageModule }).__oeModule;
+        const host = document.createElement('main');
+        host.innerHTML = html;
+        document.body.append(host);
+        const list = host.querySelector('ul')!;
+        const before = [...list.querySelectorAll('li')];
+        const scope = new runtime.LifetimeScope();
+        const items = runtime.signal(original);
+        const recipe = factories.createKeyedRecipe!(scope, { props: {}, bindings: { items } });
+        const projection = runtime.claimRecipe(scope, recipe, host);
+        const focused = before[500]!;
+        const text = focused.childNodes[1]!;
+        focused.contentEditable = 'true';
+        focused.focus();
+        const selection = document.getSelection()!;
+        selection.setBaseAndExtent(text, 1, text, 3);
+
+        const observer = new MutationObserver(() => {});
+        observer.observe(list, { childList: true });
+        const swapped = original.slice();
+        [swapped[1], swapped[998]] = [swapped[998]!, swapped[1]!];
+        items.value = swapped;
+        const insertions = observer
+          .takeRecords()
+          .reduce((sum, record) => sum + record.addedNodes.length, 0);
+        observer.disconnect();
+        const after = [...list.querySelectorAll('li')];
+        const expected = before.slice();
+        [expected[1], expected[998]] = [expected[998]!, expected[1]!];
+        const sameRows =
+          after.length === expected.length && after.every((row, index) => row === expected[index]);
+        const stationarySelection =
+          document.activeElement === focused &&
+          selection.anchorNode === text &&
+          selection.anchorOffset === 1 &&
+          selection.focusNode === text &&
+          selection.focusOffset === 3;
+
+        // Leave one marker in place without its row, and move another complete
+        // entry out of order. A refresh still restores the owned DOM order.
+        after[40]!.remove();
+        const moved = after[80]!;
+        const end = list.lastChild;
+        list.insertBefore(moved.previousSibling!, end);
+        list.insertBefore(moved, end);
+        items.value = swapped.slice();
+        const repaired = [...list.querySelectorAll('li')];
+        const restored =
+          repaired.length === expected.length &&
+          repaired.every((row, index) => row === expected[index]);
+        projection.dispose(true);
+        scope.dispose();
+        const empty = host.childNodes.length === 0;
+        host.remove();
+        return { insertions, sameRows, stationarySelection, restored, empty };
+      },
+      { html, original },
+    );
+
+    expect(result).toEqual({
+      insertions: 4,
+      sameRows: true,
+      stationarySelection: true,
+      restored: true,
+      empty: true,
+    });
+    await page.close();
+  });
+
   test('fresh keyed updates consume duplicate entries in order and compare raw keys strictly', async () => {
     await prepare();
     const result = await page.evaluate(() => {

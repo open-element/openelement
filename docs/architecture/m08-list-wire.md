@@ -104,6 +104,12 @@ The generated module indexes prior entries by their raw key on update and by
 their wire token on initial claim. The index consumes each group in order and
 omits `NaN` raw keys, preserving mount's strict equality rule.
 
+Claimed lists use the same minimal placement as mounted lists when their
+prior entry runs are intact. An outside edit that detaches or reorders a node
+triggers backward placement against the live DOM. In the Chromium distant-swap
+test, an intact 1,000-entry list moves only two entries (their markers and
+rows) and the stationary row keeps its focus and selection.
+
 A duplicate claimed insert is re-claimable: the inserted entry carries its own
 `oe:k:` marker, so `dispose(false)` + a fresh claim adopts every occurrence.
 This is the B1 review closure; the internal duplicate-key refusal was removed
