@@ -183,33 +183,41 @@ function canRunAuthoredScript({ name, attributes }: RenderedTag): boolean {
   return false;
 }
 
-const FRAME_TAGS = new Set(['iframe', 'object', 'embed']);
+/** Embedded documents: the attribute that loads each element's content. */
+const FRAME_URL_ATTRIBUTES = new Map([
+  ['iframe', 'src'],
+  ['object', 'data'],
+  ['embed', 'src'],
+]);
 // The rendered-tag walker reads raw attribute text. Only the references that
-// can contribute to an ASCII JavaScript scheme or its URL whitespace matter.
-const SCRIPT_URL_CHARACTER = /&(?:#(?:[xX]([0-9a-fA-F]+)|([0-9]+));?|colon;|Tab;|NewLine;)/g;
+// can contribute to a URL scheme or its URL whitespace matter.
+const URL_SCHEME_CHARACTER = /&(?:#(?:[xX]([0-9a-fA-F]+)|([0-9]+));?|colon;|Tab;|NewLine;)/g;
 
-function isJavaScriptUrl(value: string | undefined): boolean {
-  if (!value) return false;
-  const decoded = value.replace(SCRIPT_URL_CHARACTER, (entity, hex, decimal) => {
+/**
+ * Read the protocol the browser sees: attribute character references are
+ * decoded before a URL or a sandbox token set is parsed.
+ */
+function readUrlProtocol(value: string | undefined): string | null {
+  if (!value) return null;
+  const decoded = value.replace(URL_SCHEME_CHARACTER, (entity, hex, decimal) => {
     if (entity === '&colon;') return ':';
     if (entity === '&Tab;') return '\t';
     if (entity === '&NewLine;') return '\n';
     const code = hex === undefined ? Number.parseInt(decimal, 10) : Number.parseInt(hex, 16);
     return code > 0 && code <= 0x7f ? String.fromCharCode(code) : entity;
   });
+  return URL.parse(decoded)?.protocol ?? null;
+}
+
+function isJavaScriptUrl(value: string | undefined): boolean {
   // This is a document capability check. Only a navigation that can run
   // script in the current context can introduce the first island here.
-  switch (URL.parse(decoded)?.protocol) {
-    case 'javascript:':
-      return true;
-    // A data navigation creates a document with an opaque origin.
-    case 'data:':
-      return false;
-    // The supported browsers do not execute VBScript.
-    case 'vbscript:':
-    default:
-      return false;
-  }
+  return readUrlProtocol(value) === 'javascript:';
+}
+
+/** A `data:` document has an opaque origin, so its scripts cannot reach this document. */
+function isDataUrl(value: string | undefined): boolean {
+  return readUrlProtocol(value) === 'data:';
 }
 
 function hasJavaScriptNavigation({ name, attributes }: RenderedTag): boolean {
@@ -229,6 +237,51 @@ function hasJavaScriptNavigation({ name, attributes }: RenderedTag): boolean {
   }
 }
 
+/**
+ * A sandbox is provably isolating unless it may grant both script and
+ * same-origin access: without one of the tokens the frame either cannot run
+ * script or keeps an opaque origin that cannot reach this document.
+ */
+function sandboxNotProvablyIsolated(value: string): boolean {
+  // Attribute values are decoded before the sandbox token set is read. An
+  // entity can spell the whitespace separator, so an entity-bearing value is
+  // not provable and retains the bootstrap.
+  if (value.includes('&')) return true;
+  const tokens = new Set(value.toLowerCase().split(/[\t\n\f\r ]+/));
+  return tokens.has('allow-scripts') && tokens.has('allow-same-origin');
+}
+
+/**
+ * Embedded documents can execute authored script with access to this document.
+ * This decision sees rendered HTML only, never the request URL, so a frame's
+ * origin is not provable. Lead-ratified fail-closed policy: every embedded
+ * document whose isolation is not provable retains the bootstrap. Consequence:
+ * the zero-JS guarantee covers documents with no embedded documents or only
+ * provably isolated ones, and an unprovable cross-origin frame costs the
+ * bootstrap. Passing the document URL into this decision would be a later
+ * refinement, out of scope here.
+ *
+ * Only a `data:` document is provably opaque, and only an iframe `sandbox`
+ * without both tokens is provably isolated (`sandbox` is inert on object and
+ * embed). `srcdoc` wins over `src` (HTML spec), so its presence is authored
+ * content even when `src` is a `data:` document.
+ */
+function canFrameRunAuthoredScript({ name, attributes }: RenderedTag): boolean {
+  const urlAttribute = FRAME_URL_ATTRIBUTES.get(name);
+  if (urlAttribute === undefined) return false;
+  if (name === 'iframe' && attributes.has('sandbox')) {
+    return sandboxNotProvablyIsolated(attributes.get('sandbox') ?? '');
+  }
+  return attributes.has('srcdoc') || !isDataUrl(attributes.get(urlAttribute));
+}
+
+/** Whether this tag can execute authored script with access to this document. */
+function canIntroduceAuthoredCode(tag: RenderedTag): boolean {
+  return (
+    canRunAuthoredScript(tag) || hasJavaScriptNavigation(tag) || canFrameRunAuthoredScript(tag)
+  );
+}
+
 function documentClientFacts(
   html: string | undefined,
   islands: ReadonlySet<string>,
@@ -245,15 +298,15 @@ function documentClientFacts(
       if (islands.has(name)) observed.add(name);
       if (name === 'form' && attributes.has('data-open-enhance')) enhanced = true;
       if (inOpenShadow && attributes.get('id')) fragments = true;
-      if (canRunAuthoredScript(tag) || hasJavaScriptNavigation(tag)) authoredCode = true;
-      if (FRAME_TAGS.has(tag.name) || tag.attributes.has('is')) opaque = true;
+      if (canIntroduceAuthoredCode(tag)) authoredCode = true;
+      if (FRAME_URL_ATTRIBUTES.has(tag.name) || tag.attributes.has('is')) opaque = true;
     });
     authoredCode ||= !complete;
   }
   if (executableHead && !authoredCode) {
     const complete = visitRenderedTags(executableHead, (tag) => {
-      if (canRunAuthoredScript(tag) || hasJavaScriptNavigation(tag)) authoredCode = true;
-      if (FRAME_TAGS.has(tag.name) || tag.attributes.has('is')) opaque = true;
+      if (canIntroduceAuthoredCode(tag)) authoredCode = true;
+      if (FRAME_URL_ATTRIBUTES.has(tag.name) || tag.attributes.has('is')) opaque = true;
       return !authoredCode;
     });
     authoredCode ||= !complete;

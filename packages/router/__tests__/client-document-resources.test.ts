@@ -166,17 +166,83 @@ test('trusted JavaScript navigation carries late activations even before the fir
   const external = '<iframe src="https://example.test/frame"></iframe>';
   expect(rows(host + ordinary)).toEqual([['my-counter', 'load', file]]);
   expect(rows(host + external)).toHaveLength(2);
+  // An absolute frame URL is not provably cross-origin without the document
+  // URL, so the frame keeps the client bootstrap (fail closed).
+  expect(app.clientScriptDescriptors(external)).not.toEqual([]);
   for (const html of [
     ordinary,
     escaped,
     sandboxed,
-    external,
     '<a href="/help#javascript:">Help</a>',
     '<a href="javascript://[">Invalid navigation URL</a>',
     '<a href="data:text/plain,Reference">Reference document</a>',
     '<iframe src="data:text/plain,Reference"></iframe>',
     '<a href="vbscript:">Legacy protocol</a>',
     '<button is="native-button">More</button>',
+  ]) {
+    expect(app.clientScriptDescriptors(html)).toEqual([]);
+  }
+});
+
+test('script-capable embedded documents retain the client bootstrap', () => {
+  const app = makeApp('/client/islands/client.js');
+  expect(app.clientScriptDescriptors('<p>A static route</p>')).toEqual([]);
+  expect(
+    app.clientScriptDescriptors('<p>Initial markup</p>', '<iframe src="/embedded"></iframe>'),
+  ).toHaveLength(1);
+  for (const html of [
+    // A frame without `sandbox` can load a same-origin document whose script
+    // reaches this document, and a relative URL is same-origin unless <base>
+    // overrides it.
+    '<iframe src="/embedded"></iframe>',
+    '<iframe></iframe>',
+    '<iframe srcdoc="<p>Embedded</p>"></iframe>',
+    '<iframe srcdoc="&lt;script&gt;mount()&lt;/script&gt;"></iframe>',
+    // `srcdoc` wins over `src` (HTML spec): a data: src proves nothing about
+    // the srcdoc document, which is same-origin and can run authored script.
+    '<iframe srcdoc="<script>mount()</script>" src="data:text/html,<p>Embedded</p>"></iframe>',
+    '<iframe src="&#100;ata:text/html,<p>Embedded</p>" srcdoc="<script>mount()</script>"></iframe>',
+    // An absolute URL is not provably cross-origin without the document URL.
+    '<iframe src="https://embedded.example.test/frame"></iframe>',
+    '<iframe src="//embedded.example.test/frame"></iframe>',
+    // allow-scripts + allow-same-origin makes the sandbox removable.
+    '<iframe sandbox="allow-scripts allow-same-origin" src="/embedded"></iframe>',
+    '<iframe sandbox="ALLOW-SCRIPTS ALLOW-SAME-ORIGIN" srcdoc="<p>Embedded</p>"></iframe>',
+    // An entity can spell the token separator, so a sandbox is not provable.
+    '<iframe sandbox="allow-scripts&#32;allow-same-origin" src="/embedded"></iframe>',
+    // The escapable sandbox keeps the bootstrap even over an opaque data:
+    // document: the frame can navigate itself to a same-origin page.
+    '<iframe sandbox="allow-scripts allow-same-origin" src="data:text/html,<p>Reference</p>"></iframe>',
+    // Browsers implement `sandbox` for iframe only: object/embed ignore it.
+    '<object data="/embedded.html"></object>',
+    '<object sandbox data="/embedded.html"></object>',
+    '<embed src="/embedded.html">',
+  ]) {
+    expect(app.clientScriptDescriptors(html)).toHaveLength(1);
+  }
+});
+
+test('provably isolated embedded documents stay zero-JS', () => {
+  const app = makeApp('/client/islands/client.js');
+  expect(app.clientScriptDescriptors('<p>A static route</p>')).toEqual([]);
+  for (const html of [
+    // No script, or an opaque origin that cannot reach this document.
+    '<iframe sandbox src="/embedded"></iframe>',
+    '<iframe sandbox="allow-same-origin" src="/embedded"></iframe>',
+    '<iframe sandbox="allow-scripts" src="/embedded"></iframe>',
+    '<iframe sandbox srcdoc="<script>mount()</script>"></iframe>',
+    '<iframe sandbox="allow-scripts" srcdoc="<p>Widget</p>"></iframe>',
+    // The sandbox still wins over srcdoc when `src` is a data: document.
+    '<iframe sandbox srcdoc="<script>mount()</script>" src="data:text/html,<p>Embedded</p>"></iframe>',
+    '<iframe sandbox="allow-scripts" srcdoc="<script>mount()</script>" src="data:text/html,<p>Embedded</p>"></iframe>',
+    // A javascript: navigation is isolated by the sandbox too.
+    '<iframe sandbox="allow-scripts allow-forms" src="javascript:mount()"></iframe>',
+    // A data: document is an opaque origin.
+    '<iframe src="data:text/html,<p>Reference</p>"></iframe>',
+    '<iframe src="DATA:text/html,<p>Reference</p>"></iframe>',
+    '<iframe src="&#100;ata:text/html,<p>Reference</p>"></iframe>',
+    '<object data="data:text/html,<p>Reference</p>"></object>',
+    '<embed src="data:text/html,<p>Reference</p>">',
   ]) {
     expect(app.clientScriptDescriptors(html)).toEqual([]);
   }
