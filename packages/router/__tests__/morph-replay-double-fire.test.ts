@@ -1,5 +1,5 @@
 /**
- * Pre-upgrade replay double-delivery across a 422 morph (live.spec.ts:185).
+ * Historical pre-upgrade replay double-delivery across a 422 morph.
  *
  * WHY THIS FILE LIVES IN `packages/router/__tests__`. The contract it documents
  * is a seam between two owners:
@@ -8,8 +8,8 @@
  *     morph (`islandIntact` true) but the parent alignment still MOVES it
  *     (`morphChildren` -> `insertBefore`), which runs the platform's
  *     `disconnectedCallback`/`connectedCallback` pair;
- *   - the generated-element shell (element) calls its pre-upgrade replay at that
- *     reconnect (shell.ts:2844), and the replay registry (element) only pins its
+ *   - before the first-activation gate, the generated shell called replay at
+ *     that reconnect (shell.ts:2844), and the replay registry only pinned its
  *     first-activation cutoff at the root's first REPLAY PASS
  *     (pre-upgrade-events.ts:478-480), not at the element's first activation.
  * The bug is only visible when both halves are composed, so the pin needs the
@@ -18,7 +18,7 @@
  * end-to-end reproduction (real built fixture, real chromium) is recorded in the
  * F16 diagnosis report for live.spec.ts:185, not here.
  *
- * MEASURED MECHANISM (fixture `router-request-time`, chromium, built dist):
+ * MEASURED BEFORE THE FIX (fixture `router-request-time`, chromium, built dist):
  *   1. `page.goto('/form')`; `live-counter` is a generated-lane island whose
  *      activation factory imports ONLY its island chunk (entry-client-codegen.ts
  *      activation factory for generated islands), so its first connect can run
@@ -342,8 +342,8 @@ interface ReplayModel {
 }
 
 /**
- * The documented model of `pre-upgrade-events.ts`'s facade registry. Every
- * behaviour below mirrors a specific production line; nothing here is invented:
+ * The historical model of `pre-upgrade-events.ts`'s facade registry before
+ * the generated activation hook recorded host settlement.
  *   - the shared pending pool + one-record-per-target/type dedup (:308-344);
  *   - the accept filter's pending-owner rule (:201-234) — and the measured fact
  *     that `markPreUpgradeIslandSettled` has no production caller, so the

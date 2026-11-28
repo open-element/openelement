@@ -11,7 +11,10 @@
 
 // The shell's side of the replay contract (see that module's doc): this capture
 // module is the ONLY publisher, and it publishes at install time.
-import { installPreUpgradeReplayHook } from './pre-upgrade-replay-hook.ts';
+import {
+  installPreUpgradeReplayHook,
+  isPreUpgradeIslandSettled,
+} from './pre-upgrade-replay-hook.ts';
 
 export interface PreUpgradeEvent {
   readonly target: EventTarget;
@@ -95,21 +98,6 @@ function resolveCaptureTarget(event: Event): EventTarget | null {
     // Fall through to event.target below.
   }
   return event.target;
-}
-
-/**
- * Island hosts that already reached their activation decision (claim or
- * fresh, success or failure). The facade marks its host element here; the
- * document-level capture then skips ordinary traffic inside settled islands
- * while still capturing for nested still-pending islands. Kernel-level
- * callers (hydrateExistingDom tests, non-facade hosts) never consult this set:
- * their capture contract is "everything inside the claim root".
- */
-const settledIslandHosts = new WeakSet<object>();
-
-/** Facade activation decisions land here (success or failure). */
-export function markPreUpgradeIslandSettled(host: unknown): void {
-  if (host && typeof host === 'object') settledIslandHosts.add(host);
 }
 
 function isIslandHostTag(node: unknown): boolean {
@@ -207,7 +195,7 @@ export function acceptPendingIslandEvent(
       for (const node of path) {
         const tag = tagNameOf(node);
         if (!tag || !lookup.has(tag)) continue;
-        if (!settledIslandHosts.has(node as object)) return true;
+        if (!isPreUpgradeIslandSettled(node as object)) return true;
       }
       return false;
     }
@@ -215,7 +203,7 @@ export function acceptPendingIslandEvent(
       if (!isIslandHostTag(node)) continue;
       // A pending host anywhere on the path (delayed / idle / visible /
       // nested-late / morph-added) keeps the record capturable.
-      if (!settledIslandHosts.has(node as object)) return true;
+      if (!isPreUpgradeIslandSettled(node as object)) return true;
     }
     // No island host (background) or every host settled (live traffic).
     return false;
@@ -570,7 +558,7 @@ function pendingDeclaredIslandBetween(root: Node, target: EventTarget): boolean 
   while (current) {
     if (current === root) return false;
     const tag = tagNameOf(current);
-    if (tag && declared.has(tag) && !settledIslandHosts.has(current as object)) return true;
+    if (tag && declared.has(tag) && !isPreUpgradeIslandSettled(current)) return true;
     current = composedParentNode(current);
   }
   return false;
@@ -658,8 +646,8 @@ export function ensurePreHydrationClickCapture(
   // Publish the per-root replay pair to the generated shell's neutral hook
   // (2026-11-21): the shell may not import THIS module, so the capture install is
   // the one moment the implementation becomes reachable from the shell's side.
-  // No module-scope side effect: a page that never installs the capture carries
-  // no hook, and the shell's calls are honest no-ops.
+  // Pages without capture install no replay pair. The shell still records its
+  // activation decisions so a later installation can filter live hosts.
   installPreUpgradeReplayHook({
     replay: (root) => replayPreUpgradeCaptures(root),
     release: (root) => releasePreUpgradeCapturesFor(root),

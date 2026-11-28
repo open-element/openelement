@@ -370,6 +370,66 @@ test('a direct counter and generic property host claim and replay from the same 
   }
 });
 
+test.each(['before', 'after'] as const)(
+  'capture installed %s activation skips live targets but replays a nested pending host',
+  async (captureOrder) => {
+    const page = await browser.newPage();
+    try {
+      await page.route('https://oe-direct.test/**', (route) => route.fulfill({ body: '' }));
+      await page.goto('https://oe-direct.test/');
+      await page.addScriptTag({ path: mixed.file });
+      const result = await page.evaluate((timing) => {
+        const { Counter, Generic, counterSsr, genericSsr, installCapture } = window.__oeDirect;
+        const frame = document.createElement('main');
+        frame.setHTMLUnsafe(counterSsr(undefined, undefined, [], ['/counter.css']) + genericSsr());
+        document.body.append(frame);
+        const counter = frame.querySelector('my-counter')!;
+        const generic = frame.querySelector('oe-mixed-generic')!;
+        const [live, delayed] = timing === 'before' ? [generic, counter] : [counter, generic];
+        const install = () => installCapture(document, ['my-counter', 'oe-mixed-generic']);
+        if (timing === 'before') install();
+        const define = (host: Element) => {
+          customElements.define(host.localName, host === counter ? Counter : Generic);
+        };
+        define(live);
+        if (timing === 'after') install();
+        live.shadowRoot!.append(delayed);
+
+        // Keep every target attached so the detached-target sweep cannot free
+        // a slot. No unsettled island is on the path of these 64 clicks.
+        for (let index = 0; index < 64; index++) {
+          const button = document.createElement('button');
+          live.shadowRoot!.append(button);
+          button.click();
+        }
+
+        const delayedRoot = delayed.shadowRoot!;
+        const button = delayedRoot.querySelectorAll('button')[delayed === counter ? 1 : 0]!;
+        const readCount = () =>
+          delayedRoot.querySelector(delayed === counter ? '#count' : '#generic')!.textContent;
+        button.click();
+        const before = readCount();
+        define(delayed);
+        const after = readCount();
+        frame.append(delayed);
+        const reconnected = readCount();
+        button.click();
+        return { before, after, reconnected, next: readCount() };
+      }, captureOrder);
+      const count = (value: number) =>
+        captureOrder === 'before' ? String(value) : `default:${value}`;
+      expect(result).toEqual({
+        before: count(0),
+        after: count(1),
+        reconnected: count(1),
+        next: count(2),
+      });
+    } finally {
+      await page.close();
+    }
+  },
+);
+
 test('styleless direct hosts allocate no style scope and still follow theme changes', async () => {
   const page = await browser.newPage();
   try {

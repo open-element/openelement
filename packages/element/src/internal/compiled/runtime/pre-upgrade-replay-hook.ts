@@ -10,21 +10,19 @@
  * through `document-services` (executor-free). Replay needs the registry's
  * per-root bucket, so the shell cannot re-implement it either.
  *
- * So this module holds ONE function slot and nothing else:
+ * The hook owns the installed replay pair and the weak record of settled hosts:
  *
  * - the capture module PUBLISHES its implementation from inside
  *   `ensurePreHydrationClickCapture` (the same call the entry already makes —
  *   no module-scope side effect, so a graph that never installs the capture
  *   carries no hook either);
- * - the shell ASKS for it on a successful claim/mount and releases at its
- *   activation decision.
+ * - after a successful claim or mount the shell requests replay and settles the
+ *   host before redispatch. Release settles hosts whose activation failed as
+ *   well. Settlement also works when capture installs after the host activates.
  *
- * What that buys: one call site swap, no second registry, no second capture, and
- * a null hook that is a correct no-op (an entry that never installed the capture
- * has nothing to replay). What it costs: the shell can no longer prove replay
- * *statelessly* — a reader must know the entry installs it. `pre-hydration
- * replay` is therefore proven end-to-end (the packed starter's `#942` rows) and
- * not by a shell-only unit row.
+ * A shell that activates before capture has nothing to replay, but its weak
+ * settlement record still lets a later installer reject ordinary live traffic.
+ * The packed starter exercises both the delayed replay and the capture bound.
  *
  * Deliberately import-free: this file is inside the shell's allowed closure
  * precisely because it reaches nothing (the P1 test names it as the exception).
@@ -39,6 +37,7 @@ export interface PreUpgradeReplayHook {
 }
 
 let installed: PreUpgradeReplayHook | null = null;
+const settledIslandHosts = new WeakSet<object>();
 
 /**
  * Publish (or clear) the replay implementation. Called by the capture module
@@ -54,12 +53,19 @@ export function preUpgradeReplayHookInstalled(): boolean {
   return installed !== null;
 }
 
-/** Replay this root's records, or nothing when no capture was installed. */
+/** Whether a generated host has reached its activation decision. */
+export function isPreUpgradeIslandSettled(host: object): boolean {
+  return settledIslandHosts.has(host);
+}
+
+/** Settle the host before replay, so its redispatched events see it as live. */
 export function replayPreUpgradeCaptures(root: Node): void {
+  settledIslandHosts.add(root);
   installed?.replay(root);
 }
 
-/** Release this root's records, or nothing when no capture was installed. */
+/** Settle the host and release its records, including after a failed activation. */
 export function releasePreUpgradeCapturesFor(root: Node): void {
+  settledIslandHosts.add(root);
   installed?.release(root);
 }
