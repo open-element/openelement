@@ -652,18 +652,22 @@ test.describe('round-2 morph client fixes (0.42.0-alpha.6)', () => {
     await page.click('#submit');
     await page.waitForURL('**/form?echoed=nav-guard');
     await expect(page.locator('#echo')).toHaveText('echo=nav-guard');
-    await page.reload();
-    // History shape after a reload differs across engines (Firefox grows an
-    // extra entry); walk back until the pre-submit URL is reached.
-    for (let i = 0; i < 3 && !page.url().endsWith('/form'); i++) await page.goBack();
-    // The invariant §10 promises: displayed content always matches the URL.
-    // With a memory-only guard (pre-fix) a bfcache/persisted restore shows
-    // the morphed page at the pre-submit URL — stale.
-    if (page.url().endsWith('/form')) {
-      await expect(page.locator('#echo')).toHaveText('echo=');
-    } else {
-      await expect(page.locator('#echo')).toHaveText('echo=nav-guard');
+    await page.evaluate(() => {
+      (window as unknown as { __reloadProbe?: boolean }).__reloadProbe = true;
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    expect(
+      await page.evaluate(() => (window as unknown as { __reloadProbe?: boolean }).__reloadProbe),
+    ).toBeUndefined();
+    await expect(page).toHaveURL(/\/form\?echoed=nav-guard$/);
+    await expect(page.locator('#echo')).toHaveText('echo=nav-guard');
+    // Firefox may add a history entry for the reload. Walk back to the
+    // pre-submit URL, then verify its server-rendered content.
+    for (let i = 0; i < 3 && !page.url().endsWith('/form'); i++) {
+      await page.goBack({ waitUntil: 'domcontentloaded' });
     }
+    await expect(page).toHaveURL(/\/form$/);
+    await expect(page.locator('#echo')).toHaveText('echo=');
   });
 
   test('a morphed-in island instance shows the server render and hydrates (#579)', async ({
