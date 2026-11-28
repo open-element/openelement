@@ -25,7 +25,7 @@ import {
 } from './delivery.ts';
 
 // #868: the browser runtimes are real modules (island-scheduler.ts,
-// enhance-client.ts) bundled via the virtual:open-client-runtime specifiers
+// form-enhancement-loader.ts) bundled via the virtual:open-client-runtime specifiers
 // resolved by build-client.ts. The generated entry only wires them; no
 // toString() serialization, no import-free constraint, no string copy.
 export const VIRTUAL_RUNTIME_SPECIFIERS = {

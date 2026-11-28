@@ -25,6 +25,8 @@
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
+import { gzipSync } from 'node:zlib';
+import type { BrowserEntryGraphArtifact } from '../../../../packages/router/src/vite/internal/browser-entry-graph-artifact.ts';
 
 const DIST = new URL('../dist/', import.meta.url);
 const CLIENT_ASSETS_DIR = new URL('client/assets/', DIST);
@@ -61,6 +63,15 @@ test('the SSG page declares base-prefixed marked links in its original head', as
   const response = await request.get(`${BASE}/`);
   expect(response.status()).toBe(200);
   const html = await response.text();
+
+  const transition = html.match(
+    /<link rel="stylesheet" href="(\/sub\/assets\/open-view-transition-[a-f0-9]{12}\.css)"/,
+  );
+  expect(transition).not.toBeNull();
+  const transitionSheet = await request.get(transition![1]!);
+  expect(transitionSheet.status()).toBe(200);
+  expect(transitionSheet.headers()['content-type']).toContain('text/css');
+  expect(await transitionSheet.text()).toContain('@view-transition { navigation: auto; }');
 
   const links = headStyleLinks(html);
   // The page's own sheet and the nested light component's sheet (one link
@@ -118,3 +129,145 @@ test.describe('with JavaScript disabled', () => {
 });
 
 /** Read chunks until the accumulated text contains `needle`; return it. */
+
+const catalogueType = 'application/open-islands+json';
+
+test('one bootstrap consumes a route-local catalogue and replays a click before upgrade', async ({
+  page,
+  request,
+}, testInfo) => {
+  const urls = new Map<string, number>();
+  const pending: Promise<void>[] = [];
+  page.on('response', (response) => {
+    if (!new URL(response.url()).pathname.endsWith('.js')) return;
+    pending.push(
+      response.body().then((bytes) => {
+        urls.set(new URL(response.url()).pathname, gzipSync(bytes, { level: 9 }).length);
+      }),
+    );
+  });
+
+  let unblock!: () => void;
+  const blocked = new Promise<void>((resolve) => {
+    unblock = resolve;
+  });
+  let reached!: () => void;
+  const requested = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  await page.route('**/island-subpage-card-*.js', async (route) => {
+    reached();
+    await blocked;
+    await route.continue();
+  });
+
+  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
+  try {
+    const home = JSON.parse((await page.locator(`script[type="${catalogueType}"]`).textContent())!);
+    expect(home.map(([tag]: [string]) => tag)).toEqual([
+      'subpage-card',
+      'subpage-late',
+      'subpage-note',
+    ]);
+    const other = await request.get(`${BASE}/other`);
+    expect(await other.text()).toContain(`<script type="${catalogueType}">[["subpage-other"`);
+    expect(await other.text()).toContain(`src="${BASE}/client/islands/client.js"`);
+    await requested;
+    expect(await page.evaluate(() => customElements.get('subpage-card'))).toBeUndefined();
+    await page.getByRole('button', { name: 'Show generated child' }).click();
+  } finally {
+    unblock();
+  }
+
+  const nested = page.getByRole('button', { name: 'Nested 0' });
+  await expect(nested).toBeVisible();
+  await nested.click();
+  await expect(page.getByRole('button', { name: 'Nested 1' })).toBeVisible();
+  await Promise.all(pending);
+  const graph = JSON.parse(
+    readFileSync(new URL('client/.vite/oe-browser-entry-graph.json', DIST), 'utf8'),
+  ) as BrowserEntryGraphArtifact;
+  const loaded = graph.chunks.filter((chunk) => urls.has(`${BASE}/client/${chunk.file}`));
+  expect(
+    loaded.some((chunk) =>
+      chunk.modules.some((module) =>
+        /(?:app\/islands\/|virtual:open-island-activation:)subpage-(?:other|native)(?:\.|$)/.test(
+          module.id,
+        ),
+      ),
+    ),
+  ).toBe(false);
+  expect(urls.has(`${BASE}/client/${graph.entry.chunkFile}`)).toBe(true);
+  await testInfo.attach('route-browser-js-gzip', {
+    contentType: 'application/json',
+    body: JSON.stringify(Object.fromEntries(urls), null, 2),
+  });
+});
+
+test('an opaque native module can append an island in its open root and receives ordinary Vite CSS', async ({
+  page,
+}) => {
+  await page.goto(`${BASE}/native`);
+  const catalogue = JSON.parse(
+    (await page.locator(`script[type="${catalogueType}"]`).textContent())!,
+  );
+  expect(catalogue.map(([tag]: [string]) => tag)).toEqual([
+    'subpage-card',
+    'subpage-late',
+    'subpage-native',
+    'subpage-note',
+    'subpage-other',
+    'subpage-styled',
+  ]);
+  await expect(page.locator('subpage-native')).toHaveCSS('border-top-width', '6px');
+  const child = page.locator('subpage-native').getByRole('button', { name: 'Nested 0' });
+  await expect(child).toBeVisible();
+  await child.click();
+  await expect(page.getByRole('button', { name: 'Nested 1' })).toBeVisible();
+});
+
+test('a failed activation remains inert and a fresh navigation can load it', async ({ page }) => {
+  let failures = 0;
+  await page.route('**/island-subpage-card-*.js', async (route) => {
+    failures++;
+    await route.abort();
+  });
+  const warning = page.waitForEvent('console', {
+    predicate: (event) =>
+      event.type() === 'warning' && event.text().includes('[openElement] subpage-card'),
+  });
+  await page.goto(`${BASE}/`);
+  await warning;
+  expect(await page.evaluate(() => customElements.get('subpage-card'))).toBeUndefined();
+  expect(await page.getByText('carded').isVisible()).toBe(true);
+  expect(failures).toEqual(1);
+  await page.unroute('**/island-subpage-card-*.js');
+  await page.reload();
+  await page.waitForFunction(() => !!customElements.get('subpage-card'));
+  await page.getByRole('button', { name: 'Show generated child' }).click();
+  await expect(page.getByRole('button', { name: 'Nested 0' })).toBeVisible();
+});
+
+test('a generated activation uses its original chunk and applies Vite CSS', async ({ page }) => {
+  const graph = JSON.parse(
+    readFileSync(new URL('client/.vite/oe-browser-entry-graph.json', DIST), 'utf8'),
+  ) as BrowserEntryGraphArtifact;
+  const island = graph.islands.find(({ tag }) => tag === 'subpage-styled')!;
+  expect(island.activationChunkFile).toEqual(island.chunkFile);
+  await page.goto(`${BASE}/styled-activation`);
+  await expect(page.getByRole('button', { name: 'Styled island' })).toBeVisible();
+  await expect(page.locator('subpage-styled')).toHaveCSS('border-bottom-width', '7px');
+});
+
+test('trusted author markup can add the first island through a navigation URL', async ({
+  page,
+}) => {
+  await page.goto(`${BASE}/trusted-link`);
+  await expect(page.locator('subpage-other')).toHaveCount(0);
+  await expect(page.locator(`script[type="${catalogueType}"]`)).toHaveCount(1);
+  await page.getByRole('link', { name: 'Show the first island' }).click();
+  const button = page.getByRole('button', { name: 'Other 0' });
+  await expect(button).toBeVisible();
+  await button.click();
+  await expect(page.getByRole('button', { name: 'Other 1' })).toBeVisible();
+});

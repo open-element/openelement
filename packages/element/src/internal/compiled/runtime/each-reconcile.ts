@@ -59,8 +59,8 @@ export interface EachReconcileEntryView {
  * largest old position satisfying the chain's descending bound.
  */
 function longestIncreasingStablePositions(ordered: ReadonlyArray<number>): Set<number> {
-  const lengths = new Array<number>(ordered.length).fill(0);
   const tailValues: number[] = [];
+  const buckets = new Map<number, Array<{ old: number; at: number }>>();
   for (let index = 0; index < ordered.length; index += 1) {
     const value = ordered[index]!;
     if (value < 0) continue;
@@ -71,22 +71,16 @@ function longestIncreasingStablePositions(ordered: ReadonlyArray<number>): Set<n
       if (tailValues[middle]! < value) low = middle + 1;
       else high = middle;
     }
-    lengths[index] = low + 1;
     if (low === tailValues.length) tailValues.push(value);
     else tailValues[low] = value;
-  }
-  // Buckets of (old position, index) per chain length, later old positions
-  // first, so each selection step takes the largest old position that still
-  // extends the chain built so far.
-  const buckets = new Map<number, Array<{ old: number; at: number }>>();
-  for (let index = 0; index < ordered.length; index += 1) {
-    const length = lengths[index]!;
-    if (length === 0) continue;
+
+    // Within one chain length, old positions arrive in descending order.
+    // A larger value would extend that chain, landing in a longer bucket.
+    const length = low + 1;
     const bucket = buckets.get(length) ?? [];
-    bucket.push({ old: ordered[index]!, at: index });
+    bucket.push({ old: value, at: index });
     buckets.set(length, bucket);
   }
-  for (const bucket of buckets.values()) bucket.sort((left, right) => right.old - left.old);
   const positions = new Set<number>();
   let bound = Number.POSITIVE_INFINITY;
   for (let need = tailValues.length; need >= 1; need -= 1) {
@@ -115,6 +109,19 @@ export function reconcileEachEntries(
   previous: ReadonlyArray<EachReconcileEntryView>,
 ): void {
   if (parent === null) return;
+  if (next.length === previous.length) {
+    const seen = new Set<EachReconcileEntryView>();
+    let unchanged = true;
+    for (let index = 0; index < next.length; index += 1) {
+      const entry = next[index]!;
+      if (entry !== previous[index] || seen.has(entry) || entry.nodes[0]?.parentNode !== parent) {
+        unchanged = false;
+        break;
+      }
+      seen.add(entry);
+    }
+    if (unchanged) return;
+  }
   const oldPosition = new Map<EachReconcileEntryView, number>();
   for (let index = 0; index < previous.length; index += 1) {
     oldPosition.set(previous[index]!, index);

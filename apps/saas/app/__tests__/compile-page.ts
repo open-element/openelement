@@ -31,13 +31,13 @@ import {
 // tarballs (release qualification) — never a relative path into a package.
 const ELEMENT_URL = import.meta.resolve('@openelement/element');
 const APP_URL = import.meta.resolve('@openelement/router');
+const SERVER_URL = import.meta.resolve('@openelement/element/server');
 // The generated leaf imports its primitives from a SUBPATH (M11-3), so the
 // rewrite table needs that entry too — a bare-specifier-only rewrite leaves the
 // temp module unable to resolve it.
 const LEAF_RUNTIME_URL = import.meta.resolve('@openelement/element/internal/compiled/leaf-runtime');
 const SHELL_URL = import.meta
   .resolve('@openelement/element/internal/compiled/generated-element/shell');
-const COMPILED_RUNTIME_URL = import.meta.resolve('@openelement/element/internal/compiled/runtime');
 
 /**
  * Compile + import a GENERATED-lane island component (function component plus
@@ -71,7 +71,6 @@ export async function compileGeneratedIsland(
     // can name is listed: a missed one surfaces as an unresolvable import.
     .replaceAll('@openelement/element/internal/compiled/leaf-runtime', LEAF_RUNTIME_URL)
     .replaceAll('@openelement/element/internal/compiled/generated-element/shell', SHELL_URL)
-    .replaceAll('@openelement/element/internal/compiled/runtime', COMPILED_RUNTIME_URL)
     .replaceAll("from '@openelement/element'", `from '${ELEMENT_URL}'`)
     .replaceAll("from '@openelement/router'", `from '${APP_URL}'`)
     // Relative imports arrive with EITHER quote style (the emitted tail is
@@ -122,6 +121,10 @@ export async function compileFunctionPage(
     throw new Error(`${sourceUrl} is not admitted by the server-component lane`);
   }
   const rewritten = compiled.code
+    .replace(
+      /from (['"])@openelement\/element\/server\1/g,
+      (_match, quote: string) => `from ${quote}${SERVER_URL}${quote}`,
+    )
     .replaceAll("from '@openelement/element'", `from '${ELEMENT_URL}'`)
     .replaceAll("from '@openelement/router'", `from '${APP_URL}'`)
     .replaceAll(

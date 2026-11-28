@@ -79,7 +79,7 @@ function wrapInDocument(content, opts) {
 function __ssr(tag, props) { return tag + (props.context.locale ? ":" + props.context.locale : ""); }
 function __pageProps(routeModule, context) { return { context: context }; }
 function __pageErrorProps(routeModule, error, context) { return { error: error, context: context }; }
-function __clientScriptDescriptors() { return [{ type: "module", src: "/client/islands/client.js" }]; }
+function __clientDocumentResources() { return { scripts: [{ type: "module", src: "/client/islands/client.js" }] }; }
 // Faithful miniature of @openelement/router/document resolvePageDocument (#1326):
 // resolver heads receive the same context object; lang carries the locale;
 // links default to []; the render wiring's client-script descriptors ride the

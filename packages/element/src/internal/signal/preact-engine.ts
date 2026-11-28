@@ -1,67 +1,58 @@
 /**
- * SignalEngine backed by @preact/signals-core.
+ * Branded signal functions backed by @preact/signals-core.
  *
- * This IS the default engine: framework.ts wires it up via createPreactEngine()
- * at module load. @preact/signals-core is the single chartered runtime
+ * The framework exports these named adapters directly. @preact/signals-core is the single chartered runtime
  * dependency of @openelement/element (the packaged-artifact verification scans
  * the shipped surface runtime-free) and the only engine the package ships and
- * verifies. The SignalEngine
- * protocol is an internal seam that keeps call sites implementation-agnostic;
- * it is not a promise of third-party engine support.
+ * verifies.
  */
 
 import {
-  batch as preactBatch,
   computed as preactComputed,
   effect as preactEffect,
   signal as preactSignal,
   untracked as preactUntracked,
 } from '@preact/signals-core';
-import type { BatchedSignalEngine } from './types.ts';
+import type { ReadonlySignal, Unsubscribe, WritableSignal } from './types.ts';
 import { SIGNAL_BRAND } from '@openelement/protocol/signal';
 
-export function createPreactEngine(): BatchedSignalEngine {
+/** Create the branded writable signal exposed by Element. */
+export function signal<T>(initialValue: T): WritableSignal<T> {
+  const s = preactSignal(initialValue);
   return {
-    signal<T>(initialValue: T) {
-      const s = preactSignal(initialValue);
-      return {
-        [SIGNAL_BRAND]: true as const,
-        get value(): T {
-          return s.value;
-        },
-        set value(value: T) {
-          s.value = value;
-        },
-        subscribe(fn: (value: T) => void): () => void {
-          const dispose = preactEffect(() => fn(s.value));
-          return () => dispose();
-        },
-      };
+    [SIGNAL_BRAND]: true as const,
+    get value(): T {
+      return s.value;
     },
-
-    computed<T>(fn: () => T) {
-      const c = preactComputed(fn);
-      return {
-        [SIGNAL_BRAND]: true as const,
-        get value(): T {
-          return c.value;
-        },
-        subscribe(fn: (value: T) => void): () => void {
-          const dispose = preactEffect(() => fn(c.value));
-          return () => dispose();
-        },
-      };
+    set value(value: T) {
+      s.value = value;
     },
-
-    effect(fn: () => void | (() => void)): () => void {
-      const dispose = preactEffect(() => fn());
+    subscribe(fn: (value: T) => void): Unsubscribe {
+      const dispose = preactEffect(() => fn(s.value));
       return () => dispose();
     },
+  };
+}
 
-    batch<T>(run: () => T): T {
-      return preactBatch(run);
+/** Create a branded derived signal. */
+export function computed<T>(fn: () => T): ReadonlySignal<T> {
+  const c = preactComputed(fn);
+  return {
+    [SIGNAL_BRAND]: true as const,
+    get value(): T {
+      return c.value;
+    },
+    subscribe(fn: (value: T) => void): Unsubscribe {
+      const dispose = preactEffect(() => fn(c.value));
+      return () => dispose();
     },
   };
+}
+
+/** Track an effect and return its disposer. */
+export function effect(fn: () => void | Unsubscribe): Unsubscribe {
+  const dispose = preactEffect(() => fn());
+  return () => dispose();
 }
 
 /**

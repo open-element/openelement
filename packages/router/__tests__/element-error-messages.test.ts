@@ -1,20 +1,4 @@
-/**
- * P8 consumer-form guard for the element runtime error-message seam
- * (#1546, docs/architecture/seams.md).
- *
- * The seam: element's `internal/protocol/errors.ts` declares the
- * `OE_RUNTIME_MESSAGES` global behind a `typeof` guard (default: full
- * authored prose); build-client.ts injects the production strip by spreading
- * `ELEMENT_RUNTIME_MESSAGES_DEFINE` into the client build's Vite `define`.
- *
- * This file guards the production half the way a consumer sees it: a real
- * Vite build over the seam's producer modules, driven through the exact
- * define record build-client spreads — the prose folds out, the stable codes
- * stay. The control build (same entry, no define) proves the injection is
- * what strips: source execution keeps the full messages, which is the dev
- * half locked on the element side
- * (packages/element/__tests__/compiled-runtime/runtime-messages.test.ts).
- */
+/** Verify the live generated runtime's error messages with and without the production define. */
 
 import { readFileSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -34,30 +18,20 @@ afterAll(async () => {
   for (const root of tempRoots) await rm(root, { recursive: true, force: true });
 });
 
-/** The probe entry exercises both guarded messages through their real raisers. */
 function probeEntry(): string {
-  const blocks = join(ELEMENT_SRC, 'internal/compiled/runtime/blocks.ts');
-  const kernel = join(ELEMENT_SRC, 'internal/compiled/runtime/program-kernel.ts');
+  const recipes = join(ELEMENT_SRC, 'internal/compiled/runtime/recipe.ts');
+  const scopes = join(ELEMENT_SRC, 'internal/compiled/lifetime-scope.ts');
   return `
-import { expectsArrayMessage } from ${JSON.stringify(blocks)};
-import { createContext, signalOf } from ${JSON.stringify(kernel)};
+import { claimRecipe, createRecipe } from ${JSON.stringify(recipes)};
+import { LifetimeScope } from ${JSON.stringify(scopes)};
 
-const part = { k: 'each', index: 0, signal: 'rows', key: 'id', field: 'label', item: [] } as never;
-export const probe = [
-  expectsArrayMessage('/app/list.tsx <oe-list>', part, 'nope'),
-  ((): string => {
-    const ctx = createContext(
-      { metadata: { sourceFile: '/app/list.tsx' }, tag: 'oe-list', parts: [] } as never,
-      { signals: {} } as never,
-    );
-    try {
-      signalOf(ctx, 'rows');
-      return '';
-    } catch (error) {
-      return (error as Error).message;
-    }
-  })(),
-];
+const owner = new LifetimeScope();
+const recipe = createRecipe({
+  definitionOwner: owner,
+  source: '/app/card.tsx',
+  mount: () => [],
+});
+export const probe = claimRecipe(owner, recipe, {} as Node);
 `;
 }
 
@@ -91,17 +65,14 @@ async function buildProbe(define: Record<string, string> | undefined): Promise<s
 
 test('the production define strips the prose and keeps the codes', async () => {
   const code = await buildProbe({ ...ELEMENT_RUNTIME_MESSAGES_DEFINE });
-  expect(code).not.toContain('expects an array');
-  expect(code).not.toContain('no host signal is registered');
-  expect(code).not.toContain('duplicate key in the list Block');
-  expect(code).toContain('OE_RUNTIME_LIST_VALUE_NOT_ARRAY');
-  expect(code).toContain('OE_RUNTIME_HOST_SIGNAL_MISSING');
+  expect(code).not.toContain('no generated claim');
+  expect(code).toContain('OE_RUNTIME_LEAF_CLAIM_UNAVAILABLE');
 }, 60_000);
 
-test('the same source without the injection keeps the full prose (dev contract)', async () => {
+test('the same source without the injection keeps the full prose', async () => {
   const code = await buildProbe(undefined);
-  expect(code).toContain('expects an array');
-  expect(code).toContain('no host signal is registered');
+  expect(code).toContain('no generated claim');
+  expect(code).toContain('OE_RUNTIME_LEAF_CLAIM_UNAVAILABLE');
 }, 60_000);
 
 test('build-client injects the seam record into the client build config', () => {
@@ -109,5 +80,5 @@ test('build-client injects the seam record into the client build config', () => 
   // ship prose payloads again, so the wiring itself is pinned to the record
   // this file's builds consume.
   const source = readFileSync(join(ROUTER_DIR, 'src/cli/build-client.ts'), 'utf8');
-  expect(source).toContain('define: ELEMENT_RUNTIME_MESSAGES_DEFINE');
+  expect(source).toContain('...ELEMENT_RUNTIME_MESSAGES_DEFINE');
 });

@@ -53,14 +53,11 @@ export {
   buildElementRuntimePreloadLink,
   buildSpeculationRulesJson,
   ELEMENT_RUNTIME_PRELOAD_ATTRIBUTE,
-  extractLinkHrefs,
   injectCspMeta,
   injectElementRuntimePreload,
-  injectIslandPrefetchRules,
   injectSpeculationRules,
   injectViewTransitionOptIn,
 } from './postprocess.ts';
-export { buildIslandPrefetchLinks, type SpeculationEagerness } from './speculation-rules.ts';
 
 export {
   cleanSsrArtifacts,
@@ -118,7 +115,6 @@ export { renderEntry } from './entry-orchestrator.ts';
 export {
   extractCustomElementTags,
   generateIslandManifests,
-  pageChunkMap,
   pageHasClientIslands,
   routeFromRelativePath,
   writeIslandManifests,
@@ -131,17 +127,7 @@ export type {
   PageIslandManifest,
 } from './island-manifest.ts';
 
-export {
-  clientEntryHasClientJs,
-  clientEntryNeedsElementRuntime,
-  elementServicesSpecifier,
-  generateClientEntry,
-} from './entry-client-codegen.ts';
-export {
-  islandsMightUseBlocks,
-  elementRuntimeBlocksAlias,
-  type IslandsBlocksScanInput,
-} from './island-blocks-scan.ts';
+export { clientEntryHasClientJs, generateClientEntry } from './entry-client-codegen.ts';
 export { validateClientIslandEntry } from './entry-generators.ts';
 export {
   isIslandDeliveryStrategy,

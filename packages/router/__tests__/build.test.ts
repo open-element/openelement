@@ -131,23 +131,19 @@ describe('build - generateClientEntry', () => {
       },
     ];
     const code = generateClientEntry(islands);
-    const captureCall = 'ensurePreHydrationClickCapture(document, __tags);';
+    const captureCall = '__installPreHydrationCapture(document, __tags);';
     expect(code).toContain(captureCall);
     expect(code.includes('ensurePreHydrationClickCapture();')).toEqual(false);
-    // B2: the capture lives inside the lazy runtime load (the runtime is no
-    // longer in the entry's static graph), so an island factory must chain on
-    // that load — the customElements.define() that upgrades an existing host
-    // runs only after the capture is installed, while the island chunk itself
-    // still downloads in parallel.
-    const loadIndex = code.indexOf('var __loadElementRuntime');
+    // The static document service installs before the scheduler can dispatch
+    // either kind of island activation.
     const captureIndex = code.indexOf(captureCall);
-    expect(loadIndex >= 0 && captureIndex > loadIndex).toEqual(true);
-    expect(code).toContain('var __island = import(');
-    expect(code).toContain('Promise.all([__island, __loadElementRuntime()])');
+    expect(code.indexOf('var __scheduler')).toBeGreaterThan(captureIndex);
+    expect(code).toContain('return import("/app/islands/my-counter.ts")');
+    expect(code).not.toContain('__loadElementRuntime');
     // The declared list is assigned before the island module can define, and
     // the scheduler that starts activations comes after both.
-    expect(code.indexOf('var __tags =') < code.indexOf('var __scheduler')).toEqual(true);
-    expect(code.indexOf('var __loadElementRuntime') < code.indexOf('var __map')).toEqual(true);
+    expect(code).toContain('var __tags = ["my-counter"];');
+    expect(code.indexOf('var __tags =')).toBeLessThan(captureIndex);
   });
 });
 

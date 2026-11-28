@@ -28,6 +28,13 @@
 import { MAX_ACTION_BODY_BYTES } from '@openelement/element/authoring';
 import { composeFetchMiddleware, createRuntimeAdapter } from '@openelement/element/build-utils';
 import type { LayoutPlan } from '@openelement/protocol/ssg';
+import type { ClientIslandAsset } from '@openelement/protocol/client-assets';
+import type { ClientScriptDescriptor } from '../../../loading/module/nonce.ts';
+import {
+  ISLAND_CATALOGUE_SCRIPT_TYPE,
+  resolveDocumentIslandCatalogue,
+} from '../ssg/document-island-catalogue.ts';
+import { visitRenderedTags, type RenderedTag } from '../ssg/rendered-html.ts';
 import { createActionBodyLimit } from './action-runtime.ts';
 import { createLayoutRuntime, createStatusHtml } from './document-runtime.ts';
 import type { LayoutRuntime, StatusHtmlRenderer } from './document-runtime.ts';
@@ -67,6 +74,8 @@ export interface GeneratedPageRuntime {
 export interface GeneratedAppConfig {
   /** Build-time island map: tag -> client module path (#951 upgrade URLs). */
   islands: Record<string, string>;
+  /** Dev delivery tags with a client upgrade strategy. */
+  clientIslandTags?: readonly string[];
   /** The build's layout plan (serialized generated data). */
   layoutPlan: LayoutPlan;
   /** Declared project locales (serialized generated data). */
@@ -128,9 +137,20 @@ export interface GeneratedApp {
    */
   registerSsrIsland(tag: string, ctor: unknown, hostRenderer: unknown): void;
   /** Request-time client-script src setter (`dist/server/index.js` startup). */
-  setRequestTimeClientScript(src: string | null | undefined): void;
-  /** wrapInDocument `scripts` descriptors for the current runtime mode (#951). */
-  clientScriptDescriptors(): Array<{ type: 'module'; src: string }>;
+  setRequestTimeClientScript(
+    src: string | null | undefined,
+    islands?: readonly string[] | Readonly<Record<string, ClientIslandAsset>>,
+    entryPreloads?: readonly string[],
+  ): void;
+  /** wrapInDocument `scripts` descriptors for the rendered document (#951). */
+  clientScriptDescriptors(html?: string, executableHead?: string): ClientScriptDescriptor[];
+  clientDocumentResources(
+    html?: string,
+    executableHead?: string,
+  ): {
+    scripts: ClientScriptDescriptor[];
+    entryPreloads?: readonly string[];
+  };
   locales: readonly string[];
   getDefaultLocale(): string;
   /** Page-render bindings — present only when the config carried `pageRuntime`. */
@@ -140,6 +160,162 @@ export interface GeneratedApp {
   statusHtml?: StatusHtmlRenderer;
   resolveLayout?: LayoutRuntime['resolveLayout'];
   renderLayout?: LayoutRuntime['renderLayout'];
+}
+
+const DATA_SCRIPT_TYPES = new Set([
+  'application/json',
+  ISLAND_CATALOGUE_SCRIPT_TYPE,
+  'application/ld+json',
+  'importmap',
+  'speculationrules',
+]);
+
+function canRunAuthoredScript({ name, attributes }: RenderedTag): boolean {
+  if (
+    name === 'script' &&
+    !DATA_SCRIPT_TYPES.has(attributes.get('type')?.trim().toLowerCase() ?? '')
+  ) {
+    return true;
+  }
+  for (const attribute of attributes.keys()) {
+    if (attribute.startsWith('on')) return true;
+  }
+  return false;
+}
+
+/** Embedded documents: the attribute that loads each element's content. */
+const FRAME_URL_ATTRIBUTES = new Map([
+  ['iframe', 'src'],
+  ['object', 'data'],
+  ['embed', 'src'],
+]);
+// The rendered-tag walker reads raw attribute text. Only the references that
+// can contribute to a URL scheme or its URL whitespace matter.
+const URL_SCHEME_CHARACTER = /&(?:#(?:[xX]([0-9a-fA-F]+)|([0-9]+));?|colon;|Tab;|NewLine;)/g;
+
+/**
+ * Read the protocol the browser sees: attribute character references are
+ * decoded before a URL or a sandbox token set is parsed.
+ */
+function readUrlProtocol(value: string | undefined): string | null {
+  if (!value) return null;
+  const decoded = value.replace(URL_SCHEME_CHARACTER, (entity, hex, decimal) => {
+    if (entity === '&colon;') return ':';
+    if (entity === '&Tab;') return '\t';
+    if (entity === '&NewLine;') return '\n';
+    const code = hex === undefined ? Number.parseInt(decimal, 10) : Number.parseInt(hex, 16);
+    return code > 0 && code <= 0x7f ? String.fromCharCode(code) : entity;
+  });
+  return URL.parse(decoded)?.protocol ?? null;
+}
+
+function isJavaScriptUrl(value: string | undefined): boolean {
+  // This is a document capability check. Only a navigation that can run
+  // script in the current context can introduce the first island here.
+  return readUrlProtocol(value) === 'javascript:';
+}
+
+/** A `data:` document has an opaque origin, so its scripts cannot reach this document. */
+function isDataUrl(value: string | undefined): boolean {
+  return readUrlProtocol(value) === 'data:';
+}
+
+function hasJavaScriptNavigation({ name, attributes }: RenderedTag): boolean {
+  switch (name) {
+    case 'a':
+    case 'area':
+      return isJavaScriptUrl(attributes.get('href') ?? attributes.get('xlink:href'));
+    case 'form':
+      return isJavaScriptUrl(attributes.get('action'));
+    case 'button':
+    case 'input':
+      return isJavaScriptUrl(attributes.get('formaction'));
+    case 'iframe':
+      return !attributes.has('sandbox') && isJavaScriptUrl(attributes.get('src'));
+    default:
+      return false;
+  }
+}
+
+/**
+ * A sandbox is provably isolating unless it may grant both script and
+ * same-origin access: without one of the tokens the frame either cannot run
+ * script or keeps an opaque origin that cannot reach this document.
+ */
+function sandboxNotProvablyIsolated(value: string): boolean {
+  // Attribute values are decoded before the sandbox token set is read. An
+  // entity can spell the whitespace separator, so an entity-bearing value is
+  // not provable and retains the bootstrap.
+  if (value.includes('&')) return true;
+  const tokens = new Set(value.toLowerCase().split(/[\t\n\f\r ]+/));
+  return tokens.has('allow-scripts') && tokens.has('allow-same-origin');
+}
+
+/**
+ * Embedded documents can execute authored script with access to this document.
+ * This decision sees rendered HTML only, never the request URL, so a frame's
+ * origin is not provable. Lead-ratified fail-closed policy: every embedded
+ * document whose isolation is not provable retains the bootstrap. Consequence:
+ * the zero-JS guarantee covers documents with no embedded documents or only
+ * provably isolated ones, and an unprovable cross-origin frame costs the
+ * bootstrap. Passing the document URL into this decision would be a later
+ * refinement, out of scope here.
+ *
+ * Only a `data:` document is provably opaque, and only an iframe `sandbox`
+ * without both tokens is provably isolated (`sandbox` is inert on object and
+ * embed). `srcdoc` wins over `src` (HTML spec), so its presence is authored
+ * content even when `src` is a `data:` document.
+ */
+function canFrameRunAuthoredScript({ name, attributes }: RenderedTag): boolean {
+  const urlAttribute = FRAME_URL_ATTRIBUTES.get(name);
+  if (urlAttribute === undefined) return false;
+  if (name === 'iframe' && attributes.has('sandbox')) {
+    return sandboxNotProvablyIsolated(attributes.get('sandbox') ?? '');
+  }
+  return attributes.has('srcdoc') || !isDataUrl(attributes.get(urlAttribute));
+}
+
+/** Whether this tag can execute authored script with access to this document. */
+function canIntroduceAuthoredCode(tag: RenderedTag): boolean {
+  return (
+    canRunAuthoredScript(tag) || hasJavaScriptNavigation(tag) || canFrameRunAuthoredScript(tag)
+  );
+}
+
+function documentClientFacts(
+  html: string | undefined,
+  islands: ReadonlySet<string>,
+  executableHead: string | undefined,
+) {
+  const observed = new Set<string>();
+  let enhanced = false;
+  let fragments = false;
+  let authoredCode = html === undefined;
+  let opaque = false;
+  if (html !== undefined) {
+    const complete = visitRenderedTags(html, (tag) => {
+      const { name, attributes, inOpenShadow } = tag;
+      if (islands.has(name)) observed.add(name);
+      if (name === 'form' && attributes.has('data-open-enhance')) enhanced = true;
+      if (inOpenShadow && attributes.get('id')) fragments = true;
+      if (canIntroduceAuthoredCode(tag)) authoredCode = true;
+      if (FRAME_URL_ATTRIBUTES.has(tag.name) || tag.attributes.has('is')) opaque = true;
+    });
+    authoredCode ||= !complete;
+  }
+  if (executableHead && !authoredCode) {
+    const complete = visitRenderedTags(executableHead, (tag) => {
+      if (canIntroduceAuthoredCode(tag)) authoredCode = true;
+      if (FRAME_URL_ATTRIBUTES.has(tag.name) || tag.attributes.has('is')) opaque = true;
+      return !authoredCode;
+    });
+    authoredCode ||= !complete;
+  }
+  return { observed, enhanced, fragments, authoredCode, opaque };
+}
+
+function isIslandTagList(value: unknown): value is readonly string[] {
+  return Array.isArray(value);
 }
 
 /**
@@ -156,12 +332,40 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
   // the prod src arrives from whoever knows the final asset addresses — the
   // generated dist/server/index.js at request-time startup, and the SSG
   // build before prerendering (both hand in the Phase 2 client asset
-  // manifest's entry URL, #1471). The descriptors ride the resolved
-  // document, so every render channel serializes the same tag.
+  // manifest's entry URL and delivery tags, #1471). A caller that has
+  // rendered the body can select the descriptor from the actual document.
   let requestTimeClientScriptSrc: string | null = null;
-  const clientScriptDescriptors = () => {
+  const devIslandTags = new Set(config.clientIslandTags ?? Object.keys(config.islands));
+  let requestTimeIslandTags = devIslandTags;
+  let requestTimeIslands: Readonly<Record<string, ClientIslandAsset>> | undefined;
+  let requestTimeEntryPreloads: readonly string[] = [];
+  const fetchMiddleware = config.fetchMiddleware ?? [];
+  const clientScriptDescriptors = (
+    html?: string,
+    executableHead?: string,
+  ): ClientScriptDescriptor[] => {
     const src = config.devClientScriptSrc || requestTimeClientScriptSrc;
-    return src ? [{ type: 'module' as const, src }] : [];
+    if (!src) return [];
+    const islands = config.devClientScriptSrc ? devIslandTags : requestTimeIslandTags;
+    const facts = documentClientFacts(html, islands, executableHead);
+    // An enhanced response can morph islands in from any eligible route.
+    // Fetch middleware can replace the body after route rendering.
+    const authored = facts.authoredCode || fetchMiddleware.length > 0;
+    if (!authored && facts.observed.size === 0 && !facts.enhanced && !facts.fragments) return [];
+    const module = { type: 'module', src };
+    if (config.devClientScriptSrc || !requestTimeIslands) return [module];
+    const catalogue = resolveDocumentIslandCatalogue(
+      requestTimeIslands,
+      facts.observed,
+      authored || facts.opaque || facts.enhanced,
+    );
+    if (
+      catalogue.length === 0 &&
+      !Object.values(requestTimeIslands).some((asset) => asset.activation)
+    )
+      return [module];
+    const code = JSON.stringify(catalogue).replaceAll('<', '\\u003c');
+    return [{ type: ISLAND_CATALOGUE_SCRIPT_TYPE, code }, module];
   };
 
   // The composed handler contract (#858): fetch middleware
@@ -172,7 +376,6 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
   type HandlerContext = { env?: unknown; platform?: unknown };
   const dispatchApp = (request: Request, context: HandlerContext = {}): Promise<Response> =>
     app.fetch(request, (context.env || {}) as Record<string, unknown>, context.platform);
-  const fetchMiddleware = config.fetchMiddleware ?? [];
   const handler =
     fetchMiddleware.length > 0
       ? composeFetchMiddleware([...fetchMiddleware], dispatchApp)
@@ -203,10 +406,20 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
     actionBodyLimit: createActionBodyLimit(MAX_ACTION_BODY_BYTES),
     registerSsrComponent: (tag, ctor) => guard.register(tag, ctor),
     registerSsrIsland: (tag, ctor, hostRenderer) => guard.registerIsland(tag, ctor, hostRenderer),
-    setRequestTimeClientScript: (src) => {
+    setRequestTimeClientScript: (src, islands, entryPreloads = []) => {
       requestTimeClientScriptSrc = src || null;
+      requestTimeIslands = isIslandTagList(islands) ? undefined : islands;
+      requestTimeEntryPreloads = entryPreloads;
+      const tags = isIslandTagList(islands) ? islands : islands && Object.keys(islands);
+      requestTimeIslandTags = tags === undefined ? devIslandTags : new Set(tags);
     },
     clientScriptDescriptors,
+    clientDocumentResources: (html, executableHead) => {
+      const scripts = clientScriptDescriptors(html, executableHead);
+      return scripts.length > 0 && !config.devClientScriptSrc && requestTimeEntryPreloads.length > 0
+        ? { scripts, entryPreloads: requestTimeEntryPreloads }
+        : { scripts };
+    },
     locales: config.locales,
     getDefaultLocale: () => config.defaultLocale,
   };

@@ -28,7 +28,7 @@ import { chromium, firefox, webkit, type Browser, type Page } from 'playwright';
 import ts from 'typescript';
 import { build } from 'vite';
 import { __h, __t } from '../../../element/src/server.ts';
-import * as compiledRuntime from '../../../element/src/internal/compiled/runtime.ts';
+import * as compiledRuntime from '../../../element/src/internal/compiled/leaf-runtime.ts';
 import { compileFunctionModule } from '../../src/internal/compiler/semantic-core/function-frontend.ts';
 import { compileServerComponentModule } from '../../src/internal/compiler/semantic-core/server-component.ts';
 import {

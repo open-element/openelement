@@ -7,25 +7,6 @@
 
 import type { CompatibilityClassification, HydrationStrategy } from './framework.ts';
 import type { RenderError, SsrAdmissionDecision } from './render.ts';
-import type { PartProgramV2 } from './part-program.ts';
-
-/** Build-only route projection bound to a specific compiled page program. */
-export interface StreamRouteManifest {
-  program: { version: number; tag: string; sha256: string };
-  fields: Array<{
-    field: string;
-    signal: string;
-    owners: Array<{
-      kind: 'part' | 'region';
-      index: number;
-      location: string;
-      // The program source map's record origin, projected from the Part Program
-      // IR (protocol-owned): the compiler's CompileElementResult.program IS a
-      // PartProgramV2, so the projection reads the contract type directly.
-      source: PartProgramV2['sourceMap']['records'][number]['source'];
-    }>;
-  }>;
-}
 
 /** Adapter-owned browser delivery strategy, including media-query admission. */
 export type IslandDeliveryStrategy = HydrationStrategy | 'media';
@@ -179,7 +160,6 @@ export interface PageRouteDecl {
   importPath: string;
   isDynamic?: boolean;
   paramNames?: string[];
-  streamManifest?: StreamRouteManifest;
   /**
    * The server function page fact (alpha15 server lane): the exported server
    * function component the route's `export default definePage(Component)`
@@ -409,11 +389,10 @@ export interface RouteInfoEntry {
   rendering?: 'static' | 'dynamic';
   /** True when the route module exports an action (request-time form POST). */
   hasAction?: boolean;
-  streamManifest?: StreamRouteManifest;
   params?: Record<string, string>;
 }
 
-/** The server bundle facts the SSG engine consumes for stream rendering. */
+/** Server bundle facts used during prerendering. */
 export interface SsrBundle {
   default: unknown;
   routeInfo?: RouteInfoEntry[];

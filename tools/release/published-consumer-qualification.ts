@@ -597,15 +597,8 @@ async function prepublishAliasMain(args: readonly string[]): Promise<void> {
 // The release line a published artifact is qualified against (#1717)
 // ---------------------------------------------------------------------------
 //
-// A published artifact is judged by the release it shipped in, never by
-// whatever this checkout pins today. `1.0.0-alpha.15`'s starter pins vite
-// `8.0.16` because that is the toolchain alpha.15 shipped; `main` moved to
-// `8.1.6` afterwards (#1683), so comparing the two turned every qualification
-// run of an older release into a guaranteed failure — a false negative about
-// the published artifact produced by a working-tree fact. The release line is
-// the only record that answers "what did this release carry", and the tag the
-// release created is that record: reading it there keeps exactly one authority
-// for the value, with no tracked copy and no drift guard to maintain (P6).
+// Judge the published starter against its own release tag, not the current
+// checkout: later releases may carry a different Vite pin.
 
 /** The starter vite pin a release carried, and the record it was read from. */
 export interface ReleaseLineVitePin {
@@ -616,16 +609,7 @@ export interface ReleaseLineVitePin {
 /** Where a release tree states the starter's vite pin. */
 const RELEASE_LINE_TEMPLATE = 'packages/create/templates/package.json.tmpl';
 
-/**
- * The tag that carries a release's create-package tree: the T7 per-package
- * form the release workflow creates (`gh release create --target <sha>`,
- * `.github/workflows/autoflow-release.yml` "Create per-package GitHub
- * Releases"). `1.0.0-alpha.15` is the first release that has it; the retired
- * `v<version>` umbrella tag is deliberately **not** consulted — it is the only
- * record alpha.1–alpha.14 have, and those releases shipped the Vite+ catalog
- * form whose starter had no vite devDependency of its own, so there is no pin
- * to compare and no reason to keep a second candidate alive for them.
- */
+/** The per-package release tag; older umbrella tags lack a starter Vite pin. */
 function releaseLineTag(version: string): string {
   return `create-v${normalizeVersion(version)}`;
 }
@@ -673,19 +657,10 @@ export async function releaseLineVitePin(
 }
 
 // ---------------------------------------------------------------------------
-// Scaffold package-manager-neutrality guard (alpha15+)
+// Scaffold package-manager-neutrality guard
 // ---------------------------------------------------------------------------
-//
-// The published starter's install runs in the scaffold's own directory, so the
-// harness must know what the shipped form is before it runs anything. The
-// Vite+ catalog form is RETIRED: the scaffold now pins `vite` itself (at the
-// router's own version), declares no `packageManager`, carries no pnpm-only
-// `catalog:`/`vite-plus` specifier, and ships NO pnpm-workspace.yaml. A
-// create-side regression that reintroduces any of those would make the
-// generated project installable only under pnpm — the defect the alpha15
-// neutral-scaffold change fixed — and a harness step that still expected the
-// retired file would fail with pnpm's ERR_PNPM_CATALOG_ENTRY_NOT_FOUND_FOR_SPEC
-// instead of naming the real cause.
+// Check the shipped form before install: catalog specifiers, a packageManager,
+// or a pnpm workspace file would make the starter dependent on pnpm.
 
 /**
  * Assert a scaffolded starter's package.json is the package-manager-neutral
@@ -741,16 +716,7 @@ export function assertPackageManagerNeutralManifest(
   }
 }
 
-/**
- * Verify the scaffold ships NO pnpm-specific workspace file, in the directory
- * where the install below runs. The Vite+ form shipped one (the catalog that
- * resolved `vite-plus: "catalog:"`); the neutral scaffold ships none, and the
- * packed-consumer harnesses write their own overrides carrier into their
- * scratch trees instead (owner decision, alpha15 option B). A file here is the
- * create-side regression this guard exists to catch, named before pnpm's
- * resolver can report it as something else. The read is itself the existence
- * check (read-and-expect-ENOENT, no shape probe before it).
- */
+/** Reject a shipped workspace file before a package manager reports a misleading resolver error. */
 export async function assertStarterShipsNoWorkspaceFile(
   starterDir: string,
   context: string,

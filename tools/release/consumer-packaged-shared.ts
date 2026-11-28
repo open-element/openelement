@@ -636,13 +636,20 @@ if (!browserType) {
 }
 
 const browser = await browserType.launch({ headless: true });
+const scripts = Promise.withResolvers<void>();
 try {
   const page = await browser.newPage();
-  await page.goto(baseUrl + '/notes', { waitUntil: 'load' });
+  // Hold script responses while the parser creates the actual SSR nodes.
+  // Waiting for document load here would also wait for these scripts.
+  await page.route('**/*', async (route) => {
+    if (route.request().resourceType() === 'script') await scripts.promise;
+    await route.continue();
+  });
+  await page.goto(baseUrl + '/notes', { waitUntil: 'commit' });
   const mainFrame = page.mainFrame();
   let documentRequests = 0;
   let documentLoads = 0;
-  // Observe main-frame document navigation after the initial load. Same-document
+  // Observe main-frame document navigation after the first commit. Same-document
   // navigation issues no new document request or load, and subframes do not count.
   page.on('request', (request) => {
     if (
@@ -653,7 +660,6 @@ try {
       documentRequests++;
     }
   });
-  page.on('load', () => { documentLoads++; });
   const assertNoReload = (): void => {
     if (documentRequests !== 0 || documentLoads !== 0) {
       throw new Error(
@@ -674,6 +680,21 @@ try {
   assertNoReload();
   const count = page.locator('note-counter #count');
   const ssrCount = await count.elementHandle();
+  if (!ssrCount || await page.evaluate(() => customElements.get('note-counter') !== undefined)) {
+    throw new Error('expected the counter node before its custom element was registered');
+  }
+  scripts.resolve();
+  await page.waitForLoadState('load');
+  page.on('load', () => { documentLoads++; });
+
+  // The server also rendered the button and count. Only click the live
+  // custom element once activation has upgraded that host.
+  await page.waitForFunction(() =>
+    document.querySelector('notes-index')?.shadowRoot?.querySelector('note-counter')?.matches(':defined'),
+    undefined,
+    { timeout: 60000 },
+  );
+  assertNoReload();
   const button = page.locator('note-counter #increment');
   await button.click();
   assertNoReload();
@@ -684,12 +705,13 @@ try {
   await page.waitForFunction(islandCountText('2'), undefined, { timeout: 60000 });
   assertNoReload();
   const activeCount = await count.elementHandle();
-  if (!await ssrCount!.evaluate((node, candidate) => node === candidate, activeCount)) {
+  if (!await ssrCount.evaluate((node, candidate) => node === candidate, activeCount)) {
     throw new Error('native kernel re-rendered instead of claiming the SSR node');
   }
   assertNoReload();
   console.log('BROWSER-CONTINUATION-OK ' + renderer + ' ' + browserName + ' ' + browser.version());
 } finally {
+  scripts.resolve();
   await browser.close();
 }
 `;

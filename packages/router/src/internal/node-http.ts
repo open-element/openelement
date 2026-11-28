@@ -18,9 +18,7 @@
  * and stream `cancel()` converge on one idempotent cleanup.
  * This adapter owns the host side of that convergence — the client socket's
  * disconnect aborts `Request.signal` BEFORE the handler is dispatched, so
- * loader/stream work observes it through the signal (the one
- * `createStreamRequestScope` fans out from) instead of only after the
- * response body conversion.
+ * render and loader work can observe cancellation before response conversion.
  */
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';

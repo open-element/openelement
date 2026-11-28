@@ -2,7 +2,7 @@
  * site theme-token gate: theme values in the site must come from the
  * @theme role source (packages/ui/src/theme.css, delivered by the
  * @openelement/router Tailwind entry) or the site alias layer
- * (www/site-css.ts), never from hardcoded literals.
+ * (www/site-css.css), never from hardcoded literals.
  *
  * Rules for sources under www/app/ (routes, islands, components):
  *  1. No hex color literals. 6/8-digit forms always fail; 3/4-digit forms
@@ -29,13 +29,13 @@
  * site-chrome.css, whose own header recorded that plain `.css` files sat
  * outside this gate. That gap is closed here: a rule moved into an authored
  * sheet is checked by the same gate as the sheet it came from. The linked
- * sheet's one theme-invariant ink is a site alias in www/site-css.ts
+ * sheet's one theme-invariant ink is a site alias in www/site-css.css
  * (--scrim-ink), which is where its palette citation lives — so the allowlist
  * stays empty. (The second alias, --grid-ink, retired with the violet grid
  * overlays when every masthead moved onto the flat canvas.)
  *
  * Token definitions belong in packages/ui/src/theme.css (the single role
- * source, consumed through the preset) or www/site-css.ts (site aliases, the
+ * source, consumed through the preset) or www/site-css.css (site aliases, the
  * citation site). Both are DEFINITION layers and are deliberately not scanned
  * as consumers; the ui package itself emits no values — the retired
  * theme-tokens twin is not an acceptance source.
@@ -43,20 +43,21 @@
 
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SITE_BREAKPOINT_TIERS } from '../site-css.ts';
 import { readdir, readFile } from 'node:fs/promises';
 import process from 'node:process';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const SCAN_ROOTS = [join(repoRoot, 'www/app')];
+// The document sheet owns the site's explicit palette and typography values.
+export const DOCUMENT_STYLE_SHEET = join(repoRoot, 'www/site-css.css');
 /**
  * The site's linked authored stylesheet(s) — plain `.css` delivered through
  * the `tailwind.theme` source list (www/openelement.config.ts), not
  * CSS-in-TS. They are scanned with EVERY rule below, bare palette included:
  * the sheet is a consumer with no role protection of its own, and the #1569
- * migration moved rules here from the scanned CSS-in-TS set. Adding a linked
- * authored sheet is adding it to this list — the gate never skips one
- * silently (an unreadable target fails the check).
+ * migration moved rules here from the scanned CSS-in-TS set. Every new linked
+ * CSS consumer belongs here. The document's token-definition sheet only
+ * consumes the shared breakpoint scale and is checked for those values.
  */
 export const LINKED_STYLE_SHEETS: readonly string[] = [join(repoRoot, 'www/site-chrome.css')];
 export const SOURCE = /\.(ts|tsx)$/;
@@ -71,7 +72,10 @@ const FONT_SIZE_LITERAL = /font-size\s*:\s*[0-9.]+(?:px|rem|em)\b/;
 // every value: the @media presence is tested per line, values per match.
 const MEDIA_LINE = /@media/;
 const TIER_VALUE = /(?:max-width|max-height|min-width):\s*(\d+)(?![\d.])/g;
-const TIERS = new Set<number>(SITE_BREAKPOINT_TIERS);
+/** Central viewport tier scale (px). 901 is the 900 desktop complement. */
+const TIERS = new Set([
+  360, 480, 520, 640, 700, 720, 760, 768, 860, 900, 901, 940, 1040, 1041, 1100, 1120, 1200,
+]);
 // Rule 4 scope: the site-ui sheets and the island modules (island component
 // sheets moved into their island files under the #1553 style asset protocol's
 // same-module admission, and keep the same palette gate). Components under
@@ -124,7 +128,7 @@ export const BARE_PALETTE_ALLOWLIST: Readonly<Record<string, string>> = {
   // (theme-invariant dark dialog scrim, then the retired open-search page
   // sheet) never came back: the scrim rule now lives in the linked
   // www/site-chrome.css layer, which IS scanned (LINKED_STYLE_SHEETS), and it
-  // consumes the site alias --scrim-ink (www/site-css.ts) — the alias layer is
+  // consumes the site alias --scrim-ink (www/site-css.css) — the alias layer is
   // where a theme-invariant palette citation lives, so the allowlist stays
   // empty rather than carrying a permanent exception.
 };
@@ -212,7 +216,7 @@ export function findBreakpointFailures(file: string, lines: string[]): ThemeToke
           file,
           line: i + 1,
           rule: 'breakpoint-tier',
-          text: `${value}px is outside SITE_BREAKPOINT_TIERS (www/site-css.ts)`,
+          text: `${value}px is outside the shared site breakpoint scale`,
         });
       }
     }
@@ -274,6 +278,8 @@ export async function collectAppScanTargets(root: string): Promise<AppScanTarget
 export async function findSiteThemeTokenFailures(): Promise<ThemeTokenFailure[]> {
   const failures: ThemeTokenFailure[] = [];
   const roleTokens = await loadRoleColorTokens();
+  const document = await readFile(DOCUMENT_STYLE_SHEET, 'utf8');
+  failures.push(...findBreakpointFailures(DOCUMENT_STYLE_SHEET, document.split('\n')));
   for (const root of SCAN_ROOTS) {
     for (const target of await collectAppScanTargets(root)) {
       const lines = (await readFile(target.path, 'utf8')).split('\n');
@@ -307,7 +313,7 @@ async function main(): Promise<void> {
       console.error(`- ${failure.file}:${failure.line} [${failure.rule}] ${failure.text}`);
     }
     console.error(
-      'Theme values must come from the theme token table (packages/ui/src/theme.css) or the www/site-css.ts alias layer.',
+      'Theme values must come from the theme token table (packages/ui/src/theme.css) or the www/site-css.css alias layer.',
     );
     process.exit(1);
   }

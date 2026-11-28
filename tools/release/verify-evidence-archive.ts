@@ -617,6 +617,7 @@ export async function downloadArchive(
     await rm(target, { force: true });
     throw new Error(
       `fetch failed for ${url}: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
     );
   }
   await handle.close();

@@ -201,12 +201,13 @@ build identity) instead of `__partProgram`. Under the same decision,
 `validatePartProgram` and `PART_PROGRAM_VERSION` retire with the schema, and
 `COMPILED_MODULE_ABI_VERSION` is superseded by the new ABI version.
 
-This is an approved target, not implementation evidence: no source is deleted,
-the current Part Program path still ships, and the new ABI is not frozen. The
-staging discipline from the D-O2 amendment — per-consumer migration, no premature
-ABI freeze — continues to govern the target. The new ABI's actual structure
-remains deferred to M01 design plus real packed-consumer evidence; it must not
-become another large JSON descriptor.
+At adoption, the Part Program still shipped and the ABI remained open. The
+D-O2 staging discipline continued to govern the migration through packed-consumer
+verification.
+
+Alpha17 removed the serialized executor, its validator and version, and its
+component exchange schema. Server JSX lowering retains its node and binding
+types. Generated host markup still carries root and stylesheet markers.
 
 Full analysis: fourth-pass reassessment (retired into Git history on 2026-11-10).
 

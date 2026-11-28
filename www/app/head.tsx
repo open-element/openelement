@@ -27,13 +27,13 @@
  * third-party origin — on networks where that origin is unreachable (the
  * site's Chinese audience) they stalled first paint until the browser timed
  * out. The families below must match fontsource's ('Inter Variable',
- * 'JetBrains Mono Variable', 'Instrument Serif' — see www/site-css.ts), and
+ * 'JetBrains Mono Variable', 'Instrument Serif' — see www/site-css.css), and
  * `www/__tests__/font-delivery.test.ts` pins the declaration, the dependency
  * versions and the stacks together.
  *
  * Code fences carry their build-time token colors in the page HTML itself
  * (www/lib/markdown.ts), and the palette resolves through the document
- * stylesheet (www/site-css.ts), so the head ships no highlighting style or
+ * stylesheet (www/site-css.css), so the head ships no highlighting style or
  * script (issue #1552 retired the vendored Prism runtime).
  *
  * Site-wide head only (Beta.2.2, #1327): per-page meaning — title,
@@ -43,7 +43,6 @@
  * page-level boilerplate may live here: a boilerplate og:title/description
  * would duplicate the page's own.
  */
-import { documentStyle } from '../site-css.ts';
 import { SITE_ORIGIN } from './site-ui/site-url.ts';
 
 const socialImage = `${SITE_ORIGIN}/brand/og-default.png`;
@@ -57,13 +56,6 @@ export default [
   { meta: { property: 'og:image:height', content: '630' } },
   { meta: { name: 'twitter:card', content: 'summary_large_image' } },
   { meta: { name: 'twitter:image', content: socialImage } },
-  // Anti-flash: the theme is applied before the document style below paints, so
-  // the page is never rendered in the wrong palette.
-  {
-    style:
-      'html{visibility:visible!important;}body{background:var(--color-background);color:var(--color-foreground);}',
-  },
   { link: { rel: 'icon', type: 'image/svg+xml', sizes: 'any', href: '/favicon.svg' } },
   { link: { rel: 'apple-touch-icon', sizes: '180x180', href: '/brand/apple-touch-icon.png' } },
-  { style: documentStyle },
 ];

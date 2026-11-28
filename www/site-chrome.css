@@ -25,7 +25,7 @@
  * linked sheet under the SAME rules it applies to the CSS-in-TS sheets under
  * www/app/site-ui and www/app/islands — hex/font/breakpoint rules plus the
  * bare-palette rule. The one theme-invariant ink this sheet needs by name
- * (the dialog scrim's dark) is a site alias in www/site-css.ts
+ * (the dialog scrim's dark) is a site alias in www/site-css.css
  * (--scrim-ink), the site's sanctioned token-definition layer: the bare
  * palette citation lives there, never here.
  */
@@ -76,7 +76,7 @@ open-search {
   }
 }
 
-/* The dialog scrim's ink: --scrim-ink is the site alias (www/site-css.ts) of
+/* The dialog scrim's ink: --scrim-ink is the site alias (www/site-css.css) of
  * a theme-invariant dark palette value — no role token is theme-invariant
  * dark, which is why the retired open-search.css carried a
  * BARE_PALETTE_ALLOWLIST entry. The sheet is scanned by the theme-token gate
@@ -255,7 +255,7 @@ open-search .search-hit-mark {
 
 /* ─── Site shell: "Linear noir" (owner direction 2026-11-26) ──────────────
  *
- * The palette is a SITE layer now, not a homepage one. www/site-css.ts owns
+ * The palette is a SITE layer now, not a homepage one. www/site-css.css owns
  * the --site-* values (light default + html[data-theme="dark"] overrides) and
  * the role remap at the end of this sheet points every semantic role at them,
  * so the chrome, the page families and the packages/ui components all resolve
@@ -2860,7 +2860,7 @@ open-page-rail {
 }
 
 /* Fenced blocks compile to Shiki token spans at generation time; token
-   colors resolve through the --shiki-* palette table (site-css.ts), so the
+   colors resolve through the --shiki-* palette table (site-css.css), so the
    rules above only own the surface, the border and the plain-fence ink. */
 .article-content open-code-block {
   margin: calc(var(--spacing) * 5) 0;
@@ -3400,7 +3400,7 @@ open-registry-lookup button[type='submit']:focus-visible {
 /* ─── Site-wide role layer: the one palette every page inherits ────────────
  *
  * The semantic roles the chrome, the page families and packages/ui consume
- * point at the --site-* palette in www/site-css.ts. The selector pairs a bare
+ * point at the --site-* palette in www/site-css.css. The selector pairs a bare
  * `:root` (so a no-JS / pre-init document still gets the light defaults) with
  * `:root[data-theme]`, whose specificity beats the shipped @theme dark block
  * (`:root[data-theme=dark]`) regardless of whether data-theme is "light" or

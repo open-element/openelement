@@ -310,30 +310,6 @@ export const DocumentErrorCode = {
 } as const;
 
 /**
- * Stable codes for the streaming pump
- * (`vite/internal/server-runtime/stream-runtime.ts`). Phase `ssr`: these
- * fire while the generated entry serves a streamed route — the payload
- * encoder, the deferred-field front gate, the timeout sweep, the Part
- * backfill pump, and the per-route shell gate.
- */
-export const StreamErrorCode = {
-  /** A seed attribute or Part frame encodes past the payload bound. */
-  PAYLOAD_BOUND: 'OE_STREAM_PAYLOAD_BOUND',
-  /** The loader data is not one plain object. */
-  LOADER_NOT_OBJECT: 'OE_STREAM_LOADER_NOT_OBJECT',
-  /** The route manifest declares past the field/Part budget. */
-  MANIFEST_BUDGET: 'OE_STREAM_MANIFEST_BUDGET',
-  /** A manifest-declared deferred field is absent from the loader data. */
-  FIELD_MISSING: 'OE_STREAM_FIELD_MISSING',
-  /** The loader data carries a thenable the manifest does not declare. */
-  THENABLE_UNDECLARED: 'OE_STREAM_THENABLE_UNDECLARED',
-  /** A deferred field did not settle within the policy timeout. */
-  DEFERRED_TIMEOUT: 'OE_STREAM_DEFERRED_TIMEOUT',
-  /** A resolved deferred range serializes past the payload bound. */
-  RANGE_BOUND: 'OE_STREAM_RANGE_BOUND',
-} as const;
-
-/**
  * Stable codes for the page SSR renderer seam
  * (`vite/internal/server-runtime/renderer-runtime.ts`). Phase `ssr`: the
  * native renderer fails closed before any render work starts.

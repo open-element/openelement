@@ -41,8 +41,9 @@
  *   a declared-property commit is what "change" means, and the shell raises it.
  * - The constructor's optional `findParent` resolver is how a generated element's
  *   anchor scope finds the nearest generated ANCESTOR element's anchor. It is
- *   consulted on every connect, so a reconnect after a move re-resolves the tree
- *   exactly like the consumer bridge re-resolves its provider.
+ *   consulted on every connect and when a previously unavailable ancestor
+ *   publishes. A move re-resolves the tree, and a late anchor changes the bridge
+ *   without dropping the already-connected consumer's signal.
  * - {@linkcode CompiledContextService.forRender} — the RENDER (server/SSG) mode
  *   of the SAME service. A render scope is created per producer call, is
  *   connection-published from birth, and never consults the DOM: it resolves
@@ -185,8 +186,9 @@ export class CompiledContextService {
   /** One step up the generated owner tree; null for the tree root. */
   #parent: CompiledContextService | null = null;
   #children = new Set<CompiledContextService>();
-  /** Consulted on every connect to (re-)resolve the owner-tree parent. */
+  /** Resolves the generated anchor's owner-tree parent on connect or relink. */
   #findParent: (() => CompiledContextService | null) | null;
+  #onConnection: ((connected: boolean) => void) | null;
   #connected = false;
   #disposed = false;
   /**
@@ -202,14 +204,17 @@ export class CompiledContextService {
    * @param element the DOM element a protocol-mode consumer dispatches from
    *   (the generated element host, or the nearest ancestor host for a hostless
    *   component owner); `null` for a render scope, which never dispatches.
-   * @param findParent optional owner-tree parent resolver, consulted at connect.
+   * @param findParent optional owner-tree parent resolver, consulted at connect or relink.
+   * @param onConnection optional generated anchor registration after providers publish.
    */
   constructor(
     element: HTMLElement | null,
     findParent: (() => CompiledContextService | null) | null = null,
+    onConnection: ((connected: boolean) => void) | null = null,
   ) {
     this.#element = element;
     this.#findParent = findParent;
+    this.#onConnection = onConnection;
   }
 
   /**
@@ -404,20 +409,14 @@ export class CompiledContextService {
     // the CURRENT tree, exactly like the consumer bridge re-resolves its
     // provider. An anchor scope supplies the resolver; a hostless child scope
     // already knows its creating owner.
-    if (this.#findParent !== null) {
-      const resolved = this.#findParent();
-      if (resolved !== this.#parent) {
-        const previous = this.#parent;
-        if (previous !== null) previous.#children.delete(this);
-        this.#parent = resolved;
-        if (resolved !== null) resolved.#children.add(this);
-      }
-    }
+    this.#linkParent();
     // Providers, then consumers, then descendants. Order matters: a consumer in
     // this scope resolves against a provider published by an ANCESTOR (already
     // connected, because the cascade is top-down), and a descendant must resolve
     // against both.
     for (const provider of this.#ownedProviders.values()) this.#publishOwned(provider);
+    if (!this.#connected) return;
+    this.#onConnection?.(true);
     for (const consumer of this.#consumers) this.#subscribe(consumer);
     for (const child of [...this.#children]) child.connect();
   }
@@ -426,6 +425,7 @@ export class CompiledContextService {
   disconnect(): void {
     if (!this.#connected) return;
     this.#connected = false;
+    this.#onConnection?.(false);
     for (const child of [...this.#children]) child.disconnect();
     const subscriptions = [...this.#subscriptions.values()];
     this.#subscriptions.clear();
@@ -450,6 +450,34 @@ export class CompiledContextService {
     if (previous !== null) previous.#children.delete(this);
     this.#parent = null;
     this.#disposed = true;
+  }
+
+  /** A connected generated ancestor became available after this scope mounted. */
+  relinkParent(): void {
+    if (this.#connected && this.#linkParent()) this.#rebindConsumers();
+  }
+
+  #linkParent(): boolean {
+    if (this.#findParent === null) return false;
+    const parent = this.#findParent();
+    if (parent === this.#parent) return false;
+    if (this.#parent !== null) this.#parent.#children.delete(this);
+    this.#parent = parent;
+    if (parent !== null) parent.#children.add(this);
+    return true;
+  }
+
+  #rebindConsumers(): void {
+    for (const consumer of this.#consumers) {
+      if (!this.#connected) return;
+      const previous = this.#subscriptions.get(consumer);
+      this.#subscriptions.delete(consumer);
+      previous?.();
+      if (this.#connected) this.#subscribe(consumer);
+    }
+    for (const child of [...this.#children]) {
+      if (child.#connected && child.#parent === this) child.#rebindConsumers();
+    }
   }
 
   /** Read one intent's value into its signal and mark it published. */
@@ -485,16 +513,7 @@ export class CompiledContextService {
         consumer.notify(snapshot);
         return;
       }
-      consumer.notify(snapshot);
-      let subscribing = true;
-      const unsubscribe = owned.value.subscribe((value) => {
-        // Only the subscription-time echo of the value just read is dropped, so
-        // a lazy engine's first real write is never lost.
-        if (subscribing && Object.is(value, snapshot)) return;
-        consumer.notify(value);
-      });
-      subscribing = false;
-      this.#subscriptions.set(consumer, unsubscribe);
+      this.#bridgeSignal(consumer, owned.value);
       return;
     }
     if (this.#render) {
@@ -517,11 +536,34 @@ export class CompiledContextService {
         '[compiled-context] a protocol consumer needs an element to dispatch from',
       );
     }
+    if (!this.#connected) return;
     const local = consumeContext(consumer.context, element);
-    const unsubscribeLocal = local.subscribe(consumer.notify);
-    this.#subscriptions.set(consumer, () => {
-      unsubscribeLocal();
-      releaseConsumedContext(local);
+    this.#bridgeSignal(consumer, local, () => releaseConsumedContext(local));
+  }
+
+  #bridgeSignal(
+    consumer: ContextConsumer,
+    source: WritableSignal<unknown>,
+    releaseSource?: Unsubscribe,
+  ): void {
+    let subscribing = true;
+    const unsubscribe = source.subscribe((value) => {
+      if (!subscribing) consumer.notify(value);
     });
+    subscribing = false;
+    const release = releaseSource
+      ? () => {
+          unsubscribe();
+          releaseSource();
+        }
+      : unsubscribe;
+    if (!this.#connected || this.#subscriptions.has(consumer)) {
+      release();
+      return;
+    }
+    // Publishing a value can synchronously remove the host. Install the
+    // cleanup first so that disconnect can release this exact bridge.
+    this.#subscriptions.set(consumer, release);
+    consumer.notify(source.value);
   }
 }

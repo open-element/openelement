@@ -18,6 +18,8 @@ import { BOOLEAN_ATTRIBUTES } from '../../semantic-core/attribute-classification
 import { STATIC_STYLES_MARKER } from '@openelement/protocol/part-program';
 import {
   INTERNAL_PREFIX,
+  LIST_ENTRY_INDEX,
+  LIST_ENTRY_MATCHER,
   type EmitState,
   nextName,
   pushParts,
@@ -961,7 +963,7 @@ function emitClaimEntryBuilder(
 /**
  * One claim-time keyed sync. `previous` is the seeded list on the strict first
  * call and the live entry list afterwards. Matching keeps mount's
- * `entry.key === key` identity plus the mount used-set rule, so duplicate
+ * `entry.key === key` identity and first-unused occurrence order, so duplicate
  * client keys adopt the wire entry once per occurrence and insert the
  * remainder. The strict call is the seed assignment's defense: an unmatched
  * seeded entry is a mismatch, never a delete. The non-strict refresh disposes
@@ -989,18 +991,15 @@ function emitClaimListSync(
   // the claimed DOM, owners and entries untouched. The refresh assignment keeps
   // the previous entry list, so the next legal signal value can recover.
   push(state, 'for (const key of keys) encodeListKey(key);');
+  push(state, `const matchEntry = ${LIST_ENTRY_MATCHER}(previous);`);
   push(state, 'const next = [];');
   push(state, 'const used = new Set();');
   push(state, 'for (let index = 0; index < items.length; index++) {');
   state.indent += 1;
   push(state, 'const item = items[index];');
   push(state, 'const key = keys[index];');
-  push(state, 'let found = null;');
-  push(
-    state,
-    'for (const entry of previous) { if (entry.key === key && !used.has(entry)) { found = entry; break; } }',
-  );
-  push(state, 'if (found !== null) {');
+  push(state, 'const found = matchEntry(key);');
+  push(state, 'if (found !== undefined) {');
   state.indent += 1;
   push(state, 'used.add(found); found.item = item; found.update(item); next.push(found);');
   state.indent -= 1;
@@ -1030,30 +1029,54 @@ function emitClaimListSync(
   push(state, 'entry.owner.dispose(true);');
   state.indent -= 1;
   push(state, '}');
+  emitClaimListPlacement(state, endVar);
+  push(state, 'return next;');
+  state.indent -= 1;
+  push(state, '}');
+}
+
+/**
+ * A claimed list may already have been edited outside the runtime. Only trust
+ * the previous entry order for minimal placement after checking its live node
+ * runs. An intact list with the same order and no insertions needs no placement.
+ * Passing an empty previous order lets the shared reconciler repair drift.
+ */
+function emitClaimListPlacement(state: EmitState, endVar: string): void {
   push(state, `const parent = ${endVar}.parentNode;`);
-  push(state, 'if (parent !== null) {');
-  state.indent += 1;
+  push(state, 'if (parent === null) return next;');
   push(state, `let reference = ${endVar};`);
-  push(state, 'for (let entryIndex = next.length - 1; entryIndex >= 0; entryIndex--) {');
-  state.indent += 1;
-  push(state, 'const nodes = next[entryIndex].nodes;');
-  push(state, 'for (let nodeIndex = nodes.length - 1; nodeIndex >= 0; nodeIndex--) {');
-  state.indent += 1;
-  push(state, 'const node = nodes[nodeIndex];');
+  push(state, 'let nextIndex = next.length - 1;');
+  push(state, 'const hasInsertions = next.length > used.size;');
+  push(state, 'let reordered = false;');
+  push(state, 'let intact = true;');
   push(
     state,
-    'if (node.parentNode !== parent || node.nextSibling !== reference) parent.insertBefore(node, reference);',
+    'verifyOrder: for (let entryIndex = previous.length - 1; entryIndex >= 0; entryIndex--) {',
   );
+  state.indent += 1;
+  push(state, 'const entry = previous[entryIndex];');
+  push(state, 'if (!used.has(entry)) continue;');
+  push(state, 'while (hasInsertions && !used.has(next[nextIndex])) nextIndex--;');
+  push(state, 'if (entry !== next[nextIndex]) reordered = true;');
+  push(state, 'nextIndex--;');
+  push(state, 'for (let nodeIndex = entry.nodes.length - 1; nodeIndex >= 0; nodeIndex--) {');
+  state.indent += 1;
+  push(state, 'const node = entry.nodes[nodeIndex];');
+  push(state, 'if (node.parentNode !== parent || node.nextSibling !== reference) {');
+  state.indent += 1;
+  push(state, 'intact = false;');
+  push(state, 'break verifyOrder;');
+  state.indent -= 1;
+  push(state, '}');
   push(state, 'reference = node;');
   state.indent -= 1;
   push(state, '}');
   state.indent -= 1;
   push(state, '}');
-  state.indent -= 1;
-  push(state, '}');
-  push(state, 'return next;');
-  state.indent -= 1;
-  push(state, '}');
+  push(
+    state,
+    `if (!intact || reordered || hasInsertions) reconcileEachEntries(next, parent, ${endVar}, intact && reordered ? previous : []);`,
+  );
 }
 
 /**
@@ -1120,6 +1143,7 @@ function emitClaimList(
       nextName(state, 'eachCreateScope'),
       nextName(state, 'eachCreateItem'),
       node.parameter,
+      node.key !== null,
       node.template,
       records,
       node.span,
@@ -1206,19 +1230,17 @@ function emitClaimList(
   // list node, so the strict seed mismatch reports where the list was written.
   const seedDetail = `${mismatchVar} + ${JSON.stringify(` at ${here}/each`)}`;
   push(state, `if (${mismatchVar} !== null) throw ${claimErrorFrom(seedDetail, node.span)};`);
+  const seedByToken = nextName(state, 'seedByToken');
+  push(state, `const ${seedByToken} = ${LIST_ENTRY_INDEX}(${seededVar}, "token");`);
   push(state, `for (let index = 0; index < ${itemsVar}.length; index++) {`);
   state.indent += 1;
   push(state, `const token = ${tokensVar}[index];`);
   push(state, 'if (token === null) continue;');
-  push(state, `for (const entry of ${seededVar}) {`);
-  state.indent += 1;
+  push(state, `const entry = ${seedByToken}.get(token)?.pop();`);
   push(
     state,
-    'if (!entry.assigned && entry.token === token) { entry.assigned = true; entry.key = ' +
-      `${keysVar}[index]; entry.item = ${itemsVar}[index]; break; }`,
+    `if (entry !== undefined) { entry.assigned = true; entry.key = ${keysVar}[index]; entry.item = ${itemsVar}[index]; }`,
   );
-  state.indent -= 1;
-  push(state, '}');
   state.indent -= 1;
   push(state, '}');
   push(

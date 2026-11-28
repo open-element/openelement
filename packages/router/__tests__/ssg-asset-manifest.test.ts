@@ -105,10 +105,8 @@ function renderDocument(doc: ReturnType<typeof resolvePageDocument>): string {
 
 /** The generated wiring both renderer adapters emit (asserted per mode). */
 function assertDocumentTimeInjection(code: string): void {
-  expect(code).toContain(
-    'const __doc = __resolvePageDocument(__page.head, __pageContext, __clientScriptDescriptors());',
-  );
-  expect(code).toContain('scripts: __doc.clientScripts || [],');
+  expect(code).toContain('const __doc = __resolvePageDocument(__page.head, __pageContext);');
+  expect(code).toContain('...__clientDocumentResources(content),');
   // No post-build script surgery may reappear.
   expect(
     !code.includes('insertBeforeBodyClose'),
@@ -450,17 +448,20 @@ test('matrix — postProcessClientIslandBuild honors the manifest on a real temp
       shared: ['/client/islands/element-runtime-3c1d.js'],
       styles: [],
     };
-    await postProcessClientIslandBuild({
-      phase3: { root: tmp, outDir: 'dist', base: '/', upgradeStrategy: 'idle' },
-      phase1: {
-        islandTagNames: ['open-counter'],
-        islandFiles: ['counter.ts'],
-        packageIslandDecls: [],
-        compilerBehaviorDecls: [],
-        islandMeta: {},
+    await postProcessClientIslandBuild(
+      {
+        phase3: { root: tmp, outDir: 'dist', base: '/', upgradeStrategy: 'idle' },
+        phase1: {
+          islandTagNames: ['open-counter'],
+          islandFiles: ['counter.ts'],
+          packageIslandDecls: [],
+          compilerBehaviorDecls: [],
+          islandMeta: {},
+        },
+        clientAssetManifest: manifestRecord,
       },
-      clientAssetManifest: manifestRecord,
-    });
+      new Map([['/client/islands/chunk-9f3e2a.js', ['/client/islands/element-runtime-3c1d.js']]]),
+    );
     const files = readdirSync(join(dist, 'island-manifests'), { withFileTypes: true }).map(
       (e) => e.name,
     );

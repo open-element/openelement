@@ -237,7 +237,14 @@ function connect(host: HTMLElement, options: SiteMenuOptions): () => void {
     summary.focus();
   };
 
+  let focusFrame: number | null = null;
+  const cancelFocus = (): void => {
+    if (focusFrame !== null) globalThis.cancelAnimationFrame(focusFrame);
+    focusFrame = null;
+  };
+
   const onToggle = (): void => {
+    cancelFocus();
     setExpanded(details.open);
     if (!details.open) return;
     // `toggle` fires before the open panel is laid out; one frame later the
@@ -245,7 +252,9 @@ function connect(host: HTMLElement, options: SiteMenuOptions): () => void {
     // not already moved it into the panel (keyboard-opened disclosure lands
     // on the summary; a fast pointer/keyboard move to a row must win over
     // this hand-off — otherwise Enter activates the wrong link).
-    globalThis.requestAnimationFrame(() => {
+    focusFrame = globalThis.requestAnimationFrame(() => {
+      focusFrame = null;
+      if (!details.open) return;
       const active = doc.activeElement;
       if (active instanceof Node && active !== summary && details.contains(active)) return;
       details.querySelector<HTMLElement>('a')?.focus();
@@ -274,6 +283,7 @@ function connect(host: HTMLElement, options: SiteMenuOptions): () => void {
   doc.addEventListener('pointerdown', onPointerDown, true);
 
   return () => {
+    cancelFocus();
     details.removeEventListener('toggle', onToggle);
     doc.removeEventListener('keydown', onKeydown);
     doc.removeEventListener('pointerdown', onPointerDown, true);

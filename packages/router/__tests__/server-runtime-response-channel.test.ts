@@ -1,20 +1,9 @@
-/**
- * Unit tests for @openelement/router/server-runtime response channel
- * (ADR-0160 rule a, #1470 block a): the request-time runtime semantics that
- * generated entries import instead of carrying emitted function bodies —
- * header commitment, the late-mutation Proxy guard, the Set-Cookie
- * channel merge, protocol-header precedence (ADR-0129 §3), and the CSP
- * auto-nonce (ADR-0158 commitment list).
- *
- * The end-to-end behavior stays pinned by the read-only oracles
- * (request-time-parity, stream-manifest) and by stream-handler.test.ts,
- * which drives the real generated handler against this module.
- */
+/** Response-header merge, protocol header precedence, and CSP nonce behavior. */
+
 import { expect, test } from 'vitest';
 import {
   applyCspNonce,
   createCspNonce,
-  createStreamHeaderChannel,
   isSsgPrerenderDispatch,
   mergeChannelHeaders,
   PROTOCOL_HEADERS,
@@ -26,21 +15,6 @@ function textResponse(init?: { headers?: HeadersInit; status?: number }): Respon
     status: init?.status ?? 200,
     headers: init?.headers,
   });
-}
-
-/** Run fn with console.warn captured; returns the captured payloads. */
-function captureWarn(fn: () => void): Array<{ message: string; payload: unknown }> {
-  const captured: Array<{ message: string; payload: unknown }> = [];
-  const original = console.warn;
-  console.warn = (msg?: unknown, ...args: unknown[]) => {
-    captured.push({ message: String(msg), payload: args[0] });
-  };
-  try {
-    fn();
-  } finally {
-    console.warn = original;
-  }
-  return captured;
 }
 
 test('PROTOCOL_HEADERS is the ADR-0129 §3 protocol set (lowercase wire names)', () => {
@@ -121,76 +95,6 @@ test('mergeChannelHeaders compares protocol names case-insensitively', () => {
   const response = textResponse({ headers: { LOCATION: '/framework' } });
   const channel = new Headers({ location: '/channel' });
   expect(mergeChannelHeaders(response, channel).headers.get('location')).toEqual('/framework');
-});
-
-test('createStreamHeaderChannel: pre-commit mutators pass through, reads stay live', () => {
-  const { channel, commit } = createStreamHeaderChannel('/stream');
-  channel.append('Set-Cookie', 'session=abc; HttpOnly');
-  channel.set('X-Pre', 'yes');
-  expect(channel.get('Set-Cookie')).toEqual('session=abc; HttpOnly');
-  expect(channel.get('X-Pre')).toEqual('yes');
-  expect(channel.has('X-Pre')).toEqual(true);
-  commit();
-  commit(); // idempotent
-  expect(channel.get('Set-Cookie')).toEqual('session=abc; HttpOnly');
-});
-
-test('createStreamHeaderChannel: post-commit append/set/delete are warn-and-ignore no-ops', () => {
-  const { channel, commit } = createStreamHeaderChannel('/stream');
-  channel.append('Set-Cookie', 'session=abc; HttpOnly');
-  commit();
-  const captured = captureWarn(() => {
-    channel.append('Set-Cookie', 'late=1');
-    channel.set('X-Late', 'discard');
-    channel.delete('Set-Cookie');
-  });
-  expect(channel.get('Set-Cookie')).toEqual('session=abc; HttpOnly');
-  expect(channel.get('X-Late')).toEqual(null);
-  expect(captured.length, 'each gated write warns once').toEqual(3);
-  for (const entry of captured) {
-    expect(entry.message).toEqual('[openElement] late response header write');
-  }
-  expect(captured[0].payload).toEqual({
-    route: '/stream',
-    header: 'Set-Cookie',
-    operation: 'append',
-  });
-  expect(captured[2].payload).toEqual({
-    route: '/stream',
-    header: 'Set-Cookie',
-    operation: 'delete',
-  });
-});
-
-test('createStreamHeaderChannel: forEach hands callbacks the gated proxy', () => {
-  const { channel, commit } = createStreamHeaderChannel('/stream');
-  channel.append('X-One', '1');
-  const seen: Array<[string, string, unknown]> = [];
-  channel.forEach((value, name, reference) => {
-    seen.push([name, value, reference]);
-  });
-  expect(seen.length).toEqual(1);
-  expect(seen[0][0], 'Headers.forEach iterates normalized (lowercase) names').toEqual('x-one');
-  expect(seen[0][1]).toEqual('1');
-  // vitest compares Headers opaquely, so the identity contract uses toBe:
-  // the forEach reference must be the channel's own (gated) instance.
-  expect(seen[0][2], 'the callback receives the channel itself').toBe(channel);
-  const gated = seen[0][2] as Headers;
-  commit();
-  const captured = captureWarn(() => gated.append('X-Late', 'discard'));
-  expect(captured.length, 'a reference held through forEach is gated too').toEqual(1);
-  expect(channel.get('X-Late')).toEqual(null);
-});
-
-test('createStreamHeaderChannel: thisArg flows through forEach', () => {
-  const { channel } = createStreamHeaderChannel('/stream');
-  channel.append('X-One', '1');
-  const receiver = { suffix: '!' };
-  let received: unknown;
-  channel.forEach(function (this: typeof receiver, _value, _name) {
-    received = this.suffix;
-  }, receiver);
-  expect(received).toEqual('!');
 });
 
 test('createCspNonce emits 32 lowercase hex characters (a dash-free UUID)', () => {

@@ -380,7 +380,11 @@ export function buildClientAssetManifest(options: {
   // Rollup module metadata: module id -> containing chunk file. A module
   // that shares a chunk with other islands keeps its identity here.
   const fileByModuleId = new Map<string, string>();
+  const emittedFiles = new Set<string>();
+  let entryImports: readonly string[] | undefined;
   for (const chunk of chunks) {
+    emittedFiles.add(chunk.fileName);
+    if (chunk.fileName === entryFile) entryImports = chunk.imports;
     const ids = new Set<string>(Object.keys(chunk.modules ?? {}));
     if (chunk.facadeModuleId) ids.add(chunk.facadeModuleId);
     for (const rawId of ids) {
@@ -452,9 +456,13 @@ export function buildClientAssetManifest(options: {
     if (islandFiles.has(url)) continue;
     shared.add(url);
   }
+  const entryPreloads = [
+    ...new Set(entryImports?.filter((file) => file !== entryFile && emittedFiles.has(file))),
+  ].map(assetUrl);
 
   return {
     entry: assetUrl(entryFile),
+    ...(entryPreloads.length === 0 ? {} : { entryPreloads }),
     islands: islandAssets,
     shared: [...shared].sort(),
     styles: [...new Set(options.styleFileNames ?? [])].sort().map(assetUrl),

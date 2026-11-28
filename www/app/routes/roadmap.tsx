@@ -265,14 +265,7 @@ const content = {
   },
 };
 
-/**
- * The roadmap page as a server function page (alpha15 server architecture):
- * the route module's own exported TSX function, lowered by the compiler into
- * a generative HTML constructor. The page hook class (`page-roadmap`) scopes
- * the former component sheet's authored rules in the linked document
- * stylesheet, and the rows' per-item `data-state`/`data-stamp` slots carry
- * the variant data the sheet's group-data utilities match.
- */
+/** The page-roadmap class scopes site-chrome.css; row data attributes select variants. */
 export function RoadmapPage(props: {
   metadata: { breadcrumb: string; title: string; lede: string };
   railItems: Array<{ id: string; href: string; label: string; depth: string }>;

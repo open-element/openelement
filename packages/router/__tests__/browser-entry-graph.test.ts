@@ -4,18 +4,14 @@
  * The claim under test (plan §12a, ADR-0174 scope): **no production browser
  * entry LOADS the generic Part Program executor**. The evidence is the
  * observer plugin mounted in the real client build plus the checker that
- * evaluates its artifact. This suite proves the tool rather than the tree:
- * the tree is expected red today, and P1 is NOT claimed here.
+ * evaluates its artifact.
  *
- * Real-build proof matrix (no synthetic all-green fixture is the only
- * evidence — every positive/negative below is a real Vite/Rolldown build):
- *
- *   T1  real router CLI build of a class-island app → the artifact is emitted,
- *       deterministic/normalized, and VIOLATED with named executor entries.
+ *   T1  generated island built through the real Router CLI. The graph is
+ *       normalized, includes its style asset, and meets the executor gate.
  *   T2  direct Vite build of the generated-element shell + neutral primitives
  *       (write:false) → MET; report categories still listed.
- *   T3  an unused re-export of `convertToAttribute` from `facade-host.ts` →
- *       parsed-only executor residue recorded, loaded set MET, checker exit 0.
+ *   T3  a historical executor ID in a real artifact's parse capture → MET,
+ *       with the residue in the detailed report.
  *   T4  exact identity: a `node_modules/probe/facade-host.ts` copy is NOT the
  *       element executor entry (no suffix matching).
  *   T5  forged artifacts derived from T1/T2 (missing/malformed/incomplete/
@@ -44,6 +40,7 @@ import {
   EXECUTOR_ENTRY_RELATIVE_MODULES,
   STYLE_ASSET_VIRTUAL_MODULE_PREFIX,
   browserEntryGraphGateListDigest,
+  deriveBrowserEntryGraphSummary,
   evaluateBrowserEntryGraphArtifact,
   executorEntryModuleIds,
   isNormalizedBrowserEntryGraphModuleId,
@@ -123,26 +120,7 @@ export function ProbeHome() {
 export default definePage(ProbeHome, { head: { title: 'module graph probe' } });
 `;
 
-/**
- * The fixture island — VIOLATED BY CONSTRUCTION, through the one door the
- * generated lane still leaves open.
- *
- * The class lane reached the generic Part Program executor because every
- * compiled class RENDERED through its kernel, so any class island's chunk
- * closure contained the executor entries. That path is gone: a generated
- * element mounts through the shell and touches no Part Program. What remains is
- * the package ROOT barrel — `@openelement/element` is flagged `sideEffects`
- * (it installs the hydration and Block edges) and re-exports `renderToString`,
- * so a client module that imports a RUNTIME value from the root drags
- * `runtime-program.ts` / `runtime/hydrate.ts` / `runtime/program-kernel.ts`
- * into the island's chunk. That is the documented P1 cost of the root-barrel
- * error-boundary surface, and the exact class this observer exists to catch.
- *
- * The leak rides a plain helper module rather than the component body: the
- * compiler's tracked-slot classification (correctly) refuses an unclassified
- * root-barrel binding inside JSX, and a real application reaches the barrel
- * from ordinary module code.
- */
+/** Exercise a real browser import through the Element package entry. */
 const ISLAND_HELPER = `import { renderToString } from '@openelement/element';
 
 export const helperReachesTheRootBarrel = typeof renderToString;
@@ -159,6 +137,12 @@ export const helperReachesTheRootBarrel = typeof renderToString;
  * no style edge at all — so the strategy is a fixture parameter, not a detail.
  */
 function islandSource(hydrate: string, ssr: boolean, dsd: boolean): string {
+  const enableInteraction =
+    hydrate === 'only'
+      ? ` onClick={() => {
+    void import('../utils/probe-lazy.ts').then((mod) => mod.run());
+  }}`
+      : '';
   return `import { defineIslandConfig } from '@openelement/router';
 import { helperReachesTheRootBarrel } from './probe-helper.ts';
 
@@ -173,7 +157,7 @@ export const openElement = defineIslandConfig({
 });
 
 export default function ProbeCounter(props: { count: number }) {
-  return <span id="count" data-barrel={helperReachesTheRootBarrel}>{props.count}</span>;
+  return <span id="count" data-barrel={helperReachesTheRootBarrel}${enableInteraction}>{props.count}</span>;
 }
 `;
 }
@@ -199,6 +183,10 @@ async function makeRouterFixture(): Promise<string> {
     ].join('\n'),
   );
   await writeFixtureFile(join(root, 'app', 'islands', 'probe-helper.ts'), ISLAND_HELPER);
+  await writeFixtureFile(
+    join(root, 'app', 'utils', 'probe-lazy.ts'),
+    'export function run() { console.info("probe"); }',
+  );
   await writeFixtureFile(join(root, 'app', 'islands', 'probe-counter.tsx'), ISLAND_CLASS);
   await writeFixtureFile(
     join(root, 'app', 'islands', 'probe-counter.css'),
@@ -372,13 +360,8 @@ const SHELL_ENTRY = [
 ].join('\n');
 
 interface RealEvidence {
-  t1: {
-    root: string;
-    build: RouterBuildResult;
-    artifact: BrowserEntryGraphArtifact;
-    source: string;
-  };
-  t2?: { root: string; artifact: BrowserEntryGraphArtifact; source: string };
+  t1: BrowserEntryGraphArtifact;
+  t2?: string;
 }
 
 let evidence: RealEvidence | undefined;
@@ -389,7 +372,7 @@ function readGraphArtifact(source: string, label: string): BrowserEntryGraphArti
   return JSON.parse(source) as BrowserEntryGraphArtifact;
 }
 
-test('T1 real router CLI build emits a normalized, VIOLATED browser-entry graph', async () => {
+test('T1 real router CLI build emits a normalized, MET browser-entry graph', async () => {
   const root = await makeRouterFixture();
   const build = await runRouterBuild(root);
   expect(build.code, build.output).toBe(0);
@@ -433,8 +416,16 @@ test('T1 real router CLI build emits a normalized, VIOLATED browser-entry graph'
   expect(
     artifact.chunks.some((chunk) => chunk.modules.some((module) => module.renderedLength > 0)),
   ).toBe(true);
-  // Dynamic/implicit chunk edges are materialized, not dropped.
-  expect(artifact.chunks.some((chunk) => chunk.dynamicImports.length > 0)).toBe(true);
+  // The document's activation edge is explicit evidence, and imports made
+  // by the island after interaction retain their actual Vite dynamic edges.
+  const island = artifact.islands.find(({ tag }) => tag === 'probe-counter')!;
+  expect(island.activationChunkFile).toBe(island.chunkFile);
+  const islandChunk = artifact.chunks.find(({ file }) => file === island.chunkFile)!;
+  const lazyChunk = artifact.chunks.find(({ modules }) =>
+    modules.some(({ id }) => id.endsWith('app/utils/probe-lazy.ts')),
+  );
+  expect(lazyChunk).toBeDefined();
+  expect(islandChunk.dynamicImports).toContain(lazyChunk!.file);
 
   // B1 privacy: the style-asset graph id is base64url of the sheet's ABSOLUTE
   // path in the bundler. The artifact must carry the decoded, workspace-anchored
@@ -461,51 +452,13 @@ test('T1 real router CLI build emits a normalized, VIOLATED browser-entry graph'
   }
 
   const evaluation = evaluateBrowserEntryGraphArtifact(artifact);
-  expect(evaluation.verdict).toBe('VIOLATED');
-  expect(evaluation.violations.length).toBeGreaterThan(0);
-  const gateIds = new Set(executorEntryModuleIds(artifact.element.packageRoot));
-  for (const violation of evaluation.violations) {
-    expect(gateIds.has(violation.moduleId), violation.moduleId).toBe(true);
-    expect(artifact.chunks.some((chunk) => chunk.file === violation.chunkFile)).toBe(true);
-  }
-  // The island's chunk closure contains the executor chunk: the violation is
-  // attributable to the island, not to an unreachable module.
-  expect(
-    evaluation.violations.some((violation) => violation.islands.includes('probe-counter')),
-    JSON.stringify(evaluation.violations, null, 2),
-  ).toBe(true);
+  expect(evaluation.verdict, JSON.stringify(evaluation.violations, null, 2)).toBe('MET');
+  expect(evaluation.violations).toEqual([]);
 
-  // The checker's real CLI agrees, and names an executor entry in its output.
-  // Output discipline: a failing human run keeps stdout (the data channel)
-  // empty — the verdict block moves to stderr, and the structured verdict
-  // lives in the `--json` machine document.
-  const artifactArg = relative(REPO_ROOT, artifactPath);
-  const checked = await runChecker([artifactArg]);
-  expect(checked.code, checked.stderr).toBe(1);
-  expect(checked.stdout).toBe('');
-  expect(checked.stderr).toContain('VIOLATED');
-  expect(checked.stderr).toContain('loaded ');
-
-  const cliReport = JSON.parse((await runChecker(['--json', artifactArg])).stdout) as {
-    format: string;
-    exitCode: number;
-    artifacts: Array<{
-      verdict: string;
-      violations: Array<{ moduleId: string; islands: string[] }>;
-    }>;
-    summary: { met: number; violated: number; unproven: number };
-  };
-  expect(cliReport.format).toBe('openelement.browser-entry-graph-check/1');
-  expect(cliReport.exitCode).toBe(1);
-  expect(cliReport.summary).toEqual({ met: 0, violated: 1, unproven: 0 });
-  expect(cliReport.artifacts).toHaveLength(1);
-  expect(cliReport.artifacts[0]!.verdict).toBe('VIOLATED');
-  expect(
-    cliReport.artifacts[0]!.violations.some((violation) => gateIds.has(violation.moduleId)),
-    JSON.stringify(cliReport.artifacts[0]!.violations),
-  ).toBe(true);
-
-  evidence = { t1: { root, build, artifact, source } };
+  const checked = await runChecker([relative(REPO_ROOT, artifactPath)]);
+  expect(checked.code, checked.stderr).toBe(0);
+  expect(checked.stdout).toContain('MET');
+  evidence = { t1: artifact };
 });
 
 test('T2 real Vite build of the generated shell + neutral primitives is MET', async () => {
@@ -530,7 +483,7 @@ test('T2 real Vite build of the generated shell + neutral primitives is MET', as
   expect(evaluation.loadedModuleCount).toBeGreaterThan(0);
 
   if (evidence !== undefined) {
-    evidence.t2 = { root, artifact, source: source! };
+    evidence.t2 = source!;
   }
 });
 
@@ -638,40 +591,20 @@ test('T2c the writer still fails closed on a strategy-resolved island with no em
 });
 
 test('T3 a parsed-but-unused executor entry is a diagnostic, not a gate failure', async () => {
-  // The re-exported executor entry is a PARSE-ONLY residue: the bundler parses
-  // the module to build its export table and then tree-shakes the binding, so
-  // nothing of it loads. `runtime-program.ts` is the surviving gate-table entry
-  // that still exports a real value (`normalizePartProgram`) — the deleted
-  // facade module cannot carry this fixture, and using a live member of the
-  // frozen table keeps the assertion measuring the same predicate.
-  const root = await makeDirectFixture(
-    'parsed-only',
-    [
-      "import { createGeneratedElementClass } from '@openelement/element/internal/compiled/generated-element/shell';",
-      "export { normalizePartProgram } from 'oe-executor-entry';",
-      'globalThis.__oeBrowserGraphProbe = typeof createGeneratedElementClass;',
-      '',
-    ].join('\n'),
-  );
-  const build = await runDirectBuild({
-    root,
-    plugin: true,
-    aliases: {
-      'oe-executor-entry': join(ELEMENT_ROOT, 'src', 'internal', 'compiled', 'runtime-program.ts'),
-    },
-  });
-  const source = build.assets.get(GRAPH_ASSET);
-  expect(source).toBeDefined();
-  const artifact = readGraphArtifact(source!, 'T3');
-  const executorEntry = 'packages/element/src/internal/compiled/runtime-program.ts';
+  const root = await makeDirectFixture('parsed-only', SHELL_ENTRY);
+  const build = await runDirectBuild({ root, plugin: true });
+  const artifact = readGraphArtifact(build.assets.get(GRAPH_ASSET)!, 'T3');
+  const executorEntry = executorEntryModuleIds(artifact.element.packageRoot)[0]!;
+  expect(artifact.parsedModuleIds).not.toContain(executorEntry);
 
-  expect(artifact.parsedModuleIds).toContain(executorEntry);
+  artifact.parsedModuleIds.push(executorEntry);
+  Object.assign(artifact.predicate, deriveBrowserEntryGraphSummary(artifact));
   const evaluation = evaluateBrowserEntryGraphArtifact(artifact);
   expect(evaluation.verdict, JSON.stringify(evaluation, null, 2)).toBe('MET');
   expect(evaluation.parsedOnlyExecutorResidues).toContain(executorEntry);
 
   const artifactPath = join(root, 'parsed-only.json');
-  await writeFile(artifactPath, source!, 'utf8');
+  await writeFile(artifactPath, JSON.stringify(artifact), 'utf8');
   const reportPath = join(root, 'parsed-only-report.txt');
   const checked = await runChecker([
     relative(REPO_ROOT, artifactPath),
@@ -733,15 +666,34 @@ test('T5 forged/derived artifacts fail closed: UNPROVEN exit 2, never a green cl
   expect(evidence?.t2, 'T2 real artifact is required').toBeDefined();
   const realEvidence = evidence!;
   const forgedDir = await makeTempRoot();
-  const t2Source = realEvidence.t2!.source;
+  const t2Source = realEvidence.t2!;
 
-  const cloneT1 = () => JSON.parse(realEvidence.t1.source) as Record<string, unknown>;
+  const cloneT1 = () => structuredClone(realEvidence.t1) as unknown as Record<string, unknown>;
   const cloneT2 = () => JSON.parse(t2Source) as Record<string, unknown>;
   const writeForged = async (name: string, value: unknown): Promise<string> => {
     const path = join(forgedDir, `${name}.json`);
     await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
     return relative(REPO_ROOT, path);
   };
+
+  // Put one rendered executor entry in a real island chunk. This keeps the
+  // failure probe independent of the application importing a retired runtime.
+  const violationProbe = structuredClone(realEvidence.t1);
+  const island = violationProbe.islands[0]!;
+  const gateId = executorEntryModuleIds(violationProbe.element.packageRoot).find(
+    (id) =>
+      !violationProbe.chunks.some((chunk) => chunk.modules.some((module) => module.id === id)),
+  )!;
+  const islandChunk = violationProbe.chunks.find((chunk) => chunk.file === island.chunkFile)!;
+  islandChunk.modules.push({ id: gateId, renderedLength: 1 });
+  if (!violationProbe.parsedModuleIds.includes(gateId)) violationProbe.parsedModuleIds.push(gateId);
+  Object.assign(violationProbe.predicate, deriveBrowserEntryGraphSummary(violationProbe));
+  expect(violationProbe.predicate.loadedViolations).toEqual([
+    { moduleId: gateId, chunkFile: island.chunkFile, islands: [island.tag] },
+  ]);
+  const violationPath = await writeForged('loaded-executor', violationProbe);
+  const cloneViolation = () =>
+    structuredClone(violationProbe) as unknown as Record<string, unknown>;
 
   // 1. Incomplete capture.
   const incomplete = cloneT1();
@@ -775,23 +727,24 @@ test('T5 forged/derived artifacts fail closed: UNPROVEN exit 2, never a green cl
   const emptyChunks = cloneT1();
   emptyChunks.chunks = [];
   // 9. A loaded violation hidden behind an unreachable chunk (forged green).
-  const hiddenViolation = cloneT1();
-  const entryChunk = (
-    hiddenViolation.chunks as Array<{
-      isEntry: boolean;
-      dynamicImports: string[];
-      imports: string[];
-    }>
-  ).find((chunk) => chunk.isEntry)!;
-  entryChunk.dynamicImports = [];
-  entryChunk.imports = [];
+  const hiddenViolation = structuredClone(violationProbe);
+  const hiddenChunk = hiddenViolation.chunks.find(({ modules }) =>
+    modules.some(({ id }) => id.endsWith('app/utils/probe-lazy.ts')),
+  )!;
+  for (const chunk of hiddenViolation.chunks) {
+    chunk.modules = chunk.modules.filter(({ id }) => id !== gateId);
+    chunk.dynamicImports = chunk.dynamicImports.filter((file) => file !== hiddenChunk.file);
+  }
+  hiddenChunk.modules.push({ id: gateId, renderedLength: 17 });
+  Object.assign(hiddenViolation.predicate, deriveBrowserEntryGraphSummary(hiddenViolation));
+  expect(hiddenViolation.predicate.loadedViolations).toEqual([]);
   // 10. Drifted gate table digest.
   const drifted = cloneT1();
   (drifted.predicate as { gateListDigest: string }).gateListDigest = 'sha256:deadbeef';
   // 11. Self-inconsistent summary that hides a loaded violation (forged green):
   // the chunk facts still load executor entries, so a zeroed summary must be
   // caught rather than reported as MET.
-  const hiddenViolationSummary = cloneT1();
+  const hiddenViolationSummary = cloneViolation();
   (hiddenViolationSummary.predicate as { loadedViolations: unknown[] }).loadedViolations = [];
   // 12. The bundler's opaque style-asset id (base64url of an absolute path)
   // must never be accepted as an artifact id: it is a machine-path carrier.
@@ -806,16 +759,13 @@ test('T5 forged/derived artifacts fail closed: UNPROVEN exit 2, never a green cl
     opaqueStyle.chunks as Array<{ modules: Array<{ id: string; renderedLength: number }> }>
   )[0]!.modules.push({ id: opaqueStyleId, renderedLength: 10 });
   // 13. A non-canonical spelling of a gate id must not evade exact matching.
-  const nonCanonicalGate = cloneT1();
-  const gateViolation = (
-    nonCanonicalGate.predicate as { loadedViolations: Array<{ moduleId: string }> }
-  ).loadedViolations[0]!.moduleId;
-  const nonCanonicalSpelling = gateViolation.replace('packages/element/', 'packages//element/');
+  const nonCanonicalGate = cloneViolation();
+  const nonCanonicalSpelling = gateId.replace('packages/element/', 'packages//element/');
   for (const chunk of nonCanonicalGate.chunks as Array<{
     modules: Array<{ id: string; renderedLength: number }>;
   }>) {
     for (const moduleRecord of chunk.modules) {
-      if (moduleRecord.id === gateViolation) moduleRecord.id = nonCanonicalSpelling;
+      if (moduleRecord.id === gateId) moduleRecord.id = nonCanonicalSpelling;
     }
   }
   // 14. An unknown `\0` scheme (possible machine-path carrier) is malformed.
@@ -902,7 +852,7 @@ test('T5 forged/derived artifacts fail closed: UNPROVEN exit 2, never a green cl
   expect(opaqueCheck.stderr).not.toContain('/Users/');
   expect(opaqueCheck.stderr).not.toContain(REPO_ROOT);
 
-  // The same real artifacts keep their honest verdicts through the CLI.
+  // Check the real positive and the derived negative through the CLI.
   const t2Path = join(forgedDir, 'real-t2.json');
   await writeFile(t2Path, t2Source, 'utf8');
   const met = await runChecker([relative(REPO_ROOT, t2Path)]);
@@ -911,18 +861,13 @@ test('T5 forged/derived artifacts fail closed: UNPROVEN exit 2, never a green cl
   expect(met.stdout.split('\n').filter((line) => line.length > 0)).toHaveLength(1);
   expect(met.stdout).toContain('MET');
 
-  const violated = await runChecker([
-    relative(REPO_ROOT, join(realEvidence.t1.root, 'dist', 'client', GRAPH_ASSET)),
-  ]);
+  const violated = await runChecker([violationPath]);
   expect(violated.code, violated.stderr).toBe(1);
   // A failing human run keeps stdout a data channel (empty).
   expect(violated.stdout).toBe('');
 
   // --json is a deterministic document and repeats the honesty.
-  const jsonChecked = await runChecker([
-    '--json',
-    relative(REPO_ROOT, join(realEvidence.t1.root, 'dist', 'client', GRAPH_ASSET)),
-  ]);
+  const jsonChecked = await runChecker(['--json', violationPath]);
   expect(jsonChecked.code).toBe(1);
   const report = JSON.parse(jsonChecked.stdout) as {
     format: string;
@@ -984,15 +929,11 @@ test('T7 determinism: two observer builds emit byte-identical artifacts', async 
   );
 });
 
-test('the frozen executor-entry table names existing modules and keeps its digest pinned', () => {
-  // Four, not six: `facade-host.ts` and `runtime/kernel.ts` were the class lane's
-  // own call surfaces and were deleted with the lane, so the gate now names the
-  // executor proper. The loop below is the assertion that made the stale naming
-  // visible — every id must still resolve on disk.
+test('the frozen table keeps rejecting retired executor IDs', () => {
   expect(EXECUTOR_ENTRY_RELATIVE_MODULES).toHaveLength(4);
   expect(new Set(EXECUTOR_ENTRY_RELATIVE_MODULES).size).toBe(4);
   for (const modulePath of EXECUTOR_ENTRY_RELATIVE_MODULES) {
-    expect(existsSync(join(ELEMENT_ROOT, modulePath)), modulePath).toBe(true);
+    expect(existsSync(join(ELEMENT_ROOT, modulePath)), modulePath).toBe(false);
   }
   // A reviewed change to the table changes this literal in the same commit.
   expect(browserEntryGraphGateListDigest()).toBe(

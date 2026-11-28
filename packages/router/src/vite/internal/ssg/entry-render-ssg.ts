@@ -65,11 +65,7 @@ export function renderSsgSection(desc: EntryDescriptor): string {
         .map(quoteGeneratedJavaScriptValue)
         .join(
           ', ',
-        )}], rendering: (__pageDefinition(${r.varName}).renderIntent?.mode || "static"), hasAction: (typeof ${r.varName}.action === "function" || (typeof ${r.varName}.actions === "object" && ${r.varName}.actions !== null))${
-        r.streamManifest
-          ? `, streamManifest: __streamManifests[${quoteGeneratedJavaScriptValue(r.path)}]`
-          : ''
-      }${pageKindField} },`,
+        )}], rendering: (__pageDefinition(${r.varName}).renderIntent?.mode || "static"), hasAction: (typeof ${r.varName}.action === "function" || (typeof ${r.varName}.actions === "object" && ${r.varName}.actions !== null))${pageKindField} },`,
     );
   }
   lines.push('];');
@@ -188,6 +184,7 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   );
   lines.push('    const fullHtml = wrapInDocument(content, {');
   for (const optionLine of documentWrapOptionsLines({
+    contentExpr: 'content',
     titleExpr: `title || __doc.title || ${quoteGeneratedJavaScriptValue(desc.document.title)}`,
     langExpr: `lang || __doc.lang || ${quoteGeneratedJavaScriptValue(desc.document.lang)}`,
     headExtrasExpr: '__routeHeadExtras',
@@ -299,6 +296,7 @@ export function renderSsgSection(desc: EntryDescriptor): string {
   );
   lines.push('        const errorHtml = wrapInDocument(errorContent, {');
   for (const optionLine of documentWrapOptionsLines({
+    contentExpr: 'errorContent',
     titleExpr: `title || __doc.title || ${quoteGeneratedJavaScriptValue(desc.document.title)}`,
     langExpr: `lang || __doc.lang || ${quoteGeneratedJavaScriptValue(desc.document.lang)}`,
     headExtrasExpr: '__routeHeadExtras',

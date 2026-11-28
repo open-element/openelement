@@ -25,8 +25,8 @@ import type { Plugin } from 'vite';
 import type { FrameworkOptions } from './framework.ts';
 import type { OpenElementBuildContext } from './build-context.ts';
 
-import { generateClientEntry, islandsMightUseBlocks } from './internal/ssg/index.ts';
-import { resolveElementServicesRuntimeModule } from './internal/ssg/entry-client-codegen.ts';
+import { generateClientEntry } from './internal/ssg/index.ts';
+import { resolveElementDocumentServicesModule } from './internal/ssg/entry-client-codegen.ts';
 import type { DevLiveStyleSheetGroup } from './internal/ssg/entry-client-codegen.ts';
 import { buildClientIslandEntries } from './internal/ssg/client-island-entries.ts';
 import { VIRTUAL_RUNTIME_SPECIFIERS } from './internal/ssg/entry-generators.ts';
@@ -35,8 +35,6 @@ import { compilerBehaviorDeclarations } from './internal/ssg/client-admission.ts
 import { runtimeModulePath } from './internal/runtime-module-path.ts';
 import { islandStyleDeclarations } from './internal/island-style-declarations.ts';
 import { devAuthoredIslandStyleGraphIds } from './internal/style-assets.ts';
-import { ISLAND_ADMISSION } from '@openelement/protocol/island-admission';
-import type { DevStyleSession } from './internal/dev-style-session.ts';
 
 const VIRTUAL_CLIENT_ENTRY_ID = 'virtual:open-client-entry';
 // Exported for plugin.ts: the dev watcher invalidates this module when the
@@ -45,17 +43,9 @@ export const RESOLVED_CLIENT_ENTRY_ID = '\0' + VIRTUAL_CLIENT_ENTRY_ID;
 const CLIENT_ENTRY_PUBLIC_PATH = 'client/islands/client.js';
 
 /**
- * The packages the dev dep optimizer must pre-bundle for an island page.
- *
- * B2 moved the element runtime behind `__loadElementRuntime()`'s dynamic
- * import, so on an island page Vite first meets `@openelement/element` and
- * `@openelement/router` while the first island hydrates — not while it scans
- * the entry. A discovery that late starts a SECOND optimization of the same
- * session, and until it commits Vite holds the module graph: the element
- * runtime (and with it the pre-upgrade click capture the runtime installs)
- * lands after the first real user click, which is then neither handled nor
- * queued — the click is lost. Naming the packages here puts them in the FIRST
- * optimization, which is what the page's own module graph asks for anyway.
+ * Pre-bundle framework dependencies that islands may reach on activation.
+ * Late optimizer discovery can hold the module graph while Vite starts a new
+ * optimization pass, delaying registration and early interaction handling.
  */
 export const DEV_RUNTIME_PREBUNDLE_PACKAGES = [
   '@openelement/element',
@@ -147,7 +137,6 @@ function devLiveStyleSheetGroups(): DevLiveStyleSheetGroup[] {
 export function devIslandClientPlugin(
   options: FrameworkOptions,
   ctx: OpenElementBuildContext,
-  styleSession: DevStyleSession,
 ): Plugin {
   let base = '/';
 
@@ -190,27 +179,13 @@ export function devIslandClientPlugin(
         return runtimeModulePath('./ssg/island-scheduler.ts');
       }
       if (id === VIRTUAL_RUNTIME_SPECIFIERS.enhance) {
-        return runtimeModulePath('./ssg/enhance-client.ts');
+        return runtimeModulePath('./ssg/form-enhancement-loader.ts');
       }
-      // B2: the same element-services virtual id the built entry carries, so
-      // dev serves the surface the production build would (one resolution
-      // rule, owned by the selector's own module).
-      const elementServices = resolveElementServicesRuntimeModule(id);
-      if (elementServices !== null) return elementServices;
-      return null;
+      return resolveElementDocumentServicesModule(id);
     },
 
-    async load(id) {
+    load(id) {
       if (id !== RESOLVED_CLIENT_ENTRY_ID) return;
-      // The entry registers the component-sheet adapter the SELECTED engine
-      // owns — the same owner the built entry resolves it from
-      // (cli/build-client.ts reads styleIntegration.provider), so a client
-      // upgrade on any engine's dev app recognizes the sheet its DSD declares
-      // instead of failing closed on an unexpected stylesheet resource. The
-      // build additionally gates on discovered candidates to keep the
-      // permanent bundle lean; dev's candidate set is live at request time,
-      // so an engine being selected is the whole condition here.
-      const utilitySheet = (await styleSession.resolve())?.provider.componentSheetSpecifier;
       const root = process.cwd();
       const islandsDir = options.islandsDir || DEFAULT_ISLANDS_DIR;
       // #569: an island-free app with data-open-enhance forms still needs the
@@ -231,32 +206,10 @@ export function devIslandClientPlugin(
         ),
         upgradeStrategy: options.island?.upgradeStrategy,
       });
-      // #1548: same blocks scan the production build runs, so dev serves the
-      // same entry specialization (and exercises it) instead of diverging
-      // from the built bundle. The scan is conservative: any unresolvable
-      // island module keeps the builders-carrying entry.
-      const mightUseBlocks = islandsMightUseBlocks({
-        root,
-        islandsDir,
-        islandTagNames: ctx.phase1.islandTagNames ?? [],
-        islandFiles: ctx.phase1.islandFiles ?? [],
-        packageIslandDecls: ctx.phase1.packageIslandDecls ?? [],
-        compilerBehaviorDecls: compilerBehaviorDeclarations(
-          ctx.phase1.staticComponents,
-          options.island?.upgradeStrategy,
-        ),
-        staticSidecars: [ISLAND_ADMISSION],
-      });
       const devLiveStyleSheets = devLiveStyleSheetGroups();
       return generateClientEntry(islandEntries, {
         enhancedForms,
         specializeScheduler: true,
-        // alpha15 S lane (S5-A), provider-generalized by the closeout: the
-        // dev entry registers the shared component stylesheet through the
-        // same adapter protocol the built entry uses, resolved from the
-        // selected provider rather than hardcoded to one engine.
-        ...(utilitySheet === undefined ? {} : { utilitySheet }),
-        ...(mightUseBlocks ? {} : { includeBlocksRuntime: false }),
         // F16 dev live-sheet channel: emitted ONLY when an admitted generated
         // island declares sheets, and only in dev — the build entry never
         // receives this option and must stay byte-identical.

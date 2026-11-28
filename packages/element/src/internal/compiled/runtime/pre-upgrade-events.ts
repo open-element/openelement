@@ -9,20 +9,12 @@
  * page-lifetime entry table).
  */
 
-import type { CompiledHydrationOptions } from './hydrate.ts';
-// The error dialect comes from its ORIGIN module, never from the executor's
-// `fail` micro-factory in program-kernel.ts. The two are byte-for-byte the same
-// failure — `fail(code, message)` IS `raiseFrameworkError('render', code,
-// message)` — but the import edge is not: program-kernel is one of the six P1
-// executor entry modules, so reaching it here made this module (and the
-// document-level pre-hydration capture it owns) impossible to install from a
-// page floor that must stay executor-free. Importing the origin is the same
-// rule leaf-runtime.ts states for `removeNodes`: import the origin, never the
-// re-export.
-import { ClaimErrorCode, raiseFrameworkError } from '@openelement/protocol/errors';
 // The shell's side of the replay contract (see that module's doc): this capture
 // module is the ONLY publisher, and it publishes at install time.
-import { installPreUpgradeReplayHook } from './pre-upgrade-replay-hook.ts';
+import {
+  installPreUpgradeReplayHook,
+  isPreUpgradeIslandSettled,
+} from './pre-upgrade-replay-hook.ts';
 
 export interface PreUpgradeEvent {
   readonly target: EventTarget;
@@ -108,21 +100,6 @@ function resolveCaptureTarget(event: Event): EventTarget | null {
   return event.target;
 }
 
-/**
- * Island hosts that already reached their activation decision (claim or
- * fresh, success or failure). The facade marks its host element here; the
- * document-level capture then skips ordinary traffic inside settled islands
- * while still capturing for nested still-pending islands. Kernel-level
- * callers (hydrateExistingDom tests, non-facade hosts) never consult this set:
- * their capture contract is "everything inside the claim root".
- */
-const settledIslandHosts = new WeakSet<object>();
-
-/** Facade activation decisions land here (success or failure). */
-export function markPreUpgradeIslandSettled(host: unknown): void {
-  if (host && typeof host === 'object') settledIslandHosts.add(host);
-}
-
 function isIslandHostTag(node: unknown): boolean {
   try {
     const element = node as { localName?: unknown; tagName?: unknown };
@@ -181,14 +158,11 @@ function eventPathNodes(event: Event, target: EventTarget): readonly unknown[] {
  * Facade document-capture filter: only interactions that could belong to a
  * still-pending DECLARED OpenElement island enter the queue.
  *
- * The entry's `__tags` (the generated client entry's island list) is the
- * owner: a path node counts only when its tag is in the root's declared set
- * and its host is not settled. Undeclared third-party custom elements
- * (sl-*, md-*, ion-*, ...) never enter the queue no matter how many distinct
- * targets they produce — otherwise 64 foreign targets exhaust the bounded
- * queue and a real delayed island loses its replay. Nested pending declared
- * islands still capture through a settled outer (any pending declared host
- * on the path keeps the record).
+ * The closest host on the composed path whose tag is in the entry's declared
+ * set owns the event. A live inner island already received the interaction,
+ * so a pending ancestor must never capture it for redispatch. A pending inner
+ * island can still capture through a settled ancestor. Undeclared custom
+ * elements never claim a queue slot on their own.
  *
  * Legacy: with no declared set (empty/omitted — direct kernel callers and
  * older ensure() calls without tags), falls back to the dash heuristic so
@@ -217,8 +191,7 @@ export function acceptPendingIslandEvent(
         : (declaredTags as ReadonlySet<string>);
       for (const node of path) {
         const tag = tagNameOf(node);
-        if (!tag || !lookup.has(tag)) continue;
-        if (!settledIslandHosts.has(node as object)) return true;
+        if (tag && lookup.has(tag)) return !isPreUpgradeIslandSettled(node as object);
       }
       return false;
     }
@@ -226,7 +199,7 @@ export function acceptPendingIslandEvent(
       if (!isIslandHostTag(node)) continue;
       // A pending host anywhere on the path (delayed / idle / visible /
       // nested-late / morph-added) keeps the record capturable.
-      if (!settledIslandHosts.has(node as object)) return true;
+      if (!isPreUpgradeIslandSettled(node as object)) return true;
     }
     // No island host (background) or every host settled (live traffic).
     return false;
@@ -419,22 +392,6 @@ function isInsideRoot(root: Node, target: EventTarget): target is Node {
   return false;
 }
 
-export function preUpgradeEventList(
-  source: CompiledHydrationOptions['preUpgradeEvents'],
-): readonly PreUpgradeEvent[] {
-  if (!source) return [];
-  if (Array.isArray(source)) return source;
-  if (typeof source === 'object' && 'stop' in source) {
-    source.stop();
-    return source.events;
-  }
-  raiseFrameworkError(
-    'render',
-    ClaimErrorCode.PRE_UPGRADE_EVENTS_INVALID,
-    '[compiled-hydration] preUpgradeEvents: expected an event array or capture object',
-  );
-}
-
 /**
  * Replay each captured record at most once, and only while its target remains
  * owned by this root. Records owned by OTHER roots stay pending: an element
@@ -597,7 +554,7 @@ function pendingDeclaredIslandBetween(root: Node, target: EventTarget): boolean 
   while (current) {
     if (current === root) return false;
     const tag = tagNameOf(current);
-    if (tag && declared.has(tag) && !settledIslandHosts.has(current as object)) return true;
+    if (tag && declared.has(tag) && !isPreUpgradeIslandSettled(current)) return true;
     current = composedParentNode(current);
   }
   return false;
@@ -685,8 +642,8 @@ export function ensurePreHydrationClickCapture(
   // Publish the per-root replay pair to the generated shell's neutral hook
   // (2026-11-21): the shell may not import THIS module, so the capture install is
   // the one moment the implementation becomes reachable from the shell's side.
-  // No module-scope side effect: a page that never installs the capture carries
-  // no hook, and the shell's calls are honest no-ops.
+  // Pages without capture install no replay pair. The shell still records its
+  // activation decisions so a later installation can filter live hosts.
   installPreUpgradeReplayHook({
     replay: (root) => replayPreUpgradeCaptures(root),
     release: (root) => releasePreUpgradeCapturesFor(root),

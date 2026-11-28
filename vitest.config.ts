@@ -132,10 +132,6 @@ export default defineConfig({
         test: {
           name: 'element',
           include: ['packages/element/__tests__/**/*.test.ts'],
-          // #1548: the Block builders reach the runtime through the blocks
-          // seam; tests driving the runtime internals install them exactly
-          // like the entries do (see install-blocks-runtime.ts).
-          setupFiles: ['packages/element/__tests__/install-blocks-runtime.ts'],
           testTimeout: 20_000,
         },
       },
@@ -251,10 +247,6 @@ export default defineConfig({
               // specific entries come first.
               find: '@openelement/element/internal/compiled/generated-element/shell',
               replacement: `${rootDir}packages/element/src/internal/compiled/generated-element/shell.ts`,
-            },
-            {
-              find: '@openelement/element/internal/compiled/runtime',
-              replacement: `${rootDir}packages/element/src/internal/compiled/runtime.ts`,
             },
             {
               // The generated leaf's closed entry (M11-3). Listed AFTER the

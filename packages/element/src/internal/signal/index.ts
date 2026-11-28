@@ -25,10 +25,5 @@ export type {
 } from '@openelement/protocol/signal';
 export { isSignalLike, unwrapSignalLike } from './types.ts';
 
-// Internal engine seam (#723): the built-in adapter getter. One engine per
-// application; not re-exported from the package root and no arbitrary-engine
-// switching (multiple engines are not a supported promise).
-export { selectedSignalEngine } from './selection.ts';
-
 // ─── Framework layer ────────────────────────────────────────────
 export { computed, effect, signal } from './framework.ts';

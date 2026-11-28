@@ -5,10 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
-import { siteCSS } from '../site-css.ts';
 import {
   BARE_PALETTE_ALLOWLIST,
   BARE_PALETTE_SEGMENTS,
+  DOCUMENT_STYLE_SHEET,
   LINKED_STYLE_SHEETS,
   collectAppScanTargets,
   findAuthoredSheetFailures,
@@ -184,13 +184,13 @@ test('a prohibited declaration in the linked sheet is rejected deterministically
   expect(Object.keys(BARE_PALETTE_ALLOWLIST)).toEqual([]);
 });
 
-test('the linked sheet’s theme-invariant ink is an alias in site-css.ts', async () => {
-  // www/site-css.ts is the site's sanctioned token-definition layer (the
+test('the linked sheet’s theme-invariant ink is an alias in site-css.css', async () => {
+  // www/site-css.css is the site's sanctioned token-definition layer (the
   // gate's own doctrine names it): the palette citation lives there, the
   // consumer sheet names the alias. A rename on either side must fail here.
   // --grid-ink was the second alias; it retired when the violet page-hook
   // grid overlays were removed for the flat site canvas (2026-11-26 unify).
-  expect(siteCSS).toContain('--scrim-ink:');
+  expect(await readFile(DOCUMENT_STYLE_SHEET, 'utf8')).toContain('--scrim-ink:');
   const sheet = await readFile(CHROME_SHEET, 'utf8');
   expect(sheet).toContain('var(--scrim-ink)');
   // No bare palette citation may re-enter the linked sheet.

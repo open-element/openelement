@@ -17,8 +17,6 @@ export { isJsxModuleId } from './internal/compiler/semantic-core/jsx-module-id.t
 // compiled module. Host builds whose compiled-element binding is not
 // `compiledElementPlugin` (the router dev transform, plugin-hmr.ts) register
 // these the same way the plugin does.
-export { compiledArtifactStyleRequests } from './internal/compiler/compiled-artifact-style-requests.ts';
-export { readCompiledArtifactStyles } from './internal/compiler/compiled-artifact-style-requests.ts';
 export { compiledArtifactClassCandidates } from './internal/compiler/compiled-artifact-class-candidates.ts';
 // The compiler's fail-closed error carrier and its diagnostic record: both
 // lanes throw this one class, and the hosts catch it to project the structured
@@ -107,4 +105,3 @@ export {
   emittedModuleTypeChecks,
   typeCheckEmittedModule,
 } from './internal/compiler/semantic-core/type-check.ts';
-export { validatePartProgram } from '@openelement/protocol/part-program';

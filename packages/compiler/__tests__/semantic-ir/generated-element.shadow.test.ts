@@ -40,7 +40,7 @@
  * not the M13 matrix, not the style consumer, not forms, and not author API.
  */
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
@@ -56,7 +56,8 @@ import {
   serializeShadowTemplate,
   type CompiledDsdOptions,
 } from '../../../element/src/internal/compiled/dsd.ts';
-import { testProgram } from '../../../element/__tests__/compiled-runtime/test-program.ts';
+import { serializeGeneratedElementHtml } from '../../../element/src/internal/compiled/generated-element/dsd-ssr.ts';
+import { serializeStyleLinks } from '../../../element/src/internal/compiled/style-link-tags.ts';
 import { ELEMENT_CLASSIFIER as CLASSIFIER, REPO_ROOT } from './testlib/element-classifier.ts';
 
 const FILE = '/proj/src/generated-shadow.tsx';
@@ -521,104 +522,27 @@ describe('canonical DSD spelling leaf', () => {
     expect(() => serializeShadowTemplate('manual' as unknown as 'open', '')).toThrow();
   });
 
-  test('the old server shares this leaf instead of carrying a private copy', async () => {
-    const server = await import('../../../element/src/internal/compiled/server/index.ts');
-    expect('serializeDsdAttributes' in server).toBe(false);
-    const dsd = await import('../../../element/src/internal/compiled/dsd.ts');
-    expect(dsd.serializeDsdAttributes).toBe(serializeDsdAttributes);
-    const serverSource = readFileSync(
-      new URL('../../../element/src/internal/compiled/server/index.ts', import.meta.url),
-      'utf8',
-    );
-    expect(serverSource).toContain("from '../dsd.ts'");
-    expect(serverSource).not.toContain('function serializeDsdAttributes');
-  });
-
-  /**
-   * B5: compare the old server PUBLIC serializer against the current canonical
-   * leaf. The old implementation is not copied into the test as an eternal
-   * oracle; the 252-case HEAD-vs-new diff in the independent review remains the
-   * historical evidence for the extraction diff itself. This test pins the
-   * continuing wire agreement while the shared leaf is the only DSD speller.
-   */
-  test('the old server wire and the canonical DSD leaf agree for every legal option', async () => {
-    const { serializeCompiledProgram, serializeProgramContent, serializeStyleLinks } =
-      await import('../../../element/src/internal/compiled/server/index.ts');
-    const program = testProgram({
-      tag: 'oe-dsd-wire',
-      template: [
-        {
-          k: 'el',
-          tag: 'p',
-          attrs: [['class', 'card']],
-          children: [{ k: 'text', value: 'body & text' }],
-        },
-      ],
-      parts: [],
-    });
-    const host = {};
-    const content = serializeProgramContent(program, host);
-    const links = ['/assets/a.css', 'https://cdn.example/b.css'];
-    const styleNodes = serializeStyleLinks(links);
-    const light = '<b slot="title">light</b>';
-
-    for (const mode of ['open', 'closed'] as const) {
-      for (const options of legalDsdOptions()) {
-        const expected = `<${program.tag}>${serializeShadowTemplate(
-          mode,
-          `${styleNodes}${content}`,
-          options,
-        )}${light}</${program.tag}>`;
-        const actual = serializeCompiledProgram(program, host, {
-          mode,
-          dsd: options,
-          styleLinks: links,
-          hostChildren: light,
-        });
-        expect(actual, `${mode} ${JSON.stringify(options)}`).toBe(expected);
+  test('generated shadow hosts apply every legal DSD option and keep light children after the template', () => {
+    const tag = 'oe-dsd-wire';
+    const content = '<p class="card">body &amp; text</p>';
+    const styleLinks = ['/assets/a.css', 'https://cdn.example/b.css'];
+    const lightChildren = '<b slot="title">light</b>';
+    for (const root of ['open', 'closed'] as const) {
+      for (const dsd of legalDsdOptions()) {
+        const template = serializeShadowTemplate(
+          root,
+          `${serializeStyleLinks(styleLinks)}${content}`,
+          dsd,
+        );
+        expect(
+          serializeGeneratedElementHtml({ tag, root, content, lightChildren, dsd, styleLinks }),
+          `${root} ${JSON.stringify(dsd)}`,
+        ).toBe(`<${tag}>${template}${lightChildren}</${tag}>`);
       }
     }
-
-    // One representative with host attrs and the inline style path: the light
-    // serializer is the public source of the style+content inner bytes, so the
-    // test does not restate the style spelling either.
-    const styleCss = '.card { color: rebeccapurple; }';
-    const lightWire = serializeCompiledProgram(program, host, {
-      mode: 'light',
-      styleCss,
-      styleLinks: links,
-    });
-    const lightOpen = `<${program.tag} data-oe-light>`;
-    const lightClose = `</${program.tag}>`;
-    expect(lightWire.startsWith(lightOpen)).toBe(true);
-    expect(lightWire.endsWith(lightClose)).toBe(true);
-    const styleAndContent = lightWire.slice(lightOpen.length, -lightClose.length);
-    const serverOpen = serializeCompiledProgram(program, host, {
-      mode: 'open',
-      dsd: { delegatesFocus: true },
-      styleCss,
-      styleLinks: links,
-      hostAttrs: [
-        ['data-owner', 'a&"'],
-        ['aria-label', 'card'],
-      ],
-      hostChildren: light,
-    });
-    expect(serverOpen).toBe(
-      `<${program.tag} data-owner="a&amp;&quot;" aria-label="card">` +
-        `${serializeShadowTemplate('open', styleAndContent, { delegatesFocus: true })}` +
-        `${light}</${program.tag}>`,
-    );
   });
 
-  test('invalid DSD options fail with the same error identity in server and leaf', async () => {
-    const { serializeCompiledProgram } =
-      await import('../../../element/src/internal/compiled/server/index.ts');
-    const program = testProgram({
-      tag: 'oe-dsd-invalid',
-      template: [{ k: 'el', tag: 'p', attrs: [], children: [] }],
-      parts: [],
-    });
+  test('invalid DSD options keep the same coded failure through the generated host writer', () => {
     const invalidOptions: CompiledDsdOptions[] = [
       { delegatesFocus: 'yes' as unknown as boolean },
       { clonable: 1 as unknown as boolean },
@@ -631,7 +555,14 @@ describe('canonical DSD spelling leaf', () => {
       expect(direct, JSON.stringify(options)).not.toBeNull();
       expect(captureError(() => serializeShadowTemplate('open', '', options))).toEqual(direct);
       expect(
-        captureError(() => serializeCompiledProgram(program, {}, { mode: 'open', dsd: options })),
+        captureError(() =>
+          serializeGeneratedElementHtml({
+            tag: 'oe-dsd-invalid',
+            root: 'open',
+            content: '',
+            dsd: options,
+          }),
+        ),
       ).toEqual(direct);
     }
     expect(captureError(() => serializeShadowTemplate('manual' as unknown as 'open', ''))).toEqual({

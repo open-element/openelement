@@ -8,6 +8,16 @@
 /** Default build output directory name (relative to the app root). */
 export const DEFAULT_OUT_DIR = 'dist';
 
+/** Content-addressed stylesheet owned by the SSG view-transition postprocessor. */
+export const SSG_VIEW_TRANSITION_STYLE_PREFIX = 'assets/open-view-transition-';
+const SSG_VIEW_TRANSITION_STYLE_PATH = new RegExp(
+  `^${SSG_VIEW_TRANSITION_STYLE_PREFIX}([a-f0-9]{12})\\.css$`,
+);
+
+export function ssgViewTransitionStyleHash(path: string): string | undefined {
+  return SSG_VIEW_TRANSITION_STYLE_PATH.exec(path)?.[1];
+}
+
 /** The public deployment snapshot is a sibling of the build workspace. */
 export function publicOutputDir(outDir: string): string {
   return `${outDir.replace(/[\\/]+$/, '')}-public`;

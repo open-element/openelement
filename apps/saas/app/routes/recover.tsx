@@ -1,20 +1,8 @@
-/**
- * /recover — request-time password-recovery route. The compiled page element
- * lives in app/components/page-recover.tsx; the loader/action logic lives in
- * app/route-logic/recover.ts so Deno tests import it without evaluating the
- * compiled class.
- */
 import { definePage } from '@openelement/router';
 import { defineIslandConfig } from '@openelement/router';
 import { createRecoverAction, recoverLoader, recoverPageProps } from '../route-logic/recover.ts';
 
-/**
- * The page component is declared IN THIS MODULE (execution-plan §19.9): the
- * server function page lane records `pageComponentName` only for an exported
- * component function the route module declares itself, so an imported class
- * could not be admitted. Was `app/components/page-recover.tsx`.
- */
-
+// The compiler admits page functions declared in their route module.
 export const openElement = defineIslandConfig({
   tag: 'recover-page',
   root: 'shadow',
@@ -36,7 +24,7 @@ export function RecoverPage(props: { errorText: string; sent: number }) {
       )}
       <form method='post'>
         <label>
-          Email <input type='email' name='email' required />
+          Email <input type='email' name='email' autocomplete='email' spellcheck='false' required />
         </label>
         <button type='submit'>Send recovery email</button>
       </form>

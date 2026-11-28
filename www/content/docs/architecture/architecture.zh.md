@@ -10,7 +10,7 @@ order: 10
 
 依赖方向——使用方指向其依赖。
 
-<figure class="diagram" aria-hidden="true"><svg viewBox="0 0 144 88" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="22" cy="20" r="9"/><circle cx="122" cy="20" r="9"/><circle cx="72" cy="74" r="9"/><path d="M31 26l29 9"/><path d="M113 26l-29 9"/><path d="M72 52v13"/><g style="color:var(--color-primary)"><circle cx="72" cy="40" r="12"/><circle cx="72" cy="40" r="3.5" fill="currentColor" stroke="none"/></g></svg></figure>
+<figure class="diagram" aria-hidden="true"><svg viewBox="0 0 144 88" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="22" cy="20" r="9"/><circle cx="122" cy="20" r="9"/><circle cx="72" cy="74" r="9"/><path d="M31 26l29 9"/><path d="M113 26l-29 9"/><path d="M72 52v13"/><g class="text-primary"><circle cx="72" cy="40" r="12"/><circle cx="72" cy="40" r="3.5" fill="currentColor" stroke="none"/></g></svg></figure>
 
 | 包                       | 角色                | 依赖                                                    |
 | ------------------------ | ------------------- | ------------------------------------------------------- |
@@ -168,48 +168,48 @@ openElement × Supabase × Cloudflare 是第一方全栈交付路径，所有权
 
 ### 产物体积
 
-以下数字于 2026-11-27 量自文档站点自身的构建（`vp run site:build`）。静态产物总量是 `www/dist` 下所有常规文件的字节总和，含隐藏的构建元数据。本页及其搜索索引也在测量范围内，更新数字后重新构建可能相差几个字节。`check:doc-figures` 允许总量有 ±1% 的偏差，并精确验证页面、URL 和 manifest 的数量。
+以下数字于 2026-11-28 量自文档站点自身的构建（`vp run site:build`）。静态产物总量是 `www/dist` 下所有常规文件的字节总和，含隐藏的构建元数据。本页及其搜索索引也在测量范围内，更新数字后重新构建可能相差几个字节。`check:doc-figures` 允许总量有 ±1% 的偏差，并精确验证页面、URL 和 manifest 的数量。
 
 | 指标                  | 数值                                     |
 | ------------------- | -------------------------------------- |
 | 预渲染文档               | 66 个 HTML 文件                           |
 | `sitemap.xml` URL 数 | 64                                     |
-| 静态产物总量              | 13.6 MiB（14,221,788 B）                 |
+| 静态产物总量              | 12.1 MiB（12,664,540 B）                 |
 | island manifest     | 66 份——每页一份                             |
-| 搜索索引                | 每个语言 32 页（en、zh），64 个 fragment，1.6 MiB |
+| 搜索索引                | 每个语言 32 页（en、zh），64 个 fragment，1.4 MiB |
 
 ```bash
 # 先重新生成以下全部内容。
 vp run site:build
 find www/dist -name '*.html' | wc -l  # 66
 grep -o '<loc>' www/dist/sitemap.xml | wc -l  # 64
-find www/dist -type f -exec wc -c {} + | awk '$NF != "total" { sum += $1 } END { print sum }'  # 14,221,788 B
+find www/dist -type f -exec wc -c {} + | awk '$NF != "total" { sum += $1 } END { print sum }'  # 12,664,540 B
 find www/dist/island-manifests -name '*.json' | wc -l  # 66
 cat www/dist/pagefind/pagefind-entry.json  # 每种语言 page_count 32
 find www/dist/pagefind/fragment -type f | wc -l  # 64
-find www/dist/pagefind -type f -exec wc -c {} + | awk '$NF != "total" { sum += $1 } END { print sum }'  # 1,708,345 B
+find www/dist/pagefind -type f -exec wc -c {} + | awk '$NF != "total" { sum += $1 } END { print sum }'  # 1,496,997 B
 ```
 
 ### Island bundle
 
-文档站点使用 openElement 构建。下表列出其 island chunk、搜索 combobox 运行时、共享入口和元素运行时的原始体积及 gzip 体积。
+文档站点使用 openElement 构建。下表列出 island chunk、搜索 combobox 运行时和共享入口的原始及 gzip 体积。「包含 Element 模块的 JavaScript」一行统计所有实际包含 `@openelement/element` 模块的产物文件的完整字节数，其中可能包含文档服务等其他代码。`check:doc-figures` 根据构建产物的浏览器图谱识别这些模块。
 
 | Chunk                         | 原始字节    | gzip -9 |
 | ----------------------------- | ------- | ------- |
-| `element-runtime`             | 66,159  | 21,411  |
-| `island-open-button`          | 14,114  | 3,262   |
-| `island-open-code-block`      | 7,734   | 2,527   |
-| `island-open-copy-button`     | 11,426  | 2,758   |
-| `island-open-counter`         | 8,328   | 2,222   |
-| `island-open-layer-strip`     | 3,770   | 1,618   |
-| `island-open-page-rail`       | 35,951  | 7,504   |
-| `island-open-registry-lookup` | 27,462  | 7,206   |
-| `island-open-search`          | 84,238  | 16,636  |
-| `island-open-site-menu`       | 6,149   | 2,283   |
-| `island-open-source-toggle`   | 6,430   | 2,188   |
-| `island-open-theme-toggle`    | 18,254  | 3,790   |
-| `open-search-combobox`        | 108,612 | 35,531  |
-| `client.js`                   | 9,977   | 2,881   |
+| 包含 Element 模块的 JavaScript（7 个文件） | 65,485 | 23,410 |
+| `island-open-button` | 14,203 | 3,312 |
+| `island-open-code-block` | 7,761 | 2,508 |
+| `island-open-copy-button` | 11,655 | 2,836 |
+| `island-open-counter` | 8,338 | 2,236 |
+| `island-open-layer-strip` | 3,857 | 1,651 |
+| `island-open-page-rail` | 35,421 | 7,063 |
+| `island-open-registry-lookup` | 27,936 | 7,349 |
+| `island-open-search` | 84,369 | 16,760 |
+| `island-open-site-menu` | 6,127 | 2,298 |
+| `island-open-source-toggle` | 6,653 | 2,263 |
+| `island-open-theme-toggle` | 18,244 | 3,796 |
+| `open-search-combobox` | 108,610 | 35,527 |
+| `client.js` | 4,690 | 2,129 |
 
 ```bash
 for file in www/dist/client/islands/*.js; do
@@ -217,15 +217,15 @@ for file in www/dist/client/islands/*.js; do
 done
 ```
 
-编译元素的共享运行时单独成块。搜索首次打开时才加载 combobox 运行时。组件样式表单独输出到 `client/assets/`（ADR-0164）。数字校验允许原始体积有 ±1% 的偏差，gzip 体积有 ±3% 的偏差。
+搜索首次打开时才加载 combobox 运行时。构建将组件样式表输出到 `client/assets/`（ADR-0164）。数字校验允许原始体积有 ±1% 的偏差，gzip 体积有 ±3% 的偏差。
 
 每条路由的载荷包括其 island manifest 列出的所有 chunk、共享客户端入口，以及这些文件的传递静态导入。每个 island 何时加载由其水合策略决定。
 
 | 路由                       | 客户端载荷（原始） | 不同 chunk 数 |
 | ------------------------ | --------- | ---------- |
-| `/guide/mdx`             | 230,065 B | 9          |
-| `/guide/getting-started` | 230,065 B | 9          |
-| `/`                      | 260,083 B | 13         |
+| `/guide/mdx` | 222,561 B | 16 |
+| `/guide/getting-started` | 222,561 B | 16 |
+| `/` | 209,882 B | 18 |
 
 66 份页面 manifest 合计声明了 11 个 island 标签、318 条记录。`open-search`、`open-site-menu` 和 `open-theme-toggle` 出现在每一页，`open-page-rail` 出现在 52 页，`open-code-block` 出现在 46 页，`open-button` 出现在 8 页。`open-copy-button` 出现在两种语言的首页和贡献指南，`open-registry-lookup` 出现在两种语言的错误参考和 API 参考。`open-counter`、`open-layer-strip` 和 `open-source-toggle` 出现在两种语言的首页。
 

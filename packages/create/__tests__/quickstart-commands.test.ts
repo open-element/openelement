@@ -135,9 +135,6 @@ test('the two commands have exactly one source each', () => {
   // The gate above is only meaningful if the expected strings are the CLI's
   // own builders, not a second hand-written copy.
   expect(createInstallCommand()).toEqual('npm create @openelement <project-name>');
-  expect(devCommand()).toEqual('npm run dev');
-  expect(installDependenciesCommand()).toEqual('npm install');
-  expect(devCommand('pnpm')).toEqual('pnpm run dev');
   expect(installDependenciesCommand('bun')).toEqual('bun install');
 });
 

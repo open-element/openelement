@@ -37,9 +37,10 @@ function GeneratedTable() {
     <table>
       <tbody>
         {rows.value.map((row) => (
-          <tr key={row.id}>
+          <tr key={row.id} data-id={row.id}>
             <td class="col-md-1">{row.id}</td>
-            <td class="col-md-4"><a>{row.label}</a></td>
+            <td class="col-md-4"><a data-id={row.linkId}>{row.label}</a></td>
+            <td><a data-id={row.id}>Remove</a></td>
           </tr>
         ))}
       </tbody>
@@ -57,6 +58,7 @@ const SITE: GeneratedElementSite = { tag: 'oe-bench-generated' };
 export interface GeneratedBenchRow {
   readonly id: number;
   readonly label: string;
+  readonly linkId: number | null | { toString(): string };
 }
 
 const ADJECTIVES = ['pretty', 'large', 'big', 'small', 'tall', 'short', 'long'];
@@ -69,6 +71,7 @@ export function buildGeneratedRows(count: number): GeneratedBenchRow[] {
     rows.push({
       id: index,
       label: `${ADJECTIVES[index % ADJECTIVES.length]} ${NOUNS[index % NOUNS.length]} ${index}`,
+      linkId: index,
     });
   }
   return rows;
@@ -108,6 +111,16 @@ export interface GeneratedTableFacts {
   readonly mountedElements: number;
   readonly mountTextWrites: number;
   readonly update10thTextWrites: number;
+  readonly update10thAttributeWrites: number;
+  readonly attributeUpdates: {
+    readonly initial: string | null;
+    readonly changed: { readonly writes: number; readonly value: string | null };
+    readonly repaired: { readonly writes: number; readonly value: string | null };
+    readonly removed: { readonly writes: number; readonly value: string | null };
+    readonly absentWrites: number;
+    readonly reads: number;
+    readonly coercions: number;
+  };
   readonly updateInsertions: number;
   readonly swappedIds: readonly [string, string];
   readonly removeRemovals: number;
@@ -160,11 +173,55 @@ export function runGeneratedTableBenchmark(): GeneratedTableFacts {
     const updated = rows.value.slice();
     for (let index = 0; index < updated.length; index += 10) {
       const row = updated[index]!;
-      updated[index] = { id: row.id, label: `${row.label} !!!` };
+      updated[index] = { ...row, label: `${row.label} !!!` };
     }
     rows.value = updated;
     const update10thTextWrites = doc.counts.textWrites;
+    const update10thAttributeWrites = doc.counts.attrWrites;
     const updateInsertions = doc.counts.insertions;
+
+    const firstRow = rows.value[0]!;
+    const firstLink = elementsByTag(elementsByTag(root, 'TR')[0]!, 'A')[0]!;
+    const initial = firstLink.getAttribute('data-id');
+    let reads = 0;
+    let coercions = 0;
+    const changedRow = {
+      ...firstRow,
+      get linkId() {
+        reads++;
+        return {
+          toString() {
+            coercions++;
+            return 'changed';
+          },
+        };
+      },
+    };
+    const linkWrite = () => ({
+      writes: doc.counts.attrWrites,
+      value: firstLink.getAttribute('data-id'),
+    });
+    doc.resetCounts();
+    rows.value = [changedRow, ...rows.value.slice(1)];
+    const changed = linkWrite();
+    firstLink.setAttribute('data-id', 'outside edit');
+    doc.resetCounts();
+    rows.value = rows.value.slice();
+    const repaired = linkWrite();
+    doc.resetCounts();
+    rows.value = [{ ...firstRow, linkId: null }, ...rows.value.slice(1)];
+    const removed = linkWrite();
+    doc.resetCounts();
+    rows.value = rows.value.slice();
+    const attributeUpdates = {
+      initial,
+      changed,
+      repaired,
+      removed,
+      absentWrites: doc.counts.attrWrites,
+      reads,
+      coercions,
+    };
 
     // Keyed swap: rows 1 and 998 exchange data; the DOM follows the KEYS.
     // The count is the deterministic contract (#1455's mirror on the generated
@@ -201,6 +258,8 @@ export function runGeneratedTableBenchmark(): GeneratedTableFacts {
       mountedElements,
       mountTextWrites,
       update10thTextWrites,
+      update10thAttributeWrites,
+      attributeUpdates,
       updateInsertions,
       swapInsertions,
       swappedIds,

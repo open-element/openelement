@@ -55,16 +55,13 @@ import {
 import { safeReadDir, safeReadFile, safeStat } from './route-scanner-fs.ts';
 import { analyzeModuleSemantics } from '@openelement/compiler';
 import { ROUTER_MODULE_VOCABULARY } from '@openelement/protocol/module-vocabulary';
-import type { StreamRouteManifest } from '@openelement/protocol/ssg';
 import {
   buildPageModuleFacts,
   type PageModuleCarrier,
   type PageModuleFacts,
 } from './page-classification.ts';
 
-export type ScannedRouteEntry = RouteEntry & {
-  streamManifest?: StreamRouteManifest;
-} & PageModuleCarrier;
+export type ScannedRouteEntry = RouteEntry & PageModuleCarrier;
 
 const IMPORT_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js'];
 

@@ -78,8 +78,8 @@ entries and subscriptions in place so the next legal signal value recovers.
 The same token may legitimately appear more than once. Duplicate keys are
 mount-relevant state, not wire corruption:
 
-- mount keeps its existing used-set rule: the first occurrence adopts a
-  previous entry, later occurrences insert;
+- mounted and claimed updates take the first unused matching entry in prior
+  order. An occurrence without a prior match inserts;
 - SSR emits one key marker per item, so duplicate items produce duplicate
   tokens and no half string;
 - claim counts occurrences. `entrySeedMismatch` applies three rules in order,
@@ -99,6 +99,16 @@ reorder such as server `[a, a, c]` / client `[c, a, a]` keeps each token group's
 occurrence order (`a0`, then `a1`) while the groups move as blocks. Ordering is
 never compared as a whole: the claim matches by token and the existing
 minimal-move placement handles reorder.
+
+The generated module indexes prior entries by their raw key on update and by
+their wire token on initial claim. The index consumes each group in order and
+omits `NaN` raw keys, preserving mount's strict equality rule.
+
+Claimed lists use the same minimal placement as mounted lists when their
+prior entry runs are intact. An outside edit that detaches or reorders a node
+triggers backward placement against the live DOM. In the Chromium distant-swap
+test, an intact 1,000-entry list moves only two entries (their markers and
+rows) and the stationary row keeps its focus and selection.
 
 A duplicate claimed insert is re-claimable: the inserted entry carries its own
 `oe:k:` marker, so `dispose(false)` + a fresh claim adopts every occurrence.
@@ -128,11 +138,16 @@ insert. A late enclosing mismatch before phase 2 opens nothing: no
 subscription, no DOM write, no queue drain; claim owners are released and
 borrowed nodes are kept.
 
-The first write of a dynamic slot skips the DOM operation when the current
-value already equals the value that would be written; mount writes stay
-unconditional. That skip is an implementation coupling to the shared refresh,
-not an update-period zero-mutation acceptance, not mismatch recovery and not
-SSR→claim reseeding.
+Claim compares a dynamic slot's current value before assigning it. Mounted
+list-entry text refreshes do the same, including entries that a claimed list
+creates during activation or update. Each refresh evaluates and coerces the
+expression in authored order before reading the live text, so a changed
+rendered string or an outside DOM edit still triggers a write. Equal rendered
+text keeps the same node and its selection.
+
+Mounted keyed entries also compare refreshed `data-*` attributes on native
+HTML elements. The refresh coerces the expression before reading the current
+attribute so a real change, removal or outside edit still produces a write.
 
 ### 4.1 Permitted seed state (the single M08 definition)
 

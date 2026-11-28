@@ -1,0 +1,297 @@
+/*
+ * Document-level site styles. The Tailwind entry links this stylesheet before
+ * the chrome rules, where their selectors can retain their cascade. The same
+ * Tailwind sources also feed shadow sheets, so anchor these rules to the
+ * document without increasing specificity.
+ *
+ * Keep the root aliases and rules for slotted code blocks here. WebKit does
+ * not apply the component's @scope rules to slotted light DOM, but the
+ * document stylesheet reaches it in every supported engine.
+ */
+html {
+  visibility: visible !important;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:root,
+html[data-theme="light"],
+:root[data-theme="light"] {
+  --surface-1: var(--site-panel);
+  --surface-code: var(--site-code);
+  --surface-code-foreground: var(--site-code-foreground);
+  --edge-highlight: color-mix(in srgb, var(--color-foreground) 10%, transparent);
+  --border-strong: color-mix(in srgb, var(--color-border) 68%, var(--color-foreground));
+  --nav-bg: var(--color-background);
+  --nav-height: calc(var(--spacing) * 16);
+  --nav-link-color: var(--color-foreground);
+  --nav-link-hover: color-mix(in srgb, var(--color-primary) 50%, var(--color-foreground));
+  --font-size-button: var(--text-sm);
+  --font-size-body-sm: var(--text-sm);
+  --font-size-caption: var(--text-xs);
+  /* Functional micro-copy floor, 12px (was 11px/0.6875rem): the micro token
+     feeds section headings, table headers, hints and inline metadata across
+     the site, so it is text a reader must be able to read, not decoration.
+     Genuinely decorative marks may still author 0.6875rem at the call site. */
+  --font-size-micro: 0.75rem;
+  --font-size-tiny: 0.85rem;
+  --font-size-lede: 1.1rem;
+  --font-size-overline: 0.75rem;
+  --font-size-article-title: 1.125rem;
+  --font-size-display-sm: 1.75rem;
+  --font-size-display-md: 2.125rem;
+  --font-size-display-lg: 2.625rem;
+  /* --font-weight-medium is NOT re-aliased here: it is a real scale variable
+     (--font-weight-medium: 500), and aliasing it to itself through the scale
+     would create a cycle that invalidates both. --font-weight-semibold stays
+     an override: the scale ships 600, the site's semibold voice is 700, and
+     --font-weight-bold carries exactly that. */
+  --font-weight-semibold: var(--font-weight-bold);
+  /* Site identity faces, re-homed from the retired ui sheet (#1504): the
+     token table ships TW4 defaults only, so the brand stacks live here; the
+     faces themselves are self-hosted from the fontsource packages declared
+     in www/site-fonts.ts and compiled into the site's linked style bundle
+     via the preset sources — the family names must match fontsource's.
+     Mono covers code, labels, eyebrows and nav; serif covers the zh italic
+     accents. */
+  --font-mono: 'JetBrains Mono Variable', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', monospace;
+  --font-serif: 'Instrument Serif', 'Songti SC', 'Noto Serif CJK SC', serif;
+  /* Site layout constants, re-homed from the retired ui sheet: page-level
+     measures, not component tokens. rem-exact values of the retired px. */
+  --site-container: 70rem; /* 1120px */
+  --site-container-wide: 77.5rem; /* 1240px */
+  --site-container-reading: 47.5rem; /* 760px */
+  /* Theme-invariant inks the linked authored layer (www/site-chrome.css)
+     consumes by name. That sheet is scanned by the site theme-token gate, so
+     its bare palette citations live HERE, in the site alias layer, never at
+     the call site: --scrim-ink is the open-search dialog scrim's ink (no role
+     is theme-invariant dark — --color-foreground changes with the theme).
+     It is defined once, in this block, so it never flips with the theme. The
+     page-hook grid alias (--grid-ink) retired with the violet grid overlays
+     when the docs/contributing mastheads joined the flat canvas. */
+  --scrim-ink: #080808;
+  /* The site-wide palette keeps quiet rules for structure and stronger edges
+     for controls. Fill steps separate the page, panel, raised controls, code
+     and active selection. State uses the same high-contrast ink as content. */
+  --site-ground: #f7f7f7;
+  --site-ink: #151515;
+  --site-ink-soft: #363636;
+  --site-muted: #595959;
+  --site-hairline: rgb(0 0 0 / 0.12);
+  --site-hairline-strong: #7d7d7d;
+  --site-panel: #ffffff;
+  --site-panel-raised: #efefef;
+  --site-panel-selected: #e4e4e4;
+  --site-code: #f4f4f4;
+  --site-code-foreground: var(--site-ink-soft);
+  --site-accent: var(--site-ink);
+  /* Site override: real sans for prose. The shared token sheet maps
+     --font-sans to JetBrains Mono (brand choice for the component layer);
+     long-form reading on this site needs a true sans. Mono stays on
+     --font-mono (code, labels, eyebrows, nav) — nothing else changes. */
+  --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+}
+html[data-theme="dark"],
+:root[data-theme="dark"] {
+  --surface-1: var(--site-panel);
+  --surface-code: var(--site-code);
+  --surface-code-foreground: var(--site-code-foreground);
+  --edge-highlight: color-mix(in srgb, var(--color-foreground) 14%, transparent);
+  --border-strong: color-mix(in srgb, var(--color-border) 72%, var(--color-foreground));
+  --nav-bg: var(--color-background);
+  --nav-height: calc(var(--spacing) * 16);
+  --site-ground: #0e0e0e;
+  --site-ink: #f2f2f2;
+  --site-ink-soft: #d6d6d6;
+  --site-muted: #a5a5a5;
+  --site-hairline: rgb(255 255 255 / 0.14);
+  --site-hairline-strong: #858585;
+  --site-panel: #191919;
+  --site-panel-raised: #232323;
+  --site-panel-selected: #333333;
+  --site-code: #121212;
+  --site-code-foreground: var(--site-ink-soft);
+  --site-accent: var(--site-ink);
+}
+body {
+  margin: 0;
+  /* One flat ground for the whole site. The old violet radial + grid wash was
+     the pre-unification brand; the design system's canvas is a single colour
+     that flips with data-theme (and prints white, see the print block in
+     www/site-chrome.css). */
+  background: var(--site-ground);
+  color: var(--site-ink);
+  font-family: var(--font-sans);
+  line-height: 1.7;
+}
+/* The document canvas follows the theme too, so overscroll never shows the
+ * UA's white/dark default behind the flat ground. */
+html {
+  background: var(--site-ground);
+}
+::view-transition-old(open-brand-mark),
+::view-transition-new(open-brand-mark) { animation-duration: 320ms; animation-timing-function: var(--ease-out); }
+:where(:root, :root *)::selection {
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  color: var(--color-foreground);
+}
+/* The code-block surface (open-code-block's slotted <pre>), owned here for the
+   engine reason in the module doc. Two surface levels only: this block surface
+   (--surface-code with its paired ink) and the page paper; the block owns its
+   own horizontal scroll so a long line never widens the page, and the
+   padding/border/radius repeat the article fences' declaration (see
+   open-article-view.css, the .article-content pre rule), so a code block reads
+   the same wherever it appears. Highlighted code uses the same surface pair
+   through the Shiki palette aliases below. */
+:where(:root) open-code-block pre {
+  max-width: 100%;
+  margin: 0;
+  padding: var(--code-block-padding, calc(var(--spacing) * 4));
+  border: var(--code-block-border, 0.5px solid var(--color-border));
+  border-radius: var(--code-block-radius, var(--radius-lg));
+  background: var(--surface-code);
+  color: var(--surface-code-foreground);
+  overflow-x: auto;
+  font-size: var(--code-block-font-size, var(--text-sm));
+  line-height: 1.6;
+}
+/* Build-time syntax highlighting palette (www/lib/markdown.ts, issue #1552).
+   Token classes read these aliases, which flip with the document theme.
+   Light values are the
+   bundled github-light palette; dark values are the bundled github-dark
+   palette except the lighter comment gray #7d8590. The code surface stays
+   site-owned: the theme's background and
+   foreground alias --surface-code / --surface-code-foreground, which the
+   site-wide remap points at --site-code / --site-code-foreground. The home
+   hero sample is compiled by the same highlighter and reads the same table,
+   so both palettes serve every surface. The minimum contrast is 4.62:1
+   on light code and 5.02:1 on dark code. */
+:root {
+  --shiki-background: var(--surface-code);
+  --shiki-foreground: var(--surface-code-foreground);
+  --shiki-token-comment: #57606a;
+  --shiki-token-punctuation: #24292e;
+  --shiki-token-constant: #005cc5;
+  --shiki-token-string: #032f62;
+  --shiki-token-string-expression: #032f62;
+  --shiki-token-keyword: #cb2431;
+  --shiki-token-function: #6f42c1;
+  --shiki-token-parameter: #9a4d00;
+  --shiki-token-link: #032f62;
+  --shiki-token-inserted: #1a7f37;
+  --shiki-token-deleted: #b31d28;
+  --shiki-token-changed: #9a4d00;
+}
+:root[data-theme='dark'] {
+  --shiki-background: var(--surface-code);
+  --shiki-foreground: var(--surface-code-foreground);
+  --shiki-token-comment: #7d8590;
+  --shiki-token-punctuation: #e1e4e8;
+  --shiki-token-constant: #79b8ff;
+  --shiki-token-string: #9ecbff;
+  --shiki-token-string-expression: #9ecbff;
+  --shiki-token-keyword: #f97583;
+  --shiki-token-function: #b392f0;
+  --shiki-token-parameter: #ffab70;
+  --shiki-token-link: #9ecbff;
+  --shiki-token-inserted: #aff5b1;
+  --shiki-token-deleted: #ffb1b1;
+  --shiki-token-changed: #ffab70;
+}
+
+/* Shiki's focusable blocks keep their palette over plain pre rules, including
+   the home sample's transparent fallback. */
+:where(:root) pre.shiki.css-variables[tabindex] {
+  background-color: var(--shiki-background);
+  color: var(--shiki-foreground);
+}
+
+:where(:root) .shiki .shiki-foreground { color: var(--shiki-foreground); }
+:where(:root) .shiki .shiki-token-comment { color: var(--shiki-token-comment); }
+:where(:root) .shiki .shiki-token-punctuation { color: var(--shiki-token-punctuation); }
+:where(:root) .shiki .shiki-token-constant { color: var(--shiki-token-constant); }
+:where(:root) .shiki .shiki-token-string { color: var(--shiki-token-string); }
+:where(:root) .shiki .shiki-token-string-expression { color: var(--shiki-token-string-expression); }
+:where(:root) .shiki .shiki-token-keyword { color: var(--shiki-token-keyword); }
+:where(:root) .shiki .shiki-token-function { color: var(--shiki-token-function); }
+:where(:root) .shiki .shiki-token-parameter { color: var(--shiki-token-parameter); }
+:where(:root) .shiki .shiki-token-link { color: var(--shiki-token-link); }
+:where(:root) .shiki .shiki-token-inserted { color: var(--shiki-token-inserted); }
+:where(:root) .shiki .shiki-token-deleted { color: var(--shiki-token-deleted); }
+:where(:root) .shiki .shiki-token-changed { color: var(--shiki-token-changed); }
+:where(:root) .shiki .shiki-italic { font-style: italic; }
+:where(:root) .shiki .shiki-bold { font-weight: bold; }
+:where(:root) .shiki .shiki-underline { text-decoration: underline; }
+:where(:root) .shiki .shiki-strike { text-decoration: line-through; }
+:where(:root) .shiki .shiki-underline-strike { text-decoration: underline line-through; }
+
+/* Site-wide keyboard-focus baseline (light DOM). Every island that renders
+   light roots — the layout shell, the search island — and every bare document
+   link gets one ring shape; shadow components carry their own (page-styles
+   already seats the same pair on each page tag). The ring role keeps the
+   indicator on the token table in both themes; forced-colors remaps below. */
+:where(:root, :root *):focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
+/* User-preference adaptations (document-level: custom properties inherit
+   into every shadow tree, so one rule covers components too). */
+@media (forced-colors: active) {
+  :root, :root[data-theme] { --site-panel-selected: Canvas; }
+  /* Links distinguished by color alone collapse into surrounding text when
+     the palette flattens: underline every link. !important outranks the
+     scoped prose rules that otherwise remove underlines. Borders keep their
+     width and map to system colors on their own; the outline focus ring
+     remaps. */
+  :where(:root) a { text-decoration: underline !important; }
+  :where(:root, :root *):focus-visible { outline: 2px solid Highlight; }
+}
+/* Reading-page print: chrome goes away, ink goes black on white, and content
+   links carry their target so the paper copy stays navigable. Token
+   remapping (not selector enumeration) carries the whole prose surface —
+   h2/h3, code, strong, tables — including dark mode, where near-white ink
+   would otherwise vanish on paper. The layout's own chrome (header, sidebar,
+   mobile menu, footer, the search island) is not enumerated here: each of
+   those elements carries the print:hidden! utility in its own markup — the
+   layout chrome and the reading shell's breadcrumb/pager/rail alike. */
+@media print {
+  :root, :root[data-theme='dark'] {
+    --color-foreground: #000; --color-muted-foreground: #000;
+    --color-background: #fff; --color-muted: #fff; --color-card: #fff;
+    --color-popover: #fff;
+    --site-panel-selected: white;
+  }
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  :where(:root) .main,
+  :where(:root) .article-content,
+  :where(:root) .article-content p,
+  :where(:root) .article-content li,
+  :where(:root) .title,
+  :where(:root) .lede {
+    color: #000 !important;
+  }
+  /* Keep code blocks, figures and tables whole across page breaks. */
+  :where(:root) pre,
+  :where(:root) figure,
+  :where(:root) table,
+  :where(:root) open-code-block {
+    break-inside: avoid;
+  }
+  /* attr(href) prints relative paths, useless on paper: expand only
+     absolute URLs and say so. */
+  :where(:root) .article-content a[href^="http"]::after,
+  :where(:root) .article-content a[href^="https://"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.85em;
+    word-break: break-all;
+  }
+}

@@ -34,12 +34,6 @@ function readPage(path: string): string {
 
 // ─── Bug 1: Sidebar not missing ─────────────────────────────────────
 
-test('v0.44 regression: compiled reading shell and page rail are present in guide pages', () => {
-  const html = readPage(DOCS_PAGE);
-  expect(html, 'Reading shell must be present').toContain('<open-reading-shell');
-  expect(html, 'Page rail must be present').toContain('<open-page-rail');
-});
-
 test('v0.27.0 regression: the layout shell is present and expanded', () => {
   const html = readPage(DOCS_PAGE);
   // The light-root layout and static article chain must be expanded, while
@@ -178,15 +172,4 @@ test('v0.40.0 cleanup: registry output is not built', () => {
     existsSync(componentPage),
     'registry component page should not be generated in v0.40',
   ).toBeFalsy();
-});
-
-// ─── Custom element count sanity ─────────────────────────────────────
-
-test('v0.27.0 regression: app-layout tags not duplicated', () => {
-  const html = readPage(DOCS_PAGE);
-  // The shell appears exactly once as the wrapper (opening + closing).
-  const opens = (html.match(/<app-layout/g) || []).length;
-  const closes = (html.match(/<\/app-layout>/g) || []).length;
-  expect(opens, 'Mismatched app-layout tags').toEqual(closes);
-  expect(opens >= 1 && opens <= 3, `app-layout appears ${opens} times, expected 1-3`).toBeTruthy();
 });

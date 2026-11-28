@@ -1,187 +1,18 @@
 /**
- * Retained logical instances for nested generated-element children — the
- * PRIVATE runtime prerequisite for `16b-LC retained-child` (design
- * `nested-retention-design.md` §A Addendum; independent review
- * `nested-retention-review.md` P1).
+ * Retain hostless child setup across mount and claim. Each ledger belongs to
+ * the enclosing logical scope. The compiler supplies the same site key to
+ * both paths, so they reuse the child's scope and setup record.
  *
- * The generated root element already retains one logical instance across a
- * disconnect/reconnect (`shell.ts` `ensureInstance` plus the compiler-owned
- * `__oe_rootInstance` factory, T3). This module is the generic form for a
- * HOSTLESS nested child: every retained child instance is one `owner.child()`
- * scope plus the setup record evaluated on it exactly once, keyed by the
- * enclosing logical instance's owner scope and the compiler-emitted
- * projection-site key.
+ * Each mount or claim opens one transaction. Child bodies join the root's
+ * transaction on their own ledgers. Commit sweeps unvisited sites and applies
+ * staged structural-scope moves. Abort visits members deepest-first and
+ * evicts only entries created in that attempt, keeping the prior index.
  *
- * ## Entry contract
- *
- * - `owner` is the enclosing LOGICAL INSTANCE's retained scope (the root
- *   element instance scope, or a retained child's scope). One ledger exists per
- *   owner, and the retained child scope is that owner's child, so explicit
- *   owner teardown disposes it through the existing `LifetimeScope` cascade.
- * - `siteKey` is the compiler-emitted, mount/claim-identical authored-span
- *   literal (`"<file>:<start>:<end>"`, review F3). The runtime never derives,
- *   parses or validates it.
- * - `structuralOwner` names the scope that owns the structural region the site
- *   was emitted in (condition branch, list item, connection/projection scope).
- *   It is recorded so explicit release can name a whole removed region by the
- *   ONE scope the compiler already has (`releaseUnderStructuralScope`); it is
- *   exact object identity, never a lifetime-class inference.
- *
- * ## Rules this module owns
- *
- * 1. Reuse-or-create: the first call for `(owner, siteKey)` creates the child
- *    scope and runs `setup` once; every later call returns the same entry and
- *    never re-runs setup (no duplicate resources / subscriptions).
- * 2. Setup failure: the new scope is plain-disposed with every cleanup
- *    attempted, then the ORIGINAL setup error is rethrown; no entry is stored,
- *    so the next call retries on a fresh scope. Cleanup errors never replace
- *    the setup error — the same discipline as `shell.ts` `ensureInstance`.
- * 3. Eviction is explicit and mode-independent: an entry is disposed plain
- *    (`dispose(false)`) and the ledger NEVER removes DOM; a retained child
- *    scope must not own a range cleanup (it owns no region). Release is not
- *    derived from the dispose-mode flag and is not registered as a range
- *    cleanup: a structural scope's own `dispose(false|true)` never evicts, and
- *    an explicit release evicts even after that scope died (review F1/F6,
- *    Addendum A.2.3).
- * 4. Pass epoch (`beginInstancePass` / `endInstancePass` / `abortInstancePass`):
- *    one pass brackets one generated mount/claim body on that body's own
- *    instance scope. `retainChildInstance` marks the site live. Commit
- *    (`endInstancePass`) sweeps every entry the pass did not reach (the site is
- *    structurally absent now); abort (`abortInstancePass`) evicts ONLY entries
- *    created during the aborted pass and keeps every pre-existing entry for the
- *    retry, so a failed claim neither leaks an uncommitted setup nor discards a
- *    committed one.
- * 5. Structural-owner rebinding is staged: mount and claim emit the same site
- *    with different scope objects, so a later pass may re-bind an existing
- *    entry; the new index is applied at commit and discarded by abort, which
- *    leaves the previous index intact (a rolled-back pass cannot re-point
- *    release bookkeeping at scopes of a connection that never committed).
- * 6. Idempotent explicit release: `releaseChildInstance` /
- *    `releaseUnderStructuralScope` delete bookkeeping FIRST and then dispose,
- *    so a second call (even after a throwing cleanup) is a no-op, and release
- *    after owner teardown still cleans bookkeeping instead of resurrecting a
- *    disposed entry.
- * 7. Disposed-state fail-closed: `retainChildInstance` refuses a disposed owner
- *    (`OE_KERNEL_DISPOSED`) and never reuses an entry whose retained scope was
- *    disposed independently; the caller must release that entry explicitly
- *    before retaining the site again.
- * 8. Setup is a one-shot, side-effect-bounded call: it receives the new
- *    retained scope, must not re-enter `retainChildInstance` for the SAME site
- *    (such a nested creation would be overwritten by the outer entry and leave
- *    an orphan scope; the ledger's per-owner `inFlight` set fails it closed as
- *    `OEIR_INSTANCE_LEDGER_REENTRANT`), and must not dispose its retained scope
- *    or the owner. If setup returns after disposing either, the entry is rolled
- *    back and refused with `OE_KERNEL_DISPOSED` — a disposed instance is never
- *    stored or aliased.
- * 9. Rollback isolation: while `abortInstancePass` is evicting, a cleanup that
- *    calls `retainChildInstance` is rejected (`OEIR_INSTANCE_LEDGER_ROLLBACK`),
- *    because a new entry created from a rolled-back cleanup would survive the
- *    abort as a leaked logical instance; opening a new pass from that cleanup
- *    is likewise refused (it would leave the aborting ledger with a stray open
- *    pass). Abort drops cleanup errors, so these rejections never replace the
- *    caller's original pass failure.
- * 10. Bounded state: two module-level `WeakMap`s (owner -> ledger, structural
- *    scope -> entries) plus per-ledger maps/sets whose empty structural sets
- *    are deleted. Weak keys keep no scope alive, but the structural set is a
- *    strong hold while its scope lives (see the mandatory-release note below);
- *    there is no global identity-keyed strong registry, no DOM/signal import
- *    and no second reactive engine.
- * 11. Owner-teardown release (`releaseRetainedChildren`): the explicit,
- *    deterministic cleanup for the owner's WHOLE lifetime. It closes a live
- *    transaction's member passes, drops the ledger (so no cleanup can re-enter
- *    it), deindexes every entry, plain-disposes every retained scope with all
- *    cleanups attempted (recursively releasing each scope's own ledger), keeps
- *    the first failure, discards open-pass state and deletes the ledger.
- *    Idempotent, mode-independent, and never inferred from a dispose flag —
- *    an owner that stops being externally reachable is not a cleanup
- *    trigger.
- * 12. One transaction per attempt (`InstanceTransaction`): the root pass owns
- *    the token; a retained body that retains children JOINS it instead of
- *    committing; commit/abort are the root's and close every member pass. A
- *    token whose root transaction is closed is refused (`STATE`), so a delayed
- *    child body can never open a pass nobody will commit.
- *
- * ## Eviction cleanup semantics (plain cleanups)
- *
- * Eviction is a PLAIN scope disposal: the retained scope's `add` cleanups run
- * (LIFO, every one attempted, first error kept) and its range cleanups are
- * dropped unrun — the ledger never removes DOM and a retained scope must not
- * own a range cleanup. Cleanup errors are handled per path: a setup failure and
- * an abort drop them so the original error wins; an explicit release and the
- * commit sweep surface the first one after every cleanup was attempted.
- *
- * ## Structural release is mandatory, and its index is a strong hold
- *
- * A structural scope's own `dispose()` in either mode is NOT a release by
- * design, and this module registers no range cleanup, so
- * `releaseUnderStructuralScope` (or an exact `releaseChildInstance`) is the
- * ONLY channel that ends a retained region. The compiler must therefore emit
- * the explicit release at every structural removal/rollback site that can
- * discard retained children: it is mandatory, not an optimization. The
- * structural index is `WeakMap<scope, Set<entry>>`: the key does not keep the
- * structural scope alive, but while that scope is alive the set strongly holds
- * every entry it can release (and via the entry the retained scope and record).
- * A forgotten release therefore keeps the logical instance reusable across a
- * re-entered structure (state resurrection) and keeps its resources alive until
- * the owner is torn down or an explicit release runs.
- *
- * ## Recursive ledgers and the cross-ledger transaction (depth ≥ 2, 2026-11-21)
- *
- * A retained child's scope is itself an owner, so nesting needs no extra state:
- * the child body retains its own children on that scope's ledger. What nesting
- * DID need is one transaction across those ledgers, because a child pass that
- * committed on its own would sweep/commit inside a parent attempt that may
- * still abort (the failure mode ADR-0181's original depth-1 boundary named).
- *
- * The protocol is a TOKEN, not a second registry:
- *
- * - the ROOT retaining body calls `beginInstancePass(owner)` and keeps the
- *   returned `InstanceTransaction`; the token is threaded to retained child
- *   calls as compiler-private generated data (`host.txn`);
- * - a retained body that itself retains children calls
- *   `joinInstancePass(ownScope, token)`: it opens a NORMAL pass on its own
- *   ledger and registers `(owner, pass)` on the token. It NEVER commits and
- *   never aborts on its own;
- * - `endInstancePass(rootOwner)` commits the root pass first (its sweep may
- *   evict a removed child, recursively releasing that child's ledger and any
- *   grandchild entries), then commits every surviving member shallow-first,
- *   skipping members whose ledger was released or whose pass no longer matches;
- * - `abortInstancePass(rootOwner)` aborts members deepest-first, then the root
- *   pass, so an attempt that never happened leaves pre-existing entries intact
- *   with their previous structural index and evicts exactly the entries each
- *   pass created;
- * - evicting ANY entry first releases that entry scope's own ledger
- *   (`releaseRetainedChildren(scope)`), so grandchild bookkeeping can never
- *   outlive its owner and a disposed subtree cannot be resurrected;
- * - `releaseRetainedChildren(owner)` closes a live transaction's member passes
- *   before dropping the owner's ledger, so an explicit owner teardown can never
- *   leave a member pass open on a scope that survives only as a WeakMap key.
- *
- * Members are registered shallow-first (the bodies run depth-first), and both
- * loops skip a member whose ledger no longer exists or whose pass number no
- * longer matches — the idempotent form of "the subtree was already released".
- * A joined pass is a normal pass: `createdPass` still distinguishes
- * created-in-attempt from pre-existing, and no pass is swept by an abort.
- *
- * Consumption boundary: the ROOT pass bracket, ref-site retention, the six
- * structural/ref release sites, the shell connect abort and the three
- * owner-teardown releases consume this module; depth ≥ 2 adds the token
- * (`beginInstancePass` return + `joinInstancePass`) and the JOINED child pass,
- * and no other protocol surface.
- *
- * ## Failure identities
- *
- * Internal identities, not protocol catalogue rows (the same practice as
- * `claim-invariants.ts`): `OEIR_INSTANCE_LEDGER_STATE` for pass-bracket
- * violations, `OEIR_INSTANCE_LEDGER_DUPLICATE` for the same site retained
- * twice inside one pass, `OEIR_INSTANCE_LEDGER_REENTRANT` for a same-site
- * retain from inside that site's own setup, and
- * `OEIR_INSTANCE_LEDGER_ROLLBACK` for a retain attempted from a cleanup running
- * inside an abort. A disposed owner or retained scope reuses
- * `OE_KERNEL_DISPOSED`. Messages honor the `RUNTIME_MESSAGES_ENABLED` strip
- * seam.
- *
- * @module ./instance-ledger.ts
+ * The structural index strongly holds entries while its key lives. The
+ * compiler must explicitly release a discarded region even after the scope
+ * has been disposed. The ledger disposes retained scopes without removing
+ * DOM. Setup and abort preserve the original error. Commit and release
+ * attempt every cleanup before throwing the first failure.
  */
 
 import {
@@ -579,16 +410,7 @@ export function releaseRetainedChildren(owner: LifetimeScope): void {
   // This owner may itself be a joined member being torn down: drop the join
   // marker so a later root commit/abort skips the released ledger.
   ledger.joined = null;
-  if (transaction !== null) {
-    for (const member of [...transaction.members].reverse()) {
-      const memberLedger = ledgers.get(member.owner);
-      if (memberLedger === undefined || memberLedger.marks === null) continue;
-      if (memberLedger.pass !== member.pass) continue;
-      memberLedger.joined = null;
-      memberLedger.transaction = null;
-      abortPass(memberLedger);
-    }
-  }
+  abortJoinedPasses(transaction);
   // Bookkeeping first: remove the ledger before disposing anything, so a
   // cleanup that re-enters this module cannot observe or resurrect half of it.
   ledgers.delete(owner);
@@ -605,10 +427,6 @@ export function releaseRetainedChildren(owner: LifetimeScope): void {
   if (failure !== null) throw failure.error;
 }
 
-/**
- * Open one mount/claim pass on `owner`'s ledger. A pass never nests on one
- * owner: each generated body brackets its OWN instance scope.
- */
 /**
  * Open the ONE cross-ledger transaction of a mount/claim attempt on `owner`'s
  * ledger (the ROOT retaining body) and return its token.
@@ -752,6 +570,19 @@ function abortPass(ledger: Ledger): void {
   }
 }
 
+function abortJoinedPasses(transaction: InstanceTransaction | null): void {
+  if (transaction === null) return;
+  // Snapshot the members in deepest-first order before cleanup can re-enter.
+  for (const member of [...transaction.members].reverse()) {
+    const memberLedger = ledgers.get(member.owner);
+    if (memberLedger === undefined || memberLedger.marks === null) continue;
+    if (memberLedger.pass !== member.pass) continue;
+    memberLedger.joined = null;
+    memberLedger.transaction = null;
+    abortPass(memberLedger);
+  }
+}
+
 /**
  * Commit the root pass and every joined member pass (shallow-first).
  *
@@ -803,15 +634,6 @@ export function abortInstancePass(owner: LifetimeScope): void {
   if (ledger === undefined || ledger.marks === null) return;
   const transaction = ledger.transaction;
   ledger.transaction = null;
-  if (transaction !== null) {
-    for (const member of [...transaction.members].reverse()) {
-      const memberLedger = ledgers.get(member.owner);
-      if (memberLedger === undefined || memberLedger.marks === null) continue;
-      if (memberLedger.pass !== member.pass) continue;
-      memberLedger.joined = null;
-      memberLedger.transaction = null;
-      abortPass(memberLedger);
-    }
-  }
+  abortJoinedPasses(transaction);
   abortPass(ledger);
 }

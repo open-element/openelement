@@ -65,13 +65,6 @@ export interface ElementInternalsRecord {
   internals: ElementInternals | null;
 }
 
-/**
- * Backward-compatible internal alias for the former closed-root-only record.
- * The record is now the ONE element-lifetime `ElementInternals` owner shared by
- * closed-root discovery and form association (M09-2d).
- */
-export type ClosedRootDiscovery = ElementInternalsRecord;
-
 function fail(code: string, message: string, cause?: Error): never {
   throw frameworkError(code, `[generated-element] ${message}`, {
     phase: 'csr',

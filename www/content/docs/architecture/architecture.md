@@ -11,7 +11,7 @@ order: 10
 
 Dependency direction — consumers point at what they use.
 
-<figure class="diagram" aria-hidden="true"><svg viewBox="0 0 144 88" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="22" cy="20" r="9"/><circle cx="122" cy="20" r="9"/><circle cx="72" cy="74" r="9"/><path d="M31 26l29 9"/><path d="M113 26l-29 9"/><path d="M72 52v13"/><g style="color:var(--color-primary)"><circle cx="72" cy="40" r="12"/><circle cx="72" cy="40" r="3.5" fill="currentColor" stroke="none"/></g></svg></figure>
+<figure class="diagram" aria-hidden="true"><svg viewBox="0 0 144 88" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="22" cy="20" r="9"/><circle cx="122" cy="20" r="9"/><circle cx="72" cy="74" r="9"/><path d="M31 26l29 9"/><path d="M113 26l-29 9"/><path d="M72 52v13"/><g class="text-primary"><circle cx="72" cy="40" r="12"/><circle cx="72" cy="40" r="3.5" fill="currentColor" stroke="none"/></g></svg></figure>
 
 | Package                  | Role                  | Depends on                                                    |
 | ------------------------ | --------------------- | ------------------------------------------------------------- |
@@ -169,48 +169,48 @@ What we measure, and the commands that reproduce each row.
 
 ### Output size
 
-Measured on 2026-11-27 from the docs site's own build (`vp run site:build`). Total static output is the sum of every regular file under `www/dist`, including hidden build metadata. The figures and search index are inside the measured tree, so writing down a new total may move the next build by a few bytes. `check:doc-figures` allows ±1% for the total and checks the page, URL and manifest counts exactly.
+Measured on 2026-11-28 from the docs site's own build (`vp run site:build`). Total static output is the sum of every regular file under `www/dist`, including hidden build metadata. The figures and search index are inside the measured tree, so writing down a new total may move the next build by a few bytes. `check:doc-figures` allows ±1% for the total and checks the page, URL and manifest counts exactly.
 
 | Metric                 | Value                                               |
 | ---------------------- | --------------------------------------------------- |
 | Pre-rendered documents | 66 HTML files                                       |
 | URLs in `sitemap.xml`  | 64                                                  |
-| Total static output    | 13.6 MiB (14,221,788 B)                              |
+| Total static output    | 12.1 MiB (12,664,540 B)                              |
 | Island manifests       | 66 — one per page                                   |
-| Search index           | 32 pages per locale (en, zh), 64 fragments, 1.6 MiB |
+| Search index           | 32 pages per locale (en, zh), 64 fragments, 1.4 MiB |
 
 ```bash
 # Regenerate everything below first.
 vp run site:build
 find www/dist -name '*.html' | wc -l  # 66
 grep -o '<loc>' www/dist/sitemap.xml | wc -l  # 64
-find www/dist -type f -exec wc -c {} + | awk '$NF != "total" { sum += $1 } END { print sum }'  # 14,221,788 B
+find www/dist -type f -exec wc -c {} + | awk '$NF != "total" { sum += $1 } END { print sum }'  # 12,664,540 B
 find www/dist/island-manifests -name '*.json' | wc -l  # 66
 cat www/dist/pagefind/pagefind-entry.json  # page_count 32 per locale
 find www/dist/pagefind/fragment -type f | wc -l  # 64
-find www/dist/pagefind -type f -exec wc -c {} + | awk '$NF != "total" { sum += $1 } END { print sum }'  # 1,708,345 B
+find www/dist/pagefind -type f -exec wc -c {} + | awk '$NF != "total" { sum += $1 } END { print sum }'  # 1,496,997 B
 ```
 
 ### Island bundles
 
-The docs site builds with openElement. These are the raw and gzip sizes of its island chunks, search combobox runtime, shared entry and element runtime.
+The docs site builds with openElement. The table shows the raw and gzip sizes of its island chunks, search combobox runtime, and shared entry. The Element-bearing row sums the complete bytes of each emitted file containing a rendered module from `@openelement/element`, including files that also carry document services and other code. `check:doc-figures` selects these files by module identity in the emitted browser graph.
 
 | Chunk                         | Raw bytes | gzip -9 |
 | ----------------------------- | --------- | ------- |
-| `element-runtime`             | 66,159    | 21,411  |
-| `island-open-button`          | 14,114    | 3,262   |
-| `island-open-code-block`      | 7,734     | 2,527   |
-| `island-open-copy-button`     | 11,426    | 2,758   |
-| `island-open-counter`         | 8,328     | 2,222   |
-| `island-open-layer-strip`     | 3,770     | 1,618   |
-| `island-open-page-rail`       | 35,951    | 7,504   |
-| `island-open-registry-lookup` | 27,462    | 7,206   |
-| `island-open-search`          | 84,238    | 16,636  |
-| `island-open-site-menu`       | 6,149     | 2,283   |
-| `island-open-source-toggle`   | 6,430     | 2,188   |
-| `island-open-theme-toggle`    | 18,254    | 3,790   |
-| `open-search-combobox`        | 108,612   | 35,531  |
-| `client.js`                   | 9,977     | 2,881   |
+| Element-bearing JavaScript (7 files) | 65,485 | 23,410 |
+| `island-open-button` | 14,203 | 3,312 |
+| `island-open-code-block` | 7,761 | 2,508 |
+| `island-open-copy-button` | 11,655 | 2,836 |
+| `island-open-counter` | 8,338 | 2,236 |
+| `island-open-layer-strip` | 3,857 | 1,651 |
+| `island-open-page-rail` | 35,421 | 7,063 |
+| `island-open-registry-lookup` | 27,936 | 7,349 |
+| `island-open-search` | 84,369 | 16,760 |
+| `island-open-site-menu` | 6,127 | 2,298 |
+| `island-open-source-toggle` | 6,653 | 2,263 |
+| `island-open-theme-toggle` | 18,244 | 3,796 |
+| `open-search-combobox` | 108,610 | 35,527 |
+| `client.js` | 4,690 | 2,129 |
 
 ```bash
 for file in www/dist/client/islands/*.js; do
@@ -218,15 +218,15 @@ for file in www/dist/client/islands/*.js; do
 done
 ```
 
-The shared compiled-element runtime ships in its own chunk. Search loads its combobox runtime when first opened. Component stylesheets are emitted separately under `client/assets/` (ADR-0164). The figure gate allows ±1% for raw bytes and ±3% for gzip bytes.
+Search loads its combobox runtime when first opened. The build emits component stylesheets under `client/assets/` (ADR-0164). The figure gate allows ±1% for raw bytes and ±3% for gzip bytes.
 
 Each route's payload includes all chunks named in its island manifest, the shared client entry and their transitive static imports. The hydration strategy determines when each island loads.
 
 | Route                    | Client payload (raw) | Distinct chunks |
 | ------------------------ | -------------------- | --------------- |
-| `/guide/mdx`             | 230,065 B            | 9               |
-| `/guide/getting-started` | 230,065 B            | 9               |
-| `/`                      | 260,083 B            | 13              |
+| `/guide/mdx` | 222,561 B | 16 |
+| `/guide/getting-started` | 222,561 B | 16 |
+| `/` | 209,882 B | 18 |
 
 Across 66 page manifests the site declares 11 island tags in 318 entries. Every page declares `open-search`, `open-site-menu` and `open-theme-toggle`. The site declares `open-page-rail` on 52 pages, `open-code-block` on 46 pages and `open-button` on 8 pages. In both languages, the homepage and contributing guide declare `open-copy-button`, and the error and API references declare `open-registry-lookup`. Both versions of the homepage declare `open-counter`, `open-layer-strip` and `open-source-toggle`.
 

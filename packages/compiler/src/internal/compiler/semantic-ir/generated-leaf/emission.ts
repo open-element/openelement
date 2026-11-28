@@ -15,6 +15,10 @@ import { type BindingId } from '../../semantic-core/scope-resolution.ts';
 
 export const INTERNAL_PREFIX = '__oe_';
 
+export const LIST_ENTRY_INDEX = `${INTERNAL_PREFIX}indexListEntries`;
+
+export const LIST_ENTRY_MATCHER = `${INTERNAL_PREFIX}matchListEntries`;
+
 /**
  * 16b-LC depth >= 2 (2026-11-21): the transaction token local of a retaining
  * body. The root body captures `beginInstancePass`'s return in it; a retained
@@ -240,6 +244,8 @@ export interface EmitState {
    * instance has no update hook to re-read its props (M06b1b).
    */
   listDepth: number;
+  /** Whether the current mounted entry has an authored key. */
+  keyedEntry?: boolean;
   /**
    * Number of enclosing reusable-recipe mount bodies being emitted (M06b2a). A
    * children recipe or a children projection inside one is refused: the recipe

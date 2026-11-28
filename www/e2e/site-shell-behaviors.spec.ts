@@ -38,6 +38,53 @@ test.describe('site shell behavior boundaries', () => {
     await expect(menu).not.toHaveAttribute('open', '');
   });
 
+  test('closing the menu before its focus handoff preserves outside focus', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/guide/islands-and-ssr/');
+    const menu = page.locator('details.oe-site-menu');
+    await expect(menu.locator('summary')).toHaveAttribute('aria-label', 'Open navigation');
+    const focusedOutside = await menu.evaluate((element) => {
+      if (!(element instanceof HTMLDetailsElement)) throw new Error('Expected a details element');
+      const details = element;
+      const originalRequest = window.requestAnimationFrame;
+      const originalCancel = window.cancelAnimationFrame;
+      const frames = new Map<number, FrameRequestCallback>();
+      let id = 0;
+      let focusAttempts = 0;
+      const link = details.querySelector<HTMLAnchorElement>('a')!;
+      const originalFocus = link.focus;
+      link.focus = () => {
+        focusAttempts += 1;
+      };
+      window.requestAnimationFrame = (callback) => {
+        frames.set(++id, callback);
+        return id;
+      };
+      window.cancelAnimationFrame = (frame) => {
+        frames.delete(frame);
+      };
+      try {
+        details.open = true;
+        details.dispatchEvent(new Event('toggle'));
+        details.open = false;
+        const outside = document.querySelector<HTMLElement>('main h1')!;
+        outside.tabIndex = -1;
+        outside.focus();
+        for (const callback of frames.values()) callback(performance.now());
+        return {
+          closed: !details.open,
+          focusedOutside: document.activeElement === outside,
+          focusAttempts,
+        };
+      } finally {
+        link.focus = originalFocus;
+        window.requestAnimationFrame = originalRequest;
+        window.cancelAnimationFrame = originalCancel;
+      }
+    });
+    expect(focusedOutside).toEqual({ closed: true, focusedOutside: true, focusAttempts: 0 });
+  });
+
   for (const { route, appearance, toggle, system, docs, blog } of [
     {
       route: '/',

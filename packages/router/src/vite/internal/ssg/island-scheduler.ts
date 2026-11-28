@@ -90,9 +90,9 @@ export interface IslandSchedulerDeps {
    */
   idleFallbackTimeoutMs: number;
   /**
-   * Runs (macrotask-deferred) after any island module resolves. The enhance
-   * layer uses it to rescan submit roots for late-hydrating islands (#584);
-   * null when the page has no data-open-enhance forms (#597).
+   * Runs (macrotask-deferred) after an island module resolves. The form loader
+   * uses it to find newly opened shadow roots (#584). Null when the app
+   * has no enhanced-form capability.
    */
   onIslandLoaded: (() => void) | null;
 }

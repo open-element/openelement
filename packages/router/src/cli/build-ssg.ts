@@ -194,8 +194,8 @@ interface BuildSSGOptions {
   base?: string;
   /**
    * View Transitions API configuration.
-   * When true (default), injects <meta name="view-transition" content="same-origin">
-   * into all HTML files for smooth cross-page animations in MPA navigation.
+   * When true (default), links the same-origin stylesheet that opts
+   * prerendered HTML into cross-document View Transitions.
    * Set to false to disable.
    * @default true
    */
@@ -835,10 +835,18 @@ async function buildSSG(
     // (no client bundle shipped) embeds nothing.
     const setRequestTimeClientScript = (
       module as {
-        __setRequestTimeClientScript?: (src: string | null | undefined) => void;
+        __setRequestTimeClientScript?: (
+          src: string | null | undefined,
+          islands?: NonNullable<typeof ctx.clientAssetManifest>['islands'],
+          entryPreloads?: readonly string[],
+        ) => void;
       }
     ).__setRequestTimeClientScript;
-    setRequestTimeClientScript?.(ctx.clientAssetManifest?.entry ?? null);
+    setRequestTimeClientScript?.(
+      ctx.clientAssetManifest?.entry ?? null,
+      ctx.clientAssetManifest?.islands,
+      ctx.clientAssetManifest?.entryPreloads,
+    );
     if (ctx.clientAssetManifest?.entry) {
       log.info(`Client scripts embedded at render time from: ${ctx.clientAssetManifest.entry}`);
     }

@@ -167,7 +167,9 @@ test('both stylesheets are emitted and linked: the document sheet and the shadow
   );
 
   const html = await readFile(join(appDir, 'dist', 'index.html'), 'utf8');
-  const documentHref = html.match(/<link rel="stylesheet" href="([^"]+)"/)?.[1];
+  const documentHref = html.match(
+    /<link rel="stylesheet" href="(\/client\/assets\/[^"]+)"\s*\/>/,
+  )?.[1];
   expect(documentHref, 'the document stylesheet is linked').toBeTruthy();
   const documentName = documentHref!.split('/').pop()!;
   expect(bodies.has(documentName), 'the document stylesheet is an emitted asset').toBe(true);

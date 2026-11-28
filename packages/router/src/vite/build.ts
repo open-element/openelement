@@ -18,12 +18,7 @@ import { serializeClientAssetsModule } from '@openelement/protocol/client-assets
 import type { OpenElementBuildContext } from './build-context.ts';
 import { join } from 'pathe';
 import { createLogger } from '@openelement/element';
-import {
-  cleanSsrArtifacts,
-  injectIslandPrefetchRules,
-  pageChunkMap,
-  postProcessClientIslandBuild,
-} from './internal/ssg/index.ts';
+import { cleanSsrArtifacts, postProcessClientIslandBuild } from './internal/ssg/index.ts';
 import { stylePlanForApp } from './internal/style-plan.ts';
 import { stylesheetLinkTag } from './head-injection.ts';
 import {
@@ -32,21 +27,21 @@ import {
   writeBuildEvidence,
 } from './build-plan.ts';
 import { DEFAULT_OUT_DIR } from './internal/paths.ts';
-import { readSsgPageManifest } from './internal/ssg/output-manifest.ts';
+import { readSsgOutputManifest } from './internal/ssg/output-manifest.ts';
 import { authoredPublicPaths, writePublishOutput } from './internal/publish-manifest.ts';
 
 const log = createLogger('build');
 
 /** Phase 2: client island bundle. Shared by the SPA and SSG closeBundle paths. */
-async function runClientIslandBuild(ctx: OpenElementBuildContext): Promise<string[]> {
+async function runClientIslandBuild(ctx: OpenElementBuildContext) {
   log.info('[2/3] Client island build...');
   try {
     const { buildClient } = await import('../cli/build-client.ts');
-    const { manifest, files } = await buildClient(ctx);
-    ctx.clientAssetManifest = manifest;
+    const result = await buildClient(ctx);
+    ctx.clientAssetManifest = result.manifest;
     ctx.markComplete(2);
     log.info('[2/3] Client island build - complete');
-    return files;
+    return result;
   } catch (error) {
     log.error(`[2/3] Client island build - FAILED: ${error}`);
     throw error;
@@ -163,10 +158,10 @@ export function buildPlugin(
       const hasServerRenderedPages = (ctx.phase1.cachedRoutes ?? []).some(
         (route) => route.type === 'page',
       );
-      const clientPublicFiles =
+      const clientOutput =
         totalIslands > 0 || hasEnhancedForms || stylePlan || hasServerRenderedPages
           ? await runClientIslandBuild(ctx)
-          : [];
+          : undefined;
 
       // The document stylesheet: Phase 2 emitted it (content-hashed, in
       // dist/client/assets/). Point the head artifact at it BEFORE Phase 3
@@ -233,22 +228,12 @@ export function buildPlugin(
         try {
           const manifest = ctx.clientAssetManifest;
           if (manifest) {
-            const { pageManifests, files } = await postProcessClientIslandBuild(ctx);
-            islandManifestFiles = files;
+            islandManifestFiles = await postProcessClientIslandBuild(
+              ctx,
+              clientOutput?.runtimePreloads,
+            );
             await writeRequestTimeClientAssets(ctx, manifest);
             log.info(`Client scripts rendered from the asset manifest: ${manifest.entry}`);
-            // -- Per-page island-chunk prefetch (#1561) --
-            // A separate lane from the manifest pass, which stays read-only
-            // on the rendered HTML (#1471 pin): the chunk facts derive from
-            // the manifests just written (single owner of the page→chunk
-            // mapping), and this lane owns the only HTML write they feed —
-            // one <script type="speculationrules"> per page, listing the
-            // linked pages' island chunks. Unsupported browsers ignore the
-            // tag (zero JS, zero cost).
-            injectIslandPrefetchRules(
-              join(ctx.phase3.root || process.cwd(), ctx.phase3.outDir || DEFAULT_OUT_DIR),
-              pageChunkMap(pageManifests),
-            );
           } else {
             log.info('No Phase 2 client asset manifest - island manifests skipped');
           }
@@ -281,11 +266,13 @@ export function buildPlugin(
         config.build.copyPublicDir && config.publicDir && existsSync(config.publicDir)
           ? authoredPublicPaths(config.publicDir)
           : [];
+      const { pages, viewTransitionStyle } = readSsgOutputManifest(outputDir);
       writePublishOutput(outputDir, [
         ...authored,
-        ...clientPublicFiles,
+        ...(clientOutput?.files ?? []),
         ...islandManifestFiles,
-        ...readSsgPageManifest(outputDir),
+        ...pages,
+        ...(viewTransitionStyle ? [viewTransitionStyle] : []),
       ]);
     },
   };

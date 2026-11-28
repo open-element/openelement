@@ -1415,12 +1415,11 @@ function admitIslandStyles(input: {
  * transform's. The identity is attached to the scanned record as
  * `generatedElementHost`; the internal entry descriptor (`buildEntryDescriptor`)
  * re-attaches it to the scanned local island declarations (delivery aliases
- * included), and no renderer/registration consumer reads it yet.
+ * included) for server rendering and client delivery planning.
  *
  * `projectRoot` is the compiler identity anchor: the compile call receives
- * `stableModuleId(fullPath, projectRoot)` (the same anchoring
- * `island-blocks-scan` uses) so a refusal diagnostic carries a stable
- * project-relative id, never a machine path. Only the host-site resolver gets
+ * `stableModuleId(fullPath, projectRoot)` so refusal diagnostics carry a stable
+ * project-relative id. Only the host-site resolver gets
  * the absolute path, because it needs the `islandsDir` segment. Callers pass
  * their real root (the Vite plugin's resolved root, the SSG build's root); the
  * cwd default only serves hosts that never resolved one.
@@ -1501,10 +1500,8 @@ export async function scanIslandMeta(
     }
     tagClaimants.set(tagName, filePath);
 
-    // The compiler identity is project-anchored (the same `stableModuleId`
-    // anchoring island-blocks-scan uses), so a refusal diagnostic carries a
-    // stable id instead of the machine path. The ABSOLUTE path is only for
-    // the host-site resolver, which anchors admission on the islandsDir
+    // Refusal diagnostics use the project-anchored compiler identity.
+    // The host-site resolver uses the absolute path to locate the islandsDir
     // segment.
     const absoluteModuleId = normalizeSeparators(fullPath);
     const moduleId = stableModuleId(absoluteModuleId, projectRoot);

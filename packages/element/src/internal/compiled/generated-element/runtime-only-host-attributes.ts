@@ -1,40 +1,7 @@
 /**
- * The runtime-only host attributes the compiled element runtime writes on a
- * host tag AFTER (or independently of) server serialization — the ONE fact
- * (P6/P8) shared by the generated-element shell's writers and the compiled
- * runtime's hydration executor.
- *
- * WHY A SEPARATE LEAF: two consumers need exactly these names and neither may
- * import the other.
- *
- * - The generated-element shell writes the JSON prop seed; the SSR writers mark
- *   light-root ownership and projected light children; the document-theme
- *   broadcaster mirrors the broadcast attribute on every connected host.
- * - `internal/compiled/runtime/hydrate.ts` must EXEMPT them from its
- *   "unexpected attribute" drift check: a class-lane parent can claim a nested
- *   host that the runtime already touched (a seeded generated child island, a
- *   theme-mirrored custom element), and those attributes are runtime-managed
- *   state, not server drift.
- *
- * Hydration cannot import the shell (the shell's module graph captures
- * `HTMLElement` at `open-element-base.ts` evaluation, so the compiled runtime
- * barrel would stop being safely importable before a DOM harness exists — the
- * existing `compiled-hydration/*` consumer-form tests pin that), and the
- * generated lane must never pull the executor in the other direction. A third
- * hand-written list in hydration is exactly the C-1 defect: the JSON prop seed
- * was written on nested generated hosts but missing from the claim's
- * exemption, so the parent's claim failed with `unexpected attribute`. The
- * names therefore live here, import-only:
- *
- * - zero DOM and no import of the shell or the runtime barrel (this leaf may
- *   be imported by both sides without evaluating either side);
- * - not a package export subpath and not re-exported from any barrel, so it
- *   never appears in the public interface snapshot.
- *
- * A name here is exempted only on a CUSTOM-ELEMENT host: every writer targets
- * a compiled/generated host, so the same name on a plain element stays genuine
- * drift. `data-oe-static-styles` is NOT a member: it rides the DSD template's
- * `<style>`/`<link>` nodes, never a host tag.
+ * Host attributes owned by generated SSR, claim and the theme broadcaster.
+ * Nested claim may ignore these names on a child host. An explicitly authored
+ * attribute still participates in the static seed check.
  */
 
 import { DATA_OE_LIGHT } from '@openelement/protocol/part-program';

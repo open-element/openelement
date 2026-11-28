@@ -359,7 +359,7 @@ test('pack surface: a declared bin whose target is missing from the archive fail
 });
 
 test('pack surface: module-scope seam installs are found, deferred ones are not', () => {
-  const offending = ['installHydrationExecutor(hydrateExistingDom);', 'installSeamThing(other);'];
+  const offending = ['installBlockBuilders(blockBuilders);', 'installSeamThing(other);'];
   for (const line of offending) {
     const found = findModuleScopeSeamInstalls(line);
     expect(found.length, `must fail: ${line}`).toEqual(1);
@@ -367,14 +367,14 @@ test('pack surface: module-scope seam installs are found, deferred ones are not'
 
   const accepted = [
     // Inside a function or a block: not an import-time install.
-    'function wire() {\n  installHydrationExecutor(hydrateExistingDom);\n}',
-    'if (ready) {\n  installHydrationExecutor(hydrateExistingDom);\n}',
+    'function wire() {\n  installBlockBuilders(blockBuilders);\n}',
+    'if (ready) {\n  installBlockBuilders(blockBuilders);\n}',
     // An indented call is not a module-scope statement head.
-    '  installHydrationExecutor(hydrateExistingDom);',
+    '  installBlockBuilders(blockBuilders);',
     // A factory call is not an install: it has no seam naming convention, and
     // Router's pure reachability imports must stay unflagged (#1425 scope).
     'createIslandScheduler({ log, win, doc });',
-    'export { installHydrationExecutor } from "./hydrate-seam.js";',
+    'export { installBlockBuilders } from "./blocks-seam.js";',
   ];
   for (const source of accepted) {
     expect(findModuleScopeSeamInstalls(source), `must pass: ${JSON.stringify(source)}`).toEqual([]);
@@ -382,16 +382,13 @@ test('pack surface: module-scope seam installs are found, deferred ones are not'
 });
 
 test('pack surface: an undeclared seam install fails, a declared one passes', () => {
-  // The installer path in the fixture is the one the shipped element manifest
-  // declares, so "declared" below means the real declaration actually covers
-  // the real module — not a coincidental match on a test-only name.
-  const INSTALLER_PATH = 'src/internal/compiled/runtime/hydrate-install.js';
+  const INSTALLER_PATH = 'src/install-probe.js';
   const packaged = (sideEffects: unknown): Map<string, string> =>
     new Map<string, string>([
       ['package/package.json', JSON.stringify(manifest('@openelement/element', { sideEffects }))],
       ['package/README.md', ''],
-      ['package/src/index.js', "import './internal/compiled/runtime/hydrate-install.js';"],
-      [`package/${INSTALLER_PATH}`, 'installHydrationExecutor(hydrateExistingDom);'],
+      ['package/src/index.js', "import './install-probe.js';"],
+      [`package/${INSTALLER_PATH}`, 'installProbeRuntime(probeRuntime);'],
     ]);
   // Only the seam rule's findings: a fixture whose sideEffects differs from
   // packedMetadata() also trips the parity rule, which is not under test here.
@@ -406,16 +403,8 @@ test('pack surface: an undeclared seam install fails, a declared one passes', ()
   expect(undeclared.length).toEqual(1);
   expect(undeclared[0].path).toContain(INSTALLER_PATH);
 
-  // The shipped declaration clears it, and clears every other rule too.
-  expect(
-    scanPackedPackage(
-      '@openelement/element',
-      packaged(packedMetadata('@openelement/element').sideEffects),
-    ),
-  ).toEqual([]);
-
   // Wildcards and a flat `true` are honoured the way npm reads them.
-  for (const declared of [['./src/**'], true] as const) {
+  for (const declared of [[`./${INSTALLER_PATH}`, './src/index.js'], ['./src/**'], true] as const) {
     expect(seam(declared), `must pass with sideEffects=${JSON.stringify(declared)}`).toEqual([]);
   }
 
@@ -425,16 +414,5 @@ test('pack surface: an undeclared seam install fails, a declared one passes', ()
   expect(importerOnly.length).toEqual(1);
   expect(importerOnly[0].path).toContain(INSTALLER_PATH);
 
-  // And the shipped element manifest must not regress to the flat claim. The
-  // flagged set names every install edge's importer and installer (#1425
-  // class): the default entry, the entries that import one install
-  // (`./client-only` → blocks, `./no-blocks` → claim, #1548), and both
-  // installers.
-  expect(packedMetadata('@openelement/element').sideEffects).toEqual([
-    './src/index.js',
-    './src/client-only.js',
-    './src/no-blocks.js',
-    './src/internal/compiled/runtime/hydrate-install.js',
-    './src/internal/compiled/runtime/blocks-install.js',
-  ]);
+  expect(packedMetadata('@openelement/element').sideEffects).toBe(false);
 });

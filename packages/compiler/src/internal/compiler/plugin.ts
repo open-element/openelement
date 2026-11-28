@@ -6,12 +6,8 @@
  * predicate, so this transform asks each lane in turn and a module no lane
  * owns passes through untouched.
  *
- * The hook also ADOPTS this compiler's own emitted artifacts (a package's
- * shipped module): there is nothing left to compile, but the module's `.css`
- * imports are the same style edges the authored path registers, and the
- * style-asset intercept only answers registered edges. The artifact read
- * recovers exactly those edges (compiled-artifact-style-requests.ts) so the
- * packed and workspace-source forms of one package admit identically.
+ * Packed generated modules supply class candidates recorded at pack time.
+ * The Router registers generated styles through the island declaration.
  *
  * Internal generated-lane pipeline: not part of the public adapter API.
  */
@@ -31,7 +27,6 @@ import {
 } from './semantic-core/diagnostics/index.ts';
 import { typeCheckEmittedModule } from './semantic-core/type-check.ts';
 import { compiledArtifactClassCandidates } from './compiled-artifact-class-candidates.ts';
-import { readCompiledArtifactStyles } from './compiled-artifact-style-requests.ts';
 import { registerStyleRequest, styleRequestFile, styleRequestModuleId } from './style-requests.ts';
 import { type ClassCandidateRegistry } from './tailwind-candidates.ts';
 
@@ -156,18 +151,8 @@ export interface CompiledElementPluginOptions {
 }
 
 /**
- * Register one module's style edges (the registry's one write path, S-C1.4).
- *
- * The importing component's root scope is part of every edge it registers
- * (alpha15 S lane, S-C1.2): a light-root component's sheets leave the build
- * wrapped in `@scope (<tag>)`, so the tag travels to the intercept through the
- * registry key. A shipped artifact states the same fact in its Part Program
- * literal.
- *
- * The Vite transform is the caller for a module the bundler processes; a build
- * host that admits a module for its ADMISSION FACTS alone (a Page or Layout the
- * server renders and no island imports) calls the same step with the same
- * compiled program — no second writer, no second registry.
+ * Register an island declaration's stylesheet edges. The scope tag is part
+ * of the key for a light-root sheet emitted inside an `@scope` wrapper.
  */
 export function registerStyleEdges(
   id: string,
@@ -256,22 +241,6 @@ function createCompiledElementPlugin(options: CompiledElementPluginOptions = {})
                   : { compiledTags: options.compiledTags }),
               })
             : null;
-        // An ALREADY-compiled artifact (a package's shipped module) has no
-        // authored grammar left to compile, but its `.css` imports are the
-        // same style edges the authored path registers — recovered through the
-        // artifact read (compiled-artifact-style-requests.ts) so the packed
-        // form is admitted identically to the workspace-source form (#1558/
-        // KR-10). This transform stays the registry's one writer.
-        const artifact =
-          generated || serverCompiled ? undefined : readCompiledArtifactStyles(code, id);
-        // The adopted artifact's `.css` edges travel to the intercepting host
-        // plugin through the style-edge registry — keyed by the id the
-        // bundler's resolver lands on for the authored import. The compiler
-        // never writes files or reads sheet bytes; the host build owns the
-        // emitted artifacts from here.
-        if (artifact !== undefined) {
-          registerStyleEdges(id, artifact.requests, artifact.scopeTag);
-        }
         // A component's statically admitted class tokens (alpha15 S lane)
         // travel through the candidate registry: the host build hands them to
         // the OFFICIAL Tailwind compiler as explicit candidates and emits the

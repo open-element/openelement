@@ -8,7 +8,7 @@ import { projectOwnGeneratedLeaf, type Projection, type Recipe } from '../runtim
 import { removeNodes } from '../runtime/values.ts';
 import { assertGeneratedElementTag, normalizeGeneratedStyles } from './descriptor.ts';
 import {
-  adoptGeneratedClientStyles,
+  generatedClientStyles,
   captureCleanupFailures,
   finishGeneratedConnection,
   observeGeneratedRegion,
@@ -106,7 +106,7 @@ function buildDirectShadowClass(
   class DirectShadowElement extends OpenElementBase implements GeneratedElement {
     readonly #state = {
       root: null as ReturnType<typeof resolveGeneratedOpenRoot> | null,
-      styleScope: new CompiledStyleScope(),
+      styleScope: null as CompiledStyleScope | null,
       regionState: 'unobserved' as 'unobserved' | 'present' | 'absent',
       connecting: false,
       instance: null as LifetimeScope | null,
@@ -128,13 +128,10 @@ function buildDirectShadowClass(
         const resolved = (state.root ??= resolveGeneratedOpenRoot(this, delegatesFocus));
         const root = resolved.root;
         assertGeneratedRootOptions(root, 'open', delegatesFocus);
-        adoptGeneratedClientStyles(
-          state.styleScope,
-          root,
-          this.constructor,
-          styles,
-          resolved.created,
-        );
+        const selectedStyles = generatedClientStyles(this.constructor, styles, resolved.created);
+        if (selectedStyles !== undefined) {
+          (state.styleScope ??= new CompiledStyleScope()).connect(root, [...selectedStyles]);
+        }
         observeGeneratedRegion(state, root, !resolved.created);
         const instance = retainGeneratedInstance(
           state,
@@ -156,7 +153,7 @@ function buildDirectShadowClass(
           state.bindings = null;
         }
         releaseIgnoringErrors([
-          () => state.styleScope.disconnect(),
+          () => state.styleScope?.disconnect(),
           () => connection?.dispose(false),
           () => instance?.dispose(true),
         ]);
@@ -173,7 +170,7 @@ function buildDirectShadowClass(
       state.projection = null;
       state.connection = null;
       captureCleanupFailures([
-        () => state.styleScope.disconnect(),
+        () => state.styleScope?.disconnect(),
         () => projection?.dispose(false),
         () => connection?.dispose(false),
       ]);
@@ -191,7 +188,7 @@ function buildDirectShadowClass(
         state.regionState = 'absent';
       }
       captureCleanupFailures([
-        () => state.styleScope.disconnect(),
+        () => state.styleScope?.disconnect(),
         () => projection?.dispose(detachOwnedNodes),
         () => {
           if (detachOwnedNodes && ownedNodes !== null) removeNodes(ownedNodes);

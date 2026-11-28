@@ -71,7 +71,8 @@ export function publicTreePaths(root: string): string[] {
   return files.sort();
 }
 
-function readCanonicalRegularFile(
+/** Read the verified file descriptor without reopening its pathname. */
+export function readCanonicalRegularFile(
   file: string,
   diagnostic: string,
 ): { bytes: Buffer; mode: number } {

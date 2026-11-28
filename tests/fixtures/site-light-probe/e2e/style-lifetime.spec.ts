@@ -23,7 +23,7 @@
  *      pnpm --dir tests/fixtures/site-light-probe run e2e:browsers
  */
 
-import { readdirSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 
 const DIST = new URL('../dist/', import.meta.url);
@@ -78,6 +78,16 @@ const declaredAssets = new Set(
     .map((name) => `/client/assets/${name}`),
 );
 
+const html = readFileSync(new URL('index.html', DIST), 'utf8');
+const transitionLinks = [
+  ...html.matchAll(/href="(\/assets\/open-view-transition-[a-f0-9]{12}\.css)"/g),
+];
+if (transitionLinks.length !== 1)
+  throw new Error('expected one emitted view-transition stylesheet');
+const transitionAsset = transitionLinks[0]![1]!;
+readFileSync(new URL(transitionAsset.slice(1), DIST));
+declaredAssets.add(transitionAsset);
+
 let cssResponses: string[] = [];
 const observedUrls = new Set<string>();
 
@@ -99,6 +109,11 @@ test('repeated navigation does not accumulate sheets or stylesheet requests', as
     await page.goto('/');
     await page.waitForLoadState('load');
     cycles.push(await readCounts(page));
+    for (const href of cssResponses) {
+      expect(declaredAssets.has(href), `cycle ${cycle + 1} requested undeclared ${href}`).toBe(
+        true,
+      );
+    }
   }
   const first = cycles[0]!;
   console.log(`[S-15 lifetime] ${JSON.stringify(cycles)}`);

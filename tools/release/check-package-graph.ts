@@ -19,17 +19,16 @@
  *   declared export target exists, product-boundary imports stay forbidden
  *   (Element must not import Router; the Router core must not import
  *   Element), and no source reaches into another package via a private
- *   workspace path (merged from the former standalone package-surface check)
+ *   workspace path
  * - release-critical package configuration: every package is on
  *   PACKAGE_VERSION, declares exports and a files allowlist (with
  *   README.md/LICENSE present on disk), uses the @openelement
  *   scope, and the create CLI's embedded CREATE_VERSION and the packed
- *   consumer's browser-probe Playwright pin track the release line (merged
- *   from the former standalone package-config verification)
+ *   consumer's browser-probe Playwright pin track the release line
  */
 
 import { readdirSync } from 'node:fs';
-import { readdir, readFile, stat, stat as statPath } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import {
   PACKAGE_COUNT,
   PACKAGE_VERSION,
@@ -240,7 +239,7 @@ async function validatePackageSurface(packages: PackageInfo[], failures: string[
     for (const target of exportTargets(pkg.exports)) {
       const path = `${pkg.dir}/${target.replace(/^\.\//, '')}`;
       try {
-        const targetStat = await statPath(path);
+        const targetStat = await stat(path);
         if (!targetStat.isFile())
           failures.push(`${pkg.name}: export target is not a file: ${target}`);
       } catch {

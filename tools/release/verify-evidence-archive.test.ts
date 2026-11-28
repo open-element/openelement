@@ -453,7 +453,13 @@ test('verify-evidence: a streamed body above the cap is refused without Content-
         { ...EVIDENCE_LIMITS, maxDownloadBytes: 10 },
         () => Promise.resolve(new Response(body)),
       ),
-    ).rejects.toThrow(/streamed bytes exceed the 10 byte limit/);
+    ).rejects.toMatchObject({
+      message:
+        'fetch failed for https://example.test/evidence.tar.zst: download refused: streamed bytes exceed the 10 byte limit',
+      cause: expect.objectContaining({
+        message: 'download refused: streamed bytes exceed the 10 byte limit',
+      }),
+    });
     expect(existsSync(target)).toEqual(false);
   } finally {
     await rm(dir, { recursive: true, force: true });

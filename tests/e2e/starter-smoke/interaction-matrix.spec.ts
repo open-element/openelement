@@ -142,6 +142,42 @@ test.describe('hydration timing', () => {
       timeout: 10_000,
     });
   });
+
+  test('traffic inside a live island cannot exhaust idle replay', async ({ page }) => {
+    await page.addInitScript(() => {
+      const pending: IdleRequestCallback[] = [];
+      window.requestIdleCallback = (callback) => pending.push(callback);
+      document.addEventListener('oe-test-release-idle', () => {
+        for (const callback of pending.splice(0)) {
+          callback({ didTimeout: false, timeRemaining: () => 0 });
+        }
+      });
+    });
+    await page.goto('/');
+    const timer = page.locator('live-timer');
+    await expect(timer.locator('#elapsed')).toBeVisible();
+    const counter = page.locator('my-counter');
+    await expect(counter.locator('#count')).toHaveText('0');
+    expect(await page.evaluate(() => customElements.get('my-counter') === undefined)).toBe(true);
+    await timer.evaluate((host) => {
+      for (let index = 0; index < 64; index++) {
+        const target = document.createElement('button');
+        host.shadowRoot!.append(target);
+        target.click();
+      }
+    });
+    await counter
+      .locator('button')
+      .nth(1)
+      .evaluate((button) => (button as HTMLButtonElement).click());
+    await page.evaluate(() => document.dispatchEvent(new Event('oe-test-release-idle')));
+    await expect
+      .poll(() => page.evaluate(() => customElements.get('my-counter') !== undefined))
+      .toBe(true);
+    await expect(counter.locator('#count')).toHaveText('1');
+    await counter.locator('button').nth(1).click();
+    await expect(counter.locator('#count')).toHaveText('2');
+  });
 });
 
 test.describe('navigation', () => {

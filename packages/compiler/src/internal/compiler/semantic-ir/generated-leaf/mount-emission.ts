@@ -20,6 +20,7 @@ import {
   type EmitState,
   push,
   INTERNAL_PREFIX,
+  LIST_ENTRY_MATCHER,
   type SpanLike,
   nextName,
   recordFor,
@@ -179,6 +180,7 @@ export function emitEntryBuilder(
   scopeParam: string,
   itemParam: string,
   itemName: string,
+  hasKey: boolean,
   nodes: readonly FunctionModelNode[],
   records: ReadonlyMap<string, LoweredExpressionRecord>,
   anchor: SpanLike,
@@ -187,7 +189,9 @@ export function emitEntryBuilder(
   state.indent += 1;
   const outerScope = state.scopeVar;
   const outerOrdinals = state.textOrdinals;
+  const outerKeyedEntry = state.keyedEntry;
   state.scopeVar = scopeParam;
+  state.keyedEntry = hasKey;
   // Save/restore rather than add/delete: a nested list entry may shadow the same
   // mapper name, and deleting it on the way out would hide the outer entry-local
   // reads (refresh registration and `declareReads` both consult this set).
@@ -215,6 +219,7 @@ export function emitEntryBuilder(
   push(state, `return { nodes: ${INTERNAL_PREFIX}nodes, update(next) { ${updateBody} } };`);
   state.textOrdinals = outerOrdinals;
   state.scopeVar = outerScope;
+  state.keyedEntry = outerKeyedEntry;
   state.indent -= 1;
   push(state, '}');
 }
@@ -494,6 +499,7 @@ function emitList(
       `${INTERNAL_PREFIX}eachScope${id}`,
       `${INTERNAL_PREFIX}eachItem${id}`,
       node.parameter,
+      node.key !== null,
       node.template,
       records,
       node.span,
@@ -510,6 +516,10 @@ function emitList(
   state.indent += 1;
   pushParts(state, [`const ${INTERNAL_PREFIX}items = (`, { record: itemsRecord }, ');']);
   push(state, `const ${INTERNAL_PREFIX}previous = ${entriesVar};`);
+  push(
+    state,
+    `const ${INTERNAL_PREFIX}matchEntry = ${LIST_ENTRY_MATCHER}(${INTERNAL_PREFIX}previous);`,
+  );
   push(state, `const ${INTERNAL_PREFIX}next = [];`);
   push(state, `const ${INTERNAL_PREFIX}used = new Set();`);
   push(
@@ -522,12 +532,11 @@ function emitList(
     state,
     `const ${INTERNAL_PREFIX}key = ${keyFn}(${INTERNAL_PREFIX}item, ${INTERNAL_PREFIX}index);`,
   );
-  push(state, `let ${INTERNAL_PREFIX}found = null;`);
   push(
     state,
-    `for (const ${INTERNAL_PREFIX}entry of ${INTERNAL_PREFIX}previous) { if (${INTERNAL_PREFIX}entry.key === ${INTERNAL_PREFIX}key && !${INTERNAL_PREFIX}used.has(${INTERNAL_PREFIX}entry)) { ${INTERNAL_PREFIX}found = ${INTERNAL_PREFIX}entry; break; } }`,
+    `const ${INTERNAL_PREFIX}found = ${INTERNAL_PREFIX}matchEntry(${INTERNAL_PREFIX}key);`,
   );
-  push(state, `if (${INTERNAL_PREFIX}found !== null) {`);
+  push(state, `if (${INTERNAL_PREFIX}found !== undefined) {`);
   state.indent += 1;
   push(
     state,
@@ -563,10 +572,7 @@ function emitList(
     state,
     `const ${INTERNAL_PREFIX}entry = { key: ${INTERNAL_PREFIX}key, item: ${INTERNAL_PREFIX}item, owner: ${INTERNAL_PREFIX}owner, nodes: ${INTERNAL_PREFIX}built.nodes, update: ${INTERNAL_PREFIX}built.update };`,
   );
-  push(
-    state,
-    `${INTERNAL_PREFIX}used.add(${INTERNAL_PREFIX}entry); ${INTERNAL_PREFIX}next.push(${INTERNAL_PREFIX}entry);`,
-  );
+  push(state, `${INTERNAL_PREFIX}next.push(${INTERNAL_PREFIX}entry);`);
   state.indent -= 1;
   push(state, `}`);
   state.indent -= 1;
@@ -585,16 +591,16 @@ function emitList(
   // it) is never re-inserted, and a distant swap moves exactly the swapped
   // entries, where the inline backward walk re-inserted every entry between
   // the swap and the tail (measured 997 of 1000, 2026-11-24).
-  push(state, `const ${INTERNAL_PREFIX}previousNodes = new Set();`);
-  push(
-    state,
-    `for (const ${INTERNAL_PREFIX}entry of ${INTERNAL_PREFIX}previous) for (const ${INTERNAL_PREFIX}node of ${INTERNAL_PREFIX}entry.nodes) ${INTERNAL_PREFIX}previousNodes.add(${INTERNAL_PREFIX}node);`,
-  );
   if (wire) {
     // The list end is the fixed tail: every entry node belongs before it and a
     // following sibling can never be mistaken for a list node.
     push(state, `const ${INTERNAL_PREFIX}tail = ${endVar};`);
   } else {
+    push(state, `const ${INTERNAL_PREFIX}previousNodes = new Set();`);
+    push(
+      state,
+      `for (const ${INTERNAL_PREFIX}entry of ${INTERNAL_PREFIX}previous) for (const ${INTERNAL_PREFIX}node of ${INTERNAL_PREFIX}entry.nodes) ${INTERNAL_PREFIX}previousNodes.add(${INTERNAL_PREFIX}node);`,
+    );
     push(state, `let ${INTERNAL_PREFIX}tail = ${anchorVar}.nextSibling;`);
     push(
       state,
@@ -631,8 +637,21 @@ function emitList(
   registerRefresh(state, refreshVar);
 }
 
-function emitTextWrite(state: EmitState, targetVar: string, record: LoweredExpressionRecord): void {
-  pushParts(state, [`${targetVar}.nodeValue = displayValue((`, { record }, '));']);
+function emitTextWrite(
+  state: EmitState,
+  targetVar: string,
+  record: LoweredExpressionRecord,
+  compare = false,
+): void {
+  if (!compare) {
+    pushParts(state, [`${targetVar}.nodeValue = displayValue((`, { record }, '));']);
+    return;
+  }
+  // Evaluate and coerce once before reading the live node. An author edit can
+  // differ from the previous render even when the expression returns the same value.
+  const valueVar = `${INTERNAL_PREFIX}textValue`;
+  pushParts(state, [`const ${valueVar} = displayValue((`, { record }, '));']);
+  push(state, `if (${targetVar}.nodeValue !== ${valueVar}) ${targetVar}.nodeValue = ${valueVar};`);
 }
 
 /** The DOM event name for one authored `onX` attribute (`onClick` -> `click`). */
@@ -767,6 +786,7 @@ function emitAttributeWrite(
   channel: string,
   record: LoweredExpressionRecord,
   anchor: SpanLike,
+  compareLiveValue = false,
 ): void {
   const literal = JSON.stringify(name);
   if (channel === 'boolean') {
@@ -792,6 +812,9 @@ function emitAttributeWrite(
   }
   const valueVar = nextName(state, 'value');
   pushParts(state, [`const ${valueVar} = attributeValueOf((`, { record }, '));'], anchor);
+  if (compareLiveValue) {
+    push(state, `if (${elementVar}.getAttribute(${literal}) === ${valueVar}) return;`, anchor);
+  }
   push(state, `if (${valueVar} === null) ${elementVar}.removeAttribute(${literal});`, anchor);
   push(state, `else {`, anchor);
   push(state, `  assertSafeUrlAttribute(${literal}, ${valueVar});`, anchor);
@@ -1370,6 +1393,11 @@ export function emitNode(
     // `document.createElement` call would produce an HTML-namespaced lookalike
     // that renders nothing. `foreignObject` switches its children back to HTML.
     const elementNamespace = node.tag === 'svg' ? 'svg' : namespace;
+    const compareEntryDataAttributes =
+      state.keyedEntry === true &&
+      elementNamespace === 'html' &&
+      !node.tag.includes('-') &&
+      !node.attributes.some((attribute) => attribute.name.toLowerCase() === 'is');
     push(
       state,
       elementNamespace === 'svg'
@@ -1421,6 +1449,13 @@ export function emitNode(
       if (record === null || !declareReads(state, record)) continue;
       const dependencies = dependencyNames(state, record);
       if (dependencies === null) continue;
+      // Compare after coercion so each refresh still observes the authored
+      // expression and repairs DOM edits. A custom element can observe an
+      // assignment even when the assigned value matches.
+      const compareLiveValue =
+        compareEntryDataAttributes &&
+        attribute.channel === 'attribute' &&
+        attribute.name.toLowerCase().startsWith('data-');
       if (dependencies.length === 0) {
         if (!readsEntryLocal(state, record)) {
           emitAttributeWrite(
@@ -1446,6 +1481,7 @@ export function emitNode(
               attribute.channel,
               record,
               attribute.span,
+              compareLiveValue,
             ),
           ),
         );
@@ -1454,7 +1490,15 @@ export function emitNode(
       const refresh = nextName(state, 'refresh');
       push(state, `function ${refresh}() {`, attribute.span);
       state.indent += 1;
-      emitAttributeWrite(state, varName, attribute.name, attribute.channel, record, attribute.span);
+      emitAttributeWrite(
+        state,
+        varName,
+        attribute.name,
+        attribute.channel,
+        record,
+        attribute.span,
+        compareLiveValue,
+      );
       state.indent -= 1;
       push(state, `}`);
       push(state, `${refresh}();`);
@@ -1487,15 +1531,15 @@ export function emitNode(
     if (record === null || !declareReads(state, record)) return;
     const dependencies = dependencyNames(state, record);
     if (dependencies === null) return;
-    let boundaryEnd: string | null = null;
+    let textVar: string;
     if (state.emitTextBoundaries) {
       const ordinal = textOrdinal(state, node);
       if (ordinal === null) return;
       const boundaryStart = nextName(state, 'textStart');
       push(state, `const ${boundaryStart} = emitComment(textSlotMarker(${ordinal}));`, node.span);
       sink.push({ kind: 'node', name: boundaryStart });
-      boundaryEnd = nextName(state, 'textEnd');
-      const textVar = nextName(state, 'text');
+      const boundaryEnd = nextName(state, 'textEnd');
+      textVar = nextName(state, 'text');
       push(state, `const ${textVar} = document.createTextNode("");`, node.span);
       sink.push({ kind: 'node', name: textVar });
       push(
@@ -1504,34 +1548,11 @@ export function emitNode(
         node.span,
       );
       sink.push({ kind: 'node', name: boundaryEnd });
-      if (dependencies.length === 0) {
-        if (!readsEntryLocal(state, record)) {
-          emitTextWrite(state, textVar, record);
-          return;
-        }
-        // Entry-local read without a reactive dependency: the entry update hook
-        // re-binds the mapper parameter, so the text write must re-run from a
-        // registered refresh closure (M06b2c — unkeyed/same-key reuse).
-        registerRefresh(
-          state,
-          emitLocalRefresh(state, node.span, () => emitTextWrite(state, textVar, record)),
-        );
-        return;
-      }
-      const refresh = nextName(state, 'refresh');
-      push(state, `function ${refresh}() {`, node.span);
-      state.indent += 1;
-      emitTextWrite(state, textVar, record);
-      state.indent -= 1;
-      push(state, `}`);
-      push(state, `${refresh}();`);
-      emitDependencySubscriptions(state, dependencies, refresh, node.span);
-      registerRefresh(state, refresh);
-      return;
+    } else {
+      textVar = nextName(state, 'text');
+      push(state, `const ${textVar} = document.createTextNode("");`, node.span);
+      sink.push({ kind: 'node', name: textVar });
     }
-    const textVar = nextName(state, 'text');
-    push(state, `const ${textVar} = document.createTextNode("");`, node.span);
-    sink.push({ kind: 'node', name: textVar });
     if (dependencies.length === 0) {
       if (!readsEntryLocal(state, record)) {
         emitTextWrite(state, textVar, record);
@@ -1542,14 +1563,14 @@ export function emitNode(
       // registered refresh closure (M06b2c — unkeyed/same-key reuse).
       registerRefresh(
         state,
-        emitLocalRefresh(state, node.span, () => emitTextWrite(state, textVar, record)),
+        emitLocalRefresh(state, node.span, () => emitTextWrite(state, textVar, record, true)),
       );
       return;
     }
     const refresh = nextName(state, 'refresh');
     push(state, `function ${refresh}() {`, node.span);
     state.indent += 1;
-    emitTextWrite(state, textVar, record);
+    emitTextWrite(state, textVar, record, state.listDepth > 0);
     state.indent -= 1;
     push(state, `}`);
     push(state, `${refresh}();`);

@@ -20,14 +20,49 @@ import { OpenElementError } from '@openelement/element';
 import {
   ELEMENT_RUNTIME_CHUNK_NAME,
   type ElementRuntimeIdentity,
+  documentServiceModuleIds,
+  isDocumentServiceModule,
   elementRuntimeChunkName,
-  findElementRuntimeChunkFile,
-  requireElementRuntimeChunk,
+  collectElementRuntimeChunks,
+  elementRuntimePreloads,
   requireEntryStaticGraphFreeOfRuntime,
   resolveElementRuntimeIdentity,
 } from '../src/vite/internal/element-runtime-chunk.ts';
 import type { ClientBuildChunk } from '../src/vite/client-asset-manifest.ts';
 import { ClientBuildErrorCode } from '../src/internal/error-codes.ts';
+
+test('static entry guard permits the resolved document-services closure and refuses inlined generated runtime', () => {
+  const packageRoot = '/app/node_modules/@openelement/element';
+  const wrapper = '/router/src/element-document-services.js';
+  const services = `${packageRoot}/src/document-services.js`;
+  const capture = `${packageRoot}/src/internal/compiled/runtime/pre-upgrade-events.js`;
+  const errors = '/app/node_modules/@openelement/protocol/src/errors.js';
+  const generated = `${packageRoot}/src/internal/compiled/generated-element/direct-shadow.js`;
+  const graph = new Map([
+    [wrapper, [services]],
+    [services, [capture]],
+    [capture, [errors]],
+  ]);
+  const identity = {
+    packageRoot,
+    documentServices: documentServiceModuleIds(wrapper, (id) => ({
+      importedIds: graph.get(id) ?? [],
+    })),
+  };
+  expect(isDocumentServiceModule(`${errors}?resolved`, identity)).toBe(true);
+  const entry: ClientBuildChunk = {
+    fileName: 'islands/client.js',
+    isEntry: true,
+    modules: { [capture]: {} },
+  };
+  expect(() => requireEntryStaticGraphFreeOfRuntime([entry], identity)).not.toThrow();
+  expect(() =>
+    requireEntryStaticGraphFreeOfRuntime(
+      [{ ...entry, modules: { ...entry.modules, [generated]: {} } }],
+      identity,
+    ),
+  ).toThrow(/statically reaches the shared element runtime: islands\/client\.js/);
+});
 
 const tempRoots: string[] = [];
 
@@ -146,151 +181,76 @@ test('elementRuntimeChunkName strips query suffixes and a null identity matches 
   expect(elementRuntimeChunkName('/site/packages/element/src/index.ts', null)).toBe(undefined);
 });
 
-test('requireElementRuntimeChunk accepts the emitted chunk carrying runtime modules', () => {
-  const sharedChunk = {
-    fileName: 'islands/element-runtime-Bh4sh.js',
-    facadeModuleId: null,
-    modules: {
-      '/site/packages/element/src/index.ts': {},
-      '/site/packages/element/src/html.ts': {},
-    },
-  };
-  requireElementRuntimeChunk(
-    [sharedChunk, { fileName: 'islands/client.js', facadeModuleId: null, modules: {} }],
-    WORKSPACE_IDENTITY,
-  );
-  // The runtime module riding a facade (no separate module map) counts too.
-  requireElementRuntimeChunk(
-    [
-      {
-        fileName: 'islands/element-runtime-Bh4sh.js',
-        facadeModuleId: '/site/packages/element/src/index.ts',
-        modules: {},
-      },
-    ],
-    WORKSPACE_IDENTITY,
-  );
-});
-
-test('requireElementRuntimeChunk fails closed on zero grouped runtime modules', () => {
-  const islandsOnly = [
-    {
-      fileName: 'islands/island-open-badge-9qf3dl.js',
-      facadeModuleId: '/site/app/islands/open-badge.ts',
-      modules: { '/site/app/islands/open-badge.ts': {} },
-    },
-  ];
-  const error = assertThrowsIncludes(
-    () => requireElementRuntimeChunk(islandsOnly, WORKSPACE_IDENTITY),
-    OpenElementError,
-    'shared element-runtime chunk never fired',
-  );
-  expect(error.code).toEqual(ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING);
-  expect(error.phase).toEqual('build');
-});
-
-test('requireElementRuntimeChunk rejects a runtime homed inside an island chunk', () => {
-  // The group never fired: the runtime modules homed in whichever island
-  // chunk their import reached first, so the one carrying chunk is island-
-  // named rather than the shared element-runtime identity.
-  const islandWithRuntime = [
-    {
-      fileName: 'islands/island-open-badge-9qf3dl.js',
-      facadeModuleId: '/site/app/islands/open-badge.ts',
-      modules: {
-        '/site/app/islands/open-badge.ts': {},
-        '/site/packages/element/src/index.ts': {},
-      },
-    },
-  ];
-  const error = assertThrowsIncludes(
-    () => requireElementRuntimeChunk(islandWithRuntime, WORKSPACE_IDENTITY),
-    OpenElementError,
-    'is not the shared element-runtime chunk',
-  );
-  expect(error.code).toEqual(ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING);
-  expect(error.phase).toEqual('build');
-});
-
-test('requireElementRuntimeChunk rejects a runtime split across chunks', () => {
-  const split = [
-    {
-      fileName: 'islands/element-runtime-Bh4sh.js',
-      facadeModuleId: null,
-      modules: { '/site/packages/element/src/index.ts': {} },
-    },
-    {
-      fileName: 'islands/island-open-badge-9qf3dl.js',
-      facadeModuleId: null,
-      modules: { '/site/packages/element/src/html.ts': {} },
-    },
-  ];
-  const error = assertThrowsIncludes(
-    () => requireElementRuntimeChunk(split, WORKSPACE_IDENTITY),
-    OpenElementError,
-    'across 2 chunks',
-  );
-  expect(error.code).toEqual(ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING);
-  expect(error.phase).toEqual('build');
-});
-
-test('requireElementRuntimeChunk fails closed on a missing identity (ordering bug)', () => {
-  const error = assertThrowsIncludes(
-    () => requireElementRuntimeChunk([], null),
-    OpenElementError,
-    'identity pass produced no element runtime identity',
-  );
-  expect(error.code).toEqual(ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING);
-  expect(error.phase).toEqual('build');
-});
-
-// ─── findElementRuntimeChunkFile: the projected address (#1544/B2) ────
-//
-// The head projection that modulepreloads the runtime on island-bearing
-// pages reads the chunk's ADDRESS from the build's own output. These are the
-// guard forms of that read: the identity is the grouping name plus the hash
-// `chunkFileNames` appends, exactly one file may carry it, and an output with
-// none returns undefined, leaving the fail-closed requirement to the caller.
-
-test('findElementRuntimeChunkFile reads the emitted chunk file and its base-prefixed asset URL', () => {
+test('the runtime may span chunks with arbitrary names and unique module owners', () => {
   const files = [
-    'islands/client.js',
-    'islands/island-open-badge-9qf3dl.js',
-    `islands/${ELEMENT_RUNTIME_CHUNK_NAME}-Bh4sh.js`,
+    { fileName: 'islands/shared.js', modules: { '/site/packages/element/src/index.ts': {} } },
+    { fileName: 'islands/optional.js', modules: { '/site/packages/element/src/context.ts': {} } },
+    { fileName: 'islands/client.js', modules: {} },
   ];
-  expect(findElementRuntimeChunkFile(files)).toEqual(
-    `islands/${ELEMENT_RUNTIME_CHUNK_NAME}-Bh4sh.js`,
-  );
-  // The same list as the client asset manifest serves it: base-prefixed URLs.
-  expect(findElementRuntimeChunkFile(files.map((file) => `/client/${file}`))).toEqual(
-    `/client/islands/${ELEMENT_RUNTIME_CHUNK_NAME}-Bh4sh.js`,
-  );
-  // Zero matches is NOT an error here: a zero-island native build legally
-  // carries no runtime chunk. Callers that require the chunk fail closed
-  // themselves (requireElementRuntimeChunk above).
-  expect(findElementRuntimeChunkFile(['islands/client.js'])).toEqual(undefined);
-  // Near-misses never count: the hash suffix is required, and a chunk that
-  // merely CONTAINS the name is a different chunk.
-  expect(findElementRuntimeChunkFile([`islands/${ELEMENT_RUNTIME_CHUNK_NAME}.js`])).toEqual(
-    undefined,
-  );
-  expect(findElementRuntimeChunkFile([`islands/x-${ELEMENT_RUNTIME_CHUNK_NAME}-Bh4sh.js`])).toEqual(
-    undefined,
+  expect(collectElementRuntimeChunks(files, WORKSPACE_IDENTITY)).toEqual(
+    new Set(['islands/shared.js', 'islands/optional.js']),
   );
 });
 
-test('findElementRuntimeChunkFile rejects a split layout instead of taking the first hit', () => {
-  const split = [
-    `islands/${ELEMENT_RUNTIME_CHUNK_NAME}-Bh4sh.js`,
-    `islands/${ELEMENT_RUNTIME_CHUNK_NAME}-Zx9qp.js`,
+test('a generated island requires a real emitted runtime module', () => {
+  const files = [
+    {
+      fileName: 'islands/facade.js',
+      facadeModuleId: '/site/packages/element/src/index.ts',
+      modules: {},
+    },
   ];
   const error = assertThrowsIncludes(
-    () => findElementRuntimeChunkFile(split),
+    () => collectElementRuntimeChunks(files, WORKSPACE_IDENTITY),
     OpenElementError,
-    'requires exactly one shared runtime chunk',
+    'has no runtime module',
   );
   expect(error.code).toEqual(ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING);
   expect(error.phase).toEqual('build');
+  expect(collectElementRuntimeChunks(files, WORKSPACE_IDENTITY, false)).toEqual(new Set());
+});
+
+test('an emitted runtime module has only one chunk owner', () => {
+  const files = [
+    { fileName: 'islands/shared.js', modules: { '/site/packages/element/src/index.ts': {} } },
+    { fileName: 'islands/optional.js', modules: { '/site/packages/element/src/index.ts': {} } },
+  ];
+  const error = assertThrowsIncludes(
+    () => collectElementRuntimeChunks(files, WORKSPACE_IDENTITY),
+    OpenElementError,
+    'was emitted in both islands/shared.js and islands/optional.js',
+  );
+  expect(error.code).toEqual(ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING);
+  expect(error.phase).toEqual('build');
+});
+
+test('runtime ownership fails closed without the resolved package identity', () => {
+  const error = assertThrowsIncludes(
+    () => collectElementRuntimeChunks([], null),
+    OpenElementError,
+    'produced no identity',
+  );
+  expect(error.code).toEqual(ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING);
+  expect(error.phase).toEqual('build');
+});
+
+test('runtime preloads follow static edges and preserve the configured base URL', () => {
+  const files = [
+    { fileName: 'counter.js', imports: ['shared.js'] },
+    { fileName: 'board.js', imports: ['bridge.js', 'shared.js'] },
+    { fileName: 'bridge.js', imports: ['shared.js', 'optional.js'] },
+    { fileName: 'optional.js', imports: ['shared.js'] },
+    { fileName: 'shared.js' },
+    { fileName: 'native.js', dynamicImports: ['optional.js'] },
+  ];
+  const base = 'https://cdn.example.test/docs/';
+  const preloads = elementRuntimePreloads(files, new Set(['shared.js', 'optional.js']), base);
+  expect(preloads.get(base + 'client/counter.js')).toEqual([base + 'client/shared.js']);
+  expect(preloads.get(base + 'client/board.js')).toEqual([
+    base + 'client/shared.js',
+    base + 'client/optional.js',
+  ]);
+  expect(preloads.has(base + 'client/native.js')).toBe(false);
 });
 
 // ─── requireEntryStaticGraphFreeOfRuntime: B2's own property ───────────

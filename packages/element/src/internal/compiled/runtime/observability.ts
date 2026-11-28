@@ -17,6 +17,9 @@
  * @module ./observability.ts
  */
 
+// Production client builds replace this identifier; Node, dev and tests retain probes.
+declare const OE_RUNTIME_PROBE: boolean | undefined;
+
 /** Monotonic counters for the generated-code runtime primitives. */
 export interface RuntimeProbeCounts {
   /** Successful insertions (one per projection/region). */
@@ -70,42 +73,46 @@ export const runtimeProbe = {
 
 /** One projection owner was created (recorded before setup may fail). */
 export function recordOwnerCreated(): void {
-  counts.owners++;
+  if (typeof OE_RUNTIME_PROBE === 'undefined' || OE_RUNTIME_PROBE) counts.owners++;
 }
 
 /** One region identity was allocated. */
 export function recordRegionAllocated(): void {
-  counts.regions++;
+  if (typeof OE_RUNTIME_PROBE === 'undefined' || OE_RUNTIME_PROBE) counts.regions++;
 }
 
 /** One insertion committed: the region and its top-level nodes are owned. */
 export function recordProjection(nodes: number): void {
-  counts.projections++;
-  counts.nodes += nodes;
+  if (typeof OE_RUNTIME_PROBE === 'undefined' || OE_RUNTIME_PROBE) {
+    counts.projections++;
+    counts.nodes += nodes;
+  }
 }
 
 /** One region range cleanup was registered. */
 export function recordRangeCleanup(): void {
-  counts.rangeCleanups++;
+  if (typeof OE_RUNTIME_PROBE === 'undefined' || OE_RUNTIME_PROBE) counts.rangeCleanups++;
 }
 
 /** One write subscription was opened through the neutral binding helper. */
 export function recordSubscriptionOpened(): void {
-  counts.subscriptions++;
+  if (typeof OE_RUNTIME_PROBE === 'undefined' || OE_RUNTIME_PROBE) counts.subscriptions++;
 }
 
 /** One write subscription was released. */
 export function recordSubscriptionClosed(): void {
-  counts.unsubscribed++;
+  if (typeof OE_RUNTIME_PROBE === 'undefined' || OE_RUNTIME_PROBE) counts.unsubscribed++;
 }
 
 /** One lineage check admitted (or rejected) a projection. */
 export function recordLineage(accepted: boolean): void {
-  if (accepted) counts.lineageAccepted++;
-  else counts.lineageRejected++;
+  if (typeof OE_RUNTIME_PROBE === 'undefined' || OE_RUNTIME_PROBE) {
+    if (accepted) counts.lineageAccepted++;
+    else counts.lineageRejected++;
+  }
 }
 
 /** One projection disposal was requested (idempotent per projection). */
 export function recordProjectionDisposed(): void {
-  counts.disposed++;
+  if (typeof OE_RUNTIME_PROBE === 'undefined' || OE_RUNTIME_PROBE) counts.disposed++;
 }

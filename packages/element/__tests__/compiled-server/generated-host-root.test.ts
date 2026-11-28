@@ -1,29 +1,11 @@
-/**
- * M11-2 — the serializer's ROOT page path invokes a registered generated host
- * producer (Node; the real compiler+entry+browser vertical is the router /
- * fixture suites).
- *
- * A generated page's host class carries no `__partProgram`. The generated
- * entry pairs the compiler-emitted `<Name>__ssrHost` producer with the tag
- * through the ONE registry guard (`SSR_REGISTRY_GENERATED_HOSTS`), exactly the
- * table the nested expansion already reads. This suite pins the root path:
- *
- * - a paired tag renders through the SAME helper the nested branch uses
- *   (props channel, no light children, no host attributes at the root) and
- *   never probes the class or its program;
- * - the per-island stylesheet URLs come from the SAME request-time style-link
- *   channel the generated entry fills; `null` (declared but carrier
- *   unavailable) fails closed instead of rendering the host unstyled;
- * - a malformed table / present-but-invalid entry / non-string producer result
- *   keeps the existing fail-closed identities;
- * - a tag with no pair entry keeps the compiled-class path byte-identical.
- */
+/** Verify paired generated SSR producers and their fail-closed dispatch. */
 
 import { afterEach, describe, expect, test } from 'vitest';
 import { renderToString } from '../../src/public-runtime.ts';
 import { serializeGeneratedElementHtml } from '../../src/internal/compiled/generated-element/dsd-ssr.ts';
 import { __setRequestTimeStyleSheetUrls } from '../../src/internal/compiled/server/style-links.ts';
 import { SSR_REGISTRY_GENERATED_HOSTS } from '@openelement/protocol/registry-markers';
+import { FacadeErrorCode } from '@openelement/protocol/errors';
 import { trustedHtml } from '../../src/internal/core/security.ts';
 
 const HOST_TAG = 'oe-generated-page';
@@ -93,7 +75,7 @@ describe('generated page root dispatch', () => {
     expect(html).toContain('<div class="slotted"><pre>code</pre></div>');
   });
 
-  test('a paired tag renders through the host producer before any program probe', () => {
+  test('a paired tag renders through the host producer without a constructor lookup', () => {
     const calls: unknown[][] = [];
     let html = '';
     withGeneratedRegistry(new Map([[HOST_TAG, hostProducer(calls)]]), () => {
@@ -168,11 +150,11 @@ describe('generated page root dispatch', () => {
     });
   });
 
-  test('an unpaired tag keeps the class path: the pair table alone renders nothing', () => {
+  test('an unregistered tag fails with the program-missing code', () => {
     withGeneratedRegistry(new Map(), () => {
-      // The table exists but has no entry for this tag: the class/program path
-      // runs, so an unregistered tag still fails closed exactly as before.
-      expect(() => renderToString('oe-not-a-generated-page')).toThrow(/found no compiled class/);
+      expect(() => renderToString('oe-not-a-generated-page')).toThrow(
+        expect.objectContaining({ code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' }),
+      );
     });
   });
 });

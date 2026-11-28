@@ -429,6 +429,21 @@ jobs:
         # run. Reuses the scaffold the packed workspace built above; it never
         # re-packs or re-installs.
         run: vp run --no-cache --fail-if-no-match --filter @openelement/e2e-starter-smoke quality
+      - name: Upload starter-smoke browser failure artifacts
+        # A3b: the packed-starter Playwright suite (`test`, inside `gate` above)
+        # is the other browser surface with a Playwright config. It keeps
+        # retry traces (`retries: CI ? 2 : 0` + `trace: 'on-first-retry'`), but
+        # nothing uploaded them; on a failure this carries the first-attempt
+        # screenshots/error-context plus any retry trace. The `pack` job is
+        # where this suite runs (the `e2e-full` leg never starts the packed
+        # starter), and the outputDir is the package default.
+        if: failure()
+        # v7.0.2 — the same actions/upload-artifact pin the other workflows use.
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: starter-smoke-failure-artifacts
+          path: tests/e2e/starter-smoke/test-results/**
+          if-no-files-found: ignore
 
   # ── Heavy qualification layer (5 jobs) ────────────────────────────────
   # Runs only on a workflow_dispatch with full_qualification=true (the
@@ -493,6 +508,7 @@ jobs:
         if: matrix.leg == 'fixture-gates'
         run: vp run --no-cache --fail-if-no-match --filter @openelement/element browser:gate:full
       - name: Fixture gates
+        id: fixture_gates
         if: matrix.leg == 'fixture-gates'
         run: |
           vp run --no-cache --fail-if-no-match --filter @openelement/fixture-router-native-framework gate
@@ -519,6 +535,62 @@ jobs:
           vp run --no-cache --fail-if-no-match --filter @openelement/fixture-router-nitro typecheck
           vp run --no-cache --fail-if-no-match --filter @openelement/fixture-router-nitro proof:node
           vp run --no-cache --fail-if-no-match --filter @openelement/fixture-router-nitro proof:workers
+
+      # ── A3b failure forensics (2026-11-28) ─────────────────────────────
+      # The fixture browser configs pin `retries: 0` together with
+      # `trace: 'on-first-retry'`, so a first failure records no trace (the
+      # `site-e2e` leg's runner passes `--retries 1`, so its config does keep
+      # retry traces), and this job uploaded nothing: the once-seen firefox
+      # `page.reload` load-event stall (run 46124591159, `e2e/live.spec.ts`
+      # #578) left no artifact behind. The configs are outside this workflow's
+      # write surface, so instead of editing them the leg re-runs — only after
+      # it already failed — the fixture browser suite that recorded a failing
+      # test, with the Playwright CLI override `--trace=retain-on-failure`.
+      # Command-line `use` options are merged last over the config's `use` (CLI
+      # wins), and retain-on-failure keeps the failing attempt's trace without
+      # needing a retry, so `retries: 0` stays untouched. Both steps run only
+      # when the fixture-gates step itself failed: a green leg executes
+      # neither, records no trace (a passing test discards it) and uploads
+      # nothing.
+      - name: Re-run failed fixture browser suite with traces
+        if: failure() && steps.fixture_gates.outcome == 'failure'
+        run: |
+          # A failing gate stops at the first failing fixture, so at most one
+          # results dir carries a non-empty `failedTests` list; re-run that
+          # suite (its dist build already succeeded inside the failed gate
+          # step). The only skip is the exact empty-list encoding Playwright
+          # writes (`"failedTests": []`, pinned 1.59.1); any other content
+          # re-runs, which is the safe direction — an extra passing re-run is
+          # harmless, a missing trace is not. `--output` keeps the re-run out
+          # of `test-results`, so the original failure screenshots and
+          # error-context files stay intact for the upload step.
+          for results in tests/fixtures/*/test-results tests/fixtures/*/e2e/test-results; do
+            last_run="$results/.last-run.json"
+            [ -f "$last_run" ] || continue
+            if grep -q '"failedTests": \[\]' "$last_run"; then
+              continue
+            fi
+            fixture_dir="${results%/test-results}"
+            fixture_dir="${fixture_dir%/e2e}"
+            fixture="${fixture_dir#tests/fixtures/}"
+            vp run --no-cache --fail-if-no-match --filter "@openelement/fixture-$fixture" e2e:browsers \
+              --trace=retain-on-failure --output "$GITHUB_WORKSPACE/$fixture_dir/test-results/traced"
+          done
+
+      - name: Upload fixture browser failure artifacts
+        if: failure() && steps.fixture_gates.outcome == 'failure'
+        # v7.0.2 — the same actions/upload-artifact pin the other workflows use.
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: fixture-gates-failure-artifacts
+          # Original failure output (screenshots, error-context, .last-run.json)
+          # plus the traced re-run (`test-results/traced/trace.zip`).
+          # if-no-files-found: ignore keeps this diagnostic step from failing
+          # when the failure never reached a fixture browser run.
+          path: |
+            tests/fixtures/*/test-results/**
+            tests/fixtures/*/e2e/test-results/**
+          if-no-files-found: ignore
 
   bfcache:
     needs: [sha-guard]

@@ -117,19 +117,13 @@ function renderRouteHandlerPreamble(lines: string[], ctx: RouteHandlerEmitContex
   // body is wrapped in an IIFE so EVERY exit —
   // success, re-render, redirect, rejection, error fallback — merges the
   // channel via __mergeChannelHeaders.
-  if (!isAction && route.streamManifest) {
-    lines.push(`  const __headerChannel = __streamHeaderChannel(${pathLiteral});`);
-    lines.push(`  const __responseHeaders = __headerChannel.channel;`);
-  } else {
-    lines.push(`  const __responseHeaders = new Headers();`);
-  }
+  lines.push(`  const __responseHeaders = new Headers();`);
   lines.push(`  return __mergeChannelHeaders(await (async () => {`);
   lines.push(`  let __tag = ${tagNameExpr}`);
   lines.push(`  let __page = ${pageDefExpr}`);
   lines.push(`  let __params = {}`);
   lines.push(`  let __routeMetaValue = ${routeMeta}`);
   lines.push(`  const __routeContext = ${routeContext}`);
-  if (!isAction && route.streamManifest) lines.push(`  let __streamScope;`);
   // Request-time responses are never cacheable;
   // the POST endpoint is negotiated by the framework action header.
   lines.push(`  c.header('Cache-Control', 'no-store');`);
@@ -145,14 +139,9 @@ function renderRouteHandlerPreamble(lines: string[], ctx: RouteHandlerEmitContex
   // The WinterCG route middleware resolved the winner; the bound request
   // scope owns request/response mechanics inside the handler body.
   lines.push(`    __params = __route.params`);
-  if (!isAction && route.streamManifest) {
-    lines.push(`    __streamScope = __streamRequestScope(c.req.raw);`);
-  }
   lines.push(`    const __loadContext = {`);
   lines.push(`      params: __params,`);
-  lines.push(
-    `      request: ${!isAction && route.streamManifest ? '__streamScope.request' : 'c.req.raw'},`,
-  );
+  lines.push(`      request: c.req.raw,`);
   lines.push(`      responseHeaders: __responseHeaders,`);
   lines.push(`      env: c.env || {},`);
   lines.push(
@@ -247,12 +236,11 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
     // no-store baseline.
     lines.push(`    c.header('Cache-Control', 'private, no-cache');`);
   }
-  // #951/#1471: the island client script rides the resolved document's
-  // clientScripts descriptors (the dev URL, or the request-time/SSG src
-  // handed in through the setter seam), so a CSP nonce reaches it and the
-  // static render pass embeds the same tag at document time.
+  // #951/#1471: the selected descriptor reaches the document serializer,
+  // which adds the CSP nonce in request-time renders.
   lines.push(`    return c.html(wrapInDocument(content, {`);
   for (const optionLine of documentWrapOptionsLines({
+    contentExpr: 'content',
     titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
     langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
     headExtrasExpr: '__routeHeadExtras',
@@ -264,7 +252,6 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
   lines.push(`    })${isAction ? ', __actionStatus' : ''})`);
 
   lines.push(`  } catch (err) {`);
-  if (!isAction && ctx.route.streamManifest) lines.push(`    __streamScope?.cancel();`);
   lines.push(`    if (__isOpenElementRedirect(err)) {`);
   if (isAction) {
     // In the POST action context every 3xx is
@@ -287,9 +274,9 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
     `        allowHeadExtrasScripts: ${JSON.stringify(docConfig.allowHeadExtrasScripts)},`,
   );
   lines.push(`        cspNonce: c.get('cspNonce'),`);
-  // Status fallback: no resolved document exists here (the throw may precede
-  // resolution), so the descriptors pass directly — same list, same tags.
-  lines.push(`        scripts: __clientScriptDescriptors(),`);
+  if (docConfig.allowHeadExtrasScripts) {
+    lines.push(`        ...__clientDocumentResources('', ${headExtrasExpr}),`);
+  }
   lines.push(`      }), 404)`);
   lines.push(`    }`);
 
@@ -339,6 +326,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
     );
     lines.push(`        return c.html(wrapInDocument(errorContent, {`);
     for (const optionLine of documentWrapOptionsLines({
+      contentExpr: 'errorContent',
       titleExpr: `__doc.title || ${quoteGeneratedJavaScriptValue(docConfig.title)}`,
       langExpr: `__doc.lang || ${quoteGeneratedJavaScriptValue(docConfig.lang)}`,
       headExtrasExpr: '__routeHeadExtras',

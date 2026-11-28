@@ -208,6 +208,36 @@ test('buildClientAssetManifest maps islands by Rollup module id, not by output f
   expect(manifest.styles).toEqual([]);
 });
 
+test('bootstrap preload URLs are direct, emitted, deduplicated static imports', () => {
+  const entry = 'islands/client.js';
+  const helper = 'islands/first.js';
+  const nested = 'islands/nested.js';
+  const island = 'islands/dynamic.js';
+  const chunks = collectClientBuildChunks({
+    output: [
+      {
+        type: 'chunk',
+        fileName: entry,
+        imports: [helper, helper, entry, 'https://cdn.example.test/missing.js', 'style.css'],
+        dynamicImports: [island],
+      },
+      { type: 'chunk', fileName: helper, imports: [nested] },
+      { type: 'chunk', fileName: nested },
+      { type: 'chunk', fileName: island },
+      { type: 'asset', fileName: 'style.css' },
+    ],
+  });
+  const manifest = buildClientAssetManifest({
+    root: ROOT,
+    base: '/sub/',
+    islands: [],
+    viteManifest: { 'virtual:open-client-entry': { file: entry, isEntry: true } },
+    chunks,
+    manifestPath: MANIFEST_PATH,
+  });
+  expect(manifest.entryPreloads).toEqual(['/sub/client/islands/first.js']);
+});
+
 test('buildClientAssetManifest maps the emitted style assets to sorted preload URLs', () => {
   // ADR-0164: the client build's style-asset emissions become the manifest's
   // `styles` field — base-prefixed, deduplicated, sorted (the field is a

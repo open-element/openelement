@@ -6,6 +6,7 @@
  * and the DSD template declares a marked, base-prefixed `<link>` for the emitted
  * asset.
  */
+import { signal } from '@openelement/element';
 import { defineIslandConfig } from '@openelement/router';
 
 export const openElement = defineIslandConfig({
@@ -17,5 +18,12 @@ export const openElement = defineIslandConfig({
 });
 
 export default function SubpageCard() {
-  return <span class="subpage-card">carded</span>;
+  const shown = signal(false);
+  return (
+    <section>
+      <span class="subpage-card">carded</span>
+      <button type="button" onClick={() => (shown.value = true)}>Show generated child</button>
+      {shown.value ? <subpage-late></subpage-late> : null}
+    </section>
+  );
 }

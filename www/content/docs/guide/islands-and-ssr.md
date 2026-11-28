@@ -54,7 +54,7 @@ The whole path, one stage per line:
 
 Steps 1–4 reuse what the server produced: no client work, and the HTML is already the page. Step 5 needs a client module only for a declared island — and it reuses the existing DOM rather than rebuilding it. Step 6 is the only island-specific step: it runs where a module declared a `hydrate` strategy, and a page with no interactive island executes no island chunk of its own.
 
-The honest caveats: "no client work" means none needed to render or read the page, not that zero bytes are ever executed — while an app declares any island or enhanced form, one small app-wide claim bootstrap still runs on static pages, and a page whose manifest carries a client-activatable island also preloads the shared element-runtime chunk ([Small runtime](#small-runtime) below prices both). And "no rebuild" describes the upgrade path, not a promise that nothing ever updates: after upgrade, a signal change re-renders only the compiled Parts that read the changed value.
+Pages that use only static islands and native browser features can ship without framework JavaScript. When an interactive island upgrades, it reuses the server-rendered DOM. Subsequent signal changes update only the compiled Parts that read the value.
 
 ## Server first
 
@@ -120,7 +120,7 @@ Light islands are the practical route for utility-first styling. A shadow root i
 
 ## Small runtime
 
-What ships is the set of island chunks a page declares plus the generated claim code — there is no framework runtime that every page must load. A page with no interactive module executes none of its island chunks; while the app has any island (or enhanced form), a small app-wide claim bootstrap — about 2 KB gzipped — is the one script such a page executes. Fetched and executed are different costs: a link target's chunks can be prefetched before the reader follows the link, and any page whose manifest has a client-activatable island `modulepreload`s the shared element-runtime chunk (about 29 KB gzipped in the www build) even when every island on it is `'visible'` — the runtime is fetched and parsed up front, while the island's own chunk stays deferred until its host activates.
+Interactive documents use a shared bootstrap. Production HTML can preload the bootstrap’s direct JavaScript dependencies so the browser discovers them alongside the entry. The document tells the bootstrap which island hosts can activate, including generated children the build can identify. An author-provided script or an enhanced form can introduce additional hosts, so the document can retain the full set of activation metadata. Browsers request an island chunk when its activation is due. For islands scheduled at load or idle, the build can preload their shared runtime dependencies. Visible and media islands request their island dependencies when their scheduling conditions are met. Ordinary links leave the destination’s island chunks for navigation. Use the Router’s explicit `speculation` option to opt in to browser speculation for destination documents.
 
 That budget is the reason the static surface matters. Anything that can be expressed as markup — content, layout, documentation, even fully styled interactive-looking components — should stay static DSD; islands are reserved for state and browser APIs. Component code is identical in both cases, so the decision is a one-line declaration rather than a rewrite, and it can be revisited when the component's real requirements become clear.
 

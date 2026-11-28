@@ -255,6 +255,104 @@ test('an empty first activation keeps its cutoff while the nested pending host s
   }
 });
 
+test('a live inner island inside a still-pending outer shadow root is not replayed by the outer release', async () => {
+  const page = await browser.newPage();
+  try {
+    await page.addScriptTag({ path: facade.file });
+    const result = await page.evaluate(() => {
+      const {
+        ensurePreHydrationClickCapture,
+        replayPreUpgradeCaptures,
+        releasePreUpgradeCapturesFor,
+      } = window.__oeReplayFacade;
+      // The two combinations that matter here are "inner activates first" and
+      // "the inner host sits in the pending outer host's OPEN shadow root". Open
+      // mode is load-bearing: the composed path that document capture sees must
+      // name the inner host, while a closed root would retarget the click to the
+      // outer host and the capture filter would judge the wrong owner.
+      const outer = document.createElement('oe-shadow-outer-pending');
+      const outerShadow = outer.attachShadow({ mode: 'open' });
+      const inner = document.createElement('oe-shadow-inner-live');
+      const innerShadow = inner.attachShadow({ mode: 'open' });
+      const button = document.createElement('button');
+      innerShadow.append(button);
+      outerShadow.append(inner);
+      document.body.append(outer);
+      ensurePreHydrationClickCapture(document, ['oe-shadow-outer-pending', 'oe-shadow-inner-live']);
+
+      // The inner island activates first: the shell settles the host at its
+      // activation decision, so the later document capture sees it as live.
+      replayPreUpgradeCaptures(inner);
+      releasePreUpgradeCapturesFor(inner);
+      let handled = 0;
+      button.addEventListener('click', () => handled++);
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+      const afterLiveClick = handled;
+
+      // The outer island activates later. The pre-a0e685cad capture rule ("any
+      // pending declared host on the path captures") queued this live click
+      // under the still-pending outer host and replayed it below (handled would
+      // become 2); the nearest-declared-host rule leaves it with the live inner
+      // island that already handled it.
+      replayPreUpgradeCaptures(outer);
+      releasePreUpgradeCapturesFor(outer);
+      return { afterLiveClick, handled };
+    });
+    expect(result).toEqual({ afterLiveClick: 1, handled: 1 });
+  } finally {
+    await page.close();
+  }
+});
+
+test('a live inner island in a pending outer light-DOM subtree is not replayed by the outer release', async () => {
+  const page = await browser.newPage();
+  try {
+    await page.addScriptTag({ path: facade.file });
+    const result = await page.evaluate(() => {
+      const {
+        ensurePreHydrationClickCapture,
+        replayPreUpgradeCaptures,
+        releasePreUpgradeCapturesFor,
+      } = window.__oeReplayFacade;
+      // Same inner-first activation race as the shadow-root case above, but with
+      // NO shadow roots: the inner island is an ordinary light-DOM descendant of
+      // the still-pending outer island. The document capture's composed path
+      // names both hosts directly — nothing is retargeted across a shadow
+      // boundary — so this is the plain nesting the nearest-declared-host rule
+      // must also own; the shadow test only adds the retargeting composition.
+      const outer = document.createElement('oe-light-outer-pending');
+      const inner = document.createElement('oe-light-inner-live');
+      const button = document.createElement('button');
+      inner.append(button);
+      outer.append(inner);
+      document.body.append(outer);
+      ensurePreHydrationClickCapture(document, ['oe-light-outer-pending', 'oe-light-inner-live']);
+
+      // The inner island activates first: the shell settles the host at its
+      // activation decision, so the later document capture sees it as live.
+      replayPreUpgradeCaptures(inner);
+      releasePreUpgradeCapturesFor(inner);
+      let handled = 0;
+      button.addEventListener('click', () => handled++);
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+      const afterLiveClick = handled;
+
+      // The outer island activates later. Under the pre-a0e685cad rule ("any
+      // pending declared host on the path captures") the still-pending outer
+      // host kept this live click in the shared pool, and the outer activation
+      // replayed it below (handled would become 2). The nearest-declared-host
+      // rule returns at the settled inner island first, so the click is never
+      // queued and the outer release has nothing to replay (handled stays 1).
+      replayPreUpgradeCaptures(outer);
+      releasePreUpgradeCapturesFor(outer);
+      return { afterLiveClick, handled };
+    });
+    expect(result).toEqual({ afterLiveClick: 1, handled: 1 });
+  } finally {
+    await page.close();
+  }
+});
+
 test('manual descriptors still materialize EventInit overrides and reject unlisted kinds', async () => {
   const page = await browser.newPage();
   try {

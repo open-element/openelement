@@ -16,6 +16,10 @@
  */
 
 import { expect, test } from 'vitest';
+import {
+  releasePreUpgradeCapturesFor as releaseAtActivation,
+  replayPreUpgradeCaptures as replayAtActivation,
+} from '../../src/internal/compiled/runtime/pre-upgrade-replay-hook.ts';
 import { type FacadeDom, FacadeElement, installFacadeDom } from './facade-dom.ts';
 import { cleanup, click, pendingHost } from './pre-upgrade-helpers.ts';
 
@@ -24,7 +28,6 @@ const dom: FacadeDom = installFacadeDom();
 
 const {
   ensurePreHydrationClickCapture,
-  markPreUpgradeIslandSettled,
   preUpgradeRetainedRecordCount,
   releasePreUpgradeCapturesFor,
   replayPreUpgradeCaptures,
@@ -70,7 +73,6 @@ test('retention: reentrant replay and reconnect keep the adopted order without d
   host.appendChild(second);
   button.dispatchEvent(click());
   second.dispatchEvent(click());
-  markPreUpgradeIslandSettled(host);
 
   const fired: string[] = [];
   button.addEventListener('click', () => {
@@ -79,8 +81,8 @@ test('retention: reentrant replay and reconnect keep the adopted order without d
   });
   second.addEventListener('click', () => fired.push('second'));
   try {
-    replayPreUpgradeCaptures(asNode(host));
-    releasePreUpgradeCapturesFor(asNode(host));
+    replayAtActivation(asNode(host));
+    releaseAtActivation(asNode(host));
     replayPreUpgradeCaptures(asNode(host));
     expect(fired).toEqual(['first', 'second']);
     expect(preUpgradeRetainedRecordCount(asNode(host))).toBe(0);
@@ -89,14 +91,13 @@ test('retention: reentrant replay and reconnect keep the adopted order without d
   }
 });
 
-test('retention: release without replay drops the unconsumed record (replay is a no-op)', () => {
+test('retention: a failed activation drops its record and leaves room for a pending sibling', () => {
   ensurePreHydrationClickCapture();
   const { host, button } = pendingHost(dom, 'oe-retention-cancelled');
   button.dispatchEvent(click());
 
-  // Cancelled before activation: the disconnect path releases the root's
-  // records without any replay pass — the record was never consumed.
-  releasePreUpgradeCapturesFor(asNode(host));
+  // A failed connect releases the root's records without replay.
+  releaseAtActivation(asNode(host));
   expect(
     preUpgradeRetainedRecordCount(asNode(host)),
     'the root bucket is empty after an unreplayed release',
@@ -108,7 +109,18 @@ test('retention: release without replay drops the unconsumed record (replay is a
   expect(fired, 'the unconsumed record is gone: replay is a no-op').toEqual([]);
   expect(preUpgradeRetainedRecordCount(asNode(host))).toEqual(0);
 
-  cleanup(host);
+  const pending = pendingHost(dom, 'oe-retention-after-failure');
+  for (let index = 0; index < 64; index++) {
+    const target = new FacadeElement('button', dom.document);
+    host.appendChild(target);
+    target.dispatchEvent(click());
+  }
+  pending.button.dispatchEvent(click());
+  pending.button.addEventListener('click', () => fired.push('pending'));
+  replayAtActivation(asNode(pending.host));
+  releaseAtActivation(asNode(pending.host));
+  expect(fired).toEqual(['pending']);
+  cleanup(host, pending.host);
 });
 
 test('retention: a root release never touches another pending root share', () => {
@@ -184,14 +196,12 @@ test('retention: outer shadow claim leaves a nested declared island pending', ()
   outer.button.addEventListener('click', () => fired.push('outer'));
   inner.button.addEventListener('click', () => fired.push('inner'));
   try {
-    markPreUpgradeIslandSettled(outer.host);
-    replayPreUpgradeCaptures(asNode(outer.host));
-    releasePreUpgradeCapturesFor(asNode(outer.host));
+    replayAtActivation(asNode(outer.host));
+    releaseAtActivation(asNode(outer.host));
     expect(fired).toEqual(['outer']);
 
-    markPreUpgradeIslandSettled(inner.host);
-    replayPreUpgradeCaptures(asNode(inner.host));
-    releasePreUpgradeCapturesFor(asNode(inner.host));
+    replayAtActivation(asNode(inner.host));
+    releaseAtActivation(asNode(inner.host));
     expect(fired).toEqual(['outer', 'inner']);
   } finally {
     cleanup(outer.host, inner.host);

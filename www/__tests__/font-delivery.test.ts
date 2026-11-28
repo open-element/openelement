@@ -13,8 +13,8 @@
  *     typo otherwise surfaces only at build time);
  *   - the installed stylesheets must declare the declared family with
  *     `font-display: swap` — the swap policy the site's first paint relies
- *     on, and the family name www/site-css.ts spells in its stacks;
- *   - www/site-css.ts must spell that same family in its token stacks (the
+ *     on, and the family name www/site-css.css spells in its stacks;
+ *   - www/site-css.css must spell that same family in its token stacks (the
  *     `--font-sans` / `--font-mono` / `--font-serif` values), because a stack
  *     name that does not match the @font-face family silently drops to the
  *     fallback list.
@@ -86,15 +86,15 @@ test('font delivery: the installed stylesheets declare the family with font-disp
 test('font delivery: the site stacks spell the declared families', () => {
   // The STACK declarations, not the file's comments: a family named only in
   // prose would still leave the browser on the fallback list.
-  const siteCSS = readFileSync(join(siteRoot, 'site-css.ts'), 'utf8');
+  const siteCSS = readFileSync(join(siteRoot, 'site-css.css'), 'utf8');
   const stacks = [...siteCSS.matchAll(/--font-(?:sans|mono|serif)\s*:\s*([^;]+);/g)].map(
     (match) => match[1]!,
   );
-  expect(stacks.length, 'site-css.ts declares no --font-* stack').toBeGreaterThan(0);
+  expect(stacks.length, 'site-css.css declares no --font-* stack').toBeGreaterThan(0);
   for (const font of SITE_FONT_PACKAGES) {
     expect(
       stacks.some((stack) => stack.includes(`'${font.family}'`)),
-      `no --font-sans/--font-mono/--font-serif stack in www/site-css.ts spells ` +
+      `no --font-sans/--font-mono/--font-serif stack in www/site-css.css spells ` +
         `'${font.family}' — the @font-face would never apply and the stack would ` +
         'drop to its fallbacks',
     ).toBe(true);

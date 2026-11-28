@@ -50,10 +50,16 @@ const ELEMENT_EXPORTS: Record<string, string> = {
   './vite': './src/vite.ts',
 };
 
-test('vpPackEntries derives ordered entries from exports', () => {
-  expect(vpPackEntries(pkg('@openelement/element', ELEMENT_EXPORTS))).toEqual([
+test('Element keeps the internal runtime probe in the pack without a package export', () => {
+  const element = pkg('@openelement/element', ELEMENT_EXPORTS);
+  expect(vpPackEntries(element)).toEqual([
     'src/index.ts',
     'src/vite.ts',
+    'src/internal/compiled/runtime/observability.ts',
+  ]);
+  expect(Object.keys(synthesizedPackedManifest(element).exports as object)).toEqual([
+    '.',
+    './vite',
   ]);
 });
 
@@ -626,16 +632,16 @@ test('the guard fails an entry no seed file consumes (negative)', async () => {
     );
     writeFileSync(
       join(ssg, 'entry-client-codegen.ts'),
-      "export const surface = runtimeModulePath('./ssg/element-services-full.ts');\n",
+      "export const surface = runtimeModulePath('./ssg/element-document-services.ts');\n",
     );
     writeFileSync(join(ssg, 'island-scheduler.ts'), 'export const schedule = 1;\n');
-    writeFileSync(join(ssg, 'element-services-full.ts'), 'export const surface = 1;\n');
+    writeFileSync(join(ssg, 'element-document-services.ts'), 'export const surface = 1;\n');
 
     const { modules, problems } = consumerPathConsumedModules(root);
     expect(problems).toEqual([]);
     const drift = packEntryDrift(modules, [
       'src/vite/internal/ssg/island-scheduler.ts',
-      'src/vite/internal/ssg/element-services-full.ts',
+      'src/vite/internal/ssg/element-document-services.ts',
       'src/vite/internal/ssg/element-services-retired.ts',
     ]);
     expect(drift.missing).toEqual([]);

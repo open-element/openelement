@@ -16,7 +16,7 @@
 import { afterEach, assert, expect, test } from 'vitest';
 import { waitFor } from './helpers.js';
 import { WtrLiveTimerElement } from '../generated/wtr-live-timer.ts';
-import { createRecipe } from '@openelement/element/internal/compiled/runtime';
+import { createRecipe } from '@openelement/element/internal/compiled/leaf-runtime';
 import { createGeneratedElementClass } from '@openelement/element/internal/compiled/generated-element/shell';
 
 customElements.define('wtr-live-timer', WtrLiveTimerElement);

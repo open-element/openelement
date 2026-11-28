@@ -144,20 +144,13 @@ function setExclusiveFlag(current: boolean | undefined, incoming: boolean, pair:
  * Unknown dash-args are rejected (L9) instead of silently ignored; only
  * --help/-h short-circuits before parsing.
  */
-function parseArgs(argv: string[]): CliFlags {
+function parseArgs(argv: readonly string[]): CliFlags {
   const flags: CliFlags = { start: false, help: false };
   for (let i = 0; i < argv.length; i++) {
-    let arg = argv[i]!;
-    // --flag=value spelling: normalized onto the separated form before the
-    // switch (only the value-taking flag needs it).
+    const arg = argv[i]!;
     if (arg.startsWith('--template=')) {
-      argv = [
-        ...argv.slice(0, i),
-        '--template',
-        arg.slice('--template='.length),
-        ...argv.slice(i + 1),
-      ];
-      arg = '--template';
+      flags.template = arg.slice('--template='.length);
+      continue;
     }
     switch (arg) {
       case '-h':
@@ -226,8 +219,7 @@ function printUsage(): void {
  * Resolve the template. One template ships (#1530), so there is nothing to
  * ask: `-t/--template` names it explicitly (an unknown value fails with the
  * available name), and a bare run takes that same default — on a TTY exactly
- * as under CI. The former TTY confirmation asked a question with one possible
- * answer, which only made a first run feel like an interrogation.
+ * as under CI.
  */
 function resolveTemplate(flag: string | undefined): string {
   if (flag !== undefined && flag !== TEMPLATE_NAME) {

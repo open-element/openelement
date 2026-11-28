@@ -155,13 +155,13 @@ test('ADR-0148 semantic core imports stay bundler-neutral and inside the core', 
   }
 
   // The allowed outside modules must stay neutral: no runtime, Vite, or Node
-  // capability may ride into the semantic core. The Part Program artifact's
-  // only edges are the import-free canonical protocol base owners.
+  // capability may ride into the semantic core. The lowering records share
+  // the import-free HTML void-element tags.
   const protocolSource = await readFile(PROTOCOL_PROGRAM, 'utf8');
   expect(
     moduleSpecifiers(protocolSource, PROTOCOL_PROGRAM),
-    'canonical Part Program protocol may only import the protocol base owners (ADR-0148)',
-  ).toEqual(['./errors.ts', './forbidden-sinks.ts', './void-tags.ts']);
+    'shared lowering records import only the canonical void tags (ADR-0148)',
+  ).toEqual(['./void-tags.ts']);
   for (const { url, label } of PROTOCOL_BASE) {
     const source = await readFile(url, 'utf8');
     expect(moduleSpecifiers(source, url), `canonical ${label} must stay import-free`).toEqual([]);

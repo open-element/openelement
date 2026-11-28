@@ -52,6 +52,7 @@ interface Bundle {
 declare global {
   interface Window {
     __oeDirect: {
+      themeManager: typeof import('../../../element/src/open-element-styles.ts').themeManager;
       Counter: CustomElementConstructor;
       Timer: CustomElementConstructor;
       Generic: CustomElementConstructor;
@@ -93,6 +94,20 @@ async function bundle(name: string, exports: string[]): Promise<Bundle> {
     configFile: false,
     root: dir,
     logLevel: 'silent',
+    plugins: [
+      {
+        name: 'count-style-scopes',
+        transform(code, id) {
+          if (!id.endsWith('/open-element-styles.ts')) return;
+          return code.replace(
+            'export class CompiledStyleScope {',
+            `export class CompiledStyleScope {
+          constructor() { globalThis.__oeStyleScopeAllocations = (globalThis.__oeStyleScopeAllocations || 0) + 1; }
+        `,
+          );
+        },
+      },
+    ],
     resolve: {
       alias: {
         [GENERATED_ELEMENT_SHELL_SPECIFIER]: join(
@@ -138,6 +153,7 @@ beforeAll(async () => {
   );
   const element = join(REPO_ROOT, 'packages/element/src/document-services.ts');
   const shared = [
+    `export { themeManager } from ${JSON.stringify(join(REPO_ROOT, 'packages/element/src/open-element-styles.ts'))};`,
     "export { default as Counter, MyCounter__ssrHost as counterSsr } from './counter.js';",
     "export { default as Timer } from './timer.js';",
     `export { ensurePreHydrationClickCapture as installCapture } from ${JSON.stringify(element)};`,
@@ -348,6 +364,117 @@ test('a direct counter and generic property host claim and replay from the same 
       retained: true,
       afterReconnect: ['1', 'converted:1'],
       seed: 'older malformed transport',
+    });
+  } finally {
+    await page.close();
+  }
+});
+
+test.each(['before', 'after'] as const)(
+  'capture installed %s activation skips live targets but replays a nested pending host',
+  async (captureOrder) => {
+    const page = await browser.newPage();
+    try {
+      await page.route('https://oe-direct.test/**', (route) => route.fulfill({ body: '' }));
+      await page.goto('https://oe-direct.test/');
+      await page.addScriptTag({ path: mixed.file });
+      const result = await page.evaluate((timing) => {
+        const { Counter, Generic, counterSsr, genericSsr, installCapture } = window.__oeDirect;
+        const frame = document.createElement('main');
+        frame.setHTMLUnsafe(counterSsr(undefined, undefined, [], ['/counter.css']) + genericSsr());
+        document.body.append(frame);
+        const counter = frame.querySelector('my-counter')!;
+        const generic = frame.querySelector('oe-mixed-generic')!;
+        const [live, delayed] = timing === 'before' ? [generic, counter] : [counter, generic];
+        const install = () => installCapture(document, ['my-counter', 'oe-mixed-generic']);
+        if (timing === 'before') install();
+        const define = (host: Element) => {
+          customElements.define(host.localName, host === counter ? Counter : Generic);
+        };
+        define(live);
+        if (timing === 'after') install();
+        live.shadowRoot!.append(delayed);
+
+        // Keep every target attached so the detached-target sweep cannot free
+        // a slot. No unsettled island is on the path of these 64 clicks.
+        for (let index = 0; index < 64; index++) {
+          const button = document.createElement('button');
+          live.shadowRoot!.append(button);
+          button.click();
+        }
+
+        const delayedRoot = delayed.shadowRoot!;
+        const button = delayedRoot.querySelectorAll('button')[delayed === counter ? 1 : 0]!;
+        const readCount = () =>
+          delayedRoot.querySelector(delayed === counter ? '#count' : '#generic')!.textContent;
+        button.click();
+        const before = readCount();
+        define(delayed);
+        const after = readCount();
+        frame.append(delayed);
+        const reconnected = readCount();
+        button.click();
+        return { before, after, reconnected, next: readCount() };
+      }, captureOrder);
+      const count = (value: number) =>
+        captureOrder === 'before' ? String(value) : `default:${value}`;
+      expect(result).toEqual({
+        before: count(0),
+        after: count(1),
+        reconnected: count(1),
+        next: count(2),
+      });
+    } finally {
+      await page.close();
+    }
+  },
+);
+
+test('styleless direct hosts allocate no style scope and still follow theme changes', async () => {
+  const page = await browser.newPage();
+  try {
+    await page.addScriptTag({ path: direct.file });
+    const result = await page.evaluate(async () => {
+      const { Counter, Timer, counterSsr, themeManager } = window.__oeDirect;
+      const counts = () =>
+        (window as unknown as { __oeStyleScopeAllocations?: number }).__oeStyleScopeAllocations ??
+        0;
+      document.documentElement.dataset.theme = 'light';
+      const frame = document.createElement('div');
+      frame.setHTMLUnsafe(counterSsr(undefined, undefined, [], ['/counter.css']));
+      customElements.define('my-counter', Counter);
+      document.body.append(frame);
+      const host = frame.firstElementChild!;
+      const mounted = [counts(), host.getAttribute('data-theme')];
+      document.documentElement.dataset.theme = 'dark';
+      await Promise.resolve();
+      const themed = host.getAttribute('data-theme');
+      frame.remove();
+      const live = new CSSStyleSheet();
+      live.replaceSync('#count { color: rgb(1, 2, 3) }');
+      (Counter as unknown as { __oeDevLiveStyles: CSSStyleSheet[] }).__oeDevLiveStyles = [live];
+      document.body.append(frame);
+      const reconnected = [counts(), host.shadowRoot!.adoptedStyleSheets.length];
+      frame.remove();
+      const disconnected = host.shadowRoot!.adoptedStyleSheets.length;
+      const globalSheet = new CSSStyleSheet();
+      themeManager.registerStyles(globalSheet);
+      customElements.define('live-timer', Timer);
+      const timer = document.createElement('live-timer');
+      document.body.append(timer);
+      const clientOnly = [counts(), timer.shadowRoot!.adoptedStyleSheets.length];
+      timer.remove();
+      const timerDisconnected = timer.shadowRoot!.adoptedStyleSheets.length;
+      themeManager.resetStyles();
+      return { mounted, themed, reconnected, disconnected, clientOnly, timerDisconnected };
+    });
+    expect(result).toEqual({
+      mounted: [0, 'light'],
+      themed: 'dark',
+      reconnected: [1, 1],
+      disconnected: 0,
+      clientOnly: [2, 2],
+      timerDisconnected: 0,
     });
   } finally {
     await page.close();

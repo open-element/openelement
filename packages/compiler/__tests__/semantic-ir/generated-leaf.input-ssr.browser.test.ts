@@ -33,7 +33,8 @@ import { chromium, type Browser, type Page } from 'playwright';
 import { build } from 'vite';
 import { compileFunctionModule } from '../../src/internal/compiler/semantic-core/function-frontend.ts';
 import { generateLeafModule } from '../../src/internal/compiler/semantic-ir/generated-leaf/generate.ts';
-import * as compiledRuntime from '../../../element/src/internal/compiled/runtime.ts';
+import * as compiledRuntime from '../../../element/src/internal/compiled/leaf-runtime.ts';
+import type { LifetimeScope } from '../../../element/src/internal/compiled/lifetime-scope.ts';
 import { signal as nodeSignal } from '../../../element/src/internal/signal/framework.ts';
 import { ELEMENT_CLASSIFIER as CLASSIFIER, REPO_ROOT } from './testlib/element-classifier.ts';
 
@@ -432,12 +433,13 @@ describe('M08 input SSR → parse → pre-claim user edit → claim (Chromium LO
         const result = await page.evaluate(
           ({ html, edit, initial }) => {
             const { __oeRuntime: runtime, __oeModule: factories } = window as unknown as {
-              __oeRuntime: Pick<typeof compiledRuntime, 'LifetimeScope' | 'claimRecipe'> & {
+              __oeRuntime: Pick<typeof compiledRuntime, 'claimRecipe'> & {
+                LifetimeScope: new () => LifetimeScope;
                 signal: typeof nodeSignal;
               };
               __oeModule: {
                 createPropertyFieldRecipe(
-                  owner: compiledRuntime.LifetimeScope,
+                  owner: LifetimeScope,
                   hostRecord: {
                     props: { value: string; label: string };
                     propsChanged: ReturnType<typeof nodeSignal<number>>;

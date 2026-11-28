@@ -164,125 +164,15 @@ test('#1386: frameworkError carries code, severity, phase and recoverable', () =
   expect(fallback.toJSON().code).toEqual('OE_OTHER');
 });
 
-test('#1386: the runtime raisers report their code through the wire entries', async () => {
-  const { createFreshDom, serializeToHtml } = await import('../src/internal/compiled/runtime.ts');
-  const { testProgram } = await import('./compiled-runtime/test-program.ts');
-  const { signal } = await import('../src/internal/signal/framework.ts');
-  const { TestDocument } = await import('./compiled-runtime/test-dom.ts');
-
-  const program = testProgram({
-    tag: 'oe-dialect-proof',
-    sourceFile: '/app/components/dialect-proof.tsx',
-    template: [{ k: 'el', tag: 'ul', attrs: [], children: [{ k: 'part', index: 0 }] }],
-    parts: [
-      {
-        k: 'each',
-        index: 0,
-        signal: 'rows',
-        key: 'id',
-        field: 'label',
-        item: [{ k: 'el', tag: 'li', attrs: [], children: [{ k: 'ival', field: 'label' }] }],
-      },
-    ],
-  });
-  const document = new TestDocument();
-
-  // A non-array list Block: both executors raise the same code for the same
-  // failing authoring decision.
-  const notArray = { signals: { rows: signal<unknown>('nope') }, handlers: {} };
-  for (const [label, run] of [
-    ['serializeToHtml', () => serializeToHtml(program, notArray as never)],
-    [
-      'createFreshDom',
-      () =>
-        createFreshDom(
-          program,
-          notArray as never,
-          document.createElement('oe-dialect-proof') as unknown as Node,
-        ),
-    ],
-  ] as const) {
-    let thrown: unknown;
-    try {
-      run();
-    } catch (error) {
-      thrown = error;
-    }
-    expect(thrown, label).toBeInstanceOf(OpenElementError);
-    expect(thrown.code, label).toEqual(RuntimeErrorCode.LIST_VALUE_NOT_ARRAY);
-    expect(thrown.phase, label).toEqual('render');
-    // The reader still gets the authored vocabulary (#1413).
-    expect(thrown.message, label).toContain('this.rows');
-  }
-
-  // A duplicate item key: the server and the client agree on the key code.
-  const duplicate = {
-    signals: {
-      rows: signal<unknown>([
-        { id: 'a', label: 'x' },
-        { id: 'a', label: 'y' },
-      ]),
-    },
-    handlers: {},
-  };
-  let keyThrown: unknown;
-  try {
-    createFreshDom(
-      program,
-      duplicate as never,
-      document.createElement('oe-dialect-proof') as unknown as Node,
-    );
-  } catch (error) {
-    keyThrown = error;
-  }
-  expect(keyThrown).toBeInstanceOf(OpenElementError);
-  expect(keyThrown.code).toEqual(EachKeyErrorCode.DUPLICATE_KEY);
-});
-
-test('#1386: a claim mismatch is an OpenElementError with the released code', async () => {
-  const { PartProgramHydrationError } = await import('../src/internal/compiled/runtime.ts');
-  const error = new PartProgramHydrationError('template[0]', 'drifted', {
-    kind: 'root',
-    root: {} as Node,
-  });
+test('generated claim errors carry a code, phase and recovery flag', async () => {
+  const { LEAF_CLAIM_MISMATCH, leafClaimMismatch } =
+    await import('../src/internal/compiled/runtime/claim-invariants.ts');
+  const error = leafClaimMismatch('drifted');
   expect(error).toBeInstanceOf(OpenElementError);
-  expect(error.code).toEqual(ClaimErrorCode.STRUCTURE_MISMATCH);
-  expect(error.code).toEqual('OPEN_ELEMENT_COMPILED_CLAIM_MISMATCH');
-  expect(error.phase).toEqual('render');
-  expect(error.recoverable).toEqual(true);
-  // Provenance fields stay fields, not contract.
-  expect(error.path).toEqual('template[0]');
-  expect(error.detail).toEqual('drifted');
-  expect(error.ownerKind).toEqual('root');
-});
-
-test('#1386: the compiled program grammar raises catchable codes per failure family', async () => {
-  const { assertCompiledProgram, CompiledProgramValidationError } =
-    await import('../src/internal/compiled/server/index.ts');
-  // Every grammar rejection is the same class with the same code, so a host
-  // catches the whole boundary as one thing.
-  let grammarThrown: unknown;
-  try {
-    assertCompiledProgram({ tag: 'div', template: [] });
-  } catch (error) {
-    grammarThrown = error;
-  }
-  expect(grammarThrown).toBeInstanceOf(OpenElementError);
-  expect(grammarThrown.code).toEqual(ServerErrorCode.PROGRAM_INVALID);
-  expect(grammarThrown.code).toEqual('OPEN_ELEMENT_COMPILED_PROGRAM_INVALID');
-  expect(grammarThrown).toBeInstanceOf(CompiledProgramValidationError);
-
-  // The wire program validator raises the program family's code.
-  const wireProtocol: typeof import('@openelement/protocol/part-program') =
-    await import('@openelement/protocol/part-program');
-  let wireThrown: unknown;
-  try {
-    wireProtocol.validatePartProgram({ tag: 'div' });
-  } catch (error) {
-    wireThrown = error;
-  }
-  expect(wireThrown).toBeInstanceOf(OpenElementError);
-  expect(wireThrown.code).toEqual(ProgramErrorCode.INVALID_PROGRAM);
+  expect(error.code).toBe(LEAF_CLAIM_MISMATCH);
+  expect(error.code).toBe('OEIR_LEAF_CLAIM_MISMATCH');
+  expect(error.phase).toBe('csr');
+  expect(error.recoverable).toBe(false);
 });
 
 test('#1386: the compiler reports a failed compile as one catchable code', async () => {

@@ -1,25 +1,9 @@
-// Single-file cohesion is a deliberate trade against small-parts granularity (comply-or-explain, design-principles.md:16-19): the root-facade implementation boundary is ONE surface — the server-render entry (`renderToString`: compiled Part Program serializer dispatch, generated-host registry pairing, light-host attribute writing, property seeding), the pre-upgrade capture bootstrap over the claim capture/replay seam, and the core/protocol/signal surface a compiled module resolves against — because a page root and a NESTED host must render and seed through the same decision table (serializer selection, host-attribute merge, prop seed) rather than two that can disagree; the boundary is that it is NOT a package subpath: it hosts no compiler, no second serializer and no DOM executor of its own, and every compiled/runtime fact it re-exports keeps its own owner.
-/**
- * Deliberate root-facade implementation boundary. Not a package subpath.
- *
- * This facade exposes the server-render entry (`renderToString`, implemented over
- * the compiled Part Program serializer) and the pre-upgrade capture bootstrap
- * (implemented over the compiled claim capture/replay seam), alongside the
- * shared core/protocol/signal surface re-exported below.
- */
-import { normalizeHostAttributePairs } from './internal/compiled/server/index.ts';
+/** Server rendering and shared runtime exports for generated components. */
+import { normalizeHostAttributePairs } from './internal/compiled/server/host-attributes.ts';
 import { SSR_REGISTRY_GENERATED_HOSTS } from '@openelement/protocol/registry-markers';
-// The NEUTRAL conversion table, not the facade's re-export of it: the facade is
-// the class lane's host and goes away with it, while this function is shared by
-// both lanes' property records (F16 deletion prep).
 import { requestTimeIslandStyleLinks } from './internal/compiled/server/style-links.ts';
 import type { DocumentStyleResources } from './internal/core/html-escape.ts';
 import { escapeAttrValue } from './internal/core/html-escape.ts';
-import type {
-  CompiledElementMetadata,
-  CompiledPropertyMetadata,
-  PartProgram,
-} from '@openelement/protocol/part-program';
 import {
   ErrorCode,
   FacadeErrorCode,
@@ -31,7 +15,6 @@ import type {
   NestedHostFallback,
   NestedHostRequest,
 } from './internal/compiled/runtime/nested-host.ts';
-import type { CompiledSignalLike } from './internal/compiled/server/index.ts';
 import { type TrustedHtml, trustedHtmlValue } from './internal/core/security.ts';
 import { substituteSlotAnchors } from './internal/compiled/slot-anchors.ts';
 import { CompiledProgramValidationError } from './internal/compiled/runtime/values.ts';
@@ -82,9 +65,7 @@ export {
   wrapInDocument,
 } from './internal/core/html-escape.ts';
 export type { DocumentStyleResources } from './internal/core/html-escape.ts';
-// Streamed-frame admission policy (#1412 companion): the single source the
-// build manifest scan, the stream executor admission, and the generated
-// browser installer all consume.
+// Shared URL sink policy used by server rendering and generated DOM writes.
 export {
   STREAM_FRAME_FORBIDDEN_TAGS,
   STREAM_FRAME_UNSAFE_URL,
@@ -92,17 +73,10 @@ export {
   STREAM_FRAME_URL_CONTROL_MAX,
   unsafeStreamFrameAttribute,
 } from '@openelement/protocol/stream-frame-policy';
-// Numeric build/runtime policy budgets (internal/protocol/policy.ts): the
-// same single-source contract for the streaming admission numbers.
 export {
   IDLE_FALLBACK_TIMEOUT_MS,
   MAX_ACTION_BODY_BYTES,
   MAX_COMPOSITION_DEPTH,
-  STREAM_MAX_FIELDS,
-  STREAM_MAX_OWNERS,
-  STREAM_MAX_PAYLOAD_LENGTH,
-  STREAM_MAX_SEED_PROPERTIES,
-  STREAM_TIMEOUT_MS,
 } from '@openelement/protocol/policy';
 export type { IslandOptions } from '@openelement/protocol/island';
 export { StyleSheet } from './internal/core/style-sheet.ts';
@@ -112,48 +86,11 @@ export type { StyleSheetLike } from '@openelement/protocol/style-sheet';
 export { deepGetElementById, ensureDeepFragmentNavigation } from './internal/core/deep-fragment.ts';
 export { ensurePreHydrationClickCapture } from './internal/compiled/runtime/pre-upgrade-events.ts';
 
-// ─── Server-render entry (compiled serializer) ─────────────────────
-
-/**
- * The signal capability the compiled server host and its computed factories
- * actually consume: a readable protocol signal, never a writable promise.
- */
-type CompiledSignalRecord = Record<string, CompiledSignalLike<unknown>>;
-
-/** Compiled class statics consumed by the server-render entry. */
-interface CompiledComponentConstructor extends CustomElementConstructor {
-  /** The descriptor's authoritative custom-element name for constructor-form SSR. */
+type GeneratedSsrConstructor = CustomElementConstructor & {
   __oeTag?: string;
-  __partProgram?: PartProgram;
-  __compiledProperties?: CompiledPropertyMetadata[];
-  __elementMetadata?: CompiledElementMetadata;
-  /**
-   * The build-time ROOT MODE (`light` | `shadow`). Its own static rather than a
-   * read of `__partProgram.root.kind`, so dispatch never depends on the
-   * execution artifact (C07–C11).
-   */
-  __computedFields?: Record<string, (signals: CompiledSignalRecord) => CompiledSignalLike<unknown>>;
-  /**
-   * The emitted property table (`static props`), whose `default` holds the
-   * authored initializer verbatim — the only carrier of a non-serializable
-   * default (a `trustedHtml(...)` capability object) at SSR time.
-   */
-  props?: Record<string, { default?: unknown }>;
-  styles?: unknown;
-  delegatesFocus?: boolean;
-  /** Marks a compiled ErrorBoundary subclass (the public base sets it). */
-  isErrorBoundary?: boolean;
-  /**
-   * True when the compiler admitted static class candidates for this component
-   * (alpha15 S lane, emitted by the compiler on shadow-root components that
-   * carry utility classes). The SSR serializer then declares the server
-   * build's component stylesheet as external `<link>` nodes in the DSD
-   * template; a false/absent flag means the component needs none.
-   */
-  __oeUtilityClasses?: boolean;
-}
+  __ssr?: unknown;
+};
 
-/** The compiled tag a diagnostic names, or `<unknown>` for a foreign class. */
 /**
  * The half of {@linkcode DocumentStyleResources} a render needs: it only ever
  * reports the sheets it discovered, so the seam is typed by that one method
@@ -171,7 +108,7 @@ export interface RenderToStringOptions {
   componentClass?: CustomElementConstructor;
   props?: Record<string, unknown>;
   sourceInfo?: { route?: string; source?: string };
-  /** Build-admitted nested compiled tags. Omitted means shell-only rendering. */
+  /** Build-admitted nested generated tags. Omitted means shell-only rendering. */
   ssrRenderableTags?: readonly string[];
   /** Trusted parent-owned light children keyed by slot name. */
   projectedChildren?: ReadonlyMap<string, TrustedHtml>;
@@ -230,25 +167,7 @@ function classNameOf(ctor: object): string {
 }
 
 /**
- * Serialize one LIGHT-root generated host: the element tag, its canonical
- * attribute pairs and the compiled content (with caller projections
- * substituted into it) as the host's children.
- *
- * The producer is content-only because that is exactly what a light root owns —
- * its region is the host's children, not a template. The attribute pairs go
- * through the SAME normalization the shadow host producer receives, so a light
- * and a shadow host spell the same authored attributes identically.
- *
- * `projectedChildren` is the compiled children channel's light-side half. A
- * generated light producer names each of its `<slot>` elements with an
- * `oe:s:` / `oe:/s:` anchor pair, so substitution is a walk over the producer's
- * OWN marker comments — there is no markup pattern match and no second parse of
- * the content. A projection that names a slot the content does not declare
- * fails closed with the serializer's validation identity, exactly like the
- * class lane's `projectedChildren` check.
- */
-/**
- * The light-root class static's result: the serialized content plus the seeded
+ * The light-root producer's result: the serialized content plus the seeded
  * host attribute pairs (`__oeHostAttributes`) it computed but has no wrapper to
  * return. A string is the pre-existing shape and carries no pairs, so an older
  * emitted module keeps rendering byte-identically.
@@ -333,22 +252,9 @@ function serializeLightGeneratedHost(
   projectedChildren?: ReadonlyMap<string, string>,
   lightProjectionIntent = false,
 ): string {
-  const pairs =
-    authoredAttributes === undefined
-      ? []
-      : normalizeHostAttributePairs(authoredAttributes).attributes.map(
-          (attribute) => [attribute.name, attribute.bare ? '' : attribute.value] as const,
-        );
+  const pairs = normalizeHostAttributePairs(authoredAttributes);
   const attributes = pairs.map(([name, value]) => ` ${name}="${escapeAttrValue(value)}"`).join('');
-  // The marker is the light-root OWNERSHIP fact, not an authored attribute: the
-  // class lane's serializer always writes it, and the claim path plus the
-  // light-root CSS scope both key off it. A generated light host that omitted it
-  // would serialize the right CONTENT under the wrong ownership contract, and
-  // the divergence would only surface when something asked the DOM whose
-  // children those were.
-  // Order matches the class lane's serializer (authored attributes first, the
-  // marker last), so a consumer keying off attribute order — a snapshot, a
-  // string patch, a CSS attribute selector list — sees one spelling.
+  // Claim and light-root CSS scope use the ownership marker after authored attributes.
   const children = projectSlotAnchors(content, projectedChildren);
   const hasProjectedChildren =
     lightProjectionIntent ||
@@ -377,7 +283,7 @@ function projectSlotAnchors(
   return result.html;
 }
 
-function compiledTagOf(ctor: CompiledComponentConstructor): string | undefined {
+function generatedTagOf(ctor: GeneratedSsrConstructor): string | undefined {
   if (typeof ctor.__oeTag === 'string' && ctor.__oeTag !== '') return ctor.__oeTag;
   const registry = typeof customElements === 'undefined' ? undefined : customElements;
   const getName = (
@@ -397,13 +303,12 @@ function compositionDepthError(): OpenElementError {
   );
 }
 
-function failUncompiled(ctor: object, tag: string): never {
+function failMissingRenderer(ctor: object, tag: string): never {
   raiseFrameworkError(
     'ssr',
     FacadeErrorCode.PROGRAM_MISSING,
-    `[openElement] <${tag}> (${classNameOf(ctor)}) has no compiled Part Program. ` +
-      'renderToString only serializes classes produced by the OpenElement compiler ' +
-      '(@openelement/compiler open:compiled-element transform).',
+    `[openElement] <${tag}> (${classNameOf(ctor)}) has no generated server renderer. ` +
+      'Admit the component for SSR or pass its generated light-root constructor.',
   );
 }
 
@@ -426,11 +331,8 @@ type RegisteredGeneratedHostRenderer = (
  * table the generated entry's registry guard writes
  * (`SSR_REGISTRY_GENERATED_HOSTS`).
  *
- * `undefined` means "this tag is not a generated host": the caller keeps the
- * compiled-class path byte-identical. A malformed table, or a present-but-
- * invalid entry, fails closed with the existing program-missing identity —
- * treating it as absent would silently dispatch the tag to a different renderer
- * (L1 fail-closed rule, shared by the root page path and nested expansion).
+ * An absent pair leaves the light-root constructor path available. A malformed
+ * table or producer fails closed before choosing another renderer.
  */
 function registeredGeneratedHostRenderer(tag: string): RegisteredGeneratedHostRenderer | undefined {
   const registry =
@@ -511,32 +413,12 @@ function createNestedStyleLinkSink(): NestedStyleLinkSink {
   };
 }
 
-/**
- * Build the nested-host expander for ONE render (P-6, 2026-11-21).
- *
- * The class lane expands a nested custom-element host because its serializer walks
- * `renderNestedElement` for every `*-*` tag. A generated element's `__ssr` is a
- * STRING BUILDER, so it needs an expander handed to it — and EVERY generated
- * markup producer needs the same one: a light root, a shadow host, and a page
- * root. This factory is that single implementation; before it the body lived
- * inline in the light-root branch only, so a shadow page's `<open-dialog>` stayed
- * a bare tag while both other lanes expanded theirs.
- *
- * The expander reuses the SAME nested dispatch the class lane uses — the registry
- * pair channel, then a light-root class static, then the compiled class — so a
- * nested host expands identically from either parent lane. The admission set is
- * the render's own `ssrRenderableTags`; a tag outside it answers `undefined` and
- * the producer keeps its literal bytes. Returns `undefined` when the render
- * admits nothing, so a project with no admitted nested tag emits no expander.
- *
- * `sharedStyleSink` carries the enclosing template's live sheet list into a
- * nested LIGHT child's own content: that content lands in the SAME enclosing
- * template, so any light descendant it expands must lift into the same list
- * (`F16` trap: a producer is a string builder, so the list cannot be amended
- * after it returns). A shadow host's own content starts a fresh sink.
- */
 type NestedStyleDestination = 'document' | 'shadow';
 
+/**
+ * Expand only tags admitted by this render. Light descendants share the
+ * enclosing stylesheet sink, while a shadow template starts a fresh sink.
+ */
 function createNestedHostExpander(
   options: InternalRenderToStringOptions,
   depth: number,
@@ -573,7 +455,7 @@ function nestedStyleSinkOf(expander: unknown): NestedStyleLinkSink | undefined {
   return (expander as { nestedStyleSink?: NestedStyleLinkSink } | undefined)?.nestedStyleSink;
 }
 
-/** One expansion attempt: the registry pair, then a light class static, then the class. */
+/** Expand through the registered host producer or generated light-root constructor. */
 function expandNestedHostOnce(
   options: InternalRenderToStringOptions,
   depth: number,
@@ -629,46 +511,26 @@ function expandNestedHostInner(
   }
   const nestedClass = (
     typeof customElements === 'undefined' ? undefined : customElements.get(request.tag)
-  ) as CompiledComponentConstructor | undefined;
+  ) as GeneratedSsrConstructor | undefined;
   if (nestedClass === undefined) return undefined;
-  const nestedLightSsr = (nestedClass as { __ssr?: unknown }).__ssr;
-  if (typeof nestedLightSsr === 'function') {
-    // A generated light root owns no template. Its caller children must enter
-    // through the same anchored projection channel as a page-root light host,
-    // including each authored named slot group. Its descendants keep the
-    // enclosing style destination: document head for a light page, DSD template
-    // for a shadow parent.
-    const groups =
-      request.groups ?? (request.children === '' ? [] : [['', request.children] as const]);
-    const projectedChildren = new Map<string, string>();
-    for (const [slotName, html] of groups) {
-      projectedChildren.set(slotName, (projectedChildren.get(slotName) ?? '') + html);
-    }
-    return renderToStringAtDepth(
-      request.tag,
-      {
-        componentClass: nestedClass,
-        props: {},
-        hostAttrs: request.attributes,
-        projectedChildren,
-        lightProjectionIntent: request.hasChildren === true || request.children !== '',
-        ssrRenderableTags: options.ssrRenderableTags,
-        documentStyles: options.documentStyles,
-        nestedStyleLinkSink: nestedStyleSink,
-        styleDestination,
-        onNestedFailure: options.onNestedFailure,
-      },
-      depth + 1,
-    );
+  if (typeof nestedClass.__ssr !== 'function') failMissingRenderer(nestedClass, request.tag);
+
+  // Light roots project the caller's named groups into the producer's anchors
+  // and keep the enclosing style destination.
+  const groups =
+    request.groups ?? (request.children === '' ? [] : [['', request.children] as const]);
+  const projectedChildren = new Map<string, string>();
+  for (const [slotName, html] of groups) {
+    projectedChildren.set(slotName, (projectedChildren.get(slotName) ?? '') + html);
   }
-  // A class nested host expands through the class serializer, which owns its own
-  // nested walk — so the depth recursion stays the one serializer's, not a second
-  // dispatcher.
   return renderToStringAtDepth(
     request.tag,
     {
       componentClass: nestedClass,
       props: {},
+      hostAttrs: request.attributes,
+      projectedChildren,
+      lightProjectionIntent: request.hasChildren === true || request.children !== '',
       ssrRenderableTags: options.ssrRenderableTags,
       documentStyles: options.documentStyles,
       nestedStyleLinkSink: nestedStyleSink,
@@ -747,65 +609,22 @@ function renderRegisteredGeneratedHost(
   return rendered;
 }
 
-/** Coerce a JS-side prop value per the compiled converter record. */
-/*
- * The streamed-page shell (StreamShellManifest, CreateStreamShellOptions,
- * StreamShellExecutor, createStreamShellExecutor, jsonSeed and the shell
- * assembly) is DELETED with the class lane's compiled stream channel
- * (2026-11-24). The executor's one identity input was
- * `componentClass.__partProgram` — the wire program the class compiler
- * emitted — and every consumer of it retired with renderIntent.stream
- * (owner decision 2026-11-22; Alpha18 owns the replacement carrier).
- */
-
-/**
- * Server-render one compiled element to deterministic HTML.
- *
- * Generated server entries call this with the tag and its compiled class; the
- * class's `__partProgram`/metadata statics drive the serializer. Initial
- * signal values come from `props` (coerced per the compiled converters),
- * falling back to the compiled defaults. Attribute-backed properties whose
- * serialized value differs from the compiled default are emitted as host
- * attributes so the client claim rebuilds the same signal state. The root
- * mode comes from `program.root.kind` (light content vs. DSD open/closed).
- *
- * Fails closed with `OE_PROGRAM_MISSING` for unregistered or uncompiled
- * classes — there is no runtime JSX fallback renderer.
- */
+/** Render a paired host or a generated light-root constructor. */
 function renderToStringAtDepth(
   input: string | CustomElementConstructor,
   options: InternalRenderToStringOptions = {},
   depth = 0,
 ): string {
   if (depth > MAX_COMPOSITION_DEPTH) throw compositionDepthError();
-  // M11-2 generated page root: a generated element page carries no
-  // `__partProgram`; its server artifact is the compiler-emitted host producer
-  // the entry paired with the tag through the ONE registry guard. Dispatch
-  // through the SAME pair channel the nested expansion uses, BEFORE any class
-  // or program probe, so the generated page root and a nested generated host
-  // cannot diverge. A tag that is not paired (every compiled class page) keeps
-  // the class path byte-identical.
   if (typeof input === 'string') {
     const rootGeneratedHostRenderer = registeredGeneratedHostRenderer(input);
     if (rootGeneratedHostRenderer !== undefined) {
-      // A generated host reached through the server function lane's `__ssr`
-      // carries authored children (its composition groups) and passthrough host
-      // attributes; a generated PAGE root carries neither. Forward both so a
-      // nested generated host keeps its slotted light DOM — the class path's
-      // nested expansion and this dispatch stay the same host artifact.
-      // Absent author data stays absent: the generated PAGE root passes
-      // neither, and the producer sees exactly what the pre-composition lane
-      // passed (undefined), not an empty list.
+      // A nested host can supply light children and attributes. A page root
+      // leaves both absent so the producer receives its normal root inputs.
       const hostAttributes =
         options.hostAttrs === undefined
           ? undefined
-          : normalizeHostAttributePairs(options.hostAttrs).attributes.map(
-              (attribute) => [attribute.name, attribute.bare ? '' : attribute.value] as const,
-            );
-      // A page ROOT has no enclosing render, so there is nothing above it to
-      // expand INTO it — but its own content still needs an expander for the
-      // components inside its template (P-6). `nestedHostFor` is built below from
-      // the same request-record contract the nested path uses.
+          : normalizeHostAttributePairs(options.hostAttrs);
       return renderRegisteredGeneratedHost(
         input,
         rootGeneratedHostRenderer,
@@ -821,127 +640,68 @@ function renderToStringAtDepth(
       ? typeof customElements !== 'undefined'
         ? customElements.get(input)
         : undefined
-      : input)) as CompiledComponentConstructor | undefined;
+      : input)) as GeneratedSsrConstructor | undefined;
   if (!resolvedClass) {
     throw new OpenElementError(
-      `[openElement] renderToString(${
-        typeof input === 'string' ? JSON.stringify(input) : 'class'
-      }) found no compiled class: pass options.componentClass or register the tag. ` +
-        'The serializer reads the compiled statics from the class and fails ' +
-        'closed for unregistered components.',
+      `[openElement] renderToString(${typeof input === 'string' ? JSON.stringify(input) : 'class'}) found no registered generated element.`,
       { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
     );
   }
-  const resolvedTag = typeof input === 'string' ? input : compiledTagOf(resolvedClass);
-  const tagForDiagnostics = resolvedTag ?? '<unknown>';
-  const program = resolvedClass.__partProgram;
-  if (!program) {
-    // A LIGHT-root generated element serializes its own children, so its
-    // compiled artifact is the shell-attached static `__ssr()` (the compiler
-    // emits the leaf producer and the descriptor's `ssrProducer` row; the shell
-    // installs it on the class). No Part Program, no registry pair, no DSD
-    // wrapper: the host's children ARE the region, exactly as on the client.
-    const lightSsr = (resolvedClass as { __ssr?: unknown }).__ssr;
-    if (typeof lightSsr === 'function') {
-      if (resolvedTag === undefined) {
-        throw new OpenElementError(
-          '[openElement] renderToString(class) cannot derive the custom-element tag for this generated light root; ' +
-            'render it by its registered tag or use a constructor emitted by the generated-element runtime.',
-          { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
-        );
-      }
-      // #1800 (alpha16 closeout): a LIGHT-root generated element's declared
-      // sheets are a DOCUMENT resource — the asset is emitted and its URL
-      // recorded by the client build (`island-style-declarations.ts`), but until
-      // now nothing declared it, so the sheet reached no document and the island
-      // rendered unstyled. A light root's content IS the document's content, so
-      // the document head is the only owner that can deliver its CSS (the same
-      // rule the class lane's light root follows through
-      // `documentStyleResourcesOf`). `null` keeps the shadow primitive's explicit
-      // "declared but carrier unavailable" refusal: a dev render with no emitted
-      // assets must fail loudly rather than emit an unstyled island.
-      const declaredLightSheets = requestTimeIslandStyleLinks(resolvedTag);
-      if (declaredLightSheets === null) {
-        throw new OpenElementError(
-          `[openElement] admitted generated light host <${
-            resolvedTag
-          }> declares IslandConfig.styles, but this render has no emitted asset ` +
-            'carrier for it (the dev server emits no style assets). Run a production ' +
-            'build, or remove the declaration; rendering it unstyled would silently ' +
-            'drop the authored sheets.',
-          { code: ErrorCode.SSR_RENDER_ERROR, phase: 'ssr' },
-        );
-      }
-      if (declaredLightSheets !== undefined && declaredLightSheets.length > 0) {
-        if (options.styleDestination === 'shadow')
-          options.nestedStyleLinkSink?.add(declaredLightSheets);
-        else options.documentStyles?.add(declaredLightSheets);
-      }
-      // alpha16 nested-expansion: a generated light-root host's `__ssr` is a
-      // string builder, so a custom-element tag inside its markup would stay an
-      // unexpanded tag (a second descriptor-less element, not DSD). The class
-      // lane expands because its serializer walks `renderNestedElement`; this is
-      // the same walk for the generated lane, supplied as ONE expander the
-      // producer calls per dash tag.
-      //
-      // The expander reuses the SAME nested dispatch the class lane uses — the
-      // registry pair channel, then a light-root class static, then the compiled
-      // class — so a nested host expands identically from either parent lane.
-      // The admission set is the render's own `ssrRenderableTags`; a tag outside
-      // it answers `undefined` and the producer keeps its literal bytes.
-      // P-6 (2026-11-21): the expander is built by ONE factory shared by every
-      // render entry that produces generated markup — the light root, the shadow
-      // host (page root and nested), and the class lane's own nested walk. It was
-      // inline here only, which is why a shadow page's inner components stayed
-      // unexpanded tags.
-      const styleDestination: NestedStyleDestination = options.styleDestination ?? 'document';
-      const nestedHost = createNestedHostExpander(
-        options,
-        depth,
-        options.nestedStyleLinkSink,
-        styleDestination,
-      );
-
-      // Pass the host attribute pairs: the class static now folds them through
-      // the shell's own seeder/resolver so a declared row gets its server value.
-      // Before this, a light-root component with any row threw on `props.x`.
-      // The expander stays the producer's ONE host argument (its shell-side
-      // wrapper builds the host record), so `16b-EB`'s report channel rides the
-      // CATCH inside the expander rather than a widened producer ABI: a caught
-      // descendant failure is handed to the boundary's reporter when the render
-      // has one, and re-raised when it does not — the unchanged pre-`16b-EB`
-      // whole-render failure.
-      const rendered = (
-        lightSsr as (input?: unknown, attributes?: unknown, nestedHost?: unknown) => unknown
-      ).call(resolvedClass, options.props, options.hostAttrs, nestedHost);
-      const light = lightResult(rendered, 'light-root', resolvedTag);
-      const renderedContent = light.content;
-      if (styleDestination === 'document') {
-        options.documentStyles?.add(nestedStyleSinkOf(nestedHost)?.links ?? []);
-      }
-      // The producer is content-only (the shadow lane's `<Name>__ssrHost` wraps
-      // its own DSD template). A light root's region IS the host's children, so
-      // the serializer owns the host element: the tag plus the canonical
-      // attribute pairs, then the compiled content with the caller's projections
-      // substituted into the producer's anchored slots.
-      return serializeLightGeneratedHost(
-        resolvedTag,
-        renderedContent,
-        mergeHostAttributes(options.hostAttrs, light.hostAttributes, light.seedRows),
-        options.projectedChildren,
-        options.lightProjectionIntent,
-      );
-    }
-    failUncompiled(resolvedClass, tagForDiagnostics);
+  const resolvedTag = typeof input === 'string' ? input : generatedTagOf(resolvedClass);
+  const lightSsr = resolvedClass.__ssr;
+  if (typeof lightSsr !== 'function') {
+    failMissingRenderer(resolvedClass, resolvedTag ?? '<unknown>');
   }
-  // The class lane is deleted: a resolved class that carries a `__partProgram` is
-  // no longer renderable here. Failing with the same coded error the compiler
-  // surface uses keeps a stale artifact from rendering silently.
-  failUncompiled(resolvedClass, tagForDiagnostics);
+  if (resolvedTag === undefined) {
+    throw new OpenElementError(
+      '[openElement] renderToString(class) cannot derive the custom-element tag for this generated light root; ' +
+        'render it by its registered tag or use a constructor emitted by the generated-element runtime.',
+      { code: FacadeErrorCode.PROGRAM_MISSING, phase: 'ssr' },
+    );
+  }
+
+  const declaredLightSheets = requestTimeIslandStyleLinks(resolvedTag);
+  if (declaredLightSheets === null) {
+    throw new OpenElementError(
+      `[openElement] admitted generated light host <${resolvedTag}> declares IslandConfig.styles, ` +
+        'but this render has no emitted asset carrier for it (the dev server emits no style assets). ' +
+        'Run a production build, or remove the declaration; rendering it unstyled would silently ' +
+        'drop the authored sheets.',
+      { code: ErrorCode.SSR_RENDER_ERROR, phase: 'ssr' },
+    );
+  }
+  if (declaredLightSheets !== undefined && declaredLightSheets.length > 0) {
+    if (options.styleDestination === 'shadow')
+      options.nestedStyleLinkSink?.add(declaredLightSheets);
+    else options.documentStyles?.add(declaredLightSheets);
+  }
+  const styleDestination: NestedStyleDestination = options.styleDestination ?? 'document';
+  const nestedHost = createNestedHostExpander(
+    options,
+    depth,
+    options.nestedStyleLinkSink,
+    styleDestination,
+  );
+  const rendered: unknown = lightSsr.call(
+    resolvedClass,
+    options.props,
+    options.hostAttrs,
+    nestedHost,
+  );
+  const light = lightResult(rendered, 'light-root', resolvedTag);
+  if (styleDestination === 'document') {
+    options.documentStyles?.add(nestedStyleSinkOf(nestedHost)?.links ?? []);
+  }
+  return serializeLightGeneratedHost(
+    resolvedTag,
+    light.content,
+    mergeHostAttributes(options.hostAttrs, light.hostAttributes, light.seedRows),
+    options.projectedChildren,
+    options.lightProjectionIntent,
+  );
 }
 
-/** Server-render one compiled element through canonical Element composition:
- * returns the serialized DSD `html` string directly. */
+/** Render a generated component and its admitted nested hosts to HTML. */
 export function renderToString(
   input: string | CustomElementConstructor,
   options: RenderToStringOptions = {},

@@ -208,6 +208,35 @@ test.describe('fetch middleware module contract (ADR-0123, #858, Alpha.1)', () =
 });
 
 test.describe('revalidation continuity (0.42.0-alpha.3)', () => {
+  test('idle page claim does not replay a click already handled by its live child', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const idle: IdleRequestCallback[] = [];
+      window.requestIdleCallback = (callback) => idle.push(callback);
+      document.addEventListener('oe-test-release-page-idle', () => {
+        for (const callback of idle.splice(0)) {
+          callback({ didTimeout: false, timeRemaining: () => 0 });
+        }
+      });
+    });
+    await page.goto('/form');
+    await expect
+      .poll(() => page.evaluate(() => customElements.get('live-counter') !== undefined))
+      .toBe(true);
+    expect(await page.evaluate(() => customElements.get('form-page') === undefined)).toBe(true);
+
+    const count = page.locator('live-counter #count');
+    await page.locator('live-counter #increment').click();
+    await expect(count).toHaveText('1');
+    await page.evaluate(() => document.dispatchEvent(new Event('oe-test-release-page-idle')));
+    await waitForPageClaim(page, 'form-page');
+    const pageButton = page.locator('#page-increment');
+    await pageButton.click();
+    await expect(pageButton).toHaveText('1');
+    await expect(count).toHaveText('1');
+  });
+
   test('422 morph preserves the interactive page root and nested island', async ({ page }) => {
     await page.goto('/form');
     const button = page.locator('live-counter #increment');
@@ -652,18 +681,22 @@ test.describe('round-2 morph client fixes (0.42.0-alpha.6)', () => {
     await page.click('#submit');
     await page.waitForURL('**/form?echoed=nav-guard');
     await expect(page.locator('#echo')).toHaveText('echo=nav-guard');
-    await page.reload();
-    // History shape after a reload differs across engines (Firefox grows an
-    // extra entry); walk back until the pre-submit URL is reached.
-    for (let i = 0; i < 3 && !page.url().endsWith('/form'); i++) await page.goBack();
-    // The invariant §10 promises: displayed content always matches the URL.
-    // With a memory-only guard (pre-fix) a bfcache/persisted restore shows
-    // the morphed page at the pre-submit URL — stale.
-    if (page.url().endsWith('/form')) {
-      await expect(page.locator('#echo')).toHaveText('echo=');
-    } else {
-      await expect(page.locator('#echo')).toHaveText('echo=nav-guard');
+    await page.evaluate(() => {
+      (window as unknown as { __reloadProbe?: boolean }).__reloadProbe = true;
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    expect(
+      await page.evaluate(() => (window as unknown as { __reloadProbe?: boolean }).__reloadProbe),
+    ).toBeUndefined();
+    await expect(page).toHaveURL(/\/form\?echoed=nav-guard$/);
+    await expect(page.locator('#echo')).toHaveText('echo=nav-guard');
+    // Firefox may add a history entry for the reload. Walk back to the
+    // pre-submit URL, then verify its server-rendered content.
+    for (let i = 0; i < 3 && !page.url().endsWith('/form'); i++) {
+      await page.goBack({ waitUntil: 'domcontentloaded' });
     }
+    await expect(page).toHaveURL(/\/form$/);
+    await expect(page.locator('#echo')).toHaveText('echo=');
   });
 
   test('a morphed-in island instance shows the server render and hydrates (#579)', async ({

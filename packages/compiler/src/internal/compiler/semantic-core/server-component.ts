@@ -2,14 +2,8 @@
  * Server-only TSX function components (alpha15 server lane): the admission
  * and generative lowering entry.
  *
- * A server function component is an exported function whose body is a single
- * return of JSX — the compiled render() grammar's own subset (one semantic
- * authority: the SAME `Lowering` walk the @element class path runs, with the
- * props parameter as the field accessor; the same attribute-name safety, sink
- * denial, trustedHtml boundary and OEC diagnostics — no parallel checker
- * exists). What differs is only the OUTPUT: instead of a Part Program, the
- * admitted JSX lowers to a plain exported TS function whose body composes the
- * element server runtime's constructor helpers:
+ * An exported function returning one JSX element compiles to a plain TS
+ * function that composes the Element server constructor helpers:
  *
  *   __h("article", { class: "card" }, [__h("h2", {}, [__t(props.name)])])
  *
@@ -189,21 +183,7 @@ function fieldsOfPropsType(typeNode: ts.TypeNode | undefined, fail: CompilerFail
       fail(member, 'OEC9032', 'the props type admits property signatures only');
     }
     if (isPromiseAnnotation(member.type)) promiseFields.add(member.name.text);
-    const label = propsTypeOf(member.type);
-    fields.push({
-      name: member.name.text,
-      reflect: false,
-      attribute: null,
-      type: label,
-      converter: label,
-      typeConstructor: 'String',
-      accessibility: '',
-      typeText: member.type ? `: ${member.type.getText()}` : '',
-      initializerText: '',
-      defaultValue: null,
-      // The synthetic table only feeds the walk's name/type lookups.
-      node: member as unknown as ts.PropertyDeclaration,
-    });
+    fields.push({ name: member.name.text, type: propsTypeOf(member.type) });
   }
   return { fields, promiseFields };
 }
@@ -535,14 +515,10 @@ export function compileServerComponentModule(
         : (statement as ts.FunctionDeclaration),
       fail,
     );
-    // THE semantic authority: the same walk the @element render body takes.
-    const lowering = new Lowering(sf, component.fields, [], {
-      computedLocal: null,
-      server: {
-        ...serverBinding,
-        asyncFunction: component.isAsync,
-        promiseFields: component.promiseFields,
-      },
+    const lowering = new Lowering(sf, component.fields, {
+      ...serverBinding,
+      asyncFunction: component.isAsync,
+      promiseFields: component.promiseFields,
     });
     const root = lowering.lowerRoot(component.returned);
     if (root.k !== 'el') {
@@ -915,7 +891,7 @@ export class ConstructorEmitter {
         const signal = this.identifier(part.signal, 'the class sink');
         const synthesized = this.lowering.synthesizedFields.find((field) => field.name === signal);
         const value = synthesized
-          ? `(${synthesized.computed!.body.getText(this.sf)})`
+          ? `(${synthesized.computed.body.getText(this.sf)})`
           : `${this.parameter}.${signal}`;
         attrEntries.push(`${JSON.stringify('class')}: ${value}`);
         continue;

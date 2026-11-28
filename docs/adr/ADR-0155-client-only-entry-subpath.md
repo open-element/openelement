@@ -1,7 +1,11 @@
 # ADR-0155: The `client-only` entry subpath and the claim executor seam
 
 - Status: ACCEPTED (2026-09-22, alpha3 consolidation — records the #1416 E2
-  surgery)
+  surgery); **AMENDED** 2026-11-28 — retirement condition 2 discharged under the
+  amendment's operative reading (owner-ratified; literal satisfaction is not
+  claimed) and `./client-only` retired with the executor (see
+  [ADR-0184](./ADR-0184-alpha17-emitted-runtime-entry-retirement.md) and the
+  amendment at the end)
 - Amends: none. Extends the P2/P5 regime of
   `docs/architecture/design-principles.md` (P2 litmus: runtime surface needs an
   ADR; P5: every shim lands with a written retirement condition).
@@ -198,7 +202,10 @@ entries can all be deleted as one unit when either of these holds:**
    capability it guards. This is the stronger condition: it retires the claim
    machinery itself, not just the entry split.
 
-Neither condition is met today. When either is met, the deletion is one unit —
+Neither condition is met today. (Update 2026-11-28: condition 2 is now
+discharged under the operative reading recorded in the amendment at the end —
+an owner-ratified reading, not literal satisfaction of the clause; condition 1
+is still not met.) When either is met, the deletion is one unit —
 no compatibility layer, no deprecated alias period (Alpha permits breaking
 cleanup; see ADR-0154 and the P5 clause on compatibility living only at
 deployment boundaries). If the condition is met and the deletion is deferred,
@@ -266,3 +273,43 @@ Consequences for this ADR's contract:
   each entry ~5 KB raw / 1.3 KB gzip (repo-local four-entry harness,
   2026-10-12), against the ~17 KB raw the claim axis still saves `./client-only`
   and the ~8 KB raw the blocks axis still saves `./no-blocks` and `./base`.
+
+## Amendment (2026-11-28): retirement condition 2 discharged under its operative reading — the subpath retires with the executor
+
+Append-only amendment. Owner-directed 2026-11-28 in session as part of the
+three-PR Alpha17 delivery; the written carrier for the public-surface half is
+[ADR-0184](./ADR-0184-alpha17-emitted-runtime-entry-retirement.md). The
+Context, Decision and 2026-10-12 amendment above stay as written; this section
+records that the retirement condition now has an outcome, in the exact form
+this record specified — one unit, no compatibility alias, no deprecated-alias
+period.
+
+What changed: the emitted Part Program runtime is deleted, not deprecated. The
+claim/hydrate/revive executor, the program kernel and serializer, the Block
+builders and their seams and installers, the kernel's seam lookup and the
+`pageCanHydrateServerDom` entry-selection predicate are gone; a component's DOM
+program is lowered at build time into its generated module (mount, claim and
+server-rendering functions), the browser adopts a server-rendered shadow root
+through the platform's declarative Shadow DOM parser, and the generated claim
+code binds to the adopted nodes. `packages/element/package.json` no longer
+publishes `./client-only`, and `src/client-only.ts`, `runtime/claim-seam.ts`,
+`runtime/claim-install.ts` and the kernel's seam lookup are deleted with it.
+
+Which condition decided it: **retirement condition 2** — "the Part Program
+reaches full static lowering (no claim need)" in its operative reading: the
+program is resolved to its final DOM at build time, and no graph can link a
+generic claim executor because none exists, so the full entry is what the
+subpath was. Condition 1 (bundler-native per-page conditional exports) is
+**not** met; the retirement does not rely on it and does not re-open it.
+
+What is explicitly not claimed: the literal clause "no connected element ever
+has pre-existing content it must adopt" does not hold verbatim — server-rendered
+DSD markup still exists and generated claim code still binds to it. What
+retired is the **generic claim executor and its seam**, not the existence of
+server DOM or the need to adopt it; adoption is emitted per component and this
+amendment claims no change to that. The 2026-10-12 reconnect amendment therefore
+stays historical rationale for the deleted seam, not a live contract.
+
+This record stays **ACTIVE** as the historical rationale for the entry-split
+and seam pattern; its published surface no longer exists. The later record that
+carries the removal is ADR-0184.

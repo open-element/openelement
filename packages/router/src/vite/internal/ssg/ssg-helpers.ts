@@ -174,7 +174,7 @@ const nitroHandler = async (event) => {
 // document's script descriptors, so a per-request CSP nonce
 // (middleware.csp.nonce) reaches it.
 // An empty clientAssets.entry (no client bundle shipped) embeds nothing.
-__setRequestTimeClientScript(clientAssets.entry);
+__setRequestTimeClientScript(clientAssets.entry, clientAssets.islands, clientAssets.entryPreloads);
 
 // Request-time admission predicate (#1215): DERIVED from the request-time
 // route table — a boolean OR over the route URLPatterns (#856).

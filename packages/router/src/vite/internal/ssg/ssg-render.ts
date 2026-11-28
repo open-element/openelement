@@ -32,7 +32,7 @@ import {
 import { createLogger } from '@openelement/element';
 import { expandDynamicRoutes, expandI18nLocales } from './ssg-dynamic.ts';
 import { renderRequestTimeServerModule } from './ssg-helpers.ts';
-import { pruneSsgPages, writeSsgPageManifest } from './output-manifest.ts';
+import { pruneSsgOutput, writeSsgOutputManifest } from './output-manifest.ts';
 import { formatJson, normalizeSeparators } from '@openelement/element/build-utils';
 import { buildError, SsgRenderErrorCode } from '../../../internal/error-codes.ts';
 import { SSG_PRERENDER_ENV_KEY } from '../server-runtime/response-channel.ts';
@@ -206,9 +206,9 @@ export async function ssgRender(
   // This runs before the first write of the run, including the dynamic-route
   // expansion below.
   const outputDir = join(root, outDir);
-  const pruned = pruneSsgPages(outputDir);
+  const pruned = pruneSsgOutput(outputDir);
   if (pruned.length > 0) {
-    log.info(`Pruned ${pruned.length} page(s) from the previous build`);
+    log.info(`Pruned ${pruned.length} file(s) from the previous SSG build`);
   }
   /** Absolute paths of every page document this run generates. */
   const generatedPages: string[] = [];
@@ -431,11 +431,6 @@ export async function ssgRender(
     }
   }
 
-  // The run's own record of what it generated: the authority the next run's
-  // prune and the acceptance of a removed route both rest on. Written after
-  // every rename above so it names the files that are actually on disk.
-  writeSsgPageManifest(outputDir, generatedPages);
-
   // ── Post-processing modules ─────────────────────────────────
   const {
     injectCspMeta,
@@ -444,13 +439,13 @@ export async function ssgRender(
     buildSpeculationRulesJson,
   } = await import('./postprocess.ts');
 
-  if (options.viewTransition !== false) {
-    injectViewTransitionOptIn(outputDir);
-    // Not a meta tag: the injection is the `@view-transition` at-rule in a
-    // plain <style> block, which is the only form that can carry the
-    // reduced-motion opt-out (see injectViewTransitionOptIn's own doc).
-    log.info('View Transitions opt-in style block injected');
-  }
+  const viewTransitionStyle =
+    options.viewTransition === false
+      ? undefined
+      : injectViewTransitionOptIn(outputDir, generatedPages, options.base ?? '/');
+
+  // Publishing and pruning both use the inventory of files this run wrote.
+  writeSsgOutputManifest(outputDir, generatedPages, viewTransitionStyle);
 
   if (options.speculation) {
     const specOpts =

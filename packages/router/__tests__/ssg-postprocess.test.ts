@@ -19,6 +19,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -27,14 +28,10 @@ import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/
 import { OpenElementError } from '@openelement/element';
 import { ClientAssetErrorCode } from '../src/internal/error-codes.ts';
 import {
-  buildIslandPrefetchLinks,
   buildSpeculationRulesJson,
-  extractLinkHrefs,
   injectCspMeta,
-  injectIslandPrefetchRules,
   injectSpeculationRules,
   injectViewTransitionOptIn,
-  pageChunkMap,
   routeFromRelativePath,
 } from '../src/vite/internal/ssg/index.ts';
 import {
@@ -148,6 +145,10 @@ test('islandChunkMapFromAssetManifest fails closed for every island when no mani
 
 // ─── postProcessClientIslandBuild (manifest-driven, no HTML surgery) ────
 
+const PROJECTION_RUNTIME_PRELOADS = new Map([
+  ['/client/islands/island-counter-Ab12.js', ['/client/islands/element-runtime-Bh4sh.js']],
+]);
+
 /** Minimal BuildContextView for the island-manifest pass. */
 function ctxView(manifest: ClientAssetManifest | null, root: string) {
   return {
@@ -185,7 +186,7 @@ test('postProcessClientIslandBuild writes per-page manifests with manifest-keyed
       shared: ['/client/islands/element-runtime-Bh4sh.js'],
       styles: [],
     };
-    await postProcessClientIslandBuild(ctxView(manifest, tmp));
+    await postProcessClientIslandBuild(ctxView(manifest, tmp), PROJECTION_RUNTIME_PRELOADS);
 
     // The island identity resolves through the manifest, chunk URL intact.
     const homeManifest = JSON.parse(readFileSync(await pageManifestPath(dist, '/'), 'utf8')) as {
@@ -375,9 +376,8 @@ test('postProcessClientIslandBuild validates only the local metadata Phase 2 sel
 // ─── #1544/B2 element-runtime modulepreload projection ──────────────
 //
 // The projection is read off the per-page island manifests the same pass just
-// wrote, and the chunk's address off the emitted client asset manifest. These
-// pin the three decisions the pass owns: which pages get the link, what
-// happens when the chunk cannot be named, and that a re-run is a no-op.
+// wrote, intersected with the Phase 2 graph's runtime dependency addresses.
+// These pin eligible pages and idempotent output.
 
 /** An island-bearing page and a zero-island page in one dist. */
 function writeProjectionPages(dist: string): void {
@@ -406,8 +406,14 @@ test('#1544/B2: the runtime modulepreload lands on the island-bearing page only,
   try {
     const dist = join(tmp, 'dist');
     writeProjectionPages(dist);
-    await postProcessClientIslandBuild(ctxView(PROJECTION_MANIFEST, tmp));
-    await postProcessClientIslandBuild(ctxView(PROJECTION_MANIFEST, tmp));
+    await postProcessClientIslandBuild(
+      ctxView(PROJECTION_MANIFEST, tmp),
+      PROJECTION_RUNTIME_PRELOADS,
+    );
+    await postProcessClientIslandBuild(
+      ctxView(PROJECTION_MANIFEST, tmp),
+      PROJECTION_RUNTIME_PRELOADS,
+    );
     const homeHtml = readFileSync(join(dist, 'index.html'), 'utf8');
     expect(homeHtml.match(/rel="modulepreload"/g)?.length).toEqual(1);
     expect(homeHtml).toContain(
@@ -420,6 +426,31 @@ test('#1544/B2: the runtime modulepreload lands on the island-bearing page only,
     cleanup(tmp);
   }
 });
+
+test.each(['visible', 'media'] as const)(
+  '#1544/B2: %s waits for the browser scheduler before fetching the runtime',
+  async (strategy) => {
+    const root = makeTempDir();
+    try {
+      const dist = join(root, 'dist');
+      writeProjectionPages(dist);
+      const context = ctxView(PROJECTION_MANIFEST, root);
+      await postProcessClientIslandBuild(
+        {
+          ...context,
+          phase1: {
+            ...context.phase1,
+            islandMeta: { 'open-counter': { hydrate: strategy } },
+          },
+        },
+        PROJECTION_RUNTIME_PRELOADS,
+      );
+      expect(readFileSync(join(dist, 'index.html'), 'utf8')).not.toContain('modulepreload');
+    } finally {
+      cleanup(root);
+    }
+  },
+);
 
 test('#1544/B2: a zero-island build needs no runtime chunk and therefore injects nothing', async () => {
   // The `shared` set is empty because no island ships: the pass must not fail
@@ -450,16 +481,31 @@ test('#1544/B2: a zero-island build needs no runtime chunk and therefore injects
   }
 });
 
-test('#1544/B2: an island-bearing native build whose runtime chunk cannot be named fails closed', async () => {
+test('#1544/B2: in a mixed app a native-only page receives no Element runtime preload', async () => {
   const tmp = makeTempDir();
   try {
     const dist = join(tmp, 'dist');
     writeProjectionPages(dist);
-    await assertRejectsIncludes(
-      () => postProcessClientIslandBuild(ctxView({ ...PROJECTION_MANIFEST, shared: [] }, tmp)),
-      OpenElementError,
-      'need the shared element-runtime chunk preloaded',
+    writeFileSync(
+      join(dist, 'foreign.html'),
+      '<html><head></head><foreign-card></foreign-card></html>',
     );
+    const context = ctxView(
+      {
+        ...PROJECTION_MANIFEST,
+        islands: {
+          ...PROJECTION_MANIFEST.islands,
+          'foreign-card': { file: '/client/islands/island-native-Cd34.js', strategy: 'idle' },
+        },
+      },
+      tmp,
+    );
+    context.phase1.islandTagNames.push('foreign-card');
+    await postProcessClientIslandBuild(context, PROJECTION_RUNTIME_PRELOADS);
+    expect(readFileSync(join(dist, 'index.html'), 'utf8')).toContain(
+      'data-open-element-runtime-preload',
+    );
+    expect(readFileSync(join(dist, 'foreign.html'), 'utf8')).not.toContain('modulepreload');
   } finally {
     cleanup(tmp);
   }
@@ -639,27 +685,24 @@ test('injectCspMeta skips non-HTML files', () => {
 
 // ─── injectViewTransitionOptIn ─────────────────────────────────
 
-test('injectViewTransitionOptIn writes the standard opt-in, not the legacy meta', () => {
-  // The opt-in is the CSS View Transitions Level 2 at-rule. The
-  // `<meta name="view-transition">` spelling was the API's experimental form
-  // and is what this used to write; a meta is not what the specification
-  // defines, so the delivery moved to a document stylesheet.
+test('injectViewTransitionOptIn links a static stylesheet with the reduced-motion opt-out', () => {
   const tmp = makeTempDir();
   try {
     const htmlPath = join(tmp, 'index.html');
     writeFileSync(htmlPath, '<html><head></head><body><p>Hello</p></body></html>');
 
-    injectViewTransitionOptIn(tmp);
+    const asset = injectViewTransitionOptIn(tmp, [htmlPath], '/book/');
+    expect(asset).toMatch(/^assets\/open-view-transition-[a-f0-9]{12}\.css$/);
 
     const content = readFileSync(htmlPath, 'utf8');
-    expect(content, 'the at-rule opted the document in').toContain(
-      '@view-transition { navigation: auto; }',
-    );
-    expect(content, 'reduced motion opts back out').toMatch(
+    expect(content).toContain(`<head>\n  <link rel="stylesheet" href="/book/${asset}" />`);
+    expect(content).not.toMatch(/<(?:script|style)\b|<meta name="view-transition"/);
+
+    const css = readFileSync(join(tmp, asset!), 'utf8');
+    expect(css).toContain('@view-transition { navigation: auto; }');
+    expect(css).toMatch(
       /@media\s*\(prefers-reduced-motion: reduce\)\s*\{\s*@view-transition\s*\{\s*navigation: none;\s*\}\s*\}/,
     );
-    expect(content, 'the legacy meta is gone').not.toContain('<meta name="view-transition"');
-    expect(content, 'the block is a plain <style>, engine-independent').toContain('<style>');
   } finally {
     cleanup(tmp);
   }
@@ -671,28 +714,59 @@ test('injectViewTransitionOptIn does not duplicate on repeated calls', () => {
     const htmlPath = join(tmp, 'index.html');
     writeFileSync(htmlPath, '<html><head></head><body></body></html>');
 
-    injectViewTransitionOptIn(tmp);
-    injectViewTransitionOptIn(tmp);
+    const asset = injectViewTransitionOptIn(tmp, [htmlPath], '/');
+    expect(injectViewTransitionOptIn(tmp, [htmlPath], '/')).toBe(asset);
 
     const content = readFileSync(htmlPath, 'utf8');
-    const count = (content.match(/@view-transition \{ navigation: auto; \}/g) || []).length;
+    const count = (content.match(/<link rel="stylesheet"/g) || []).length;
     expect(count).toEqual(1);
   } finally {
     cleanup(tmp);
   }
 });
 
-test('injectViewTransitionOptIn recurses into subdirectories', () => {
+test('injectViewTransitionOptIn refuses a conflicting file or a symlink to matching bytes', () => {
+  const tmp = makeTempDir();
+  try {
+    const htmlPath = join(tmp, 'index.html');
+    const html = '<html><head></head><body></body></html>';
+    writeFileSync(htmlPath, html);
+    const asset = injectViewTransitionOptIn(tmp, [htmlPath], '/');
+    if (!asset) throw new Error('Expected a view-transition stylesheet');
+    const file = join(tmp, asset);
+    const css = readFileSync(file);
+
+    writeFileSync(htmlPath, html);
+    writeFileSync(file, '/* host stylesheet */');
+    expect(() => injectViewTransitionOptIn(tmp, [htmlPath], '/')).toThrow('stylesheet conflicts');
+    expect(readFileSync(file, 'utf8')).toBe('/* host stylesheet */');
+    expect(readFileSync(htmlPath, 'utf8')).toBe(html);
+
+    const target = join(tmp, 'host.css');
+    writeFileSync(target, css);
+    rmSync(file);
+    symlinkSync(target, file, 'file');
+    expect(() => injectViewTransitionOptIn(tmp, [htmlPath], '/')).toThrow('stylesheet conflicts');
+    expect(readFileSync(target)).toEqual(css);
+    expect(readFileSync(htmlPath, 'utf8')).toBe(html);
+  } finally {
+    cleanup(tmp);
+  }
+});
+
+test('injectViewTransitionOptIn links the same asset from root and nested pages with relative base', () => {
   const tmp = makeTempDir();
   try {
     mkdirSync(join(tmp, 'guide'));
-    writeFileSync(join(tmp, 'index.html'), '<html><head></head><body></body></html>');
-    writeFileSync(join(tmp, 'guide', 'page.html'), '<html><head></head><body></body></html>');
+    const home = join(tmp, 'index.html');
+    const nested = join(tmp, 'guide', 'page.html');
+    writeFileSync(home, '<html><head></head><body></body></html>');
+    writeFileSync(nested, '<html><head></head><body></body></html>');
 
-    injectViewTransitionOptIn(tmp);
+    const asset = injectViewTransitionOptIn(tmp, [home, nested], './');
 
-    expect(readFileSync(join(tmp, 'index.html'), 'utf8')).toContain('view-transition');
-    expect(readFileSync(join(tmp, 'guide', 'page.html'), 'utf8')).toContain('view-transition');
+    expect(readFileSync(home, 'utf8')).toContain(`href="${asset}"`);
+    expect(readFileSync(nested, 'utf8')).toContain(`href="../${asset}"`);
   } finally {
     cleanup(tmp);
   }
@@ -701,12 +775,10 @@ test('injectViewTransitionOptIn recurses into subdirectories', () => {
 test('injectViewTransitionOptIn skips non-HTML files', () => {
   const tmp = makeTempDir();
   try {
-    const htmlPath = join(tmp, 'index.html');
     const txtPath = join(tmp, 'readme.txt');
-    writeFileSync(htmlPath, '<html><head></head><body></body></html>');
     writeFileSync(txtPath, 'Not HTML');
 
-    injectViewTransitionOptIn(tmp);
+    expect(injectViewTransitionOptIn(tmp, [txtPath], '/')).toBeUndefined();
 
     const txtContent = readFileSync(txtPath, 'utf8');
     expect(txtContent).toEqual('Not HTML');
@@ -721,7 +793,7 @@ test('injectViewTransitionOptIn handles HTML without <head> tag', () => {
     const htmlPath = join(tmp, 'no-head.html');
     writeFileSync(htmlPath, '<html><body><p>No head</p></body></html>');
 
-    injectViewTransitionOptIn(tmp);
+    injectViewTransitionOptIn(tmp, [htmlPath], '/');
 
     const content = readFileSync(htmlPath, 'utf8');
     expect(content).toContain('view-transition');
@@ -731,22 +803,18 @@ test('injectViewTransitionOptIn handles HTML without <head> tag', () => {
 });
 
 test('injectViewTransitionOptIn still injects when body text mentions the at-rule', () => {
-  // Regression, in the new spelling: a changelog page whose prose names
-  // `@view-transition` must still receive the opt-in. The guard tests the
-  // declaration, not the name.
   const tmp = makeTempDir();
   try {
     const htmlPath = join(tmp, 'changelog.html');
     writeFileSync(
       htmlPath,
-      '<html><head></head><body><p>We switched to @view-transition in v0.41</p></body></html>',
+      '<html><head></head><body><p>@view-transition { navigation: auto; }</p></body></html>',
     );
 
-    injectViewTransitionOptIn(tmp);
+    const asset = injectViewTransitionOptIn(tmp, [htmlPath], 'https://cdn.example/book/');
 
     const content = readFileSync(htmlPath, 'utf8');
-    const matchCount = (content.match(/@view-transition \{ navigation: auto; \}/g) || []).length;
-    expect(matchCount, 'the opt-in was injected, not skipped for the body text').toEqual(1);
+    expect(content).toContain(`href="/book/${asset}"`);
   } finally {
     cleanup(tmp);
   }
@@ -993,216 +1061,10 @@ test('injectSpeculationRules still injects when body text mentions speculationru
   }
 });
 
-// ─── Per-page island-chunk prefetch (#1561) ─────────────────────────────
-
-test('buildIslandPrefetchLinks returns empty for an empty chunk set', () => {
-  expect(buildIslandPrefetchLinks([])).toEqual('');
-});
-
-test('buildIslandPrefetchLinks emits resource prefetch link tags', () => {
-  const html = buildIslandPrefetchLinks(['/client/islands/a-1.js', '/client/islands/b-2.js']);
-  expect(html).toContain(
-    '<link rel="prefetch" as="fetch" href="/client/islands/a-1.js" data-open-island-prefetch>',
-  );
-  expect(html).toContain(
-    '<link rel="prefetch" as="fetch" href="/client/islands/b-2.js" data-open-island-prefetch>',
-  );
-  expect(html).not.toContain('speculationrules');
-});
-
-test('extractLinkHrefs reads anchors and skips comments, script and style blocks', () => {
-  const html = `
-<!-- <a href="/in-comment"> -->
-<script>const html = '<a href="/in-script">';</script>
-<style>a { content: '<a href="/in-style">' }</style>
-<a href="/first">one</a>
-<a href='/second'>two</a>
-<a data-x=1 href=/third>three</a>
-<a name="no-href">four</a>
-`;
-  expect(extractLinkHrefs(html)).toEqual(['/first', '/second', '/third']);
-});
-
 test('routeFromRelativePath is the single output-path → route derivation', () => {
   expect(routeFromRelativePath('index.html')).toEqual('/');
   expect(routeFromRelativePath('about.html')).toEqual('/about');
   expect(routeFromRelativePath(join('guide', 'intro', 'index.html'))).toEqual('/guide/intro');
-});
-
-test('pageChunkMap dedupes and sorts each route’s chunk URLs', () => {
-  const map = pageChunkMap([
-    {
-      route: '/a',
-      islands: [
-        { tagName: 'x-b', chunkUrl: '/c/b.js', strategy: 'idle', layer: 'dsd-static' },
-        { tagName: 'x-a', chunkUrl: '/c/shared.js', strategy: 'idle', layer: 'dsd-static' },
-        { tagName: 'x-c', chunkUrl: '/c/b.js', strategy: 'idle', layer: 'pure-island' },
-      ],
-      builtAt: '1970-01-01T00:00:00.000Z',
-    },
-  ]);
-  expect(map.get('/a')).toEqual(['/c/b.js', '/c/shared.js']);
-});
-
-test('injectIslandPrefetchRules writes each page the chunks of the pages it links to', () => {
-  const tmp = makeTempDir();
-  try {
-    mkdirSync(tmp, { recursive: true });
-    mkdirSync(join(tmp, 'about'), { recursive: true });
-    mkdirSync(join(tmp, 'blog'), { recursive: true });
-    writeFileSync(
-      join(tmp, 'index.html'),
-      '<html><head><title>home</title></head><body>' +
-        '<a href="/about">about</a><a href="/blog/x">post</a>' +
-        '<a href="https://elsewhere.example/nope">external</a><a href="#top">anchor</a>' +
-        '</body></html>',
-    );
-    writeFileSync(
-      join(tmp, 'about', 'index.html'),
-      '<html><head></head><body><p>no links</p></body></html>',
-    );
-    writeFileSync(
-      join(tmp, 'blog', 'x.html'),
-      '<html><head></head><body><a href="/">home</a><a href="/about/">about</a></body></html>',
-    );
-
-    // The chunk facts come from the island manifests (pageChunkMap form) —
-    // the consumer shape the build lane feeds the injector.
-    const pageChunks = pageChunkMap([
-      {
-        route: '/',
-        islands: [
-          {
-            tagName: 'open-home',
-            chunkUrl: '/client/islands/home-Zz9.js',
-            strategy: 'idle',
-            layer: 'dsd-static',
-          },
-        ],
-        builtAt: '1970-01-01T00:00:00.000Z',
-      },
-      {
-        route: '/about',
-        islands: [
-          {
-            tagName: 'open-counter',
-            chunkUrl: '/client/islands/counter-Ab12.js',
-            strategy: 'idle',
-            layer: 'dsd-static',
-          },
-        ],
-        builtAt: '1970-01-01T00:00:00.000Z',
-      },
-      {
-        route: '/blog/x',
-        islands: [
-          {
-            tagName: 'open-badge',
-            chunkUrl: '/client/islands/badge-Cd34.js',
-            strategy: 'idle',
-            layer: 'pure-island',
-          },
-          {
-            tagName: 'open-badge-2',
-            chunkUrl: '/client/islands/badge-Cd34.js',
-            strategy: 'idle',
-            layer: 'pure-island',
-          },
-        ],
-        builtAt: '1970-01-01T00:00:00.000Z',
-      },
-    ]);
-    injectIslandPrefetchRules(tmp, pageChunks);
-
-    const index = readFileSync(join(tmp, 'index.html'), 'utf8');
-    // /about + /blog/x chunks; external and anchor links contribute nothing;
-    // the page's own chunk (home-Zz9) is never listed. Resource prefetch
-    // link tags, not speculationrules (Speculation Rules targets documents).
-    expect(index).toContain(
-      '<link rel="prefetch" as="fetch" href="/client/islands/badge-Cd34.js" data-open-island-prefetch>',
-    );
-    expect(index).toContain(
-      '<link rel="prefetch" as="fetch" href="/client/islands/counter-Ab12.js" data-open-island-prefetch>',
-    );
-    expect(index).not.toContain('home-Zz9');
-    expect((index.match(/data-open-island-prefetch/g) || []).length).toEqual(2);
-    expect(index.indexOf('rel="prefetch"')).toBeGreaterThan(index.indexOf('<head>'));
-
-    // A page without outbound links ships no prefetch links.
-    const about = readFileSync(join(tmp, 'about', 'index.html'), 'utf8');
-    expect(about.includes('rel="prefetch"')).toEqual(false);
-
-    // Trailing-slash links resolve to the same route; the home page's own
-    // chunk is excluded from /blog/x's list (it links to / only).
-    const blogX = readFileSync(join(tmp, 'blog', 'x.html'), 'utf8');
-    expect(blogX).toContain(
-      '<link rel="prefetch" as="fetch" href="/client/islands/counter-Ab12.js" data-open-island-prefetch>',
-    );
-    expect(blogX).toContain(
-      '<link rel="prefetch" as="fetch" href="/client/islands/home-Zz9.js" data-open-island-prefetch>',
-    );
-    expect(blogX).not.toContain('badge-Cd34');
-  } finally {
-    cleanup(tmp);
-  }
-});
-
-test('injectIslandPrefetchRules is idempotent and leaves other lanes’ tags alone', () => {
-  const tmp = makeTempDir();
-  try {
-    mkdirSync(tmp, { recursive: true });
-    writeFileSync(
-      join(tmp, 'index.html'),
-      '<html><head></head><body><a href="/about">about</a></body></html>',
-    );
-    // The global speculation lane's tag is a different script — it must not
-    // block (or be blocked by) this lane.
-    writeFileSync(
-      join(tmp, 'about.html'),
-      '<html><head><script type="speculationrules">{"prefetch":[]}</script></head>' +
-        '<body><a href="/">home</a></body></html>',
-    );
-    const pageChunks = pageChunkMap([
-      {
-        route: '/',
-        islands: [
-          {
-            tagName: 'open-home',
-            chunkUrl: '/client/islands/home-Zz9.js',
-            strategy: 'idle',
-            layer: 'dsd-static',
-          },
-        ],
-        builtAt: '1970-01-01T00:00:00.000Z',
-      },
-      {
-        route: '/about',
-        islands: [
-          {
-            tagName: 'open-counter',
-            chunkUrl: '/client/islands/counter-Ab12.js',
-            strategy: 'idle',
-            layer: 'dsd-static',
-          },
-        ],
-        builtAt: '1970-01-01T00:00:00.000Z',
-      },
-    ]);
-
-    injectIslandPrefetchRules(tmp, pageChunks);
-    injectIslandPrefetchRules(tmp, pageChunks);
-
-    const index = readFileSync(join(tmp, 'index.html'), 'utf8');
-    expect((index.match(/data-open-island-prefetch/g) || []).length).toEqual(1);
-    // The global lane's tag survives untouched; the about page gains its own
-    // prefetch link (not a second speculationrules script — resource prefetch
-    // uses link tags, not the Speculation Rules document API).
-    const about = readFileSync(join(tmp, 'about.html'), 'utf8');
-    expect((about.match(/<script type="speculationrules"/g) || []).length).toEqual(1);
-    expect(about.includes('data-open-island-prefetch')).toEqual(true);
-  } finally {
-    cleanup(tmp);
-  }
 });
 
 /** Capture console.warn lines while one async call runs. */

@@ -22,7 +22,6 @@
     "Theme broadcast attribute on compiled hosts (#773 writer; hydration classification)",
     "Push lifecycle ↔ pack-surface gate (#1541)",
     "SSG prerender dispatch marker (#1560)",
-    "Per-page island-chunk prefetch (#1561)",
     "Block-builders runtime specialization (#1548, [ADR-0166](../adr/ADR-0166-regions-axis-entry-subpaths.md))",
     "Layout-convention compile-gate admission (alpha15 R batch 3)",
     "Router lifecycle bin (#1633)",

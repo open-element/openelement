@@ -8,7 +8,7 @@
 //   - `head.scripts` below: external scripts, structured (src/defer), so the
 //     framework serializes the tags and the Site never hand-writes markup;
 //   - `app/head.tsx`: structural content a URL list cannot express (meta tags,
-//     icons, feed links, inline critical CSS).
+//     icons and feed links).
 import { defineConfig } from '@openelement/router';
 import { SITE_BUDGET } from './site-budget.ts';
 import { SITE_DEFAULT_LOCALE, SITE_LOCALES } from './site-config.ts';
@@ -77,7 +77,7 @@ export default defineConfig({
     // site-chrome.css is the shell's linked authored-CSS layer: the host
     // boxes, pseudo-elements and keyframes the retired component sheets
     // owned, compiled into the same linked document stylesheet as the fonts.
-    theme: [...SITE_FONT_SOURCES, './site-chrome.css'],
+    theme: [...SITE_FONT_SOURCES, './site-css.css', './site-chrome.css'],
   },
   speculation: true,
   // One shared official-Site SLO (www/site-budget.ts): the build manifest

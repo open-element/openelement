@@ -1,8 +1,3 @@
-/**
- * /checkout — one-time Stripe Checkout route (thin wrapper). The compiled
- * page element lives in app/components/page-checkout.tsx, the loader/action
- * logic in app/route-logic/checkout.ts.
- */
 import { definePage } from '@openelement/router';
 import { defineIslandConfig } from '@openelement/router';
 import {
@@ -11,13 +6,7 @@ import {
   createCheckoutLoader,
 } from '../route-logic/checkout.ts';
 
-/**
- * The page component is declared IN THIS MODULE (execution-plan §19.9): the
- * server function page lane records `pageComponentName` only for an exported
- * component function the route module declares itself, so an imported class
- * could not be admitted. Was `app/components/page-checkout.tsx`.
- */
-
+// The compiler admits page functions declared in their route module.
 export const openElement = defineIslandConfig({
   tag: 'checkout-page',
   root: 'shadow',

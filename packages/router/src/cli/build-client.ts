@@ -20,11 +20,8 @@ import { build as viteBuild, type InlineConfig } from 'vite';
 import { dirname, isAbsolute, join, relative, resolve } from 'pathe';
 import {
   clientEntryHasClientJs,
-  clientEntryNeedsElementRuntime,
   extractCustomElementTags,
   generateClientEntry,
-  islandsMightUseBlocks,
-  elementRuntimeBlocksAlias,
 } from '../vite/internal/ssg/index.ts';
 import { runtimeModulePath } from '../vite/internal/runtime-module-path.ts';
 import { findBuildWorkspaceRootOrUndefined } from '../vite/workspace-alias.ts';
@@ -33,7 +30,16 @@ import {
   createGeneratedElementSiteResolver,
 } from '../vite/generated-element-site.ts';
 import { buildClientIslandEntries } from '../vite/internal/ssg/client-island-entries.ts';
-import { resolveElementServicesRuntimeModule } from '../vite/internal/ssg/entry-client-codegen.ts';
+import { ISLAND_ACTIVATION_PREFIX } from '../vite/internal/ssg/document-island-catalogue.ts';
+import { closedIslandSource } from '../vite/internal/ssg/document-island-source.ts';
+import {
+  createIslandActivationModules,
+  DOCUMENT_ISLANDS_RUNTIME_SPECIFIER,
+  ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER,
+  REGISTER_ISLAND_RUNTIME_SPECIFIER,
+  registerIslandRuntime,
+  resolveElementDocumentServicesModule,
+} from '../vite/internal/ssg/entry-client-codegen.ts';
 import {
   type ClientIslandDeliveryEntry,
   type IslandDeliveryMeta,
@@ -58,12 +64,19 @@ import { createStyleBuildIntegration } from '../vite/internal/style-provider.ts'
 import {
   ELEMENT_RUNTIME_ENTRY_SPECIFIER,
   type ElementRuntimeIdentity,
+  documentServiceModuleIds,
+  isDocumentServiceModule,
   elementRuntimeChunkName,
-  requireElementRuntimeChunk,
+  collectElementRuntimeChunks,
+  elementRuntimePreloads,
   requireEntryStaticGraphFreeOfRuntime,
   resolveElementRuntimeIdentity,
 } from '../vite/internal/element-runtime-chunk.ts';
-import { requireViteHelperChunk, viteHelperChunkName } from '../vite/internal/vite-helper-chunk.ts';
+import {
+  requireViteHelperChunk,
+  VITE_HELPER_CHUNK_NAME,
+  viteHelperChunkName,
+} from '../vite/internal/vite-helper-chunk.ts';
 import { realpathSync } from 'node:fs';
 import { realPathKey } from '../vite/internal/real-path-key.ts';
 import { islandStyleDeclarations } from '../vite/internal/island-style-declarations.ts';
@@ -77,6 +90,7 @@ import {
 } from '../vite/internal/ssg/page-classification.ts';
 import { browserEntryBoundaryPlugin } from '../vite/internal/browser-entry-boundary.ts';
 import { browserEntryGraphPlugin } from '../vite/internal/browser-entry-graph.ts';
+import { resolvePackageIslandProvider } from '../vite/internal/package-island-provider.ts';
 import {
   analyzeModuleSemantics,
   clearStyleRequests,
@@ -84,6 +98,7 @@ import {
   styleRequestModuleId,
 } from '@openelement/compiler';
 import { ELEMENT_RUNTIME_MESSAGES_DEFINE } from '../vite/internal/element-error-messages.ts';
+import { ELEMENT_RUNTIME_PROBE_DEFINE } from '../vite/internal/element-runtime-probe.ts';
 import {
   type ServerRenderedSeeds,
   type StyleAssetRecord,
@@ -313,18 +328,9 @@ export function findReachableIslandTags(
   const allowed = candidates.filter((tag) => admitted.has(tag));
   const reachable = new Set<string>();
   const candidateSet = new Set(allowed);
-  const recordSource = (source: string, filePath?: string): void => {
-    if (filePath) {
-      const semantics = analyzeModuleSemantics(source, filePath, {
-        vocabulary: ROUTER_MODULE_VOCABULARY,
-      });
-      for (const tag of semantics.referencedCustomElementTags) {
-        if (candidateSet.has(tag)) reachable.add(tag);
-      }
-    } else {
-      for (const tag of extractCustomElementTags(source)) {
-        if (candidateSet.has(tag)) reachable.add(tag);
-      }
+  const recordTags = (tags: Iterable<string>): void => {
+    for (const tag of tags) {
+      if (candidateSet.has(tag)) reachable.add(tag);
     }
   };
 
@@ -356,16 +362,12 @@ export function findReachableIslandTags(
     const semantics = analyzeModuleSemantics(source, normalizedPath, {
       vocabulary: ROUTER_MODULE_VOCABULARY,
     });
-    recordSource(source, normalizedPath);
+    recordTags(semantics.referencedCustomElementTags);
     // Importing a local island module is an explicit registration-capability
     // edge even when its tag is created later by opaque third-party code.
     // The declaration itself is therefore observable reachability evidence.
-    for (const tag of [
-      ...semantics.definedCustomElementTags,
-      ...(deliveryByFile.get(realPathKey(normalizedPath)) ?? []),
-    ]) {
-      if (candidateSet.has(tag)) reachable.add(tag);
-    }
+    recordTags(semantics.definedCustomElementTags);
+    recordTags(deliveryByFile.get(realPathKey(normalizedPath)) ?? []);
     for (const specifier of semantics.relativeImports) {
       const imported = resolveSourceImport(normalizedPath, specifier, root);
       if (imported) recordSourceFile(imported);
@@ -373,7 +375,7 @@ export function findReachableIslandTags(
   };
 
   for (const entry of walkHtmlFileEntries(resolve(root, outDir))) {
-    recordSource(readFileSync(entry.absolutePath, 'utf8'));
+    recordTags(extractCustomElementTags(readFileSync(entry.absolutePath, 'utf8')));
   }
 
   const routesDir = ctx.phase3.routesDir || 'app/routes';
@@ -449,9 +451,11 @@ type ViteInlineConfigWithManifest = Omit<InlineConfig, 'build'> & {
   build?: ViteBuildOptionsWithManifest;
 };
 
-async function buildClient(
-  ctx: OpenElementBuildContext,
-): Promise<{ manifest: ClientAssetManifest | null; files: string[] }> {
+async function buildClient(ctx: OpenElementBuildContext): Promise<{
+  manifest: ClientAssetManifest | null;
+  files: string[];
+  runtimePreloads?: ReadonlyMap<string, readonly string[]>;
+}> {
   // the style-request registry's bookkeeping is this build's
   // lifetime — the SSR build clears and re-registers through its own
   // transforms, and a stale entry from an earlier build in this process must
@@ -542,17 +546,6 @@ async function buildClient(
           documentCandidates,
           sources: () => walkedSources,
         });
-  /**
-   * The component stylesheet's graph specifier, decided from the CURRENT
-   * registry: the generated entry imports the adapter when (and only when) the
-   * build discovered shadow candidates, so the client adopts the one shared
-   * sheet. Asked lazily — the entry module's `load` runs after the discovery
-   * pass registered its facts.
-   */
-  const componentSheetSpecifier = (): string | undefined =>
-    componentSheetCandidates().length > 0
-      ? styleIntegration?.provider.componentSheetSpecifier
-      : undefined;
   /**
    * Whether the selected engine reads its candidates from source. The module
    * texts the discovery walk reads are republished only for such an engine.
@@ -678,20 +671,11 @@ async function buildClient(
     upgradeStrategy: ctx.phase3.upgradeStrategy,
   });
 
-  // The generated entry's own runtime requirement — the one fact the guard and
-  // the JS drop below consume, asked of the generator with the exact inputs it
-  // will be called with (defect D: an entry that imports only the document
-  // stylesheet must not be held to the island entry's runtime contract).
-  const entryNeedsElementRuntime = clientEntryNeedsElementRuntime(islandEntries);
-  // M11-3: client JS and the legacy executor runtime are two facts. A page whose
-  // only islands are generated-lane islands keeps its island entry (and JS) but
-  // must not be held to the executor runtime's chunk contract.
   const entryHasClientJs = clientEntryHasClientJs(islandEntries, { enhancedForms });
+  const hasClientIslands = clientEntryHasClientJs(islandEntries);
   const styleOnlyEmission = !entryHasClientJs;
   if (styleOnlyEmission) {
     log.info('Island-free client entry - style-only client build, zero client JS');
-  } else if (!entryNeedsElementRuntime) {
-    log.info('Generated-element islands only - client entry without the executor runtime');
   }
 
   // #1471: island identity comes from this build's own resolver. Each
@@ -710,11 +694,11 @@ async function buildClient(
   const declaredIslandSpecifiers = [...new Set(islandEntries.map((entry) => entry.modulePath))];
 
   // #1544: the shared element-runtime chunk's grouping identity — the
-  // element package root, derived from a module id this build's own resolver
-  // answers (same identity pass, same virtual-entry importer the generated
-  // entry's runtime import resolves through). Filled in buildStart, before
-  // chunk grouping runs; an unresolvable specifier fails the build.
+  // element package root, resolved from the same virtual entry as island
+  // modules. Resolve before chunk grouping so actual runtime dependencies
+  // can be identified whether an island imports them directly or indirectly.
   let elementRuntimeIdentity: ElementRuntimeIdentity | null = null;
+  let documentServicesId: string | undefined;
 
   const clientAssetIslands: ClientAssetIslandInput[] = [
     ...selectedLocalTags.map((tagName, index) => ({
@@ -744,60 +728,21 @@ async function buildClient(
   const packageDeclIdentities = () =>
     selectedPackageDecls.map((island) => packageIslandIdentity(island, islandModuleIds));
 
-  // #1548: the blocks axis of the element entry selection. The scan asks the
-  // compiler (the single owner of the fact) whether any admitted island
-  // module lowers when/each Block Parts; only its proof of absence drops
-  // the Block builders from the page's element entry. The sidecar
-  // descriptors match the compiledElementPlugin call below, so the scan
-  // admits exactly the modules the build's own transform admits.
-  const mightUseBlocks = islandsMightUseBlocks({
-    root,
-    islandsDir,
-    islandTagNames: selectedLocalTags,
-    islandFiles: selectedLocalFiles,
-    packageIslandDecls: selectedPackageDecls,
-    compilerBehaviorDecls: selectedCompilerBehaviorDecls,
-  });
-  // The emission half of the same axis: resolve the bare element specifier to
-  // the blocks-free entry for the whole client graph.
-  const elementRuntimeBlocksAliasValue = !mightUseBlocks
-    ? elementRuntimeBlocksAlias(root, serializedAlias)
-    : undefined;
+  const packageSpecifiers = new Set(selectedPackageDecls.map((island) => island.modulePath));
+  const activationModules = createIslandActivationModules(islandEntries);
+  const activationReferences = new Map<string, string>();
+  const activationFiles = new Map<string, { file: string; css: string[] }>();
+  const directActivationSources = new Set<string>();
 
-  /**
-   * The generated entry's text, built when the module graph asks for the entry
-   * (a `load` hook) rather than when the plugin list is assembled: the
-   * component stylesheet's adapter import depends on the shadow candidates this
-   * build DISCOVERS, and the discovery pass registers them in its own
-   * `buildStart` — before any module loads, but after this closure is created.
-   */
-  const buildClientEntryCode = (): string => {
-    const utilitySheet = componentSheetSpecifier();
-    return generateClientEntry(islandEntries, {
+  const buildClientEntryCode = (): string =>
+    generateClientEntry(islandEntries, {
       enhancedForms,
       specializeScheduler: true,
-      // The document stylesheet's module: for a `graph-entry` provider the
-      // generated entry imports the CSS entry so the engine's pipeline
-      // compiles it inside this build's CSS graph and Vite emits the
-      // content-hashed `.css` asset (plus every `url()` asset the sources
-      // reference) into dist/client. No other module imports it, so the entry
-      // chunk's CSS is exactly the document stylesheet. A `generated` provider
-      // emits its document sheet as its own asset and the head links it, so
-      // nothing is imported here.
-      ...(stylePlan !== undefined && styleIntegration?.provider.documentDelivery === 'graph-entry'
+      responseCatalogue: true,
+      ...(styleIntegration?.provider.documentDelivery === 'graph-entry'
         ? { styleEntry: styleIntegration.provider.documentSheetModule }
         : {}),
-      // The component stylesheet's adapter: imported and registered by the entry
-      // when the compiler admitted shadow-root candidates.
-      ...(utilitySheet === undefined ? {} : { utilitySheet }),
-      // Omitted on any doubt: the flag's default (builders installed) is the
-      // entry codegen's own conservative default, not a second copy of it. The
-      // alias bailing out does not flip this flag: the entry subpath resolves
-      // through the package exports regardless of the alias, and keeping the
-      // builders in the entry graph is the safe direction.
-      ...(mightUseBlocks ? {} : { includeBlocksRuntime: false }),
     });
-  };
 
   // Restore RegExp from serialized noExternal patterns
   const noExternalPatterns = (ctx.phase3.ssrNoExternal || []).map((item) => {
@@ -848,7 +793,7 @@ async function buildClient(
     // #1546: production bundles strip the element runtime's authored error
     // prose to its stable codes (element's protocol/errors.ts seam). Dev
     // builds never inject this, so dev keeps the full messages.
-    define: ELEMENT_RUNTIME_MESSAGES_DEFINE,
+    define: { ...ELEMENT_RUNTIME_MESSAGES_DEFINE, ...ELEMENT_RUNTIME_PROBE_DEFINE },
     // JSX automatic runtime must be configured in the internal
     // viteBuild() call — configFile:false means user's vite.config.ts is
     // NOT read. Without this, the oxc transform falls back to the react
@@ -866,11 +811,23 @@ async function buildClient(
       chunkSizeWarningLimit: CHUNK_SIZE_WARNING_LIMIT_KB,
       minify: 'oxc',
       manifest: true,
+      modulePreload: {
+        // Response hints already select eager runtime imports. The activation
+        // file fetches its own JS through the native module graph; Vite keeps
+        // the stylesheet dependencies independently of this JS-only filter.
+        resolveDependencies: (_file, deps, { hostId }) =>
+          hostId.startsWith('islands/activate-') ? [] : deps,
+      },
       rollupOptions: {
+        // Workers have separate Rolldown options and no native HTMLElement.
+        transform: { define: { OE_DOCUMENT_CLIENT_BUILD: 'true' } },
         input: { client: VIRTUAL_CLIENT_ENTRY_ID },
         output: {
           format: 'esm',
-          entryFileNames: 'islands/[name].js',
+          entryFileNames: (chunk) =>
+            chunk.facadeModuleId?.startsWith('\0' + ISLAND_ACTIVATION_PREFIX)
+              ? 'islands/[name]-[hash].js'
+              : 'islands/[name].js',
           chunkFileNames: 'islands/[name]-[hash].js',
           // B2 gap (a) is why the output uses `codeSplitting`, not
           // `manualChunks`.
@@ -891,46 +848,39 @@ async function buildClient(
           // the one decision into the surface that can express all of
           // it, never an addition beside the old one.
           //
-          // Two groups, not one, and the split is load-bearing. A
-          // dedicated group whose `name` answers ONLY for the injected
-          // helper ids re-homes the helper; folding the same answer into
-          // the general decision group does not (measured on the repro:
-          // the helper stays in the island chunk). The dedicated group
-          // must also outrank every other group in the build — with a
-          // group of higher priority present, the helper follows THAT
-          // group's chunk again. Hence one helper-only group at a
-          // priority above every rule the build declares, and the
-          // pre-existing decision kept verbatim as its own group.
+          // Keep the eager helper group above the package-wide rules. It
+          // claims the resolved document-services closure too, including
+          // the dependencies those services share with the island runtime.
           codeSplitting: {
             groups: [
               {
                 name(id: string) {
-                  return viteHelperChunkName(id) ?? null;
+                  if (id === '\0' + REGISTER_ISLAND_RUNTIME_SPECIFIER)
+                    return VITE_HELPER_CHUNK_NAME;
+                  const helperChunk = viteHelperChunkName(id);
+                  if (helperChunk) return helperChunk;
+                  if (isDocumentServiceModule(id, elementRuntimeIdentity)) {
+                    return hasClientIslands ? VITE_HELPER_CHUNK_NAME : 'element-document-services';
+                  }
+                  return null;
                 },
-                // Declared above every other group this build declares.
-                // The priority is load-bearing, not decoration: measured
-                // on the repro, a competing group of HIGHER priority in
-                // the same build re-claims the helper and the island
-                // edge returns.
-                // Keeping this group strictly highest is what makes the
-                // claim unconditional; the emitted-chunk guard below is
-                // what makes a future violation fatal instead of silent.
                 priority: 100,
+                includeDependenciesRecursively: false,
+              },
+              {
+                // Group by static reachability from each island entry. Merging
+                // unrelated subgroups would make a small island download
+                // context and list support used only by a different island.
+                name: (id) => elementRuntimeChunkName(id, elementRuntimeIdentity) ?? null,
+                entriesAware: true,
+                priority: 50,
               },
               {
                 name(id: string) {
-                  // #1544: the element runtime rides one shared chunk
-                  // every island imports, instead of homing inside
-                  // whichever island chunk its import reached first. The
-                  // match is exact package-root containment from the
-                  // identity pass — a native build that groups zero
-                  // runtime modules fails the post-build guard below
-                  // rather than shipping per-island copies.
-                  const runtimeChunk = elementRuntimeChunkName(id, elementRuntimeIdentity);
-                  if (runtimeChunk) return runtimeChunk;
                   // Force preact + preact/hooks into a single chunk so the
                   // shared options object is not duplicated across chunks
                   // (which breaks hooks).
+                  if (directActivationSources.has(id)) return null;
                   if (id.includes('node_modules/preact') || id.includes('/preact/')) {
                     return 'preact';
                   }
@@ -956,17 +906,7 @@ async function buildClient(
       },
     },
     resolve: {
-      alias: [
-        // #1548: with the blocks scan's proof of absence, the WHOLE client
-        // graph resolves the element runtime to the blocks-free entry — the
-        // generated entry's specifier alone cannot prune the blocks cluster,
-        // because every island module imports `@openelement/element` for its
-        // base class and the package's sideEffects declaration (#1425) keeps
-        // the default entry's installs alive in every graph that touches it.
-        // Undefined keeps the default resolution.
-        ...(elementRuntimeBlocksAliasValue !== undefined ? [elementRuntimeBlocksAliasValue] : []),
-        ...serializedAlias,
-      ],
+      alias: serializedAlias,
       // The browser-client resolve policy the outer resolved config carries
       // (captured in the open plugin's configResolved). Empty conditions and
       // an unset preserveSymlinks mean "nothing to override" and this build
@@ -1123,24 +1063,65 @@ async function buildClient(
         name: 'open:virtual-client-entry',
         resolveId(id) {
           if (id === VIRTUAL_CLIENT_ENTRY_ID) return RESOLVED_CLIENT_ENTRY_ID;
+          if (activationModules.has(id) || id === REGISTER_ISLAND_RUNTIME_SPECIFIER)
+            return '\0' + id;
+          if (id === DOCUMENT_ISLANDS_RUNTIME_SPECIFIER)
+            return runtimeModulePath('./ssg/document-islands.ts');
           // #868: the client runtimes resolve to their real source modules,
           // so they typecheck, bundle and minify like any other module.
           if (id === VIRTUAL_RUNTIME_SPECIFIERS.scheduler) {
             return runtimeModulePath('./ssg/island-scheduler.ts');
           }
           if (id === VIRTUAL_RUNTIME_SPECIFIERS.enhance) {
-            return runtimeModulePath('./ssg/enhance-client.ts');
+            return runtimeModulePath('./ssg/form-enhancement-loader.ts');
           }
-          // B2: the generated entry reaches the element-services surface
+          // The generated entry reaches document services
           // through a stable virtual id (so the emitted entry text is
           // machine-independent); the selector and its one resolution rule
           // live together in entry-client-codegen.ts.
-          const elementServices = resolveElementServicesRuntimeModule(id);
-          if (elementServices !== null) return elementServices;
+          const documentServices = resolveElementDocumentServicesModule(id);
+          if (documentServices !== null) return documentServices;
           return null;
         },
         load(id) {
           if (id === RESOLVED_CLIENT_ENTRY_ID) return buildClientEntryCode();
+          if (id === '\0' + REGISTER_ISLAND_RUNTIME_SPECIFIER) return registerIslandRuntime;
+          if (id.startsWith('\0' + ISLAND_ACTIVATION_PREFIX)) {
+            return activationModules.get(id.slice(1))?.code;
+          }
+        },
+      },
+      {
+        name: 'open:island-activation-emission',
+        buildStart() {
+          for (const [id, activation] of activationModules) {
+            activationReferences.set(
+              id,
+              this.emitFile({
+                type: 'chunk',
+                id,
+                name: `${activation.direct ? 'island' : 'activate'}-${activation.tags[0]}`,
+                preserveSignature: 'strict',
+              }),
+            );
+          }
+        },
+        generateBundle(_options, bundle) {
+          for (const [id, reference] of activationReferences) {
+            const file = this.getFileName(reference);
+            const css = new Set<string>();
+            const seen = new Set<string>();
+            const collectStyles = (name: string): void => {
+              if (seen.has(name)) return;
+              seen.add(name);
+              const item = bundle[name];
+              if (item?.type !== 'chunk') return;
+              for (const dependency of item.imports) collectStyles(dependency);
+              for (const sheet of item.viteMetadata?.importedCss ?? []) css.add(sheet);
+            };
+            collectStyles(file);
+            activationFiles.set(id, { file, css: [...css] });
+          }
         },
       },
       {
@@ -1166,13 +1147,13 @@ async function buildClient(
               }
               islandModuleIds.set(specifier, resolved.id);
             }
-            // #1544: anchor the shared element-runtime chunk's identity the
-            // same way — through this build's own resolver, from the virtual
-            // entry the generated code imports the runtime through. The
-            // generated entry statically imports the runtime, so an
-            // unresolvable specifier (or a package layout the root walk
-            // cannot anchor) fails here instead of letting chunk grouping
-            // guess.
+            for (const activation of activationModules.values()) {
+              if (activation.direct)
+                directActivationSources.add(islandModuleIds.get(activation.modulePath)!);
+            }
+            // #1544: resolve the Element package identity before chunk grouping.
+            // Resolving the entry locates the package without adding a bundle
+            // dependency. Emitted module IDs determine whether a chunk ships.
             const runtimeResolved = await this.resolve(
               ELEMENT_RUNTIME_ENTRY_SPECIFIER,
               RESOLVED_CLIENT_ENTRY_ID,
@@ -1182,11 +1163,46 @@ async function buildClient(
             } else {
               this.error(
                 `The element runtime "${ELEMENT_RUNTIME_ENTRY_SPECIFIER}" does not resolve in the ` +
-                  `client build (importer: ${VIRTUAL_CLIENT_ENTRY_ID}) — the generated entry ` +
-                  `statically imports it, so the shared element-runtime chunk cannot be grouped`,
+                  `client build (importer: ${VIRTUAL_CLIENT_ENTRY_ID}) — the shared ` +
+                  `element-runtime chunk cannot be grouped`,
               );
             }
+            if (entryHasClientJs) {
+              const services = await this.resolve(
+                ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER,
+                RESOLVED_CLIENT_ENTRY_ID,
+              );
+              if (!services) this.error('The document-services runtime entry does not resolve.');
+              documentServicesId = services.id;
+            }
           },
+        },
+        async buildEnd(error) {
+          if (error) return;
+          for (const activation of activationModules.values()) {
+            if (!activation.direct || !packageSpecifiers.has(activation.modulePath)) continue;
+            const facadeId = islandModuleIds.get(activation.modulePath)!;
+            const providerId = await resolvePackageIslandProvider(
+              this.getModuleInfo(facadeId),
+              activation.constructorExports,
+              async (source, importer) => {
+                const resolved = await this.resolve(source, importer);
+                if (!resolved || resolved.external) return undefined;
+                const info = this.getModuleInfo(resolved.id);
+                return info ? { id: info.id, exportNames: info.exports } : undefined;
+              },
+            );
+            if (providerId === undefined) continue;
+            islandModuleIds.set(activation.modulePath, providerId);
+            directActivationSources.add(providerId);
+          }
+          if (elementRuntimeIdentity === null || documentServicesId === undefined) return;
+          elementRuntimeIdentity = {
+            ...elementRuntimeIdentity,
+            documentServices: documentServiceModuleIds(documentServicesId, (id) =>
+              this.getModuleInfo(id),
+            ),
+          };
         },
       },
       // The browser-entry module-graph observer (M10-P1 evidence, REPORT-ONLY):
@@ -1204,18 +1220,18 @@ async function buildClient(
         // Only the islands that actually enter the client bundle. A
         // `hydrate: 'none'` island is SSR-only by design — the generated entry
         // emits no import for it, so its module is absent from the emitted
-        // chunks by construction (the same `strategy !== 'none'` fact
-        // `clientEntryNeedsElementRuntime` consumes). Handing it to the
+        // chunks by construction. Handing it to the
         // island-attribution pass would be a category error, not a missing
         // module: the writer's `island-chunk-unresolved` contract stays
         // fail-closed for islands that SHOULD be there.
-        islands: islandEntries
-          .filter((entry) => entry.strategy !== 'none')
-          .map((entry) => ({
-            tag: entry.tagName,
-            specifier: entry.modulePath,
-            strategy: entry.strategy,
+        islands: [...activationModules].flatMap(([id, activation]) =>
+          activation.tags.map((tag) => ({
+            tag,
+            specifier: activation.modulePath,
+            strategy: activation.strategy,
+            activationModuleId: '\0' + id,
           })),
+        ),
         islandModuleIds,
       }),
     ],
@@ -1230,36 +1246,23 @@ async function buildClient(
     );
     log.info('Client bundle built -> ' + clientOutDir);
 
-    // #1544, fail closed: the generated entry statically imports the element
-    // runtime, so the emitted graph must group runtime modules into the shared
-    // chunk — zero matches is a structural failure (per-island runtime copies
-    // would ship silently), not a degraded chunk layout. An island-free entry
-    // (style-only / CSS-only, S-C2/S-12 and defect D) imports the document
-    // stylesheet and nothing else, so there is no runtime to group — the
-    // requirement is the generated entry's own fact, never a property of the
-    // emission shape.
-    if (entryNeedsElementRuntime) {
-      requireElementRuntimeChunk(collectClientBuildChunks(outputs), elementRuntimeIdentity);
-    }
-
-    // B2 gap (a), fail closed, both halves:
-    //
-    //  1. Vite's injected preload helper modules, when the graph carries any,
-    //     must be homed in the one dedicated `vite-helper` chunk. Anywhere
-    //     else — in practice a lazily-loaded island chunk — is the layout that
-    //     gives the entry a static edge to that island.
-    //  2. The property itself: the emitted entry must not STATICALLY reach the
-    //     shared element-runtime chunk. This is the one that survives Vite
-    //     renaming its helper id: guard 1 would then match nothing and pass
-    //     vacuously, while guard 2 still fails the build the moment the
-    //     runtime reappears in the entry's static closure.
-    //
-    // Guard 2 matches requireElementRuntimeChunk's posture; the B2 promise is
-    // the generated entry's own, and www is the acceptance case.
     const emittedChunks = collectClientBuildChunks(outputs);
+    const shipsGeneratedIsland = islandEntries.some(
+      (entry) => entry.generatedLane === true && entry.strategy !== 'none',
+    );
+    const runtimeFiles = collectElementRuntimeChunks(
+      emittedChunks,
+      elementRuntimeIdentity,
+      shipsGeneratedIsland,
+    );
+    const runtimePreloads = elementRuntimePreloads(emittedChunks, runtimeFiles, clientBase);
     requireViteHelperChunk(emittedChunks);
-    if (entryNeedsElementRuntime) {
-      requireEntryStaticGraphFreeOfRuntime(emittedChunks, elementRuntimeIdentity);
+    if (entryHasClientJs) {
+      requireEntryStaticGraphFreeOfRuntime(
+        emittedChunks,
+        elementRuntimeIdentity,
+        RESOLVED_CLIENT_ENTRY_ID,
+      );
     }
 
     // #1471: the client asset manifest — compile-time island identity joined
@@ -1281,6 +1284,62 @@ async function buildClient(
       resolvedIslandModuleIds: islandModuleIds,
       styleFileNames: [...styleAssetRecords.values()].map((record) => record.fileName),
     });
+
+    const generatedSpecifiers = new Set(
+      islandEntries
+        .filter((entry) => entry.generatedLane && !entry.isPackage)
+        .map((entry) => entry.modulePath),
+    );
+    // An application alias can redirect even a framework-looking import.
+    const hasSourceAlias = serializedAlias.some(({ find }) =>
+      ['@openelement/element', '@openelement/router'].some((source) =>
+        typeof find === 'string'
+          ? source === find || source.startsWith(find + '/')
+          : new RegExp(find).test(source),
+      ),
+    );
+    const potentialHosts = (specifier: string): readonly string[] | undefined => {
+      if (hasSourceAlias || !generatedSpecifiers.has(specifier)) return undefined;
+      const moduleId = islandModuleIds.get(specifier);
+      if (!moduleId || !existsSync(moduleId)) return undefined;
+      const source = readFileSync(moduleId, 'utf8');
+      const tags = closedIslandSource(source, moduleId);
+      if (!tags || tags.some((tag) => !Object.hasOwn(ctx.clientAssetManifest!.islands, tag))) {
+        return undefined;
+      }
+      return tags;
+    };
+
+    const activationUrls = new Set<string>();
+    for (const [id, activation] of activationModules) {
+      const emitted = activationFiles.get(id);
+      if (
+        emitted === undefined ||
+        !emittedChunks.some(
+          (chunk) => chunk.fileName === emitted.file && chunk.facadeModuleId === '\0' + id,
+        )
+      ) {
+        throw buildError(
+          ClientAssetErrorCode.ISLAND_UNMAPPED,
+          `No emitted activation module for ${activation.tags.join(', ')}`,
+        );
+      }
+      const children = potentialHosts(activation.modulePath);
+      const file = `${clientBase}client/${emitted.file}`;
+      activationUrls.add(file);
+      for (const tag of activation.tags) {
+        ctx.clientAssetManifest.islands[tag]!.activation = {
+          file,
+          ...(emitted.css.length === 0 ? {} : { css: emitted.css }),
+          ...(activation.media === undefined ? {} : { media: activation.media }),
+          ...(children === undefined ? {} : { children }),
+        };
+      }
+    }
+
+    ctx.clientAssetManifest.shared = ctx.clientAssetManifest.shared.filter(
+      (url) => !activationUrls.has(url),
+    );
 
     // The document stylesheet (S lane): the client entry chunk's emitted CSS
     // files, read from the same manifest the asset manifest consumes — or, for
@@ -1530,6 +1589,7 @@ async function buildClient(
     }
     return {
       manifest: ctx.clientAssetManifest,
+      runtimePreloads,
       files: publicFiles.map((name) => `client/${name}`),
     };
   } catch (error) {

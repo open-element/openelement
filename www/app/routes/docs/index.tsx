@@ -260,12 +260,7 @@ const content = {
   },
 } as const;
 
-/**
- * The docs hub as a server function page (alpha15 server architecture): the
- * route module's own exported TSX function, lowered by the compiler into a
- * generative HTML constructor. The page hook class (`page-docs`) scopes the
- * former component sheet's authored rules (www/site-chrome.css).
- */
+/** The page-docs class scopes rules in site-chrome.css. */
 export function PageDocs(props: {
   title: string;
   lede: string;

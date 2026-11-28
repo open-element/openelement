@@ -596,14 +596,7 @@ const content = {
   },
 } as const;
 
-/**
- * The API reference as a server function page (alpha15 server architecture):
- * the route module's own exported TSX function, lowered by the compiler into
- * a generative HTML constructor. The page hook class (`page-reference`) scopes
- * the former component sheet's authored rules in the linked document
- * stylesheet; the package registry, the export reference, the config-option
- * table and the element reference are each Block entries mapped from props.
- */
+/** The page-reference class scopes rules in site-chrome.css. */
 export function ReferencePage(props: {
   metadata: { breadcrumb: string; title: string; lede: string };
   railItems: Array<{ id: string; href: string; label: string; depth: string }>;

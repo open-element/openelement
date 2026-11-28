@@ -16,6 +16,8 @@ import {
   type ModuleImportContext,
   importContexts,
   fragmentLineCount,
+  LIST_ENTRY_INDEX,
+  LIST_ENTRY_MATCHER,
 } from './emission.ts';
 import { findMountCycle, moduleUsesContext, planRetention } from './instance-emission.ts';
 import { moduleUsesSharedClaimCursor, collectStaticClassCandidates } from './structure.ts';
@@ -502,6 +504,38 @@ export function generateLeafModule(
     ...authoredImports,
     '',
   ];
+  if (body.includes(`${LIST_ENTRY_INDEX}(`) || body.includes(`${LIST_ENTRY_MATCHER}(`)) {
+    // A reverse bucket lets each lookup consume the first unused occurrence
+    // with pop(). Omit NaN because mount previously matched keys with ===.
+    headerLines.push(
+      `function ${LIST_ENTRY_INDEX}(entries, field, start = 0) {`,
+      '  const byKey = new Map();',
+      '  for (let index = entries.length - 1; index >= start; index--) {',
+      '    const entry = entries[index];',
+      '    const key = entry[field];',
+      '    if (key !== key) continue;',
+      '    const bucket = byKey.get(key);',
+      '    if (bucket === undefined) byKey.set(key, [entry]);',
+      '    else bucket.push(entry);',
+      '  }',
+      '  return byKey;',
+      '}',
+      '',
+      `function ${LIST_ENTRY_MATCHER}(entries) {`,
+      '  let index = 0;',
+      '  let byKey;',
+      '  return (key) => {',
+      '    if (byKey === undefined) {',
+      '      const entry = entries[index];',
+      '      if (entry !== undefined && entry.key === key) { index++; return entry; }',
+      `      byKey = ${LIST_ENTRY_INDEX}(entries, "key", index);`,
+      '    }',
+      '    return byKey.get(key)?.pop();',
+      '  };',
+      '}',
+      '',
+    );
+  }
   if (sharedClaimCursor) {
     headerLines.push('let __oe_claimCursor = null;', `let ${CLAIM_ACTIVATION} = null;`, '');
   }

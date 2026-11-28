@@ -24,15 +24,9 @@ import { createLogger, formatError } from '@openelement/element';
 import {
   buildError,
   ClientAssetErrorCode,
-  ClientBuildErrorCode,
   SsgHygieneErrorCode,
 } from '../../../internal/error-codes.ts';
-import type { PageIslandManifest } from './island-manifest.ts';
-import {
-  generateIslandManifests,
-  pageHasClientIslands,
-  writeIslandManifests,
-} from './island-manifest.ts';
+import { generateIslandManifests, writeIslandManifests } from './island-manifest.ts';
 import { expandIslandDeliveryDecl, resolveIslandHydrate } from './island-scanner.ts';
 import {
   type IslandDeliveryMeta,
@@ -40,11 +34,8 @@ import {
   resolveIslandDeliveryTags,
 } from './delivery.ts';
 import { DEFAULT_OUT_DIR } from './../paths.ts';
-import { findElementRuntimeChunkFile } from '../element-runtime-chunk.ts';
 import { injectElementRuntimePreload } from './postprocess.ts';
 import { safeReadDir } from './route-scanner-fs.ts';
-
-export { buildIslandPrefetchLinks } from './speculation-rules.ts';
 
 const log = createLogger('build-postprocess');
 
@@ -120,20 +111,17 @@ export function islandChunkMapFromAssetManifest(
  * client script tags themselves were already embedded at render time
  * (#1471) — this pass records the identity-driven chunk/strategy/layer
  * manifests and then feeds the one HTML write derived from them (B2/#1544):
- * the shared element-runtime chunk's `<link rel="modulepreload">` on exactly
- * the pages whose manifest carries a client-activatable island. The
- * per-page speculation-rules injection (#1561) is a separate lane fed by
- * the manifests this function returns. Fail-closed: the chunk map is
+ * the runtime preload links for the actual static dependencies of each
+ * page's emitted island chunks. Fail-closed: the chunk map is
  * resolved — and any missing island asset thrown — before a single page
  * manifest is generated or written, so the pass either writes the complete
  * manifest set or none of it, never a partial record that silently omits an
- * admitted island; and an island-bearing native build whose emitted runtime
- * chunk cannot be named fails the head projection instead of shipping pages
- * with a cold runtime fetch.
+ * admitted island. Native-only apps can ship no Element runtime.
  */
 export async function postProcessClientIslandBuild(
   ctx: BuildContextView,
-): Promise<{ pageManifests: PageIslandManifest[]; files: string[] }> {
+  runtimePreloads?: ReadonlyMap<string, readonly string[]>,
+): Promise<string[]> {
   const root = ctx.phase3.root || process.cwd();
   const outDir = ctx.phase3.outDir || DEFAULT_OUT_DIR;
   const outputDir = join(root, outDir);
@@ -190,27 +178,10 @@ export async function postProcessClientIslandBuild(
   const pageManifests = generateIslandManifests(outputDir, chunkMap, strategyMap, layerMap);
   const files = await writeIslandManifests(outputDir, pageManifests);
 
-  // B2/#1544: project the same per-page facts onto the document head. The
-  // runtime chunk's address is the build's own emitted artifact (the client
-  // asset manifest's shared set); no second source of page→island knowledge
-  // exists here.
-  const bearingPages = pageManifests.filter((manifest) => pageHasClientIslands(manifest));
-  if (bearingPages.length > 0) {
-    const runtimeUrl = findElementRuntimeChunkFile(ctx.clientAssetManifest?.shared ?? []);
-    if (runtimeUrl === undefined) {
-      throw buildError(
-        ClientBuildErrorCode.ELEMENT_RUNTIME_CHUNK_MISSING,
-        `Island-bearing pages (${bearingPages
-          .map((manifest) => manifest.route)
-          .join(', ')}) need the shared element-runtime chunk preloaded, but the emitted client ` +
-          `assets carry no element-runtime-<hash>.js chunk to name — the client build ` +
-          `must ship the #1544 chunk before the per-page projection can point a modulepreload at it`,
-      );
-    } else {
-      injectElementRuntimePreload(outputDir, pageManifests, runtimeUrl);
-    }
+  if (runtimePreloads?.size) {
+    injectElementRuntimePreload(outputDir, pageManifests, runtimePreloads);
   }
-  return { pageManifests, files };
+  return files;
 }
 
 /**

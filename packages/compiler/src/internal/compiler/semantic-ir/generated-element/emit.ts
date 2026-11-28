@@ -738,8 +738,7 @@ export function generateElementModule(
   // T3 / 16b-LC-1: the descriptor row is driven by the leaf generator's OWN
   // emission decision (`rootInstanceFactory` is non-null exactly when the
   // factory declaration was written), never by scanning the emitted text. A
-  // root with no local setup snapshot keeps today's descriptor bytes (and the
-  // shell's `createBindings?.() ?? {}` path); the compiler-owned name is
+  // root with no local setup snapshot has an empty bindings record; the compiler-owned name is
   // deliberately absent from the tail collision list above.
   const rootInstanceFactory = leaf.rootInstanceFactory;
 
@@ -787,8 +786,7 @@ export function generateElementModule(
       : [`  createRecipe: create${rootName}Recipe,`]),
     // T3 / 16b-LC-1: the root setup factory is the descriptor's call-once
     // retained setup site (compiler-private member the shell already owns from
-    // LC-0). Emitted only when the leaf declared it; `createBindings` remains
-    // never emitted.
+    // LC-0). Emitted only when the leaf declared it.
     ...(rootInstanceFactory === null ? [] : [`  createInstance: ${rootInstanceFactory},`]),
     // A LIGHT (or absent) descriptor root serializes its own children, so its
     // SSR entry point is the leaf's parameterless `<Name>__ssr` — the shadow

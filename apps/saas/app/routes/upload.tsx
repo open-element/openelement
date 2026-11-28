@@ -1,9 +1,3 @@
-/**
- * /upload — Supabase Storage upload with authorization (reference starter,
- * #983). Thin wrapper: the compiled page element lives in
- * app/components/page-upload.tsx, the loader/action logic in
- * app/route-logic/upload.ts.
- */
 import { definePage } from '@openelement/router';
 import { defineIslandConfig } from '@openelement/router';
 import {
@@ -13,13 +7,7 @@ import {
   uploadPageProps,
 } from '../route-logic/upload.ts';
 
-/**
- * The page component is declared IN THIS MODULE (execution-plan §19.9): the
- * server function page lane records `pageComponentName` only for an exported
- * component function the route module declares itself, so an imported class
- * could not be admitted. Was `app/components/page-upload.tsx`.
- */
-
+// The compiler admits page functions declared in their route module.
 export const openElement = defineIslandConfig({
   tag: 'upload-page',
   root: 'shadow',

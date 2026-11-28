@@ -187,9 +187,7 @@ function focusTargetsPopover(host: DropdownHost, event: FocusEvent): boolean {
  * while the compiled nodes were re-claimed). It is accepted for the intrinsic
  * call contract and deliberately ignored (`void signal`); the listeners live
  * once per host on the retained root and are removed by
- * `disposeDropdownFocusWiring` at activation and at teardown. ADR-0182's
- * 2026-11-20 correction records this reading; the earlier connection-signal
- * wording was wrong.
+ * `disposeDropdownFocusWiring` at activation and at teardown.
  */
 export function watchDropdownFocusReturn(host: DropdownHost, signal?: AbortSignal): void {
   if (readInstanceState(host, 'focusWired', () => false)) return;

@@ -97,8 +97,7 @@ export function mdxVirtualSourcePath(moduleId: string): string | undefined {
   if (!moduleId.startsWith(MDX_VIRTUAL_PREFIX) || !moduleId.endsWith(MDX_VIRTUAL_SUFFIX)) {
     return undefined;
   }
-  const inner = moduleId.slice(MDX_VIRTUAL_PREFIX.length, -MDX_VIRTUAL_SUFFIX.length);
-  return inner.endsWith('.mdx') ? inner : inner;
+  return moduleId.slice(MDX_VIRTUAL_PREFIX.length, -MDX_VIRTUAL_SUFFIX.length);
 }
 
 export function mayDeclareComponent(source: string): boolean {

@@ -178,3 +178,42 @@ test.describe('Theme initialization', () => {
     expect(themeInit).toBe('1');
   });
 });
+
+test.describe('linked styles on the initial document', () => {
+  test.use({ javaScriptEnabled: false });
+
+  test('shadow wrappers and highlighted tokens are styled without JavaScript', async ({ page }) => {
+    await page.goto('/contributing/');
+    await expect(page.locator('open-button .button-wrapper').first()).toHaveCSS(
+      'display',
+      'contents',
+    );
+    await expect(page.locator('open-code-block .code-block-wrapper')).toHaveCSS(
+      'display',
+      'contents',
+    );
+    const token = page.locator('pre.shiki .shiki-token-function').first();
+    await expect(token).toHaveCSS('color', 'rgb(111, 66, 193)');
+  });
+});
+
+test('enhancing a code block preserves the server-rendered font stack', async ({
+  browser,
+  page,
+}) => {
+  const staticPage = await browser.newPage({ javaScriptEnabled: false, colorScheme: 'light' });
+  try {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.goto('/contributing/');
+    await staticPage.goto(page.url());
+
+    const selector = 'open-code-block pre.shiki';
+    const initialFont = await staticPage.locator(selector).evaluate((el) => {
+      return getComputedStyle(el).fontFamily;
+    });
+    await expect(page.locator('open-code-block')).toHaveAttribute('data-theme', 'light');
+    await expect(page.locator(selector)).toHaveCSS('font-family', initialFont);
+  } finally {
+    await staticPage.close();
+  }
+});

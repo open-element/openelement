@@ -73,7 +73,6 @@ interface InstanceRetentionResult {
     freshBindings: boolean;
     text: string | null;
   };
-  conflictError: string | null;
 }
 
 /**
@@ -237,7 +236,7 @@ export function describeLifetime(openPage: () => Promise<Page>): void {
       }
     });
 
-    test('createBindings and propsChanged are retained across disconnect/reconnect', async () => {
+    test('createInstance bindings and propsChanged are retained across disconnect/reconnect', async () => {
       const page = await openPage();
       try {
         const result = (await page.evaluate(`(() => {
@@ -251,7 +250,7 @@ export function describeLifetime(openPage: () => Promise<Page>): void {
           mod.defineGeneratedElement({
             tag: 'oe-m09-retained',
             properties: [{ name: 'label', attribute: 'label', type: 'string' }],
-            createBindings: () => {
+            createInstance: () => {
               bindingCalls += 1;
               return bindings;
             },
@@ -337,20 +336,6 @@ export function describeLifetime(openPage: () => Promise<Page>): void {
           const hosts = [];
           const records = [];
           const recipeHosts = [];
-          // The descriptor must name exactly one call-once/retain setup site: a
-          // descriptor with BOTH createInstance and createBindings fails closed.
-          let conflictError = null;
-          try {
-            mod.defineGeneratedElement({
-              tag: 'oe-lc0-conflict',
-              properties: [],
-              createInstance: () => ({}),
-              createBindings: () => ({}),
-              createRecipe: mod.createProfileRecipe,
-            });
-          } catch (error) {
-            conflictError = error && error.message ? error.message : String(error);
-          }
           mod.defineGeneratedElement({
             tag: 'oe-lc0-instance',
             properties: [{ name: 'label', attribute: 'label', type: 'string' }],
@@ -435,7 +420,6 @@ export function describeLifetime(openPage: () => Promise<Page>): void {
             afterFinalDisconnect,
             afterDispose,
             afterRemount,
-            conflictError,
           };
         })()`)) as InstanceRetentionResult;
 
@@ -497,7 +481,6 @@ export function describeLifetime(openPage: () => Promise<Page>): void {
           freshBindings: true,
           text: 'second',
         });
-        expect(result.conflictError).toContain('mutually exclusive');
       } finally {
         await page.close();
       }

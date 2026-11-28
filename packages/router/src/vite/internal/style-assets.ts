@@ -67,7 +67,6 @@ import {
   compileGeneratedElementIfAdmitted,
   compileServerComponentIfAdmitted,
   prepareServerComponentImports,
-  readCompiledArtifactStyles,
   getStyleRequest,
   hasStyleImporter,
   type RegisteredStyleRequest,
@@ -851,29 +850,10 @@ async function discoverServerRenderedModules(
       candidates.register(file, serverCompiled.classCandidates ?? [], { shadow: false });
       continue;
     }
-    // A SHIPPED (already compiled) module — a package consumed from node_modules
-    // — has no authored grammar left to compile, but its `.css` edges are the
-    // same edges: recovered through the same read the build-time transform uses
-    // and registered through the same writer.
-    const artifact = readCompiledArtifactStyles(source, file);
-    if (artifact === undefined) {
-      // Not a compiled artifact either: the module carries no class candidates,
-      // and registering that absence keeps a deleted class from surviving an
-      // edit (defect C).
-      registerArtifactCandidates(source, file, candidates);
-      // A GENERATED element module is a component module too, but it reaches
-      // neither branch above: it declares no `@element` decorator (the class is
-      // compiler-emitted) and an uncompiled package ships the authored `.tsx`.
-      // Its admission identity is the island policy sidecar, and the manual-mode
-      // report below must count it — otherwise a generated package the app
-      // imports without admitting it is silently undelivered, which is exactly
-      // the failure that report exists to name.
-      if (moduleDeclaresGeneratedElement(source, file)) elementFiles.push(file);
-      continue;
-    }
-    registerStyleEdges(file, artifact.requests, artifact.scopeTag);
+    // Packed generated modules supply their class candidates. A generated
+    // sidecar also identifies unadmitted components for the package warning.
     registerArtifactCandidates(source, file, candidates);
-    elementFiles.push(file);
+    if (moduleDeclaresGeneratedElement(source, file)) elementFiles.push(file);
   }
   reportUnadmittedComponentPackages.call(
     this,

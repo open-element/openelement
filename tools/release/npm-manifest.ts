@@ -76,44 +76,10 @@ const ENGINES: Record<string, Record<string, string>> = {
   '@openelement/ui': { node: '>=24.2' },
 };
 
-/**
- * Bundler tree-shaking contract (#1412). Element, Router, and UI modules
- * declare no import-time global writes (no module-scope `globalThis`/
- * `window`/`document`/`customElements` assignment in their shipped sources),
- * so an unused import may be dropped. Create's `./src/cli.js` IS the program —
- * it scaffolds on import — so that module stays flagged.
- *
- * `@openelement/element` cannot be a flat `false` (#1425). The default entry
- * installs the compiled hydration executor through an import-time seam: the entry
- * performs `import './internal/compiled/runtime/hydrate-install.js'` and that
- * module calls `installHydrationExecutor(...)` at module scope. A bundler that
- * reads `sideEffects: false` removes BOTH halves — the bare import inside the
- * entry (an unused statement in a side-effect-free module) and the installer
- * body (a side-effect-free module with no used exports) — so the hydration
- * executor is missing at runtime and every island that must adopt
- * server-rendered DOM throws instead of hydrating. Declaring an array is not
- * enough to name one side of that edge: the importer and installer entries
- * below must survive. Verified by the packed-consumer browser matrix
- * (tools/release#consumer:packaged leg 6), which fails 3/3 browsers when
- * either entry is removed from this list.
- *
- * #1548 adds the blocks axis to the same contract: the default entry and
- * `./client-only` also import `blocks-install.js` (`installBlockBuilders(...)`
- * at module scope), so the when/each Block builders ship on those entries and
- * are droppable on `./no-blocks` and `./base`. The flagged set is therefore
- * the three importing entries plus both installers; the source-side mirror
- * lives in packages/element/package.json `sideEffects` and the walker shared
- * by both guards is packages/element/__tests__/side-effects-declaration.test.ts.
- */
+/** Compiled package side-effect metadata mirrors the source entry behavior. */
 const SIDE_EFFECTS: Record<string, false | string[]> = {
   '@openelement/protocol': false,
-  '@openelement/element': [
-    './src/index.js',
-    './src/client-only.js',
-    './src/no-blocks.js',
-    './src/internal/compiled/runtime/hydrate-install.js',
-    './src/internal/compiled/runtime/blocks-install.js',
-  ],
+  '@openelement/element': false,
   '@openelement/compiler': false,
   '@openelement/router': false,
   '@openelement/create': ['./src/cli.js'],
@@ -129,11 +95,12 @@ const PACKAGE_DESCRIPTIONS: Record<string, string> = {
   '@openelement/protocol':
     'Cross-system contracts and tiny pure predicates for the OpenElement framework.',
   '@openelement/compiler':
-    'Build-time compiler for OpenElement: transforms TSX with @element decorators into Part Program modules.',
+    'Build-time compiler for OpenElement function components. Generates custom elements and server rendering code from JSX and TSX.',
   '@openelement/router':
     'Routing, application runtime, and lifecycle tooling for the OpenElement framework.',
   '@openelement/create': 'Project generator for the OpenElement Web Components framework.',
-  '@openelement/element': 'Custom element base class and authoring APIs for OpenElement.',
+  '@openelement/element':
+    'Runtime and authoring APIs for OpenElement function components and custom elements.',
   '@openelement/ui':
     'Experimental reference Web Components and UI primitives built on the OpenElement runtime.',
 };

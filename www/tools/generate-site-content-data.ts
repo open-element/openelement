@@ -86,7 +86,7 @@ for (const name of ['guide', 'architecture'] as const) {
 // as every fence — one highlighter instance, one --shiki-* variable theme — so
 // the homepage hero sample carries the same <pre class="shiki ..."> bytes a
 // fenced block emits, with token colors resolved by the site palette
-// (www/site-css.ts) in whichever theme is active. Shiki already emits
+// (www/site-css.css) in whichever theme is active. Shiki already emits
 // tabindex="0" on the <pre>, which is the keyboard scroll affordance the hero
 // sample had as plain text. The routes project these bytes into trusted HTML.
 outputs.set(

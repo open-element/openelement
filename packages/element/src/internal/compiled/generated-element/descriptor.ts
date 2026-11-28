@@ -58,14 +58,7 @@ export interface GeneratedElementProperty {
 
 /** The host record the generated recipe factory consumes. */
 export interface GeneratedElementHost<P extends object = Record<string, unknown>> {
-  /**
-   * Created once by `createInstance` (or the legacy `createBindings` fallback)
-   * and retained for the element lifetime. With `createInstance` the record is
-   * the return value of that setup factory, so it may reference setup-owned
-   * signals/computeds that live in the retained instance scope; with the legacy
-   * `createBindings` it stays allocation-only (see
-   * {@linkcode GeneratedElementDescriptor.createBindings}).
-   */
+  /** Retained setup record, created once by `createInstance` when present. */
   readonly bindings: Readonly<Record<string, unknown>>;
   /**
    * The enclosing LOGICAL instance scope (LC-2 nesting): the element/island
@@ -204,8 +197,7 @@ export interface GeneratedElementDescriptor<P extends object = Record<string, un
    * only (module-local `__oe_rootInstance`, T3/`16b-LC-1`) and the emitted
    * descriptor supplies it here, so the generated root mount/claim alias the
    * retained record instead of re-evaluating setup in `<Name>__claim`; a root
-   * with no local setup snapshot emits no factory and the shell keeps the
-   * `createBindings?.() ?? {}` fallback. Hosts/tests may still supply this
+   * with no local setup snapshot emits no factory and receives empty bindings. Hosts/tests may still supply this
    * factory directly (descriptor-fixture evidence). Nested hostless children
    * keep their own per-claim evaluation: the generated-path fixture measures
    * that re-evaluation, while nested child retention remains OWED for
@@ -216,35 +208,11 @@ export interface GeneratedElementDescriptor<P extends object = Record<string, un
    * are released only by explicit teardown (`dispose`), never by a plain
    * disconnect. Setup MUST NOT append DOM: the projection owns the region.
    *
-   * Mutually exclusive with `createBindings`: one descriptor names exactly one
-   * call-once/retain site, so a descriptor carrying both fails descriptor
-   * validation instead of creating a second setup path.
    */
   readonly createInstance?: (
     owner: LifetimeScope,
     host: GeneratedElementInstanceHost<P>,
   ) => Readonly<Record<string, unknown>>;
-  /**
-   * Legacy allocation-only bindings factory, kept for hosts/tests (M09-0 shell
-   * tests). Called once per element on first connection and the returned record
-   * is retained for the element lifetime (the factory does not re-run across
-   * disconnect/reconnect).
-   *
-   * This factory runs without a `LifetimeScope` handle and the shell has no
-   * owner on which to register a cleanup for it. The contract is therefore
-   * allocation-only: it MUST NOT allocate effects, listeners, timers,
-   * subscriptions, or any other resource that needs cleanup. It may allocate
-   * signals/computeds and return plain data. A descriptor that needs
-   * element-lifetime cleanup ownership uses `createInstance` instead of leaking
-   * it through this record.
-   *
-   * The shell retains the record across reconnect, while the per-connection
-   * scope is disposed and recreated: resources the generated recipe factory
-   * registers on that scope are released. Omitted means the generated module
-   * must not require bindings; a missing binding still fails through the
-   * generated module's own `OEIR_LEAF_MISSING_VALUE` contract.
-   */
-  readonly createBindings?: () => Readonly<Record<string, unknown>>;
 }
 
 export interface NormalizedProperty {
@@ -310,7 +278,6 @@ export interface NormalizedDescriptor {
     owner: LifetimeScope,
     host: GeneratedElementInstanceHost<Record<string, unknown>>,
   ) => Readonly<Record<string, unknown>>;
-  readonly createBindings?: () => Readonly<Record<string, unknown>>;
   readonly ssrProducer?: () => string;
 }
 
@@ -643,17 +610,8 @@ function normalizeDescriptorWithRows(
   if (typeof descriptor.createRecipe !== 'function') {
     descriptorError('createRecipe must be the generated recipe factory');
   }
-  if (descriptor.createBindings !== undefined && typeof descriptor.createBindings !== 'function') {
-    descriptorError('createBindings must be a function when present');
-  }
   if (descriptor.createInstance !== undefined && typeof descriptor.createInstance !== 'function') {
     descriptorError('createInstance must be a function when present');
-  }
-  if (descriptor.createInstance !== undefined && descriptor.createBindings !== undefined) {
-    descriptorError(
-      'createInstance and createBindings are mutually exclusive: the descriptor must name exactly ' +
-        'one call-once/retain setup site',
-    );
   }
   const rootMode = descriptor.root ?? 'light';
   if (rootMode !== 'light' && rootMode !== 'shadow-open' && rootMode !== 'shadow-closed') {
@@ -684,9 +642,6 @@ function normalizeDescriptorWithRows(
     ...(descriptor.createInstance === undefined
       ? {}
       : { createInstance: descriptor.createInstance as NormalizedDescriptor['createInstance'] }),
-    ...(descriptor.createBindings === undefined
-      ? {}
-      : { createBindings: descriptor.createBindings }),
   };
 }
 

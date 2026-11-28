@@ -30,12 +30,23 @@ export interface ClientIslandAsset {
    * asset is a modulepreload candidate.
    */
   preload?: boolean;
+  /** Production activation module, including Vite's generated import work. */
+  activation?: {
+    file: string;
+    media?: string;
+    /** Vite stylesheet dependencies in static graph order, relative to the client base. */
+    css?: readonly string[];
+    /** Absent when the island can introduce hosts outside its proven closure. */
+    children?: readonly string[];
+  };
 }
 
 /** The Phase 2 client build's delivery manifest, keyed by island identity. */
 export interface ClientAssetManifest {
   /** The island client entry URL ('' when no client bundle shipped). */
   entry: string;
+  /** Direct static JS dependencies emitted for the bootstrap entry. */
+  entryPreloads?: readonly string[];
   /** Compile-time island identity (delivery tag) -> emitted asset. */
   islands: Record<string, ClientIslandAsset>;
   /** Shared chunk URLs emitted by the client build (JS, neither entry nor island-dedicated). */

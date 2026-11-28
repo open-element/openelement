@@ -14,8 +14,7 @@
  * release tag (e.g. toRootCss, added and removed inside this PR).
  */
 import { existsSync } from 'node:fs';
-import { readdir } from 'node:fs/promises';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import process from 'node:process';
 import { emitSummary } from './checker-io.ts';
 import { spawnCommand } from './node-command.ts';
@@ -47,13 +46,12 @@ for (const dir of SCAN_DIRS) {
     collect(`${entry.parentPath}/${entry.name}`);
   }
 }
-// The agent contract moved out of the retired maintainer tree; keep it scanned.
+// Include the agent contract outside the scanned directories.
 for (const file of ['docs/agent-contract.md']) {
   if (existsSync(file)) collect(file);
 }
 // Every package README teaches the current public surface; packages/ui is
-// already walked above and deduped. Two-level cap mirrors the former walk's
-// maxDepth: `<pkg>/README.md` only, never nested docs.
+// already walked above and deduped. Scan only `<pkg>/README.md`.
 for (const entry of await readdir('packages', { recursive: true, withFileTypes: true })) {
   const entryPath = `${entry.parentPath}/${entry.name}`;
   if (

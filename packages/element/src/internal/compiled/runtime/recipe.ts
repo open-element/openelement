@@ -1,6 +1,6 @@
 /**
  * The generated-code insertion primitive: mount recipes and their per-projection
- * owners (JSX model §4, §4.1a/§4.1b/§4.2, ADR-0173 2026-11-03 amendment).
+ * owners.
  *
  * A JSX expression in value position is a compiler-emitted **mount recipe** —
  * an opaque, non-serializable insertion description. Creating one evaluates no

@@ -85,12 +85,16 @@ const STAGING_TOOLCHAIN_ALIAS_NAMES: ReadonlySet<string> = new Set(['vite', 'vit
  * resolves them by path when it generates the consumer's client entry, and
  * that entry imports their factories by name — no package-internal import
  * edge keeps them reachable, so they are explicit pack entries. The two roots
- * (`island-scheduler`, `enhance-client`) are resolved directly; their relative
+ * (`island-scheduler`, `form-enhancement-loader`) resolve directly. Their relative
  * value imports also need stable emitted paths (G0.5 §2).
  */
 export const ROUTER_CLIENT_RUNTIME_ENTRIES = [
   'src/vite/internal/ssg/island-scheduler.ts',
+  'src/vite/internal/ssg/document-islands.ts',
+  'src/vite/internal/ssg/document-island-catalogue.ts',
+  'src/vite/internal/ssg/form-enhancement-loader.ts',
   'src/vite/internal/ssg/enhance-client.ts',
+  'src/vite/internal/ssg/enhanced-history.ts',
   'src/vite/internal/ssg/form-enhance.ts',
   'src/vite/internal/ssg/island-lifecycle.ts',
   'src/vite/internal/ssg/morph-align.ts',
@@ -98,18 +102,8 @@ export const ROUTER_CLIENT_RUNTIME_ENTRIES = [
   'src/vite/internal/ssg/morph-focus-restore.ts',
   'src/vite/internal/ssg/morph-scroll-restore.ts',
   'src/vite/internal/ssg/morph-webkit-fix.ts',
-  // B2: the generated client entry reaches the element runtime through a
-  // DYNAMIC import whose specifier is emitted as a STRING by
-  // entry-client-codegen.ts, so the pack module graph has no import edge to
-  // these modules — exactly the island-scheduler case above. Without them the
-  // router tarball ships a client entry importing a module the package does
-  // not contain, which is what made `pack:dry-run` fail at HEAD.
-  'src/vite/internal/ssg/element-services-full.ts',
-  'src/vite/internal/ssg/element-services-client-only.ts',
-  'src/vite/internal/ssg/element-services-base.ts',
-  // The generated-lane page floor's document-services wrapper: the entry
-  // carries its specifier as a STRING too (same reason as the trio above), so
-  // the pack module graph has no edge to it either.
+  // The generated entry's static document-services specifier is emitted as
+  // text. Its resolver path has no import edge in the pack module graph.
   'src/vite/internal/ssg/element-document-services.ts',
 ] as const;
 
@@ -186,10 +180,9 @@ function isAmbientDeclarationTarget(pkg: PackageInfo, subpath: string, target: s
 }
 
 /**
- * The pack entry list: every TypeScript exports target (the compiled public
- * surface) plus, for the router, the path-delivered client-runtime modules and
- * the `openelement` bin dispatcher. Asset export targets are not compile
- * entries. Order-stable and deduplicated.
+ * The pack entry list preserves exported modules, Router's generated-code
+ * targets and bin, and Element's internal observation hook for packed tests.
+ * Asset and ambient declaration targets are copied without compilation.
  */
 export function vpPackEntries(pkg: PackageInfo): string[] {
   const map = exportsMap(pkg);
@@ -204,6 +197,9 @@ export function vpPackEntries(pkg: PackageInfo): string[] {
     if (isAssetExportTarget(pkg, subpath, target)) continue;
     if (isAmbientDeclarationTarget(pkg, subpath, target)) continue;
     push(requireSrcModule(pkg, subpath, target));
+  }
+  if (pkg.name === '@openelement/element') {
+    push('src/internal/compiled/runtime/observability.ts');
   }
   if (pkg.name === '@openelement/router') {
     for (const entry of ROUTER_CLIENT_RUNTIME_ENTRIES) push(entry);

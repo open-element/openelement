@@ -36,8 +36,19 @@ beforeAll(async () => {
 
 afterAll(removeDist);
 
-test('v0.44 static-only build ships zero client runtime (#1171)', () => {
+test('v0.44 static-only build ships zero client runtime and links its transition stylesheet', async () => {
   assertZeroIslandOutput(distDir);
+  const publicDir = join(fixtureDir, 'dist-public');
+  for (const path of ['index.html', 'about/index.html', 'mdx-page/index.html']) {
+    const html = await readFile(join(publicDir, path), 'utf8');
+    expect(html).not.toMatch(/<(?:script|style)\b|\sstyle\s*=/i);
+    const link = html.match(
+      /<link rel="stylesheet" href="\/(assets\/open-view-transition-[a-f0-9]{12}\.css)"/,
+    );
+    expect(link, path).not.toBeNull();
+    const css = await readFile(join(publicDir, link![1]!), 'utf8');
+    expect(css).toContain('@view-transition { navigation: auto; }');
+  }
 });
 
 const islandManifest: PageIslandManifest = {

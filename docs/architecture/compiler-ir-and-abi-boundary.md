@@ -40,9 +40,13 @@ exact IR node shapes — because packed-consumer evidence must constrain them.
 6. **Runtime shrinks to primitives**: signals, ownership, DOM/range helpers, event
    installation, security sinks, claim recovery, platform interop.
 
-## 2. Current implementation reality (evidence)
+## 2. Implementation at the time of the design
 
-What exists today, so the design is not confused with it:
+Alpha17 retired the serialized Part Program, the executor, and the validator.
+The compiler still uses typed lowering records for server JSX. Generated
+components import runtime helpers and carry their own mount and claim functions.
+
+The table records the 2026-11-03 baseline.
 
 | Fact | Evidence |
 | --- | --- |
@@ -248,7 +252,7 @@ build-time classification fact, not an ABI field.
 
 | Check | Owner | When | Meaning |
 | --- | --- | --- | --- |
-| `PART_PROGRAM_VERSION` | current schema | today | retires with the schema (approved P-4) |
+| `PART_PROGRAM_VERSION` | serialized schema | retired in Alpha17 | removed with the validator and serialized executor (P-4) |
 | `COMPILED_MODULE_ABI_VERSION` (v2) | current generated-module ABI | today | **retires**; superseded by the new ABI's own version (approved P-3/P-4) |
 | **New ABI version** | new generated-module contract | from Alpha16b | Alpha16b performs **compatibility checking only**: generated module ↔ runtime helpers ↔ server/client build identity |
 | **Cross-module ABI freeze** | Alpha17 | Alpha17 | the stable published contract between a precompiled library and a consumer |

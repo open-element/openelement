@@ -2,8 +2,8 @@
   "generatedFrom": "hand-maintained: last meaningful update per article and locale, validated against www/content/docs by check:content-dates",
   "articles": {
     "architecture/architecture": {
-      "en": "2026-11-25",
-      "zh": "2026-11-25"
+      "en": "2026-11-28",
+      "zh": "2026-11-28"
     },
     "architecture/design-system": {
       "en": "2026-11-25",
@@ -50,8 +50,8 @@
       "zh": "2026-11-24"
     },
     "guide/islands-and-ssr": {
-      "en": "2026-11-25",
-      "zh": "2026-11-25"
+      "en": "2026-11-28",
+      "zh": "2026-11-28"
     },
     "guide/mdx": {
       "en": "2026-11-25",

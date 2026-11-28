@@ -41,7 +41,8 @@ import { join } from 'node:path';
 import process from 'node:process';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 import { serveFetch } from '../src/internal/node-http.ts';
-import { createFetchHandler } from '../src/vite/internal/static-serve.ts';
+import { createFetchHandler, importRequestTimeServer } from '../src/vite/internal/static-serve.ts';
+import type { BrowserEntryGraphArtifact } from '../src/vite/internal/browser-entry-graph-artifact.ts';
 
 const REPO_ROOT = join(import.meta.dirname!, '..', '..', '..');
 const ROUTER_BUILD_CLI = join(REPO_ROOT, 'packages', 'router', 'src', 'cli', 'build.ts');
@@ -218,7 +219,7 @@ export { readProofLabel as proofText } from './proof-copy.ts';
     [
       '/** Local island of the external-consumer proof fixture. */',
       "import { defineIslandConfig } from '@openelement/router';",
-      "import { onConnect } from '@openelement/element';",
+      "import { onConnect, signal } from '@openelement/element';",
       "import { conditionTarget } from '@acme/conditions';",
       "import { flavor } from '@acme/conditions/flavor';",
       "import { sharedTag } from '@shared/tag.ts';",
@@ -236,6 +237,7 @@ export { readProofLabel as proofText } from './proof-copy.ts';
       '});',
       '',
       'export default function OeProofCounter(props: { proofSource: string }) {',
+      '  const count = signal(0);',
       '  // The nested dynamic import itself (B2 gap (a)). Never awaited by the',
       '  // assertions — its only job is to exist in the emitted island chunk, and',
       "  // `onConnect` is the generated lane's activation point (it is where the",
@@ -248,7 +250,7 @@ export { readProofLabel as proofText } from './proof-copy.ts';
       '  // resolution reaches the emitted terminal bytes. A module-scope statement',
       '  // is not part of the admitted component grammar: the generated lane lowers',
       '  // the component body, not arbitrary top-level side effects.',
-      "  return <span class='source' data-proof={`${conditionTarget}:${sharedTag}:${flavor}:${extensionPriority}`}>{proofText(props.proofSource as ProofLabel)}</span>;",
+      "  return <span class='source' data-proof={`${conditionTarget}:${sharedTag}:${flavor}:${extensionPriority}`}>{proofText(props.proofSource as ProofLabel)}<button type='button' onClick={() => { count.value += 1; }}>{count.value}</button></span>;",
       '}',
       '',
     ].join('\n'),
@@ -268,6 +270,7 @@ export { readProofLabel as proofText } from './proof-copy.ts';
       "    <div class='proof'>",
       '      <oe-proof-counter></oe-proof-counter>',
       "      <open-button variant='primary'>External consumer proof.</open-button>",
+      "      <a href='/proof-jsx/'>JSX proof page</a>",
       '    </div>',
       '  );',
       '}',
@@ -346,9 +349,10 @@ export default function Aside() {
   );
   await write(
     join(appDir, 'app/islands/oe-jsx-list.jsx'),
-    `import { computed, signal } from '@openelement/element';
+    `import { computed, onConnect, signal } from '@openelement/element';
 import { defineIslandConfig } from '@openelement/router';
 import { itemLabels, labelFor } from '../shared/proof-authoring-barrel.js';
+import { startProofWorker } from '../shared/proof-worker-client.js';
 
 export const openElement = defineIslandConfig({
   root: 'shadow',
@@ -365,6 +369,7 @@ function Panel(props) {
 export default function JsxList(props) {
   const flipped = signal(false);
   const items = computed(() => flipped.value ? [...itemLabels].reverse() : itemLabels);
+  onConnect(() => startProofWorker());
   return (
     <Panel title={props.heading}>
       <button type="button" onClick={() => { flipped.value = !flipped.value; }}>Reverse</button>
@@ -376,6 +381,33 @@ export default function JsxList(props) {
 `,
   );
   await write(
+    join(appDir, 'app/shared/proof-worker-client.js'),
+    `export function startProofWorker() {
+  const worker = new Worker(new URL('./proof-worker.ts', import.meta.url));
+  worker.onmessage = (event) => document.documentElement.setAttribute('data-worker-proof', event.data);
+  return () => worker.terminate();
+}
+`,
+  );
+  await write(
+    join(appDir, 'app/shared/proof-worker.ts'),
+    `import { createDirectShadowElementClassWithProjection } from '@openelement/element/internal/compiled/generated-element/shell';
+
+const ElementClass = createDirectShadowElementClassWithProjection({
+  tag: 'oe-worker-proof',
+  source: 'worker',
+  mount: () => [],
+  claim: () => [],
+});
+try {
+  const element = new ElementClass();
+  element.attachShadow({ mode: 'open' });
+} catch (error) {
+  self.postMessage((error as { code?: string }).code);
+}
+`,
+  );
+  await write(
     join(appDir, 'app/routes/proof-jsx.jsx'),
     `import { definePage } from '@openelement/router';
 import { JsxHeading as Heading } from '../components/jsx-heading';
@@ -383,7 +415,7 @@ import { ExactHeading } from '../components/jsx-heading.tsx';
 import '../components/jsx-aside.jsx';
 
 export function JsxPage() {
-  return <main><Heading /><ExactHeading /><oe-jsx-list heading="JSX list"></oe-jsx-list><oe-jsx-aside></oe-jsx-aside></main>;
+  return <main><Heading /><ExactHeading /><oe-jsx-list heading="JSX list"></oe-jsx-list><oe-jsx-aside></oe-jsx-aside><a href="/">Consumer proof home</a></main>;
 }
 
 export default definePage(JsxPage, { renderIntent: { mode: 'static' } });
@@ -556,6 +588,13 @@ test('external consumer: a JSX route prerenders and a JSX island claims and upda
   expect(html).toContain('Alpha');
   expect(html).toContain('Beta');
 
+  const clientDir = join(distDir, 'client', 'islands');
+  const chunks = (await readdir(clientDir)).filter((file) => file.endsWith('.js'));
+  for (const file of chunks) {
+    const code = await readFile(join(clientDir, file), 'utf8');
+    expect(code, file).not.toContain('unavailable during SSR');
+  }
+
   const { chromium } = await import('@playwright/test');
   const browser = await chromium.launch();
   const server = serveFetch({
@@ -574,6 +613,9 @@ test('external consumer: a JSX route prerenders and a JSX island claims and upda
     page.setDefaultTimeout(5_000);
     await page.goto(`http://127.0.0.1:${address.port}/proof-jsx/`);
     await page.waitForFunction(() => customElements.get('oe-jsx-list') !== undefined);
+    await page.waitForFunction(
+      () => document.documentElement.dataset.workerProof === 'SSR_DOM_ACCESS_UNSUPPORTED',
+    );
     const island = page.locator('oe-jsx-list');
     const panel = island.getByRole('region', { name: 'JSX list' });
     const items = panel.getByRole('listitem');
@@ -593,6 +635,70 @@ test('external consumer: a JSX route prerenders and a JSX island claims and upda
   }
 }, 30_000);
 
+test('external consumer: linked interactive pages request only their own islands by default', async () => {
+  const distDir = join(fixture.appDir, 'dist');
+  const graph = JSON.parse(
+    await readFile(join(distDir, 'client', '.vite', 'oe-browser-entry-graph.json'), 'utf8'),
+  ) as BrowserEntryGraphArtifact;
+  const counter = graph.islands.find(({ tag }) => tag === 'oe-proof-counter')!;
+  const list = graph.islands.find(({ tag }) => tag === 'oe-jsx-list')!;
+  const bootstrap = graph.chunks.find(({ file }) => file === graph.entry.chunkFile)!;
+  const entryPreloads = bootstrap.imports.map((file) => `/client/${file}`);
+  expect(entryPreloads.length).toBeGreaterThan(0);
+
+  const { chromium } = await import('@playwright/test');
+  const browser = await chromium.launch();
+  const server = serveFetch({
+    hostname: '127.0.0.1',
+    port: 0,
+    handler: createFetchHandler({ distDir }),
+  });
+  try {
+    await once(server, 'listening');
+    const address = server.address();
+    if (address === null || typeof address === 'string') throw new Error('No loopback address');
+    const scenarios = [
+      { path: '/', own: counter, other: list, destination: '/proof-jsx/' },
+      { path: '/proof-jsx/', own: list, other: counter, destination: '/' },
+    ];
+    for (const { path, own, other, destination } of scenarios) {
+      const page = await browser.newPage();
+      const requests: string[] = [];
+      page.on('request', (request) => requests.push(new URL(request.url()).pathname));
+      const response = await page.goto(`http://127.0.0.1:${address.port}${path}`);
+      const html = await response!.text();
+      expect(
+        [...html.matchAll(/<link rel="modulepreload" href="([^"]+)">/g)].map((match) => match[1]),
+      ).toEqual(entryPreloads);
+      await page.locator(`a[href="${destination}"]`).waitFor();
+      await page.waitForFunction((tag) => customElements.get(tag) !== undefined, own.tag);
+      if (own === list) {
+        await page.getByRole('button', { name: 'Reverse' }).click();
+        await page.getByText('Reversed').waitFor();
+      } else {
+        const button = page.locator(own.tag).getByRole('button');
+        expect(await button.textContent()).toBe('0');
+        await button.click();
+        await page.locator(own.tag).getByRole('button', { name: '1' }).waitFor();
+      }
+      await page.waitForLoadState('networkidle');
+      for (const url of entryPreloads) {
+        expect(requests.filter((request) => request === url)).toEqual([url]);
+      }
+      expect(requests, path).toContain(`/client/${own.chunkFile}`);
+      expect(requests, path).not.toContain(`/client/${other.chunkFile}`);
+      expect(requests, path).not.toContain(`/client/${other.activationChunkFile}`);
+      expect(await page.locator('link[rel=prefetch], script[type=speculationrules]').count()).toBe(
+        0,
+      );
+      await page.close();
+    }
+  } finally {
+    await browser.close();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}, 30_000);
+
 test('external consumer: the SSR bundle and prerendered HTML carry the import condition', async () => {
   const distDir = join(fixture.appDir, 'dist');
   const serverEntry = join(distDir, 'server', 'entry.js');
@@ -609,66 +715,180 @@ test('external consumer: the SSR bundle and prerendered HTML carry the import co
   expect(homeHtml).toContain('server-extension-priority');
   expect(homeHtml).not.toContain('client-extension-priority');
   expect(homeHtml).not.toContain('condition-browser-target');
-});
+  expect(homeHtml).toContain('/assets/open-view-transition-');
 
-/**
- * Every JS file reachable from `entry` through STATIC module edges
- * (`import … from '…'`, `import '…'`, `export … from '…'`), resolved
- * relatively inside the emitted client islands directory.
- *
- * Dynamic `import()` edges are deliberately NOT followed: B2's whole contract
- * is that the element runtime is reached only through them, so folding them
- * in would make the assertion vacuous.
- */
-async function staticImportGraph(islandsDir: string, entry: string): Promise<Set<string>> {
-  const staticEdge = /(?:^|[;\n])\s*(?:import\s*(?!\()|export\s+[^'"]*?\sfrom\s*)["']([^"']+)["']/g;
-  const seen = new Set<string>();
-  const queue = [entry];
-  while (queue.length > 0) {
-    const file = queue.pop()!;
-    if (seen.has(file)) continue;
-    seen.add(file);
-    const code = await readFile(join(islandsDir, file), 'utf8');
-    for (const match of code.matchAll(staticEdge)) {
-      const specifier = match[1]!;
-      if (!specifier.startsWith('.')) continue;
-      queue.push(specifier.replace(/^\.\//, ''));
-    }
-  }
-  return seen;
-}
+  const serverMod = await importRequestTimeServer(join(distDir, 'server', 'index.js'));
+  const fetch = createFetchHandler({ distDir, serverMod });
+  const response = await fetch(new Request('http://localhost/proof-live'));
+  expect(response.status).toBe(200);
+  const requestTimeHtml = await response.text();
+  expect(requestTimeHtml).toContain('request-time proof');
+  expect(requestTimeHtml).not.toContain('/assets/open-view-transition-');
+});
 
 test('external consumer (#1544/B2): the runtime preload is a per-page projection and the runtime leaves the entry static graph', async () => {
   const distDir = join(fixture.appDir, 'dist');
   const islandsDir = join(distDir, 'client', 'islands');
-  const clientIslands = await readdir(islandsDir);
-  const runtimeFile = clientIslands.find((file) => /^element-runtime-.+\.js$/.test(file));
-  expect(runtimeFile, `client islands: ${clientIslands.join(', ')}`).toBeTruthy();
-
-  // Island-bearing prerendered page: exactly one modulepreload, naming the
-  // chunk this build actually emitted (no hand-maintained runtime list).
   const homeHtml = await readFile(join(distDir, 'index.html'), 'utf8');
-  const preloads = homeHtml.match(/<link rel="modulepreload"[^>]*>/g) ?? [];
-  expect(preloads).toEqual([
-    `<link rel="modulepreload" href="/client/islands/${runtimeFile}" data-open-element-runtime-preload>`,
-  ]);
+  const preloads = [
+    ...homeHtml.matchAll(
+      /<link rel="modulepreload" href="\/client\/([^"]+)" data-open-element-runtime-preload>/g,
+    ),
+  ].map((match) => match[1]);
+  expect(preloads.length).toBeGreaterThan(0);
 
-  // Zero-island prerendered page: the projection gives it NO runtime preload.
   const staticHtml = await readFile(join(distDir, 'proof-static', 'index.html'), 'utf8');
-  expect(staticHtml.includes('modulepreload')).toEqual(false);
-  // It still carries the client entry (the projection removes a resource
-  // hint, never the entry).
-  expect(staticHtml).toContain('<script type="module" src="/client/islands/client.js">');
+  expect(staticHtml).not.toMatch(/modulepreload|client\.js|data-open-island-prefetch/);
 
-  // The preload is a warm START, not the graph edge: the entry the zero-island
-  // page loads must not reach the runtime chunk statically either — only the
-  // dynamic `__loadElementRuntime()` import may. This is the property the
-  // modulepreload link above cannot prove on its own.
-  const staticGraph = await staticImportGraph(islandsDir, 'client.js');
-  expect([...staticGraph]).not.toContain(runtimeFile);
-  // Guard against a vacuous pass: the same entry does carry the island wiring
-  // and its dynamic island imports.
+  const graph = JSON.parse(
+    await readFile(join(distDir, 'client', '.vite', 'oe-browser-entry-graph.json'), 'utf8'),
+  ) as BrowserEntryGraphArtifact;
+  expect(graph.status).toBe('complete');
+  const chunks = new Map(graph.chunks.map((chunk) => [chunk.file, chunk]));
+  function closure(roots: string[]): Set<string> {
+    const seen = new Set<string>();
+    for (const file of roots) {
+      if (seen.has(file)) continue;
+      seen.add(file);
+      const chunk = chunks.get(file);
+      expect(chunk, file).toBeDefined();
+      roots.push(...chunk!.imports);
+    }
+    return seen;
+  }
+  const eager = closure([graph.entry.chunkFile]);
+  const home = closure(
+    graph.islands
+      .filter((island) => homeHtml.includes(`<${island.tag}`))
+      .map((island) => island.chunkFile),
+  );
+  expect(eager.size).toBeGreaterThan(1);
+  for (const preload of preloads) {
+    expect(home).toContain(preload);
+    expect(eager).not.toContain(preload);
+  }
+  // The HTML names the activation façade the graph attributes to the host.
+  // The bootstrap is shared with other pages and names no individual island.
+  const counter = graph.islands.find(({ tag }) => tag === 'oe-proof-counter')!;
+  expect(counter.activationChunkFile).toBeDefined();
+  expect(homeHtml).toContain(`/client/${counter.activationChunkFile}`);
+  const activation = await readFile(join(distDir, 'client', counter.activationChunkFile!), 'utf8');
+  if (counter.activationChunkFile !== counter.chunkFile) {
+    expect(activation).toContain(counter.chunkFile.split('/').at(-1)!);
+    expect(activation).toMatch(/import\(`?["']?\.\//);
+  }
   const entryCode = await readFile(join(islandsDir, 'client.js'), 'utf8');
-  expect(entryCode).toContain('oe-proof-counter');
-  expect(entryCode).toMatch(/import\(`?["']?\.\//);
+  expect(entryCode).not.toContain('oe-proof-counter');
+});
+
+test('a native-only package registers both delivery tags without requesting the Element runtime', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-consumer-native-islands-'));
+  fixtureRoots.push(root);
+  const appDir = join(root, 'app');
+  const foreign = join(appDir, 'node_modules', '@acme', 'foreign');
+  await write(join(appDir, 'package.json'), '{"name":"native-island-proof","type":"module"}');
+  await write(
+    join(appDir, 'vite.config.ts'),
+    `
+import { openElement } from '@openelement/router/vite';
+export default { plugins: [openElement({ packageIslands: ['@acme/foreign'], layout: false })] };
+`,
+  );
+  await write(
+    join(appDir, 'app/routes/index.tsx'),
+    `
+import { definePage } from '@openelement/router';
+export function Page() {
+  return <main><foreign-button></foreign-button><foreign-badge></foreign-badge></main>;
+}
+export default definePage(Page);
+`,
+  );
+  await write(
+    join(foreign, 'package.json'),
+    JSON.stringify({
+      name: '@acme/foreign',
+      type: 'module',
+      exports: { './manifest': './manifest.js', './cards': './cards.js' },
+    }),
+  );
+  await write(
+    join(foreign, 'manifest.js'),
+    `export const manifest = ${JSON.stringify({
+      schemaVersion: 1,
+      packageName: '@acme/foreign',
+      version: '1.0.0',
+      declarations: ['foreign-button', 'foreign-badge'].map((tagName, index) => ({
+        tagName,
+        className: index === 0 ? 'ForeignButton' : 'ForeignBadge',
+        openElement: {
+          ssr: false,
+          dsd: false,
+          hydrate: 'only',
+          module: '@acme/foreign/cards',
+          export: index === 0 ? 'ForeignButton' : 'ForeignBadge',
+        },
+      })),
+    })};`,
+  );
+  await write(
+    join(foreign, 'cards.js'),
+    `
+export class ForeignButton extends HTMLElement {
+  connectedCallback() {
+    this.innerHTML = '<button type="button">Activate native control</button>';
+    this.querySelector('button').addEventListener('click', () => { this.dataset.active = 'true'; });
+  }
+}
+customElements.define('foreign-badge', class extends HTMLElement {
+  connectedCallback() { this.textContent = 'Registered by its own module'; }
+});
+`,
+  );
+  await symlink(
+    join(fixture.appDir, 'node_modules', '@openelement'),
+    join(appDir, 'node_modules', '@openelement'),
+  );
+  await symlink(join(REPO_ROOT, 'node_modules', 'vite'), join(appDir, 'node_modules', 'vite'));
+
+  let logs = '';
+  const build = spawn(process.execPath, [ROUTER_BUILD_CLI], { cwd: appDir });
+  build.stdout.on('data', (chunk) => (logs += chunk));
+  build.stderr.on('data', (chunk) => (logs += chunk));
+  const [code] = await once(build, 'exit');
+  expect(code, logs).toBe(0);
+  const distDir = join(appDir, 'dist');
+  const html = await readFile(join(distDir, 'index.html'), 'utf8');
+  expect(html).toContain('/client/islands/client.js');
+  expect(html).not.toContain('data-open-element-runtime-preload');
+  expect(await readdir(join(distDir, 'client', 'islands'))).not.toEqual(
+    expect.arrayContaining([expect.stringMatching(/^element-runtime-/)]),
+  );
+
+  const { chromium } = await import('@playwright/test');
+  const browser = await chromium.launch();
+  const server = serveFetch({
+    hostname: '127.0.0.1',
+    port: 0,
+    handler: createFetchHandler({ distDir }),
+  });
+  try {
+    await once(server, 'listening');
+    const address = server.address();
+    if (address === null || typeof address === 'string') throw new Error('No loopback address');
+    const page = await browser.newPage();
+    const scripts = new Set<string>();
+    page.on('request', (request) => {
+      if (request.resourceType() === 'script') scripts.add(new URL(request.url()).pathname);
+    });
+    await page.goto(`http://127.0.0.1:${address.port}/`);
+    await page.getByRole('button', { name: 'Activate native control' }).click();
+    expect(await page.locator('foreign-button').getAttribute('data-active')).toBe('true');
+    expect(await page.locator('foreign-badge').textContent()).toBe('Registered by its own module');
+    expect([...scripts].filter((url) => /\/island-/.test(url))).toHaveLength(1);
+    expect([...scripts].some((url) => /\/element-runtime-/.test(url))).toBe(false);
+  } finally {
+    await browser.close();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
 });

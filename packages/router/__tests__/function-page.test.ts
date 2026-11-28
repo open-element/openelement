@@ -404,7 +404,7 @@ function __getDefaultLocale() { return 'en'; }
 function __localeFromPath(locales, path, fallback) { return fallback; }
 function __ssr(tag, props) { return '<host>' + tag + '</host>'; }
 function __renderLayout(content, path) { return '<layout>' + content + '</layout>'; }
-function __clientScriptDescriptors() { return []; }
+function __clientDocumentResources() { return { scripts: [] }; }
 function __resolvePageDocument(head, context) {
   const resolved = typeof head === 'function' ? head(context) : head;
   return Object.assign({ links: [] }, resolved);
