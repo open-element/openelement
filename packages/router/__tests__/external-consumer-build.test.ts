@@ -349,9 +349,10 @@ export default function Aside() {
   );
   await write(
     join(appDir, 'app/islands/oe-jsx-list.jsx'),
-    `import { computed, signal } from '@openelement/element';
+    `import { computed, onConnect, signal } from '@openelement/element';
 import { defineIslandConfig } from '@openelement/router';
 import { itemLabels, labelFor } from '../shared/proof-authoring-barrel.js';
+import { startProofWorker } from '../shared/proof-worker-client.js';
 
 export const openElement = defineIslandConfig({
   root: 'shadow',
@@ -368,6 +369,7 @@ function Panel(props) {
 export default function JsxList(props) {
   const flipped = signal(false);
   const items = computed(() => flipped.value ? [...itemLabels].reverse() : itemLabels);
+  onConnect(() => startProofWorker());
   return (
     <Panel title={props.heading}>
       <button type="button" onClick={() => { flipped.value = !flipped.value; }}>Reverse</button>
@@ -375,6 +377,33 @@ export default function JsxList(props) {
       <ul>{items.value.map((item) => <li key={item.id}>{labelFor(item.label)}</li>)}</ul>
     </Panel>
   );
+}
+`,
+  );
+  await write(
+    join(appDir, 'app/shared/proof-worker-client.js'),
+    `export function startProofWorker() {
+  const worker = new Worker(new URL('./proof-worker.ts', import.meta.url));
+  worker.onmessage = (event) => document.documentElement.setAttribute('data-worker-proof', event.data);
+  return () => worker.terminate();
+}
+`,
+  );
+  await write(
+    join(appDir, 'app/shared/proof-worker.ts'),
+    `import { createDirectShadowElementClassWithProjection } from '@openelement/element/internal/compiled/generated-element/shell';
+
+const ElementClass = createDirectShadowElementClassWithProjection({
+  tag: 'oe-worker-proof',
+  source: 'worker',
+  mount: () => [],
+  claim: () => [],
+});
+try {
+  const element = new ElementClass();
+  element.attachShadow({ mode: 'open' });
+} catch (error) {
+  self.postMessage((error as { code?: string }).code);
 }
 `,
   );
@@ -559,6 +588,13 @@ test('external consumer: a JSX route prerenders and a JSX island claims and upda
   expect(html).toContain('Alpha');
   expect(html).toContain('Beta');
 
+  const clientDir = join(distDir, 'client', 'islands');
+  const chunks = (await readdir(clientDir)).filter((file) => file.endsWith('.js'));
+  for (const file of chunks) {
+    const code = await readFile(join(clientDir, file), 'utf8');
+    expect(code, file).not.toContain('unavailable during SSR');
+  }
+
   const { chromium } = await import('@playwright/test');
   const browser = await chromium.launch();
   const server = serveFetch({
@@ -577,6 +613,9 @@ test('external consumer: a JSX route prerenders and a JSX island claims and upda
     page.setDefaultTimeout(5_000);
     await page.goto(`http://127.0.0.1:${address.port}/proof-jsx/`);
     await page.waitForFunction(() => customElements.get('oe-jsx-list') !== undefined);
+    await page.waitForFunction(
+      () => document.documentElement.dataset.workerProof === 'SSR_DOM_ACCESS_UNSUPPORTED',
+    );
     const island = page.locator('oe-jsx-list');
     const panel = island.getByRole('region', { name: 'JSX list' });
     const items = panel.getByRole('listitem');

@@ -1,7 +1,12 @@
 import { FacadeErrorCode, OpenElementError } from './internal/core/errors.ts';
 
+// Router defines this only in its production document client build. Source
+// imports and other builds keep the platform check, including DOM-less SSR.
+declare const OE_DOCUMENT_CLIENT_BUILD: boolean | undefined;
+
 /** SSR-safe HTMLElement base without mutating the host global scope. */
 export const OpenElementBase: typeof HTMLElement =
+  (typeof OE_DOCUMENT_CLIENT_BUILD !== 'undefined' && OE_DOCUMENT_CLIENT_BUILD === true) ||
   typeof HTMLElement !== 'undefined'
     ? HTMLElement
     : (class {

@@ -817,6 +817,8 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<{
           hostId.startsWith('islands/activate-') ? [] : deps,
       },
       rollupOptions: {
+        // Workers have separate Rolldown options and no native HTMLElement.
+        transform: { define: { OE_DOCUMENT_CLIENT_BUILD: 'true' } },
         input: { client: VIRTUAL_CLIENT_ENTRY_ID },
         output: {
           format: 'esm',
