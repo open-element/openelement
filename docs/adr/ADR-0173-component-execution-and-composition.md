@@ -190,7 +190,11 @@ retained behind a long-lived compatibility adapter; the owner approved this on
 the public platform boundary, and the compiler still emits an internal element
 class where the platform requires one. No compatibility adapter is built. This
 is policy, not implementation evidence: the class path still ships and no slice
-is verified by this record.
+is verified by this record. (Update 2026-11-28: this sentence records the
+2026-11-03 state. The class authoring path no longer ships — the Alpha16
+class-lane deletion (`8d5058891`, #1805) removed the public Class/Decorator
+surface with no adapter, so the policy above is no longer ahead of its
+implementation.)
 
 Evidence recorded when the decision was taken: at the 2026-11-03 baseline, 219
 in-tree files were recorded as matching `@element(` — a historical size metric,

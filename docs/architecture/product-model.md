@@ -35,7 +35,7 @@ See the
 
 | Status | Contract | Evidence required / responsible milestone |
 | --- | --- | --- |
-| Current fact | Alpha.15 Part Program and classes remain; the first-party Lit renderer is retired in the current source line (no compatibility window; ADR-0152 2026-11-08) | Existing release evidence; no new qualification claimed here |
+| Current fact | Part Program and classes no longer remain in the source line: the Class authoring API was retired with no compatibility adapter in the 1.0.0-alpha.16 release, and the serialized Part Program, its generic executor and validator, and the emitted-runtime entry subpaths are retired in Alpha17 (unreleased; [ADR-0184](../adr/ADR-0184-alpha17-emitted-runtime-entry-retirement.md), 2026-11-28); the first-party Lit renderer is retired in the current source line (no compatibility window; ADR-0152 2026-11-08) | Existing release evidence; no new qualification claimed here |
 | Accepted target | Full TSX syntax input, explicit Signals, HTML-first output, native Request/Response |
 | APPROVED TARGET (2026-11-03) | Retire the serialized Part Program protocol and the Class authoring API, with no compatibility adapter; narrow generated ABI (structure not frozen) | Alpha16 semantic samples and connected codegen slices; Alpha16b class migration/retirement and ABI compatibility checks; Alpha17 author productization and ABI freeze |
 | Candidate | Tracked readonly props, computed derivation, Children and JSX values | [Author candidate contract](./tsx-author-candidate-contract.md); author review and consumer tests before freeze |

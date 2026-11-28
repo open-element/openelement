@@ -147,8 +147,9 @@ extension point for a feature nobody needs yet is surface with no owner.
 retired, and **no compatibility adapter is built** for it (ADR-0173 fourth-pass
 amendment). Native Custom Elements remain the public platform boundary; the
 compiler may still emit an internal generated class where the platform requires
-an element. **CURRENT FACT:** the class authoring path still ships; approval is
-not implementation evidence.
+an element. **CURRENT FACT (Alpha17):** the class authoring path no longer ships;
+the Alpha16 class-lane deletion removed the public Class/Decorator surface and
+no adapter was built.
 
 Retirement is evidence-gated: a replacement must cover the retiring capability
 inventory — semantics, not just the API name — and a necessary capability is not

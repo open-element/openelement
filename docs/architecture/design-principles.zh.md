@@ -68,12 +68,15 @@ void 元素集合有唯一属主。自建正则路由、scoping 运行时、元�
 [The Rule of Least Power][least-power]；
 [Svelte — Rethinking Reactivity][svelte]。
 
-本仓实践：当前后端仍消费Part Program。ADR-0174接受后继浏览器直接生成
-mount/claim/update/dispose，并区分编译期IR、生成模块ABI与HTML/数据wire；
-实现尚未完成，不代表旧执行器已退休。必要Signals、身份、事件、region与清理
-helper可以保留，但需唯一owner、行为证据和字节归因。无VDOM或runtime JSX
-fallback；不受支持的写法以源码定位诊断拒绝。服务器IR无需为了与客户端形式
-一致而重写。helper/ABI/wire的稳定格式须在消费者证据形成后冻结。
+本仓实践：编译器把获准组件降为自带 mount/claim/update/dispose 与服务端渲染
+代码的生成模块（ADR-0174）。生成元素 shell 拥有元素生命周期；浏览器经平台
+解析器采用服务端渲染 DOM（shadow root 用 Declarative Shadow DOM），生成的
+claim 代码绑定到被采用的节点。Alpha17 已退役序列化 Part Program 及其通用
+执行器与校验器，故运行期表面积是该 shell 加一个闭合的内部 helper 集合，
+而不是通用解释器。必要 Signals、身份、事件、region 与清理 helper 可以保留，
+但需唯一 owner、行为证据和字节归因。无 VDOM 或 runtime JSX fallback；不受
+支持的写法以源码定位诊断拒绝。服务器 IR 无需为了与客户端形式一致而重写。
+helper/ABI/wire 的稳定格式须在消费者证据形成后冻结。
 
 判别问句：_这增加的是构建期表面积还是运行期表面积？运行期表面积需要
 ADR。_
@@ -119,8 +122,9 @@ HTTP 语义绝不静默降级。表单无 JavaScript 可用；GET 缓存语义�
 
 **APPROVED TARGET（2026-11-03）：** 公共 Class/Decorator 作者 API 退役，且
 **不为其构建兼容适配器**（ADR-0173 第四次修订）。原生 Custom Elements 仍是
-公共平台边界；平台要求元素时，编译器仍可在内部生成 class。**CURRENT FACT：**
-class 作者路径目前仍在交付；批准不等于实现证据。
+公共平台边界；平台要求元素时，编译器仍可在内部生成 class。**CURRENT FACT
+（Alpha17）：** class 作者路径已不再交付；Alpha16 class lane 删除已移除公共
+Class/Decorator 作者面，且未构建适配器。
 
 退役受证据约束：替代必须覆盖被退役能力清单——是语义，而不只是 API
 名称——必要能力不得推迟到后续产品化里程碑。
