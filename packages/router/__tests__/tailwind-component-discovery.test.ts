@@ -202,7 +202,9 @@ async function emittedSheets(): Promise<Map<string, string>> {
 
 test('an #imports-reached shadow component reaches the component sheet exactly like a relative one', async () => {
   const html = await readFile(join(appDir, 'dist', 'index.html'), 'utf8');
-  const documentHref = html.match(/<link rel="stylesheet" href="([^"]+)"/)?.[1];
+  const documentHref = html.match(
+    /<link rel="stylesheet" href="(\/client\/assets\/[^"]+)"\s*\/>/,
+  )?.[1];
   expect(documentHref, 'the document stylesheet is linked').toBeTruthy();
   const documentName = documentHref!.split('/').pop()!;
 

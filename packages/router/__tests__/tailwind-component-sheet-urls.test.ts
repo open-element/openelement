@@ -397,7 +397,9 @@ test('the emitted component sheet addresses emitted fonts — never a source pat
   const bodies = await Promise.all(cssFiles.map((file) => readFile(join(assetsDir, file), 'utf8')));
 
   const html = await readFile(join(appDir, 'dist', 'index.html'), 'utf8');
-  const linked = html.match(/<link rel="stylesheet" href="([^"]+)"/)?.[1];
+  const linked = html.match(
+    /<link rel="stylesheet" href="(\/sub\/client\/assets\/[^"]+)"\s*\/>/,
+  )?.[1];
   expect(linked, 'the document stylesheet is linked').toBeTruthy();
   const documentSheetName = linked!.replace('/sub/client/assets/', '');
   const documentBody = bodies[cssFiles.indexOf(documentSheetName)];
