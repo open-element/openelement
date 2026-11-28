@@ -61,6 +61,32 @@ function readAttributes(
 }
 
 /**
+ * Return the index just past the comment that opens at `start`, or undefined
+ * when its end cannot be established from a plain scan.
+ *
+ * HTML ends a comment at `-->`, at the incorrectly closed `--!>`, and
+ * abruptly when the opener is followed directly by `>` (`<!-->`) or `->`
+ * (`<!--->`). Searching for `-->` alone skips those short forms and lets a
+ * later `-->` hide the markup after them from the walk. A nested `<!--` runs
+ * the tokenizer through states that can consume a dash the plain search
+ * counts as a close, so that history is treated as unreadable: the caller
+ * fails closed and the bootstrap caller keeps the client.
+ */
+function readCommentEnd(html: string, start: number): number | undefined {
+  const content = start + 4;
+  // Abrupt-closing-of-empty-comment forms.
+  if (html[content] === '>') return content + 1;
+  if (html.startsWith('->', content)) return content + 2;
+  const close = /--!?>/g;
+  close.lastIndex = content;
+  const match = close.exec(html);
+  if (!match) return undefined;
+  const nested = html.indexOf('<!--', content);
+  if (nested >= 0 && nested < match.index) return undefined;
+  return match.index + match[0].length;
+}
+
+/**
  * Return false when authored markup cannot be read confidently. The
  * bootstrap caller can retain the client for that document; the manifest
  * caller keeps the definite tags it already observed.
@@ -78,9 +104,9 @@ export function visitRenderedTags(
     const start = html.indexOf('<', index);
     if (start < 0) break;
     if (html.startsWith('<!--', start)) {
-      const end = html.indexOf('-->', start + 4);
-      if (end < 0) return false;
-      index = end + 3;
+      const end = readCommentEnd(html, start);
+      if (end === undefined) return false;
+      index = end;
       continue;
     }
     const next = html[start + 1];

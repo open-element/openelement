@@ -237,7 +237,11 @@ test('provably isolated embedded documents stay zero-JS', () => {
     '<iframe sandbox="allow-scripts" srcdoc="<script>mount()</script>" src="data:text/html,<p>Embedded</p>"></iframe>',
     // A javascript: navigation is isolated by the sandbox too.
     '<iframe sandbox="allow-scripts allow-forms" src="javascript:mount()"></iframe>',
-    // A data: document is an opaque origin.
+    // A data: document is an opaque origin, so its own script cannot reach
+    // this document. Isolation is initial-document only: a parent form/link
+    // with `target` (or the frame navigating itself) can later load a
+    // same-origin page whose script reaches the parent. Recorded residual
+    // (round2-review R2-2); the static decision cannot see that navigation.
     '<iframe src="data:text/html,<p>Reference</p>"></iframe>',
     '<iframe src="DATA:text/html,<p>Reference</p>"></iframe>',
     '<iframe src="&#100;ata:text/html,<p>Reference</p>"></iframe>',
