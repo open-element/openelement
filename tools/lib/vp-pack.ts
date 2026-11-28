@@ -91,6 +91,7 @@ const STAGING_TOOLCHAIN_ALIAS_NAMES: ReadonlySet<string> = new Set(['vite', 'vit
 export const ROUTER_CLIENT_RUNTIME_ENTRIES = [
   'src/vite/internal/ssg/island-scheduler.ts',
   'src/vite/internal/ssg/document-islands.ts',
+  'src/vite/internal/ssg/document-island-catalogue.ts',
   'src/vite/internal/ssg/form-enhancement-loader.ts',
   'src/vite/internal/ssg/enhance-client.ts',
   'src/vite/internal/ssg/enhanced-history.ts',
