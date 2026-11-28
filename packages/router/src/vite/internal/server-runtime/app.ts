@@ -189,7 +189,10 @@ function isJavaScriptUrl(value: string | undefined): boolean {
     const code = hex === undefined ? Number.parseInt(decimal, 10) : Number.parseInt(hex, 16);
     return code > 0 && code <= 0x7f ? String.fromCharCode(code) : entity;
   });
-  return /^[\u0000-\u0020]*javascript:/i.test(decoded.replace(/[\t\n\r]/g, ''));
+  const normalized = decoded.replace(/[\t\n\r]/g, '');
+  let start = 0;
+  while (start < normalized.length && normalized.charCodeAt(start) <= 0x20) start++;
+  return normalized.slice(start).toLowerCase().startsWith('javascript:');
 }
 
 function hasJavaScriptNavigation({ name, attributes }: RenderedTag): boolean {

@@ -134,7 +134,7 @@ test('trusted JavaScript navigation carries late activations even before the fir
   expect(rows(host)).toEqual([['my-counter', 'load', file]]);
   for (const link of [
     '<a href="javascript:add()">Add</a>',
-    '<a href="&#9;java&#115cript&colon;add()">Add</a>',
+    '<a href="&#31;&#9;java&#115cript&colon;add()">Add</a>',
     '<a href="java&Tab;script&#58;add()">Add</a>',
   ]) {
     expect(rows(link)).toHaveLength(2);
