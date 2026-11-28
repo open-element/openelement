@@ -1,6 +1,8 @@
 /*
  * Document-level site styles. The Tailwind entry links this stylesheet before
- * the chrome rules, where their selectors can retain their cascade.
+ * the chrome rules, where their selectors can retain their cascade. The same
+ * Tailwind sources also feed shadow sheets, so anchor these rules to the
+ * document without increasing specificity.
  *
  * Keep the root aliases and rules for slotted code blocks here. WebKit does
  * not apply the component's @scope rules to slotted light DOM, but the
@@ -20,7 +22,6 @@ body {
 
 :root,
 html[data-theme="light"],
-:host([data-theme="light"]),
 :root[data-theme="light"] {
   --surface-1: var(--site-panel);
   --surface-code: var(--site-code);
@@ -97,7 +98,6 @@ html[data-theme="light"],
   --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
 }
 html[data-theme="dark"],
-:host([data-theme="dark"]),
 :root[data-theme="dark"] {
   --surface-1: var(--site-panel);
   --surface-code: var(--site-code);
@@ -137,7 +137,7 @@ html {
 }
 ::view-transition-old(open-brand-mark),
 ::view-transition-new(open-brand-mark) { animation-duration: 320ms; animation-timing-function: var(--ease-out); }
-::selection {
+:where(:root, :root *)::selection {
   background: color-mix(in srgb, var(--color-primary) 14%, transparent);
   color: var(--color-foreground);
 }
@@ -149,7 +149,7 @@ html {
    open-article-view.css, the .article-content pre rule), so a code block reads
    the same wherever it appears. Highlighted code uses the same surface pair
    through the Shiki palette aliases below. */
-open-code-block pre {
+:where(:root) open-code-block pre {
   max-width: 100%;
   margin: 0;
   padding: var(--code-block-padding, calc(var(--spacing) * 4));
@@ -207,36 +207,36 @@ open-code-block pre {
 
 /* Shiki's focusable blocks keep their palette over plain pre rules, including
    the home sample's transparent fallback. */
-pre.shiki.css-variables[tabindex] {
+:where(:root) pre.shiki.css-variables[tabindex] {
   background-color: var(--shiki-background);
   color: var(--shiki-foreground);
 }
 
-.shiki .shiki-foreground { color: var(--shiki-foreground); }
-.shiki .shiki-token-comment { color: var(--shiki-token-comment); }
-.shiki .shiki-token-punctuation { color: var(--shiki-token-punctuation); }
-.shiki .shiki-token-constant { color: var(--shiki-token-constant); }
-.shiki .shiki-token-string { color: var(--shiki-token-string); }
-.shiki .shiki-token-string-expression { color: var(--shiki-token-string-expression); }
-.shiki .shiki-token-keyword { color: var(--shiki-token-keyword); }
-.shiki .shiki-token-function { color: var(--shiki-token-function); }
-.shiki .shiki-token-parameter { color: var(--shiki-token-parameter); }
-.shiki .shiki-token-link { color: var(--shiki-token-link); }
-.shiki .shiki-token-inserted { color: var(--shiki-token-inserted); }
-.shiki .shiki-token-deleted { color: var(--shiki-token-deleted); }
-.shiki .shiki-token-changed { color: var(--shiki-token-changed); }
-.shiki .shiki-italic { font-style: italic; }
-.shiki .shiki-bold { font-weight: bold; }
-.shiki .shiki-underline { text-decoration: underline; }
-.shiki .shiki-strike { text-decoration: line-through; }
-.shiki .shiki-underline-strike { text-decoration: underline line-through; }
+:where(:root) .shiki .shiki-foreground { color: var(--shiki-foreground); }
+:where(:root) .shiki .shiki-token-comment { color: var(--shiki-token-comment); }
+:where(:root) .shiki .shiki-token-punctuation { color: var(--shiki-token-punctuation); }
+:where(:root) .shiki .shiki-token-constant { color: var(--shiki-token-constant); }
+:where(:root) .shiki .shiki-token-string { color: var(--shiki-token-string); }
+:where(:root) .shiki .shiki-token-string-expression { color: var(--shiki-token-string-expression); }
+:where(:root) .shiki .shiki-token-keyword { color: var(--shiki-token-keyword); }
+:where(:root) .shiki .shiki-token-function { color: var(--shiki-token-function); }
+:where(:root) .shiki .shiki-token-parameter { color: var(--shiki-token-parameter); }
+:where(:root) .shiki .shiki-token-link { color: var(--shiki-token-link); }
+:where(:root) .shiki .shiki-token-inserted { color: var(--shiki-token-inserted); }
+:where(:root) .shiki .shiki-token-deleted { color: var(--shiki-token-deleted); }
+:where(:root) .shiki .shiki-token-changed { color: var(--shiki-token-changed); }
+:where(:root) .shiki .shiki-italic { font-style: italic; }
+:where(:root) .shiki .shiki-bold { font-weight: bold; }
+:where(:root) .shiki .shiki-underline { text-decoration: underline; }
+:where(:root) .shiki .shiki-strike { text-decoration: line-through; }
+:where(:root) .shiki .shiki-underline-strike { text-decoration: underline line-through; }
 
 /* Site-wide keyboard-focus baseline (light DOM). Every island that renders
    light roots — the layout shell, the search island — and every bare document
    link gets one ring shape; shadow components carry their own (page-styles
    already seats the same pair on each page tag). The ring role keeps the
    indicator on the token table in both themes; forced-colors remaps below. */
-:focus-visible {
+:where(:root, :root *):focus-visible {
   outline: 2px solid var(--color-ring);
   outline-offset: 2px;
 }
@@ -249,8 +249,8 @@ pre.shiki.css-variables[tabindex] {
      scoped prose rules that otherwise remove underlines. Borders keep their
      width and map to system colors on their own; the outline focus ring
      remaps. */
-  a { text-decoration: underline !important; }
-  :focus-visible { outline: 2px solid Highlight; }
+  :where(:root) a { text-decoration: underline !important; }
+  :where(:root, :root *):focus-visible { outline: 2px solid Highlight; }
 }
 /* Reading-page print: chrome goes away, ink goes black on white, and content
    links carry their target so the paper copy stays navigable. Token
@@ -271,25 +271,25 @@ pre.shiki.css-variables[tabindex] {
     background: #fff !important;
     color: #000 !important;
   }
-  .main,
-  .article-content,
-  .article-content p,
-  .article-content li,
-  .title,
-  .lede {
+  :where(:root) .main,
+  :where(:root) .article-content,
+  :where(:root) .article-content p,
+  :where(:root) .article-content li,
+  :where(:root) .title,
+  :where(:root) .lede {
     color: #000 !important;
   }
   /* Keep code blocks, figures and tables whole across page breaks. */
-  pre,
-  figure,
-  table,
-  open-code-block {
+  :where(:root) pre,
+  :where(:root) figure,
+  :where(:root) table,
+  :where(:root) open-code-block {
     break-inside: avoid;
   }
   /* attr(href) prints relative paths, useless on paper: expand only
      absolute URLs and say so. */
-  .article-content a[href^="http"]::after,
-  .article-content a[href^="https://"]::after {
+  :where(:root) .article-content a[href^="http"]::after,
+  :where(:root) .article-content a[href^="https://"]::after {
     content: " (" attr(href) ")";
     font-size: 0.85em;
     word-break: break-all;
