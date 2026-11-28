@@ -120,3 +120,19 @@ test('primitive generated state proves literal children while an opaque callback
     ),
   ).toBeUndefined();
 });
+
+test('script-capable frames and URLs retain catalogue fallback for an active document', () => {
+  const app = makeApp();
+  const file = '/client/activate.js';
+  const islands = {
+    'my-counter': { file, strategy: 'load', activation: { file, children: [] } },
+    'future-counter': { file, strategy: 'load', activation: { file, children: [] } },
+  } as const;
+  app.setRequestTimeClientScript('/client/client.js', islands);
+  const host = '<my-counter></my-counter>';
+  const rows = (html: string) => JSON.parse(app.clientScriptDescriptors(html)[0]!.code!);
+  expect(rows(host)).toEqual([['my-counter', 'load', file]]);
+  expect(rows(host + '<a href="java&#115;cript:add()">Add</a>')).toHaveLength(2);
+  expect(rows(host + '<iframe src="/frame"></iframe>')).toHaveLength(2);
+  expect(app.clientScriptDescriptors('<iframe src="/frame"></iframe>')).toEqual([]);
+});

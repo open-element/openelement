@@ -175,6 +175,34 @@ function canRunAuthoredScript({ name, attributes }: RenderedTag): boolean {
   return false;
 }
 
+const FRAME_TAGS = new Set(['iframe', 'object', 'embed']);
+const SCRIPT_URL_ATTRIBUTES = new Set([
+  'href',
+  'src',
+  'action',
+  'formaction',
+  'data',
+  'xlink:href',
+]);
+
+function canIntroduceUnmodelledHosts({ name, attributes }: RenderedTag): boolean {
+  if (FRAME_TAGS.has(name) || attributes.has('is')) return true;
+  for (const [attribute, value] of attributes) {
+    if (!SCRIPT_URL_ATTRIBUTES.has(attribute)) continue;
+    // Attribute entities and ASCII whitespace can obscure a script scheme.
+    if (
+      value.includes('&') ||
+      value
+        .replace(/[\t\n\r\f ]/g, '')
+        .toLowerCase()
+        .startsWith('javascript:')
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function documentClientFacts(
   html: string | undefined,
   islands: ReadonlySet<string>,
@@ -183,25 +211,28 @@ function documentClientFacts(
   const observed = new Set<string>();
   let enhanced = false;
   let fragments = false;
-  let opaque = html === undefined;
+  let authoredCode = html === undefined;
+  let opaque = false;
   if (html !== undefined) {
     const complete = visitRenderedTags(html, (tag) => {
       const { name, attributes, inOpenShadow } = tag;
       if (islands.has(name)) observed.add(name);
       if (name === 'form' && attributes.has('data-open-enhance')) enhanced = true;
       if (inOpenShadow && attributes.get('id')) fragments = true;
-      if (canRunAuthoredScript(tag)) opaque = true;
+      if (canRunAuthoredScript(tag)) authoredCode = true;
+      if (canIntroduceUnmodelledHosts(tag)) opaque = true;
     });
-    opaque ||= !complete;
+    authoredCode ||= !complete;
   }
-  if (executableHead && !opaque) {
+  if (executableHead && !authoredCode) {
     const complete = visitRenderedTags(executableHead, (tag) => {
-      if (canRunAuthoredScript(tag)) opaque = true;
-      return !opaque;
+      if (canRunAuthoredScript(tag)) authoredCode = true;
+      if (canIntroduceUnmodelledHosts(tag)) opaque = true;
+      return !authoredCode;
     });
-    opaque ||= !complete;
+    authoredCode ||= !complete;
   }
-  return { observed, enhanced, fragments, opaque };
+  return { observed, enhanced, fragments, authoredCode, opaque };
 }
 
 function isIslandTagList(value: unknown): value is readonly string[] {
@@ -239,14 +270,14 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
     const facts = documentClientFacts(html, islands, executableHead);
     // An enhanced response can morph islands in from any eligible route.
     // Fetch middleware can replace the body after route rendering.
-    const opaque = facts.opaque || fetchMiddleware.length > 0;
-    if (!opaque && facts.observed.size === 0 && !facts.enhanced && !facts.fragments) return [];
+    const authored = facts.authoredCode || fetchMiddleware.length > 0;
+    if (!authored && facts.observed.size === 0 && !facts.enhanced && !facts.fragments) return [];
     const module = { type: 'module', src };
     if (config.devClientScriptSrc || !requestTimeIslands) return [module];
     const catalogue = resolveDocumentIslandCatalogue(
       requestTimeIslands,
       facts.observed,
-      opaque || facts.enhanced,
+      authored || facts.opaque || facts.enhanced,
     );
     if (
       catalogue.length === 0 &&
