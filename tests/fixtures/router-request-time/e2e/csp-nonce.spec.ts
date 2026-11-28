@@ -117,9 +117,12 @@ test.describe('CSP nonce (request-time)', () => {
 
     const button = page.locator('live-counter #increment');
     const count = page.locator('live-counter #count');
-    const allowActivation = Promise.withResolvers<void>();
+    let releaseActivation!: () => void;
+    const allowActivation = new Promise<void>((resolve) => {
+      releaseActivation = resolve;
+    });
     await page.route(`**${activation}`, async (route) => {
-      await allowActivation.promise;
+      await allowActivation;
       await route.continue();
     });
     try {
@@ -137,7 +140,7 @@ test.describe('CSP nonce (request-time)', () => {
       expect(await page.evaluate(() => customElements.get('live-counter'))).toBeUndefined();
       await button.click();
     } finally {
-      allowActivation.resolve();
+      releaseActivation();
     }
     await expect(count).toHaveText('1');
     for (const helper of helpers) {
