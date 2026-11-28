@@ -116,9 +116,16 @@ test('the document links exactly one document sheet and the DSD one component sh
     );
     return { head, inRoot };
   });
-  // One unmarked head link: the generated document sheet (authored sheets are
-  // marked). Nothing else in the head is a stylesheet.
-  expect(state.head.filter((entry) => !entry.marked).length).toBe(1);
+  const unmarked = state.head.filter((entry) => !entry.marked);
+  expect(
+    unmarked.filter((entry) => /^\/client\/assets\/[a-f0-9]+\.css$/.test(entry.href)),
+  ).toHaveLength(1);
+  expect(
+    unmarked.filter((entry) =>
+      /^\/assets\/open-view-transition-[a-f0-9]{12}\.css$/.test(entry.href),
+    ),
+  ).toHaveLength(1);
+  expect(unmarked).toHaveLength(2);
   // The shadow component declares its own sheets inside its template, where a
   // document-level rule cannot reach.
   expect(state.inRoot.length).toBeGreaterThanOrEqual(1);

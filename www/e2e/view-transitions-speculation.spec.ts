@@ -88,11 +88,8 @@ test.describe('View Transitions', () => {
       // `pagereveal` exposes a ViewTransition on the destination document when
       // the navigation animates. Set the listener before any document script.
       //
-      // The navigation is a history traversal (`goBack`): the spec runs a
-      // transition for `traverse`, `push` and `replace`, and a `page.goto` is
-      // none of those. A link click would not do either — the client Router
-      // intercepts same-origin clicks, so that is a SAME-document navigation
-      // with its own acceptance.
+      // A download-free native anchor bypasses client-side navigation and
+      // exercises a same-origin cross-document navigation.
       await page.emulateMedia({ reducedMotion });
       await page.addInitScript(() => {
         (window as unknown as { __reveal: number }).__reveal = 0;
@@ -102,10 +99,21 @@ test.describe('View Transitions', () => {
           }
         });
       });
-      await page.goto('/');
       await page.goto('/roadmap/');
-      await page.goBack();
-      await page.waitForLoadState('networkidle');
+      await page.evaluate(() => {
+        const link = document.createElement('a');
+        link.href = '/';
+        link.textContent = 'Navigate';
+        link.setAttribute('data-native-transition-test', '');
+        link.setAttribute('target', '_self');
+        link.addEventListener('click', (event) => event.stopPropagation());
+        document.body.append(link);
+      });
+      await Promise.all([
+        page.waitForURL((url) => url.pathname === '/'),
+        page.locator('[data-native-transition-test]').click(),
+      ]);
+      await page.waitForLoadState('load');
 
       const observed = await page.evaluate((marker) => {
         // The prerequisite for the CROSS-DOCUMENT row is the at-rule, not the
@@ -126,6 +134,9 @@ test.describe('View Transitions', () => {
         }
         return {
           atRule,
+          revealApi:
+            typeof PageRevealEvent !== 'undefined' && 'viewTransition' in PageRevealEvent.prototype,
+          reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
           sameDocument:
             typeof (window as unknown as { ViewTransition?: unknown }).ViewTransition ===
             'function',
@@ -135,19 +146,20 @@ test.describe('View Transitions', () => {
       }, OPT_IN_MARKER);
       testInfo.annotations.push({
         type: 'cross-document view transitions',
-        description: `atRule=${observed.atRule} sameDocumentApi=${observed.sameDocument} pagereveal=${observed.revealed} at=${observed.path}`,
+        description: `atRule=${observed.atRule} revealApi=${observed.revealApi} sameDocumentApi=${observed.sameDocument} pagereveal=${observed.revealed} at=${observed.path}`,
       });
-      if (!observed.atRule) {
+      expect(observed.reducedMotion).toBe(reducedMotion === 'reduce');
+      if (!observed.atRule || !observed.revealApi) {
         testInfo.annotations.push({
           type: 'N/A',
           description:
-            'this engine has no `@view-transition` at-rule, so no cross-document transition is possible; the row is not measured on it',
+            'this engine lacks the at-rule or the PageReveal transition API; the native transition row is not measured on it',
         });
         expect(observed.revealed, 'an engine without the at-rule fires no reveal').toBe(0);
         return;
       }
-      expect(observed.path, 'the traversal landed on the previous document').toBe('/');
-      expect(observed.revealed, 'an opted-in traversal animates only with motion enabled').toBe(
+      expect(observed.path, 'the navigation landed on the destination document').toBe('/');
+      expect(observed.revealed, 'an opted-in navigation animates only with motion enabled').toBe(
         reducedMotion === 'reduce' ? 0 : 1,
       );
     });
