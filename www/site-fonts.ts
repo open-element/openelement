@@ -17,10 +17,10 @@
  * files), so the channel changed and the glyphs did not.
  *
  * The family names are fontsource's own; the site's token stacks
- * (www/site-css.ts) must spell them exactly or the faces never apply.
+ * (www/site-css.css) must spell them exactly or the faces never apply.
  * www/__tests__/font-delivery.test.ts pins the three facts together — the
  * declared specifiers, the www/package.json dependency versions, and the
- * families in site-css.ts.
+ * families in site-css.css.
  */
 
 /** One fontsource package behind a site family. */
@@ -31,7 +31,7 @@ export interface SiteFontPackage {
   readonly version: string;
   /** The package stylesheets compiled into the site's style bundle. */
   readonly css: readonly string[];
-  /** The family the stylesheets declare — the name site-css.ts must use. */
+  /** The family the stylesheets declare — the name site-css.css must use. */
   readonly family: string;
 }
 

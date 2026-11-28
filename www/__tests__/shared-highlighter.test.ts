@@ -6,8 +6,8 @@
  * Its two consumer forms — markdown fences (renderSiteMarkdown) and
  * page-component code blocks (highlightSiteCode, via the generated
  * _generated-page-code.ts) — must emit the same contract: the same
- * `shiki css-variables` wrapper and `var(--shiki-*)` token references the
- * site palette table (site-css.ts) resolves. A second highlighter, or a form
+ * `shiki css-variables` wrapper and `shiki-token-*` classes the
+ * site palette table (site-css.css) resolves. A second highlighter, or a form
  * that drifts off the shared theme variables, fails here.
  */
 import { expect, test } from 'vitest';
@@ -21,10 +21,10 @@ test('fences and highlightSiteCode emit the same shiki css-variables contract', 
 
   for (const html of [fenceHtml, blockHtml]) {
     expect(html, 'the shared wrapper class').toContain('class="shiki css-variables"');
-    expect(html, 'token colors ride the shared --shiki-* palette variables').toContain(
-      'var(--shiki-token-keyword)',
+    expect(html, 'token colors use the shared site classes').toContain(
+      'class="shiki-token-keyword"',
     );
-    expect(html, 'no hardcoded token hex leaves the pipeline').not.toMatch(/color:#\w{3,8}/);
+    expect(html, 'no inline token CSS leaves the pipeline').not.toMatch(/\sstyle=/);
   }
   // The wrapper prefix is byte-identical: same theme, same renderer options.
   const wrapper = /<pre class="shiki css-variables"[^>]*>/.exec(fenceHtml)?.[0];

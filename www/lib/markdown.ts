@@ -5,9 +5,8 @@
  * guide and architecture collections). Code fences are compiled to
  * token-span HTML by Shiki here, on the build machine: the highlighter, its
  * grammars and its theme are devDependencies that never enter a page bundle
- * or a published package. The emitted markup is plain platform HTML — token
- * colors ride on `var(--shiki-token-*)` references resolved by the site
- * palette table (www/site-css.ts), so the light/dark palettes switch with
+ * or a published package. The emitted token classes resolve through the site
+ * palette (www/site-css.css), so the light/dark palettes switch with
  * `data-theme` exactly like every other site color, with no runtime
  * highlighter and no highlight flash.
  *
@@ -31,19 +30,61 @@ import {
   createHighlighter,
   createJavaScriptRegexEngine,
   type Highlighter,
+  type ShikiTransformer,
 } from 'shiki';
 
 /**
- * The highlight theme: Shiki's CSS-variables theme. Every token color is
- * emitted as a `var(--shiki-token-*)` reference, so the span markup is pure
- * platform HTML and the palette lives in ONE place — the site's document
- * stylesheet (www/site-css.ts), which defines the `--shiki-*` values per
- * theme. Values inherit into every shadow tree (the article prose renders
- * inside page-component shadow roots, where `[data-theme]` selectors cannot
- * reach), so highlighted code paints correctly in both themes with no
- * runtime highlighter and no highlight flash.
+ * Keep Shiki's semantic color assignments and use the document stylesheet's
+ * live palette for the site's light DOM code, including projected samples.
  */
 export const siteCodeTheme = createCssVariablesTheme({ variablePrefix: '--shiki-' });
+
+const TOKEN_COLOR_CLASSES = new Set([
+  'shiki-foreground',
+  'shiki-token-comment',
+  'shiki-token-punctuation',
+  'shiki-token-constant',
+  'shiki-token-string',
+  'shiki-token-string-expression',
+  'shiki-token-keyword',
+  'shiki-token-function',
+  'shiki-token-parameter',
+  'shiki-token-link',
+  'shiki-token-inserted',
+  'shiki-token-deleted',
+  'shiki-token-changed',
+]);
+const TOKEN_FONT_CLASSES = new Map([
+  ['font-style:italic', 'shiki-italic'],
+  ['font-weight:bold', 'shiki-bold'],
+  ['text-decoration:underline', 'shiki-underline'],
+  ['text-decoration:line-through', 'shiki-strike'],
+  ['text-decoration:underline line-through', 'shiki-underline-strike'],
+]);
+
+const highlightClasses: ShikiTransformer = {
+  pre(node) {
+    if (
+      node.properties.style !==
+      'background-color:var(--shiki-background);color:var(--shiki-foreground)'
+    ) {
+      throw new Error('[markdown] unexpected Shiki code-block style');
+    }
+    delete node.properties.style;
+  },
+  span(node) {
+    const style = node.properties.style;
+    if (typeof style !== 'string') return;
+    for (const declaration of style.split(';')) {
+      const color = /^color:var\(--(shiki-[a-z-]+)\)$/.exec(declaration)?.[1];
+      const name =
+        color && TOKEN_COLOR_CLASSES.has(color) ? color : TOKEN_FONT_CLASSES.get(declaration);
+      if (!name) throw new Error(`[markdown] unexpected Shiki token style '${declaration}'`);
+      this.addClassToHast(node, name);
+    }
+    delete node.properties.style;
+  },
+};
 
 /** Grammars loaded into the highlighter — the full closed set the site needs. */
 const SITE_CODE_LANGS = ['typescript', 'tsx', 'javascript', 'json', 'bash', 'css', 'html', 'text'];
@@ -131,9 +172,11 @@ function highlightFenceSource(source: string, fence: string, highlighter: Highli
         `${[...PLAIN_FENCE_LANGS].filter((lang) => lang !== '').join(', ')}.`,
     );
   }
-  // Token colors are var() references resolved by the site palette table
-  // (www/site-css.ts) — see the siteCodeTheme note above.
-  return highlighter.codeToHtml(source, { lang: grammar, theme: siteCodeTheme });
+  return highlighter.codeToHtml(source, {
+    lang: grammar,
+    theme: siteCodeTheme,
+    transformers: [highlightClasses],
+  });
 }
 
 /**

@@ -33,10 +33,10 @@ test('build output: both homepages ship readable code and the canonical install 
     expect(html).toContain(`<code id="home-install-command">${installCommand}</code>`);
     expect(html).toContain('open-counter.tsx');
     // The hero sample is compiled by the site's one Shiki pipeline: fenced-code
-    // bytes (`class="shiki css-variables"` plus inline --shiki-* token vars),
+    // markup (`class="shiki css-variables"` plus token classes),
     // not escaped plain text.
     expect(html).toContain('class="shiki css-variables"');
-    expect(html).toMatch(/--shiki-token-/);
+    expect(html).toMatch(/class="shiki-token-/);
     expect(html).toMatch(/<open-counter [^>]*><template shadowrootmode="open"/);
   }
 });
@@ -134,7 +134,9 @@ test('build output: artifact scan — no vendored highlighter, no CDN font refer
       'did not reach the emitted style bundle',
   ).toBeGreaterThan(0);
   const homeHtml = readFileSync(join(DIST, 'index.html'), 'utf8');
-  const stylesheetHref = homeHtml.match(/<link rel="stylesheet" href="([^"]+)"/)?.[1];
+  const stylesheetHref = homeHtml.match(
+    /<link rel="stylesheet" href="(\/client\/assets\/[^"]+)"/,
+  )?.[1];
   expect(stylesheetHref, 'the built head links a stylesheet').toBeTruthy();
   const bundlePath = join(DIST, stylesheetHref!.replace(/^\//, ''));
   expect(existsSync(bundlePath), `linked style bundle is missing: ${bundlePath}`).toBeTruthy();
@@ -295,6 +297,30 @@ test('build output: pages ship exactly two eager scripts — theme-init and the 
     const srcs = [...html.matchAll(eagerScripts)].map((m) => m[2]!.split('/').pop());
     expect(srcs.sort(), `eager scripts on ${page}`).toEqual(['client.js', 'theme-init.js']);
     expect(html.includes('/assets/vendor/'), `vendored runtime scripts on ${page}`).toBeFalsy();
+  }
+});
+
+test('published site documents link stylesheets and keep inline scripts inert', () => {
+  const { root } = checkPublishOutput(DIST);
+  const pages = walkHtmlFileEntries(root);
+  expect(pages.length).toBeGreaterThan(0);
+  const inertScript = /\btype="(?:application\/(?:ld\+json|open-islands\+json)|speculationrules)"/i;
+  const tagPattern = /<([a-z][\w:-]*)(?=[\s/>])((?:[^>"']|"[^"]*"|'[^']*')*)>/gi;
+  for (const page of pages) {
+    const html = readFileSync(page.absolutePath, 'utf8');
+    for (const [, tag, attributes] of html.matchAll(tagPattern)) {
+      const attrNames = attributes.replace(/"[^"]*"|'[^']*'/g, '""');
+      expect(tag.toLowerCase(), page.relativePath).not.toBe('style');
+      expect(attrNames, page.relativePath).not.toMatch(/\s(?:style|on[a-z]+)\s*=/i);
+      if (tag.toLowerCase() === 'script' && !/\ssrc\s*=/i.test(attrNames)) {
+        expect(attributes, page.relativePath).toMatch(inertScript);
+      }
+    }
+    const documentSheet = html.match(/<link rel="stylesheet" href="\/client\/assets\/[^"]+"\s*\/>/);
+    const themeScript = html.match(/<script src="\/theme-init\.js"><\/script>/);
+    expect(documentSheet, page.relativePath).not.toBeNull();
+    expect(themeScript, page.relativePath).not.toBeNull();
+    expect(themeScript!.index!).toBeLessThan(documentSheet!.index!);
   }
 });
 

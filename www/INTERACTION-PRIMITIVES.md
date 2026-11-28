@@ -59,7 +59,7 @@ coexist. Reference implementation: `open-search-combobox.ts` (`sync()`).
 
 ### Focus management — native-first
 
-- **Site-wide `:focus-visible` baseline** (site-css.ts): one ring shape —
+- **Site-wide `:focus-visible` baseline** (site-css.css): one ring shape —
   `2px solid var(--color-ring)`, offset 2 — for every light-DOM focusable
   (document links, search trigger/input). The site's own components seat the
   same pair as UTILITIES on the element they ring

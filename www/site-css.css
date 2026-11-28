@@ -1,54 +1,23 @@
-/**
- * The document-level stylesheet of the www site.
+/*
+ * Document-level site styles. The Tailwind entry links this stylesheet before
+ * the chrome rules, where their selectors can retain their cascade.
  *
- * Every rule here targets html/body or defines document-root aliases — subjects
- * that live outside every component @scope, which is why they cannot live in
- * component sheets. Component-local concerns (including language variants via
- * subject-side `:lang(zh)`) belong in the component sheets instead.
- *
- * One subject is document-level for an engine reason rather than a layering
- * one: content SLOTTED into a shadow host's `<slot>` (open-code-block's
- * projected `<pre>`). A component sheet compiles to `@scope (<host-tag>)`,
- * and WebKit does not apply scoped rules to slotted light DOM — measured
- * 2026-10-09 on the built home page: a plain descendant rule inside the scope
- * applied, while `open-code-block pre` and `open-code-block` itself kept their
- * unscoped values (Chromium applied both). The document layer reaches the
- * slotted element in every engine, so the code-block surface is stated here.
- *
- * `documentStyle` is the same layer one step further out: the body baseline,
- * composed with `siteCSS` into the single inline <style> the document head
- * carries. It lives here rather than in app/head.tsx because
- * check-site-theme-tokens.ts scans www/app for hardcoded theme values; this
- * module is the site's designated style layer (the gate's own doctrine
- * names it). The @font-face faces live outside this body (there is no
- * @font-face rule here): they are self-hosted from the fontsource npm
- * packages declared in www/site-fonts.ts and compiled into the site's one
- * linked style bundle (www/openelement.config.ts `tailwind.theme`), so the
- * family names in the stacks below must match fontsource's families
- * ('Inter Variable', 'JetBrains Mono Variable', 'Instrument Serif').
- *
- * Token delivery (alpha9 C4, #1507; twin retired alpha9 C5): the site build
- * enables the router's Tailwind entry (see openelement.config.ts), so the
- * @theme role table (packages/ui/src/theme.css) ships through the entry's
- * compiled, head-linked stylesheet — NOT as an inline copy here. The ui
- * package carries no scale values of its own (the compiled theme-tokens twin
- * is deleted), so there is no fallback sheet to inline: if the entry ever
- * turns off, the site must supply its own role table first (the OFF contract,
- * packages/ui/CUSTOMIZATION.md "Value delivery").
+ * Keep the root aliases and rules for slotted code blocks here. WebKit does
+ * not apply the component's @scope rules to slotted light DOM, but the
+ * document stylesheet reaches it in every supported engine.
  */
+html {
+  visibility: visible !important;
+}
 
-/**
- * Central viewport tier scale (px). Every bare-number @media width/height
- * breakpoint in www/app and www/site-css.ts must be one of these —
- * check-site-theme-tokens.ts enforces it, so a new tier is a deliberate
- * edit here, not a scattered literal. rem/ch/% layout measures and
- * element-relative @container widths are not viewport tiers and stay out
- * of this list. 901 is the 900 desktop complement (min-width side).
- */
-export const SITE_BREAKPOINT_TIERS = [
-  360, 480, 520, 640, 700, 720, 760, 768, 860, 900, 901, 940, 1040, 1041, 1100, 1120, 1200,
-] as const;
-export const siteCSS = `
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 :root,
 html[data-theme="light"],
 :host([data-theme="light"]),
@@ -178,9 +147,8 @@ html {
    own horizontal scroll so a long line never widens the page, and the
    padding/border/radius repeat the article fences' declaration (see
    open-article-view.css, the .article-content pre rule), so a code block reads
-   the same wherever it appears. Shiki paints the pre's background/color inline
-   from --shiki-background/--shiki-foreground, which alias the same two tokens,
-   so the inline style and this rule agree by construction. */
+   the same wherever it appears. Highlighted code uses the same surface pair
+   through the Shiki palette aliases below. */
 open-code-block pre {
   max-width: 100%;
   margin: 0;
@@ -194,10 +162,8 @@ open-code-block pre {
   line-height: 1.6;
 }
 /* Build-time syntax highlighting palette (www/lib/markdown.ts, issue #1552).
-   Shiki's css-variables theme emits token colors as var() references, so this
-   table is the single resolver: the values flip with data-theme and inherit
-   into every shadow tree — page prose renders inside page-component shadow
-   roots, where [data-theme] selectors cannot reach. Light values are the
+   Token classes read these aliases, which flip with the document theme.
+   Light values are the
    bundled github-light palette; dark values are the bundled github-dark
    palette except the lighter comment gray #7d8590. The code surface stays
    site-owned: the theme's background and
@@ -238,6 +204,33 @@ open-code-block pre {
   --shiki-token-deleted: #ffb1b1;
   --shiki-token-changed: #ffab70;
 }
+
+/* Shiki's focusable blocks keep their palette over plain pre rules, including
+   the home sample's transparent fallback. */
+pre.shiki.css-variables[tabindex] {
+  background-color: var(--shiki-background);
+  color: var(--shiki-foreground);
+}
+
+.shiki .shiki-foreground { color: var(--shiki-foreground); }
+.shiki .shiki-token-comment { color: var(--shiki-token-comment); }
+.shiki .shiki-token-punctuation { color: var(--shiki-token-punctuation); }
+.shiki .shiki-token-constant { color: var(--shiki-token-constant); }
+.shiki .shiki-token-string { color: var(--shiki-token-string); }
+.shiki .shiki-token-string-expression { color: var(--shiki-token-string-expression); }
+.shiki .shiki-token-keyword { color: var(--shiki-token-keyword); }
+.shiki .shiki-token-function { color: var(--shiki-token-function); }
+.shiki .shiki-token-parameter { color: var(--shiki-token-parameter); }
+.shiki .shiki-token-link { color: var(--shiki-token-link); }
+.shiki .shiki-token-inserted { color: var(--shiki-token-inserted); }
+.shiki .shiki-token-deleted { color: var(--shiki-token-deleted); }
+.shiki .shiki-token-changed { color: var(--shiki-token-changed); }
+.shiki .shiki-italic { font-style: italic; }
+.shiki .shiki-bold { font-weight: bold; }
+.shiki .shiki-underline { text-decoration: underline; }
+.shiki .shiki-strike { text-decoration: line-through; }
+.shiki .shiki-underline-strike { text-decoration: underline line-through; }
+
 /* Site-wide keyboard-focus baseline (light DOM). Every island that renders
    light roots — the layout shell, the search island — and every bare document
    link gets one ring shape; shadow components carry their own (page-styles
@@ -301,23 +294,4 @@ open-code-block pre {
     font-size: 0.85em;
     word-break: break-all;
   }
-}`;
-
-// Token note (see the module doc): the theme layer comes from the entry's
-// head-linked stylesheet asset, so nothing here re-declares it. Shadow trees keep
-// inheriting the variables from the document root the same as before — the
-// delivery changed, the inheritance contract did not.
-
-/**
- * The complete document-level style body: the body baseline and the site
- * rules. The @font-face faces are not part of this body and never may be:
- * this text is inlined into the head, where a relative font URL would
- * resolve against the page, and the raw-<style> head contract rejects
- * `@import` outright. They ride the site's linked style bundle instead
- * (www/site-fonts.ts → www/openelement.config.ts `tailwind.theme` → the
- * head-linked document stylesheet), whose same-origin woff2 siblings are
- * emitted and URL-rewritten by Vite's own asset graph. The theme token
- * table is not part of this body either — the same linked stylesheet
- * carries it (see the module doc). app/head.tsx wraps this in one <style> entry.
- */
-export const documentStyle = `body{font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}${siteCSS}`;
+}
