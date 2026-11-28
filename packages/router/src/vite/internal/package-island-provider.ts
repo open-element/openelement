@@ -14,7 +14,7 @@ export async function resolvePackageIslandProvider(
   ) => Promise<
     | {
         id: string;
-        exports: readonly string[];
+        exportNames: readonly string[];
       }
     | undefined
   >,
@@ -40,7 +40,7 @@ export async function resolvePackageIslandProvider(
     if (
       !target ||
       !facade.importedIds.includes(target.id) ||
-      !target.exports.includes(forward.name)
+      !target.exportNames.includes(forward.name)
     ) {
       return undefined;
     }

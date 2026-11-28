@@ -1188,7 +1188,8 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<{
               async (source, importer) => {
                 const resolved = await this.resolve(source, importer);
                 if (!resolved || resolved.external) return undefined;
-                return this.getModuleInfo(resolved.id) ?? undefined;
+                const info = this.getModuleInfo(resolved.id);
+                return info ? { id: info.id, exportNames: info.exports } : undefined;
               },
             );
             if (providerId === undefined) continue;

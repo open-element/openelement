@@ -17,8 +17,8 @@ const facade = {
 };
 
 const targets = new Map([
-  ['./compiler-output.js', { id: providerId, exports: ['LocalButton', 'LocalInput'] }],
-  ['./another-output.js', { id: otherId, exports: ['LocalDialog'] }],
+  ['./compiler-output.js', { id: providerId, exportNames: ['LocalButton', 'LocalInput'] }],
+  ['./another-output.js', { id: otherId, exportNames: ['LocalDialog'] }],
 ]);
 
 function resolveTarget(source: string, importer: string) {
@@ -46,7 +46,7 @@ test('refuses ambiguity, a different resolved edge, or a missing binding', async
   ).resolves.toBeUndefined();
   await expect(
     resolvePackageIslandProvider(facade, ['Button'], () =>
-      Promise.resolve({ id: providerId, exports: ['LocalInput'] }),
+      Promise.resolve({ id: providerId, exportNames: ['LocalInput'] }),
     ),
   ).resolves.toBeUndefined();
 });
