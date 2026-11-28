@@ -20,7 +20,7 @@ import {
   type EmitState,
   push,
   INTERNAL_PREFIX,
-  LIST_ENTRY_INDEX,
+  LIST_ENTRY_MATCHER,
   type SpanLike,
   nextName,
   recordFor,
@@ -518,7 +518,7 @@ function emitList(
   push(state, `const ${INTERNAL_PREFIX}previous = ${entriesVar};`);
   push(
     state,
-    `const ${INTERNAL_PREFIX}byKey = ${LIST_ENTRY_INDEX}(${INTERNAL_PREFIX}previous, "key");`,
+    `const ${INTERNAL_PREFIX}matchEntry = ${LIST_ENTRY_MATCHER}(${INTERNAL_PREFIX}previous);`,
   );
   push(state, `const ${INTERNAL_PREFIX}next = [];`);
   push(state, `const ${INTERNAL_PREFIX}used = new Set();`);
@@ -534,7 +534,7 @@ function emitList(
   );
   push(
     state,
-    `const ${INTERNAL_PREFIX}found = ${INTERNAL_PREFIX}byKey.get(${INTERNAL_PREFIX}key)?.pop();`,
+    `const ${INTERNAL_PREFIX}found = ${INTERNAL_PREFIX}matchEntry(${INTERNAL_PREFIX}key);`,
   );
   push(state, `if (${INTERNAL_PREFIX}found !== undefined) {`);
   state.indent += 1;

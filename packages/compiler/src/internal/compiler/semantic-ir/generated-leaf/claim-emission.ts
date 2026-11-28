@@ -19,6 +19,7 @@ import { STATIC_STYLES_MARKER } from '@openelement/protocol/part-program';
 import {
   INTERNAL_PREFIX,
   LIST_ENTRY_INDEX,
+  LIST_ENTRY_MATCHER,
   type EmitState,
   nextName,
   pushParts,
@@ -990,14 +991,14 @@ function emitClaimListSync(
   // the claimed DOM, owners and entries untouched. The refresh assignment keeps
   // the previous entry list, so the next legal signal value can recover.
   push(state, 'for (const key of keys) encodeListKey(key);');
-  push(state, `const byKey = ${LIST_ENTRY_INDEX}(previous, "key");`);
+  push(state, `const matchEntry = ${LIST_ENTRY_MATCHER}(previous);`);
   push(state, 'const next = [];');
   push(state, 'const used = new Set();');
   push(state, 'for (let index = 0; index < items.length; index++) {');
   state.indent += 1;
   push(state, 'const item = items[index];');
   push(state, 'const key = keys[index];');
-  push(state, 'const found = byKey.get(key)?.pop();');
+  push(state, 'const found = matchEntry(key);');
   push(state, 'if (found !== undefined) {');
   state.indent += 1;
   push(state, 'used.add(found); found.item = item; found.update(item); next.push(found);');
