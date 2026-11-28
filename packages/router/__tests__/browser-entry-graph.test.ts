@@ -137,6 +137,12 @@ export const helperReachesTheRootBarrel = typeof renderToString;
  * no style edge at all — so the strategy is a fixture parameter, not a detail.
  */
 function islandSource(hydrate: string, ssr: boolean, dsd: boolean): string {
+  const enableInteraction =
+    hydrate === 'only'
+      ? ` onClick={() => {
+    void import('../utils/probe-lazy.ts').then((mod) => mod.run());
+  }}`
+      : '';
   return `import { defineIslandConfig } from '@openelement/router';
 import { helperReachesTheRootBarrel } from './probe-helper.ts';
 
@@ -151,7 +157,7 @@ export const openElement = defineIslandConfig({
 });
 
 export default function ProbeCounter(props: { count: number }) {
-  return <span id="count" data-barrel={helperReachesTheRootBarrel}>{props.count}</span>;
+  return <span id="count" data-barrel={helperReachesTheRootBarrel}${enableInteraction}>{props.count}</span>;
 }
 `;
 }
@@ -177,6 +183,10 @@ async function makeRouterFixture(): Promise<string> {
     ].join('\n'),
   );
   await writeFixtureFile(join(root, 'app', 'islands', 'probe-helper.ts'), ISLAND_HELPER);
+  await writeFixtureFile(
+    join(root, 'app', 'utils', 'probe-lazy.ts'),
+    'export function run() { console.info("probe"); }',
+  );
   await writeFixtureFile(join(root, 'app', 'islands', 'probe-counter.tsx'), ISLAND_CLASS);
   await writeFixtureFile(
     join(root, 'app', 'islands', 'probe-counter.css'),
@@ -406,8 +416,16 @@ test('T1 real router CLI build emits a normalized, MET browser-entry graph', asy
   expect(
     artifact.chunks.some((chunk) => chunk.modules.some((module) => module.renderedLength > 0)),
   ).toBe(true);
-  // Dynamic/implicit chunk edges are materialized, not dropped.
-  expect(artifact.chunks.some((chunk) => chunk.dynamicImports.length > 0)).toBe(true);
+  // The document's activation edge is explicit evidence, and imports made
+  // by the island after interaction retain their actual Vite dynamic edges.
+  const island = artifact.islands.find(({ tag }) => tag === 'probe-counter')!;
+  expect(island.activationChunkFile).toBe(island.chunkFile);
+  const islandChunk = artifact.chunks.find(({ file }) => file === island.chunkFile)!;
+  const lazyChunk = artifact.chunks.find(({ modules }) =>
+    modules.some(({ id }) => id.endsWith('app/utils/probe-lazy.ts')),
+  );
+  expect(lazyChunk).toBeDefined();
+  expect(islandChunk.dynamicImports).toContain(lazyChunk!.file);
 
   // B1 privacy: the style-asset graph id is base64url of the sheet's ABSOLUTE
   // path in the bundler. The artifact must carry the decoded, workspace-anchored
@@ -709,16 +727,17 @@ test('T5 forged/derived artifacts fail closed: UNPROVEN exit 2, never a green cl
   const emptyChunks = cloneT1();
   emptyChunks.chunks = [];
   // 9. A loaded violation hidden behind an unreachable chunk (forged green).
-  const hiddenViolation = cloneViolation();
-  const entryChunk = (
-    hiddenViolation.chunks as Array<{
-      isEntry: boolean;
-      dynamicImports: string[];
-      imports: string[];
-    }>
-  ).find((chunk) => chunk.isEntry)!;
-  entryChunk.dynamicImports = [];
-  entryChunk.imports = [];
+  const hiddenViolation = structuredClone(violationProbe);
+  const hiddenChunk = hiddenViolation.chunks.find(({ modules }) =>
+    modules.some(({ id }) => id.endsWith('app/utils/probe-lazy.ts')),
+  )!;
+  for (const chunk of hiddenViolation.chunks) {
+    chunk.modules = chunk.modules.filter(({ id }) => id !== gateId);
+    chunk.dynamicImports = chunk.dynamicImports.filter((file) => file !== hiddenChunk.file);
+  }
+  hiddenChunk.modules.push({ id: gateId, renderedLength: 17 });
+  Object.assign(hiddenViolation.predicate, deriveBrowserEntryGraphSummary(hiddenViolation));
+  expect(hiddenViolation.predicate.loadedViolations).toEqual([]);
   // 10. Drifted gate table digest.
   const drifted = cloneT1();
   (drifted.predicate as { gateListDigest: string }).gateListDigest = 'sha256:deadbeef';

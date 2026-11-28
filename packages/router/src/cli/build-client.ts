@@ -729,7 +729,8 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<{
 
   const activationModules = createIslandActivationModules(islandEntries);
   const activationReferences = new Map<string, string>();
-  const activationFiles = new Map<string, string>();
+  const activationFiles = new Map<string, { file: string; css: string[] }>();
+  const directActivationSources = new Set<string>();
 
   const buildClientEntryCode = (): string =>
     generateClientEntry(islandEntries, {
@@ -875,6 +876,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<{
                   // Force preact + preact/hooks into a single chunk so the
                   // shared options object is not duplicated across chunks
                   // (which breaks hooks).
+                  if (directActivationSources.has(id)) return null;
                   if (id.includes('node_modules/preact') || id.includes('/preact/')) {
                     return 'preact';
                   }
@@ -1094,15 +1096,27 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<{
               this.emitFile({
                 type: 'chunk',
                 id,
-                name: `activate-${activation.tags[0]}`,
+                name: `${activation.direct ? 'island' : 'activate'}-${activation.tags[0]}`,
                 preserveSignature: 'strict',
               }),
             );
           }
         },
-        generateBundle() {
+        generateBundle(_options, bundle) {
           for (const [id, reference] of activationReferences) {
-            activationFiles.set(id, this.getFileName(reference));
+            const file = this.getFileName(reference);
+            const css = new Set<string>();
+            const seen = new Set<string>();
+            const collectStyles = (name: string): void => {
+              if (seen.has(name)) return;
+              seen.add(name);
+              const item = bundle[name];
+              if (item?.type !== 'chunk') return;
+              for (const dependency of item.imports) collectStyles(dependency);
+              for (const sheet of item.viteMetadata?.importedCss ?? []) css.add(sheet);
+            };
+            collectStyles(file);
+            activationFiles.set(id, { file, css: [...css] });
           }
         },
       },
@@ -1128,6 +1142,10 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<{
                 );
               }
               islandModuleIds.set(specifier, resolved.id);
+            }
+            for (const activation of activationModules.values()) {
+              if (activation.direct)
+                directActivationSources.add(islandModuleIds.get(activation.modulePath)!);
             }
             // #1544: resolve the Element package identity before chunk grouping.
             // Resolving the entry locates the package without adding a bundle
@@ -1276,7 +1294,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<{
       if (
         emitted === undefined ||
         !emittedChunks.some(
-          (chunk) => chunk.fileName === emitted && chunk.facadeModuleId === '\0' + id,
+          (chunk) => chunk.fileName === emitted.file && chunk.facadeModuleId === '\0' + id,
         )
       ) {
         throw buildError(
@@ -1285,11 +1303,12 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<{
         );
       }
       const children = potentialHosts(activation.modulePath);
-      const file = `${clientBase}client/${emitted}`;
+      const file = `${clientBase}client/${emitted.file}`;
       activationUrls.add(file);
       for (const tag of activation.tags) {
         ctx.clientAssetManifest.islands[tag]!.activation = {
           file,
+          ...(emitted.css.length === 0 ? {} : { css: emitted.css }),
           ...(activation.media === undefined ? {} : { media: activation.media }),
           ...(children === undefined ? {} : { children }),
         };

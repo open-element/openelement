@@ -146,7 +146,7 @@ test('one bootstrap consumes a route-local catalogue and replays a click before 
   const requested = new Promise<void>((resolve) => {
     reached = resolve;
   });
-  await page.route('**/activate-subpage-card-*.js', async (route) => {
+  await page.route('**/island-subpage-card-*.js', async (route) => {
     reached();
     await blocked;
     await route.continue();
@@ -208,6 +208,7 @@ test('an opaque native module can append an island in its open root and receives
     'subpage-native',
     'subpage-note',
     'subpage-other',
+    'subpage-styled',
   ]);
   await expect(page.locator('subpage-native')).toHaveCSS('border-top-width', '6px');
   const child = page.locator('subpage-native').getByRole('button', { name: 'Nested 0' });
@@ -218,7 +219,7 @@ test('an opaque native module can append an island in its open root and receives
 
 test('a failed activation remains inert and a fresh navigation can load it', async ({ page }) => {
   let failures = 0;
-  await page.route('**/activate-subpage-card-*.js', async (route) => {
+  await page.route('**/island-subpage-card-*.js', async (route) => {
     failures++;
     await route.abort();
   });
@@ -231,9 +232,20 @@ test('a failed activation remains inert and a fresh navigation can load it', asy
   expect(await page.evaluate(() => customElements.get('subpage-card'))).toBeUndefined();
   expect(await page.getByText('carded').isVisible()).toBe(true);
   expect(failures).toEqual(1);
-  await page.unroute('**/activate-subpage-card-*.js');
+  await page.unroute('**/island-subpage-card-*.js');
   await page.reload();
   await page.waitForFunction(() => !!customElements.get('subpage-card'));
   await page.getByRole('button', { name: 'Show generated child' }).click();
   await expect(page.getByRole('button', { name: 'Nested 0' })).toBeVisible();
+});
+
+test('a generated activation uses its original chunk and applies Vite CSS', async ({ page }) => {
+  const graph = JSON.parse(
+    readFileSync(new URL('client/.vite/oe-browser-entry-graph.json', DIST), 'utf8'),
+  ) as BrowserEntryGraphArtifact;
+  const island = graph.islands.find(({ tag }) => tag === 'subpage-styled')!;
+  expect(island.activationChunkFile).toEqual(island.chunkFile);
+  await page.goto(`${BASE}/styled-activation`);
+  await expect(page.getByRole('button', { name: 'Styled island' })).toBeVisible();
+  await expect(page.locator('subpage-styled')).toHaveCSS('border-bottom-width', '7px');
 });

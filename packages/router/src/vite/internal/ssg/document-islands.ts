@@ -12,6 +12,11 @@ import {
 
 interface DocumentIslandOptions {
   bootstrapUrl: string;
+  preload: <T>(
+    load: () => Promise<T>,
+    css: readonly string[] | undefined,
+    importerUrl: string,
+  ) => Promise<T>;
   idleFallbackTimeoutMs: number;
   strategies: Parameters<typeof createIslandSchedulerWithStrategies>[1];
   actionHeader?: string;
@@ -37,10 +42,10 @@ export function startDocumentIslands(options: DocumentIslandOptions): void {
   const shared = new Map<string, NonNullable<IslandSchedulerDeps['map'][string]>>();
 
   ensureDeepFragmentNavigation();
-  for (const [tag, strategy, activationUrl, query] of catalogue) {
+  for (const [tag, strategy, activationUrl, query, css] of catalogue) {
     tags.push(tag);
     strategies[strategy].push(tag);
-    if (strategy === 'media' && query !== undefined && typeof window.matchMedia === 'function') {
+    if (strategy === 'media' && query != null && typeof window.matchMedia === 'function') {
       mediaQueries[tag] = window.matchMedia(query);
     }
 
@@ -48,9 +53,9 @@ export function startDocumentIslands(options: DocumentIslandOptions): void {
     if (!factory) {
       let pending: Promise<unknown> | undefined;
       factory = () =>
-        (pending ??= import(/* @vite-ignore */ activationUrl).then(({ default: activate }) =>
-          activate(),
-        ));
+        (pending ??= options
+          .preload(() => import(/* @vite-ignore */ activationUrl), css, options.bootstrapUrl)
+          .then((module) => module?.default(tag)));
       shared.set(activationUrl, factory);
     }
     map[tag] = factory;

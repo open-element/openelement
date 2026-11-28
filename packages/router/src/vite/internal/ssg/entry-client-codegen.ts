@@ -11,6 +11,7 @@ import {
   validateClientIslandEntry,
   VIRTUAL_RUNTIME_SPECIFIERS,
 } from './entry-generators.ts';
+import { VITE_PRELOAD_HELPER_ID } from '../vite-helper-chunk.ts';
 import { ISLAND_ACTIVATION_PREFIX } from './document-island-catalogue.ts';
 import type { ClientIslandDeliveryEntry, ClientIslandDeliveryInput } from './delivery.ts';
 
@@ -168,6 +169,11 @@ export const registerIslandRuntime = `export function register(tag, getConstruct
 
 /** Preserve each Vite-generated static import edge and its preload behavior. */
 export function createIslandActivationModules(islands: readonly ClientIslandDeliveryInput[]) {
+  const generated = new Set(
+    islands
+      .filter((island) => 'generatedLane' in island && island.generatedLane)
+      .map((island) => island.modulePath),
+  );
   const groups = new Map<string, AdmittedClientIslandEntry[]>();
   for (const entry of expandClientIslandEntries(islands)) {
     if (entry.strategy === 'none') continue;
@@ -175,6 +181,10 @@ export function createIslandActivationModules(islands: readonly ClientIslandDeli
     const group = groups.get(key);
     if (group) group.push(entry);
     else groups.set(key, [entry]);
+  }
+  const counts = new Map<string, number>();
+  for (const [first] of groups.values()) {
+    counts.set(first!.modulePath, (counts.get(first!.modulePath) ?? 0) + 1);
   }
   return new Map(
     [...groups.values()].map((entries) => {
@@ -185,6 +195,10 @@ export function createIslandActivationModules(islands: readonly ClientIslandDeli
         const tag = single ? 'tag' : quoteGeneratedJavaScriptValue(entry.tagName);
         return `register(${tag}, () => mod[${exported}])`;
       });
+      const direct = generated.has(first.modulePath) && counts.get(first.modulePath) === 1;
+      const registerImport = `import { register } from '${REGISTER_ISLAND_RUNTIME_SPECIFIER}';`;
+      const path = quoteGeneratedJavaScriptValue(first.modulePath);
+      const callback = register.length === 1 ? register[0] : `{ ${register.join('; ')} }`;
       return [
         ISLAND_ACTIVATION_PREFIX + first.tagName,
         {
@@ -192,10 +206,13 @@ export function createIslandActivationModules(islands: readonly ClientIslandDeli
           strategy: first.strategy,
           tags: entries.map((entry) => entry.tagName),
           media: first.media,
-          code: `import { register } from '${REGISTER_ISLAND_RUNTIME_SPECIFIER}';
-export default (${single ? 'tag' : ''}) => import(${quoteGeneratedJavaScriptValue(first.modulePath)}).then(
-  (mod) => ${single ? register[0] : `{ ${register.join('; ')} }`}
-);`,
+          direct,
+          code: direct
+            ? `${registerImport}
+import * as mod from ${path};
+export default (${single ? 'tag' : ''}) => ${callback};`
+            : `${registerImport}
+export default (${single ? 'tag' : ''}) => import(${path}).then((mod) => ${callback});`,
         },
       ] as const;
     }),
@@ -303,6 +320,7 @@ export function generateClientEntry(
   if (options.responseCatalogue && admittedIslands.length > 0) {
     const imports = [
       `import { startDocumentIslands } from '${DOCUMENT_ISLANDS_RUNTIME_SPECIFIER}';`,
+      `import { __vitePreload as preload } from ${quoteGeneratedJavaScriptValue(VITE_PRELOAD_HELPER_ID)};`,
     ];
     if (options.enhancedForms) {
       imports.push(
@@ -329,6 +347,7 @@ export function generateClientEntry(
     );
     return `${styleImport}${imports.join('\n')}\nstartDocumentIslands({
       bootstrapUrl: import.meta.url,
+      preload,
       idleFallbackTimeoutMs: ${IDLE_FALLBACK_TIMEOUT_MS},
       strategies: { ${strategies.join(', ')} },
       ${options.enhancedForms ? `actionHeader: ${quoteGeneratedJavaScriptValue(ACTION_FETCH_HEADER)}, observeFormEnhancement,` : ''}

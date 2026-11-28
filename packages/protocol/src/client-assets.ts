@@ -34,6 +34,8 @@ export interface ClientIslandAsset {
   activation?: {
     file: string;
     media?: string;
+    /** Vite stylesheet dependencies in static graph order, relative to the client base. */
+    css?: readonly string[];
     /** Absent when the island can introduce hosts outside its proven closure. */
     children?: readonly string[];
   };

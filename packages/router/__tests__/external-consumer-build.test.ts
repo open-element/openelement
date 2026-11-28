@@ -659,8 +659,10 @@ test('external consumer (#1544/B2): the runtime preload is a per-page projection
   expect(counter.activationChunkFile).toBeDefined();
   expect(homeHtml).toContain(`/client/${counter.activationChunkFile}`);
   const activation = await readFile(join(distDir, 'client', counter.activationChunkFile!), 'utf8');
-  expect(activation).toContain(counter.chunkFile.split('/').at(-1)!);
-  expect(activation).toMatch(/import\(`?["']?\.\//);
+  if (counter.activationChunkFile !== counter.chunkFile) {
+    expect(activation).toContain(counter.chunkFile.split('/').at(-1)!);
+    expect(activation).toMatch(/import\(`?["']?\.\//);
+  }
   const entryCode = await readFile(join(islandsDir, 'client.js'), 'utf8');
   expect(entryCode).not.toContain('oe-proof-counter');
 });

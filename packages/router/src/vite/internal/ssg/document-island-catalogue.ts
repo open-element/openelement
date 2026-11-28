@@ -7,7 +7,8 @@ export type IslandCatalogueEntry = readonly [
   tag: string,
   strategy: Exclude<ClientIslandAsset['strategy'], 'none'>,
   activation: string,
-  media?: string,
+  media?: string | null,
+  css?: readonly string[],
 ];
 
 /** Use all build-admitted activations if an executing host has an opaque closure. */
@@ -30,10 +31,12 @@ export function resolveDocumentIslandCatalogue(
   const rows: IslandCatalogueEntry[] = [];
   for (const [tag, asset] of Object.entries(islands)) {
     if ((opaque || selected.has(tag)) && asset.activation && asset.strategy !== 'none') {
-      const { file, media } = asset.activation;
-      rows.push(
-        media === undefined ? [tag, asset.strategy, file] : [tag, asset.strategy, file, media],
-      );
+      const { file, media, css } = asset.activation;
+      if (css?.length) rows.push([tag, asset.strategy, file, media ?? null, css]);
+      else
+        rows.push(
+          media === undefined ? [tag, asset.strategy, file] : [tag, asset.strategy, file, media],
+        );
     }
   }
   return rows;
