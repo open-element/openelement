@@ -24,13 +24,9 @@ test('the generated-lane keyed table: mount, 10th-label update, swap and remove 
   const facts = runGeneratedTableBenchmark();
   // 1k keyed rows mount: one <tr> per row.
   expect(facts.mountedRowCount).toEqual(1000);
-  // MEASURED lane semantics: the keyed list reuses every entry node (zero
-  // insertions) and each reused entry rewrites BOTH of its text slots
-  // unconditionally — 1000 entries x 2 text nodes. The measured fact is recorded
-  // as-is; it is not the retired input's per-field diff and the baseline does not
-  // pretend otherwise.
+  // The keyed list reuses every entry and writes only the changed labels.
   expect(facts.updateInsertions).toEqual(0);
-  expect(facts.update10thTextWrites).toEqual(2000);
+  expect(facts.update10thTextWrites).toEqual(100);
   // Keyed movement: row 1 now shows id 998 and row 998 shows id 1.
   expect(facts.swappedIds[0]).toEqual('998');
   expect(facts.swappedIds[1]).toEqual('1');

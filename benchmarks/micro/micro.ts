@@ -52,25 +52,15 @@
  *    table-shaped list would emit no claim/SSR producer and this suite would
  *    fail loudly (missing `__ssr`/`claim`) rather than measure those phases.
  *    The row's DOM shape is preserved.
- * 2. `update10th` rewrites every matched row's slots on the generated lane.
- *    The leaf entry refresh is forced on reuse (`update(next)` calls each slot
- *    refresh), because the mapper parameter is rebound — there is no per-slot
- *    equality guard like the class lane's Part equality check. The reported
- *    `textWrites` is therefore O(rows), not O(changed rows).
+ * 2. `update10th` reevaluates the reused entries' text slots with their new
+ *    mapper bindings. It assigns only text whose rendered value differs from
+ *    the live DOM, so the operation writes 100 changed labels.
  * 3. `swap1k` re-inserts the displaced node range (the placement walk moves
  *    every node whose `nextSibling` is not the reference), so
  *    `insertions` scales with the distance between the swapped rows rather
  *    than with the two moved entries.
  * 4. `remove1` removes the entry's two nodes (its key comment plus its `<li>`),
  *    so `removals` is 2 per removed row.
- *
- * These are facts about the shipped lane, not weakened assertions. Note for
- * the self-check owner: micro.test.ts still pins two CLASS-lane counts
- * (`update10thTextWrites === 100`, `removeRemovals === 1`); those expectations
- * are the old Part equality guard and the old one-node row, so they must be
- * re-pinned to the generated-lane facts measured here (text writes = rows x 2
- * text slots, removals = 2 nodes per removed row). This file does not own the
- * test, and it has not been edited to make the old numbers pass.
  *
  * Timings are recorded as evidence only; CI asserts deterministic DOM-op
  * counts, never durations (see micro.test.ts).

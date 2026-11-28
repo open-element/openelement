@@ -248,6 +248,127 @@ interface Probe {
 }
 
 describe('M08 list — Chromium claim, update and dispose', () => {
+  test('keyed text refresh preserves equal live text and repairs outside edits in mount and claim', async () => {
+    const generated = await prepare();
+    const html = ssr(generated.loaded, 'Keyed')(
+      {},
+      { bindings: { items: { value: [{ id: 'a', label: 'Alpha' }] } } },
+    );
+    const result = await page.evaluate((serverHtml) => {
+      const runtime = (window as unknown as { __oeRuntime: RuntimePage }).__oeRuntime;
+      const factories = (window as unknown as { __oeModule: PageModule }).__oeModule;
+      return ['mount', 'claim'].map((mode) => {
+        const host = document.createElement('main');
+        document.body.append(host);
+        // Claim borrows the first entry and creates the second at activation.
+        if (mode === 'claim') host.innerHTML = serverHtml;
+        const borrowed = host.querySelector('li');
+        const items = runtime.signal<Array<{ id: string; label: unknown }>>([
+          { id: 'a', label: 'Alpha' },
+          { id: 'b', label: 'Beta' },
+        ]);
+        const scope = new runtime.LifetimeScope();
+        const recipe = factories.createKeyedRecipe!(scope, { props: {}, bindings: { items } });
+        runtime.runtimeProbe.reset();
+        const projection =
+          mode === 'claim'
+            ? runtime.claimRecipe(scope, recipe, host)
+            : runtime.insertRecipe(scope, recipe, host);
+        const entries = [...host.querySelectorAll('li')];
+        const texts = entries.map((entry) => entry.childNodes[1] as Text);
+        const first = texts[0]!;
+        const second = texts[1]!;
+        entries[1]!.contentEditable = 'true';
+        entries[1]!.focus();
+        const selected = document.getSelection()!;
+        selected.setBaseAndExtent(second, 1, second, 3);
+        const observer = new MutationObserver(() => {});
+        observer.observe(host, { subtree: true, childList: true, characterData: true });
+        const trace: string[] = [];
+        const row = (id: string, text: string) => ({
+          id,
+          get label() {
+            trace.push(`read:${id}`);
+            return {
+              toString() {
+                trace.push(`coerce:${id}`);
+                return text;
+              },
+            };
+          },
+        });
+        items.value = [row('a', 'Alpha'), row('b', 'Beta')];
+        const equalMutations = observer.takeRecords().map(({ type }) => type);
+        const keepsSelection =
+          document.activeElement === entries[1] &&
+          selected.anchorNode === second &&
+          selected.anchorOffset === 1 &&
+          selected.focusNode === second &&
+          selected.focusOffset === 3;
+        first.nodeValue = 'foreign';
+        observer.takeRecords();
+        items.value = [row('a', 'Alpha'), row('b', 'Beta!')];
+        const changedMutations = observer.takeRecords().map(({ type, target }) => ({
+          type,
+          index: target === first ? 0 : target === second ? 1 : -1,
+        }));
+        observer.disconnect();
+        const updated = [...host.querySelectorAll('li')];
+        const contents = updated.map((entry) => entry.textContent);
+        const sameNodes =
+          (mode === 'mount' || borrowed === entries[0]) &&
+          updated.length === entries.length &&
+          updated.every(
+            (entry, index) => entry === entries[index] && entry.childNodes[1] === texts[index],
+          );
+        projection.dispose(true);
+        scope.dispose();
+        const { subscriptions, unsubscribed } = runtime.runtimeProbe.snapshot();
+        const empty = host.childNodes.length === 0;
+        host.remove();
+        return {
+          mode,
+          equalMutations,
+          keepsSelection,
+          changedMutations,
+          contents,
+          trace,
+          sameNodes,
+          subscriptions,
+          unsubscribed,
+          empty,
+        };
+      });
+    }, html);
+
+    for (const { mode, ...facts } of result) {
+      expect(facts, mode).toEqual({
+        equalMutations: [],
+        keepsSelection: true,
+        changedMutations: [
+          { type: 'characterData', index: 0 },
+          { type: 'characterData', index: 1 },
+        ],
+        contents: ['Alpha', 'Beta!'],
+        trace: [
+          'read:a',
+          'coerce:a',
+          'read:b',
+          'coerce:b',
+          'read:a',
+          'coerce:a',
+          'read:b',
+          'coerce:b',
+        ],
+        sameNodes: true,
+        subscriptions: 1,
+        unsubscribed: 1,
+        empty: true,
+      });
+    }
+    await page.close();
+  });
+
   test('equal seed is zero-mutation; reorder/update/insert/delete keep entry identity', async () => {
     const generated = await prepare();
     const serverOpen = { value: true };

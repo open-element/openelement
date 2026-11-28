@@ -128,11 +128,12 @@ insert. A late enclosing mismatch before phase 2 opens nothing: no
 subscription, no DOM write, no queue drain; claim owners are released and
 borrowed nodes are kept.
 
-The first write of a dynamic slot skips the DOM operation when the current
-value already equals the value that would be written; mount writes stay
-unconditional. That skip is an implementation coupling to the shared refresh,
-not an update-period zero-mutation acceptance, not mismatch recovery and not
-SSR→claim reseeding.
+Claim compares a dynamic slot's current value before assigning it. Mounted
+list-entry text refreshes do the same, including entries that a claimed list
+creates during activation or update. Each refresh evaluates and coerces the
+expression in authored order before reading the live text, so a changed
+rendered string or an outside DOM edit still triggers a write. Equal rendered
+text keeps the same node and its selection.
 
 ### 4.1 Permitted seed state (the single M08 definition)
 

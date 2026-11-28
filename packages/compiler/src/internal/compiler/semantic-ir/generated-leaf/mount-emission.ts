@@ -631,8 +631,21 @@ function emitList(
   registerRefresh(state, refreshVar);
 }
 
-function emitTextWrite(state: EmitState, targetVar: string, record: LoweredExpressionRecord): void {
-  pushParts(state, [`${targetVar}.nodeValue = displayValue((`, { record }, '));']);
+function emitTextWrite(
+  state: EmitState,
+  targetVar: string,
+  record: LoweredExpressionRecord,
+  compare = false,
+): void {
+  if (!compare) {
+    pushParts(state, [`${targetVar}.nodeValue = displayValue((`, { record }, '));']);
+    return;
+  }
+  // Evaluate and coerce once before reading the live node. An author edit can
+  // differ from the previous render even when the expression returns the same value.
+  const valueVar = `${INTERNAL_PREFIX}textValue`;
+  pushParts(state, [`const ${valueVar} = displayValue((`, { record }, '));']);
+  push(state, `if (${targetVar}.nodeValue !== ${valueVar}) ${targetVar}.nodeValue = ${valueVar};`);
 }
 
 /** The DOM event name for one authored `onX` attribute (`onClick` -> `click`). */
@@ -1487,15 +1500,15 @@ export function emitNode(
     if (record === null || !declareReads(state, record)) return;
     const dependencies = dependencyNames(state, record);
     if (dependencies === null) return;
-    let boundaryEnd: string | null = null;
+    let textVar: string;
     if (state.emitTextBoundaries) {
       const ordinal = textOrdinal(state, node);
       if (ordinal === null) return;
       const boundaryStart = nextName(state, 'textStart');
       push(state, `const ${boundaryStart} = emitComment(textSlotMarker(${ordinal}));`, node.span);
       sink.push({ kind: 'node', name: boundaryStart });
-      boundaryEnd = nextName(state, 'textEnd');
-      const textVar = nextName(state, 'text');
+      const boundaryEnd = nextName(state, 'textEnd');
+      textVar = nextName(state, 'text');
       push(state, `const ${textVar} = document.createTextNode("");`, node.span);
       sink.push({ kind: 'node', name: textVar });
       push(
@@ -1504,34 +1517,11 @@ export function emitNode(
         node.span,
       );
       sink.push({ kind: 'node', name: boundaryEnd });
-      if (dependencies.length === 0) {
-        if (!readsEntryLocal(state, record)) {
-          emitTextWrite(state, textVar, record);
-          return;
-        }
-        // Entry-local read without a reactive dependency: the entry update hook
-        // re-binds the mapper parameter, so the text write must re-run from a
-        // registered refresh closure (M06b2c — unkeyed/same-key reuse).
-        registerRefresh(
-          state,
-          emitLocalRefresh(state, node.span, () => emitTextWrite(state, textVar, record)),
-        );
-        return;
-      }
-      const refresh = nextName(state, 'refresh');
-      push(state, `function ${refresh}() {`, node.span);
-      state.indent += 1;
-      emitTextWrite(state, textVar, record);
-      state.indent -= 1;
-      push(state, `}`);
-      push(state, `${refresh}();`);
-      emitDependencySubscriptions(state, dependencies, refresh, node.span);
-      registerRefresh(state, refresh);
-      return;
+    } else {
+      textVar = nextName(state, 'text');
+      push(state, `const ${textVar} = document.createTextNode("");`, node.span);
+      sink.push({ kind: 'node', name: textVar });
     }
-    const textVar = nextName(state, 'text');
-    push(state, `const ${textVar} = document.createTextNode("");`, node.span);
-    sink.push({ kind: 'node', name: textVar });
     if (dependencies.length === 0) {
       if (!readsEntryLocal(state, record)) {
         emitTextWrite(state, textVar, record);
@@ -1542,14 +1532,14 @@ export function emitNode(
       // registered refresh closure (M06b2c — unkeyed/same-key reuse).
       registerRefresh(
         state,
-        emitLocalRefresh(state, node.span, () => emitTextWrite(state, textVar, record)),
+        emitLocalRefresh(state, node.span, () => emitTextWrite(state, textVar, record, true)),
       );
       return;
     }
     const refresh = nextName(state, 'refresh');
     push(state, `function ${refresh}() {`, node.span);
     state.indent += 1;
-    emitTextWrite(state, textVar, record);
+    emitTextWrite(state, textVar, record, state.listDepth > 0);
     state.indent -= 1;
     push(state, `}`);
     push(state, `${refresh}();`);
