@@ -69,6 +69,10 @@ import { PW_PROBE_PIN } from './consumer-packaged-starter.ts';
 import ts from 'typescript';
 import { CREATE_VERSION } from '../../packages/create/src/version.ts';
 import {
+  BROWSER_ENTRY_GRAPH_ARTIFACT_FILE,
+  type BrowserEntryGraphArtifact,
+} from '../../packages/router/src/vite/internal/browser-entry-graph-artifact.ts';
+import {
   formatGeneratedElementRefusals,
   readGeneratedElementFacts,
 } from '../../packages/ui/tools/generated-element-facts.ts';
@@ -1444,6 +1448,25 @@ async function main(): Promise<void> {
       timeoutMs: BUILD_TIMEOUT_MS,
     });
     if (!build.success) throw new Error(`Packed UI appliance SSG build failed:\n${build.output}`);
+
+    const graph = await readJson<BrowserEntryGraphArtifact>(
+      join(starter, 'dist', 'client', BROWSER_ENTRY_GRAPH_ARTIFACT_FILE),
+    );
+    // The packed entry retains its public authoring exports, but direct
+    // activation uses the constructor in its compiled provider. A bundler
+    // may retain or remove the intermediate re-exporting façade.
+    for (const tag of ['open-button', 'open-code-block']) {
+      const island =
+        graph.status === 'complete' ? graph.islands.find((row) => row.tag === tag) : undefined;
+      if (
+        island?.moduleId !== `node_modules/@openelement/ui/src/${tag}.generated.js` ||
+        island.chunkFile !== island.activationChunkFile
+      ) {
+        throw new Error(
+          `Packed UI appliance did not attribute ${tag} to its compiled activation provider`,
+        );
+      }
+    }
 
     const serverEntry = join(starter, 'dist', 'server', 'index.js');
     if (!existsSync(serverEntry)) {

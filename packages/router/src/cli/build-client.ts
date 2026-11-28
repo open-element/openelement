@@ -90,6 +90,7 @@ import {
 } from '../vite/internal/ssg/page-classification.ts';
 import { browserEntryBoundaryPlugin } from '../vite/internal/browser-entry-boundary.ts';
 import { browserEntryGraphPlugin } from '../vite/internal/browser-entry-graph.ts';
+import { resolvePackageIslandProvider } from '../vite/internal/package-island-provider.ts';
 import {
   analyzeModuleSemantics,
   clearStyleRequests,
@@ -727,6 +728,7 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<{
   const packageDeclIdentities = () =>
     selectedPackageDecls.map((island) => packageIslandIdentity(island, islandModuleIds));
 
+  const packageSpecifiers = new Set(selectedPackageDecls.map((island) => island.modulePath));
   const activationModules = createIslandActivationModules(islandEntries);
   const activationReferences = new Map<string, string>();
   const activationFiles = new Map<string, { file: string; css: string[] }>();
@@ -1175,8 +1177,25 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<{
             }
           },
         },
-        buildEnd(error) {
-          if (error || elementRuntimeIdentity === null || documentServicesId === undefined) return;
+        async buildEnd(error) {
+          if (error) return;
+          for (const activation of activationModules.values()) {
+            if (!activation.direct || !packageSpecifiers.has(activation.modulePath)) continue;
+            const facadeId = islandModuleIds.get(activation.modulePath)!;
+            const providerId = await resolvePackageIslandProvider(
+              this.getModuleInfo(facadeId),
+              activation.constructorExports,
+              async (source, importer) => {
+                const resolved = await this.resolve(source, importer);
+                if (!resolved || resolved.external) return undefined;
+                return this.getModuleInfo(resolved.id) ?? undefined;
+              },
+            );
+            if (providerId === undefined) continue;
+            islandModuleIds.set(activation.modulePath, providerId);
+            directActivationSources.add(providerId);
+          }
+          if (elementRuntimeIdentity === null || documentServicesId === undefined) return;
           elementRuntimeIdentity = {
             ...elementRuntimeIdentity,
             documentServices: documentServiceModuleIds(documentServicesId, (id) =>

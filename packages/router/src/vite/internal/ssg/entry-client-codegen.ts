@@ -190,12 +190,18 @@ export function createIslandActivationModules(islands: readonly ClientIslandDeli
     [...groups.values()].map((entries) => {
       const first = entries[0]!;
       const single = entries.length === 1;
-      const register = entries.map((entry) => {
-        const exported = quoteGeneratedJavaScriptValue(entry.exportName ?? 'default');
+      const constructorExports = entries.map((entry) => entry.exportName ?? 'default');
+      const register = entries.map((entry, index) => {
+        const exported = quoteGeneratedJavaScriptValue(constructorExports[index]!);
         const tag = single ? 'tag' : quoteGeneratedJavaScriptValue(entry.tagName);
         return `register(${tag}, () => mod[${exported}])`;
       });
-      const direct = generated.has(first.modulePath) && counts.get(first.modulePath) === 1;
+      // A published capability can forward different tags to different modules.
+      // Keep its public module as the dynamic facade when one capability serves many tags.
+      const direct =
+        generated.has(first.modulePath) &&
+        counts.get(first.modulePath) === 1 &&
+        (!first.isPackage || single);
       const registerImport = `import { register } from '${REGISTER_ISLAND_RUNTIME_SPECIFIER}';`;
       const path = quoteGeneratedJavaScriptValue(first.modulePath);
       const callback = register.length === 1 ? register[0] : `{ ${register.join('; ')} }`;
@@ -205,6 +211,7 @@ export function createIslandActivationModules(islands: readonly ClientIslandDeli
           modulePath: first.modulePath,
           strategy: first.strategy,
           tags: entries.map((entry) => entry.tagName),
+          constructorExports,
           media: first.media,
           direct,
           code: direct
