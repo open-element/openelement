@@ -78,15 +78,18 @@ References: [W3C TAG Web Platform Design Principles][tag-dp];
 [The Rule of Least Power][least-power];
 [Svelte — Rethinking Reactivity][svelte].
 
-In this repository: the current backend consumes Part Programs. ADR-0174 accepts
-next-generation direct browser mount/claim/update/dispose with separate
-compile-time IR, generated-module ABI and HTML/data wire. This is implementation
-pending, not a claim the old executor has retired. Necessary Signals, identity,
-events, region and cleanup helpers remain permitted, with one owner, behavior
-proof and byte attribution. No VDOM or runtime JSX fallback is introduced;
-unsupported authoring fails with source-located diagnostics. Server IR need not
-be rewritten merely to match the client. Stable helper/ABI/wire formats require
-consumer evidence before freeze.
+In this repository: the compiler lowers admitted components to generated modules
+that carry their own mount, claim, update/dispose and server-rendering code
+(ADR-0174). The generated-element shell owns the element lifecycle; the browser
+adopts server-rendered DOM through the platform parser (declarative Shadow DOM
+for a shadow root), and the generated claim code binds to the adopted nodes.
+Alpha17 retired the serialized Part Program, its generic executor and validator,
+so the runtime surface is that shell plus a closed internal helper set, not a
+generic interpreter. Necessary Signals, identity, events, region and cleanup
+helpers remain permitted, with one owner, behavior proof and byte attribution.
+No VDOM or runtime JSX fallback is introduced; unsupported authoring fails with
+source-located diagnostics. Server IR need not be rewritten merely to match the
+client. Stable helper/ABI/wire formats require consumer evidence before freeze.
 
 Litmus: _Does this add build-time surface or runtime surface? Runtime surface
 needs an ADR._

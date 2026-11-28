@@ -69,7 +69,7 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 | 19 | ~~Part Program 执行器（旧执行后端）~~ **已删除（Alpha16，2026-11-22）** | ~~packages/element/src/internal/compiled/facade-host.ts~~（原执行器入口；`runtime/error-boundary.ts`、`stream-state.ts` 与 class lane 同一变更集删除） | **已删（Alpha16，2026-11-22）**（class lane 删除时执行器作为同一变更集移除。生成 lane 的 shell 通过 `generated-element/shell.ts` 自行 mount/claim，`leaf-runtime.ts` 是叶子端的闭合集合，从不导入这些端点——已实测 `element-runtime` chunk 不再包含执行器。孤儿模块 `stream-state.ts` / `runtime/error-boundary.ts` 由 `vp-pack` 的“has no packed .js”门禁抓出并一并删除，那正是该门禁存在的理由。） |
 | 20 | ~~Class authoring API（旧作者面）~~ | ~~packages/element/src/open-element-implementation.ts~~（`OpenElement` 基类；`open-element-configuration.ts`、`error-boundary.ts` 的类形状同属该面，随 class lane 删除；`base.ts` 保留为 entry 子路径）；router 侧判别/产物读取仍在树内、服务生成 lane 的编译页类：`packages/router/src/authoring.ts:456`（`isElementPageClass` 的 ES class 形状判别）、`packages/router/src/vite/internal/server-runtime/renderer-runtime.ts:146`（`resolveCompiledPageTag` 读编译产物 `__partProgram.tag`）、`packages/router/src/vite/internal/ssg/entry-descriptor.ts:467`（页面路由 `defaultTagName` 载体） | **已删（Alpha16，2026-11-22）**（ADR-0173 第四轮批准零兼容退役；class lane 随 Alpha16 删除，公开面只保留 Native Custom Element 边界，不留适配器。C-1/C-3 能力清单证据与 starter/文档迁移此前已落地。） |
 | 21 | 生成宿主注册对（M11 垂直切片，ADR-0181） | `packages/router/src/vite/internal/server-runtime/security.ts`（`registerIsland`）+ `packages/protocol/src/registry-markers.ts`（`SSR_REGISTRY_GENERATED_HOSTS`） | 条件到即删（P1 在 tracked 依赖图工件上对全部适用应用判 MET 后随 M11-3 入口切换删除） |
-| 22 | 私有实例保留账本（ADR-0181） | `packages/element/src/internal/compiled/runtime/instance-ledger.ts`（经 `runtime.ts` 对发射代码 re-export） | 条件到即删（Alpha17 预编译分发取代发射式保留计划、且无发射模块再 import 该账本） |
+| 22 | 私有实例保留账本（ADR-0181） | `packages/element/src/internal/compiled/runtime/instance-ledger.ts`（编译器发射的模块经 `packages/element/src/internal/compiled/leaf-runtime.ts` re-export；`packages/element/src/internal/compiled/generated-element/shell.ts` 直接导入） | 条件到即删（Alpha17 预编译分发取代发射式保留计划、且无发射模块再 import 该账本） |
 | 23 | browser-entry-graph 观测工件与检查器（temporary-by-intent） | `packages/router/src/vite/internal/browser-entry-graph.ts`、`browser-entry-graph-artifact.ts`、`tools/repo/check-browser-entry-graph.ts` | 条件到即删（P1 判 MET 且该证据并入 release 门禁后移除一次性检查器；工件本身不进入发布面） |
 | 24 | `OE_ISLAND_STYLE_SHADOW_UNWIRED` 拒绝（ADR-0181） | `packages/router/src/vite/internal/ssg/island-scanner.ts` | 条件到即删（2026-11-20 已按书面条件退役一次：shadow 载体落地后范围收窄为 server-rendered 且无 producer 的诚实情形；client-only 半边随后也放开。剩余情形的删除条件：server-rendered 生成岛全部获得 producer） |
 | 26 | rolldown-vite `buildStart` 诊断面 workaround（#1616 报告先行契约） | `packages/router/src/vite/internal/build-diagnostics.ts`（"The interim contract, until the bundler is fixed"，条目引用 `:91`） | 条件到即删（rolldown-vite 修复对应缺陷后删除） |
@@ -435,7 +435,7 @@ native 选择缝是主产物，不再作为垫片登记。）
 
 ### 22. 私有实例保留账本——条件到即删
 
-- 所有者：element 生成元素运行时（`generated-element/shell.ts` 是唯一消费方）。
+- 所有者：element 生成元素运行时（`generated-element/shell.ts` 直接导入 `abortInstancePass`/`releaseRetainedChildren`；编译器发射的模块经 `leaf-runtime.ts` 调用其余账本函数）。
 - 方向：生成根 mount/claim 打开一次 pass → `retainChildInstance` 记条目 → 结构性/引用位点显式 release；销毁期 `releaseRetainedChildren`。
 - 存在原因：ADR-0173 要求 setup 只跑一次、断连不重跑，而发射代码在 reconnect claim 时会重算 setup 局部；账本是让保留语义有单一所有者的最小运行时。
 - 退役条件：Alpha17 预编译分发取代当前发射式保留计划，且 `packages/element` 内无发射模块再 import 该账本（`grep` 归零即谓词，`gate:source` 绿）。
