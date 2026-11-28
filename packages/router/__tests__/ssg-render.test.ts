@@ -3,13 +3,14 @@
  */
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import process from 'node:process';
 import { expect, test } from 'vitest';
 import { assertRejectsIncludes, assertThrowsIncludes } from '../../../tests/lib/vitest-asserts.ts';
 import { ssgRender } from '../src/vite/internal/ssg/index.ts';
 import { createWinterCgApp } from '../src/vite/internal/server-runtime/wintercg.ts';
 import { resolveDynamicRoutePath } from '../src/vite/internal/ssg/ssg-helpers.ts';
+import { tryStatic } from '../src/vite/internal/static-serve.ts';
 import type { SsgPageOutput, SsgRenderOptions, SsrBundle } from '../src/vite/internal/ssg/index.ts';
 
 async function pathExists(path: string): Promise<boolean> {
@@ -177,9 +178,56 @@ test('ssgRender - handles empty getStaticPaths gracefully', async () => {
   await ssgRender(bundle, defaultOptions);
 });
 
-test('ssgRender - handles options with viewTransition disabled', async () => {
-  const bundle = createMockBundle();
-  await ssgRender(bundle, { ...defaultOptions, viewTransition: false });
+test('ssgRender links one same-origin transition stylesheet and prunes it when disabled', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-view-transition-'));
+  const app = createWinterCgApp();
+  app.use(
+    '*',
+    () =>
+      new Response('<html><head></head><body>Static page</body></html>', {
+        headers: { 'Content-Type': 'text/html; charset=UTF-8' },
+      }),
+  );
+  const bundle = createMockBundle({ default: app });
+  const dist = join(root, 'dist');
+  const authoredStyle = join(dist, 'assets', 'author.css');
+  const options = {
+    root,
+    outDir: 'dist',
+    base: '/book/',
+    middleware: { csp: { policy: "default-src 'none'; style-src 'self'" } },
+  };
+  try {
+    await mkdir(dirname(authoredStyle), { recursive: true });
+    await writeFile(authoredStyle, 'body { color: red; }');
+    await ssgRender(bundle, options);
+
+    const home = await readFile(join(dist, 'index.html'), 'utf8');
+    const nested = await readFile(join(dist, 'about/index.html'), 'utf8');
+    expect(home).not.toMatch(/<(?:style|script)\b/);
+    const path = home.match(/href="\/book\/(assets\/open-view-transition-[a-f0-9]{12}\.css)"/)?.[1];
+    expect(path).toBeDefined();
+    expect(nested).toContain(`/book/${path}`);
+    expect(home.indexOf('Content-Security-Policy')).toBeLessThan(home.indexOf(`/book/${path}`));
+    const css = tryStatic(dist, `/${path}`);
+    expect(css?.headers.get('content-type')).toContain('text/css');
+    expect(css?.headers.get('cache-control')).toContain('immutable');
+    expect(await css?.text()).toContain('prefers-reduced-motion: reduce');
+
+    await ssgRender(bundle, options);
+    expect(await readFile(join(dist, 'index.html'), 'utf8')).toBe(home);
+    await ssgRender(bundle, { ...options, viewTransition: false });
+    expect(await readFile(join(dist, 'index.html'), 'utf8')).not.toContain('open-view-transition');
+    expect(await pathExists(join(dist, path!))).toBe(false);
+    expect(await readFile(authoredStyle, 'utf8')).toBe('body { color: red; }');
+
+    await ssgRender(bundle, options);
+    await writeFile(join(dist, path!), 'body { color: green; }');
+    await ssgRender(bundle, { ...options, viewTransition: false });
+    expect(await readFile(join(dist, path!), 'utf8')).toBe('body { color: green; }');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('ssgRender emits document speculation only when enabled', async () => {

@@ -684,27 +684,24 @@ test('injectCspMeta skips non-HTML files', () => {
 
 // ─── injectViewTransitionOptIn ─────────────────────────────────
 
-test('injectViewTransitionOptIn writes the standard opt-in, not the legacy meta', () => {
-  // The opt-in is the CSS View Transitions Level 2 at-rule. The
-  // `<meta name="view-transition">` spelling was the API's experimental form
-  // and is what this used to write; a meta is not what the specification
-  // defines, so the delivery moved to a document stylesheet.
+test('injectViewTransitionOptIn links a static stylesheet with the reduced-motion opt-out', () => {
   const tmp = makeTempDir();
   try {
     const htmlPath = join(tmp, 'index.html');
     writeFileSync(htmlPath, '<html><head></head><body><p>Hello</p></body></html>');
 
-    injectViewTransitionOptIn(tmp);
+    const asset = injectViewTransitionOptIn(tmp, [htmlPath], '/book/');
+    expect(asset).toMatch(/^assets\/open-view-transition-[a-f0-9]{12}\.css$/);
 
     const content = readFileSync(htmlPath, 'utf8');
-    expect(content, 'the at-rule opted the document in').toContain(
-      '@view-transition { navigation: auto; }',
-    );
-    expect(content, 'reduced motion opts back out').toMatch(
+    expect(content).toContain(`<head>\n  <link rel="stylesheet" href="/book/${asset}" />`);
+    expect(content).not.toMatch(/<(?:script|style)\b|<meta name="view-transition"/);
+
+    const css = readFileSync(join(tmp, asset!), 'utf8');
+    expect(css).toContain('@view-transition { navigation: auto; }');
+    expect(css).toMatch(
       /@media\s*\(prefers-reduced-motion: reduce\)\s*\{\s*@view-transition\s*\{\s*navigation: none;\s*\}\s*\}/,
     );
-    expect(content, 'the legacy meta is gone').not.toContain('<meta name="view-transition"');
-    expect(content, 'the block is a plain <style>, engine-independent').toContain('<style>');
   } finally {
     cleanup(tmp);
   }
@@ -716,28 +713,30 @@ test('injectViewTransitionOptIn does not duplicate on repeated calls', () => {
     const htmlPath = join(tmp, 'index.html');
     writeFileSync(htmlPath, '<html><head></head><body></body></html>');
 
-    injectViewTransitionOptIn(tmp);
-    injectViewTransitionOptIn(tmp);
+    const asset = injectViewTransitionOptIn(tmp, [htmlPath], '/');
+    expect(injectViewTransitionOptIn(tmp, [htmlPath], '/')).toBe(asset);
 
     const content = readFileSync(htmlPath, 'utf8');
-    const count = (content.match(/@view-transition \{ navigation: auto; \}/g) || []).length;
+    const count = (content.match(/<link rel="stylesheet"/g) || []).length;
     expect(count).toEqual(1);
   } finally {
     cleanup(tmp);
   }
 });
 
-test('injectViewTransitionOptIn recurses into subdirectories', () => {
+test('injectViewTransitionOptIn links the same asset from root and nested pages with relative base', () => {
   const tmp = makeTempDir();
   try {
     mkdirSync(join(tmp, 'guide'));
-    writeFileSync(join(tmp, 'index.html'), '<html><head></head><body></body></html>');
-    writeFileSync(join(tmp, 'guide', 'page.html'), '<html><head></head><body></body></html>');
+    const home = join(tmp, 'index.html');
+    const nested = join(tmp, 'guide', 'page.html');
+    writeFileSync(home, '<html><head></head><body></body></html>');
+    writeFileSync(nested, '<html><head></head><body></body></html>');
 
-    injectViewTransitionOptIn(tmp);
+    const asset = injectViewTransitionOptIn(tmp, [home, nested], './');
 
-    expect(readFileSync(join(tmp, 'index.html'), 'utf8')).toContain('view-transition');
-    expect(readFileSync(join(tmp, 'guide', 'page.html'), 'utf8')).toContain('view-transition');
+    expect(readFileSync(home, 'utf8')).toContain(`href="${asset}"`);
+    expect(readFileSync(nested, 'utf8')).toContain(`href="../${asset}"`);
   } finally {
     cleanup(tmp);
   }
@@ -746,12 +745,10 @@ test('injectViewTransitionOptIn recurses into subdirectories', () => {
 test('injectViewTransitionOptIn skips non-HTML files', () => {
   const tmp = makeTempDir();
   try {
-    const htmlPath = join(tmp, 'index.html');
     const txtPath = join(tmp, 'readme.txt');
-    writeFileSync(htmlPath, '<html><head></head><body></body></html>');
     writeFileSync(txtPath, 'Not HTML');
 
-    injectViewTransitionOptIn(tmp);
+    expect(injectViewTransitionOptIn(tmp, [txtPath], '/')).toBeUndefined();
 
     const txtContent = readFileSync(txtPath, 'utf8');
     expect(txtContent).toEqual('Not HTML');
@@ -766,7 +763,7 @@ test('injectViewTransitionOptIn handles HTML without <head> tag', () => {
     const htmlPath = join(tmp, 'no-head.html');
     writeFileSync(htmlPath, '<html><body><p>No head</p></body></html>');
 
-    injectViewTransitionOptIn(tmp);
+    injectViewTransitionOptIn(tmp, [htmlPath], '/');
 
     const content = readFileSync(htmlPath, 'utf8');
     expect(content).toContain('view-transition');
@@ -776,22 +773,18 @@ test('injectViewTransitionOptIn handles HTML without <head> tag', () => {
 });
 
 test('injectViewTransitionOptIn still injects when body text mentions the at-rule', () => {
-  // Regression, in the new spelling: a changelog page whose prose names
-  // `@view-transition` must still receive the opt-in. The guard tests the
-  // declaration, not the name.
   const tmp = makeTempDir();
   try {
     const htmlPath = join(tmp, 'changelog.html');
     writeFileSync(
       htmlPath,
-      '<html><head></head><body><p>We switched to @view-transition in v0.41</p></body></html>',
+      '<html><head></head><body><p>@view-transition { navigation: auto; }</p></body></html>',
     );
 
-    injectViewTransitionOptIn(tmp);
+    const asset = injectViewTransitionOptIn(tmp, [htmlPath], 'https://cdn.example/book/');
 
     const content = readFileSync(htmlPath, 'utf8');
-    const matchCount = (content.match(/@view-transition \{ navigation: auto; \}/g) || []).length;
-    expect(matchCount, 'the opt-in was injected, not skipped for the body text').toEqual(1);
+    expect(content).toContain(`href="/book/${asset}"`);
   } finally {
     cleanup(tmp);
   }

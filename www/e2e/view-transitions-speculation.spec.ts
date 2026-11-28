@@ -18,8 +18,8 @@
 
 import { expect, test } from '@playwright/test';
 
-/** The declaration the pipeline injects, and the injection guard's own marker. */
 const OPT_IN_MARKER = '@view-transition { navigation: auto; }';
+const OPT_IN_LINK = 'head link[rel="stylesheet"][href*="/assets/open-view-transition-"]';
 
 test.describe('View Transitions', () => {
   const pages = ['/', '/guide/getting-started/', '/architecture/', '/changelog/'];
@@ -31,24 +31,21 @@ test.describe('View Transitions', () => {
       // requests (search index, counters) and never change the answer.
       await page.goto(path);
 
-      const shape = await page.evaluate((marker) => {
-        const styles = [...document.querySelectorAll('head style')];
-        return {
-          carrier: styles.some((style) => style.textContent?.includes(marker)),
-          occurrences: (
-            document.head.innerHTML.match(/@view-transition \{ navigation: auto; \}/g) ?? []
-          ).length,
-          legacyMeta: document.querySelectorAll('meta[name="view-transition"]').length,
-        };
-      }, OPT_IN_MARKER);
-      expect(shape.carrier, 'the declaration rides a head <style>').toBe(true);
-      expect(shape.occurrences, 'injected exactly once').toBe(1);
-      expect(shape.legacyMeta, 'the legacy meta spelling is gone').toBe(0);
+      const link = page.locator(OPT_IN_LINK);
+      await expect(link).toHaveCount(1);
+      expect(await page.locator('head').innerHTML()).not.toContain(OPT_IN_MARKER);
+      await expect(page.locator('meta[name="view-transition"]')).toHaveCount(0);
     });
   }
 
   test('the engine parses the opt-in where it has the at-rule', async ({ page }, testInfo) => {
     await page.goto('/');
+
+    const href = await page.locator(OPT_IN_LINK).getAttribute('href');
+    const response = await page.request.get(new URL(href!, page.url()).href);
+    expect(response.ok()).toBe(true);
+    expect(response.headers()['content-type']).toContain('text/css');
+    expect(await response.text()).toContain(OPT_IN_MARKER);
 
     const observed = await page.evaluate((marker) => {
       const parsed: string[] = [];
@@ -65,14 +62,13 @@ test.describe('View Transitions', () => {
       }
       // A rule the engine cannot parse is dropped from `cssRules` entirely,
       // which is exactly how an unsupported engine shows the at-rule.
-      return { parsed, text: document.head.innerHTML.includes(marker) };
+      return parsed;
     }, OPT_IN_MARKER);
     testInfo.annotations.push({
       type: 'cross-document view transitions',
-      description: `parsedRules=${observed.parsed.length} presentAsText=${observed.text}`,
+      description: `parsedRules=${observed.length}`,
     });
-    expect(observed.text, 'the declaration is in the document either way').toBe(true);
-    if (observed.parsed.length === 0) {
+    if (observed.length === 0) {
       testInfo.annotations.push({
         type: 'N/A',
         description:
@@ -80,77 +76,82 @@ test.describe('View Transitions', () => {
       });
       return;
     }
-    expect(observed.parsed.join(' '), 'the parsed rule is the navigation opt-in').toContain(
+    expect(observed.join(' '), 'the parsed rule is the navigation opt-in').toContain(
       'navigation: auto',
     );
   });
 
-  test('a real cross-document navigation runs a view transition, where the engine can', async ({
-    page,
-  }, testInfo) => {
-    // `pagereveal` fires on the DESTINATION document, and only when a
-    // cross-document view transition is actually active — the platform's own
-    // confirmation that the opt-in took effect, not a restatement of the
-    // declaration. The listener is installed by `addInitScript`, which runs in
-    // every document of this page.
-    //
-    // The navigation is a history traversal (`goBack`): the spec runs a
-    // transition for `traverse`, `push` and `replace`, and a `page.goto` is
-    // none of those. A link click would not do either — the client Router
-    // intercepts same-origin clicks, so that is a SAME-document navigation
-    // with its own acceptance.
-    await page.addInitScript(() => {
-      (window as unknown as { __reveal: number }).__reveal = 0;
-      window.addEventListener('pagereveal', () => {
-        (window as unknown as { __reveal: number }).__reveal += 1;
+  for (const reducedMotion of ['no-preference', 'reduce'] as const) {
+    test(`cross-document navigation honors motion preference ${reducedMotion}`, async ({
+      page,
+    }, testInfo) => {
+      // `pagereveal` exposes a ViewTransition on the destination document when
+      // the navigation animates. Set the listener before any document script.
+      //
+      // The navigation is a history traversal (`goBack`): the spec runs a
+      // transition for `traverse`, `push` and `replace`, and a `page.goto` is
+      // none of those. A link click would not do either — the client Router
+      // intercepts same-origin clicks, so that is a SAME-document navigation
+      // with its own acceptance.
+      await page.emulateMedia({ reducedMotion });
+      await page.addInitScript(() => {
+        (window as unknown as { __reveal: number }).__reveal = 0;
+        window.addEventListener('pagereveal', (event) => {
+          if ((event as Event & { viewTransition?: unknown }).viewTransition) {
+            (window as unknown as { __reveal: number }).__reveal += 1;
+          }
+        });
       });
-    });
-    await page.goto('/');
-    await page.goto('/roadmap/');
-    await page.goBack();
-    await page.waitForLoadState('networkidle');
+      await page.goto('/');
+      await page.goto('/roadmap/');
+      await page.goBack();
+      await page.waitForLoadState('networkidle');
 
-    const observed = await page.evaluate((marker) => {
-      // The prerequisite for the CROSS-DOCUMENT row is the at-rule, not the
-      // same-document `ViewTransition` interface: an engine can ship
-      // `startViewTransition` for a single document and still have no
-      // `@view-transition` for navigations between them (Firefox does exactly
-      // that today). Probing the interface would have counted that engine as
-      // capable and then failed it for the engine's own limitation.
-      let atRule = false;
-      for (const sheet of document.styleSheets) {
-        let rules: CSSRuleList;
-        try {
-          rules = sheet.cssRules;
-        } catch {
-          continue;
+      const observed = await page.evaluate((marker) => {
+        // The prerequisite for the CROSS-DOCUMENT row is the at-rule, not the
+        // same-document `ViewTransition` interface: an engine can ship
+        // `startViewTransition` for a single document and still have no
+        // `@view-transition` for navigations between them (Firefox does exactly
+        // that today). Probing the interface would have counted that engine as
+        // capable and then failed it for the engine's own limitation.
+        let atRule = false;
+        for (const sheet of document.styleSheets) {
+          let rules: CSSRuleList;
+          try {
+            rules = sheet.cssRules;
+          } catch {
+            continue;
+          }
+          for (const rule of rules) if (rule.cssText.includes(marker)) atRule = true;
         }
-        for (const rule of rules) if (rule.cssText.includes(marker)) atRule = true;
-      }
-      return {
-        atRule,
-        sameDocument:
-          typeof (window as unknown as { ViewTransition?: unknown }).ViewTransition === 'function',
-        revealed: (window as unknown as { __reveal: number }).__reveal,
-        path: location.pathname,
-      };
-    }, OPT_IN_MARKER);
-    testInfo.annotations.push({
-      type: 'cross-document view transitions',
-      description: `atRule=${observed.atRule} sameDocumentApi=${observed.sameDocument} pagereveal=${observed.revealed} at=${observed.path}`,
-    });
-    if (!observed.atRule) {
+        return {
+          atRule,
+          sameDocument:
+            typeof (window as unknown as { ViewTransition?: unknown }).ViewTransition ===
+            'function',
+          revealed: (window as unknown as { __reveal: number }).__reveal,
+          path: location.pathname,
+        };
+      }, OPT_IN_MARKER);
       testInfo.annotations.push({
-        type: 'N/A',
-        description:
-          'this engine has no `@view-transition` at-rule, so no cross-document transition is possible; the row is not measured on it',
+        type: 'cross-document view transitions',
+        description: `atRule=${observed.atRule} sameDocumentApi=${observed.sameDocument} pagereveal=${observed.revealed} at=${observed.path}`,
       });
-      expect(observed.revealed, 'an engine without the at-rule fires no reveal').toBe(0);
-      return;
-    }
-    expect(observed.path, 'the traversal landed on the previous document').toBe('/');
-    expect(observed.revealed, 'the traversal ran the cross-document transition').toBe(1);
-  });
+      if (!observed.atRule) {
+        testInfo.annotations.push({
+          type: 'N/A',
+          description:
+            'this engine has no `@view-transition` at-rule, so no cross-document transition is possible; the row is not measured on it',
+        });
+        expect(observed.revealed, 'an engine without the at-rule fires no reveal').toBe(0);
+        return;
+      }
+      expect(observed.path, 'the traversal landed on the previous document').toBe('/');
+      expect(observed.revealed, 'an opted-in traversal animates only with motion enabled').toBe(
+        reducedMotion === 'reduce' ? 0 : 1,
+      );
+    });
+  }
 });
 
 test.describe('Speculation Rules', () => {

@@ -19,11 +19,22 @@
  * from the same per-page manifests the build just recorded.
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, join, normalize, relative } from 'pathe';
 import { createLogger } from '@openelement/element';
 import { escapeAttr } from '@openelement/element/html';
 import { buildError, SsgRenderErrorCode } from '../../../internal/error-codes.ts';
+import { stylesheetLinkTag } from '../../head-injection.ts';
 import { visitHtmlFiles, walkHtmlFileEntries } from '../html-files.ts';
+import { SSG_VIEW_TRANSITION_STYLE_PREFIX } from '../paths.ts';
+import { publicFileDigest } from '../publish-manifest.ts';
 import { type PageIslandManifest, routeFromRelativePath } from './island-manifest.ts';
 export { buildSpeculationRulesJson } from './speculation-rules.ts';
 
@@ -155,28 +166,54 @@ export function injectCspMeta(
  *   stylesheet, exactly as it ignored the meta tag — no script, no feature
  *   detection, no runtime cost.
  *
- * The block is a plain `<style>` in the head, so the capability does not depend
- * on a style engine being selected: it is CSS the platform reads.
+ * One linked stylesheet opts in the pages prerendered by this run, regardless
+ * of whether they have islands or a configured style engine. Keeping the link
+ * at the start of the head lets later author styles retain cascade precedence.
  *
  * @see https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/@view-transition
  */
-export function injectViewTransitionOptIn(dir: string): void {
-  /**
-   * The opt-in declaration is the injection's own marker: prose mentioning
-   * `@view-transition` (a changelog entry, say) must not read as "already
-   * injected", which is why the guard tests the declaration and not the name.
-   */
-  const optIn = '@view-transition { navigation: auto; }';
-  const styleBlock = [
-    '  <style>',
-    `    ${optIn}`,
-    '    @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }',
-    '  </style>',
+export function injectViewTransitionOptIn(
+  dir: string,
+  pages: readonly string[],
+  base: string,
+): string | undefined {
+  const htmlPages = pages.filter((page) => page.endsWith('.html'));
+  if (htmlPages.length === 0) return;
+
+  const css = [
+    '@view-transition { navigation: auto; }',
+    '@media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }',
+    '',
   ].join('\n');
-  visitHtmlFiles(dir, (content) => {
-    if (content.includes(optIn)) return null;
-    return insertAfterHead(content, styleBlock);
-  });
+  const hash = publicFileDigest(Buffer.from(css)).slice(0, 12);
+  const assetPath = `${SSG_VIEW_TRANSITION_STYLE_PREFIX}${hash}.css`;
+  const asset = join(realpathSync(dir), assetPath);
+  const assetDir = dirname(asset);
+  mkdirSync(assetDir, { recursive: true });
+  if (normalize(realpathSync(assetDir)) !== assetDir) {
+    throw new Error(`Expected a canonical SSG stylesheet directory at ${assetDir}`);
+  }
+  if (existsSync(asset)) {
+    if (!lstatSync(asset).isFile() || readFileSync(asset, 'utf8') !== css) {
+      throw new Error(`SSG view-transition stylesheet conflicts with ${asset}`);
+    }
+  } else {
+    writeFileSync(asset, css, { flag: 'wx' });
+  }
+
+  // Vite's absolute base may include a CDN origin. Files from the public SSG
+  // snapshot use the same origin as the document, under that base's path.
+  const basePath = new URL(base, 'http://localhost/').pathname
+    .replace(/^\/+/, '/')
+    .replace(/\/?$/, '/');
+  for (const page of htmlPages) {
+    const href =
+      base === './' ? relative(dirname(page), join(dir, assetPath)) : `${basePath}${assetPath}`;
+    const link = stylesheetLinkTag(href);
+    const content = readFileSync(page, 'utf8');
+    if (!content.includes(link)) writeFileSync(page, insertAfterHead(content, link), 'utf8');
+  }
+  return assetPath;
 }
 
 // ─── Speculation Rules API ────────────────────────────────────────────

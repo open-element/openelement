@@ -41,7 +41,7 @@ import { join } from 'node:path';
 import process from 'node:process';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 import { serveFetch } from '../src/internal/node-http.ts';
-import { createFetchHandler } from '../src/vite/internal/static-serve.ts';
+import { createFetchHandler, importRequestTimeServer } from '../src/vite/internal/static-serve.ts';
 import type { BrowserEntryGraphArtifact } from '../src/vite/internal/browser-entry-graph-artifact.ts';
 
 const REPO_ROOT = join(import.meta.dirname!, '..', '..', '..');
@@ -715,6 +715,15 @@ test('external consumer: the SSR bundle and prerendered HTML carry the import co
   expect(homeHtml).toContain('server-extension-priority');
   expect(homeHtml).not.toContain('client-extension-priority');
   expect(homeHtml).not.toContain('condition-browser-target');
+  expect(homeHtml).toContain('/assets/open-view-transition-');
+
+  const serverMod = await importRequestTimeServer(join(distDir, 'server', 'index.js'));
+  const fetch = createFetchHandler({ distDir, serverMod });
+  const response = await fetch(new Request('http://localhost/proof-live'));
+  expect(response.status).toBe(200);
+  const requestTimeHtml = await response.text();
+  expect(requestTimeHtml).toContain('request-time proof');
+  expect(requestTimeHtml).not.toContain('/assets/open-view-transition-');
 });
 
 test('external consumer (#1544/B2): the runtime preload is a per-page projection and the runtime leaves the entry static graph', async () => {

@@ -194,8 +194,8 @@ interface BuildSSGOptions {
   base?: string;
   /**
    * View Transitions API configuration.
-   * When true (default), injects <meta name="view-transition" content="same-origin">
-   * into all HTML files for smooth cross-page animations in MPA navigation.
+   * When true (default), links the same-origin stylesheet that opts
+   * prerendered HTML into cross-document View Transitions.
    * Set to false to disable.
    * @default true
    */

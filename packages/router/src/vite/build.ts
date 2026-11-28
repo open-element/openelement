@@ -27,7 +27,7 @@ import {
   writeBuildEvidence,
 } from './build-plan.ts';
 import { DEFAULT_OUT_DIR } from './internal/paths.ts';
-import { readSsgPageManifest } from './internal/ssg/output-manifest.ts';
+import { readSsgOutputManifest } from './internal/ssg/output-manifest.ts';
 import { authoredPublicPaths, writePublishOutput } from './internal/publish-manifest.ts';
 
 const log = createLogger('build');
@@ -266,11 +266,13 @@ export function buildPlugin(
         config.build.copyPublicDir && config.publicDir && existsSync(config.publicDir)
           ? authoredPublicPaths(config.publicDir)
           : [];
+      const { pages, viewTransitionStyle } = readSsgOutputManifest(outputDir);
       writePublishOutput(outputDir, [
         ...authored,
         ...(clientOutput?.files ?? []),
         ...islandManifestFiles,
-        ...readSsgPageManifest(outputDir),
+        ...pages,
+        ...(viewTransitionStyle ? [viewTransitionStyle] : []),
       ]);
     },
   };

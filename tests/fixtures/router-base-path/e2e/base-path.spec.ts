@@ -64,6 +64,15 @@ test('the SSG page declares base-prefixed marked links in its original head', as
   expect(response.status()).toBe(200);
   const html = await response.text();
 
+  const transition = html.match(
+    /<link rel="stylesheet" href="(\/sub\/assets\/open-view-transition-[a-f0-9]{12}\.css)"/,
+  );
+  expect(transition).not.toBeNull();
+  const transitionSheet = await request.get(transition![1]!);
+  expect(transitionSheet.status()).toBe(200);
+  expect(transitionSheet.headers()['content-type']).toContain('text/css');
+  expect(await transitionSheet.text()).toContain('@view-transition { navigation: auto; }');
+
   const links = headStyleLinks(html);
   // The page's own sheet and the nested light component's sheet (one link
   // each) — the shadow component's sheet is declared inside its DSD template.
