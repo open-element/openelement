@@ -20,6 +20,7 @@ import {
   type EmitState,
   push,
   INTERNAL_PREFIX,
+  LIST_ENTRY_INDEX,
   type SpanLike,
   nextName,
   recordFor,
@@ -510,6 +511,10 @@ function emitList(
   state.indent += 1;
   pushParts(state, [`const ${INTERNAL_PREFIX}items = (`, { record: itemsRecord }, ');']);
   push(state, `const ${INTERNAL_PREFIX}previous = ${entriesVar};`);
+  push(
+    state,
+    `const ${INTERNAL_PREFIX}byKey = ${LIST_ENTRY_INDEX}(${INTERNAL_PREFIX}previous, "key");`,
+  );
   push(state, `const ${INTERNAL_PREFIX}next = [];`);
   push(state, `const ${INTERNAL_PREFIX}used = new Set();`);
   push(
@@ -522,12 +527,11 @@ function emitList(
     state,
     `const ${INTERNAL_PREFIX}key = ${keyFn}(${INTERNAL_PREFIX}item, ${INTERNAL_PREFIX}index);`,
   );
-  push(state, `let ${INTERNAL_PREFIX}found = null;`);
   push(
     state,
-    `for (const ${INTERNAL_PREFIX}entry of ${INTERNAL_PREFIX}previous) { if (${INTERNAL_PREFIX}entry.key === ${INTERNAL_PREFIX}key && !${INTERNAL_PREFIX}used.has(${INTERNAL_PREFIX}entry)) { ${INTERNAL_PREFIX}found = ${INTERNAL_PREFIX}entry; break; } }`,
+    `const ${INTERNAL_PREFIX}found = ${INTERNAL_PREFIX}byKey.get(${INTERNAL_PREFIX}key)?.pop();`,
   );
-  push(state, `if (${INTERNAL_PREFIX}found !== null) {`);
+  push(state, `if (${INTERNAL_PREFIX}found !== undefined) {`);
   state.indent += 1;
   push(
     state,
@@ -563,10 +567,7 @@ function emitList(
     state,
     `const ${INTERNAL_PREFIX}entry = { key: ${INTERNAL_PREFIX}key, item: ${INTERNAL_PREFIX}item, owner: ${INTERNAL_PREFIX}owner, nodes: ${INTERNAL_PREFIX}built.nodes, update: ${INTERNAL_PREFIX}built.update };`,
   );
-  push(
-    state,
-    `${INTERNAL_PREFIX}used.add(${INTERNAL_PREFIX}entry); ${INTERNAL_PREFIX}next.push(${INTERNAL_PREFIX}entry);`,
-  );
+  push(state, `${INTERNAL_PREFIX}next.push(${INTERNAL_PREFIX}entry);`);
   state.indent -= 1;
   push(state, `}`);
   state.indent -= 1;
@@ -585,16 +586,16 @@ function emitList(
   // it) is never re-inserted, and a distant swap moves exactly the swapped
   // entries, where the inline backward walk re-inserted every entry between
   // the swap and the tail (measured 997 of 1000, 2026-11-24).
-  push(state, `const ${INTERNAL_PREFIX}previousNodes = new Set();`);
-  push(
-    state,
-    `for (const ${INTERNAL_PREFIX}entry of ${INTERNAL_PREFIX}previous) for (const ${INTERNAL_PREFIX}node of ${INTERNAL_PREFIX}entry.nodes) ${INTERNAL_PREFIX}previousNodes.add(${INTERNAL_PREFIX}node);`,
-  );
   if (wire) {
     // The list end is the fixed tail: every entry node belongs before it and a
     // following sibling can never be mistaken for a list node.
     push(state, `const ${INTERNAL_PREFIX}tail = ${endVar};`);
   } else {
+    push(state, `const ${INTERNAL_PREFIX}previousNodes = new Set();`);
+    push(
+      state,
+      `for (const ${INTERNAL_PREFIX}entry of ${INTERNAL_PREFIX}previous) for (const ${INTERNAL_PREFIX}node of ${INTERNAL_PREFIX}entry.nodes) ${INTERNAL_PREFIX}previousNodes.add(${INTERNAL_PREFIX}node);`,
+    );
     push(state, `let ${INTERNAL_PREFIX}tail = ${anchorVar}.nextSibling;`);
     push(
       state,

@@ -15,6 +15,8 @@ import { type BindingId } from '../../semantic-core/scope-resolution.ts';
 
 export const INTERNAL_PREFIX = '__oe_';
 
+export const LIST_ENTRY_INDEX = `${INTERNAL_PREFIX}indexListEntries`;
+
 /**
  * 16b-LC depth >= 2 (2026-11-21): the transaction token local of a retaining
  * body. The root body captures `beginInstancePass`'s return in it; a retained

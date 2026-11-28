@@ -16,6 +16,7 @@ import {
   type ModuleImportContext,
   importContexts,
   fragmentLineCount,
+  LIST_ENTRY_INDEX,
 } from './emission.ts';
 import { findMountCycle, moduleUsesContext, planRetention } from './instance-emission.ts';
 import { moduleUsesSharedClaimCursor, collectStaticClassCandidates } from './structure.ts';
@@ -502,6 +503,25 @@ export function generateLeafModule(
     ...authoredImports,
     '',
   ];
+  if (body.includes(`${LIST_ENTRY_INDEX}(`)) {
+    // A reverse bucket lets each lookup consume the first unused occurrence
+    // with pop(). Omit NaN because mount previously matched keys with ===.
+    headerLines.push(
+      `function ${LIST_ENTRY_INDEX}(entries, field) {`,
+      '  const byKey = new Map();',
+      '  for (let index = entries.length - 1; index >= 0; index--) {',
+      '    const entry = entries[index];',
+      '    const key = entry[field];',
+      '    if (key !== key) continue;',
+      '    const bucket = byKey.get(key);',
+      '    if (bucket === undefined) byKey.set(key, [entry]);',
+      '    else bucket.push(entry);',
+      '  }',
+      '  return byKey;',
+      '}',
+      '',
+    );
+  }
   if (sharedClaimCursor) {
     headerLines.push('let __oe_claimCursor = null;', `let ${CLAIM_ACTIVATION} = null;`, '');
   }

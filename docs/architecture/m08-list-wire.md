@@ -78,8 +78,8 @@ entries and subscriptions in place so the next legal signal value recovers.
 The same token may legitimately appear more than once. Duplicate keys are
 mount-relevant state, not wire corruption:
 
-- mount keeps its existing used-set rule: the first occurrence adopts a
-  previous entry, later occurrences insert;
+- mounted and claimed updates take the first unused matching entry in prior
+  order. An occurrence without a prior match inserts;
 - SSR emits one key marker per item, so duplicate items produce duplicate
   tokens and no half string;
 - claim counts occurrences. `entrySeedMismatch` applies three rules in order,
@@ -99,6 +99,10 @@ reorder such as server `[a, a, c]` / client `[c, a, a]` keeps each token group's
 occurrence order (`a0`, then `a1`) while the groups move as blocks. Ordering is
 never compared as a whole: the claim matches by token and the existing
 minimal-move placement handles reorder.
+
+The generated module indexes prior entries by their raw key on update and by
+their wire token on initial claim. The index consumes each group in order and
+omits `NaN` raw keys, preserving mount's strict equality rule.
 
 A duplicate claimed insert is re-claimable: the inserted entry carries its own
 `oe:k:` marker, so `dispose(false)` + a fresh claim adopts every occurrence.

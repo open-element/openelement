@@ -18,6 +18,7 @@ import { BOOLEAN_ATTRIBUTES } from '../../semantic-core/attribute-classification
 import { STATIC_STYLES_MARKER } from '@openelement/protocol/part-program';
 import {
   INTERNAL_PREFIX,
+  LIST_ENTRY_INDEX,
   type EmitState,
   nextName,
   pushParts,
@@ -961,7 +962,7 @@ function emitClaimEntryBuilder(
 /**
  * One claim-time keyed sync. `previous` is the seeded list on the strict first
  * call and the live entry list afterwards. Matching keeps mount's
- * `entry.key === key` identity plus the mount used-set rule, so duplicate
+ * `entry.key === key` identity and first-unused occurrence order, so duplicate
  * client keys adopt the wire entry once per occurrence and insert the
  * remainder. The strict call is the seed assignment's defense: an unmatched
  * seeded entry is a mismatch, never a delete. The non-strict refresh disposes
@@ -989,18 +990,15 @@ function emitClaimListSync(
   // the claimed DOM, owners and entries untouched. The refresh assignment keeps
   // the previous entry list, so the next legal signal value can recover.
   push(state, 'for (const key of keys) encodeListKey(key);');
+  push(state, `const byKey = ${LIST_ENTRY_INDEX}(previous, "key");`);
   push(state, 'const next = [];');
   push(state, 'const used = new Set();');
   push(state, 'for (let index = 0; index < items.length; index++) {');
   state.indent += 1;
   push(state, 'const item = items[index];');
   push(state, 'const key = keys[index];');
-  push(state, 'let found = null;');
-  push(
-    state,
-    'for (const entry of previous) { if (entry.key === key && !used.has(entry)) { found = entry; break; } }',
-  );
-  push(state, 'if (found !== null) {');
+  push(state, 'const found = byKey.get(key)?.pop();');
+  push(state, 'if (found !== undefined) {');
   state.indent += 1;
   push(state, 'used.add(found); found.item = item; found.update(item); next.push(found);');
   state.indent -= 1;
@@ -1206,19 +1204,17 @@ function emitClaimList(
   // list node, so the strict seed mismatch reports where the list was written.
   const seedDetail = `${mismatchVar} + ${JSON.stringify(` at ${here}/each`)}`;
   push(state, `if (${mismatchVar} !== null) throw ${claimErrorFrom(seedDetail, node.span)};`);
+  const seedByToken = nextName(state, 'seedByToken');
+  push(state, `const ${seedByToken} = ${LIST_ENTRY_INDEX}(${seededVar}, "token");`);
   push(state, `for (let index = 0; index < ${itemsVar}.length; index++) {`);
   state.indent += 1;
   push(state, `const token = ${tokensVar}[index];`);
   push(state, 'if (token === null) continue;');
-  push(state, `for (const entry of ${seededVar}) {`);
-  state.indent += 1;
+  push(state, `const entry = ${seedByToken}.get(token)?.pop();`);
   push(
     state,
-    'if (!entry.assigned && entry.token === token) { entry.assigned = true; entry.key = ' +
-      `${keysVar}[index]; entry.item = ${itemsVar}[index]; break; }`,
+    `if (entry !== undefined) { entry.assigned = true; entry.key = ${keysVar}[index]; entry.item = ${itemsVar}[index]; }`,
   );
-  state.indent -= 1;
-  push(state, '}');
   state.indent -= 1;
   push(state, '}');
   push(

@@ -248,6 +248,58 @@ interface Probe {
 }
 
 describe('M08 list — Chromium claim, update and dispose', () => {
+  test('fresh keyed updates consume duplicate entries in order and compare raw keys strictly', async () => {
+    await prepare();
+    const result = await page.evaluate(() => {
+      const runtime = (window as unknown as { __oeRuntime: RuntimePage }).__oeRuntime;
+      const factories = (window as unknown as { __oeModule: PageModule }).__oeModule;
+      const host = document.createElement('main');
+      document.body.append(host);
+      const referenceKey = {};
+      const items = runtime.signal([
+        { id: NaN, label: 'NaN' },
+        { id: 'duplicate', label: 'first' },
+        { id: 'duplicate', label: 'second' },
+        { id: referenceKey, label: 'reference' },
+        { id: 0, label: 'zero' },
+      ]);
+      const scope = new runtime.LifetimeScope();
+      const recipe = factories.createKeyedRecipe!(scope, { props: {}, bindings: { items } });
+      const projection = runtime.insertRecipe(scope, recipe, host);
+      const before = [...host.querySelectorAll('li')];
+      items.value = [
+        { id: referenceKey, label: 'reference update' },
+        { id: 'duplicate', label: 'first update' },
+        { id: -0, label: 'negative zero' },
+        { id: 'duplicate', label: 'second update' },
+        { id: NaN, label: 'new NaN entry' },
+      ];
+      const after = [...host.querySelectorAll('li')];
+      const identity = after.map((entry) => before.indexOf(entry));
+      const labels = after.map((entry) => entry.textContent);
+      const oldNaNDetached = !before[0]!.isConnected;
+      projection.dispose(true);
+      scope.dispose();
+      const empty = host.childNodes.length === 0;
+      host.remove();
+      return { identity, labels, oldNaNDetached, empty };
+    });
+
+    expect(result).toEqual({
+      identity: [3, 1, 4, 2, -1],
+      labels: [
+        'reference update',
+        'first update',
+        'negative zero',
+        'second update',
+        'new NaN entry',
+      ],
+      oldNaNDetached: true,
+      empty: true,
+    });
+    await page.close();
+  });
+
   test('keyed text refresh preserves equal live text and repairs outside edits in mount and claim', async () => {
     const generated = await prepare();
     const html = ssr(generated.loaded, 'Keyed')(
