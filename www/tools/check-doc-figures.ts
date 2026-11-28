@@ -21,6 +21,11 @@ import { fileURLToPath } from 'node:url';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import process from 'node:process';
 import type { Manifest } from 'vite';
+import {
+  BROWSER_ENTRY_GRAPH_ARTIFACT_FILE,
+  type BrowserEntryGraphArtifact,
+  evaluateBrowserEntryGraphArtifact,
+} from '../../packages/router/src/vite/internal/browser-entry-graph-artifact.ts';
 import { clientImportGraph, payloadClosure } from '../../tools/release/payload-closure.ts';
 import { spawnCommand } from '../../tools/repo/node-command.ts';
 
@@ -107,6 +112,26 @@ for (const [rel, abs] of distFiles) {
     });
   }
 }
+
+const graph: BrowserEntryGraphArtifact = JSON.parse(
+  await readFile(join(dist, 'client', BROWSER_ENTRY_GRAPH_ARTIFACT_FILE), 'utf8'),
+);
+const graphEvaluation = evaluateBrowserEntryGraphArtifact(graph);
+if (graph.status !== 'complete' || graphEvaluation.verdict === 'UNPROVEN') {
+  throw new Error(`Cannot measure emitted Element-bearing files: ${graphEvaluation.detail}`);
+}
+const elementPrefix = `${graph.element.packageRoot}/`;
+const elementChunks = graph.chunks.filter(({ modules }) =>
+  modules.some(({ id, renderedLength }) => renderedLength > 0 && id.startsWith(elementPrefix)),
+);
+const elementBytes = { raw: 0, gzip: 0 };
+for (const { file } of elementChunks) {
+  const absolute = distFiles.get(`client/${file}`);
+  if (!absolute) throw new Error(`Missing emitted Element-bearing file: ${file}`);
+  elementBytes.raw += (await stat(absolute)).size;
+  elementBytes.gzip += await gzipSize(absolute);
+}
+
 function chunkStem(docName: string): string {
   // Doc names are either the full filename (`client.js`) or the emitted
   // chunk stem without its content hash (`island-open-layout`).
@@ -226,6 +251,30 @@ for (const docPath of docs) {
   }
   if (codeOrder.length > 0) {
     check(scope + 'code-block pages', codeOrder[0], tagCounts.get('open-code-block') ?? -2);
+  }
+  const elementRow = zh
+    ? /\|\s*包含 Element 模块的 JavaScript（(\d+) 个文件）\s*\|\s*([\d,]+)\s*\|\s*([\d,]+)\s*\|/u.exec(
+        text,
+      )
+    : /\|\s*Element-bearing JavaScript \((\d+) files\)\s*\|\s*([\d,]+)\s*\|\s*([\d,]+)\s*\|/.exec(
+        text,
+      );
+  if (elementRow) {
+    check(scope + 'Element-bearing JavaScript files', Number(elementRow[1]), elementChunks.length);
+    check(
+      scope + 'Element-bearing JavaScript raw',
+      Number(elementRow[2].replaceAll(',', '')),
+      elementBytes.raw,
+      0.01,
+    );
+    check(
+      scope + 'Element-bearing JavaScript gzip',
+      Number(elementRow[3].replaceAll(',', '')),
+      elementBytes.gzip,
+      0.03,
+    );
+  } else {
+    failures.push(`${scope}Element-bearing JavaScript figure missing`);
   }
   for (const row of text.matchAll(
     /\|\s*`([^`(|]+?)`(?:\([^)]*\))?\s*\|\s*([\d,]+)\s*\|\s*([\d,]+)\s*\|/g,
