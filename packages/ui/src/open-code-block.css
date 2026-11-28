@@ -15,6 +15,10 @@
   position: relative;
 }
 
+.code-block-wrapper {
+  display: contents;
+}
+
 .copy-btn {
   min-inline-size: 24px;
   min-block-size: 24px;

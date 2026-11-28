@@ -100,7 +100,7 @@ function OpenButton(props: {
   // (fire, then act) and the disabled guard.
   return (
     <span
-      style='display:contents'
+      class='button-wrapper'
       onClick={(event: Event) => {
         activateButton(hostOf(event), event, () => {
           hostOf(event).dispatchEvent(

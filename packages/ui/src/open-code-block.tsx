@@ -119,7 +119,7 @@ function OpenCodeBlock(props: { copyLabel: string }) {
   });
 
   return (
-    <div style='display:contents'>
+    <div class='code-block-wrapper'>
       <slot></slot>
       <button
         type='button'
