@@ -3,7 +3,11 @@
 - Status: ACCEPTED (2026-10-07, alpha.11 train — the minimal #1548 lane);
   **AMENDED** (2026-10-18 — `./no-regions` was retired in the alpha.15 line and
   the axis is now the blocks axis, `./no-blocks` / `./base`; see
-  [Amended status](#amended-status-2026-10-18))
+  [Amended status](#amended-status-2026-10-18)); **AMENDED** (2026-11-28 — the
+  blocks-axis entries retired in Alpha17 under a recorded owner-ratified
+  replacement of retirement condition 2, not literal satisfaction of it; see
+  [ADR-0184](./ADR-0184-alpha17-emitted-runtime-entry-retirement.md) and the
+  amendment at the end)
 - Amends: extends [ADR-0155](./ADR-0155-client-only-entry-subpath.md) from one
   runtime axis (the claim executor) to two (the when/each Region builders);
   same P2/P5 regime, same seam shape.
@@ -164,7 +168,10 @@ removed (use `./no-blocks`)". What replaced it:
   and unchanged — the rename is at the runtime-shape/entry layer only.
 - The public-interface snapshot and the packed tarball contain no
   `no-regions` entry; `@openelement/element` exports `client-only`, `no-blocks`,
-  and `base`.
+  and `base`. (Update 2026-11-28: this sentence is historical as of the Alpha17
+  retirement — the package no longer publishes any of the three; see the
+  amendment at the end and
+  [ADR-0184](./ADR-0184-alpha17-emitted-runtime-entry-retirement.md).)
 
 The P5 retirement condition above still applies to the surviving entries: they
 are deletable as one unit when bundlers select per-graph entry bodies natively
@@ -178,3 +185,48 @@ axis must start from a new decision record rather than reviving this subpath.
   extends; the entry-split and seam patterns reused here.
 - [seams.md](../architecture/seams.md) — the "Region-builders runtime
   specialization" row (P8 registration).
+
+## Amendment (2026-11-28): the blocks-axis entries retire — retirement condition 2 recorded as an owner-ratified replacement
+
+Append-only amendment. Owner-directed 2026-11-28 in session as part of the
+three-PR Alpha17 delivery; the written carrier for the public-surface half is
+[ADR-0184](./ADR-0184-alpha17-emitted-runtime-entry-retirement.md). The
+2026-10-18 amended status above stays as written (it retired `./no-regions` and
+named the surviving entries); this section retires those surviving entries.
+
+What changed: `packages/element/package.json` no longer publishes `./no-blocks`
+or `./base`. The Block-builder runtime (`runtime/blocks.ts`,
+`runtime/blocks-seam.ts`, `runtime/blocks-install.ts`), the client build's
+blocks scan/alias and the side-effect install edge that kept the builders alive
+are deleted with the generic executor; compiler-generated condition and list
+factories own mount and claim, and the `seams.md` row for this seam records the
+withdrawal.
+
+Which condition decided it: **retirement condition 2** — "the Part Program
+grammar retires dynamic Regions ... no graph needs the builders and the default
+entry becomes what `./no-regions` is today" — recorded as an **owner-ratified
+replacement**, not as formal satisfaction of the written condition. Its operative
+reading is: no graph needs the builders because the builders no longer exist and
+every emitted component carries its own condition/list code. Condition 1
+(bundler-native per-graph entry bodies) is **not** met; it is not used.
+
+What is explicitly not claimed (the literal gap): the condition's antecedent —
+that `when`/`each` lowering is "replaced by static or platform-native
+constructs" — does not hold verbatim. Emitted generated-leaf code still performs
+marker-based conditions and keyed list reconciliation at runtime (`oe:each` /
+`oe:k:` wire), so no static-lowering or platform-native claim is made; what
+retired is the generic Block-builder set and its install edge, not dynamism or
+the wire vocabulary. The removal is authorized by the repository owner's
+2026-11-28 direction and by the operative reading above — a recorded
+owner-ratified replacement, and a later reader must not cite this amendment as
+proof that the written antecedent was met. The removed entries re-exported the
+shared public surface (`public-surface.ts`), not an axis-specific API, so
+removing them removes that alternate spelling of the surface; any symbol the
+package dropped from every entry is the separate `.`/wire delta listed in
+ADR-0184, not this axis. The earlier amended status's rule that a future axis
+must start from a new decision record also governs `./no-blocks` and `./base`:
+the deleted names are not revived by pointing this record at them.
+
+This record stays **ACTIVE** as the rationale for the runtime-shape axis
+(P2/P5 trade, seam shape, fail-closed guards); the later record that carries the
+removal is ADR-0184.

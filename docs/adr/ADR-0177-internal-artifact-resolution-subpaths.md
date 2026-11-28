@@ -1,6 +1,9 @@
 # ADR-0177: Artifact-resolution subpaths under `internal/` (named deviation)
 
-- Status: ACCEPTED
+- Status: ACCEPTED; **AMENDED** 2026-11-20 (the third internal subpath named)
+  and 2026-11-28 (`./internal/compiled/runtime` retired with its target module —
+  see [ADR-0184](./ADR-0184-alpha17-emitted-runtime-entry-retirement.md) and the
+  amendment at the end)
 - Date: 2026-11-14
 - Owner authorization: 2026-11-14 session ruling (all recommendations accepted;
   no alias, single source of truth, no JSR/Deno, full P1–P8 compliance).
@@ -213,3 +216,53 @@ public `./lifecycle`). Both are **derived pointers**, not second owners: the
 authority is this record. They are stale in their counts (two → three internal
 subpaths, plus the separate public ones) and are corrected when next touched; this
 record's reading does not depend on their wording.
+
+## Amendment (2026-11-28): `./internal/compiled/runtime` retires with its target module
+
+Append-only amendment. Owner-directed 2026-11-28 in session as part of the
+three-PR Alpha17 delivery; the written carrier for the public-surface half is
+[ADR-0184](./ADR-0184-alpha17-emitted-runtime-entry-retirement.md). The
+Context, Decision and both earlier amendments stay as written; this section
+records one covered subpath leaving the set.
+
+What changed: `packages/element/package.json` no longer publishes
+`./internal/compiled/runtime`; `packages/element/src/internal/compiled/runtime.ts`
+is deleted together with the generic executor it re-exported (commit
+`681b5e3ce`). Emitted code now resolves its leaf helpers through the closed
+`./internal/compiled/leaf-runtime` set named by the 2026-11-20 amendment, and
+the element shell through `./internal/compiled/generated-element/shell`;
+`packages/compiler/src/internal/compiler/semantic-ir/generated-leaf/generate.ts`
+names the leaf specifier the emitted module imports.
+
+Which predicate is claimed: **none of this record's multi-clause gate predicate
+is presented as the authority for this removal.** The predicate was written to
+retire a *published subpath while its module still exists* — zero importers
+outside `packages/element`, no external resolution, zero snapshot
+`publicSymbols` behind the subpath, `gate:release` + `gate:packed` green at one
+SHA. Here the target module itself was deleted, so no `exports` entry can
+resolve and the snapshot records nothing behind the specifier. That is a
+stronger event than removing an unused alias; it is not a claim about
+`graph:check` / `esm:boundary-check` output at one SHA, and this record asserts
+no release-lane qualification. Alpha permits the break (ADR-0154); the
+artifact-resolution subpaths carried no stability promise.
+
+Later reading of the covered set: two internal artifact-resolution subpaths
+remain — `./internal/compiled/generated-element/shell` and
+`./internal/compiled/leaf-runtime` — and the ONE written retirement condition
+of this record still covers them, applied per subpath, with this record as the
+single owner. The retired `./internal/compiled/runtime` is not replaced by a
+fourth name: its shared helpers moved to the closed leaf set or the shell
+(2026-11-20 amendment), or were deleted with the executor.
+
+Derived pointer and governance: the `packages/element/package.json` `//`
+annotation that this record described as a derived pointer at `:5` of the then
+file was removed in the same change set, alongside the annotations for
+`./client-only`, `./no-blocks` and `./base` whose exports were retired. The
+governance reading: it was a derived pointer, not an owner, so its deletion
+changes no authority — this record's decision, the ADR-0137 §1 deviation naming
+and the retirement condition above remain in force and are now carried by this
+document alone. Consequence recorded for a later change: the two surviving
+internal subpaths currently have no in-package pointer annotation; restoring one
+belongs in a change that already touches that manifest and creates no second
+owner. ADR-0137 §1 remains in force throughout; the retirement narrows the
+deviation, it grants no exemption.
