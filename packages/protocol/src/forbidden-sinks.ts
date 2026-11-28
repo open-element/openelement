@@ -22,6 +22,7 @@
  * - `RAW_TEXT_TAGS`: raw-text elements are outside the compiled grammar —
  *   their content cannot be escaped by the serializer.
  */
+/** Names disallowed for both static and dynamic attribute writes. */
 export const FORBIDDEN_ATTRIBUTE_NAMES: ReadonlySet<string> = new Set(['innerhtml', 'srcdoc']);
 
 /** Property names the compiler refuses as declared props. */

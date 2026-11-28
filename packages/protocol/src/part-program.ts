@@ -188,10 +188,11 @@ export interface ProgramCondition {
 }
 
 /**
- * Operator and literal compatibility for conditions in server JSX:
- * - ordering operators require a finite numeric literal;
- * - `equals`/`not-equals` admit a finite number, string, or boolean;
- * - `truthy` admits exactly `true` or `false` (the recorded expectation).
+ * Check whether a server JSX condition operator accepts the given literal.
+ *
+ * Ordering operators require a finite number. The `equals` and `not-equals`
+ * operators accept a finite number, string, or boolean. The `truthy`
+ * operator accepts a boolean representing the expected truthiness.
  */
 export function conditionLiteralAllowed(op: unknown, value: unknown): boolean {
   switch (op) {
