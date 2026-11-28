@@ -1007,6 +1007,26 @@ function List(props) {
     );
   });
 
+  test('a keyed data attribute compares live values only on native HTML elements', () => {
+    const module = generate(`import { signal } from '@openelement/element';
+function List(props) {
+  const items = signal([]);
+  return <ul>{items.value.map((item) => <li key={item.id}>
+    <button data-id={item.id}>Native</button>
+    <button is="oe-customized" data-id={item.id}>Customized</button>
+    <oe-autonomous data-id={item.id} />
+  </li>)}</ul>;
+}
+`).module!;
+    const claimAt = module.search(/function \w+__claim\(/);
+    const mountPart = claimAt === -1 ? module : module.slice(0, claimAt);
+    expect(
+      mountPart.match(/\.getAttribute\("data-id"\) === __oe_value\d+\) return;/g),
+    ).toHaveLength(1);
+    expect(mountPart.match(/\.setAttribute\("data-id", __oe_value\d+\);/g)).toHaveLength(3);
+    expect(mountPart).toContain('.setAttribute("is", "oe-customized");');
+  });
+
   test('a condition inside an entry refreshes only the condition collector', () => {
     const module = generate(`import { signal } from '@openelement/element';
 function List(props) {

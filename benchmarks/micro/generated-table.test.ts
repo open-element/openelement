@@ -27,6 +27,18 @@ test('the generated-lane keyed table: mount, 10th-label update, swap and remove 
   // The keyed list reuses every entry and writes only the changed labels.
   expect(facts.updateInsertions).toEqual(0);
   expect(facts.update10thTextWrites).toEqual(100);
+  // Three keyed data-id bindings per row still read their model values.
+  // The live values already match through the label-only update.
+  expect(facts.update10thAttributeWrites).toEqual(0);
+  expect(facts.attributeUpdates).toEqual({
+    initial: '0',
+    changed: { writes: 1, value: 'changed' },
+    repaired: { writes: 1, value: 'changed' },
+    removed: { writes: 1, value: null },
+    absentWrites: 0,
+    reads: 2,
+    coercions: 2,
+  });
   // Keyed movement: row 1 now shows id 998 and row 998 shows id 1.
   expect(facts.swappedIds[0]).toEqual('998');
   expect(facts.swappedIds[1]).toEqual('1');

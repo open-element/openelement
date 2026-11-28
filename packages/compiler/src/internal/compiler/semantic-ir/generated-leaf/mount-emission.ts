@@ -180,6 +180,7 @@ export function emitEntryBuilder(
   scopeParam: string,
   itemParam: string,
   itemName: string,
+  hasKey: boolean,
   nodes: readonly FunctionModelNode[],
   records: ReadonlyMap<string, LoweredExpressionRecord>,
   anchor: SpanLike,
@@ -188,7 +189,9 @@ export function emitEntryBuilder(
   state.indent += 1;
   const outerScope = state.scopeVar;
   const outerOrdinals = state.textOrdinals;
+  const outerKeyedEntry = state.keyedEntry;
   state.scopeVar = scopeParam;
+  state.keyedEntry = hasKey;
   // Save/restore rather than add/delete: a nested list entry may shadow the same
   // mapper name, and deleting it on the way out would hide the outer entry-local
   // reads (refresh registration and `declareReads` both consult this set).
@@ -216,6 +219,7 @@ export function emitEntryBuilder(
   push(state, `return { nodes: ${INTERNAL_PREFIX}nodes, update(next) { ${updateBody} } };`);
   state.textOrdinals = outerOrdinals;
   state.scopeVar = outerScope;
+  state.keyedEntry = outerKeyedEntry;
   state.indent -= 1;
   push(state, '}');
 }
@@ -495,6 +499,7 @@ function emitList(
       `${INTERNAL_PREFIX}eachScope${id}`,
       `${INTERNAL_PREFIX}eachItem${id}`,
       node.parameter,
+      node.key !== null,
       node.template,
       records,
       node.span,
@@ -781,6 +786,7 @@ function emitAttributeWrite(
   channel: string,
   record: LoweredExpressionRecord,
   anchor: SpanLike,
+  compareLiveValue = false,
 ): void {
   const literal = JSON.stringify(name);
   if (channel === 'boolean') {
@@ -806,6 +812,9 @@ function emitAttributeWrite(
   }
   const valueVar = nextName(state, 'value');
   pushParts(state, [`const ${valueVar} = attributeValueOf((`, { record }, '));'], anchor);
+  if (compareLiveValue) {
+    push(state, `if (${elementVar}.getAttribute(${literal}) === ${valueVar}) return;`, anchor);
+  }
   push(state, `if (${valueVar} === null) ${elementVar}.removeAttribute(${literal});`, anchor);
   push(state, `else {`, anchor);
   push(state, `  assertSafeUrlAttribute(${literal}, ${valueVar});`, anchor);
@@ -1384,6 +1393,11 @@ export function emitNode(
     // `document.createElement` call would produce an HTML-namespaced lookalike
     // that renders nothing. `foreignObject` switches its children back to HTML.
     const elementNamespace = node.tag === 'svg' ? 'svg' : namespace;
+    const compareEntryDataAttributes =
+      state.keyedEntry === true &&
+      elementNamespace === 'html' &&
+      !node.tag.includes('-') &&
+      !node.attributes.some((attribute) => attribute.name.toLowerCase() === 'is');
     push(
       state,
       elementNamespace === 'svg'
@@ -1435,6 +1449,13 @@ export function emitNode(
       if (record === null || !declareReads(state, record)) continue;
       const dependencies = dependencyNames(state, record);
       if (dependencies === null) continue;
+      // Compare after coercion so each refresh still observes the authored
+      // expression and repairs DOM edits. A custom element can observe an
+      // assignment even when the assigned value matches.
+      const compareLiveValue =
+        compareEntryDataAttributes &&
+        attribute.channel === 'attribute' &&
+        attribute.name.toLowerCase().startsWith('data-');
       if (dependencies.length === 0) {
         if (!readsEntryLocal(state, record)) {
           emitAttributeWrite(
@@ -1460,6 +1481,7 @@ export function emitNode(
               attribute.channel,
               record,
               attribute.span,
+              compareLiveValue,
             ),
           ),
         );
@@ -1468,7 +1490,15 @@ export function emitNode(
       const refresh = nextName(state, 'refresh');
       push(state, `function ${refresh}() {`, attribute.span);
       state.indent += 1;
-      emitAttributeWrite(state, varName, attribute.name, attribute.channel, record, attribute.span);
+      emitAttributeWrite(
+        state,
+        varName,
+        attribute.name,
+        attribute.channel,
+        record,
+        attribute.span,
+        compareLiveValue,
+      );
       state.indent -= 1;
       push(state, `}`);
       push(state, `${refresh}();`);

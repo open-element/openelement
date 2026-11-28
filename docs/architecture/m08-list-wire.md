@@ -145,6 +145,10 @@ expression in authored order before reading the live text, so a changed
 rendered string or an outside DOM edit still triggers a write. Equal rendered
 text keeps the same node and its selection.
 
+Mounted keyed entries also compare refreshed `data-*` attributes on native
+HTML elements. The refresh coerces the expression before reading the current
+attribute so a real change, removal or outside edit still produces a write.
+
 ### 4.1 Permitted seed state (the single M08 definition)
 
 This subsection is the one definition of **permitted seed state** used by the

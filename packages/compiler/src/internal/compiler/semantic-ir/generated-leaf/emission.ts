@@ -242,6 +242,8 @@ export interface EmitState {
    * instance has no update hook to re-read its props (M06b1b).
    */
   listDepth: number;
+  /** Whether the current mounted entry has an authored key. */
+  keyedEntry?: boolean;
   /**
    * Number of enclosing reusable-recipe mount bodies being emitted (M06b2a). A
    * children recipe or a children projection inside one is refused: the recipe

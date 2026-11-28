@@ -1142,6 +1142,7 @@ function emitClaimList(
       nextName(state, 'eachCreateScope'),
       nextName(state, 'eachCreateItem'),
       node.parameter,
+      node.key !== null,
       node.template,
       records,
       node.span,
