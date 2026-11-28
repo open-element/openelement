@@ -947,10 +947,10 @@ function List(props) {
     // The refresh re-reads the re-bound parameter (not a captured value) ...
     expect(module).toMatch(
       new RegExp(
-        `function ${refresh}\\(\\) \\{\\n\\s+__oe_text\\d+\\.nodeValue = displayValue\\(\\(item\\)\\);\\n\\s+\\}`,
+        `function ${refresh}\\(\\) \\{\\n\\s+const __oe_textValue = displayValue\\(\\(item\\)\\);\\n\\s+if \\((__oe_text\\d+)\\.nodeValue !== __oe_textValue\\) \\1\\.nodeValue = __oe_textValue;\\n\\s+\\}`,
       ),
     );
-    // ... and the initial build calls it immediately (one write, unchanged).
+    // ... and the initial build calls it immediately.
     expect(module).toContain(`${refresh}();`);
     // No reactive dependency exists on the slot, so only the list subscription
     // is emitted in the mount — no bogus signal binding for the entry-local name.
@@ -976,7 +976,7 @@ function List(props) {
     const refresh = refreshCalls(updates[0]!)[0]!;
     expect(module).toMatch(
       new RegExp(
-        `function ${refresh}\\(\\) \\{\\n\\s+__oe_text\\d+\\.nodeValue = displayValue\\(\\(item \\. label\\)\\);`,
+        `function ${refresh}\\(\\) \\{\\n\\s+const __oe_textValue = displayValue\\(\\(item \\. label\\)\\);`,
       ),
     );
   });
@@ -1002,7 +1002,7 @@ function List(props) {
     const textRefresh = calls.find((name) => name !== attributeRefresh)!;
     expect(module).toMatch(
       new RegExp(
-        `function ${textRefresh}\\(\\) \\{\\n\\s+__oe_text\\d+\\.nodeValue = displayValue\\(\\(item\\)\\);`,
+        `function ${textRefresh}\\(\\) \\{\\n\\s+const __oe_textValue = displayValue\\(\\(item\\)\\);`,
       ),
     );
   });
@@ -1028,7 +1028,7 @@ function List(props) {
     // exercised by the real-list browser regression; this asserts the scope
     // relationship the source text carries.
     const branchRefresh =
-      /function (__oe_refresh\d+)\(\) \{\n\s+__oe_text\d+\.nodeValue = displayValue\(\(item \. label\)\);/.exec(
+      /function (__oe_refresh\d+)\(\) \{\n\s+const __oe_textValue = displayValue\(\(item \. label\)\);/.exec(
         module,
       )?.[1];
     expect(branchRefresh).toBeDefined();
