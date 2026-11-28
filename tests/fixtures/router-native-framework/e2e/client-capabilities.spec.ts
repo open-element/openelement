@@ -163,6 +163,56 @@ test('Counter omits optional context and keyed-list code used by separate island
   for (const file of optionalFiles) expect(scripts).toContain('/client/' + file);
 });
 
+test('a connected reader adopts its late-upgraded provider without remounting', async ({
+  page,
+}) => {
+  const graph: BrowserEntryGraphArtifact = JSON.parse(await readFile(graphPath, 'utf8'));
+  const provider = graph.islands.find(({ tag }) => tag === 'capability-provider')!;
+  const providerUrl = '/client/' + (provider.activationChunkFile ?? provider.chunkFile);
+  let releaseProvider!: () => void;
+  const providerReleased = new Promise<void>((resolve) => {
+    releaseProvider = resolve;
+  });
+  await page.route(`**${providerUrl}`, async (route) => {
+    await providerReleased;
+    await route.continue();
+  });
+  const requested = page.waitForRequest(
+    (request) => new URL(request.url()).pathname === providerUrl,
+  );
+
+  const providerHost = page.locator('capability-provider');
+  const output = providerHost.locator('capability-reader:not(#relocated) output');
+  const relocated = page.locator('#relocated');
+  try {
+    await page.goto('/optional-capabilities', { waitUntil: 'domcontentloaded' });
+    await requested;
+    await expect(output).toHaveText('No label');
+    await output.evaluate((node) => node.setAttribute('data-before-provider', ''));
+    await providerHost.evaluate((host) => {
+      const reader = document.createElement('capability-reader');
+      reader.id = 'relocated';
+      host.append(reader);
+    });
+    await expect(relocated.locator('output')).toHaveText('No label');
+    await relocated.evaluate((host) => document.querySelector('main')!.append(host));
+  } finally {
+    releaseProvider();
+  }
+  await expect(output).toHaveText('Copper');
+  await expect(output).toHaveAttribute('data-before-provider', '');
+  await expect(relocated.locator('output')).toHaveText('No label');
+  await relocated.evaluate((host) => document.querySelector('capability-provider')!.append(host));
+  await expect(relocated.locator('output')).toHaveText('Copper');
+
+  const list = page.locator('capability-provider li');
+  await expect(list).toHaveText(['First item', 'Second item']);
+  await list.first().evaluate((item) => item.setAttribute('data-before-reorder', ''));
+  await page.getByRole('button', { name: 'Reverse list' }).click();
+  await expect(list).toHaveText(['Second item', 'First item']);
+  await expect(list.last()).toHaveAttribute('data-before-reorder', '');
+});
+
 test('an offscreen SSG island waits to fetch its runtime until it enters the viewport', async ({
   page,
 }) => {
