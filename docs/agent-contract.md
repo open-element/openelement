@@ -305,8 +305,10 @@ installs consumer dependencies. Inspect `my-blog/dist` for this build
    the interaction and timing for deferred and prefetched requests. For a
    payload total, gzip each actually fetched file once at level 9 and sum the
    results. `renderedLength` attributes uncompressed module contributions.
-4. Run the existing gate against the graph, for example
-   `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo browser-graph:check www/dist/client/.vite/oe-browser-entry-graph.json`.
+4. Use the existing gate,
+   `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo browser-graph:check`.
+   Append the emitted graph JSON path, such as
+   `www/dist/client/.vite/oe-browser-entry-graph.json`, before running it.
    Its verdict checks the documented graph boundary. Use the browser capture
    to investigate the route's requests. If the build fails, use the existing
    diagnostics flags below to inspect its structured report.
