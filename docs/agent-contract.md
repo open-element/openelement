@@ -307,8 +307,8 @@ installs consumer dependencies. Inspect `my-blog/dist` for this build
    results. `renderedLength` attributes uncompressed module contributions.
 4. Use the existing gate,
    `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo browser-graph:check`.
-   Append the emitted graph JSON path, such as
-   `www/dist/client/.vite/oe-browser-entry-graph.json`, before running it.
+   Append the graph JSON path from step 2 relative to the checkout before
+   running it.
    Its verdict checks the documented graph boundary. Use the browser capture
    to investigate the route's requests. If the build fails, use the existing
    diagnostics flags below to inspect its structured report.
