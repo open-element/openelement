@@ -121,7 +121,7 @@ test('primitive generated state proves literal children while an opaque callback
   ).toBeUndefined();
 });
 
-test('script-capable frames and URLs retain catalogue fallback for an active document', () => {
+test('trusted JavaScript navigation carries late activations even before the first host', () => {
   const app = makeApp();
   const file = '/client/activate.js';
   const islands = {
@@ -132,7 +132,26 @@ test('script-capable frames and URLs retain catalogue fallback for an active doc
   const host = '<my-counter></my-counter>';
   const rows = (html: string) => JSON.parse(app.clientScriptDescriptors(html)[0]!.code!);
   expect(rows(host)).toEqual([['my-counter', 'load', file]]);
-  expect(rows(host + '<a href="java&#115;cript:add()">Add</a>')).toHaveLength(2);
-  expect(rows(host + '<iframe src="/frame"></iframe>')).toHaveLength(2);
-  expect(app.clientScriptDescriptors('<iframe src="/frame"></iframe>')).toEqual([]);
+  for (const link of [
+    '<a href="javascript:add()">Add</a>',
+    '<a href="&#9;java&#115cript&colon;add()">Add</a>',
+    '<a href="java&Tab;script&#58;add()">Add</a>',
+  ]) {
+    expect(rows(link)).toHaveLength(2);
+  }
+  const ordinary = '<a href="/article?lang=en&amp;page=2">Read</a>';
+  const escaped = '<a href="java&amp;#115;cript&colon;add()">Read</a>';
+  const sandboxed = '<iframe sandbox src="javascript:add()"></iframe>';
+  const external = '<iframe src="https://example.test/frame"></iframe>';
+  expect(rows(host + ordinary)).toEqual([['my-counter', 'load', file]]);
+  expect(rows(host + external)).toHaveLength(2);
+  for (const html of [
+    ordinary,
+    escaped,
+    sandboxed,
+    external,
+    '<button is="native-button">More</button>',
+  ]) {
+    expect(app.clientScriptDescriptors(html)).toEqual([]);
+  }
 });

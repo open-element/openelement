@@ -176,31 +176,37 @@ function canRunAuthoredScript({ name, attributes }: RenderedTag): boolean {
 }
 
 const FRAME_TAGS = new Set(['iframe', 'object', 'embed']);
-const SCRIPT_URL_ATTRIBUTES = new Set([
-  'href',
-  'src',
-  'action',
-  'formaction',
-  'data',
-  'xlink:href',
-]);
+// The rendered-tag walker reads raw attribute text. Only the references that
+// can contribute to an ASCII JavaScript scheme or its URL whitespace matter.
+const SCRIPT_URL_CHARACTER = /&(?:#(?:[xX]([0-9a-fA-F]+)|([0-9]+));?|colon;|Tab;|NewLine;)/g;
 
-function canIntroduceUnmodelledHosts({ name, attributes }: RenderedTag): boolean {
-  if (FRAME_TAGS.has(name) || attributes.has('is')) return true;
-  for (const [attribute, value] of attributes) {
-    if (!SCRIPT_URL_ATTRIBUTES.has(attribute)) continue;
-    // Attribute entities and ASCII whitespace can obscure a script scheme.
-    if (
-      value.includes('&') ||
-      value
-        .replace(/[\t\n\r\f ]/g, '')
-        .toLowerCase()
-        .startsWith('javascript:')
-    ) {
-      return true;
-    }
+function isJavaScriptUrl(value: string | undefined): boolean {
+  if (!value) return false;
+  const decoded = value.replace(SCRIPT_URL_CHARACTER, (entity, hex, decimal) => {
+    if (entity === '&colon;') return ':';
+    if (entity === '&Tab;') return '\t';
+    if (entity === '&NewLine;') return '\n';
+    const code = hex === undefined ? Number.parseInt(decimal, 10) : Number.parseInt(hex, 16);
+    return code > 0 && code <= 0x7f ? String.fromCharCode(code) : entity;
+  });
+  return /^[\u0000-\u0020]*javascript:/i.test(decoded.replace(/[\t\n\r]/g, ''));
+}
+
+function hasJavaScriptNavigation({ name, attributes }: RenderedTag): boolean {
+  switch (name) {
+    case 'a':
+    case 'area':
+      return isJavaScriptUrl(attributes.get('href') ?? attributes.get('xlink:href'));
+    case 'form':
+      return isJavaScriptUrl(attributes.get('action'));
+    case 'button':
+    case 'input':
+      return isJavaScriptUrl(attributes.get('formaction'));
+    case 'iframe':
+      return !attributes.has('sandbox') && isJavaScriptUrl(attributes.get('src'));
+    default:
+      return false;
   }
-  return false;
 }
 
 function documentClientFacts(
@@ -219,15 +225,15 @@ function documentClientFacts(
       if (islands.has(name)) observed.add(name);
       if (name === 'form' && attributes.has('data-open-enhance')) enhanced = true;
       if (inOpenShadow && attributes.get('id')) fragments = true;
-      if (canRunAuthoredScript(tag)) authoredCode = true;
-      if (canIntroduceUnmodelledHosts(tag)) opaque = true;
+      if (canRunAuthoredScript(tag) || hasJavaScriptNavigation(tag)) authoredCode = true;
+      if (FRAME_TAGS.has(tag.name) || tag.attributes.has('is')) opaque = true;
     });
     authoredCode ||= !complete;
   }
   if (executableHead && !authoredCode) {
     const complete = visitRenderedTags(executableHead, (tag) => {
-      if (canRunAuthoredScript(tag)) authoredCode = true;
-      if (canIntroduceUnmodelledHosts(tag)) opaque = true;
+      if (canRunAuthoredScript(tag) || hasJavaScriptNavigation(tag)) authoredCode = true;
+      if (FRAME_TAGS.has(tag.name) || tag.attributes.has('is')) opaque = true;
       return !authoredCode;
     });
     authoredCode ||= !complete;

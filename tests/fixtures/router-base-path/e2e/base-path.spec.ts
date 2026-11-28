@@ -249,3 +249,16 @@ test('a generated activation uses its original chunk and applies Vite CSS', asyn
   await expect(page.getByRole('button', { name: 'Styled island' })).toBeVisible();
   await expect(page.locator('subpage-styled')).toHaveCSS('border-bottom-width', '7px');
 });
+
+test('trusted author markup can add the first island through a navigation URL', async ({
+  page,
+}) => {
+  await page.goto(`${BASE}/trusted-link`);
+  await expect(page.locator('subpage-other')).toHaveCount(0);
+  await expect(page.locator(`script[type="${catalogueType}"]`)).toHaveCount(1);
+  await page.getByRole('link', { name: 'Show the first island' }).click();
+  const button = page.getByRole('button', { name: 'Other 0' });
+  await expect(button).toBeVisible();
+  await button.click();
+  await expect(page.getByRole('button', { name: 'Other 1' })).toBeVisible();
+});
