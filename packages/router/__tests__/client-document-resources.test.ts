@@ -171,6 +171,11 @@ test('trusted JavaScript navigation carries late activations even before the fir
     escaped,
     sandboxed,
     external,
+    '<a href="/help#javascript:">Help</a>',
+    '<a href="javascript://[">Invalid navigation URL</a>',
+    '<a href="data:text/plain,Reference">Reference document</a>',
+    '<iframe src="data:text/plain,Reference"></iframe>',
+    '<a href="vbscript:">Legacy protocol</a>',
     '<button is="native-button">More</button>',
   ]) {
     expect(app.clientScriptDescriptors(html)).toEqual([]);

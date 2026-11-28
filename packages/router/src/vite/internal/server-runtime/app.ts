@@ -197,10 +197,19 @@ function isJavaScriptUrl(value: string | undefined): boolean {
     const code = hex === undefined ? Number.parseInt(decimal, 10) : Number.parseInt(hex, 16);
     return code > 0 && code <= 0x7f ? String.fromCharCode(code) : entity;
   });
-  const normalized = decoded.replace(/[\t\n\r]/g, '');
-  let start = 0;
-  while (start < normalized.length && normalized.charCodeAt(start) <= 0x20) start++;
-  return normalized.slice(start).toLowerCase().startsWith('javascript:');
+  // This is a document capability check. Only a navigation that can run
+  // script in the current context can introduce the first island here.
+  switch (URL.parse(decoded)?.protocol) {
+    case 'javascript:':
+      return true;
+    // A data navigation creates a document with an opaque origin.
+    case 'data:':
+      return false;
+    // The supported browsers do not execute VBScript.
+    case 'vbscript:':
+    default:
+      return false;
+  }
 }
 
 function hasJavaScriptNavigation({ name, attributes }: RenderedTag): boolean {
