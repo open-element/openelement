@@ -129,7 +129,6 @@ function adoptionTargetOf(root: CompiledStyleRoot): StyleAdoptionTarget {
  */
 export class CompiledStyleScope {
   #root?: CompiledStyleRoot;
-  #styles: StyleSheetLike[] = [];
   /** Sheets this scope installed into a shadow root (never a document). */
   #adoptedSheets: StyleSheetLike[] = [];
   /**
@@ -144,7 +143,6 @@ export class CompiledStyleScope {
     const styles = asStyleList(component);
     if (this.#root !== root) this.#removeAdoptedSheets();
     this.#root = root;
-    this.#styles = styles;
     const generation = (this.#generation += 1);
 
     // Nothing to install: the root is resolved and recorded, and no adoption
@@ -154,7 +152,6 @@ export class CompiledStyleScope {
     // free host presents.
     if (styles.length === 0) {
       this.#adoptedSheets = [];
-      this.#observeSheetReadiness(styles, generation);
       return;
     }
 
@@ -170,19 +167,9 @@ export class CompiledStyleScope {
     // document-lifetime (see the class doc). The sheets are recorded AFTER the
     // adoption, so a failing apply never records sheets it did not install.
     this.#adoptedSheets = isShadowRoot(root) ? styles : [];
-    this.#observeSheetReadiness(styles, generation);
-  }
-
-  /**
-   * Report a failed sheet on the owning connection.
-   *
-   * Adoption needs no refresh step: the sheet object fills itself, so a late
-   * settlement is already reflected everywhere it was adopted. What remains is
-   * the failure half of the sheet contract — a rejected `replace()` / fetch is
-   * reported once, against the connection that owned the sheet.
-   */
-  #observeSheetReadiness(styles: readonly StyleSheetLike[], generation: number): void {
-    const pending = pendingSheetReadiness(styles as StyleSheetLike[]);
+    // A sheet fills itself wherever it was adopted. Only a failed replacement
+    // needs handling, and only while this connection still owns it.
+    const pending = pendingSheetReadiness(styles);
     if (pending.length === 0) return;
     void Promise.all(pending).then(
       () => {},
@@ -206,25 +193,12 @@ export class CompiledStyleScope {
     );
   }
 
-  adopted(root: CompiledStyleRoot, component?: StyleSheetLike | StyleSheetLike[]): void {
-    this.connect(root, component);
-  }
-
   disconnect(): void {
     // Bump the generation first: a sheet settling after this point belongs to a
     // connection that no longer owns a root to report against.
     this.#generation += 1;
     this.#removeAdoptedSheets();
     this.#root = undefined;
-    this.#styles = [];
-  }
-
-  get root(): CompiledStyleRoot | undefined {
-    return this.#root;
-  }
-
-  get styles(): StyleSheetLike[] {
-    return [...this.#styles];
   }
 
   #removeAdoptedSheets(): void {
