@@ -1,6 +1,6 @@
 # ADR-0173: Component execution and composition
 
-- Status: ACCEPTED / AMENDED (2026-11-03, semantic prerequisites and fourth-pass class-authoring retirement approved; implementation pending)
+- Status: ACCEPTED / AMENDED (2026-11-03, semantic prerequisites and fourth-pass class-authoring retirement approved; implementation pending) (Update 2026-11-28: the class-authoring retirement is no longer pending — the Alpha16 class-lane deletion (`8d5058891`, #1805) removed the public Class/Decorator surface with no adapter and is contained in the 1.0.0-alpha.16 release; this note updates that retirement only, not the record's other implementation and qualification claims.)
 - Amends: ADR-0143; principles P1 and P5
 - Related: ADR-0148, ADR-0157, ADR-0174
 

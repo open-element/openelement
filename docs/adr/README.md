@@ -36,7 +36,7 @@ annotation.
 - [ADR-0170-late-host-island-activation.md](./ADR-0170-late-host-island-activation.md)
 - [ADR-0171-private-artifact-static-boundary.md](./ADR-0171-private-artifact-static-boundary.md) — AMENDED: accepted next architecture; implementation pending (2026-10-31)
 - [ADR-0172-document-lang-resolution.md](./ADR-0172-document-lang-resolution.md)
-- [ADR-0173-component-execution-and-composition.md](./ADR-0173-component-execution-and-composition.md) — AMENDED: author semantics, slice prerequisites, reusable JSX values; class authoring retirement approved (fourth pass); implementation pending (2026-11-03)
+- [ADR-0173-component-execution-and-composition.md](./ADR-0173-component-execution-and-composition.md) — AMENDED: author semantics, slice prerequisites, reusable JSX values; class authoring retirement approved (fourth pass); implementation pending (2026-11-03) (Update 2026-11-28: the class-authoring retirement is no longer pending — the Alpha16 class-lane deletion (`8d5058891`, #1805) removed the public Class/Decorator surface with no adapter and is contained in the 1.0.0-alpha.16 release; the record's other implementation and qualification claims are unchanged by this note.)
 - [ADR-0174-generated-code-runtime-and-compatibility.md](./ADR-0174-generated-code-runtime-and-compatibility.md) — AMENDED: slice order, Alpha16a/16b split with the release gate intact, and approved retirement of the serialized Part Program protocol; implementation pending (2026-11-03)
 - [ADR-0175-alpha16a-m07-decisions-and-current-view.md](./ADR-0175-alpha16a-m07-decisions-and-current-view.md)
 - [ADR-0176-alpha16-plan-amendments-registry.md](./ADR-0176-alpha16-plan-amendments-registry.md)

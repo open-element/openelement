@@ -66,8 +66,8 @@ adapter / compat / fallback / 退役 / "Delete when" / deno；再对每处命中
 | 16 | CEM 兼容分类（第三方 WC 准入） | `packages/router/src/vite/internal/ssg/cem-compat.ts` | 保留为平台边缘（产品互操作面） |
 | 17 | 渲染器适配缝（native / lit；lit 分支已删） | ~~`packages/router/src/lit.ts`~~、~~`packages/router/src/lit-ssr.ts`~~（native 选择缝保留于 `packages/router/src/vite/internal/ssg/renderer-adapter.ts`） | **已删（ADR-0152 2026-11-08 零兼容退役；native 为唯一渲染器）** |
 | 18 | legacy 虚拟入口 id（`virtual:open-hono-entry`，ADR-0152） | `packages/router/src/vite/plugin-virtual-modules.ts` | 条件到即删（随下一次产物命名不兼容变更一起改名） |
-| 19 | ~~Part Program 执行器（旧执行后端）~~ **已删除（Alpha16，2026-11-22）** | ~~packages/element/src/internal/compiled/facade-host.ts~~（原执行器入口；`runtime/error-boundary.ts`、`stream-state.ts` 与 class lane 同一变更集删除） | **已删（Alpha16，2026-11-22）**（class lane 删除时执行器作为同一变更集移除。生成 lane 的 shell 通过 `generated-element/shell.ts` 自行 mount/claim，`leaf-runtime.ts` 是叶子端的闭合集合，从不导入这些端点——已实测 `element-runtime` chunk 不再包含执行器。孤儿模块 `stream-state.ts` / `runtime/error-boundary.ts` 由 `vp-pack` 的“has no packed .js”门禁抓出并一并删除，那正是该门禁存在的理由。） |
-| 20 | ~~Class authoring API（旧作者面）~~ | ~~packages/element/src/open-element-implementation.ts~~（`OpenElement` 基类；`open-element-configuration.ts`、`error-boundary.ts` 的类形状同属该面，随 class lane 删除；`base.ts` 当时保留为 entry 子路径，Alpha17 已随 `./base` 退役，见 ADR-0184）；router 侧判别/产物读取仍在树内、服务生成 lane 的编译页类：`packages/router/src/authoring.ts:456`（`isElementPageClass` 的 ES class 形状判别）、`packages/router/src/vite/internal/server-runtime/renderer-runtime.ts:146`（`resolveCompiledPageTag` 读编译产物 `__partProgram.tag`）、`packages/router/src/vite/internal/ssg/entry-descriptor.ts:467`（页面路由 `defaultTagName` 载体） | **已删（Alpha16，2026-11-22）**（ADR-0173 第四轮批准零兼容退役；class lane 随 Alpha16 删除，公开面只保留 Native Custom Element 边界，不留适配器。C-1/C-3 能力清单证据与 starter/文档迁移此前已落地。） |
+| 19 | ~~Part Program 执行器（旧执行后端）~~ **已删除（Alpha16，2026-11-25）** | ~~packages/element/src/internal/compiled/facade-host.ts~~（原执行器入口；`runtime/error-boundary.ts`、`stream-state.ts` 与 class lane 同一变更集删除） | **已删（Alpha16，2026-11-25，`8d5058891`）**（class lane 删除时执行器作为同一变更集移除。生成 lane 的 shell 通过 `generated-element/shell.ts` 自行 mount/claim，`leaf-runtime.ts` 是叶子端的闭合集合，从不导入这些端点——已实测 `element-runtime` chunk 不再包含执行器。孤儿模块 `stream-state.ts` / `runtime/error-boundary.ts` 由 `vp-pack` 的“has no packed .js”门禁抓出并一并删除，那正是该门禁存在的理由。） |
+| 20 | ~~Class authoring API（旧作者面）~~ | ~~packages/element/src/open-element-implementation.ts~~（`OpenElement` 基类；`open-element-configuration.ts`、`error-boundary.ts` 的类形状同属该面，随 class lane 删除；`base.ts` 当时保留为 entry 子路径，Alpha17 已随 `./base` 退役，见 ADR-0184）；router 侧判别/产物读取仍在树内、服务生成 lane 的编译页类：`packages/router/src/authoring.ts:456`（`isElementPageClass` 的 ES class 形状判别）、`packages/router/src/vite/internal/server-runtime/renderer-runtime.ts:146`（`resolveCompiledPageTag` 读编译产物 `__partProgram.tag`）、`packages/router/src/vite/internal/ssg/entry-descriptor.ts:467`（页面路由 `defaultTagName` 载体） | **已删（Alpha16，2026-11-25，`8d5058891`）**（ADR-0173 第四轮批准零兼容退役；class lane 随 Alpha16 删除，公开面只保留 Native Custom Element 边界，不留适配器。C-1/C-3 能力清单证据与 starter/文档迁移此前已落地。） |
 | 21 | 生成宿主注册对（M11 垂直切片，ADR-0181） | `packages/router/src/vite/internal/server-runtime/security.ts`（`registerIsland`）+ `packages/protocol/src/registry-markers.ts`（`SSR_REGISTRY_GENERATED_HOSTS`） | 条件到即删（P1 在 tracked 依赖图工件上对全部适用应用判 MET 后随 M11-3 入口切换删除） |
 | 22 | 私有实例保留账本（ADR-0181） | `packages/element/src/internal/compiled/runtime/instance-ledger.ts`（编译器发射的模块经 `packages/element/src/internal/compiled/leaf-runtime.ts` re-export；`packages/element/src/internal/compiled/generated-element/shell.ts` 直接导入） | 条件到即删（Alpha17 预编译分发取代发射式保留计划、且无发射模块再 import 该账本） |
 | 23 | browser-entry-graph 观测工件与检查器（temporary-by-intent） | `packages/router/src/vite/internal/browser-entry-graph.ts`、`browser-entry-graph-artifact.ts`、`tools/repo/check-browser-entry-graph.ts` | 条件到即删（P1 判 MET 且该证据并入 release 门禁后移除一次性检查器；工件本身不进入发布面） |
@@ -95,6 +95,9 @@ ADR-0152 当日 owner ruling 判定第一方 Lit renderer 零兼容退役，两�
 `renderer-adapter.ts` 收敛为 native 单模式，并对已退役的 `'lit'` 值显式抛出
 迁移错误（迁移信号，不是兼容窗口）。该行标记「已删」，编号 17 保留不复用；
 native 选择缝是主产物，不再作为垫片登记。）
+（2026-11-28 追加：第 19/20 项原记的 class lane 删除日期 2026-11-22 与提交
+不符——删除提交是 `8d5058891`（#1805），提交日期 2026-11-25；表格与详情小节
+的退役日期已按该提交更正，退役事实与条目内容不变。）
 
 ## 条目详情
 
@@ -358,7 +361,7 @@ native 选择缝是主产物，不再作为垫片登记。）
   ADR-0152 否决。
 - 处置：条件到即删（随下一次产物命名不兼容变更一起改名）。
 
-### 19. Part Program 执行器（旧执行后端）——**已退役**（2026-11-22）
+### 19. Part Program 执行器（旧执行后端）——**已退役**（2026-11-25，`8d5058891`）
 
 - 所有者（历史）：element runtime（~~packages/element/src/internal/compiled/facade-host.ts~~
   与 class lane 同一变更集删除；生成 lane 的 shell 改为 `generated-element/shell.ts`
@@ -369,13 +372,13 @@ native 选择缝是主产物，不再作为垫片登记。）
   mount/claim/update/dispose 的直出路径，同时明示"旧执行器尚未退役"。生成叶
   路径接入产品入口后，这条后端不再是产品实际运行的路径。
 - 退役条件：**已执行**——M08 的 SSR→claim 与 per-phase 等价（S/K/U/D）签收且生成叶
-  路径接入产品入口后，执行器随 class lane 在同一变更集删除（Alpha16，2026-11-22）；
+  路径接入产品入口后，执行器随 class lane 在同一变更集删除（Alpha16，2026-11-25，`8d5058891`）；
   `__partProgram` 的公开基类消费面与对应 README/公开说明同时移除。孤儿模块
   （`stream-state.ts`、`runtime/error-boundary.ts`）由 `vp-pack` 的“has no packed .js”
   门禁抓出并一并删除。
-- 处置：**已删**（Alpha16，2026-11-22）。
+- 处置：**已删**（Alpha16，2026-11-25）。
 
-### 20. Class authoring API（旧作者面）——**已退役**（2026-11-22）
+### 20. Class authoring API（旧作者面）——**已退役**（2026-11-25，`8d5058891`）
 
 - 所有者（历史）：element 作者面（~~packages/element/src/open-element-implementation.ts~~
   的 `OpenElement` 基类是唯一根；`open-element-configuration.ts` /
@@ -386,9 +389,9 @@ native 选择缝是主产物，不再作为垫片登记。）
   D-O3 取代）批准了**零兼容退役、不建迁移适配器**。
 - 退役条件：**已执行**——Alpha16b 的 C-1（size attribution）与 C-3（base codegen）
   能力清单覆盖证据落地，starter/docs 完成迁移（`docs/architecture/tsx-author-candidate-contract.md`
-  从候选转正），class lane 随后在 Alpha16 删除（2026-11-22）；公开面只保留
+  从候选转正），class lane 随后在 Alpha16 删除（2026-11-25，`8d5058891`）；公开面只保留
   Native Custom Element 边界，不留适配器。
-- 处置：**已删**（Alpha16，2026-11-22）。
+- 处置：**已删**（Alpha16，2026-11-25）。
 
 ## 审计中排除的非垫片（避免下次重查）
 
