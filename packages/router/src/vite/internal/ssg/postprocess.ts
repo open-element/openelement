@@ -19,14 +19,7 @@
  * from the same per-page manifests the build just recorded.
  */
 
-import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  realpathSync,
-  writeFileSync,
-} from 'node:fs';
+import { closeSync, mkdirSync, openSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, normalize, relative } from 'pathe';
 import { createLogger } from '@openelement/element';
 import { escapeAttr } from '@openelement/element/html';
@@ -34,7 +27,7 @@ import { buildError, SsgRenderErrorCode } from '../../../internal/error-codes.ts
 import { stylesheetLinkTag } from '../../head-injection.ts';
 import { visitHtmlFiles, walkHtmlFileEntries } from '../html-files.ts';
 import { SSG_VIEW_TRANSITION_STYLE_PREFIX } from '../paths.ts';
-import { publicFileDigest } from '../publish-manifest.ts';
+import { publicFileDigest, readCanonicalRegularFile } from '../publish-manifest.ts';
 import { type PageIslandManifest, routeFromRelativePath } from './island-manifest.ts';
 export { buildSpeculationRulesJson } from './speculation-rules.ts';
 
@@ -147,6 +140,24 @@ export function injectCspMeta(
 
 // ─── View Transitions API ─────────────────────────────────────────────
 
+function writeViewTransitionStylesheet(asset: string, css: Buffer): void {
+  let fd: number;
+  try {
+    fd = openSync(asset, 'wx');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    const diagnostic = `SSG view-transition stylesheet conflicts with ${asset}`;
+    const { bytes } = readCanonicalRegularFile(asset, diagnostic);
+    if (!bytes.equals(css)) throw new Error(diagnostic);
+    return;
+  }
+  try {
+    writeFileSync(fd, css);
+  } finally {
+    closeSync(fd);
+  }
+}
+
 /**
  * Inject the cross-document View Transition opt-in into all HTML files.
  *
@@ -180,12 +191,14 @@ export function injectViewTransitionOptIn(
   const htmlPages = pages.filter((page) => page.endsWith('.html'));
   if (htmlPages.length === 0) return;
 
-  const css = [
-    '@view-transition { navigation: auto; }',
-    '@media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }',
-    '',
-  ].join('\n');
-  const hash = publicFileDigest(Buffer.from(css)).slice(0, 12);
+  const css = Buffer.from(
+    [
+      '@view-transition { navigation: auto; }',
+      '@media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }',
+      '',
+    ].join('\n'),
+  );
+  const hash = publicFileDigest(css).slice(0, 12);
   const assetPath = `${SSG_VIEW_TRANSITION_STYLE_PREFIX}${hash}.css`;
   const asset = join(realpathSync(dir), assetPath);
   const assetDir = dirname(asset);
@@ -193,13 +206,7 @@ export function injectViewTransitionOptIn(
   if (normalize(realpathSync(assetDir)) !== assetDir) {
     throw new Error(`Expected a canonical SSG stylesheet directory at ${assetDir}`);
   }
-  if (existsSync(asset)) {
-    if (!lstatSync(asset).isFile() || readFileSync(asset, 'utf8') !== css) {
-      throw new Error(`SSG view-transition stylesheet conflicts with ${asset}`);
-    }
-  } else {
-    writeFileSync(asset, css, { flag: 'wx' });
-  }
+  writeViewTransitionStylesheet(asset, css);
 
   // Vite's absolute base may include a CDN origin. Files from the public SSG
   // snapshot use the same origin as the document, under that base's path.

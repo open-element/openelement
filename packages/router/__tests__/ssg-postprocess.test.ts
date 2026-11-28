@@ -19,6 +19,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -719,6 +720,35 @@ test('injectViewTransitionOptIn does not duplicate on repeated calls', () => {
     const content = readFileSync(htmlPath, 'utf8');
     const count = (content.match(/<link rel="stylesheet"/g) || []).length;
     expect(count).toEqual(1);
+  } finally {
+    cleanup(tmp);
+  }
+});
+
+test('injectViewTransitionOptIn refuses a conflicting file or a symlink to matching bytes', () => {
+  const tmp = makeTempDir();
+  try {
+    const htmlPath = join(tmp, 'index.html');
+    const html = '<html><head></head><body></body></html>';
+    writeFileSync(htmlPath, html);
+    const asset = injectViewTransitionOptIn(tmp, [htmlPath], '/');
+    if (!asset) throw new Error('Expected a view-transition stylesheet');
+    const file = join(tmp, asset);
+    const css = readFileSync(file);
+
+    writeFileSync(htmlPath, html);
+    writeFileSync(file, '/* host stylesheet */');
+    expect(() => injectViewTransitionOptIn(tmp, [htmlPath], '/')).toThrow('stylesheet conflicts');
+    expect(readFileSync(file, 'utf8')).toBe('/* host stylesheet */');
+    expect(readFileSync(htmlPath, 'utf8')).toBe(html);
+
+    const target = join(tmp, 'host.css');
+    writeFileSync(target, css);
+    rmSync(file);
+    symlinkSync(target, file, 'file');
+    expect(() => injectViewTransitionOptIn(tmp, [htmlPath], '/')).toThrow('stylesheet conflicts');
+    expect(readFileSync(target)).toEqual(css);
+    expect(readFileSync(htmlPath, 'utf8')).toBe(html);
   } finally {
     cleanup(tmp);
   }

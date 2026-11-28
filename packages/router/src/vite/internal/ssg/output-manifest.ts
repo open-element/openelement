@@ -4,18 +4,19 @@
  * Why a record rather than a wipe: the output directory also holds files this
  * build does not own — Vite's `public/` copy, the client bundle, the island
  * manifests, and whatever the host's own tooling writes beside the pages — so
- * pruning uses the preceding run's record of generated output. Publishing
- * uses the new record written after the route files have their final names.
+ * page pruning uses the preceding run's record of generated documents.
+ * Publishing uses the new record written after the routes have their final
+ * names. The immutable stylesheet stays reusable in the working directory
+ * and reaches the public snapshot only when the current run lists it.
  *
  * The record lives inside the output directory it describes, and every path it
  * carries is validated to resolve inside that directory before it is touched —
  * a truncated, stale, or hand-edited record cannot reach outside.
  */
-import { lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, normalize, relative, resolve } from 'pathe';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, join, relative, resolve } from 'pathe';
 import { normalizeSeparators } from '@openelement/element/build-utils';
 import { ssgViewTransitionStyleHash } from '../paths.ts';
-import { publicFileDigest } from '../publish-manifest.ts';
 
 /** Framework-owned, inside the output directory it describes. */
 export const SSG_PAGE_MANIFEST = '.openelement/ssg-pages.json';
@@ -63,30 +64,14 @@ function insideOutDir(root: string, page: string): string | null {
   return target;
 }
 
-function pruneViewTransitionStyle(root: string, path: string): boolean {
-  try {
-    const file = join(normalize(realpathSync(root)), path);
-    // A public file copied over the old asset, or a symlink in its place,
-    // belongs to the host. Only remove the recorded stylesheet bytes.
-    if (!lstatSync(file).isFile() || normalize(realpathSync(file)) !== file) return false;
-    if (publicFileDigest(readFileSync(file)).slice(0, 12) !== ssgViewTransitionStyleHash(path)) {
-      return false;
-    }
-    rmSync(file, { force: true });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /**
- * Delete the files a previous run generated. Returns the relative paths it
+ * Delete the page documents a previous run generated. Returns the relative paths it
  * removed, so a caller (and a test) can see exactly what the prune touched.
  */
 export function pruneSsgOutput(outDir: string): string[] {
   const root = resolve(outDir);
   const removed: string[] = [];
-  const { pages, viewTransitionStyle } = readSsgOutputManifest(outDir);
+  const { pages } = readSsgOutputManifest(outDir);
   for (const page of pages) {
     const target = insideOutDir(root, page);
     if (target === null) continue;
@@ -97,9 +82,6 @@ export function pruneSsgOutput(outDir: string): string[] {
       // A page that cannot be removed is left for the run to overwrite; the
       // build's own write is the authority on its content either way.
     }
-  }
-  if (viewTransitionStyle && pruneViewTransitionStyle(root, viewTransitionStyle)) {
-    removed.push(viewTransitionStyle);
   }
   return removed;
 }

@@ -11,6 +11,8 @@ import { ssgRender } from '../src/vite/internal/ssg/index.ts';
 import { createWinterCgApp } from '../src/vite/internal/server-runtime/wintercg.ts';
 import { resolveDynamicRoutePath } from '../src/vite/internal/ssg/ssg-helpers.ts';
 import { tryStatic } from '../src/vite/internal/static-serve.ts';
+import { readSsgOutputManifest } from '../src/vite/internal/ssg/output-manifest.ts';
+import { checkPublishOutput, writePublishOutput } from '../src/vite/internal/publish-manifest.ts';
 import type { SsgPageOutput, SsgRenderOptions, SsrBundle } from '../src/vite/internal/ssg/index.ts';
 
 async function pathExists(path: string): Promise<boolean> {
@@ -178,7 +180,7 @@ test('ssgRender - handles empty getStaticPaths gracefully', async () => {
   await ssgRender(bundle, defaultOptions);
 });
 
-test('ssgRender links one same-origin transition stylesheet and prunes it when disabled', async () => {
+test('ssgRender publishes the same-origin transition stylesheet only while enabled', async () => {
   const root = await mkdtemp(join(tmpdir(), 'oe-view-transition-'));
   const app = createWinterCgApp();
   app.use(
@@ -190,7 +192,17 @@ test('ssgRender links one same-origin transition stylesheet and prunes it when d
   );
   const bundle = createMockBundle({ default: app });
   const dist = join(root, 'dist');
-  const authoredStyle = join(dist, 'assets', 'author.css');
+  const authoredPath = 'assets/author.css';
+  const authoredStyle = join(dist, authoredPath);
+  const publish = () => {
+    const { pages, viewTransitionStyle } = readSsgOutputManifest(dist);
+    writePublishOutput(dist, [
+      authoredPath,
+      ...pages,
+      ...(viewTransitionStyle ? [viewTransitionStyle] : []),
+    ]);
+    return checkPublishOutput(dist);
+  };
   const options = {
     root,
     outDir: 'dist',
@@ -206,10 +218,12 @@ test('ssgRender links one same-origin transition stylesheet and prunes it when d
     const nested = await readFile(join(dist, 'about/index.html'), 'utf8');
     expect(home).not.toMatch(/<(?:style|script)\b/);
     const path = home.match(/href="\/book\/(assets\/open-view-transition-[a-f0-9]{12}\.css)"/)?.[1];
-    expect(path).toBeDefined();
+    if (!path) throw new Error('Expected a published view-transition stylesheet link');
     expect(nested).toContain(`/book/${path}`);
     expect(home.indexOf('Content-Security-Policy')).toBeLessThan(home.indexOf(`/book/${path}`));
-    const css = tryStatic(dist, `/${path}`);
+    const publicOutput = publish();
+    expect(publicOutput.files.has(path)).toBe(true);
+    const css = tryStatic(publicOutput.root, `/${path}`);
     expect(css?.headers.get('content-type')).toContain('text/css');
     expect(css?.headers.get('cache-control')).toContain('immutable');
     expect(await css?.text()).toContain('prefers-reduced-motion: reduce');
@@ -218,13 +232,19 @@ test('ssgRender links one same-origin transition stylesheet and prunes it when d
     expect(await readFile(join(dist, 'index.html'), 'utf8')).toBe(home);
     await ssgRender(bundle, { ...options, viewTransition: false });
     expect(await readFile(join(dist, 'index.html'), 'utf8')).not.toContain('open-view-transition');
-    expect(await pathExists(join(dist, path!))).toBe(false);
-    expect(await readFile(authoredStyle, 'utf8')).toBe('body { color: red; }');
+    const disabledOutput = publish();
+    expect(disabledOutput.files.has(path)).toBe(false);
+    expect(tryStatic(disabledOutput.root, `/${path}`)).toBeNull();
+    expect(tryStatic(dist, `/${path}`)).not.toBeNull();
+    expect(await readFile(join(disabledOutput.root, authoredPath), 'utf8')).toBe(
+      'body { color: red; }',
+    );
 
     await ssgRender(bundle, options);
-    await writeFile(join(dist, path!), 'body { color: green; }');
+    await writeFile(join(dist, path), 'body { color: green; }');
     await ssgRender(bundle, { ...options, viewTransition: false });
-    expect(await readFile(join(dist, path!), 'utf8')).toBe('body { color: green; }');
+    expect(publish().files.has(path)).toBe(false);
+    expect(await readFile(join(dist, path), 'utf8')).toBe('body { color: green; }');
   } finally {
     await rm(root, { recursive: true, force: true });
   }
