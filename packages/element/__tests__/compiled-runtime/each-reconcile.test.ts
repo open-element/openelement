@@ -133,6 +133,18 @@ test('a stable entry whose nodes were detached is still placed', () => {
   expect(parent.childNodes.indexOf(stableElement)).toEqual(61);
 });
 
+test('duplicate entries retain placement behavior even when the sequence is unchanged', () => {
+  const { doc, parent, tail, entries } = fixture(2);
+  const [a, b] = entries;
+  // Put b ahead of a, then supply the same duplicated entry sequence twice.
+  for (const node of b!.nodes) parent.insertBefore(node, a!.nodes[0]!);
+  const duplicated = [a!, b!, a!];
+  doc.resetCounts();
+  reconcileEachEntries(duplicated.slice(), parent, tail, duplicated);
+  expect(doc.counts.insertions).toEqual(2);
+  expect(parent.childNodes.indexOf(a!.nodes[0] as FNode)).toEqual(0);
+});
+
 test('a detached anchor (parent null) is a no-op', () => {
   const { doc, entries, tail } = fixture(3);
   doc.resetCounts();

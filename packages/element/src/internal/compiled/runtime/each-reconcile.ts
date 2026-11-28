@@ -109,6 +109,19 @@ export function reconcileEachEntries(
   previous: ReadonlyArray<EachReconcileEntryView>,
 ): void {
   if (parent === null) return;
+  if (next.length === previous.length) {
+    const seen = new Set<EachReconcileEntryView>();
+    let unchanged = true;
+    for (let index = 0; index < next.length; index += 1) {
+      const entry = next[index]!;
+      if (entry !== previous[index] || seen.has(entry) || entry.nodes[0]?.parentNode !== parent) {
+        unchanged = false;
+        break;
+      }
+      seen.add(entry);
+    }
+    if (unchanged) return;
+  }
   const oldPosition = new Map<EachReconcileEntryView, number>();
   for (let index = 0; index < previous.length; index += 1) {
     oldPosition.set(previous[index]!, index);
