@@ -1,4 +1,9 @@
 import { expect, test } from '@playwright/test';
+import { apiReference } from '../app/data/_generated-api-reference.ts';
+
+const protocolExportCount = apiReference.packages
+  .find(({ name }) => name === '@openelement/protocol')!
+  .subpaths.reduce((sum, subpath) => sum + subpath.exports.length, 0);
 
 test('reference lookup lands on a readable export and makes its long signature keyboard scrollable', async ({
   page,
@@ -249,10 +254,17 @@ test('the package scope narrows aliases and can browse or clear a package', asyn
   await expect(search.getByRole('status')).toHaveText(broadCount!);
 
   await lookup.clear();
+  expect(protocolExportCount, 'Package browse must exercise multiple full pages').toBeGreaterThan(
+    16,
+  );
   await scope.selectOption('@openelement/protocol');
-  await expect(search.getByRole('status')).toHaveText('Showing 1–8 of 433 matches.');
+  await expect(search.getByRole('status')).toHaveText(
+    `Showing 1–8 of ${protocolExportCount} matches.`,
+  );
   await search.getByRole('button', { name: 'Next results' }).press('Enter');
-  await expect(search.getByRole('status')).toHaveText('Showing 9–16 of 433 matches.');
+  await expect(search.getByRole('status')).toHaveText(
+    `Showing 9–16 of ${protocolExportCount} matches.`,
+  );
 });
 
 test('the package scope is removed on disconnect and recreated once on reconnect', async ({
@@ -262,7 +274,9 @@ test('the package scope is removed on disconnect and recreated once on reconnect
   const registry = page.locator('open-registry-lookup');
   const scope = registry.getByRole('combobox', { name: 'Package' });
   await scope.selectOption('@openelement/protocol');
-  await expect(registry.getByRole('status')).toHaveText('Showing 1–8 of 433 matches.');
+  await expect(registry.getByRole('status')).toHaveText(
+    `Showing 1–8 of ${protocolExportCount} matches.`,
+  );
   const detached = await registry.evaluate((host) => {
     const parent = host.parentNode!;
     const next = host.nextSibling;
@@ -276,7 +290,9 @@ test('the package scope is removed on disconnect and recreated once on reconnect
   await expect(scope).toHaveValue('');
   await expect(registry.getByRole('searchbox')).toHaveAttribute('required', '');
   await scope.selectOption('@openelement/protocol');
-  await expect(registry.getByRole('status')).toHaveText('Showing 1–8 of 433 matches.');
+  await expect(registry.getByRole('status')).toHaveText(
+    `Showing 1–8 of ${protocolExportCount} matches.`,
+  );
 });
 
 test('each export list can scroll with the document and return to the same compact position', async ({

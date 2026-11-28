@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { apiReference } from '../app/data/_generated-api-reference.ts';
 import { installCommand } from '../app/data/_generated-install-command.ts';
 
 // Fonts are self-hosted (www/site-fonts.ts): every face is a same-origin
@@ -476,8 +477,6 @@ test.describe('Unified page structure', () => {
     page,
   }) => {
     await page.goto('/reference/');
-    // Every generated searchRecord anchor resolves to a rendered entry.
-    // (adapter-vite anchors retired with the package; use a current export.)
     const exportRow = page.locator('#api-element-root-Action');
     await expect(exportRow).toBeVisible();
     // The row leads with its name cell; `.ref-name` went away with the
@@ -486,8 +485,6 @@ test.describe('Unified page structure', () => {
     const elementRow = page.locator('#ce-open-button');
     await expect(elementRow).toBeVisible();
     await expect(elementRow.locator('span').first()).toHaveText('<open-button>');
-    // Export rows are the generated `api-*` anchors.
-    expect(await page.locator('[id^="api-"]').count()).toBeGreaterThan(150);
     // #1557 retired the four zero-interaction ui components: the element
     // reference table carries the frozen six-component roster.
     // Element rows are the generated `ce-*` anchors.
@@ -502,20 +499,27 @@ test.describe('Unified page structure', () => {
     page,
   }) => {
     await page.goto('/reference/');
+    const expectedGroups = apiReference.packages.map((pkg) => ({
+      packageName: pkg.name,
+      anchors: pkg.subpaths.flatMap((subpath) => subpath.exports.map(({ anchor }) => anchor)),
+    }));
+    expect(expectedGroups.length).toBeGreaterThan(1);
+    for (const group of expectedGroups) expect(group.anchors.length).toBeGreaterThan(0);
+
     const metrics = await page.evaluate(() => ({
       docHeight: document.documentElement.scrollHeight,
-      groups: document.querySelectorAll('.ref-group').length,
-      rows: document.querySelectorAll('.ref-row').length,
-      anchors: document.querySelectorAll('[id^="api-"]').length,
+      groups: Array.from(document.querySelectorAll('.ref-group'), (group) => ({
+        packageName: group.getAttribute('data-ref-package'),
+        anchors: Array.from(group.querySelectorAll('.ref-group-scroll .ref-row'), (row) => row.id),
+      })),
+      anchors: Array.from(document.querySelectorAll('[id^="api-"]'), (element) => element.id),
     }));
-    // The previous single-page export wall measured ~491k px. Grouped panes
-    // keep the generated inventory navigable; this guard stops a future change
-    // from silently re-flattening it.
-    expect(metrics.groups).toEqual(6);
-    expect(metrics.rows).toBeGreaterThan(1000);
-    // Rows keep their generated anchors; the extra one is the #api-reference
-    // section id.
-    expect(metrics.anchors).toEqual(metrics.rows + 1);
+    expect(metrics.groups).toEqual(expectedGroups);
+    expect(metrics.anchors).toEqual([
+      'api-reference',
+      ...expectedGroups.flatMap(({ anchors }) => anchors),
+    ]);
+    // Grouped panes keep the full inventory off the document's scroll height.
     expect(metrics.docHeight).toBeLessThan(30000);
 
     // A generated search anchor inside a scroll pane must still land: native
