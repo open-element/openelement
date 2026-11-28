@@ -24,13 +24,7 @@ import { createLogger } from '@openelement/element';
 import { escapeAttr } from '@openelement/element/html';
 import { buildError, SsgRenderErrorCode } from '../../../internal/error-codes.ts';
 import { visitHtmlFiles, walkHtmlFileEntries } from '../html-files.ts';
-import {
-  type PageIslandManifest,
-  readTagName,
-  routeFromRelativePath,
-  skipThroughClosingTag,
-} from './island-manifest.ts';
-import { buildIslandPrefetchLinks } from './speculation-rules.ts';
+import { type PageIslandManifest, routeFromRelativePath } from './island-manifest.ts';
 export { buildSpeculationRulesJson } from './speculation-rules.ts';
 
 const log = createLogger('postprocess');
@@ -212,130 +206,6 @@ export function injectSpeculationRules(dir: string, rulesJson: string): void {
     if (content.includes('<script type="speculationrules"')) return null;
     return insertAfterHead(content, scriptTag);
   });
-}
-
-// ─── Per-page island-chunk prefetch (#1561) ───────────────────────────
-
-/**
- * Extract href targets of <a> links from HTML content. Comments, script and
- * style blocks are skipped (same token walk as extractCustomElementTags);
- * links without an href contribute nothing.
- */
-export function extractLinkHrefs(html: string): string[] {
-  const hrefs: string[] = [];
-  let index = 0;
-
-  while (index < html.length) {
-    const tagStart = html.indexOf('<', index);
-    if (tagStart === -1) break;
-
-    const next = html[tagStart + 1];
-    if (next === undefined) break;
-
-    if (next === '!') {
-      if (html.startsWith('<!--', tagStart)) {
-        const commentEnd = html.indexOf('-->', tagStart + 4);
-        index = commentEnd === -1 ? html.length : commentEnd + 3;
-      } else {
-        const declarationEnd = html.indexOf('>', tagStart + 2);
-        index = declarationEnd === -1 ? html.length : declarationEnd + 1;
-      }
-      continue;
-    }
-
-    if (next === '/' || next === '?' || /\s/.test(next)) {
-      index = tagStart + 2;
-      continue;
-    }
-
-    const tag = readTagName(html, tagStart + 1);
-    if (!tag) {
-      index = tagStart + 1;
-      continue;
-    }
-
-    if (tag.name === 'script' || tag.name === 'style') {
-      index = skipThroughClosingTag(html, tag.end, tag.name);
-      continue;
-    }
-
-    if (tag.name === 'a') {
-      const tagEnd = html.indexOf('>', tag.end);
-      if (tagEnd === -1) break;
-      const openTag = html.slice(tagStart, tagEnd);
-      const href = /href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(openTag);
-      const value = href?.[1] ?? href?.[2] ?? href?.[3];
-      if (value) hrefs.push(value);
-      index = tagEnd + 1;
-      continue;
-    }
-
-    const tagEnd = html.indexOf('>', tag.end);
-    index = tagEnd === -1 ? html.length : tagEnd + 1;
-  }
-
-  return hrefs;
-}
-
-/**
- * Resolve a page's outbound links to same-origin routes (pathname only —
- * search does not change which page file a static route renders). Anchors
- * and self-links resolve to the page's own route; the consumer excludes its
- * own chunks, so they contribute nothing. Absolute URLs are matched against
- * the route's synthetic origin: cross-origin links never prefetch, and
- * same-origin links written origin-full are conservative recall loss, not a
- * correctness issue (fewer chunks prefetched, never a wrong one).
- */
-function sameOriginLinkRoutes(html: string, pageRoute: string): string[] {
-  const base = new URL(pageRoute, 'https://openelement.invalid');
-  const routes: string[] = [];
-  for (const href of extractLinkHrefs(html)) {
-    let url: URL;
-    try {
-      url = new URL(href, base);
-    } catch {
-      continue;
-    }
-    if (url.origin !== base.origin) continue;
-    let pathname = url.pathname;
-    if (pathname !== '/' && pathname.endsWith('/')) pathname = pathname.slice(0, -1);
-    routes.push(pathname);
-  }
-  return routes;
-}
-
-/**
- * Inject per-page island-chunk prefetch links (#1561): a group of
- * `<link rel="prefetch" as="fetch" href="...">` tags listing the island
- * chunks of the pages an island-bearing page links to. `pageChunks` maps a site route to
- * the island chunk URLs that route's page loads — derived from the per-page
- * island manifests, the single owner of the page→chunk facts. A page's own
- * chunks are never listed (the page fetches them itself); the remaining
- * linked-page chunks ship as sorted link tags after <head>, each carrying
- * `data-open-island-prefetch` — the marker is what makes re-runs idempotent,
- * and the global speculation lane's `<script type="speculationrules">` tag
- * on the same page is unaffected.
- */
-export function injectIslandPrefetchRules(
-  dir: string,
-  pageChunks: ReadonlyMap<string, readonly string[]>,
-): void {
-  for (const entry of walkHtmlFileEntries(dir)) {
-    const content = readFileSync(entry.absolutePath, 'utf8');
-    if (content.includes('data-open-island-prefetch')) continue;
-    const route = routeFromRelativePath(entry.relativePath);
-    const ownChunks = new Set(pageChunks.get(route) ?? []);
-    if (ownChunks.size === 0) continue;
-    const chunks = new Set<string>();
-    for (const linkRoute of sameOriginLinkRoutes(content, route)) {
-      for (const chunk of pageChunks.get(linkRoute) ?? []) {
-        if (!ownChunks.has(chunk)) chunks.add(chunk);
-      }
-    }
-    const links = buildIslandPrefetchLinks([...chunks].sort());
-    if (!links) continue;
-    writeFileSync(entry.absolutePath, insertAfterHead(content, links), 'utf8');
-  }
 }
 
 // ─── Element-runtime modulepreload projection (#1544, B2) ─────────────

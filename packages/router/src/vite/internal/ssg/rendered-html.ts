@@ -16,17 +16,14 @@ const RAW_TEXT_TAGS = new Set([
   'xmp',
 ]);
 
-export function readTagName(
-  html: string,
-  start: number,
-): { name: string; end: number } | undefined {
+function readTagName(html: string, start: number): { name: string; end: number } | undefined {
   let end = start;
   while (end < html.length && /[A-Za-z0-9:._-]/.test(html[end])) end++;
   if (end === start) return undefined;
   return { name: html.slice(start, end).toLowerCase(), end };
 }
 
-export function skipThroughClosingTag(html: string, from: number, tagName: string): number {
+function skipThroughClosingTag(html: string, from: number, tagName: string): number {
   const close = new RegExp(`</${tagName}(?=[\\t\\n\\f\\r />])`, 'gi');
   close.lastIndex = from;
   const match = close.exec(html);

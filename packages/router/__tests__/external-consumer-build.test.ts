@@ -219,7 +219,7 @@ export { readProofLabel as proofText } from './proof-copy.ts';
     [
       '/** Local island of the external-consumer proof fixture. */',
       "import { defineIslandConfig } from '@openelement/router';",
-      "import { onConnect } from '@openelement/element';",
+      "import { onConnect, signal } from '@openelement/element';",
       "import { conditionTarget } from '@acme/conditions';",
       "import { flavor } from '@acme/conditions/flavor';",
       "import { sharedTag } from '@shared/tag.ts';",
@@ -237,6 +237,7 @@ export { readProofLabel as proofText } from './proof-copy.ts';
       '});',
       '',
       'export default function OeProofCounter(props: { proofSource: string }) {',
+      '  const count = signal(0);',
       '  // The nested dynamic import itself (B2 gap (a)). Never awaited by the',
       '  // assertions — its only job is to exist in the emitted island chunk, and',
       "  // `onConnect` is the generated lane's activation point (it is where the",
@@ -249,7 +250,7 @@ export { readProofLabel as proofText } from './proof-copy.ts';
       '  // resolution reaches the emitted terminal bytes. A module-scope statement',
       '  // is not part of the admitted component grammar: the generated lane lowers',
       '  // the component body, not arbitrary top-level side effects.',
-      "  return <span class='source' data-proof={`${conditionTarget}:${sharedTag}:${flavor}:${extensionPriority}`}>{proofText(props.proofSource as ProofLabel)}</span>;",
+      "  return <span class='source' data-proof={`${conditionTarget}:${sharedTag}:${flavor}:${extensionPriority}`}>{proofText(props.proofSource as ProofLabel)}<button type='button' onClick={() => { count.value += 1; }}>{count.value}</button></span>;",
       '}',
       '',
     ].join('\n'),
@@ -269,6 +270,7 @@ export { readProofLabel as proofText } from './proof-copy.ts';
       "    <div class='proof'>",
       '      <oe-proof-counter></oe-proof-counter>',
       "      <open-button variant='primary'>External consumer proof.</open-button>",
+      "      <a href='/proof-jsx/'>JSX proof page</a>",
       '    </div>',
       '  );',
       '}',
@@ -384,7 +386,7 @@ import { ExactHeading } from '../components/jsx-heading.tsx';
 import '../components/jsx-aside.jsx';
 
 export function JsxPage() {
-  return <main><Heading /><ExactHeading /><oe-jsx-list heading="JSX list"></oe-jsx-list><oe-jsx-aside></oe-jsx-aside></main>;
+  return <main><Heading /><ExactHeading /><oe-jsx-list heading="JSX list"></oe-jsx-list><oe-jsx-aside></oe-jsx-aside><a href="/">Consumer proof home</a></main>;
 }
 
 export default definePage(JsxPage, { renderIntent: { mode: 'static' } });
@@ -591,6 +593,60 @@ test('external consumer: a JSX route prerenders and a JSX island claims and upda
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
     });
+  }
+}, 30_000);
+
+test('external consumer: linked interactive pages request only their own islands by default', async () => {
+  const distDir = join(fixture.appDir, 'dist');
+  const graph = JSON.parse(
+    await readFile(join(distDir, 'client', '.vite', 'oe-browser-entry-graph.json'), 'utf8'),
+  ) as BrowserEntryGraphArtifact;
+  const counter = graph.islands.find(({ tag }) => tag === 'oe-proof-counter')!;
+  const list = graph.islands.find(({ tag }) => tag === 'oe-jsx-list')!;
+
+  const { chromium } = await import('@playwright/test');
+  const browser = await chromium.launch();
+  const server = serveFetch({
+    hostname: '127.0.0.1',
+    port: 0,
+    handler: createFetchHandler({ distDir }),
+  });
+  try {
+    await once(server, 'listening');
+    const address = server.address();
+    if (address === null || typeof address === 'string') throw new Error('No loopback address');
+    const scenarios = [
+      { path: '/', own: counter, other: list, destination: '/proof-jsx/' },
+      { path: '/proof-jsx/', own: list, other: counter, destination: '/' },
+    ];
+    for (const { path, own, other, destination } of scenarios) {
+      const page = await browser.newPage();
+      const requests = new Set<string>();
+      page.on('request', (request) => requests.add(new URL(request.url()).pathname));
+      await page.goto(`http://127.0.0.1:${address.port}${path}`);
+      await page.locator(`a[href="${destination}"]`).waitFor();
+      await page.waitForFunction((tag) => customElements.get(tag) !== undefined, own.tag);
+      if (own === list) {
+        await page.getByRole('button', { name: 'Reverse' }).click();
+        await page.getByText('Reversed').waitFor();
+      } else {
+        const button = page.locator(own.tag).getByRole('button');
+        expect(await button.textContent()).toBe('0');
+        await button.click();
+        await page.locator(own.tag).getByRole('button', { name: '1' }).waitFor();
+      }
+      await page.waitForLoadState('networkidle');
+      expect(requests, path).toContain(`/client/${own.chunkFile}`);
+      expect(requests, path).not.toContain(`/client/${other.chunkFile}`);
+      expect(requests, path).not.toContain(`/client/${other.activationChunkFile}`);
+      expect(await page.locator('link[rel=prefetch], script[type=speculationrules]').count()).toBe(
+        0,
+      );
+      await page.close();
+    }
+  } finally {
+    await browser.close();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 }, 30_000);
 

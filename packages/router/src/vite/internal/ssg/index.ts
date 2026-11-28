@@ -53,14 +53,11 @@ export {
   buildElementRuntimePreloadLink,
   buildSpeculationRulesJson,
   ELEMENT_RUNTIME_PRELOAD_ATTRIBUTE,
-  extractLinkHrefs,
   injectCspMeta,
   injectElementRuntimePreload,
-  injectIslandPrefetchRules,
   injectSpeculationRules,
   injectViewTransitionOptIn,
 } from './postprocess.ts';
-export { buildIslandPrefetchLinks, type SpeculationEagerness } from './speculation-rules.ts';
 
 export {
   cleanSsrArtifacts,
@@ -118,7 +115,6 @@ export { renderEntry } from './entry-orchestrator.ts';
 export {
   extractCustomElementTags,
   generateIslandManifests,
-  pageChunkMap,
   pageHasClientIslands,
   routeFromRelativePath,
   writeIslandManifests,

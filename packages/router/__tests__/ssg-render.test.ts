@@ -182,9 +182,41 @@ test('ssgRender - handles options with viewTransition disabled', async () => {
   await ssgRender(bundle, { ...defaultOptions, viewTransition: false });
 });
 
-test('ssgRender - handles options with speculation enabled', async () => {
-  const bundle = createMockBundle();
-  await ssgRender(bundle, { ...defaultOptions, speculation: true });
+test('ssgRender emits document speculation only when enabled', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'oe-speculation-'));
+  const app = createWinterCgApp();
+  app.use(
+    '*',
+    () =>
+      new Response('<html><head></head><body></body></html>', {
+        headers: { 'Content-Type': 'text/html; charset=UTF-8' },
+      }),
+  );
+  const bundle = createMockBundle({ default: app });
+  bundle.routeInfo!.push({
+    path: '/blog/:slug',
+    tagName: 'blog-post',
+    isDynamic: true,
+    paramNames: ['slug'],
+  });
+  try {
+    await ssgRender(bundle, { root, outDir: 'default' });
+    expect(await readFile(join(root, 'default', 'index.html'), 'utf8')).not.toContain(
+      'type="speculationrules"',
+    );
+
+    await ssgRender(bundle, { root, outDir: 'opt-in', speculation: true });
+    const html = await readFile(join(root, 'opt-in', 'index.html'), 'utf8');
+    const payload = /<script type="speculationrules">([\s\S]*?)<\/script>/.exec(html)?.[1];
+    expect(JSON.parse(payload!)).toEqual({
+      prerender: [
+        { source: 'list', urls: ['/'], eagerness: 'moderate' },
+        { where: { href_matches: '/about' }, eagerness: 'conservative' },
+      ],
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 // ─── #674: output mkdir failures must propagate, not be swallowed ───

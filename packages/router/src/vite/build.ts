@@ -18,12 +18,7 @@ import { serializeClientAssetsModule } from '@openelement/protocol/client-assets
 import type { OpenElementBuildContext } from './build-context.ts';
 import { join } from 'pathe';
 import { createLogger } from '@openelement/element';
-import {
-  cleanSsrArtifacts,
-  injectIslandPrefetchRules,
-  pageChunkMap,
-  postProcessClientIslandBuild,
-} from './internal/ssg/index.ts';
+import { cleanSsrArtifacts, postProcessClientIslandBuild } from './internal/ssg/index.ts';
 import { stylePlanForApp } from './internal/style-plan.ts';
 import { stylesheetLinkTag } from './head-injection.ts';
 import {
@@ -233,19 +228,12 @@ export function buildPlugin(
         try {
           const manifest = ctx.clientAssetManifest;
           if (manifest) {
-            const { pageManifests, files } = await postProcessClientIslandBuild(
+            islandManifestFiles = await postProcessClientIslandBuild(
               ctx,
               clientOutput?.runtimePreloads,
             );
-            islandManifestFiles = files;
             await writeRequestTimeClientAssets(ctx, manifest);
             log.info(`Client scripts rendered from the asset manifest: ${manifest.entry}`);
-            // Island-bearing documents can warm the chunks of linked pages.
-            // An empty source-page manifest leaves normal navigation alone.
-            injectIslandPrefetchRules(
-              join(ctx.phase3.root || process.cwd(), ctx.phase3.outDir || DEFAULT_OUT_DIR),
-              pageChunkMap(pageManifests),
-            );
           } else {
             log.info('No Phase 2 client asset manifest - island manifests skipped');
           }

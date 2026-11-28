@@ -26,7 +26,6 @@ import {
   ClientAssetErrorCode,
   SsgHygieneErrorCode,
 } from '../../../internal/error-codes.ts';
-import type { PageIslandManifest } from './island-manifest.ts';
 import { generateIslandManifests, writeIslandManifests } from './island-manifest.ts';
 import { expandIslandDeliveryDecl, resolveIslandHydrate } from './island-scanner.ts';
 import {
@@ -37,8 +36,6 @@ import {
 import { DEFAULT_OUT_DIR } from './../paths.ts';
 import { injectElementRuntimePreload } from './postprocess.ts';
 import { safeReadDir } from './route-scanner-fs.ts';
-
-export { buildIslandPrefetchLinks } from './speculation-rules.ts';
 
 const log = createLogger('build-postprocess');
 
@@ -115,9 +112,7 @@ export function islandChunkMapFromAssetManifest(
  * (#1471) — this pass records the identity-driven chunk/strategy/layer
  * manifests and then feeds the one HTML write derived from them (B2/#1544):
  * the runtime preload links for the actual static dependencies of each
- * page's emitted island chunks. The
- * per-page speculation-rules injection (#1561) is a separate lane fed by
- * the manifests this function returns. Fail-closed: the chunk map is
+ * page's emitted island chunks. Fail-closed: the chunk map is
  * resolved — and any missing island asset thrown — before a single page
  * manifest is generated or written, so the pass either writes the complete
  * manifest set or none of it, never a partial record that silently omits an
@@ -126,7 +121,7 @@ export function islandChunkMapFromAssetManifest(
 export async function postProcessClientIslandBuild(
   ctx: BuildContextView,
   runtimePreloads?: ReadonlyMap<string, readonly string[]>,
-): Promise<{ pageManifests: PageIslandManifest[]; files: string[] }> {
+): Promise<string[]> {
   const root = ctx.phase3.root || process.cwd();
   const outDir = ctx.phase3.outDir || DEFAULT_OUT_DIR;
   const outputDir = join(root, outDir);
@@ -186,7 +181,7 @@ export async function postProcessClientIslandBuild(
   if (runtimePreloads?.size) {
     injectElementRuntimePreload(outputDir, pageManifests, runtimePreloads);
   }
-  return { pageManifests, files };
+  return files;
 }
 
 /**

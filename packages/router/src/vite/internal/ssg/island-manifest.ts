@@ -15,8 +15,6 @@ import { walkHtmlFileEntries } from '../html-files.ts';
 import type { IslandDeliveryStrategy } from './delivery.ts';
 import { visitRenderedTags } from './rendered-html.ts';
 
-export { readTagName, skipThroughClosingTag } from './rendered-html.ts';
-
 /** Stable artifact timestamp; manifests must be byte-identical across builds. */
 export const DETERMINISTIC_MANIFEST_TIMESTAMP = '1970-01-01T00:00:00.000Z';
 
@@ -61,31 +59,11 @@ export function extractCustomElementTags(html: string): string[] {
  * Output-relative HTML path → site route: 'index.html' → '/',
  * 'about/index.html' → '/about', 'about.html' → '/about'.
  * The single route derivation for every consumer that keys output files by
- * route (island manifests, per-page speculation rules).
+ * route (island manifests and the Element runtime preload projection).
  */
 export function routeFromRelativePath(relativePath: string): string {
   const rel = normalizeSeparators(relativePath).replace(/\.html$/, '');
   return rel === 'index' ? '/' : `/${rel.replace(/\/index$/, '')}`;
-}
-
-/**
- * Route → the deduped, sorted island chunk URLs that route's page loads.
- * The projection every per-page consumer of the manifests reads; chunk
- * facts are never re-derived by scanning output files.
- */
-export function pageChunkMap(manifests: readonly PageIslandManifest[]): Map<string, string[]> {
-  return new Map(
-    manifests.map((manifest) => [
-      manifest.route,
-      [
-        ...new Set(
-          manifest.islands
-            .filter((island) => island.strategy !== 'none')
-            .map((island) => island.chunkUrl),
-        ),
-      ].sort(),
-    ]),
-  );
 }
 
 /**
