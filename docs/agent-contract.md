@@ -265,6 +265,52 @@ bundler-reported module sizes for attribution. A missing input or an exceeded
 limit fails the release. The official Site figures still use their eager
 static-import closure and their existing tolerance.
 
+## Tracing why a page ships JavaScript
+
+Start with a production build (`vp run --no-cache site:build` for the Site)
+and inspect artifacts from that build. For a packed starter run
+`vp run --no-cache --fail-if-no-match --filter @openelement/e2e-starter-smoke setup`.
+The installed app is `<work-dir>/my-blog`. The work directory is
+`STARTER_SMOKE_WORK_DIR` if set, otherwise read it from
+`tests/e2e/starter-smoke/node_modules/.starter-smoke-work-dir`. Setup packs and
+installs consumer dependencies. Inspect `my-blog/dist` for this build
+([paths](../tests/e2e/starter-smoke/paths.ts),
+[setup](../tests/e2e/starter-smoke/setup.ts)).
+
+1. Find the route in `dist/island-manifests/page-*.json` (for example,
+   `rg -l '"route": "/guide/mdx"' www/dist/island-manifests`). Read each
+   island's `tagName`, `chunkUrl` and `strategy`. Compare the actual route HTML,
+   scripts and module preloads. The manifest projects the page's islands and
+   `none` disables client activation. Also inspect authored scripts and
+   document capabilities such as enhanced forms. For per-response decisions,
+   follow `documentClientFacts` and `clientScriptDescriptors` in
+   [app.ts](../packages/router/src/vite/internal/server-runtime/app.ts).
+   Build-level admission lives in
+   [entry-client-codegen.ts](../packages/router/src/vite/internal/ssg/entry-client-codegen.ts)
+   and page projection and preload conditions in
+   [island-manifest.ts](../packages/router/src/vite/internal/ssg/island-manifest.ts).
+2. Open `dist/client/.vite/oe-browser-entry-graph.json` and check `status`.
+   Match page chunk URLs to `islands[].chunkFile` and `activationChunkFile`.
+   Follow chunk `imports`, `dynamicImports` and `implicitlyLoadedBefore` by file
+   identity. Inspect each module's `id` and `renderedLength`. Zero means the
+   module contributed no rendered bytes to that chunk. Dynamic edges identify
+   possible fetches. The observer and schema live in
+   [browser-entry-graph.ts](../packages/router/src/vite/internal/browser-entry-graph.ts)
+   and [browser-entry-graph-artifact.ts](../packages/router/src/vite/internal/browser-entry-graph-artifact.ts).
+3. Serve the produced HTML with the existing preview, or run `pnpm start` in
+   the packed starter app. In a fresh browser context with cache disabled,
+   capture the document, scripts and module preloads on cold navigation. Record
+   idle/visible activation and the first relevant click separately. Match the
+   requested URLs to the graph and inspect their static import closures. Record
+   the interaction and timing for deferred and prefetched requests. For a
+   payload total, gzip each actually fetched file once at level 9 and sum the
+   results. `renderedLength` attributes uncompressed module contributions.
+4. Run the existing gate against the graph, for example
+   `vp run --no-cache --fail-if-no-match --filter @openelement/tools-repo browser-graph:check www/dist/client/.vite/oe-browser-entry-graph.json`.
+   Its verdict checks the documented graph boundary. Use the browser capture
+   to investigate the route's requests. If the build fails, use the existing
+   diagnostics flags below to inspect its structured report.
+
 ## Reading build failures: the diagnostics envelope (#1612)
 
 One machine-readable JSON shape answers every build failure; it is owned by

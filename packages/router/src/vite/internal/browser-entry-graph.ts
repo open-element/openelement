@@ -25,8 +25,7 @@
  * The predicate (which modules are the generic executor's entry surface) is
  * NOT decided here: {@linkcode deriveBrowserEntryGraphSummary} is shared with
  * the checker, which recomputes the summary from the emitted facts instead of
- * trusting this writer. The expected verdict for the current tree is
- * VIOLATED — the artifact reports, it does not gate.
+ * trusting this writer. The artifact reports; the checker determines the verdict.
  *
  * @module ./browser-entry-graph.ts
  */
