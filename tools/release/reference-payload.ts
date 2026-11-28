@@ -9,6 +9,7 @@ import {
   type BrowserEntryGraphArtifact,
   evaluateBrowserEntryGraphArtifact,
 } from '../../packages/router/src/vite/internal/browser-entry-graph-artifact.ts';
+import { ISLAND_CATALOGUE_SCRIPT_TYPE } from '../../packages/router/src/vite/internal/ssg/document-island-catalogue.ts';
 import type { PageIslandManifest } from '../../packages/router/src/vite/internal/ssg/island-manifest.ts';
 import { clientChunkUrl, clientImportGraph, payloadClosure } from './payload-closure.ts';
 
@@ -31,16 +32,36 @@ interface ByteSizes {
   brotli: number;
 }
 
-function documentScripts(html: string): Set<string> {
+function documentScripts(html: string) {
   // This is the reference starter's emitted HTML. Fail if it starts shipping
   // inline code, whose gzip transfer cannot be separated from the HTML.
   const urls = new Set<string>();
+  const activations = new Map<string, string>();
+  let hasCatalogue = false;
   // HTML accepts whitespace, a slash, and ignored attributes on a script end
   // tag. A quoted attribute value can itself contain a greater-than sign.
   const scripts =
     /<script(?=[\t\n\f\r />])([^>]*)>([\s\S]*?)<\/script(?=[\t\n\f\r />])(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
   for (const [, attributes, content] of html.matchAll(scripts)) {
     const type = htmlAttribute(attributes, 'type')?.toLowerCase();
+    if (type === ISLAND_CATALOGUE_SCRIPT_TYPE) {
+      if (hasCatalogue) throw new Error('Reference home has two island catalogues');
+      hasCatalogue = true;
+      const rows: unknown = JSON.parse(content);
+      if (!Array.isArray(rows)) throw new Error('Reference home island catalogue must be an array');
+      for (const row of rows) {
+        if (
+          !Array.isArray(row) ||
+          typeof row[0] !== 'string' ||
+          typeof row[2] !== 'string' ||
+          activations.has(row[0])
+        ) {
+          throw new Error('Reference home island catalogue has an invalid or duplicate activation');
+        }
+        activations.set(row[0], row[2]);
+      }
+      continue;
+    }
     if (type && !['module', 'text/javascript', 'application/javascript'].includes(type)) continue;
     const src = htmlAttribute(attributes, 'src');
     if (src) urls.add(src);
@@ -52,7 +73,7 @@ function documentScripts(html: string): Set<string> {
     if (!href) throw new Error('Reference home has a modulepreload without href');
     urls.add(href);
   }
-  return urls;
+  return { urls, activations };
 }
 
 function htmlAttribute(
@@ -68,7 +89,12 @@ function htmlAttribute(
 export function referencePayloadUrls(
   viteManifest: Manifest,
   browserArtifact: Pick<BrowserEntryGraphArtifact, 'entry'> & {
-    islands: Array<Pick<BrowserEntryGraphArtifact['islands'][number], 'tag' | 'chunkFile'>>;
+    islands: Array<
+      Pick<
+        BrowserEntryGraphArtifact['islands'][number],
+        'tag' | 'chunkFile' | 'activationChunkFile'
+      >
+    >;
   },
   html: string,
   homeManifest: Pick<PageIslandManifest, 'islands'>,
@@ -79,14 +105,27 @@ export function referencePayloadUrls(
 
   const graph = clientImportGraph(viteManifest);
   const bootstrap = clientChunkUrl(browserArtifact.entry.chunkFile);
-  const htmlRoots = documentScripts(html);
+  const { urls: htmlRoots, activations } = documentScripts(html);
   if (!htmlRoots.has(bootstrap)) throw new Error('Reference home is missing its client bootstrap');
   const urlByTag = new Map(
     browserArtifact.islands.map(({ tag, chunkFile }) => [tag, clientChunkUrl(chunkFile)]),
   );
+  const expectedActivations = new Map(
+    browserArtifact.islands.flatMap(({ tag, activationChunkFile }) =>
+      activationChunkFile ? [[tag, clientChunkUrl(activationChunkFile)] as const] : [],
+    ),
+  );
+  for (const [tag, url] of activations) {
+    if (expectedActivations.get(tag) !== url) {
+      throw new Error(`Reference home island activation is missing from the client graph: ${tag}`);
+    }
+  }
   const islandUrls = new Set(urlByTag.values());
   for (const island of activeIslands) {
-    if (urlByTag.get(island.tagName) !== island.chunkUrl) {
+    if (
+      urlByTag.get(island.tagName) !== island.chunkUrl ||
+      expectedActivations.get(island.tagName) !== activations.get(island.tagName)
+    ) {
       throw new Error(`Reference home island is missing from the client graph: ${island.tagName}`);
     }
   }
@@ -98,9 +137,12 @@ export function referencePayloadUrls(
     [...htmlRoots].filter((url) => !islandUrls.has(url)),
     (from, to) => from !== bootstrap || !islandUrls.has(to),
   );
-  const islandClosures = activeIslands.map(({ chunkUrl }) =>
-    payloadClosure(graph, [chunkUrl], () => true),
-  );
+  const hostedTags = new Set(activeIslands.map(({ tagName }) => tagName));
+  const activationRoots = [
+    ...activeIslands.map(({ tagName, chunkUrl }) => activations.get(tagName) ?? chunkUrl),
+    ...[...activations].filter(([tag]) => !hostedTags.has(tag)).map(([, url]) => url),
+  ];
+  const islandClosures = activationRoots.map((url) => payloadClosure(graph, [url], () => true));
   for (const [index, closure] of islandClosures.entries()) {
     for (const url of closure) {
       if (islandClosures.slice(index + 1).some((other) => other.has(url))) shared.add(url);

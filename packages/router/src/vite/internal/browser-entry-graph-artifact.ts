@@ -64,6 +64,7 @@
  * @module ./browser-entry-graph-artifact.ts
  */
 
+import { ISLAND_ACTIVATION_PREFIX } from './ssg/document-island-catalogue.ts';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, relative } from 'node:path';
@@ -256,6 +257,8 @@ export interface BrowserEntryGraphIsland {
   strategy: string;
   /** The emitted chunk file carrying the island module. */
   chunkFile: string;
+  /** The separately emitted activation façade selected through the HTML catalogue. */
+  activationChunkFile?: string;
 }
 
 /** Per-category report lists (report-only; never gate). */
@@ -763,12 +766,12 @@ export function classifyBrowserEntryGraphModule(
 /** Sorted chunk names reachable from `start` over all emitted chunk edges. */
 function reachableChunkFiles(
   chunks: readonly BrowserEntryGraphChunk[],
-  start: string,
+  ...roots: string[]
 ): Set<string> {
   const byFile = new Map<string, BrowserEntryGraphChunk>();
   for (const chunk of chunks) byFile.set(chunk.file, chunk);
   const reached = new Set<string>();
-  const pending = [start];
+  const pending = roots;
   while (pending.length > 0) {
     const file = pending.pop()!;
     if (reached.has(file)) continue;
@@ -798,7 +801,11 @@ function compareStrings(left: string, right: string): number {
 export function deriveBrowserEntryGraphSummary(
   core: BrowserEntryGraphCore,
 ): BrowserEntryGraphSummary {
-  const reachable = reachableChunkFiles(core.chunks, core.entry.chunkFile);
+  const reachable = reachableChunkFiles(
+    core.chunks,
+    core.entry.chunkFile,
+    ...core.islands.flatMap(({ activationChunkFile }) => activationChunkFile ?? []),
+  );
   const loadedByModule = new Map<string, string>();
   for (const chunk of core.chunks) {
     if (!reachable.has(chunk.file)) continue;
@@ -813,7 +820,10 @@ export function deriveBrowserEntryGraphSummary(
 
   const islandClosures = new Map<string, Set<string>>();
   for (const island of core.islands) {
-    islandClosures.set(island.tag, reachableChunkFiles(core.chunks, island.chunkFile));
+    islandClosures.set(
+      island.tag,
+      reachableChunkFiles(core.chunks, island.activationChunkFile ?? island.chunkFile),
+    );
   }
 
   const loadedViolations: BrowserEntryGraphViolation[] = loadedGateIds.map((moduleId) => {
@@ -920,14 +930,6 @@ interface ParsedChunk {
   modules: BrowserEntryGraphModule[];
 }
 
-interface ParsedIsland {
-  tag: string;
-  specifier: string;
-  moduleId: string;
-  strategy: string;
-  chunkFile: string;
-}
-
 /**
  * Shape validation. Produces the normalized artifact or the first stable
  * UNPROVEN reason. Every rejection is fail-closed: the checker must not judge
@@ -1017,7 +1019,7 @@ function parseArtifact(
 
   const rawIslands = value.islands;
   if (!Array.isArray(rawIslands)) return malformed('islands must be an array');
-  const islands: ParsedIsland[] = [];
+  const islands: BrowserEntryGraphIsland[] = [];
   const islandTags = new Set<string>();
   for (const item of rawIslands) {
     if (
@@ -1026,7 +1028,9 @@ function parseArtifact(
       !isNonEmptyString(item.specifier) ||
       !isNormalizedBrowserEntryGraphModuleId(item.moduleId) ||
       !isNonEmptyString(item.strategy) ||
-      !isNormalizedBrowserEntryGraphRelativePath(item.chunkFile)
+      !isNormalizedBrowserEntryGraphRelativePath(item.chunkFile) ||
+      (item.activationChunkFile !== undefined &&
+        !isNormalizedBrowserEntryGraphRelativePath(item.activationChunkFile))
     ) {
       return malformed('every island needs tag/specifier/moduleId/strategy/chunkFile strings');
     }
@@ -1038,6 +1042,9 @@ function parseArtifact(
       moduleId: item.moduleId,
       strategy: item.strategy,
       chunkFile: item.chunkFile,
+      ...(item.activationChunkFile === undefined
+        ? {}
+        : { activationChunkFile: item.activationChunkFile }),
     });
   }
   islands.sort(
@@ -1230,7 +1237,12 @@ export function evaluateBrowserEntryGraphArtifact(value: unknown): BrowserEntryG
       `the entry chunk "${artifact.entry.chunkFile}" is not in the emitted chunk list`,
     );
   }
-  const entryCandidates = artifact.chunks.filter((chunk) => chunk.isEntry);
+  const activationRoots = new Set(
+    artifact.islands.flatMap(({ activationChunkFile }) => activationChunkFile ?? []),
+  );
+  const entryCandidates = artifact.chunks.filter(
+    (chunk) => chunk.isEntry && !activationRoots.has(chunk.file),
+  );
   if (entryCandidates.length !== 1) {
     return unproven(
       'entry-chunk-ambiguous',
@@ -1285,7 +1297,10 @@ export function evaluateBrowserEntryGraphArtifact(value: unknown): BrowserEntryG
     for (const to of chunk.dynamicImports) resolvedEdge(chunk.file, to);
     for (const to of chunk.implicitlyLoadedBefore) resolvedEdge(chunk.file, to);
   }
-  for (const island of artifact.islands) resolvedEdge('island', island.chunkFile);
+  for (const island of artifact.islands) {
+    resolvedEdge('island', island.chunkFile);
+    if (island.activationChunkFile) resolvedEdge('island activation', island.activationChunkFile);
+  }
   if (dangling.length > 0) {
     return unproven(
       'chunk-reference-dangling',
@@ -1293,12 +1308,16 @@ export function evaluateBrowserEntryGraphArtifact(value: unknown): BrowserEntryG
     );
   }
 
-  const reachable = reachableChunkFiles(artifact.chunks, artifact.entry.chunkFile);
+  const reachable = reachableChunkFiles(
+    artifact.chunks,
+    artifact.entry.chunkFile,
+    ...artifact.islands.flatMap(({ activationChunkFile }) => activationChunkFile ?? []),
+  );
   const unreachable = artifact.chunks.filter((chunk) => !reachable.has(chunk.file));
   if (unreachable.length > 0) {
     return unproven(
       'chunk-unreachable',
-      `emitted chunk(s) are unreachable from the entry chunk: ${nameIds(unreachable.map((chunk) => chunk.file))}`,
+      `emitted chunk(s) are unreachable from the document or its island activation roots: ${nameIds(unreachable.map((chunk) => chunk.file))}`,
     );
   }
 
@@ -1330,7 +1349,19 @@ export function evaluateBrowserEntryGraphArtifact(value: unknown): BrowserEntryG
     const rendered = artifact.chunks
       .find((chunk) => chunk.file === moduleChunk)
       ?.modules.find((module) => module.id === island.moduleId)?.renderedLength;
-    if (moduleChunk === undefined || moduleChunk !== island.chunkFile || (rendered ?? 0) <= 0) {
+    const activation = island.activationChunkFile;
+    const activationChunk = activation === undefined ? undefined : chunksByFile.get(activation);
+    const reachesIsland =
+      activation === undefined ||
+      (activationChunk?.isEntry &&
+        activationChunk.facadeModuleId?.startsWith('\0' + ISLAND_ACTIVATION_PREFIX) &&
+        reachableChunkFiles(artifact.chunks, activation).has(island.chunkFile));
+    if (
+      !reachesIsland ||
+      moduleChunk === undefined ||
+      moduleChunk !== island.chunkFile ||
+      (rendered ?? 0) <= 0
+    ) {
       unsureIslands.push(`${island.tag} (${island.moduleId})`);
     }
   }

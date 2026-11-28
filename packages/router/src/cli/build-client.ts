@@ -30,8 +30,14 @@ import {
   createGeneratedElementSiteResolver,
 } from '../vite/generated-element-site.ts';
 import { buildClientIslandEntries } from '../vite/internal/ssg/client-island-entries.ts';
+import { ISLAND_ACTIVATION_PREFIX } from '../vite/internal/ssg/document-island-catalogue.ts';
+import { closedIslandSource } from '../vite/internal/ssg/document-island-source.ts';
 import {
+  createIslandActivationModules,
+  DOCUMENT_ISLANDS_RUNTIME_SPECIFIER,
   ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER,
+  REGISTER_ISLAND_RUNTIME_SPECIFIER,
+  registerIslandRuntime,
   resolveElementDocumentServicesModule,
 } from '../vite/internal/ssg/entry-client-codegen.ts';
 import {
@@ -721,10 +727,15 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<{
   const packageDeclIdentities = () =>
     selectedPackageDecls.map((island) => packageIslandIdentity(island, islandModuleIds));
 
+  const activationModules = createIslandActivationModules(islandEntries);
+  const activationReferences = new Map<string, string>();
+  const activationFiles = new Map<string, string>();
+
   const buildClientEntryCode = (): string =>
     generateClientEntry(islandEntries, {
       enhancedForms,
       specializeScheduler: true,
+      responseCatalogue: true,
       ...(styleIntegration?.provider.documentDelivery === 'graph-entry'
         ? { styleEntry: styleIntegration.provider.documentSheetModule }
         : {}),
@@ -797,11 +808,21 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<{
       chunkSizeWarningLimit: CHUNK_SIZE_WARNING_LIMIT_KB,
       minify: 'oxc',
       manifest: true,
+      modulePreload: {
+        // Response hints already select eager runtime imports. The activation
+        // file fetches its own JS through the native module graph; Vite keeps
+        // the stylesheet dependencies independently of this JS-only filter.
+        resolveDependencies: (_file, deps, { hostId }) =>
+          hostId.startsWith('islands/activate-') ? [] : deps,
+      },
       rollupOptions: {
         input: { client: VIRTUAL_CLIENT_ENTRY_ID },
         output: {
           format: 'esm',
-          entryFileNames: 'islands/[name].js',
+          entryFileNames: (chunk) =>
+            chunk.facadeModuleId?.startsWith('\0' + ISLAND_ACTIVATION_PREFIX)
+              ? 'islands/[name]-[hash].js'
+              : 'islands/[name].js',
           chunkFileNames: 'islands/[name]-[hash].js',
           // B2 gap (a) is why the output uses `codeSplitting`, not
           // `manualChunks`.
@@ -829,6 +850,8 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<{
             groups: [
               {
                 name(id: string) {
+                  if (id === '\0' + REGISTER_ISLAND_RUNTIME_SPECIFIER)
+                    return VITE_HELPER_CHUNK_NAME;
                   const helperChunk = viteHelperChunkName(id);
                   if (helperChunk) return helperChunk;
                   if (isDocumentServiceModule(id, elementRuntimeIdentity)) {
@@ -1034,6 +1057,10 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<{
         name: 'open:virtual-client-entry',
         resolveId(id) {
           if (id === VIRTUAL_CLIENT_ENTRY_ID) return RESOLVED_CLIENT_ENTRY_ID;
+          if (activationModules.has(id) || id === REGISTER_ISLAND_RUNTIME_SPECIFIER)
+            return '\0' + id;
+          if (id === DOCUMENT_ISLANDS_RUNTIME_SPECIFIER)
+            return runtimeModulePath('./ssg/document-islands.ts');
           // #868: the client runtimes resolve to their real source modules,
           // so they typecheck, bundle and minify like any other module.
           if (id === VIRTUAL_RUNTIME_SPECIFIERS.scheduler) {
@@ -1052,6 +1079,31 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<{
         },
         load(id) {
           if (id === RESOLVED_CLIENT_ENTRY_ID) return buildClientEntryCode();
+          if (id === '\0' + REGISTER_ISLAND_RUNTIME_SPECIFIER) return registerIslandRuntime;
+          if (id.startsWith('\0' + ISLAND_ACTIVATION_PREFIX)) {
+            return activationModules.get(id.slice(1))?.code;
+          }
+        },
+      },
+      {
+        name: 'open:island-activation-emission',
+        buildStart() {
+          for (const [id, activation] of activationModules) {
+            activationReferences.set(
+              id,
+              this.emitFile({
+                type: 'chunk',
+                id,
+                name: `activate-${activation.tags[0]}`,
+                preserveSignature: 'strict',
+              }),
+            );
+          }
+        },
+        generateBundle() {
+          for (const [id, reference] of activationReferences) {
+            activationFiles.set(id, this.getFileName(reference));
+          }
         },
       },
       {
@@ -1132,13 +1184,14 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<{
         // island-attribution pass would be a category error, not a missing
         // module: the writer's `island-chunk-unresolved` contract stays
         // fail-closed for islands that SHOULD be there.
-        islands: islandEntries
-          .filter((entry) => entry.strategy !== 'none')
-          .map((entry) => ({
-            tag: entry.tagName,
-            specifier: entry.modulePath,
-            strategy: entry.strategy,
+        islands: [...activationModules].flatMap(([id, activation]) =>
+          activation.tags.map((tag) => ({
+            tag,
+            specifier: activation.modulePath,
+            strategy: activation.strategy,
+            activationModuleId: '\0' + id,
           })),
+        ),
         islandModuleIds,
       }),
     ],
@@ -1165,7 +1218,11 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<{
     const runtimePreloads = elementRuntimePreloads(emittedChunks, runtimeFiles, clientBase);
     requireViteHelperChunk(emittedChunks);
     if (entryHasClientJs) {
-      requireEntryStaticGraphFreeOfRuntime(emittedChunks, elementRuntimeIdentity);
+      requireEntryStaticGraphFreeOfRuntime(
+        emittedChunks,
+        elementRuntimeIdentity,
+        RESOLVED_CLIENT_ENTRY_ID,
+      );
     }
 
     // #1471: the client asset manifest — compile-time island identity joined
@@ -1187,6 +1244,61 @@ async function buildClient(ctx: OpenElementBuildContext): Promise<{
       resolvedIslandModuleIds: islandModuleIds,
       styleFileNames: [...styleAssetRecords.values()].map((record) => record.fileName),
     });
+
+    const generatedSpecifiers = new Set(
+      islandEntries
+        .filter((entry) => entry.generatedLane && !entry.isPackage)
+        .map((entry) => entry.modulePath),
+    );
+    // An application alias can redirect even a framework-looking import.
+    const hasSourceAlias = serializedAlias.some(({ find }) =>
+      ['@openelement/element', '@openelement/router'].some((source) =>
+        typeof find === 'string'
+          ? source === find || source.startsWith(find + '/')
+          : new RegExp(find).test(source),
+      ),
+    );
+    const potentialHosts = (specifier: string): readonly string[] | undefined => {
+      if (hasSourceAlias || !generatedSpecifiers.has(specifier)) return undefined;
+      const moduleId = islandModuleIds.get(specifier);
+      if (!moduleId || !existsSync(moduleId)) return undefined;
+      const source = readFileSync(moduleId, 'utf8');
+      const tags = closedIslandSource(source, moduleId);
+      if (!tags || tags.some((tag) => !Object.hasOwn(ctx.clientAssetManifest!.islands, tag))) {
+        return undefined;
+      }
+      return tags;
+    };
+
+    const activationUrls = new Set<string>();
+    for (const [id, activation] of activationModules) {
+      const emitted = activationFiles.get(id);
+      if (
+        emitted === undefined ||
+        !emittedChunks.some(
+          (chunk) => chunk.fileName === emitted && chunk.facadeModuleId === '\0' + id,
+        )
+      ) {
+        throw buildError(
+          ClientAssetErrorCode.ISLAND_UNMAPPED,
+          `No emitted activation module for ${activation.tags.join(', ')}`,
+        );
+      }
+      const children = potentialHosts(activation.modulePath);
+      const file = `${clientBase}client/${emitted}`;
+      activationUrls.add(file);
+      for (const tag of activation.tags) {
+        ctx.clientAssetManifest.islands[tag]!.activation = {
+          file,
+          ...(activation.media === undefined ? {} : { media: activation.media }),
+          ...(children === undefined ? {} : { children }),
+        };
+      }
+    }
+
+    ctx.clientAssetManifest.shared = ctx.clientAssetManifest.shared.filter(
+      (url) => !activationUrls.has(url),
+    );
 
     // The document stylesheet (S lane): the client entry chunk's emitted CSS
     // files, read from the same manifest the asset manifest consumes — or, for

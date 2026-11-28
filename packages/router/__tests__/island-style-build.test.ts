@@ -411,8 +411,8 @@ test("a client-only island's styles declaration adds its sheet import — and no
   // adds work to the island that declares it, never to a sibling or the
   // runtime.
   for (const [name, bytes] of plainArtifacts) {
-    if (name === 'client.js') continue; // the entry's island-chunk map names the hashes
-    if (name === plainIslandName) continue;
+    // Its activation façade carries Vite's hashed island import and preload edges.
+    if (name === plainIslandName || name.startsWith(`activate-${STYLED_TAG}-`)) continue;
     expect(styledArtifacts.has(name), `${name} must exist in the styled build`).toBe(true);
     expect(styledArtifacts.get(name)!.equals(bytes), `${name} must be byte-identical`).toBe(true);
   }

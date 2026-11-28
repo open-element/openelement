@@ -174,8 +174,11 @@ export function elementRuntimePreloads(
 export function requireEntryStaticGraphFreeOfRuntime(
   chunks: readonly ClientBuildChunk[],
   identity: ElementRuntimeIdentity | null,
+  entryModuleId?: string,
 ): void {
-  const entries = chunks.filter((chunk) => chunk.isEntry === true);
+  const entries = chunks.filter((chunk) =>
+    entryModuleId === undefined ? chunk.isEntry === true : chunk.facadeModuleId === entryModuleId,
+  );
   if (entries.length === 0) {
     throw buildError(
       ClientBuildErrorCode.ENTRY_STATIC_GRAPH_REACHES_RUNTIME,

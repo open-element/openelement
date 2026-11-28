@@ -11,6 +11,7 @@ import {
   validateClientIslandEntry,
   VIRTUAL_RUNTIME_SPECIFIERS,
 } from './entry-generators.ts';
+import { ISLAND_ACTIVATION_PREFIX } from './document-island-catalogue.ts';
 import type { ClientIslandDeliveryEntry, ClientIslandDeliveryInput } from './delivery.ts';
 
 // Machine-independent identity for the generated error copy: the workspace
@@ -152,6 +153,55 @@ function sharedActivationFactory(
   ].join('\n');
 }
 
+export const DOCUMENT_ISLANDS_RUNTIME_SPECIFIER = 'virtual:open-client-runtime/document-islands.ts';
+
+export const REGISTER_ISLAND_RUNTIME_SPECIFIER = 'virtual:open-client-register-island';
+
+export const registerIslandRuntime = `export function register(tag, getConstructor) {
+  if (customElements.get(tag)) return;
+  const Ctor = getConstructor();
+  if (typeof Ctor !== 'function') {
+    throw new Error('[openElement] Capability module did not export a constructor for ' + tag);
+  }
+  customElements.define(tag, Ctor);
+}`;
+
+/** Preserve each Vite-generated static import edge and its preload behavior. */
+export function createIslandActivationModules(islands: readonly ClientIslandDeliveryInput[]) {
+  const groups = new Map<string, AdmittedClientIslandEntry[]>();
+  for (const entry of expandClientIslandEntries(islands)) {
+    if (entry.strategy === 'none') continue;
+    const key = activationGroupKey(entry);
+    const group = groups.get(key);
+    if (group) group.push(entry);
+    else groups.set(key, [entry]);
+  }
+  return new Map(
+    [...groups.values()].map((entries) => {
+      const first = entries[0]!;
+      const single = entries.length === 1;
+      const register = entries.map((entry) => {
+        const exported = quoteGeneratedJavaScriptValue(entry.exportName ?? 'default');
+        const tag = single ? 'tag' : quoteGeneratedJavaScriptValue(entry.tagName);
+        return `register(${tag}, () => mod[${exported}])`;
+      });
+      return [
+        ISLAND_ACTIVATION_PREFIX + first.tagName,
+        {
+          modulePath: first.modulePath,
+          strategy: first.strategy,
+          tags: entries.map((entry) => entry.tagName),
+          media: first.media,
+          code: `import { register } from '${REGISTER_ISLAND_RUNTIME_SPECIFIER}';
+export default (${single ? 'tag' : ''}) => import(${quoteGeneratedJavaScriptValue(first.modulePath)}).then(
+  (mod) => ${single ? register[0] : `{ ${register.join('; ')} }`}
+);`,
+        },
+      ] as const;
+    }),
+  );
+}
+
 /** Virtual id and single resolver rule for the eagerly installed document services. */
 export const ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER =
   'virtual:open-client-runtime/element-document-services.ts';
@@ -188,6 +238,8 @@ interface GenerateClientEntryOptions {
   enhancedForms?: boolean;
   /** Build/dev callers supply the whole merged client-entry island inventory. */
   specializeScheduler?: boolean;
+  /** Production entries take activation descriptors from the current document. */
+  responseCatalogue?: boolean;
   /**
    * The document stylesheet module the entry statically imports (the Tailwind
    * entry, alpha15 S lane): its presence puts the CSS into this build's graph
@@ -246,6 +298,41 @@ export function generateClientEntry(
       return '// openElement Client Entry - All islands are hydrate:none (SSR-only), zero client JS\n';
     }
     return '// openElement Client Entry - No islands detected, zero client JS needed\n';
+  }
+
+  if (options.responseCatalogue && admittedIslands.length > 0) {
+    const imports = [
+      `import { startDocumentIslands } from '${DOCUMENT_ISLANDS_RUNTIME_SPECIFIER}';`,
+    ];
+    if (options.enhancedForms) {
+      imports.push(
+        `import { observeFormEnhancement } from '${VIRTUAL_RUNTIME_SPECIFIERS.enhance}';`,
+      );
+    }
+    const handlers = [
+      ...new Set(
+        admittedIslands
+          .map((island) => island.strategy)
+          .filter((strategy) => strategy === 'visible' || strategy === 'media'),
+      ),
+    ];
+    if (handlers.length > 0) {
+      const bindings = handlers.map((strategy) =>
+        strategy === 'visible' ? 'installVisibleStrategy' : 'installMediaStrategy',
+      );
+      imports.push(
+        `import { ${bindings.join(', ')} } from '${VIRTUAL_RUNTIME_SPECIFIERS.scheduler}';`,
+      );
+    }
+    const strategies = handlers.map(
+      (strategy) => `${strategy}: install${strategy === 'visible' ? 'Visible' : 'Media'}Strategy`,
+    );
+    return `${styleImport}${imports.join('\n')}\nstartDocumentIslands({
+      bootstrapUrl: import.meta.url,
+      idleFallbackTimeoutMs: ${IDLE_FALLBACK_TIMEOUT_MS},
+      strategies: { ${strategies.join(', ')} },
+      ${options.enhancedForms ? `actionHeader: ${quoteGeneratedJavaScriptValue(ACTION_FETCH_HEADER)}, observeFormEnhancement,` : ''}
+    });`;
   }
 
   // ── F16 dev live-sheet channel ────────────────────────────────────────────

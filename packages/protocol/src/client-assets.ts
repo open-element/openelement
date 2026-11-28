@@ -30,6 +30,13 @@ export interface ClientIslandAsset {
    * asset is a modulepreload candidate.
    */
   preload?: boolean;
+  /** Production activation module, including Vite's generated import work. */
+  activation?: {
+    file: string;
+    media?: string;
+    /** Absent when the island can introduce hosts outside its proven closure. */
+    children?: readonly string[];
+  };
 }
 
 /** The Phase 2 client build's delivery manifest, keyed by island identity. */

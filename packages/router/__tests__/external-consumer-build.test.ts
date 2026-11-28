@@ -653,11 +653,16 @@ test('external consumer (#1544/B2): the runtime preload is a per-page projection
     expect(home).toContain(preload);
     expect(eager).not.toContain(preload);
   }
-  // Guard against a vacuous pass: the same entry does carry the island wiring
-  // and its dynamic island imports.
+  // The HTML names the activation façade the graph attributes to the host.
+  // The bootstrap is shared with other pages and names no individual island.
+  const counter = graph.islands.find(({ tag }) => tag === 'oe-proof-counter')!;
+  expect(counter.activationChunkFile).toBeDefined();
+  expect(homeHtml).toContain(`/client/${counter.activationChunkFile}`);
+  const activation = await readFile(join(distDir, 'client', counter.activationChunkFile!), 'utf8');
+  expect(activation).toContain(counter.chunkFile.split('/').at(-1)!);
+  expect(activation).toMatch(/import\(`?["']?\.\//);
   const entryCode = await readFile(join(islandsDir, 'client.js'), 'utf8');
-  expect(entryCode).toContain('oe-proof-counter');
-  expect(entryCode).toMatch(/import\(`?["']?\.\//);
+  expect(entryCode).not.toContain('oe-proof-counter');
 });
 
 test('a native-only package registers both delivery tags without requesting the Element runtime', async () => {

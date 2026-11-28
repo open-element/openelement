@@ -65,6 +65,7 @@ export interface BrowserEntryGraphIslandInput {
   tag: string;
   specifier: string;
   strategy: string;
+  activationModuleId?: string;
 }
 
 /** Options the client build hands the observer. */
@@ -105,7 +106,8 @@ type CaptureReason =
   | 'app-root-outside-workspace'
   | 'client-outdir-outside-root'
   | 'island-module-unresolved'
-  | 'island-chunk-unresolved';
+  | 'island-chunk-unresolved'
+  | 'activation-chunk-unresolved';
 
 /** A report-only capture failure: internal codes only, never paths/messages. */
 class CaptureIncomplete extends Error {
@@ -432,12 +434,22 @@ function captureBrowserEntryGraph(
           containingChunks.length === 0 ? 'module-not-in-chunk' : 'module-in-multiple-chunks',
         ]);
       }
+      const activationChunk =
+        island.activationModuleId === undefined
+          ? undefined
+          : chunks.find(
+              (chunk) => chunk.facadeModuleId === normalizeModuleId(island.activationModuleId!),
+            );
+      if (island.activationModuleId !== undefined && activationChunk === undefined) {
+        throw new CaptureIncomplete('activation-chunk-unresolved', ['activation-facade-missing']);
+      }
       return {
         tag: island.tag,
         specifier: normalizeIslandSpecifier(island.specifier, options.root, options.workspaceRoot),
         moduleId,
         strategy: island.strategy,
         chunkFile: containingChunks[0]!.file,
+        ...(activationChunk ? { activationChunkFile: activationChunk.file } : {}),
       };
     })
     .sort(

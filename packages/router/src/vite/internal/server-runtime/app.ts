@@ -28,6 +28,12 @@
 import { MAX_ACTION_BODY_BYTES } from '@openelement/element/authoring';
 import { composeFetchMiddleware, createRuntimeAdapter } from '@openelement/element/build-utils';
 import type { LayoutPlan } from '@openelement/protocol/ssg';
+import type { ClientIslandAsset } from '@openelement/protocol/client-assets';
+import type { ClientScriptDescriptor } from '../../../loading/module/nonce.ts';
+import {
+  ISLAND_CATALOGUE_SCRIPT_TYPE,
+  resolveDocumentIslandCatalogue,
+} from '../ssg/document-island-catalogue.ts';
 import { visitRenderedTags, type RenderedTag } from '../ssg/rendered-html.ts';
 import { createActionBodyLimit } from './action-runtime.ts';
 import { createLayoutRuntime, createStatusHtml } from './document-runtime.ts';
@@ -131,12 +137,12 @@ export interface GeneratedApp {
    */
   registerSsrIsland(tag: string, ctor: unknown, hostRenderer: unknown): void;
   /** Request-time client-script src setter (`dist/server/index.js` startup). */
-  setRequestTimeClientScript(src: string | null | undefined, islandTags?: readonly string[]): void;
+  setRequestTimeClientScript(
+    src: string | null | undefined,
+    islands?: readonly string[] | Readonly<Record<string, ClientIslandAsset>>,
+  ): void;
   /** wrapInDocument `scripts` descriptors for the rendered document (#951). */
-  clientScriptDescriptors(
-    html?: string,
-    executableHead?: string,
-  ): Array<{ type: 'module'; src: string }>;
+  clientScriptDescriptors(html?: string, executableHead?: string): ClientScriptDescriptor[];
   locales: readonly string[];
   getDefaultLocale(): string;
   /** Page-render bindings — present only when the config carried `pageRuntime`. */
@@ -150,6 +156,7 @@ export interface GeneratedApp {
 
 const DATA_SCRIPT_TYPES = new Set([
   'application/json',
+  ISLAND_CATALOGUE_SCRIPT_TYPE,
   'application/ld+json',
   'importmap',
   'speculationrules',
@@ -168,28 +175,37 @@ function canRunAuthoredScript({ name, attributes }: RenderedTag): boolean {
   return false;
 }
 
-function documentNeedsClient(
-  html: string,
+function documentClientFacts(
+  html: string | undefined,
   islands: ReadonlySet<string>,
   executableHead: string | undefined,
-): boolean {
-  let needed = false;
-  const complete = visitRenderedTags(html, (tag) => {
-    const { name, attributes, inOpenShadow } = tag;
-    needed =
-      islands.has(name) ||
-      (name === 'form' && attributes.has('data-open-enhance')) ||
-      (inOpenShadow && !!attributes.get('id')) ||
-      canRunAuthoredScript(tag);
-    return !needed;
-  });
-  if (!complete || needed) return true;
-  if (!executableHead) return false;
-  const headComplete = visitRenderedTags(executableHead, (tag) => {
-    needed = canRunAuthoredScript(tag);
-    return !needed;
-  });
-  return !headComplete || needed;
+) {
+  const observed = new Set<string>();
+  let enhanced = false;
+  let fragments = false;
+  let opaque = html === undefined;
+  if (html !== undefined) {
+    const complete = visitRenderedTags(html, (tag) => {
+      const { name, attributes, inOpenShadow } = tag;
+      if (islands.has(name)) observed.add(name);
+      if (name === 'form' && attributes.has('data-open-enhance')) enhanced = true;
+      if (inOpenShadow && attributes.get('id')) fragments = true;
+      if (canRunAuthoredScript(tag)) opaque = true;
+    });
+    opaque ||= !complete;
+  }
+  if (executableHead && !opaque) {
+    const complete = visitRenderedTags(executableHead, (tag) => {
+      if (canRunAuthoredScript(tag)) opaque = true;
+      return !opaque;
+    });
+    opaque ||= !complete;
+  }
+  return { observed, enhanced, fragments, opaque };
+}
+
+function isIslandTagList(value: unknown): value is readonly string[] {
+  return Array.isArray(value);
 }
 
 /**
@@ -211,20 +227,34 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
   let requestTimeClientScriptSrc: string | null = null;
   const devIslandTags = new Set(config.clientIslandTags ?? Object.keys(config.islands));
   let requestTimeIslandTags = devIslandTags;
+  let requestTimeIslands: Readonly<Record<string, ClientIslandAsset>> | undefined;
   const fetchMiddleware = config.fetchMiddleware ?? [];
-  const clientScriptDescriptors = (html?: string, executableHead?: string) => {
+  const clientScriptDescriptors = (
+    html?: string,
+    executableHead?: string,
+  ): ClientScriptDescriptor[] => {
     const src = config.devClientScriptSrc || requestTimeClientScriptSrc;
     if (!src) return [];
     const islands = config.devClientScriptSrc ? devIslandTags : requestTimeIslandTags;
-    // Author fetch middleware can replace the body after route rendering.
+    const facts = documentClientFacts(html, islands, executableHead);
+    // An enhanced response can morph islands in from any eligible route.
+    // Fetch middleware can replace the body after route rendering.
+    const opaque = facts.opaque || fetchMiddleware.length > 0;
+    if (!opaque && facts.observed.size === 0 && !facts.enhanced && !facts.fragments) return [];
+    const module = { type: 'module', src };
+    if (config.devClientScriptSrc || !requestTimeIslands) return [module];
+    const catalogue = resolveDocumentIslandCatalogue(
+      requestTimeIslands,
+      facts.observed,
+      opaque || facts.enhanced,
+    );
     if (
-      html !== undefined &&
-      fetchMiddleware.length === 0 &&
-      !documentNeedsClient(html, islands, executableHead)
-    ) {
-      return [];
-    }
-    return [{ type: 'module' as const, src }];
+      catalogue.length === 0 &&
+      !Object.values(requestTimeIslands).some((asset) => asset.activation)
+    )
+      return [module];
+    const code = JSON.stringify(catalogue).replaceAll('<', '\\u003c');
+    return [{ type: ISLAND_CATALOGUE_SCRIPT_TYPE, code }, module];
   };
 
   // The composed handler contract (#858): fetch middleware
@@ -265,9 +295,11 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
     actionBodyLimit: createActionBodyLimit(MAX_ACTION_BODY_BYTES),
     registerSsrComponent: (tag, ctor) => guard.register(tag, ctor),
     registerSsrIsland: (tag, ctor, hostRenderer) => guard.registerIsland(tag, ctor, hostRenderer),
-    setRequestTimeClientScript: (src, islandTags) => {
+    setRequestTimeClientScript: (src, islands) => {
       requestTimeClientScriptSrc = src || null;
-      requestTimeIslandTags = islandTags === undefined ? devIslandTags : new Set(islandTags);
+      requestTimeIslands = isIslandTagList(islands) ? undefined : islands;
+      const tags = isIslandTagList(islands) ? islands : islands && Object.keys(islands);
+      requestTimeIslandTags = tags === undefined ? devIslandTags : new Set(tags);
     },
     clientScriptDescriptors,
     locales: config.locales,

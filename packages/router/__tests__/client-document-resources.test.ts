@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createGeneratedApp } from '../src/vite/internal/server-runtime/app.ts';
+import { closedIslandSource } from '../src/vite/internal/ssg/document-island-source.ts';
 import { extractCustomElementTags } from '../src/vite/internal/ssg/island-manifest.ts';
 
 beforeEach(() => {
@@ -86,4 +87,36 @@ test('authored code that can introduce a host retains the existing bootstrap', (
     [],
   );
   expect(app.clientScriptDescriptors('<p title="incomplete')).toHaveLength(1);
+});
+
+test('primitive generated state proves literal children while an opaque callback retains fallback', () => {
+  const source = `
+    import { signal as state } from '@openelement/element';
+    export default function Parent() {
+      const show = state(false);
+      return <main>
+        <button onClick={() => (show.value = true)}>Show</button>
+        {show.value ? <future-counter /> : null}
+      </main>;
+    }
+  `;
+  expect(closedIslandSource(source, 'parent.tsx')).toEqual(['future-counter']);
+  expect(
+    closedIslandSource(
+      source.replace('() => (show.value = true)', '() => globalThis.setTimeout("mountHost()", 1)'),
+      'parent.tsx',
+    ),
+  ).toBeUndefined();
+  expect(
+    closedIslandSource(
+      source.replace('() => (show.value = true)', '(show) => (show.value = true)'),
+      'parent.tsx',
+    ),
+  ).toBeUndefined();
+  expect(
+    closedIslandSource(
+      source.replace('() => (show.value = true)', '() => (opaque.value = true)'),
+      'parent.tsx',
+    ),
+  ).toBeUndefined();
 });

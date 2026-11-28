@@ -837,13 +837,13 @@ async function buildSSG(
       module as {
         __setRequestTimeClientScript?: (
           src: string | null | undefined,
-          islandTags?: readonly string[],
+          islands?: NonNullable<typeof ctx.clientAssetManifest>['islands'],
         ) => void;
       }
     ).__setRequestTimeClientScript;
     setRequestTimeClientScript?.(
       ctx.clientAssetManifest?.entry ?? null,
-      Object.keys(ctx.clientAssetManifest?.islands ?? {}),
+      ctx.clientAssetManifest?.islands,
     );
     if (ctx.clientAssetManifest?.entry) {
       log.info(`Client scripts embedded at render time from: ${ctx.clientAssetManifest.entry}`);
