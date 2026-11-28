@@ -45,6 +45,8 @@ export interface ClientIslandAsset {
 export interface ClientAssetManifest {
   /** The island client entry URL ('' when no client bundle shipped). */
   entry: string;
+  /** Direct static JS dependencies emitted for the bootstrap entry. */
+  entryPreloads?: readonly string[];
   /** Compile-time island identity (delivery tag) -> emitted asset. */
   islands: Record<string, ClientIslandAsset>;
   /** Shared chunk URLs emitted by the client build (JS, neither entry nor island-dedicated). */

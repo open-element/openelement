@@ -1186,10 +1186,10 @@ test('renderEntry: client script selection follows the wrapped 404 and error con
     'return c.html(wrapInDocument(__statusHtml("404 Not Found", "Not Found"), {',
   );
   expect(code.includes('__withDevClientScript')).toEqual(false);
-  expect(code).toContain('scripts: __clientScriptDescriptors(content),');
-  expect(code).toContain('scripts: __clientScriptDescriptors(errorContent),');
-  expect(notFoundBody).toContain('scripts: __clientScriptDescriptors(content),');
-  expect(code).not.toContain('scripts: __clientScriptDescriptors(),');
+  expect(code).toContain('...__clientDocumentResources(content),');
+  expect(code).toContain('...__clientDocumentResources(errorContent),');
+  expect(notFoundBody).toContain('...__clientDocumentResources(content),');
+  expect(code).not.toContain('...__clientDocumentResources(),');
 });
 
 test('renderEntry: hasAction codegen covers named `actions` exports (#539)', () => {
@@ -1305,7 +1305,7 @@ test('renderEntry: island client script is descriptor-driven (dev URL + request-
   expect(code).toContain(
     'export const __setRequestTimeClientScript = __app.setRequestTimeClientScript;',
   );
-  expect(code).toContain('clientScriptDescriptors: __clientScriptDescriptors,');
+  expect(code).toContain('clientDocumentResources: __clientDocumentResources,');
   // No HTML string-splicing survives in the generated entry.
   expect(code.includes('insertBeforeBodyClose')).toEqual(false);
   expect(code.includes('__withDevClientScript')).toEqual(false);

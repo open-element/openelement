@@ -38,7 +38,7 @@ test('native selection keeps the document and island wiring on their runtime bou
     ],
     { renderer: 'native' },
   );
-  expect(server).toContain('scripts: __clientScriptDescriptors(content)');
+  expect(server).toContain('...__clientDocumentResources(content)');
   expect(server).toContain('__locales.length > 0 ? __localeFromPath');
   expect(client).toContain('__installPreHydrationCapture(document, __tags);');
   expect(client).toContain(ELEMENT_DOCUMENT_SERVICES_RUNTIME_SPECIFIER);

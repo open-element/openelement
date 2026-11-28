@@ -219,7 +219,7 @@ export function documentWrapOptionsLines(options: {
     `headExtras: ${options.headExtrasExpr},`,
     `dangerouslyHeadFragments: __doc.dangerouslyHeadFragments || [],`,
     `allowHeadExtrasScripts: ${JSON.stringify(options.allowHeadExtrasScripts)},`,
-    `scripts: __clientScriptDescriptors(${options.contentExpr}${options.allowHeadExtrasScripts ? `, ${options.headExtrasExpr}` : ''}),`,
+    `...__clientDocumentResources(${options.contentExpr}${options.allowHeadExtrasScripts ? `, ${options.headExtrasExpr}` : ''}),`,
     // alpha15 S lane (S-C1.2): the light-root component stylesheets this
     // render discovered, declared in the document head beside the site's own
     // document stylesheet.

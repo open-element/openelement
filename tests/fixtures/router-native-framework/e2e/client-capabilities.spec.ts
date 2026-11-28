@@ -227,7 +227,12 @@ test('an offscreen SSG island waits to fetch its runtime until it enters the vie
   await page.setViewportSize({ width: 1280, height: 720 });
   const response = await page.goto('/deferred-capability');
   expect(response?.status()).toBe(200);
-  expect(await response!.text()).not.toContain('data-open-element-runtime-preload');
+  const html = await response!.text();
+  expect(html).not.toContain('data-open-element-runtime-preload');
+  const bootstrap = graph.chunks.find(({ file }) => file === graph.entry.chunkFile)!;
+  expect(
+    [...html.matchAll(/<link rel="modulepreload" href="([^"]+)">/g)].map((match) => match[1]),
+  ).toEqual(bootstrap.imports.map((file) => '/client/' + file));
   const host = page.locator('deferred-counter');
   expect((await host.boundingBox())?.y).toBeGreaterThan(720);
   await page.waitForLoadState('networkidle');

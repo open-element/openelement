@@ -108,6 +108,8 @@ interface DocumentWrapOptions {
    * that contains it — without JavaScript and without a runtime style node.
    */
   styleLinks?: readonly string[];
+  /** Framework-emitted dependencies of the document bootstrap module. */
+  entryPreloads?: readonly string[];
 }
 
 /**
@@ -225,6 +227,7 @@ export function documentStreamParts(options: DocumentWrapOptions = {}): {
     cspNonce,
     streamBootstrap,
     styleLinks = [],
+    entryPreloads = [],
   } = options;
   // CSP nonce format validation per the CSP spec (base64 value)
   const NONCE_RE = /^[A-Za-z0-9+/=_-]+$/;
@@ -255,6 +258,10 @@ export function documentStreamParts(options: DocumentWrapOptions = {}): {
   // component's rules must be able to win an equal-specificity tie against it
   // — the order the retired in-document style sink produced.
   const styleLinkBlock = buildStyleLinkTags(styleLinks);
+  const preloadNonce = validNonce ? ` nonce="${escapeAttr(validNonce)}"` : '';
+  const entryPreloadBlock = entryPreloads
+    .map((href) => `\n  <link rel="modulepreload" href="${escapeAttr(href)}"${preloadNonce}>`)
+    .join('');
 
   const prefix = `<!DOCTYPE html>
 <html lang="${safeLang}">
@@ -262,7 +269,7 @@ export function documentStreamParts(options: DocumentWrapOptions = {}): {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${safeTitle}</title>${metaBlock}${linkBlock}${structuredDataBlock}
-  ${safeHeadExtras}${styleLinkBlock}${dangerousHeadBlock}${streamBootstrapBlock}
+  ${safeHeadExtras}${styleLinkBlock}${dangerousHeadBlock}${entryPreloadBlock}${streamBootstrapBlock}
 </head>
 <body>
   `;

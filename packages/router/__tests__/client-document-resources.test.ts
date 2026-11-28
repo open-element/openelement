@@ -57,6 +57,27 @@ test('non-executing markup and inert template content do not imply a client capa
   expect(extractCustomElementTags(html)).toEqual([]);
 });
 
+test('only documents loading the production bootstrap receive its dependency hints', () => {
+  const entry = '/sub/client/client.js';
+  const dependency = '/sub/client/dependency.js';
+  const host = '<my-counter></my-counter>';
+  const app = makeApp();
+  app.setRequestTimeClientScript(entry, ['my-counter'], [dependency]);
+  expect(app.clientDocumentResources(host)).toEqual({
+    scripts: [{ type: 'module', src: entry }],
+    entryPreloads: [dependency],
+  });
+  expect(app.clientDocumentResources('<p>Static response</p>')).toEqual({ scripts: [] });
+  app.setRequestTimeClientScript(entry, ['my-counter']);
+  expect(app.clientDocumentResources(host)).toEqual({ scripts: [{ type: 'module', src: entry }] });
+
+  const dev = makeApp('/sub/client/dev.js');
+  dev.setRequestTimeClientScript(entry, ['my-counter'], [dependency]);
+  expect(dev.clientDocumentResources(host)).toEqual({
+    scripts: [{ type: 'module', src: '/sub/client/dev.js' }],
+  });
+});
+
 test('open DSD fragment targets and nested delivered hosts keep their capabilities', () => {
   const app = makeApp('/client/islands/client.js');
   const shell = (mode: string, body: string) =>

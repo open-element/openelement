@@ -106,7 +106,7 @@ function renderDocument(doc: ReturnType<typeof resolvePageDocument>): string {
 /** The generated wiring both renderer adapters emit (asserted per mode). */
 function assertDocumentTimeInjection(code: string): void {
   expect(code).toContain('const __doc = __resolvePageDocument(__page.head, __pageContext);');
-  expect(code).toContain('scripts: __clientScriptDescriptors(content),');
+  expect(code).toContain('...__clientDocumentResources(content),');
   // No post-build script surgery may reappear.
   expect(
     !code.includes('insertBeforeBodyClose'),

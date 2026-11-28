@@ -140,9 +140,17 @@ export interface GeneratedApp {
   setRequestTimeClientScript(
     src: string | null | undefined,
     islands?: readonly string[] | Readonly<Record<string, ClientIslandAsset>>,
+    entryPreloads?: readonly string[],
   ): void;
   /** wrapInDocument `scripts` descriptors for the rendered document (#951). */
   clientScriptDescriptors(html?: string, executableHead?: string): ClientScriptDescriptor[];
+  clientDocumentResources(
+    html?: string,
+    executableHead?: string,
+  ): {
+    scripts: ClientScriptDescriptor[];
+    entryPreloads?: readonly string[];
+  };
   locales: readonly string[];
   getDefaultLocale(): string;
   /** Page-render bindings — present only when the config carried `pageRuntime`. */
@@ -268,6 +276,7 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
   const devIslandTags = new Set(config.clientIslandTags ?? Object.keys(config.islands));
   let requestTimeIslandTags = devIslandTags;
   let requestTimeIslands: Readonly<Record<string, ClientIslandAsset>> | undefined;
+  let requestTimeEntryPreloads: readonly string[] = [];
   const fetchMiddleware = config.fetchMiddleware ?? [];
   const clientScriptDescriptors = (
     html?: string,
@@ -335,13 +344,20 @@ export function createGeneratedApp(config: GeneratedAppConfig): GeneratedApp {
     actionBodyLimit: createActionBodyLimit(MAX_ACTION_BODY_BYTES),
     registerSsrComponent: (tag, ctor) => guard.register(tag, ctor),
     registerSsrIsland: (tag, ctor, hostRenderer) => guard.registerIsland(tag, ctor, hostRenderer),
-    setRequestTimeClientScript: (src, islands) => {
+    setRequestTimeClientScript: (src, islands, entryPreloads = []) => {
       requestTimeClientScriptSrc = src || null;
       requestTimeIslands = isIslandTagList(islands) ? undefined : islands;
+      requestTimeEntryPreloads = entryPreloads;
       const tags = isIslandTagList(islands) ? islands : islands && Object.keys(islands);
       requestTimeIslandTags = tags === undefined ? devIslandTags : new Set(tags);
     },
     clientScriptDescriptors,
+    clientDocumentResources: (html, executableHead) => {
+      const scripts = clientScriptDescriptors(html, executableHead);
+      return scripts.length > 0 && !config.devClientScriptSrc && requestTimeEntryPreloads.length > 0
+        ? { scripts, entryPreloads: requestTimeEntryPreloads }
+        : { scripts };
+    },
     locales: config.locales,
     getDefaultLocale: () => config.defaultLocale,
   };

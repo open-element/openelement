@@ -352,7 +352,7 @@ function evaluateGeneratedDocumentLanguage(options: {
     'const __routeMetaValue = {};',
     'const __routeContext = {};',
     'const __page = {};',
-    'const __clientScriptDescriptors = () => [];',
+    'const __clientDocumentResources = () => ({ scripts: [] });',
   ];
   requestTimePageContextLines(lines, {
     dataExpr: 'undefined',

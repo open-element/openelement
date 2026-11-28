@@ -603,6 +603,9 @@ test('external consumer: linked interactive pages request only their own islands
   ) as BrowserEntryGraphArtifact;
   const counter = graph.islands.find(({ tag }) => tag === 'oe-proof-counter')!;
   const list = graph.islands.find(({ tag }) => tag === 'oe-jsx-list')!;
+  const bootstrap = graph.chunks.find(({ file }) => file === graph.entry.chunkFile)!;
+  const entryPreloads = bootstrap.imports.map((file) => `/client/${file}`);
+  expect(entryPreloads.length).toBeGreaterThan(0);
 
   const { chromium } = await import('@playwright/test');
   const browser = await chromium.launch();
@@ -621,9 +624,13 @@ test('external consumer: linked interactive pages request only their own islands
     ];
     for (const { path, own, other, destination } of scenarios) {
       const page = await browser.newPage();
-      const requests = new Set<string>();
-      page.on('request', (request) => requests.add(new URL(request.url()).pathname));
-      await page.goto(`http://127.0.0.1:${address.port}${path}`);
+      const requests: string[] = [];
+      page.on('request', (request) => requests.push(new URL(request.url()).pathname));
+      const response = await page.goto(`http://127.0.0.1:${address.port}${path}`);
+      const html = await response!.text();
+      expect(
+        [...html.matchAll(/<link rel="modulepreload" href="([^"]+)">/g)].map((match) => match[1]),
+      ).toEqual(entryPreloads);
       await page.locator(`a[href="${destination}"]`).waitFor();
       await page.waitForFunction((tag) => customElements.get(tag) !== undefined, own.tag);
       if (own === list) {
@@ -636,6 +643,9 @@ test('external consumer: linked interactive pages request only their own islands
         await page.locator(own.tag).getByRole('button', { name: '1' }).waitFor();
       }
       await page.waitForLoadState('networkidle');
+      for (const url of entryPreloads) {
+        expect(requests.filter((request) => request === url)).toEqual([url]);
+      }
       expect(requests, path).toContain(`/client/${own.chunkFile}`);
       expect(requests, path).not.toContain(`/client/${other.chunkFile}`);
       expect(requests, path).not.toContain(`/client/${other.activationChunkFile}`);

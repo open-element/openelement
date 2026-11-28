@@ -445,7 +445,7 @@ export function renderEntry(desc: EntryDescriptor): string {
   ) {
     lines.push('  registerSsrIsland: __registerSsrIsland,');
   }
-  lines.push('  clientScriptDescriptors: __clientScriptDescriptors,');
+  lines.push('  clientDocumentResources: __clientDocumentResources,');
   lines.push('  locales: __locales,');
   lines.push('  getDefaultLocale: __getDefaultLocale,');
   lines.push('} = __app;');

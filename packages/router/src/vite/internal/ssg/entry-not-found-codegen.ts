@@ -117,7 +117,7 @@ export function renderNotFoundRoute(
       docConfig.lang,
     )}, headExtras: ${headExtrasExpr}, allowHeadExtrasScripts: ${JSON.stringify(
       docConfig.allowHeadExtrasScripts,
-    )}, cspNonce: c.get('cspNonce')${docConfig.allowHeadExtrasScripts ? `, scripts: __clientScriptDescriptors('', ${headExtrasExpr})` : ''} }), 404);`,
+    )}, cspNonce: c.get('cspNonce')${docConfig.allowHeadExtrasScripts ? `, ...__clientDocumentResources('', ${headExtrasExpr})` : ''} }), 404);`,
   );
   lines.push(`  }`);
   // close the IIFE and merge the 404-page loader's channel too.

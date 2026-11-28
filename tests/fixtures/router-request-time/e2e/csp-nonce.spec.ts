@@ -13,7 +13,9 @@
  *
  * Run: pnpm run e2e -- csp-nonce
  */
+import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
+import type { BrowserEntryGraphArtifact } from '../../../../packages/router/src/vite/internal/browser-entry-graph-artifact.ts';
 
 const CSP_HEADER = 'content-security-policy';
 
@@ -85,6 +87,24 @@ test.describe('CSP nonce (request-time)', () => {
   });
 
   test('the island hydrates and stays interactive under the strict CSP', async ({ page }) => {
+    const graph = JSON.parse(
+      await readFile(
+        new URL('../dist/client/.vite/oe-browser-entry-graph.json', import.meta.url),
+        'utf8',
+      ),
+    ) as BrowserEntryGraphArtifact;
+    const bootstrap = graph.chunks.find(({ file }) => file === graph.entry.chunkFile)!;
+    const helpers = bootstrap.imports.map((file) => `/client/${file}`);
+    expect(helpers.length).toBeGreaterThan(0);
+    const counter = graph.islands.find(({ tag }) => tag === 'live-counter')!;
+    const activation = `/client/${counter.activationChunkFile}`;
+    const requests: string[] = [];
+    page.on('request', (request) => requests.push(new URL(request.url()).pathname));
+    await page.addInitScript(() => {
+      document.addEventListener('open:ready', () => {
+        document.documentElement.setAttribute('data-csp-fixture-ready', '');
+      });
+    });
     const cspViolations: string[] = [];
     page.on('console', (message) => {
       if (message.type() === 'error' && /content.security.policy/i.test(message.text())) {
@@ -95,12 +115,35 @@ test.describe('CSP nonce (request-time)', () => {
       if (/content.security.policy/i.test(String(error))) cspViolations.push(String(error));
     });
 
-    await page.goto('/live?x=browser');
     const button = page.locator('live-counter #increment');
     const count = page.locator('live-counter #count');
-    await expect(button).toBeVisible();
-    await button.click();
+    const allowActivation = Promise.withResolvers<void>();
+    await page.route(`**${activation}`, async (route) => {
+      await allowActivation.promise;
+      await route.continue();
+    });
+    try {
+      const response = await page.goto('/live?x=browser', { waitUntil: 'domcontentloaded' });
+      const nonce = headerNonce(response!.headers()[CSP_HEADER]);
+      expect(nonce).toBeTruthy();
+      const html = await response!.text();
+      expect(
+        [...html.matchAll(/<link rel="modulepreload" href="([^"]+)" nonce="([^"]+)">/g)].map(
+          ([, href, preloadNonce]) => [href, preloadNonce],
+        ),
+      ).toEqual(helpers.map((href) => [href, nonce]));
+      expect(html).not.toContain(`rel="modulepreload" href="${activation}"`);
+      await expect(page.locator('html[data-csp-fixture-ready]')).toBeAttached();
+      expect(await page.evaluate(() => customElements.get('live-counter'))).toBeUndefined();
+      await button.click();
+    } finally {
+      allowActivation.resolve();
+    }
     await expect(count).toHaveText('1');
+    for (const helper of helpers) {
+      expect(requests.filter((url) => url === helper)).toEqual([helper]);
+    }
+    expect(requests.filter((url) => url === activation)).toEqual([activation]);
     await button.click();
     await expect(count).toHaveText('2');
 

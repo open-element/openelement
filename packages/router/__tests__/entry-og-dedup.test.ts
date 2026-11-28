@@ -114,7 +114,7 @@ ${CREATE_DOCUMENT_STYLE_RESOURCES_MINIATURE}
 function __ssr(tag, props) { return '<main>' + tag + '</main>'; }
 function __pageProps(routeModule, context) { return {}; }
 function __pageErrorProps(routeModule, error, context) { return {}; }
-function __clientScriptDescriptors() { return []; }
+function __clientDocumentResources() { return { scripts: [] }; }
 function __resolvePageDocument(head, context, clientScripts) {
   const resolved = typeof head === 'function' ? head(context) : head;
   return Object.assign({ links: [] }, resolved);
@@ -217,7 +217,7 @@ function __ssr(tag, props) { return '<main>' + tag + '</main>'; }
 function __pageProps(routeModule, context) { return {}; }
 function __pageErrorProps(routeModule, error, context) { return {}; }
 function __renderLayout(content) { return content; }
-function __clientScriptDescriptors() { return []; }
+function __clientDocumentResources() { return { scripts: [] }; }
 function __resolvePageDocument(head, context, clientScripts) {
   const resolved = typeof head === 'function' ? head(context) : head;
   return Object.assign({ links: [] }, resolved);

@@ -275,7 +275,7 @@ function renderRouteResponseAndCatch(lines: string[], ctx: RouteHandlerEmitConte
   );
   lines.push(`        cspNonce: c.get('cspNonce'),`);
   if (docConfig.allowHeadExtrasScripts) {
-    lines.push(`        scripts: __clientScriptDescriptors('', ${headExtrasExpr}),`);
+    lines.push(`        ...__clientDocumentResources('', ${headExtrasExpr}),`);
   }
   lines.push(`      }), 404)`);
   lines.push(`    }`);
